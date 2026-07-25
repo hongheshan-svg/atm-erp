@@ -172,20 +172,20 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const warehouses = ref<any[]>([])
-const selectedWarehouse = ref(null)
+const selectedWarehouse = ref<any>(null)
 const locationTree = ref<any[]>([])
-const selectedLocation = ref(null)
+const selectedLocation = ref<any>(null)
 const childLocations = ref<any[]>([])
 const filterText = ref('')
-const treeRef = ref(null)
+const treeRef = ref<any>(null)
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const submitting = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const isEdit = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   code: '',
   name: '',
@@ -214,12 +214,12 @@ watch(filterText, (val) => {
   treeRef.value?.filter(val)
 })
 
-const filterNode = (value, data) => {
+const filterNode = (value: any, data: any) => {
   if (!value) return true
   return data.name.includes(value) || data.code.includes(value)
 }
 
-const getTypeTagType = (type) => {
+const getTypeTagType = (type: any) => {
   const types = {
     'ZONE': 'danger',
     'AISLE': 'warning',
@@ -227,40 +227,40 @@ const getTypeTagType = (type) => {
     'SHELF': 'success',
     'BIN': 'info'
   }
-  return types[type] || 'info'
+  return (types as Record<string, any>)[type] || 'info'
 }
 
 const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList({ is_active: true })
     warehouses.value = response.results || response || [] || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
 
 const loadLocations = async () => {
   if (!selectedWarehouse.value) return
-  
+
   try {
     const response = await getLocationTree(selectedWarehouse.value)
     locationTree.value = response || []
     selectedLocation.value = null
     childLocations.value = []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载库位失败:', error)
   }
 }
 
-const handleNodeClick = async (data) => {
+const handleNodeClick = async (data: any) => {
   try {
     const detail = await getLocation(data.id)
     selectedLocation.value = detail
-    
+
     // Load children
     const children = await getLocationChildren(data.id)
     childLocations.value = children || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载库位详情失败:', error)
   }
 }
@@ -286,7 +286,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleAddChild = (parent) => {
+const handleAddChild = (parent: any) => {
   resetForm()
   form.parent = parent.id
   isEdit.value = false
@@ -294,7 +294,7 @@ const handleAddChild = (parent) => {
   dialogVisible.value = true
 }
 
-const handleEdit = (location) => {
+const handleEdit = (location: any) => {
   form.id = location.id
   form.code = location.code
   form.name = location.name
@@ -313,7 +313,7 @@ const handleEdit = (location) => {
 
 const handleSubmit = async () => {
   await formRef.value?.validate()
-  
+
   submitting.value = true
   try {
     const payload = {
@@ -329,7 +329,7 @@ const handleSubmit = async () => {
       is_active: form.is_active,
       notes: form.notes
     }
-    
+
     if (isEdit.value) {
       await patchLocation(form.id, payload)
       ElMessage.success('更新成功')
@@ -337,10 +337,10 @@ const handleSubmit = async () => {
       await createLocation(payload)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadLocations()
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存失败:', error)
     ElMessage.error('保存失败')
   } finally {
@@ -348,17 +348,17 @@ const handleSubmit = async () => {
   }
 }
 
-const handleDelete = async (location) => {
+const handleDelete = async (location: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除库位 "${location.name}" 吗？`, '确认删除', {
       type: 'warning'
     })
-    
+
     await deleteLocation(location.id)
     ElMessage.success('删除成功')
     selectedLocation.value = null
     loadLocations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
       ElMessage.error('删除失败')
@@ -428,4 +428,3 @@ onMounted(() => {
   color: #999;
 }
 </style>
-

@@ -10,7 +10,7 @@
         <el-button @click="handleInventory">资产盘点</el-button>
       </div>
     </div>
-    
+
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -38,21 +38,21 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-card shadow="never">
       <template #header>
         <el-form :inline="true">
           <el-form-item>
-            <el-input v-model="queryParams.search" placeholder="搜索资产编号/名称" clearable 
+            <el-input v-model="queryParams.search" placeholder="搜索资产编号/名称" clearable
               @clear="fetchList" style="width: 200px" />
           </el-form-item>
           <el-form-item>
-            <el-cascader 
-              v-model="queryParams.category" 
+            <el-cascader
+              v-model="queryParams.category"
               :options="categoryTree"
               :props="{ checkStrictly: true, value: 'id', label: 'name', emitPath: false }"
-              placeholder="资产分类" 
-              clearable 
+              placeholder="资产分类"
+              clearable
               @change="fetchList"
               style="width: 180px"
             />
@@ -67,7 +67,7 @@
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-select v-model="queryParams.department" placeholder="使用部门" clearable 
+            <el-select v-model="queryParams.department" placeholder="使用部门" clearable
               @change="fetchList" style="width: 160px">
               <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.id" />
             </el-select>
@@ -77,19 +77,19 @@
           </el-form-item>
         </el-form>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="assetList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="asset_no" label="资产编号" width="120" fixed />
@@ -139,7 +139,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
@@ -150,7 +150,7 @@
         style="margin-top: 16px; justify-content: flex-end"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑资产' : '新增资产'" width="800px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
@@ -162,11 +162,11 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="资产分类" prop="category">
-              <el-cascader 
-                v-model="formData.category" 
+              <el-cascader
+                v-model="formData.category"
                 :options="categoryTree"
                 :props="{ checkStrictly: true, value: 'id', label: 'name', emitPath: false }"
-                placeholder="选择分类" 
+                placeholder="选择分类"
                 style="width: 100%"
               />
             </el-form-item>
@@ -199,13 +199,13 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="购置日期">
-              <el-date-picker v-model="formData.purchase_date" type="date" 
+              <el-date-picker v-model="formData.purchase_date" type="date"
                 placeholder="购置日期" style="width: 100%" value-format="YYYY-MM-DD" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="原值" prop="original_value">
-              <el-input-number v-model="formData.original_value" :min="0" :precision="2" 
+              <el-input-number v-model="formData.original_value" :min="0" :precision="2"
                 style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -220,9 +220,9 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="保管人">
-              <el-select v-model="formData.custodian" placeholder="选择保管人" 
+              <el-select v-model="formData.custodian" placeholder="选择保管人"
                 style="width: 100%" filterable clearable>
-                <el-option v-for="u in users" :key="u.id" 
+                <el-option v-for="u in users" :key="u.id"
                   :label="u.first_name || u.username" :value="u.id" />
               </el-select>
             </el-form-item>
@@ -240,7 +240,7 @@
         <el-button type="primary" @click="submitForm" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentAsset?.name" width="900px">
       <el-tabs v-if="currentAsset">
@@ -265,7 +265,7 @@
             <el-descriptions-item label="存放位置">{{ currentAsset.location || '-' }}</el-descriptions-item>
           </el-descriptions>
         </el-tab-pane>
-        
+
         <el-tab-pane label="折旧记录" v-if="currentAsset.depreciations?.length">
           <el-table :data="currentAsset.depreciations" size="small" border stripe>
             <el-table-column label="期间" width="100">
@@ -295,11 +295,11 @@
             </el-table-column>
           </el-table>
         </el-tab-pane>
-        
+
         <el-tab-pane label="变动记录" v-if="currentAsset.transfers?.length">
           <el-timeline>
-            <el-timeline-item 
-              v-for="change in currentAsset.transfers" 
+            <el-timeline-item
+              v-for="change in currentAsset.transfers"
               :key="change.id"
               :timestamp="change.change_date"
               :type="getChangeType(change.change_type)">
@@ -313,7 +313,7 @@
         </el-tab-pane>
       </el-tabs>
     </el-dialog>
-    
+
     <!-- 调拨对话框 -->
     <el-dialog v-model="transferDialogVisible" title="资产调拨" width="500px">
       <el-form :model="transferForm" label-width="100px">
@@ -326,9 +326,9 @@
           </el-select>
         </el-form-item>
         <el-form-item label="新保管人">
-          <el-select v-model="transferForm.to_custodian" placeholder="选择保管人" 
+          <el-select v-model="transferForm.to_custodian" placeholder="选择保管人"
             style="width: 100%" filterable clearable>
-            <el-option v-for="u in users" :key="u.id" 
+            <el-option v-for="u in users" :key="u.id"
               :label="u.first_name || u.username" :value="u.id" />
           </el-select>
         </el-form-item>
@@ -344,7 +344,7 @@
         <el-button type="primary" @click="submitTransfer" :loading="submitLoading">确认调拨</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 计提折旧对话框 -->
     <el-dialog v-model="depreciateDialogVisible" title="计提折旧" width="400px">
       <el-form :model="depreciateForm" label-width="80px">
@@ -413,14 +413,14 @@ const categoryTree = ref<any[]>([])
 const departments = ref<any[]>([])
 const users = ref<any[]>([])
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   category: null,
   status: null,
   department: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -429,8 +429,8 @@ const pagination = reactive({
 // 新增/编辑
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
-const formData = reactive({
+const formRef = ref<any>(null)
+const formData = reactive<Record<string, any>>({
   name: '',
   category: null,
   model: '',
@@ -451,11 +451,11 @@ const rules = {
 
 // 详情
 const detailDialogVisible = ref(false)
-const currentAsset = ref(null)
+const currentAsset = ref<any>(null)
 
 // 调拨
 const transferDialogVisible = ref(false)
-const transferForm = reactive({
+const transferForm = reactive<Record<string, any>>({
   assetId: null,
   assetName: '',
   to_department: null,
@@ -469,7 +469,7 @@ const depreciateDialogVisible = ref(false)
 const inventoryDialogVisible = ref(false)
 const inventoryLoading = ref(false)
 const inventoryResults = ref<any[]>([])
-const depreciateForm = reactive({
+const depreciateForm = reactive<Record<string, any>>({
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1
 })
@@ -477,7 +477,7 @@ const depreciateForm = reactive({
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       search: queryParams.search,
@@ -488,7 +488,7 @@ const fetchList = async () => {
     const data = await getFixedAssets(params)
     assetList.value = data.results || data || []
     pagination.total = data.count || (Array.isArray(assetList.value) ? assetList.value.length : 0)
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -499,7 +499,7 @@ const fetchStats = async () => {
   try {
     const data = await getFixedAssetStatistics()
     stats.value = data.total || {}
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -514,7 +514,7 @@ const fetchOptions = async () => {
     categoryTree.value = catRes.results || catRes || []
     departments.value = deptRes.results || deptRes || []
     users.value = userRes.results || userRes || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -541,7 +541,7 @@ const handleAdd = () => {
 const submitForm = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -553,36 +553,36 @@ const submitForm = async () => {
     dialogVisible.value = false
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getFixedAsset(row.id)
     currentAsset.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleActivate = async (row) => {
+const handleActivate = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定启用该资产吗？启用后将开始计提折旧', '提示')
     await activateFixedAsset(row.id)
     ElMessage.success('资产已启用')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     console.error('AssetList fetchStats error:', e)
   }
 }
 
-const handleTransfer = (row) => {
+const handleTransfer = (row: any) => {
   transferForm.assetId = row.id
   transferForm.assetName = `${row.asset_no} - ${row.name}`
   transferForm.to_department = null
@@ -604,14 +604,14 @@ const submitTransfer = async () => {
     ElMessage.success('调拨成功')
     transferDialogVisible.value = false
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('调拨失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleDispose = async (row) => {
+const handleDispose = async (row: any) => {
   try {
     const { value } = await ElMessageBox.prompt('请输入处置原因', '资产处置（变卖）', {
       confirmButtonText: '确认处置',
@@ -632,12 +632,12 @@ const handleDispose = async (row) => {
     ElMessage.success('资产已处置')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') console.error('AssetList handleDispose error:', e)
   }
 }
 
-const handleScrap = async (row) => {
+const handleScrap = async (row: any) => {
   try {
     const { value } = await ElMessageBox.prompt('请输入报废原因', '资产报废', {
       confirmButtonText: '确认报废',
@@ -647,7 +647,7 @@ const handleScrap = async (row) => {
     ElMessage.success('资产已报废')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') console.error('AssetList handleScrap error:', e)
   }
 }
@@ -669,7 +669,7 @@ const submitDepreciate = async () => {
     depreciateDialogVisible.value = false
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('计提折旧失败')
   } finally {
     submitLoading.value = false
@@ -682,8 +682,8 @@ const handleInventory = async () => {
   try {
     const res = await getFixedAssets({ page_size: 200 })
     const list = res.results || res.results || []
-    inventoryResults.value = list.map(a => ({ ...a, checked: false, match: true, remark: '' }))
-  } catch (error) {
+    inventoryResults.value = list.map((a: any) => ({ ...a, checked: false, match: true, remark: '' }))
+  } catch (error: any) {
     console.error(error)
     inventoryResults.value = []
   } finally {
@@ -698,12 +698,12 @@ const submitInventory = async () => {
     await inventoryFixedAssets({ items: items.map(i => ({ asset_id: i.id, match: i.match, remark: i.remark })) })
     ElMessage.success('盘点提交成功')
     inventoryDialogVisible.value = false
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '提交失败')
   }
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     IDLE: 'warning',
     IN_USE: 'success',
@@ -711,10 +711,10 @@ const getStatusType = (status) => {
     SCRAPPED: 'danger',
     SOLD: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getChangeType = (changeType) => {
+const getChangeType = (changeType: any) => {
   const types = {
     PURCHASE: 'success',
     TRANSFER: 'primary',
@@ -724,10 +724,10 @@ const getChangeType = (changeType) => {
     DISPOSE: 'info',
     SCRAP: 'danger'
   }
-  return types[changeType] || ''
+  return (types as Record<string, any>)[changeType] || ''
 }
 
-const formatPrice = (price) => {
+const formatPrice = (price: any) => {
   if (!price) return '0.00'
   return Number(price).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }

@@ -251,14 +251,14 @@ export function getPayables(params?: Record<string, any>) {
 export function getInvoices(params?: Record<string, any>) {
   return request({ url: '/finance/invoices/', method: 'get', params })
 }
-export function autoMatchInvoices(data: any) {
+export function autoMatchInvoices(data: any = {}) {
   return request({ url: '/finance/invoices/auto_match/', method: 'post', data })
 }
 export function matchInvoiceOrder(id: number, data: any) {
   return request({ url: `/finance/invoices/${id}/match_order/`, method: 'post', data })
 }
-export function downloadInvoiceTemplate() {
-  return request({ url: '/finance/invoices/download_template/', method: 'get', responseType: 'blob' })
+export function downloadInvoiceTemplate(config = {}) {
+  return request({ url: '/finance/invoices/download_template/', method: 'get', responseType: 'blob', ...config })
 }
 export function exportInvoices(params?: Record<string, any>, config = {}) {
   return request({ url: '/finance/invoices/export_excel/', method: 'get', params, ...config })
@@ -277,10 +277,10 @@ export function getExpenses(params?: Record<string, any>) {
 export function submitExpense(id: number) {
   return request({ url: `/finance/expenses/${id}/submit/`, method: 'post' })
 }
-export function approveExpense(id: number, data: any) {
+export function approveExpense(id: number, data: any = {}) {
   return request({ url: `/finance/expenses/${id}/approve/`, method: 'post', data })
 }
-export function rejectExpense(id: number, data: any) {
+export function rejectExpense(id: number, data: any = {}) {
   return request({ url: `/finance/expenses/${id}/reject/`, method: 'post', data })
 }
 
@@ -356,10 +356,10 @@ export function importBankStatements(data: FormData) {
 export function matchBankStatement(id: number, data: any) {
   return request({ url: `/finance/bank-statements/${id}/match/`, method: 'post', data })
 }
-export function ignoreBankStatement(id: number) {
-  return request({ url: `/finance/bank-statements/${id}/ignore/`, method: 'post' })
+export function ignoreBankStatement(id: number, data: any = {}) {
+  return request({ url: `/finance/bank-statements/${id}/ignore/`, method: 'post', data })
 }
-export function autoMatchAllBankStatements(data: any) {
+export function autoMatchAllBankStatements(data: any = {}) {
   return request({ url: '/finance/bank-statements/auto_match_all/', method: 'post', data })
 }
 export function bulkDeleteBankStatements(data: any) {

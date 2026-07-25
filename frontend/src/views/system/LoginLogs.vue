@@ -102,37 +102,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { getLoginLogs, getLoginStatistics } from '@/api/security'
 import { DataAnalysis } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const logs = ref<any[]>([])
 const showStats = ref(false)
-const statistics = ref(null)
+const statistics = ref<any>(null)
 const dateRange = ref<any[]>([])
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   username: '',
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     SUCCESS: 'success',
     FAILED: 'danger',
     LOCKED: 'warning'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
@@ -140,7 +140,7 @@ const formatDateTime = (dateStr) => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters

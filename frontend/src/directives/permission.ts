@@ -1,5 +1,5 @@
 import type { Directive } from 'vue'
-import { ref, watchEffect } from 'vue'
+import { watchEffect } from 'vue'
 import { usePermissionStore } from '@/stores/permission'
 
 const permissionDirective: Directive<HTMLElement, string> = {

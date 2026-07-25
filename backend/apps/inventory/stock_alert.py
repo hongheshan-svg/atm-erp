@@ -546,6 +546,7 @@ class StockAlertListSerializer(serializers.ModelSerializer):
 
 class StockAlertRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存预警规则管理"""
+
     permission_module = 'inventory'
     permission_resource = 'stock_alert_rule'
 
@@ -586,6 +587,7 @@ class StockAlertRuleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 class StockAlertViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存预警管理"""
+
     permission_module = 'inventory'
     permission_resource = 'stock_alert'
 

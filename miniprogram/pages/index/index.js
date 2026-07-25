@@ -60,9 +60,9 @@ Page({
 
   async loadProjectStats() {
     try {
-      const res = await app.request({ 
-        url: '/projects/?status=ACTIVE&page_size=1', 
-        showLoading: false 
+      const res = await app.request({
+        url: '/projects/?status=ACTIVE&page_size=1',
+        showLoading: false
       })
       this.setData({ projectCount: res.count || 0 })
     } catch (err) {

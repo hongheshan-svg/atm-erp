@@ -131,18 +131,18 @@ const total = ref(0)
 const timelineVisible = ref(false)
 const timeline = ref<any[]>([])
 const showUploadDialog = ref(false)
-const uploadFormRef = ref(null)
+const uploadFormRef = ref<any>(null)
 
-const queryParams = reactive({ page: 1, page_size: 20, search: '', status: '' })
-const uploadForm = reactive({ drawing_number: '', drawing_name: '', change_description: '', file: null })
+const queryParams = reactive<Record<string, any>>({ page: 1, page_size: 20, search: '', status: '' })
+const uploadForm = reactive<Record<string, any>>({ drawing_number: '', drawing_name: '', change_description: '', file: null })
 
-const statusType = (s) => ({ draft: 'info', reviewing: 'warning', approved: 'success', released: '', obsolete: 'danger' }[s] || 'info')
-const statusLabel = (s) => ({ draft: '草稿', reviewing: '审核中', approved: '已批准', released: '已发布', obsolete: '已废弃' }[s] || s)
+const statusType = (s: any) => (({ draft: 'info', reviewing: 'warning', approved: 'success', released: '', obsolete: 'danger' } as Record<string, any>)[s] || 'info')
+const statusLabel = (s: any) => (({ draft: '草稿', reviewing: '审核中', approved: '已批准', released: '已发布', obsolete: '已废弃' } as Record<string, any>)[s] || s)
 
 const loadList = async () => {
   loading.value = true
   try {
-    const params = { ...queryParams }
+    const params: Record<string, any> = { ...queryParams }
     if (!params.search) delete params.search
     if (!params.status) delete params.status
     const res = await getDrawingVersions(params)
@@ -151,38 +151,38 @@ const loadList = async () => {
   } finally { loading.value = false }
 }
 
-const viewTimeline = async (row) => {
+const viewTimeline = async (row: any) => {
   const res = await getDrawingTimeline(row.drawing_number)
   timeline.value = res || []
   timelineVisible.value = true
 }
 
-const submitReview = async (row) => {
+const submitReview = async (row: any) => {
   await ElMessageBox.confirm('确认提交审核？', '提示')
   try {
     await submitDrawingReview(row.id)
     ElMessage.success('已提交审核')
     loadList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '提交审核失败')
   }
 }
 
-const approveDrawing = async (row) => {
+const approveDrawing = async (row: any) => {
   await ElMessageBox.confirm('确认批准该图纸版本？', '批准')
   await approveDrawingVersion(row.id)
   ElMessage.success('批准成功')
   loadList()
 }
 
-const rejectDrawing = async (row) => {
+const rejectDrawing = async (row: any) => {
   const { value } = await ElMessageBox.prompt('请输入驳回原因', '驳回', { inputType: 'textarea' })
   await rejectDrawingVersion(row.id, { reason: value })
   ElMessage.success('已驳回')
   loadList()
 }
 
-const handleFileChange = (file) => { uploadForm.file = file.raw }
+const handleFileChange = (file: any) => { uploadForm.file = file.raw }
 
 const handleUpload = async () => {
   await uploadFormRef.value.validate()

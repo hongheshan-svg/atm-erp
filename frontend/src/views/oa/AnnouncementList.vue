@@ -16,7 +16,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" class="search-form">
         <el-form-item label="类型">
@@ -33,12 +33,12 @@
           <el-button type="primary" @click="loadData">搜索</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 公告列表 -->
       <div class="announcement-items">
-        <div 
-          v-for="item in list" 
-          :key="item.id" 
+        <div
+          v-for="item in list"
+          :key="item.id"
           class="announcement-item"
           :class="{ unread: !item.is_read, top: item.is_top }"
           @click="handleView(item)"
@@ -62,10 +62,10 @@
             <span class="views"><el-icon><View /></el-icon> {{ item.view_count }}</span>
           </div>
         </div>
-        
+
         <el-empty v-if="list.length === 0 && !loading" description="暂无公告" />
       </div>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.pageSize"
@@ -77,7 +77,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 查看公告详情 -->
     <el-dialog v-model="viewDialogVisible" :title="currentItem?.title" width="700px" destroy-on-close>
       <div class="announcement-detail">
@@ -92,7 +92,7 @@
         <div class="detail-content" v-html="sanitizedContent"></div>
       </div>
     </el-dialog>
-    
+
     <!-- 发布公告 -->
     <el-dialog v-model="dialogVisible" title="发布公告" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -159,22 +159,22 @@ const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const currentItem = ref<any>(null)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 // Announcement body is rendered with v-html; always sanitize first.
 const sanitizedContent = computed(() => sanitizeHtml(currentItem.value?.content))
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   announcement_type: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   announcement_type: 'NOTICE',
   priority: 'NORMAL',
   title: '',
@@ -192,7 +192,7 @@ const rules = {
   content: [{ required: true, message: '请输入内容', trigger: 'blur' }]
 }
 
-const getTypeColor = (type) => {
+const getTypeColor = (type: any) => {
   const colors = {
     'NOTICE': '',
     'NEWS': 'success',
@@ -201,27 +201,27 @@ const getTypeColor = (type) => {
     'MAINTENANCE': 'danger',
     'IMPORTANT': 'danger'
   }
-  return colors[type] || ''
+  return (colors as Record<string, any>)[type] || ''
 }
 
-const formatTime = (time) => {
+const formatTime = (time: any) => {
   if (!time) return ''
   const date = new Date(time)
   const now = new Date()
-  const diff = now - date
-  
+  const diff = now.getTime() - date.getTime()
+
   if (diff < 60000) return '刚刚'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
   if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
-  
+
   return date.toLocaleDateString('zh-CN')
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -238,24 +238,24 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleView = async (item) => {
+const handleView = async (item: any) => {
   currentItem.value = item
   viewDialogVisible.value = true
-  
+
   // 标记为已读
   if (!item.is_read) {
     try {
       await readAnnouncement(item.id)
       item.is_read = true
       item.view_count++
-    } catch (error) {
+    } catch (error: any) {
       console.error('标记已读失败', error)
     }
   }
@@ -267,7 +267,7 @@ const markAllRead = async () => {
     await markAllAnnouncementsRead()
     ElMessage.success('已全部标记为已读')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     markingRead.value = false
@@ -293,7 +293,7 @@ const handleSave = async (status = 'DRAFT') => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     const data = { ...form, status }
 
     await createAnnouncement(data)
@@ -301,7 +301,7 @@ const handleSave = async (status = 'DRAFT') => {
     ElMessage.success(status === 'DRAFT' ? '保存成功' : '发布成功')
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) {
       ElMessage.error(JSON.stringify(error.response.data))
     }
@@ -314,18 +314,18 @@ const handleSaveAndPublish = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     // 先保存
     const data = { ...form, status: 'DRAFT' }
     const announcement = await createAnnouncement(data)
 
     // 再发布
     await publishAnnouncement(announcement.id)
-    
+
     ElMessage.success('发布成功')
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) {
       ElMessage.error(JSON.stringify(error.response.data))
     }

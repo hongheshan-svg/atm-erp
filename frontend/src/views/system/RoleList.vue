@@ -84,19 +84,19 @@
           <el-tag type="primary" size="large">{{ currentRole.name }}</el-tag>
           <span class="role-desc">{{ currentRole.description }}</span>
         </div>
-        
+
         <!-- 预设角色模板（非标自动化行业） -->
         <el-divider content-position="left">
           <el-icon><Briefcase /></el-icon> 快速配置（非标自动化行业预设）
         </el-divider>
         <div class="preset-roles">
-          <el-button v-for="preset in presetRoles" :key="preset.code" 
+          <el-button v-for="preset in presetRoles" :key="preset.code"
             size="small" :type="preset.type || 'default'" plain
             @click="applyPreset(preset)">
             {{ preset.name }}
           </el-button>
         </div>
-        
+
         <el-divider content-position="left">数据范围</el-divider>
         <el-form-item label="数据可见范围" style="margin-bottom: 16px;">
           <el-select v-model="permForm.data_scope" style="width: 280px;">
@@ -110,9 +110,9 @@
             控制该角色可查看的数据范围
           </el-text>
         </el-form-item>
-        
+
         <el-divider content-position="left">菜单权限（按业务流程分组）</el-divider>
-        
+
         <div class="menu-tree-header">
           <el-checkbox v-model="checkAll" :indeterminate="isIndeterminate" @change="handleCheckAll">
             全选
@@ -125,7 +125,7 @@
             勾选的菜单将在侧边栏中显示
           </el-text>
         </div>
-        
+
         <el-tree
           ref="menuTreeRef"
           :data="permissionTreeNodes"
@@ -158,7 +158,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { QuestionFilled, Briefcase, Grid, OfficeBuilding, User } from '@element-plus/icons-vue'
+import { QuestionFilled, Briefcase } from '@element-plus/icons-vue'
 import { getRoles, createRole, updateRole } from '@/api/auth'
 import { getPermissionTree } from '@/api/system'
 import { useBatchDelete } from '@/composables/useBatchDelete'
@@ -182,9 +182,9 @@ const dialogVisible = ref(false)
 const permDialogVisible = ref(false)
 const dialogTitle = ref('新增角色')
 const isEdit = ref(false)
-const formRef = ref(null)
-const menuTreeRef = ref(null)
-const currentRole = ref(null)
+const formRef = ref<any>(null)
+const menuTreeRef = ref<any>(null)
+const currentRole = ref<any>(null)
 const checkedMenuIds = ref<any[]>([])
 const checkAll = ref(false)
 const isIndeterminate = ref(false)
@@ -192,7 +192,7 @@ const permissionTreeNodes = ref<any[]>([])
 const permissionMetaByCode = ref<Record<string, any>>({})
 const permissionMetaById = ref<Record<string, any>>({})
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   name: '',
   code: '',
@@ -200,7 +200,7 @@ const form = reactive({
   data_scope: 'all'
 })
 
-const permForm = reactive({
+const permForm = reactive<Record<string, any>>({
   data_scope: 'all'
 })
 
@@ -301,7 +301,7 @@ const presetRoles = ref([
 ])
 
 // 应用预设角色配置
-const applyPreset = (preset) => {
+const applyPreset = (preset: any) => {
   ElMessageBox.confirm(
     `确定要应用"${preset.name}"的权限配置吗？这将覆盖当前的权限设置。`,
     '应用预设配置',
@@ -310,7 +310,7 @@ const applyPreset = (preset) => {
     permForm.data_scope = normalizeScopeForForm(preset.data_scope)
     if (menuTreeRef.value) {
       menuTreeRef.value.setCheckedKeys(
-        preset.menu_ids.filter(code => permissionMetaByCode.value[code])
+        preset.menu_ids.filter((code: any) => permissionMetaByCode.value[code])
       )
     }
     ElMessage.success(`已应用"${preset.name}"的权限配置`)
@@ -318,20 +318,20 @@ const applyPreset = (preset) => {
 }
 
 // 展开/收起树节点
-const expandAll = (expand) => {
+const expandAll = (expand: any) => {
   const tree = menuTreeRef.value
   if (!tree) return
   const nodes = tree.store._getAllNodes()
-  nodes.forEach(node => {
+  nodes.forEach((node: any) => {
     node.expanded = expand
   })
 }
 
 // 获取所有菜单ID
 const allMenuIds = computed(() => {
-  const ids = []
-  const traverse = (nodes) => {
-    nodes.forEach(node => {
+  const ids: any[] = []
+  const traverse = (nodes: any) => {
+    nodes.forEach((node: any) => {
       ids.push(node.id)
       if (node.children) traverse(node.children)
     })
@@ -340,7 +340,7 @@ const allMenuIds = computed(() => {
   return ids
 })
 
-const normalizeScopeForForm = (scope) => {
+const normalizeScopeForForm = (scope: any) => {
   const normalized = {
     ALL: 'all',
     all: 'all',
@@ -358,11 +358,11 @@ const normalizeScopeForForm = (scope) => {
     CUSTOM: 'custom',
     custom: 'custom'
   }
-  return normalized[scope] || 'dept_tree'
+  return (normalized as Record<string, any>)[scope] || 'dept_tree'
 }
 
-const formatPermissionTree = (nodes) => {
-  return nodes.map(node => ({
+const formatPermissionTree = (nodes: any) => {
+  return nodes.map((node: any) => ({
     id: node.code,
     label: node.name,
     type: node.type,
@@ -370,23 +370,23 @@ const formatPermissionTree = (nodes) => {
   }))
 }
 
-const indexPermissionTree = (nodes) => {
+const indexPermissionTree = (nodes: any) => {
   const codeMap = {}
   const idMap = {}
 
-  const walk = (node) => {
+  const walk = (node: any) => {
     const descendantIds = [node.id]
-    ;(node.children || []).forEach(child => {
+    ;(node.children || []).forEach((child: any) => {
       descendantIds.push(...walk(child))
     })
 
-    codeMap[node.code] = {
+    ;(codeMap as Record<string, any>)[node.code] = {
       id: node.id,
       code: node.code,
       type: node.type,
       descendantIds: [...new Set(descendantIds)]
     }
-    idMap[node.id] = {
+    ;(idMap as Record<string, any>)[node.id] = {
       code: node.code,
       type: node.type
     }
@@ -406,30 +406,30 @@ const loadPermissionCatalog = async () => {
   indexPermissionTree(tree)
 }
 
-const getRoleCheckedCodes = (row) => {
+const getRoleCheckedCodes = (row: any) => {
   return [...new Set(
     (row.permission_ids || [])
-      .map(id => permissionMetaById.value[id])
+      .map((id: any) => permissionMetaById.value[id])
       .filter(Boolean)
-      .map(meta => meta.code)
+      .map((meta: any) => meta.code)
   )]
 }
 
-const getRoleMenuCount = (row) => getRoleCheckedCodes(row).length
+const getRoleMenuCount = (row: any) => getRoleCheckedCodes(row).length
 
-const getRoleDefaultScope = (row) => {
-  const defaultScope = (row.data_scopes || []).find(scope => !scope.module)
+const getRoleDefaultScope = (row: any) => {
+  const defaultScope = (row.data_scopes || []).find((scope: any) => !scope.module)
   return normalizeScopeForForm(defaultScope?.scope_type)
 }
 
-const buildPermissionIdsFromCheckedCodes = (checkedCodes, halfCheckedCodes) => {
-  const fullCheckedIds = checkedCodes.flatMap(code => permissionMetaByCode.value[code]?.descendantIds || [])
-  const halfCheckedIds = halfCheckedCodes.map(code => permissionMetaByCode.value[code]?.id).filter(Boolean)
+const buildPermissionIdsFromCheckedCodes = (checkedCodes: any, halfCheckedCodes: any) => {
+  const fullCheckedIds = checkedCodes.flatMap((code: any) => permissionMetaByCode.value[code]?.descendantIds || [])
+  const halfCheckedIds = halfCheckedCodes.map((code: any) => permissionMetaByCode.value[code]?.id).filter(Boolean)
 
   return [...new Set([...fullCheckedIds, ...halfCheckedIds])]
 }
 
-const getDataScopeLabel = (scope) => {
+const getDataScopeLabel = (scope: any) => {
   const labels = {
     all: '全部数据',
     dept_tree: '本部门及下级部门',
@@ -437,7 +437,7 @@ const getDataScopeLabel = (scope) => {
     self: '仅本人',
     custom: '自定义部门'
   }
-  return labels[scope] || scope
+  return (labels as Record<string, any>)[scope] || scope
 }
 
 const loadRoles = async () => {
@@ -445,7 +445,7 @@ const loadRoles = async () => {
   try {
     const response = await getRoles()
     roles.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载角色失败')
   } finally {
     loading.value = false
@@ -459,7 +459,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑角色'
   isEdit.value = true
   Object.assign(form, {
@@ -472,7 +472,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handlePermission = async (row) => {
+const handlePermission = async (row: any) => {
   if (Object.keys(permissionMetaByCode.value).length === 0) {
     await loadPermissionCatalog()
   }
@@ -480,16 +480,16 @@ const handlePermission = async (row) => {
   currentRole.value = row
   const menuIds = getRoleCheckedCodes(row)
   checkedMenuIds.value = menuIds
-  
+
   // 设置数据权限
   permForm.data_scope = getRoleDefaultScope(row)
-  
+
   // 更新全选状态
   checkAll.value = menuIds.length === allMenuIds.value.length
   isIndeterminate.value = menuIds.length > 0 && menuIds.length < allMenuIds.value.length
-  
+
   permDialogVisible.value = true
-  
+
   await nextTick()
   if (menuTreeRef.value) {
     menuTreeRef.value.setCheckedKeys(menuIds)
@@ -502,7 +502,7 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = {
       name: form.name,
       code: form.code,
@@ -515,7 +515,7 @@ const handleSubmit = async () => {
         }
       ]
     }
-    
+
     if (isEdit.value) {
       await updateRole(form.id, data)
       ElMessage.success('更新角色成功')
@@ -525,7 +525,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadRoles()
-  } catch (error) {
+  } catch (error: any) {
     const msg = error.response?.data?.detail || error.response?.data?.code?.[0] || '保存角色失败'
     ElMessage.error(msg)
   } finally {
@@ -533,7 +533,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleCheckAll = (val) => {
+const handleCheckAll = (val: any) => {
   if (menuTreeRef.value) {
     if (val) {
       menuTreeRef.value.setCheckedKeys(allMenuIds.value)
@@ -554,13 +554,13 @@ const handleMenuCheck = () => {
 
 const savePermissions = async () => {
   if (!currentRole.value || !menuTreeRef.value) return
-  
+
   savingPerm.value = true
   try {
     const checkedKeys = menuTreeRef.value.getCheckedKeys()
     const halfCheckedKeys = menuTreeRef.value.getHalfCheckedKeys()
     const permissionIds = buildPermissionIdsFromCheckedCodes(checkedKeys, halfCheckedKeys)
-    
+
     const data = {
       name: currentRole.value.name,
       code: currentRole.value.code,
@@ -576,12 +576,12 @@ const savePermissions = async () => {
         }
       ]
     }
-    
+
     await updateRole(currentRole.value.id, data)
     ElMessage.success('权限配置保存成功')
     permDialogVisible.value = false
     loadRoles()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存权限失败')
   } finally {
     savingPerm.value = false
@@ -591,7 +591,7 @@ const savePermissions = async () => {
 onMounted(async () => {
   try {
     await Promise.all([loadPermissionCatalog(), loadRoles()])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败', error)
     ElMessage.error('加载数据失败')
   }

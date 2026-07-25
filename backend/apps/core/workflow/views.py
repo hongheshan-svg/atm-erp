@@ -73,9 +73,7 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
         step_id = request.data.get('step_id')
         target_id = request.data.get('target_id')
         if not step_id or not target_id:
-            return Response(
-                {'error': '请提供 step_id 和 target_id'}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请提供 step_id 和 target_id'}, status=status.HTTP_400_BAD_REQUEST)
 
         queryset = self.filter_queryset(self.get_queryset())
         try:

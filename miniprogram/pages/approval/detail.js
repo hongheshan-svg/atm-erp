@@ -35,26 +35,26 @@ Page({
 
       if (this.data.type === 'task') {
         // 从任务加载
-        const taskRes = await app.request({ 
-          url: `/core/workflow/tasks/${this.data.id}/` 
+        const taskRes = await app.request({
+          url: `/core/workflow/tasks/${this.data.id}/`
         })
-        
+
         // 获取实例详情
-        const instanceRes = await app.request({ 
-          url: `/core/workflow/instances/${taskRes.instance}/` 
+        const instanceRes = await app.request({
+          url: `/core/workflow/instances/${taskRes.instance}/`
         })
-        
+
         detail = {
           ...instanceRes,
           step_name: taskRes.step_name,
           task_id: taskRes.id
         }
         tasks = instanceRes.tasks || []
-        
+
       } else {
         // 从实例加载
-        detail = await app.request({ 
-          url: `/core/workflow/instances/${this.data.id}/` 
+        detail = await app.request({
+          url: `/core/workflow/instances/${this.data.id}/`
         })
         tasks = detail.tasks || []
       }
@@ -68,7 +68,7 @@ Page({
       // 判断权限
       const userInfo = app.globalData.userInfo
       const canApprove = this.data.type === 'task' && detail.status === 'PENDING'
-      const canWithdraw = detail.status === 'PENDING' && 
+      const canWithdraw = detail.status === 'PENDING' &&
                           detail.submitter === userInfo?.id
 
       // 状态样式
@@ -124,9 +124,9 @@ Page({
               wx.navigateBack()
             }, 1500)
           } catch (err) {
-            wx.showToast({ 
-              title: err.error || '操作失败', 
-              icon: 'none' 
+            wx.showToast({
+              title: err.error || '操作失败',
+              icon: 'none'
             })
           } finally {
             this.setData({ approving: false })
@@ -159,9 +159,9 @@ Page({
               wx.navigateBack()
             }, 1500)
           } catch (err) {
-            wx.showToast({ 
-              title: err.error || '操作失败', 
-              icon: 'none' 
+            wx.showToast({
+              title: err.error || '操作失败',
+              icon: 'none'
             })
           } finally {
             this.setData({ rejecting: false })
@@ -188,9 +188,9 @@ Page({
               wx.navigateBack()
             }, 1500)
           } catch (err) {
-            wx.showToast({ 
-              title: err.error || '操作失败', 
-              icon: 'none' 
+            wx.showToast({
+              title: err.error || '操作失败',
+              icon: 'none'
             })
           } finally {
             this.setData({ withdrawing: false })

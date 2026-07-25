@@ -28,18 +28,12 @@ class Command(BaseCommand):
         for maintenance in asset_qs:
             register_payable(maintenance, 'asset_maintenance')
             count += 1
-        self.stdout.write(
-            self.style.SUCCESS(f'  ✓ 回填 {asset_qs.count()} 条资产维护(COMPLETED、cost>0)到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'  ✓ 回填 {asset_qs.count()} 条资产维护(COMPLETED、cost>0)到台账'))
 
         vehicle_qs = VehicleMaintenance.objects.filter(cost__gt=0)
         for maintenance in vehicle_qs:
             register_payable(maintenance, 'vehicle_maintenance')
             count += 1
-        self.stdout.write(
-            self.style.SUCCESS(f'  ✓ 回填 {vehicle_qs.count()} 条车辆维护(cost>0)到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'  ✓ 回填 {vehicle_qs.count()} 条车辆维护(cost>0)到台账'))
 
-        self.stdout.write(
-            self.style.SUCCESS(f'\n✓ 总计回填 {count} 条OA维护单据到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'\n✓ 总计回填 {count} 条OA维护单据到台账'))

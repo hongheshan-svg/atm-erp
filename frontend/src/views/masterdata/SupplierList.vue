@@ -52,16 +52,16 @@
       <!-- 批量操作工具栏 - 仅管理员可见 -->
       <div class="table-toolbar" v-permission="'masterdata:supplier:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
           批量删除
         </el-button>
       </div>
-      
+
       <el-table :data="suppliers" v-loading="loading" stripe border @selection-change="handleSelectionChange" :table-layout="'auto'" style="width: 100%;">
         <!-- 仅管理员显示选择列 -->
         <el-table-column v-permission="'masterdata:supplier:delete'" v-if="canDelete" type="selection" width="45" fixed />
@@ -84,11 +84,11 @@
             <el-button size="small" link type="primary" v-permission="'masterdata:supplier:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" link type="success" @click="handleViewAttachments(row)">附件</el-button>
             <!-- 仅管理员显示删除按钮 -->
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
+              size="small"
               link
-              type="danger" 
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -215,7 +215,7 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">提交</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 附件管理对话框 -->
     <el-dialog v-model="attachmentDialogVisible" :title="`${currentSupplier?.name || ''} - 附件管理`" width="900px" destroy-on-close>
       <AttachmentUpload
@@ -255,7 +255,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, Upload, Download, Document } from '@element-plus/icons-vue'
 import { getSupplierList, createSupplier, updateSupplier, exportSuppliers, downloadSupplierTemplate } from '@/api/masterdata'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
@@ -283,16 +283,16 @@ const suppliers = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增供应商')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const attachmentDialogVisible = ref(false)
-const currentSupplier = ref(null)
+const currentSupplier = ref<any>(null)
 const activeFormTab = ref('basic')
 const importResultVisible = ref(false)
-const importResult = ref(null)
-const uploadRef = ref(null)
+const importResult = ref<any>(null)
+const uploadRef = ref<any>(null)
 
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const searchForm = reactive({ search: '', status: null })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
+const searchForm = reactive<Record<string, any>>({ search: '', status: null })
 
 // Upload configuration
 const uploadUrl = computed(() => {
@@ -304,7 +304,7 @@ const uploadHeaders = computed(() => {
   return token ? { Authorization: `Bearer ${token}` } : {}
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   code: '',
   name: '',
@@ -332,16 +332,16 @@ const formRules = {
 const loadSuppliers = async () => {
   loading.value = true
   try {
-    const params = { 
-      page: pagination.page, 
+    const params: Record<string, any> = {
+      page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
-    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === null || (params as Record<string, any>)[k] === '') delete (params as Record<string, any>)[k] })
     const response = await getSupplierList(params)
     suppliers.value = response.results || response || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载供应商失败')
   } finally {
     loading.value = false
@@ -359,8 +359,8 @@ const handleAdd = () => {
   dialogTitle.value = '新增供应商'
   isEdit.value = false
   activeFormTab.value = 'basic'
-  Object.assign(form, { 
-    id: null, code: '', name: '', short_name: '', contact_person: '', phone: '', 
+  Object.assign(form, {
+    id: null, code: '', name: '', short_name: '', contact_person: '', phone: '',
     email: '', address: '', settlement_method: '',
     invoice_title: '', tax_number: '', bank_name: '', bank_account: '',
     registered_address: '', registered_phone: '', status: 'ACTIVE', notes: ''
@@ -368,7 +368,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑供应商'
   isEdit.value = true
   activeFormTab.value = 'basic'
@@ -391,19 +391,19 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadSuppliers()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('保存供应商失败: ' + (error.response?.data?.error || error.message))
   } finally {
     submitting.value = false
   }
 }
 
-const handleViewAttachments = (row) => {
+const handleViewAttachments = (row: any) => {
   currentSupplier.value = row
   attachmentDialogVisible.value = true
 }
 
-const beforeUpload = (file) => {
+const beforeUpload = (file: any) => {
   const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
   if (!isExcel) {
     ElMessage.error('只支持Excel文件格式(.xlsx, .xls)')
@@ -412,27 +412,27 @@ const beforeUpload = (file) => {
   return true
 }
 
-const handleUploadSuccess = (response) => {
+const handleUploadSuccess = (response: any) => {
   importResult.value = response
   importResultVisible.value = true
   ElMessage.success(`导入完成：新增 ${response.success_count} 个，更新 ${response.update_count} 个`)
 }
 
-const handleUploadError = (error) => {
+const handleUploadError = (error: any) => {
   console.error('Upload error:', error)
   ElMessage.error('导入失败，请检查文件格式')
 }
 
 const handleExport = async () => {
   try {
-    const params = { ...searchForm }
+    const params: Record<string, any> = { ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    
+
     const response = await exportSuppliers(params)
-    
+
     const filename = `供应商列表_${new Date().toISOString().split('T')[0]}.xlsx`
     const blob = response.data
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.style.display = 'none'
@@ -440,14 +440,14 @@ const handleExport = async () => {
     link.download = filename
     document.body.appendChild(link)
     link.click()
-    
+
     setTimeout(() => {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     }, 100)
-    
+
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }
@@ -455,19 +455,19 @@ const handleExport = async () => {
 const downloadTemplate = async () => {
   try {
     const response = await downloadSupplierTemplate()
-    
+
     if (!response || !response.data) {
       ElMessage.error('下载失败：没有收到响应数据')
       return
     }
-    
+
     const contentDisposition = response.headers?.['content-disposition'] || ''
     let filename = '供应商导入模板.xlsx'
     const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
     if (filenameMatch && filenameMatch[1]) {
       filename = filenameMatch[1].replace(/['"]/g, '')
     }
-    
+
     const blob = response.data
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -476,14 +476,14 @@ const downloadTemplate = async () => {
     link.download = filename
     document.body.appendChild(link)
     link.click()
-    
+
     setTimeout(() => {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     }, 100)
-    
+
     ElMessage.success('模板下载成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载模板失败:', error)
     ElMessage.error('下载模板失败: ' + (error.message || '未知错误'))
   }

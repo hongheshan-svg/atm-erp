@@ -1,19 +1,10 @@
-# 从源码本地构建镜像的 override
+# 从源码本地构建四服务精简部署中的应用镜像。
 # 用法: docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
-  celery:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
-  celery-beat:
-    build:
-      context: .
-      dockerfile: docker/backend/Dockerfile
-  nginx:
-    build:
-      context: .
-      dockerfile: docker/frontend/Dockerfile
+  app:
+    image: atm-erp-app:local
+    pull_policy: never
+
+  erp-updater:
+    image: atm-erp-updater:local
+    pull_policy: never

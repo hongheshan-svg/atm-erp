@@ -206,7 +206,7 @@
         <el-button type="primary" @click="submitNewRevision" :loading="saving">创建新版本</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 导入对话框 -->
     <el-dialog v-model="importDialogVisible" title="批量导入图纸" width="550px">
       <el-alert
@@ -222,7 +222,7 @@
           <div>3. 同一项目下相同图纸号+文件类型视为同一图纸</div>
         </template>
       </el-alert>
-      
+
       <el-upload
         ref="uploadRef"
         class="upload-area"
@@ -242,13 +242,13 @@
           <div class="el-upload__tip">只支持 .xlsx 或 .xls 格式文件</div>
         </template>
       </el-upload>
-      
+
       <div style="margin-top: 15px;">
         <el-checkbox v-model="importOptions.updateExisting">
           更新已存在的图纸（不勾选则跳过已存在的）
         </el-checkbox>
       </div>
-      
+
       <!-- 导入结果 -->
       <div v-if="importResult" class="import-result">
         <el-divider content-position="left">导入结果</el-divider>
@@ -260,7 +260,7 @@
             <el-tag type="primary">{{ importResult.updated || 0 }} 条</el-tag>
           </el-descriptions-item>
         </el-descriptions>
-        
+
         <div v-if="importResult.errors && importResult.errors.length > 0" class="error-list" style="margin-top: 10px;">
           <el-alert title="导入错误" type="warning" show-icon :closable="false">
             <template #default>
@@ -272,7 +272,7 @@
           </el-alert>
         </div>
       </div>
-      
+
       <template #footer>
         <el-button @click="handleDownloadTemplate">下载模板</el-button>
         <el-button @click="importDialogVisible = false">关闭</el-button>
@@ -296,7 +296,7 @@
         <el-descriptions-item label="描述" :span="2">{{ viewDetail.description || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div v-if="viewDetail.file_url" style="margin-top: 16px; text-align: center">
-        <el-button type="primary" @click="() => { globalThis.open(viewDetail.file_url) }">下载文件</el-button>
+        <el-button type="primary" @click="openDrawingFile(viewDetail.file_url)">下载文件</el-button>
       </div>
       <template #footer>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
@@ -329,26 +329,29 @@ const saving = ref(false)
 const drawings = ref<any[]>([])
 const projects = ref<any[]>([])
 const items = ref<any[]>([])
-const selectedProject = ref(null)
+const selectedProject = ref<any>(null)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增图纸')
 const revisionDialogVisible = ref(false)
-const currentDrawing = ref(null)
-const formRef = ref(null)
+const currentDrawing = ref<any>(null)
+const openDrawingFile = (url: string) => {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   drawing_no: '',
   status: '',
   file_type: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   drawing_no: '',
   name: '',
@@ -361,7 +364,7 @@ const form = reactive({
   notes: ''
 })
 
-const revisionForm = reactive({
+const revisionForm = reactive<Record<string, any>>({
   change_description: ''
 })
 
@@ -369,11 +372,11 @@ const revisionForm = reactive({
 const importDialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
-const importFile = ref(null)
+const importFile = ref<any>(null)
 const importing = ref(false)
-const importResult = ref(null)
-const uploadRef = ref(null)
-const importOptions = reactive({
+const importResult = ref<any>(null)
+const uploadRef = ref<any>(null)
+const importOptions = reactive<Record<string, any>>({
   updateExisting: false
 })
 
@@ -383,7 +386,7 @@ const rules = {
   file_type: [{ required: true, message: '请选择文件类型', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'REVIEWING': 'warning',
@@ -391,10 +394,10 @@ const getStatusType = (status) => {
     'RELEASED': 'primary',
     'OBSOLETE': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getFileTypeTag = (type) => {
+const getFileTypeTag = (type: any) => {
   const types = {
     'PDF': '',
     'STEP': 'success',
@@ -402,14 +405,14 @@ const getFileTypeTag = (type) => {
     'DWG': 'warning',
     'SOLIDWORKS': 'primary'
   }
-  return types[type] || 'info'
+  return (types as Record<string, any>)[type] || 'info'
 }
 
 const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 200 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -418,7 +421,7 @@ const loadItems = async () => {
   try {
     const res = await getItemList({ page_size: 500 })
     items.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载物料失败:', error)
   }
 }
@@ -426,7 +429,7 @@ const loadItems = async () => {
 const loadDrawings = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -434,12 +437,12 @@ const loadDrawings = async () => {
     if (selectedProject.value) {
       params.project = selectedProject.value
     }
-    Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
-    
+    Object.keys(params).forEach(k => { if (!(params as Record<string, any>)[k]) delete (params as Record<string, any>)[k] })
+
     const res = await getDrawingList(params)
     drawings.value = res.results || res || []
     pagination.total = res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载图纸列表失败')
   } finally {
     loading.value = false
@@ -471,7 +474,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑图纸'
   Object.assign(form, {
     id: row.id,
@@ -488,11 +491,11 @@ const handleEdit = async (row) => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getDrawing(row.id)
     viewDetail.value = res.data || res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
   }
@@ -503,12 +506,12 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     const payload = {
       ...form,
       project: selectedProject.value
     }
-    
+
     if (form.id) {
       await updateDrawing(form.id, payload)
       ElMessage.success('图纸更新成功')
@@ -516,10 +519,10 @@ const handleSave = async () => {
       await createDrawing( payload)
       ElMessage.success('图纸创建成功')
     }
-    
+
     dialogVisible.value = false
     loadDrawings()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '保存失败')
     }
@@ -528,33 +531,33 @@ const handleSave = async () => {
   }
 }
 
-const handleSubmitReview = async (row) => {
+const handleSubmitReview = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交该图纸进行审核吗？', '提交审核', { type: 'warning' })
     await submitDrawingReview(row.id)
     ElMessage.success('已提交审核')
     loadDrawings()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '提交失败')
     }
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要批准该图纸吗？', '批准确认', { type: 'warning' })
     await approveDrawing(row.id)
     ElMessage.success('图纸已批准')
     loadDrawings()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '批准失败')
     }
   }
 }
 
-const handleReject = async (row) => {
+const handleReject = async (row: any) => {
   try {
     const { value: comment } = await ElMessageBox.prompt('请输入驳回意见', '驳回图纸', {
       confirmButtonText: '确定',
@@ -564,27 +567,27 @@ const handleReject = async (row) => {
     await rejectDrawing(row.id, { comment })
     ElMessage.success('图纸已驳回，退回草稿')
     loadDrawings()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '驳回失败')
     }
   }
 }
 
-const handleRelease = async (row) => {
+const handleRelease = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要发布该图纸吗？发布后将发送变更通知邮件。', '发布确认', { type: 'warning' })
     await releaseDrawing(row.id)
     ElMessage.success('图纸已发布，变更通知已发送')
     loadDrawings()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '发布失败')
     }
   }
 }
 
-const handleNewRevision = (row) => {
+const handleNewRevision = (row: any) => {
   currentDrawing.value = row
   revisionForm.change_description = ''
   revisionDialogVisible.value = true
@@ -595,7 +598,7 @@ const submitNewRevision = async () => {
     ElMessage.warning('请输入变更说明')
     return
   }
-  
+
   saving.value = true
   try {
     await newDrawingRevision(currentDrawing.value.id, {
@@ -604,7 +607,7 @@ const submitNewRevision = async () => {
     ElMessage.success('新版本创建成功')
     revisionDialogVisible.value = false
     loadDrawings()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '创建失败')
   } finally {
     saving.value = false
@@ -620,18 +623,18 @@ const handleExport = async () => {
     ElMessage.warning('请先选择项目')
     return
   }
-  
+
   try {
     const response = await exportDrawingExcel( {
       params: { project: selectedProject.value },
       responseType: 'blob'
     })
-    
+
     const blobData = response.data || response
-    const blob = new Blob([blobData], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    const blob = new Blob([blobData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -641,9 +644,9 @@ const handleExport = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
+
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
   }
@@ -654,12 +657,12 @@ const handleDownloadTemplate = async () => {
     const response = await exportDrawingTemplate( {
       responseType: 'blob'
     })
-    
+
     const blobData = response.data || response
-    const blob = new Blob([blobData], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    const blob = new Blob([blobData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -668,9 +671,9 @@ const handleDownloadTemplate = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
+
     ElMessage.success('模板下载成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载模板失败:', error)
     ElMessage.error('下载模板失败')
   }
@@ -690,7 +693,7 @@ const handleImport = () => {
   importDialogVisible.value = true
 }
 
-const handleFileChange = (file) => {
+const handleFileChange = (file: any) => {
   importFile.value = file.raw
   importResult.value = null
 }
@@ -704,28 +707,28 @@ const handleConfirmImport = async () => {
     ElMessage.warning('请选择要导入的文件')
     return
   }
-  
+
   importing.value = true
   try {
     const formData = new FormData()
     formData.append('file', importFile.value)
     formData.append('project', selectedProject.value)
     formData.append('update_existing', importOptions.updateExisting.toString())
-    
+
     const response = await importDrawingExcel( formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    
+
     const data = response.data || response
     importResult.value = data
-    
+
     if (data.created > 0 || data.updated > 0) {
       ElMessage.success(data.message || `导入成功：新增${data.created}条，更新${data.updated}条`)
       loadDrawings()
     } else if (data.errors && data.errors.length > 0) {
       ElMessage.warning('导入完成，但存在错误，请查看详情')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('导入失败:', error)
     const errData = error.response?.data || error
     if (errData?.errors?.length) {
@@ -798,4 +801,3 @@ onMounted(() => {
   font-size: 12px;
 }
 </style>
-

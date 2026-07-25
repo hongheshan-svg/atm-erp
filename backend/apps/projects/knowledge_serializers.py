@@ -17,7 +17,7 @@ class KnowledgeCategorySerializer(serializers.ModelSerializer):
         model = KnowledgeCategory
         fields = '__all__'
 
-    def get_article_count(self, obj):
+    def get_article_count(self, obj) -> int:
         return obj.articles.filter(is_deleted=False, status='PUBLISHED').count()
 
 
@@ -56,7 +56,7 @@ class KnowledgeArticleSerializer(serializers.ModelSerializer):
         model = KnowledgeArticle
         fields = '__all__'
 
-    def get_author_name(self, obj):
+    def get_author_name(self, obj) -> str:
         return _display_name(obj.author)
 
 
@@ -86,7 +86,7 @@ class KnowledgeArticleListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_author_name(self, obj):
+    def get_author_name(self, obj) -> str:
         return _display_name(obj.author)
 
 
@@ -104,13 +104,13 @@ class ProjectArchiveSerializer(serializers.ModelSerializer):
         model = ProjectArchive
         fields = '__all__'
 
-    def get_reviewer_name(self, obj):
+    def get_reviewer_name(self, obj) -> str:
         return _display_name(obj.reviewer)
 
-    def get_cost_variance_amount(self, obj):
+    def get_cost_variance_amount(self, obj) -> float:
         return float(obj.actual_cost - obj.budget_amount)
 
-    def get_schedule_variance_days(self, obj):
+    def get_schedule_variance_days(self, obj) -> int:
         if obj.original_end and obj.actual_end:
             return (obj.actual_end - obj.original_end).days
         return 0
@@ -131,13 +131,13 @@ class TechnicalIssueSerializer(serializers.ModelSerializer):
         model = TechnicalIssue
         fields = '__all__'
 
-    def get_reported_by_name(self, obj):
+    def get_reported_by_name(self, obj) -> str:
         return _display_name(obj.reported_by)
 
-    def get_resolved_by_name(self, obj):
+    def get_resolved_by_name(self, obj) -> str:
         return _display_name(obj.resolved_by)
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         return _display_name(obj.created_by)
 
 
@@ -182,10 +182,10 @@ class StandardComponentSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['code', 'usage_count', 'last_used']
 
-    def get_maintainer_name(self, obj):
+    def get_maintainer_name(self, obj) -> str:
         return _display_name(obj.maintainer)
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         return _display_name(obj.created_by)
 
 

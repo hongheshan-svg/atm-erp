@@ -25,9 +25,9 @@
             </div>
           </div>
           <div class="clock-actions">
-            <el-button 
-              type="primary" 
-              size="large" 
+            <el-button
+              type="primary"
+              size="large"
               :disabled="!!todayRecord?.check_in_time"
               @click="handleCheckIn"
               :loading="checking"
@@ -35,8 +35,8 @@
               <el-icon><Clock /></el-icon>
               签到打卡
             </el-button>
-            <el-button 
-              type="success" 
+            <el-button
+              type="success"
               size="large"
               :disabled="!todayRecord?.check_in_time || !!todayRecord?.check_out_time"
               @click="handleCheckOut"
@@ -48,7 +48,7 @@
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :span="8">
         <el-card class="stats-card">
           <template #header>
@@ -79,7 +79,7 @@
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :span="8">
         <el-card class="quick-card">
           <template #header>
@@ -106,7 +106,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 考勤记录 -->
     <el-card style="margin-top: 20px;">
       <template #header>
@@ -122,21 +122,21 @@
           />
         </div>
       </template>
-      
+
       <el-empty v-if="!loading && records.length === 0" description="本月暂无考勤记录，点击上方按钮开始打卡" />
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="records" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="attendance_date" label="日期" width="120" />
@@ -179,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Clock, CircleCheck, Document, Timer, Van, Box } from '@element-plus/icons-vue'
 import { getAttendanceToday, getAttendanceRecords, getAttendanceMonthlySummary, checkIn, checkOut } from '@/api/oa'
@@ -191,13 +191,13 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const checking = ref(false)
 const records = ref<any[]>([])
-const todayRecord = ref(null)
+const todayRecord = ref<any>(null)
 const monthSummary = ref<Record<string, any>>({})
 const selectedMonth = ref(new Date().toISOString().slice(0, 7))
 const currentTime = ref('')
 const currentDate = ref('')
 
-let timer = null
+let timer: any = null
 
 const updateTime = () => {
   const now = new Date()
@@ -205,12 +205,12 @@ const updateTime = () => {
   currentDate.value = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 }
 
-const formatTime = (datetime) => {
+const formatTime = (datetime: any) => {
   if (!datetime) return ''
   return new Date(datetime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'NORMAL': 'success',
     'LATE': 'danger',
@@ -221,7 +221,7 @@ const getStatusType = (status) => {
     'TRAVEL': 'primary',
     'REMOTE': 'primary'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadTodayStatus = async () => {
@@ -229,7 +229,7 @@ const loadTodayStatus = async () => {
     const res = await getAttendanceToday()
     // res 已经是 response.data
     todayRecord.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载今日状态失败', error)
     // 设置默认值
     todayRecord.value = { check_in_time: null, check_out_time: null, status: 'NOT_CHECKED' }
@@ -248,7 +248,7 @@ const loadRecords = async () => {
     } else {
       records.value = []
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载考勤记录失败', error)
     records.value = []
   } finally {
@@ -272,7 +272,7 @@ const loadMonthlySummary = async () => {
     } else {
       monthSummary.value = {}
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载月度统计失败', error)
     monthSummary.value = {}
   }
@@ -288,7 +288,7 @@ const handleCheckIn = async () => {
     todayRecord.value = res
     ElMessage.success('签到成功')
     loadRecords()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '签到失败')
   } finally {
     checking.value = false
@@ -306,7 +306,7 @@ const handleCheckOut = async () => {
     ElMessage.success('签退成功')
     loadRecords()
     loadMonthlySummary()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '签退失败')
   } finally {
     checking.value = false

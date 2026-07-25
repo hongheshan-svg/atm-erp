@@ -7,19 +7,19 @@
           <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate">新增费率</el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="work_type_display" label="工种" width="150" />
@@ -94,9 +94,9 @@ const saving = ref(false)
 const tableData = ref<any[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const form = reactive({ id: null, work_type: '', standard_rate: 0, overtime_rate: 0, weekend_rate: 0, holiday_rate: 0, effective_from: '' })
+const form = reactive<Record<string, any>>({ id: null, work_type: '', standard_rate: 0, overtime_rate: 0, weekend_rate: 0, holiday_rate: 0, effective_from: '' })
 
 const rules = {
   work_type: [{ required: true, message: '请选择工种', trigger: 'change' }],
@@ -109,7 +109,7 @@ const loadData = async () => {
   try {
     const res = await getLaborRateList()
     tableData.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -123,7 +123,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, { id: row.id, work_type: row.work_type, standard_rate: row.standard_rate, overtime_rate: row.overtime_rate, weekend_rate: row.weekend_rate, holiday_rate: row.holiday_rate, effective_from: row.effective_from })
   dialogVisible.value = true
@@ -142,7 +142,7 @@ const handleSave = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false

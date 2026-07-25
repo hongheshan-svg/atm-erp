@@ -43,8 +43,8 @@
                 <div v-for="day in wc.days" :key="day.date" class="day-capacity">
                   <div class="day-header">{{ formatWeekday(day.date) }}</div>
                   <div class="day-date">{{ formatShortDate(day.date) }}</div>
-                  <el-progress 
-                    :percentage="day.utilization" 
+                  <el-progress
+                    :percentage="day.utilization"
                     :color="getCapacityColor(day.utilization)"
                     :stroke-width="10"
                   />
@@ -72,19 +72,19 @@
           </el-radio-group>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="orders" v-loading="loadingOrders" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="工单号" width="140">
@@ -163,7 +163,7 @@
           <div v-for="item in ganttData" :key="item.id" class="gantt-row">
             <div class="gantt-label">{{ item.order_no }}</div>
             <div class="gantt-bar-container">
-              <div 
+              <div
                 class="gantt-bar"
                 :style="getGanttBarStyle(item)"
                 :class="{ 'completed': item.status === 'COMPLETED' }"
@@ -279,7 +279,7 @@ const ganttData = ref<any[]>([])
 const ganttDateRange = ref<any[]>([])
 const orderFilter = ref('')
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -312,7 +312,7 @@ const loadCreateOptions = async () => {
     ])
     itemOptions.value = itemsRes.results || itemsRes || []
     workCenterOptions.value = wcRes.results || wcRes || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   }
 }
@@ -340,7 +340,7 @@ const submitCreate = async () => {
       ElMessage.success('工单已创建')
       createDialogVisible.value = false
       loadOrders()
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
     } finally {
       creating.value = false
@@ -360,7 +360,7 @@ const loadCapacity = async () => {
     const startDate = capacityStartDate.value?.toISOString().split('T')[0]
     const res = await getScheduleCapacity({ start_date: startDate, days: 7 })
     capacityData.value = res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     capacityData.value = []
   } finally {
@@ -371,7 +371,7 @@ const loadCapacity = async () => {
 const loadOrders = async () => {
   loadingOrders.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -381,7 +381,7 @@ const loadOrders = async () => {
     const res = await getScheduleOrderList(params)
     orders.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(orders.value) ? orders.value.length : 0)
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   } finally {
     loadingOrders.value = false
@@ -391,14 +391,14 @@ const loadOrders = async () => {
 const loadGantt = async () => {
   loadingGantt.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (ganttDateRange.value?.length === 2) {
       params.start_date = ganttDateRange.value[0].toISOString().split('T')[0]
       params.end_date = ganttDateRange.value[1].toISOString().split('T')[0]
     }
     const res = await getScheduleGanttList(params)
     ganttData.value = res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     ganttData.value = []
   } finally {
@@ -413,25 +413,25 @@ const autoSchedule = async () => {
     const res = await apiAutoSchedule()
     ElMessage.success(`排程完成，共处理 ${res.scheduled_count || 0} 个工单`)
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   } finally {
     scheduling.value = false
   }
 }
 
-const startOrder = async (row) => {
+const startOrder = async (row: any) => {
   await ElMessageBox.confirm(`确定开始生产工单 ${row.order_no}？`, '确认')
   try {
     await startScheduleOrder(row.id)
     ElMessage.success('已开始生产')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   }
 }
 
-const completeOrder = async (row) => {
+const completeOrder = async (row: any) => {
   await ElMessageBox.confirm(`确定完成工单 ${row.order_no}？`, '确认')
   try {
     await completeScheduleOrder(row.id, {
@@ -439,56 +439,56 @@ const completeOrder = async (row) => {
     })
     ElMessage.success('工单已完成')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   }
 }
 
-const getCapacityColor = (utilization) => {
+const getCapacityColor = (utilization: any) => {
   if (utilization >= 90) return '#F56C6C'
   if (utilization >= 70) return '#E6A23C'
   return '#67C23A'
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const map = { 1: 'danger', 2: 'warning', 3: '', 4: 'info', 5: 'info' }
-  return map[priority] || 'info'
+  return (map as Record<string, any>)[priority] || 'info'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { PENDING: 'info', SCHEDULED: 'warning', IN_PROGRESS: 'primary', COMPLETED: 'success', CANCELLED: 'info' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getGanttBarStyle = (item) => {
+const getGanttBarStyle = (item: any) => {
   if (!item.start || !item.end) return {}
-  
+
   const start = new Date(item.start)
   const end = new Date(item.end)
   const rangeStart = ganttDateRange.value?.[0] || new Date()
   const rangeEnd = ganttDateRange.value?.[1] || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  
-  const totalRange = rangeEnd - rangeStart
-  const left = Math.max(0, (start - rangeStart) / totalRange * 100)
-  const width = Math.min(100 - left, (end - start) / totalRange * 100)
-  
+
+  const totalRange = rangeEnd.getTime() - rangeStart.getTime()
+  const left = Math.max(0, ((start.getTime() - rangeStart.getTime()) / totalRange) * 100)
+  const width = Math.min(100 - left, ((end.getTime() - start.getTime()) / totalRange) * 100)
+
   return {
     left: `${left}%`,
     width: `${Math.max(2, width)}%`
   }
 }
 
-const formatWeekday = (dateStr) => {
+const formatWeekday = (dateStr: any) => {
   const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
   return days[new Date(dateStr).getDay()]
 }
 
-const formatShortDate = (dateStr) => {
+const formatShortDate = (dateStr: any) => {
   const d = new Date(dateStr)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
@@ -498,7 +498,7 @@ onMounted(() => {
   const today = new Date()
   const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
   ganttDateRange.value = [today, nextWeek]
-  
+
   loadData()
 })
 </script>

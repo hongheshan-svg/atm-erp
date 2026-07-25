@@ -30,6 +30,8 @@ docs/
 **/*.test.js
 **/*.spec.js
 **/coverage
+**/playwright-report
+**/test-results
 
 # Logs
 *.log

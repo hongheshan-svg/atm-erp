@@ -4,7 +4,9 @@ export function login(username: string, password: string) {
   return request({
     url: '/auth/login/',
     method: 'post',
-    data: { username, password }
+    data: { username, password },
+    skipAuthRefresh: true,
+    skipErrorMessage: true
   })
 }
 
@@ -16,7 +18,11 @@ export function updateProfile(data: any) {
   return request({ url: '/auth/users/update_profile/', method: 'put', data })
 }
 
-export function changePassword(data: { old_password: string; new_password: string }) {
+export function changePassword(data: {
+  old_password: string
+  new_password: string
+  new_password_confirm: string
+}) {
   return request({ url: '/auth/users/change_password/', method: 'post', data })
 }
 

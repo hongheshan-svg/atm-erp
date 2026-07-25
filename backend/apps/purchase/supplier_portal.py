@@ -9,6 +9,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -279,7 +280,7 @@ class SupplierQualityRecordSerializer(serializers.ModelSerializer):
         model = SupplierQualityRecord
         fields = '__all__'
 
-    def get_pass_rate(self, obj):
+    def get_pass_rate(self, obj) -> float:
         if obj.inspected_qty > 0:
             return round(float(obj.qualified_qty / obj.inspected_qty * 100), 1)
         return 0
@@ -400,6 +401,7 @@ class SupplierPortalOrdersView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id='purchase_supplier_portal_orders_list')
     def get(self, request, supplier_id):
         status_filter = request.query_params.get('status')
 
@@ -435,6 +437,7 @@ class SupplierPortalOrderDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id='purchase_supplier_portal_order_detail')
     def get(self, request, supplier_id, order_view_id):
         try:
             view = SupplierOrderView.objects.get(pk=order_view_id, supplier_id=supplier_id, is_deleted=False)

@@ -12,7 +12,6 @@ from .contract_execution import (
     DeliveryRecordViewSet,
     PaymentRecordViewSet,
 )
-from .iqc import IncomingInspectionViewSet
 from .evaluation_views import (
     EvaluationCriteriaViewSet,
     EvaluationScoreItemViewSet,
@@ -21,6 +20,7 @@ from .evaluation_views import (
     SupplierEvaluationViewSet,
     SupplierGradeHistoryViewSet,
 )
+from .iqc import IncomingInspectionViewSet
 from .outsource_tracking import (
     OutsourceCapabilityViewSet,
     OutsourceClaimViewSet,

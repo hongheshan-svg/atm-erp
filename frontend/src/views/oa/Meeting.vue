@@ -4,7 +4,7 @@
       <h2>会议管理</h2>
       <el-button type="primary" v-permission="'oa:meeting:create'" @click="handleAdd">预约会议</el-button>
     </div>
-    
+
     <el-row :gutter="16">
       <el-col :span="18">
         <el-card shadow="never">
@@ -22,9 +22,9 @@
                 </el-select>
               </el-form-item>
               <el-form-item>
-                <el-date-picker 
-                  v-model="queryParams.date_range" 
-                  type="daterange" 
+                <el-date-picker
+                  v-model="queryParams.date_range"
+                  type="daterange"
                   value-format="YYYY-MM-DD"
                   start-placeholder="开始日期"
                   end-placeholder="结束日期"
@@ -36,19 +36,19 @@
               </el-form-item>
             </el-form>
           </template>
-          
+
           <!-- 批量操作 -->
-          
+
           <div v-if="selectedRows.length > 0" class="batch-toolbar">
-          
+
             <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-          
+
             <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-          
+
             <el-button size="small" @click="batchExport">导出选中</el-button>
-          
+
           </div>
-          
+
           <el-table :data="meetingList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="45" />
             <el-table-column prop="meeting_no" label="会议编号" width="120" />
@@ -81,16 +81,16 @@
             <el-table-column label="操作" width="180" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-                <el-button type="success" link size="small" @click="handleStart(row)" 
+                <el-button type="success" link size="small" @click="handleStart(row)"
                   v-if="row.status === 'SCHEDULED'">开始</el-button>
-                <el-button type="warning" link size="small" @click="handleComplete(row)" 
+                <el-button type="warning" link size="small" @click="handleComplete(row)"
                   v-if="row.status === 'IN_PROGRESS'">结束</el-button>
-                <el-button type="danger" link size="small" @click="handleCancel(row)" 
+                <el-button type="danger" link size="small" @click="handleCancel(row)"
                   v-if="row.status === 'SCHEDULED'">取消</el-button>
               </template>
             </el-table-column>
           </el-table>
-          
+
           <el-pagination
             v-model:current-page="pagination.page"
             v-model:page-size="pagination.size"
@@ -102,14 +102,14 @@
           />
         </el-card>
       </el-col>
-      
+
       <el-col :span="6">
         <el-card shadow="never" header="今日会议">
           <div v-if="todayMeetings.length === 0" class="empty-tip">今日暂无会议</div>
           <div v-else class="today-list">
-            <div 
-              v-for="item in todayMeetings" 
-              :key="item.id" 
+            <div
+              v-for="item in todayMeetings"
+              :key="item.id"
               class="meeting-item"
               :class="item.status.toLowerCase()"
             >
@@ -125,7 +125,7 @@
             </div>
           </div>
         </el-card>
-        
+
         <el-card shadow="never" header="会议室" style="margin-top: 16px">
           <div v-for="room in meetingRooms" :key="room.id" class="room-item">
             <div class="room-name">{{ room.name }}</div>
@@ -139,7 +139,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 新建会议对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑会议' : '预约会议'" width="700px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
@@ -149,20 +149,20 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="开始时间" prop="start_time">
-              <el-date-picker 
-                v-model="formData.start_time" 
+              <el-date-picker
+                v-model="formData.start_time"
                 type="datetime"
-                style="width: 100%" 
+                style="width: 100%"
                 value-format="YYYY-MM-DDTHH:mm:ss"
               />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="结束时间" prop="end_time">
-              <el-date-picker 
-                v-model="formData.end_time" 
+              <el-date-picker
+                v-model="formData.end_time"
                 type="datetime"
-                style="width: 100%" 
+                style="width: 100%"
                 value-format="YYYY-MM-DDTHH:mm:ss"
               />
             </el-form-item>
@@ -176,10 +176,10 @@
         </el-form-item>
         <el-form-item label="会议室" v-if="!formData.is_online">
           <el-select v-model="formData.meeting_room" style="width: 100%" placeholder="选择会议室">
-            <el-option 
-              v-for="room in meetingRooms" 
-              :key="room.id" 
-              :label="`${room.name} (${room.capacity}人)`" 
+            <el-option
+              v-for="room in meetingRooms"
+              :key="room.id"
+              :label="`${room.name} (${room.capacity}人)`"
               :value="room.id"
               :disabled="!room.is_available"
             />
@@ -202,7 +202,7 @@
         <el-button type="primary" @click="submitForm" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 会议详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentMeeting?.title" width="800px">
       <el-descriptions v-if="currentMeeting" :column="2" border>
@@ -220,7 +220,7 @@
         <el-descriptions-item label="关联项目">{{ currentMeeting.project_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="会议议程" :span="2">{{ currentMeeting.agenda || '-' }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider content-position="left">参会人员</el-divider>
       <el-table :data="currentMeeting?.meeting_participants" size="small" border>
         <el-table-column prop="user_name" label="姓名" />
@@ -242,7 +242,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <template v-if="currentMeeting?.minutes">
         <el-divider content-position="left">会议纪要</el-divider>
         <div class="minutes-content">{{ currentMeeting.minutes }}</div>
@@ -272,13 +272,13 @@ const userList = ref<any[]>([])
 const userListLoaded = ref(false)
 const permissionStore = usePermissionStore()
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: null,
   date_range: []
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -287,10 +287,10 @@ const pagination = reactive({
 const dialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentMeeting = ref(null)
+const formRef = ref<any>(null)
+const currentMeeting = ref<any>(null)
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   title: '',
   start_time: '',
   end_time: '',
@@ -310,7 +310,7 @@ const rules = {
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       search: queryParams.search,
@@ -319,7 +319,7 @@ const fetchList = async () => {
     const data = await getCoreMeetings(params)
     meetingList.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -330,7 +330,7 @@ const fetchToday = async () => {
   try {
     const data = await getTodayMeetings()
     todayMeetings.value = data || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -339,7 +339,7 @@ const fetchRooms = async () => {
   try {
     const data = await getMeetingRooms()
     meetingRooms.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -351,13 +351,13 @@ const fetchUsers = async () => {
 
   try {
     const data = await getUsers()
-    userList.value = (data.results || data).map(u => ({
+    userList.value = (data.results || data).map((u: any) => ({
       id: u.id,
       name: u.full_name || u.username
     }))
     userListLoaded.value = true
     return true
-  } catch (e) {
+  } catch (e: any) {
     if (e?.response?.status !== 403) {
       console.error(e)
     }
@@ -393,50 +393,50 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getCoreMeeting(row.id)
     currentMeeting.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleStart = async (row) => {
+const handleStart = async (row: any) => {
   try {
     await startMeeting(row.id)
     ElMessage.success('会议已开始')
     fetchList()
     fetchToday()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleComplete = async (row) => {
+const handleComplete = async (row: any) => {
   try {
     const { value } = await ElMessageBox.prompt('请输入会议纪要', '结束会议', {
       inputType: 'textarea'
     })
-    
+
     await completeMeeting(row.id, { minutes: value })
     ElMessage.success('会议已结束')
     fetchList()
     fetchToday()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Meeting fetchToday error:', e)
   }
 }
 
-const handleCancel = async (row) => {
+const handleCancel = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定取消此会议吗?', '提示')
     await cancelMeeting(row.id)
     ElMessage.success('已取消')
     fetchList()
     fetchToday()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Meeting fetchToday error:', e)
   }
 }
@@ -455,7 +455,7 @@ const hasRoomConflict = async () => {
     const reqEnd = end.slice(11, 16)
     // 编辑时排除自身已占用的时段无法区分，故仅在新建时强校验
     return slots.some((s: any) => reqStart < s.end && reqEnd > s.start)
-  } catch (e) {
+  } catch (e: any) {
     // 可用性查询失败不阻断提交
     return false
   }
@@ -481,41 +481,41 @@ const submitForm = async () => {
     dialogVisible.value = false
     fetchList()
     fetchToday()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   return dateStr.replace('T', ' ').slice(0, 16)
 }
 
-const formatTime = (dateStr) => {
+const formatTime = (dateStr: any) => {
   if (!dateStr) return ''
   return dateStr.slice(11, 16)
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     SCHEDULED: '',
     IN_PROGRESS: 'success',
     COMPLETED: 'info',
     CANCELLED: 'danger'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getResponseType = (response) => {
+const getResponseType = (response: any) => {
   const types = {
     PENDING: 'info',
     ACCEPTED: 'success',
     DECLINED: 'danger',
     TENTATIVE: 'warning'
   }
-  return types[response] || ''
+  return (types as Record<string, any>)[response] || ''
 }
 
 onMounted(() => {

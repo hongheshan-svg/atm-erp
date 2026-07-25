@@ -94,7 +94,7 @@ class InstallationLogSerializer(serializers.ModelSerializer):
         model = InstallationLog
         fields = '__all__'
 
-    def get_recorded_by_name(self, obj):
+    def get_recorded_by_name(self, obj) -> str:
         return _display_name(obj.recorded_by)
 
 
@@ -111,7 +111,7 @@ class EquipmentInstallationSerializer(serializers.ModelSerializer):
         model = EquipmentInstallation
         fields = '__all__'
 
-    def get_team_leader_name(self, obj):
+    def get_team_leader_name(self, obj) -> str:
         return _display_name(obj.team_leader)
 
 
@@ -127,7 +127,7 @@ class EquipmentAcceptanceSerializer(serializers.ModelSerializer):
         model = EquipmentAcceptance
         fields = '__all__'
 
-    def get_our_representative_name(self, obj):
+    def get_our_representative_name(self, obj) -> str:
         return _display_name(obj.our_representative)
 
 
@@ -157,7 +157,7 @@ class TrainingRecordSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['training_no']
 
-    def get_trainer_name(self, obj):
+    def get_trainer_name(self, obj) -> str:
         return _display_name(obj.trainer)
 
 
@@ -176,7 +176,7 @@ class FixtureCategorySerializer(serializers.ModelSerializer):
         model = FixtureCategory
         fields = '__all__'
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
 
@@ -210,7 +210,7 @@ class FixtureSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['fixture_no', 'usage_count']
 
-    def get_custodian_name(self, obj):
+    def get_custodian_name(self, obj) -> str:
         return _display_name(obj.custodian)
 
 
@@ -243,7 +243,7 @@ class FixtureListSerializer(serializers.ModelSerializer):
             'max_usage',
         ]
 
-    def get_custodian_name(self, obj):
+    def get_custodian_name(self, obj) -> str:
         return _display_name(obj.custodian)
 
 
@@ -259,7 +259,7 @@ class FixtureUsageRecordSerializer(serializers.ModelSerializer):
         model = FixtureUsageRecord
         fields = '__all__'
 
-    def get_used_by_name(self, obj):
+    def get_used_by_name(self, obj) -> str:
         return _display_name(obj.used_by)
 
 
@@ -288,5 +288,5 @@ class FixtureMaintenanceSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['total_cost']
 
-    def get_performed_by_name(self, obj):
+    def get_performed_by_name(self, obj) -> str:
         return _display_name(obj.performed_by)

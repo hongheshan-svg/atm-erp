@@ -11,9 +11,9 @@
       <!-- 批量操作工具栏 -->
       <div class="table-toolbar" v-permission="'masterdata:warehouse:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -113,7 +113,7 @@ const dialogTitle = ref('新增仓库')
 const isEdit = ref(false)
 const formRef = ref<any>(null)
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -137,7 +137,7 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   }
 )
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   code: '',
   name: '',
@@ -147,9 +147,9 @@ const form = reactive({
   is_active: true
 })
 
-const getTypeLabel = (type) => {
+const getTypeLabel = (type: any) => {
   const labels = { 'MAIN': '主仓库', 'BRANCH': '分仓库', 'TRANSIT': '中转仓', 'VIRTUAL': '虚拟仓' }
-  return labels[type] || type
+  return (labels as Record<string, any>)[type] || type
 }
 
 async function loadWarehouses() {
@@ -161,7 +161,7 @@ async function loadWarehouses() {
     })
     warehouses.value = response.results || response || []
     pagination.total = response.count || warehouses.value.length || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载仓库失败')
   } finally {
     loading.value = false
@@ -178,7 +178,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑仓库'
   isEdit.value = true
   Object.assign(form, row)

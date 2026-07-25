@@ -18,12 +18,12 @@
           <el-alert type="info" :closable="false" style="margin-bottom: 20px">
             拖拽或勾选下方组件来自定义您的仪表盘
           </el-alert>
-          
+
           <el-row :gutter="16">
             <el-col :span="8" v-for="widget in availableWidgets" :key="widget.key">
               <el-card shadow="hover" class="widget-card" :class="{ active: isWidgetEnabled(widget.key) }">
                 <div class="widget-header">
-                  <el-checkbox 
+                  <el-checkbox
                     :model-value="isWidgetEnabled(widget.key)"
                     @change="toggleWidget(widget.key)"
                   >
@@ -54,11 +54,11 @@
               <el-switch v-model="layoutConfig.autoRefresh" />
               <span v-if="layoutConfig.autoRefresh" style="margin-left: 16px">
                 每
-                <el-input-number 
-                  v-model="layoutConfig.refreshInterval" 
-                  :min="30" 
-                  :max="600" 
-                  :step="30" 
+                <el-input-number
+                  v-model="layoutConfig.refreshInterval"
+                  :min="30"
+                  :max="600"
+                  :step="30"
                   size="small"
                   style="width: 100px"
                 />
@@ -82,19 +82,19 @@
           <el-alert type="info" :closable="false" style="margin-bottom: 20px">
             点击上下箭头调整组件在仪表盘中的显示顺序
           </el-alert>
-          
+
           <div class="widget-order-list">
             <div v-for="(element, index) in enabledWidgets" :key="element.key" class="order-item">
               <div class="order-actions">
-                <el-button 
-                  :icon="ArrowUp" 
-                  size="small" 
+                <el-button
+                  :icon="ArrowUp"
+                  size="small"
                   :disabled="index === 0"
                   @click="moveWidget(index, -1)"
                 />
-                <el-button 
-                  :icon="ArrowDown" 
-                  size="small" 
+                <el-button
+                  :icon="ArrowDown"
+                  size="small"
                   :disabled="index === enabledWidgets.length - 1"
                   @click="moveWidget(index, 1)"
                 />
@@ -104,7 +104,7 @@
               <el-tag size="small">{{ element.category }}</el-tag>
             </div>
           </div>
-          
+
           <el-empty v-if="enabledWidgets.length === 0" description="请先在组件选择中勾选组件" />
         </el-tab-pane>
       </el-tabs>
@@ -114,8 +114,8 @@
     <el-card style="margin-top: 20px">
       <template #header>仪表盘预览</template>
       <div class="preview-container" :class="`cols-${layoutConfig.columns}`">
-        <div 
-          v-for="widget in enabledWidgets" 
+        <div
+          v-for="widget in enabledWidgets"
           :key="widget.key"
           class="preview-widget"
         >
@@ -132,7 +132,7 @@
 import { ref, computed, onMounted } from 'vue'
 import request from '@/utils/request'
 import { ElMessage } from 'element-plus'
-import { Check, ArrowUp, ArrowDown, DataLine } from '@element-plus/icons-vue'
+import { Check, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 
 
 const activeTab = ref('widgets')
@@ -153,7 +153,10 @@ const availableWidgets = ref([
   { key: 'quick_actions', name: '快捷操作', description: '常用功能快捷入口', category: '系统', icon: 'Grid' },
 ])
 
-const userConfig = ref({
+const userConfig = ref<{
+  enabled_widgets: string[]
+  widget_order: string[]
+}>({
   enabled_widgets: ['project_stats', 'sales_stats', 'pending_approvals', 'inventory_alert'],
   widget_order: [],
 })
@@ -166,27 +169,27 @@ const layoutConfig = ref({
   theme: 'light'
 })
 
-const enabledWidgets = computed({
-  get() {
-    const order = userConfig.value.widget_order.length > 0 
-      ? userConfig.value.widget_order 
+const enabledWidgets = computed<any[]>({
+  get(): any[] {
+    const order = userConfig.value.widget_order.length > 0
+      ? userConfig.value.widget_order
       : userConfig.value.enabled_widgets
-    
+
     return order
       .filter(key => userConfig.value.enabled_widgets.includes(key))
       .map(key => availableWidgets.value.find(w => w.key === key))
-      .filter(Boolean)
+      .filter(Boolean) as any[]
   },
-  set(newValue) {
+  set(newValue: any[]) {
     userConfig.value.widget_order = newValue.map(w => w.key)
   }
 })
 
-const isWidgetEnabled = (key) => {
+const isWidgetEnabled = (key: any) => {
   return userConfig.value.enabled_widgets.includes(key)
 }
 
-const toggleWidget = (key) => {
+const toggleWidget = (key: any) => {
   const index = userConfig.value.enabled_widgets.indexOf(key)
   if (index > -1) {
     userConfig.value.enabled_widgets.splice(index, 1)
@@ -197,7 +200,7 @@ const toggleWidget = (key) => {
   }
 }
 
-const getCategoryType = (category) => {
+const getCategoryType = (category: any) => {
   const types = {
     '项目': 'primary',
     '销售': 'success',
@@ -207,7 +210,7 @@ const getCategoryType = (category) => {
     '审批': '',
     '系统': 'info'
   }
-  return types[category] || ''
+  return (types as Record<string, any>)[category] || ''
 }
 
 const fetchConfig = async () => {
@@ -224,7 +227,7 @@ const fetchConfig = async () => {
         Object.assign(layoutConfig.value, res.layout)
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("加载配置失败", error)
   }
 }
@@ -242,7 +245,7 @@ const saveConfig = async () => {
       }
     })
     ElMessage.success('配置保存成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -264,7 +267,7 @@ const resetToDefault = () => {
   ElMessage.success('已重置为默认配置')
 }
 
-const moveWidget = (index, direction) => {
+const moveWidget = (index: any, direction: any) => {
   if (userConfig.value.widget_order.length === 0) {
     userConfig.value.widget_order = [...userConfig.value.enabled_widgets]
   }

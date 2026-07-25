@@ -448,6 +448,7 @@ class KnowledgeBaseArticleSerializer(serializers.ModelSerializer):
 
 class ServiceContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """服务合同管理"""
+
     permission_module = 'sales'
     permission_resource = 'service_contract'
 
@@ -468,9 +469,7 @@ class ServiceContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
             qs = qs.filter(status=status_filter)
         if keyword:
             qs = qs.filter(
-                Q(contract_no__icontains=keyword)
-                | Q(title__icontains=keyword)
-                | Q(customer__name__icontains=keyword)
+                Q(contract_no__icontains=keyword) | Q(title__icontains=keyword) | Q(customer__name__icontains=keyword)
             )
 
         return qs.select_related('customer', 'project')
@@ -521,6 +520,7 @@ class ServiceContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
 class PreventiveMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """预防性维护管理"""
+
     permission_module = 'sales'
     permission_resource = 'preventive_maintenance'
 
@@ -612,9 +612,7 @@ class PreventiveMaintenanceViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
     def overdue(self, request):
         """已逾期的维护"""
         today = timezone.now().date()
-        pms = self.get_queryset().filter(
-            status__in=['SCHEDULED', 'IN_PROGRESS'], scheduled_date__lt=today
-        )
+        pms = self.get_queryset().filter(status__in=['SCHEDULED', 'IN_PROGRESS'], scheduled_date__lt=today)
         return Response(PreventiveMaintenanceSerializer(pms, many=True).data)
 
 
@@ -672,18 +670,18 @@ class ServiceRequestViewSet(
             return Response({'error': '只能提交新建状态的请求'}, status=status.HTTP_400_BAD_REQUEST)
 
         result = self.start_workflow_or_auto_approve(
-            sr, request.user,
-            approved_status='ACKNOWLEDGED',
-            submitted_status='NEW'
+            sr, request.user, approved_status='ACKNOWLEDGED', submitted_status='NEW'
         )
         if result['auto_approved']:
             sr.status = 'ACKNOWLEDGED'
             sr.acknowledged_at = timezone.now()
             sr.save()
-        return Response({
-            'message': result['message'],
-            'workflow_started': result['workflow_started'],
-        })
+        return Response(
+            {
+                'message': result['message'],
+                'workflow_started': result['workflow_started'],
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
@@ -734,11 +732,7 @@ class ServiceRequestViewSet(
 
         # 若已绑定服务合同且有现场服务活动，扣减剩余服务次数
         contract = sr.service_contract
-        if (
-            contract
-            and contract.remaining_visits > 0
-            and sr.activities.filter(activity_type='ONSITE_VISIT').exists()
-        ):
+        if contract and contract.remaining_visits > 0 and sr.activities.filter(activity_type='ONSITE_VISIT').exists():
             contract.remaining_visits -= 1
             contract.save(update_fields=['remaining_visits'])
 
@@ -784,6 +778,7 @@ class ServiceRequestViewSet(
 
 class KnowledgeBaseArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """知识库文章管理"""
+
     permission_module = 'sales'
     permission_resource = 'knowledge_base_article'
 
@@ -843,9 +838,7 @@ class KnowledgeBaseArticleViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
         limit = int(request.query_params.get('limit', 10))
         try:
             articles = self.get_queryset().filter(status='PUBLISHED').order_by('-view_count')[:limit]
-            data = list(
-                articles.values('id', 'title', 'category', 'view_count', 'helpful_count', 'created_at')
-            )
+            data = list(articles.values('id', 'title', 'category', 'view_count', 'helpful_count', 'created_at'))
             return Response(data)
         except (ProgrammingError, OperationalError):
             # 仅容忍数据表 schema 与模型的历史差异(缺表/缺列);其它异常照常抛出以暴露真实错误

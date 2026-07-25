@@ -1,4 +1,5 @@
 """订阅代理进度频道,落库 UpgradeJob 并转发到 WebSocket 组。"""
+
 import json
 
 from asgiref.sync import async_to_sync
@@ -28,6 +29,7 @@ def relay_event(event: dict) -> None:
         job.steps = state['steps']
 
     from django.utils import timezone
+
     terminal = (UpgradeJob.STATUS_SUCCESS, UpgradeJob.STATUS_FAILED, UpgradeJob.STATUS_ROLLED_BACK)
     if job.status in terminal:
         job.finished_at = timezone.now()

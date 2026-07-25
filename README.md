@@ -80,7 +80,7 @@ integration built in.
 - 🔔 **Real-time notifications + WeCom push** — approvals, goods arrival, delivery
   dates, and project deadlines pushed precisely to the responsible owner.
 - 📱 **Mobile approval Mini Program** — approve and view dashboards anywhere via WeChat.
-- 🔍 **Full-text search** — business-data search powered by Elasticsearch.
+- 🔍 **Business search** — cross-module PostgreSQL search without an external search service.
 - 📊 **BI & reports** — dashboard widgets, project profit analysis (Pandas), and
   multi-dimensional report export.
 - 🧱 **Soft delete + audit log** — all business models inherit `BaseModel`; changes
@@ -117,12 +117,12 @@ workflow, and system settings.
 
 | Category | Technology |
 |----------|------------|
-| Language / Framework | Python 3.10+ · Django 4.2 · Django REST Framework 3.14 |
+| Language / Framework | Python 3.11+ · Django 5.2 LTS · Django REST Framework 3.17 |
 | Async / Realtime | ASGI (Daphne) · Django Channels 4 · WebSocket |
 | Database | PostgreSQL 15 |
 | Cache / Broker | Redis 7 (cache + Celery broker) · django-redis |
 | Async tasks | Celery 5.3 + Celery Beat |
-| Search | Elasticsearch 7.17 + django-elasticsearch-dsl |
+| Search | PostgreSQL database search (no external search service) |
 | Auth | JWT (simplejwt) · RBAC |
 | Data processing | Pandas · NumPy |
 | Import / Export | openpyxl · xlrd · xlsxwriter · reportlab (PDF) · qrcode / python-barcode |
@@ -135,7 +135,7 @@ workflow, and system settings.
 | Category | Technology |
 |----------|------------|
 | Framework | Vue 3 (Composition API) · TypeScript |
-| Build | Vite 5 |
+| Build | Vite 8 |
 | UI | Element Plus · @element-plus/icons-vue |
 | Visualization | ECharts / vue-echarts · vue-ganttastic (Gantt) · Three.js (3D) |
 | State | Pinia |
@@ -147,40 +147,30 @@ workflow, and system settings.
 
 ### Infrastructure
 
-Docker Compose orchestrates 7 services: `postgres`, `redis`, `elasticsearch`,
-`backend`, `celery`, `celery-beat`, and `nginx`.
+Docker Compose orchestrates 4 services: `postgres`, `redis`, `app` (Nginx,
+Daphne, Celery Worker/Beat, and frontend assets), and `erp-updater`.
 
 ## Architecture
 
 ```
-                          ┌─────────────────────────┐
-   Web Browser ──────────►│  Nginx (8080/8443)       │
-   Mini Program ─────────►│  Reverse proxy / static  │
-                          └───────────┬─────────────┘
-                                      │ /api  /ws
-                          ┌───────────▼─────────────┐
-                          │  Backend (Daphne/ASGI)   │
-                          │  Django REST + Channels  │
-                          │  JWT · RBAC · Workflow   │
-                          └──┬─────────┬─────────┬───┘
-                             │         │         │
-                ┌────────────▼──┐ ┌────▼────┐ ┌──▼──────────────┐
-                │ PostgreSQL 15 │ │ Redis 7 │ │ Elasticsearch   │
-                │  business data│ │ cache/MQ│ │  full-text      │
-                └───────────────┘ └────┬────┘ └─────────────────┘
-                                       │
-                          ┌────────────▼────────────┐
-                          │ Celery Worker / Beat     │
-                          │ async tasks · reminders  │
-                          │ (host net → LAN devices) │
-                          └──────────────────────────┘
+                          ┌─────────────────────────────┐
+   Web Browser ──────────►│ app: Nginx + frontend      │
+   Mini Program ─────────►│ Daphne + Celery Worker/Beat│
+                          └─────────────┬───────────────┘
+                                        │
+                          ┌─────────────┴───────────────┐
+                          │                             │
+                ┌─────────▼─────┐               ┌──────▼─────┐
+                │ PostgreSQL 15 │               │  Redis 7   │
+                │ data / search │               │ cache / MQ │
+                └───────────────┘               └────────────┘
 ```
 
 - **Decoupled front/back end** — the frontend is served under `base: '/erp/'`; all
   routes are prefixed with `/erp/`, matching the Nginx routing.
 - **API entry** — REST under `/api/`, WebSocket under `/ws/`.
-- **Celery Worker** runs in host network mode to reach LAN devices such as the
-  ZKTeco attendance terminal.
+- **Unified app container** — supervisord manages Nginx, Daphne, Celery
+  Worker/Beat, and the upgrade progress relay.
 
 ## Quick Start
 
@@ -226,39 +216,38 @@ cp .env.docker.example .env.docker
 docker compose up -d
 
 # 4. Tail logs
-docker compose logs -f backend
+docker compose logs -f app
 
 # 5. First-time bootstrap (see below)
-docker compose exec backend python manage.py migrate
-docker compose exec backend python manage.py init_permissions
-docker compose exec backend python manage.py init_roles --force
-docker compose exec backend python manage.py init_dashboard_widgets
-docker compose exec backend python manage.py createsuperuser
+docker compose exec app python manage.py migrate
+docker compose exec app python manage.py init_permissions
+docker compose exec app python manage.py init_roles --force
+docker compose exec app python manage.py init_dashboard_widgets
+docker compose exec app python manage.py createsuperuser
 ```
 
 Then open:
 
-- Frontend: `http://localhost:8080/erp/`
-- API docs (Swagger): `http://localhost:8080/api/docs/`
+- Frontend: `http://localhost/erp/` (or the configured `HTTP_PORT`)
+- API docs (Swagger): `http://localhost/api/docs/`
 
-> ⚠️ **Port offset** — to avoid clashing with existing host services, the
-> host-exposed ports are offset (PostgreSQL `5433`, Redis `6380`, Elasticsearch
-> `9201`). Connect from the **host** via the offset ports, but
-> **container-to-container** traffic still uses the standard ports (5432/6379/9200).
+> PostgreSQL `5433` and Redis `6380` are exposed to the host only when
+> `docker-compose.expose.yml` is included. Container traffic always uses
+> `5432` / `6379`.
 
 Ops commands:
 
 ```bash
-docker compose logs -f celery              # Celery logs
-docker compose up -d --build backend       # Rebuild & restart backend
-docker compose restart celery celery-beat  # Required after changing Celery tasks
-docker compose down                        # Stop all services
+docker compose logs -f app           # Django / Celery / Nginx logs
+docker compose up -d --build app      # Rebuild & restart the unified app
+docker compose restart app            # Restart after changing Celery tasks
+docker compose down                   # Stop all services
 ```
 
 ### Option 2: One-click native deploy on Ubuntu
 
 For (pre-)production servers without Docker. The script installs and configures
-PostgreSQL, Redis, Node.js 18, a Python venv, Gunicorn, Celery, Nginx, and systemd
+PostgreSQL, Redis, Node.js 22, a Python venv, Gunicorn, Celery, Nginx, and systemd
 units. Supports **Ubuntu 20.04 / 22.04 / 24.04 and Debian 11 / 12**.
 
 ```bash
@@ -267,7 +256,7 @@ sudo bash install.sh
 
 Main steps (`scripts/deploy-native-ubuntu.sh`):
 
-1. Install system dependencies (Python, Node.js 18, Nginx, …)
+1. Install system dependencies (Python, Node.js 22, Nginx, …)
 2. Set up and start PostgreSQL (create database & user)
 3. Set up and start Redis
 4. Create a Python venv and install dependencies (incl. gunicorn)
@@ -286,7 +275,7 @@ sudo systemctl restart erp-backend erp-celery erp-celery-beat
 
 ### Option 3: Manual local dev setup
 
-For development. Provide your own PostgreSQL 15 and Redis 7 (Elasticsearch optional).
+For development. Provide your own PostgreSQL 15 and Redis 7.
 
 **Backend (`backend/`):**
 
@@ -352,11 +341,10 @@ python manage.py collectstatic --noinput  # collect static files (production)
 
 | Service | In-container | Host mapping | Note |
 |---------|--------------|--------------|------|
-| Nginx | 80 / 443 | **8080 / 8443** | Web entry |
-| Backend (Daphne) | 8000 | — | Behind Nginx |
-| PostgreSQL | 5432 | **5433** | Use 5433 from the host |
-| Redis | 6379 | **6380** | Use 6380 from the host |
-| Elasticsearch | 9200 | **9201** | Use 9201 from the host |
+| app / Nginx | 80 / 443 | `${HTTP_PORT:-80}` / `${HTTPS_PORT:-443}` | Web entry |
+| Backend (Daphne) | 8000 | — | Proxied inside the app container |
+| PostgreSQL | 5432 | **5433** (expose override only) | Optional host debugging port |
+| Redis | 6379 | **6380** (expose override only) | Optional host debugging port |
 | Frontend dev | — | **3000** | Local dev only |
 
 ## Environment Variables
@@ -372,7 +360,6 @@ Env vars are read from `.env` via `python-decouple`. See the templates
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | PostgreSQL settings |
 | `REDIS_HOST` / `REDIS_URL` | Redis settings |
 | `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery settings |
-| `ELASTICSEARCH_HOST` | Elasticsearch host |
 | `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` | CORS & CSRF allowlist |
 | `FRONTEND_URL` | Frontend URL |
 | `JWT_ACCESS_LIFETIME_MINUTES` / `JWT_REFRESH_LIFETIME_DAYS` | JWT lifetimes |

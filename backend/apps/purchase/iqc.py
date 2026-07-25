@@ -18,7 +18,8 @@
 
 from django.db import models
 from django.utils import timezone
-from rest_framework import serializers, status as drf_status, viewsets
+from rest_framework import serializers, viewsets
+from rest_framework import status as drf_status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -204,7 +205,7 @@ class IncomingInspectionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     inspector_name = serializers.SerializerMethodField()
 
-    def get_inspector_name(self, obj):
+    def get_inspector_name(self, obj) -> str:
         if obj.inspector:
             return obj.inspector.get_full_name() or obj.inspector.username
         return ''

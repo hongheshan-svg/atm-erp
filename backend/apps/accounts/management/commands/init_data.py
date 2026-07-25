@@ -3,6 +3,9 @@
 创建基础角色、部门和示例数据
 """
 
+import os
+import secrets
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
@@ -23,6 +26,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('开始初始化数据...'))
+        demo_password = os.getenv('DEMO_USER_PASSWORD') or secrets.token_urlsafe(16)
 
         # 1. 创建部门
         self.stdout.write('创建部门...')
@@ -135,7 +139,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP002',
                 'department': 'SALES',
                 'role': 'sales_manager',
-                'password': 'erp123456',
+                'password': demo_password,
             },
             {
                 'username': 'sales01',
@@ -145,7 +149,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP003',
                 'department': 'SALES',
                 'role': 'salesperson',
-                'password': 'erp123456',
+                'password': demo_password,
             },
             {
                 'username': 'purchase_manager',
@@ -155,7 +159,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP004',
                 'department': 'PURCHASE',
                 'role': 'purchase_manager',
-                'password': 'erp123456',
+                'password': demo_password,
             },
             {
                 'username': 'purchase01',
@@ -165,7 +169,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP005',
                 'department': 'PURCHASE',
                 'role': 'purchaser',
-                'password': 'erp123456',
+                'password': demo_password,
             },
             {
                 'username': 'finance01',
@@ -175,7 +179,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP006',
                 'department': 'FINANCE',
                 'role': 'accountant',
-                'password': 'erp123456',
+                'password': demo_password,
             },
             {
                 'username': 'employee01',
@@ -185,7 +189,7 @@ class Command(BaseCommand):
                 'employee_id': 'EMP007',
                 'department': 'IT',
                 'role': 'employee',
-                'password': 'erp123456',
+                'password': demo_password,
             },
         ]
 
@@ -221,10 +225,5 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('\n数据初始化完成！'))
         self.stdout.write(self.style.SUCCESS('\n可用的测试账号：'))
-        self.stdout.write('  admin / admin123 (系统管理员)')
-        self.stdout.write('  sales_manager / erp123456 (销售经理)')
-        self.stdout.write('  sales01 / erp123456 (销售员)')
-        self.stdout.write('  purchase_manager / erp123456 (采购经理)')
-        self.stdout.write('  purchase01 / erp123456 (采购员)')
-        self.stdout.write('  finance01 / erp123456 (财务人员)')
-        self.stdout.write('  employee01 / erp123456 (普通员工)')
+        self.stdout.write('  admin / <ADMIN_PASSWORD> (系统管理员)')
+        self.stdout.write(f'  示例用户统一密码: {demo_password}')

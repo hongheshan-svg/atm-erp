@@ -270,7 +270,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, Search, Refresh, Edit, Delete } from '@element-plus/icons-vue'
 import { getProcesses, createProcess, updateProcess } from '@/api/production'
 import { useBatchDelete } from '@/composables/useBatchDelete'
@@ -295,24 +295,24 @@ const projects = ref<any[]>([])
 const users = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增工序')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 // 筛选条件
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   project: null,
   process_type: '',
   search: ''
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
 // 表单数据
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   project: null,
   process_no: '',
@@ -337,7 +337,7 @@ const formRules = {
 }
 
 // 获取工序类型标签样式
-const getProcessTypeTag = (type) => {
+const getProcessTypeTag = (type: any) => {
   const map = {
     'MACHINING': 'primary',
     'WELDING': 'danger',
@@ -349,14 +349,14 @@ const getProcessTypeTag = (type) => {
     'PACKAGING': 'info',
     'OTHER': ''
   }
-  return map[type] || ''
+  return (map as Record<string, any>)[type] || ''
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters
@@ -364,7 +364,7 @@ const loadData = async () => {
     const res = await getProcesses(params)
     processList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(processList.value) ? processList.value.length : 0)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载工序列表失败:', error)
   } finally {
     loading.value = false
@@ -376,7 +376,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目列表失败:', error)
   }
 }
@@ -386,7 +386,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户列表失败:', error)
   }
 }
@@ -407,13 +407,13 @@ const handleReset = () => {
 }
 
 // 分页
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadData()
 }
 
-const handlePageChange = (page) => {
+const handlePageChange = (page: any) => {
   pagination.page = page
   loadData()
 }
@@ -439,7 +439,7 @@ const handleAdd = () => {
 }
 
 // 编辑
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑工序'
   Object.assign(formData, {
     id: row.id,
@@ -463,11 +463,11 @@ const handleEdit = (row) => {
 // 保存
 const handleSave = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = { ...formData }
     if (data.id) {
       await updateProcess(data.id, data)
@@ -476,10 +476,10 @@ const handleSave = async () => {
       await createProcess(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('保存失败:', error)
     }

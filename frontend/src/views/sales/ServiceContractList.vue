@@ -97,7 +97,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click.stop="viewContract(row)">详情</el-button>
-            <el-button size="small" link type="success" v-if="row.status === 'DRAFT'" 
+            <el-button size="small" link type="success" v-if="row.status === 'DRAFT'"
                        @click.stop="activateContract(row)">激活</el-button>
             <el-button size="small" link @click.stop="viewServiceHistory(row)">服务记录</el-button>
           </template>
@@ -159,13 +159,13 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="开始日期" prop="start_date">
-              <el-date-picker v-model="contractForm.start_date" type="date" value-format="YYYY-MM-DD" 
+              <el-date-picker v-model="contractForm.start_date" type="date" value-format="YYYY-MM-DD"
                               placeholder="选择开始日期" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="结束日期" prop="end_date">
-              <el-date-picker v-model="contractForm.end_date" type="date" value-format="YYYY-MM-DD" 
+              <el-date-picker v-model="contractForm.end_date" type="date" value-format="YYYY-MM-DD"
                               placeholder="选择结束日期" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -250,7 +250,7 @@ const showDetailDrawer = ref(false)
 const contracts = ref<any[]>([])
 const customers = ref<any[]>([])
 const projects = ref<any[]>([])
-const currentContract = ref(null)
+const currentContract = ref<any>(null)
 
 const searchKeyword = ref('')
 const statusFilter = ref('')
@@ -262,13 +262,13 @@ const stats = ref({
   plannedPM: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const contractForm = reactive({
+const contractForm = reactive<Record<string, any>>({
   customer: null,
   project: null,
   title: '',
@@ -294,28 +294,28 @@ const contractRules = {
   service_scope: [{ required: true, message: '请描述服务范围', trigger: 'blur' }]
 }
 
-const contractFormRef = ref(null)
+const contractFormRef = ref<any>(null)
 
-const formatMoney = (val) => {
+const formatMoney = (val: any) => {
   return Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { DRAFT: 'info', ACTIVE: 'success', EXPIRED: 'warning', TERMINATED: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
 const loadContracts = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize }
     if (searchKeyword.value) params.search = searchKeyword.value
     if (statusFilter.value) params.status = statusFilter.value
 
     const res = await getServiceContracts(params)
     contracts.value = res.results || res
     pagination.total = res.count || contracts.value.length
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载合同列表失败')
   } finally {
     loading.value = false
@@ -335,7 +335,7 @@ const loadStats = async () => {
 
     const pmRes = await getUpcomingMaintenance({ days: 30 })
     stats.value.plannedPM = pmRes?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载统计数据失败')
   }
 }
@@ -344,7 +344,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载客户列表失败')
   }
 }
@@ -353,7 +353,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载项目列表失败')
   }
 }
@@ -367,39 +367,39 @@ const createContract = async () => {
     showCreateDialog.value = false
     loadContracts()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewContract = async (row) => {
+const viewContract = async (row: any) => {
   try {
     const res = await getServiceContract(row.id)
     currentContract.value = res
     showDetailDrawer.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载合同详情失败')
   }
 }
 
-const activateContract = async (row) => {
+const activateContract = async (row: any) => {
   try {
     await activateServiceContract(row.id)
     ElMessage.success('合同已激活')
     loadContracts()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('激活失败')
   }
 }
 
-const viewServiceHistory = async (row) => {
+const viewServiceHistory = async (row: any) => {
   try {
     const res = await getServiceHistory(row.id)
     ElMessage.info(`服务请求: ${res.service_requests?.length || 0} 条, 预防维护: ${res.pm_records?.length || 0} 条`)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('获取服务历史失败')
   }
 }

@@ -4,7 +4,7 @@
       <h2>需求管理</h2>
       <el-button type="primary" @click="handleAdd">新增需求</el-button>
     </div>
-    
+
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -32,7 +32,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-card shadow="never">
       <template #header>
         <el-form :inline="true">
@@ -62,19 +62,19 @@
           </el-form-item>
         </el-form>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="requirementList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="req_no" label="需求编号" width="130" fixed />
@@ -107,7 +107,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
@@ -118,7 +118,7 @@
         style="margin-top: 16px; justify-content: flex-end"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑需求' : '新增需求'" width="800px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
@@ -212,7 +212,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 附件上传 -->
         <el-form-item label="技术附件">
           <el-upload
@@ -238,7 +238,7 @@
             </template>
           </el-upload>
         </el-form-item>
-        
+
         <el-form-item label="标签">
           <el-select v-model="formData.tags" multiple filterable allow-create default-first-option placeholder="添加标签" style="width: 100%">
             <el-option v-for="tag in commonTags" :key="tag" :label="tag" :value="tag" />
@@ -250,7 +250,7 @@
         <el-button type="primary" @click="submitForm" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentReq?.title" width="900px">
       <el-descriptions v-if="currentReq" :column="3" border>
@@ -278,7 +278,7 @@
           <el-tag v-for="tag in currentReq.tags" :key="tag" size="small" style="margin-right: 5px;">{{ tag }}</el-tag>
         </el-descriptions-item>
       </el-descriptions>
-      
+
       <!-- 附件列表 -->
       <el-divider content-position="left" v-if="currentReq?.attachments?.length">技术附件 ({{ currentReq.attachments.length }})</el-divider>
       <div v-if="currentReq?.attachments?.length" class="attachment-list">
@@ -288,7 +288,7 @@
           <span class="attachment-size" v-if="file.size">{{ formatFileSize(file.size) }}</span>
         </div>
       </div>
-      
+
       <!-- 追溯关联 -->
       <el-divider content-position="left" v-if="currentReq?.traces?.length">追溯关联</el-divider>
       <el-table :data="currentReq?.traces" v-if="currentReq?.traces?.length" border size="small">
@@ -296,7 +296,7 @@
         <el-table-column prop="target_name" label="名称" />
         <el-table-column prop="description" label="说明" />
       </el-table>
-      
+
       <!-- 变更历史 -->
       <el-divider content-position="left" v-if="currentReq?.changes?.length">变更历史</el-divider>
       <el-timeline v-if="currentReq?.changes?.length">
@@ -340,13 +340,13 @@ const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('access_token')}`
 }))
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: null,
   priority: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -355,10 +355,10 @@ const pagination = reactive({
 const dialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentReq = ref(null)
+const formRef = ref<any>(null)
+const currentReq = ref<any>(null)
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   title: '',
   req_type: 'FUNCTIONAL',
   priority: 'MEDIUM',
@@ -386,7 +386,7 @@ const rules = {
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       ...queryParams
@@ -394,7 +394,7 @@ const fetchList = async () => {
     const data = await getRequirementList(params)
     requirementList.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -405,14 +405,14 @@ const fetchStats = async () => {
   try {
     const data = await getRequirementStatistics()
     stats.value = data
-    
+
     // 计算待处理和实施中数量
     const byStatus = data.by_status || []
-    stats.value.pending = byStatus.filter(s => 
+    stats.value.pending = byStatus.filter((s: any) =>
       ['SUBMITTED', 'REVIEWING', 'APPROVED'].includes(s.status)
-    ).reduce((sum, s) => sum + s.count, 0)
-    stats.value.in_progress = byStatus.find(s => s.status === 'IN_PROGRESS')?.count || 0
-  } catch (e) {
+    ).reduce((sum: any, s: any) => sum + s.count, 0)
+    stats.value.in_progress = byStatus.find((s: any) => s.status === 'IN_PROGRESS')?.count || 0
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -422,7 +422,7 @@ const fetchCustomers = async () => {
   try {
     const data = await getCustomerList({ page_size: 1000 })
     customers.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载客户失败', e)
   }
 }
@@ -432,7 +432,7 @@ const fetchProjects = async () => {
   try {
     const data = await getProjectList({ page_size: 1000 })
     projects.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载项目失败', e)
   }
 }
@@ -442,17 +442,17 @@ const fetchUsers = async () => {
   try {
     const data = await getUsers({ page_size: 1000 })
     const userList = data.results || data
-    users.value = userList.map(u => ({
+    users.value = userList.map((u: any) => ({
       id: u.id,
       name: u.name || `${u.last_name || ''}${u.first_name || ''}`.trim() || u.username
     }))
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载用户失败', e)
   }
 }
 
 // 文件上传前校验
-const beforeUpload = (file) => {
+const beforeUpload = (file: any) => {
   const maxSize = 50 * 1024 * 1024 // 50MB
   if (file.size > maxSize) {
     ElMessage.error('文件大小不能超过 50MB')
@@ -462,7 +462,7 @@ const beforeUpload = (file) => {
 }
 
 // 上传成功处理
-const handleUploadSuccess = (response, file, fileListRef) => {
+const handleUploadSuccess = (response: any, file: any) => {
   formData.attachments.push({
     name: file.name,
     url: response.url || response.file_url,
@@ -473,15 +473,15 @@ const handleUploadSuccess = (response, file, fileListRef) => {
 }
 
 // 移除文件
-const handleRemoveFile = (file, fileListRef) => {
-  const index = formData.attachments.findIndex(a => a.name === file.name)
+const handleRemoveFile = (file: any) => {
+  const index = formData.attachments.findIndex((a: any) => a.name === file.name)
   if (index > -1) {
     formData.attachments.splice(index, 1)
   }
 }
 
 // 上传错误处理
-const handleUploadError = (error, file) => {
+const handleUploadError = (error: any, file: any) => {
   ElMessage.error(`${file.name} 上传失败`)
 }
 
@@ -512,7 +512,7 @@ const handleAdd = () => {
 const submitForm = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -524,29 +524,29 @@ const submitForm = async () => {
     dialogVisible.value = false
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getRequirement(row.id)
     currentReq.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   try {
     const data = await getRequirement(row.id)
     currentReq.value = data
     isEdit.value = true
-    fileList.value = (data.attachments || []).map((a) => ({ name: a.name, url: a.url }))
+    fileList.value = (data.attachments || []).map((a: any) => ({ name: a.name, url: a.url }))
     Object.assign(formData, {
       title: data.title || '',
       req_type: data.req_type || 'FUNCTIONAL',
@@ -566,56 +566,56 @@ const handleEdit = async (row) => {
       tags: data.tags || []
     })
     dialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await submitRequirement(row.id)
     ElMessage.success('已提交')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await approveRequirement(row.id)
     ElMessage.success('已批准')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleDecompose = async (row) => {
+const handleDecompose = async (row: any) => {
   try {
     const { value } = await ElMessageBox.prompt('请输入子需求标题(多个用逗号分隔)', '分解需求', {
       inputPlaceholder: '子需求1, 子需求2'
     })
-    
+
     if (!value) return
-    
+
     const children = value.split(',').map(t => ({ title: t.trim(), description: '' }))
     await decomposeRequirement(row.id, { children })
     ElMessage.success('分解成功')
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     console.error('RequirementList fetchList error:', e)
   }
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const types = { LOW: 'info', MEDIUM: '', HIGH: 'warning', CRITICAL: 'danger' }
-  return types[priority] || ''
+  return (types as Record<string, any>)[priority] || ''
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     SUBMITTED: 'warning',
@@ -625,11 +625,11 @@ const getStatusType = (status) => {
     COMPLETED: 'success',
     CANCELLED: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 // 格式化文件大小
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: any) => {
   if (!bytes) return ''
   const units = ['B', 'KB', 'MB', 'GB']
   let size = bytes
@@ -738,4 +738,3 @@ onMounted(() => {
   margin-top: 8px;
 }
 </style>
-

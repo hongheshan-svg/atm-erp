@@ -7,7 +7,7 @@
           <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate"><el-icon><Plus /></el-icon> 新建归档</el-button>
         </div>
       </template>
-      
+
       <div class="filter-area">
         <el-input v-model="queryParams.search" placeholder="搜索项目名称" style="width: 240px" clearable @keyup.enter="fetchData">
           <template #prefix><el-icon><Search /></el-icon></template>
@@ -146,16 +146,16 @@ const viewDialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 const projectList = ref<any[]>([])
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const queryParams = reactive({ search: '', status: '', page: 1, page_size: 20 })
-const form = reactive({ project: null, archive_date: '', project_summary: '', customer_satisfaction: 0, lessons_learned: '', deliverables: '' })
+const queryParams = reactive<Record<string, any>>({ search: '', status: '', page: 1, page_size: 20 })
+const form = reactive<Record<string, any>>({ project: null, archive_date: '', project_summary: '', customer_satisfaction: 0, lessons_learned: '', deliverables: '' })
 const rules = {
   project: [{ required: true, message: '请选择项目', trigger: 'change' }],
   archive_date: [{ required: true, message: '请选择归档日期', trigger: 'change' }],
   project_summary: [{ required: true, message: '请填写项目概况', trigger: 'blur' }]
 }
-const getStatusType = (status) => ({ DRAFT: 'info', REVIEW: 'warning', APPROVED: 'success', REJECTED: 'danger' }[status] || '')
+const getStatusType = (status: any) => (({ DRAFT: 'info', REVIEW: 'warning', APPROVED: 'success', REJECTED: 'danger' } as Record<string, any>)[status] || '')
 
 const fetchData = async () => {
   loading.value = true
@@ -163,7 +163,7 @@ const fetchData = async () => {
     const res = await getProjectArchiveList(queryParams)
     archives.value = res.results || res || []
     total.value = res.count || archives.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取数据失败')
   } finally {
     loading.value = false
@@ -174,7 +174,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projectList.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('ArchiveList getProjectList error:', error)
   }
 }
@@ -185,12 +185,12 @@ const handleCreate = () => {
   createDialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getProjectArchive(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
@@ -205,18 +205,18 @@ const handleSave = async () => {
     ElMessage.success('创建成功')
     createDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false
   }
 }
 
-const handleGenerate = async (row) => {
+const handleGenerate = async (row: any) => {
   try {
     await generateKnowledgeFromArchive(row.id)
     ElMessage.success('知识文章已生成')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('生成失败')
   }
 }

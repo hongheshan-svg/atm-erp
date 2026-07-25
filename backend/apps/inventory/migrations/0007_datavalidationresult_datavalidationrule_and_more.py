@@ -348,7 +348,9 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='stock',
-            constraint=models.CheckConstraint(check=models.Q(('qty_on_hand__gte', 0)), name='stock_qty_non_negative'),
+            constraint=models.CheckConstraint(
+                condition=models.Q(('qty_on_hand__gte', 0)), name='stock_qty_non_negative'
+            ),
         ),
         migrations.AddField(
             model_name='sparepartlifecycleprediction',

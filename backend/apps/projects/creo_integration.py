@@ -341,7 +341,7 @@ class MaterialExtractionService:
                 'standard': matched_material.get('standard', ''),
                 'dimension': dimension,
                 'original': original,
-                'normalized': f"{matched_material['grade']}{matched_material['category']} {dimension}".strip(),
+                'normalized': f'{matched_material["grade"]}{matched_material["category"]} {dimension}'.strip(),
             }
 
         # 未匹配到标准材质，尝试提取尺寸
@@ -727,7 +727,7 @@ class ItemCreationService:
                 continue
             try:
                 with transaction.atomic():
-                    sku = item.get('part_number') or f"{prefix}{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    sku = item.get('part_number') or f'{prefix}{datetime.now().strftime("%Y%m%d%H%M%S")}'
                     if Item.objects.filter(sku=sku, is_deleted=False).exists():
                         item.update({'error_message': f'SKU已存在: {sku}', 'status': 'ERROR'})
                         errors.append(f'SKU已存在: {sku}')

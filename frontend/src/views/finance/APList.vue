@@ -109,8 +109,8 @@
             </el-table-column>
             <el-table-column label="付款进度" width="100">
               <template #default="{ row }">
-                <el-progress 
-                  :percentage="getProgress(row)" 
+                <el-progress
+                  :percentage="getProgress(row)"
                   :stroke-width="8"
                   :color="getProgressColor(getProgress(row))"
                 />
@@ -315,19 +315,19 @@ const dataList = ref<any[]>([])
 const bankStatements = ref<any[]>([])
 const selectedBankStatements = ref<any[]>([])
 const suppliers = ref<any[]>([])
-const currentRow = ref(null)
-const currentBankStatement = ref(null)
-const importResult = ref(null)
+const currentRow = ref<any>(null)
+const currentBankStatement = ref<any>(null)
+const importResult = ref<any>(null)
 
 const viewVisible = ref(false)
 const bankDetailVisible = ref(false)
 const importResultVisible = ref(false)
 
-const summary = reactive({ total_due: 0, total_paid: 0, total_remaining: 0, overdue_amount: 0 })
-const searchForm = reactive({ supplier: null, status: null })
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const bankSearchForm = reactive({ status: null, supplier: null })
-const bankPagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const summary = reactive<Record<string, any>>({ total_due: 0, total_paid: 0, total_remaining: 0, overdue_amount: 0 })
+const searchForm = reactive<Record<string, any>>({ supplier: null, status: null })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
+const bankSearchForm = reactive<Record<string, any>>({ status: null, supplier: null })
+const bankPagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
 
 // Upload configuration
 const uploadUrl = computed(() => {
@@ -339,21 +339,21 @@ const uploadHeaders = computed(() => {
   return token ? { Authorization: `Bearer ${token}` } : {}
 })
 
-const formatNumber = (num) => parseFloat(num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const formatDateTime = (dt) => dt ? new Date(dt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'
-const getRemaining = (row) => (parseFloat(row?.amount_due) || 0) - (parseFloat(row?.amount_paid) || 0)
-const getProgress = (row) => {
+const formatNumber = (num: any) => parseFloat(num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const formatDateTime = (dt: any) => dt ? new Date(dt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'
+const getRemaining = (row: any) => (parseFloat(row?.amount_due) || 0) - (parseFloat(row?.amount_paid) || 0)
+const getProgress = (row: any) => {
   const due = parseFloat(row?.amount_due) || 0
   const paid = parseFloat(row?.amount_paid) || 0
   return due > 0 ? Math.min(100, Math.round((paid / due) * 100)) : 0
 }
-const getProgressColor = (p) => p >= 100 ? '#67c23a' : p >= 50 ? '#409eff' : '#e6a23c'
-const getStatusType = (s) => ({ PENDING: 'warning', PARTIAL: 'primary', PAID: 'success', OVERDUE: 'danger', CANCELLED: 'info' }[s] || 'info')
-const getStatusLabel = (s) => ({ PENDING: '待付款', PARTIAL: '部分付款', PAID: '已付款', OVERDUE: '已逾期', CANCELLED: '已取消' }[s] || s)
-const getBankStatusType = (s) => ({ PENDING: 'warning', MATCHED: 'success', IGNORED: 'info' }[s] || 'info')
-const getBankStatusLabel = (s) => ({ PENDING: '待匹配', MATCHED: '已匹配', IGNORED: '已忽略' }[s] || s)
+const getProgressColor = (p: any) => p >= 100 ? '#67c23a' : p >= 50 ? '#409eff' : '#e6a23c'
+const getStatusType = (s: any) => (({ PENDING: 'warning', PARTIAL: 'primary', PAID: 'success', OVERDUE: 'danger', CANCELLED: 'info' } as Record<string, any>)[s] || 'info')
+const getStatusLabel = (s: any) => (({ PENDING: '待付款', PARTIAL: '部分付款', PAID: '已付款', OVERDUE: '已逾期', CANCELLED: '已取消' } as Record<string, any>)[s] || s)
+const getBankStatusType = (s: any) => (({ PENDING: 'warning', MATCHED: 'success', IGNORED: 'info' } as Record<string, any>)[s] || 'info')
+const getBankStatusLabel = (s: any) => (({ PENDING: '待匹配', MATCHED: '已匹配', IGNORED: '已忽略' } as Record<string, any>)[s] || s)
 
-const handleTabChange = (tab) => {
+const handleTabChange = (tab: any) => {
   if (tab === 'payables') loadData()
   else if (tab === 'bankStatements') loadBankStatements()
 }
@@ -361,8 +361,8 @@ const handleTabChange = (tab) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
-    Object.keys(params).forEach(k => { if (params[k] === null) delete params[k] })
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === null) delete (params as Record<string, any>)[k] })
     const res = await getPayables(params)
     dataList.value = res.results || []
     pagination.total = res.count || 0
@@ -371,7 +371,7 @@ const loadData = async () => {
     summary.total_paid = dataList.value.reduce((sum, r) => sum + parseFloat(r.amount_paid || 0), 0)
     summary.total_remaining = summary.total_due - summary.total_paid
     summary.overdue_amount = dataList.value.filter(r => r.status === 'OVERDUE').reduce((sum, r) => sum + getRemaining(r), 0)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -381,12 +381,12 @@ const loadData = async () => {
 const loadBankStatements = async () => {
   bankLoading.value = true
   try {
-    const params = { page: bankPagination.page, page_size: bankPagination.pageSize, transaction_type: 'DEBIT', ...bankSearchForm }
-    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
+    const params: Record<string, any> = { page: bankPagination.page, page_size: bankPagination.pageSize, transaction_type: 'DEBIT', ...bankSearchForm }
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === null || (params as Record<string, any>)[k] === '') delete (params as Record<string, any>)[k] })
     const res = await getBankStatements(params)
     bankStatements.value = res.results || []
     bankPagination.total = res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载银行流水失败')
   } finally {
     bankLoading.value = false
@@ -397,7 +397,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 500 })
     suppliers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('APList getSupplierList error:', error)
   }
 }
@@ -405,7 +405,7 @@ const loadSuppliers = async () => {
 const resetSearch = () => { searchForm.supplier = null; searchForm.status = null; pagination.page = 1; loadData() }
 const resetBankSearch = () => { bankSearchForm.status = null; bankSearchForm.supplier = null; bankPagination.page = 1; loadBankStatements() }
 
-const handleView = (row) => { currentRow.value = row; viewVisible.value = true }
+const handleView = (row: any) => { currentRow.value = row; viewVisible.value = true }
 const handlePayment = (_row?: any) => {
   ElMessage.info('付款已统一由「付款核销工作台」核销银行流水完成，请在工作台中办理')
   router.push('/finance/payment-reconciliation')
@@ -421,19 +421,19 @@ const exportData = async () => {
     link.click()
     window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }
 
 // Bank statement functions
-const beforeUpload = (file) => {
+const beforeUpload = (file: any) => {
   const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
   if (!isExcel) { ElMessage.error('只支持Excel文件格式(.xlsx, .xls)'); return false }
   return true
 }
 
-const handleUploadSuccess = (response) => {
+const handleUploadSuccess = (response: any) => {
   importResult.value = response
   importResultVisible.value = true
   ElMessage.success(`成功导入 ${response.success_count} 条记录，自动匹配 ${response.matched_count} 条`)
@@ -442,7 +442,7 @@ const handleUploadSuccess = (response) => {
 
 const handleUploadError = () => { ElMessage.error('导入失败，请检查文件格式') }
 
-const handleBankSelectionChange = (selection) => { selectedBankStatements.value = selection }
+const handleBankSelectionChange = (selection: any) => { selectedBankStatements.value = selection }
 
 const handleBatchDelete = async () => {
   try {
@@ -452,7 +452,7 @@ const handleBatchDelete = async () => {
     ElMessage.success('删除成功')
     selectedBankStatements.value = []
     loadBankStatements()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
       console.error('APList handleBatchDelete error:', error)
@@ -460,20 +460,20 @@ const handleBatchDelete = async () => {
   }
 }
 
-const handleViewBank = (row) => { currentBankStatement.value = row; bankDetailVisible.value = true }
+const handleViewBank = (row: any) => { currentBankStatement.value = row; bankDetailVisible.value = true }
 
 const handleMatchBank = (_row?: any) => {
   ElMessage.info('银行流水核销已统一至「付款核销工作台」办理，请在工作台中匹配')
   router.push('/finance/payment-reconciliation')
 }
 
-const handleIgnoreBank = async (row) => {
+const handleIgnoreBank = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要忽略此银行流水记录吗？', '确认忽略', { type: 'warning' })
     await ignoreBankStatement(row.id, { notes: '手动忽略' })
     ElMessage.success('已忽略')
     loadBankStatements()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
       console.error('APList handleIgnoreBank error:', error)
@@ -488,7 +488,7 @@ const autoMatchAll = async () => {
     ElMessage.success(`成功自动匹配 ${response.matched_count} 条记录`)
     loadBankStatements()
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('自动匹配失败')
   } finally {
     autoMatching.value = false

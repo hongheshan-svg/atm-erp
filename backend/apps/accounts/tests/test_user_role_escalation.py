@@ -37,9 +37,7 @@ class UserRoleEscalationTest(TestCase):
         self.normal_role = Role.objects.create(name='员工', code='employee', is_active=True)
 
         self.hr = User.objects.create_user(username='hr', password='x', employee_id='hr', role=self.normal_role)
-        self.employee = User.objects.create_user(
-            username='emp', password='x', employee_id='emp', role=self.normal_role
-        )
+        self.employee = User.objects.create_user(username='emp', password='x', employee_id='emp', role=self.normal_role)
         self.root = User.objects.create_superuser(username='root', password='x', employee_id='root')
 
     def _req(self, user):

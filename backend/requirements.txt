@@ -1,17 +1,17 @@
 # Core Django
-Django==4.2.9
-djangorestframework==3.14.0
-djangorestframework-simplejwt==5.3.1
-django-filter==23.5
+Django==5.2.16
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-filter==26.1
 
 # Database
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 
 # CORS handling
-django-cors-headers==4.3.1
+django-cors-headers==4.9.0
 
 # API Documentation
-drf-spectacular==0.27.0
+drf-spectacular==0.30.0
 
 # Data processing
 pandas==2.1.4
@@ -33,30 +33,22 @@ reportlab==4.0.7
 # Barcode/QR code generation
 python-barcode==0.15.1
 qrcode==7.4.2
-Pillow==10.1.0
+Pillow==12.3.0
 
 # WebSocket support
-channels==4.0.0
-channels-redis==4.1.0
-daphne==4.0.0
-
-# Elasticsearch (compatible versions for ES 7.x)
-elasticsearch==7.17.9
-elasticsearch-dsl==7.4.1
-django-elasticsearch-dsl==7.3
-django-elasticsearch-dsl-drf==0.22.5
+channels==4.3.2
+channels-redis==4.3.0
+daphne==4.2.3
+Twisted[http2,tls]==26.4.0
 
 # Environment variables
 python-decouple==3.8
 
 # HTTP requests
-requests==2.31.0
+requests==2.33.0
 
 # ZKTECO attendance device integration
 pyzk==0.9
-
-# Image handling (for future use)
-Pillow==10.1.0
 
 # Date utilities
 python-dateutil==2.8.2
@@ -65,5 +57,4 @@ python-dateutil==2.8.2
 pytz==2023.3
 
 # Development
-django-extensions==3.2.3
-
+django-extensions==4.1

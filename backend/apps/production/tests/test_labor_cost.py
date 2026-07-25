@@ -11,7 +11,7 @@
 from datetime import date
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -29,12 +29,9 @@ from apps.projects.advanced_cost_tracking import LaborRateStandard, ProjectCostD
 from apps.projects.models import Project
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class ReportLaborCostTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create(
-            username='mes_op', employee_id='MES1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='mes_op', employee_id='MES1', is_staff=True, is_superuser=True)
         self.customer = Customer.objects.create(code='CUST-MES', name='报工成本客户')
         self.project = Project.objects.create(
             code='PRJ-MES',
@@ -99,9 +96,7 @@ class ReportLaborCostTest(TestCase):
         self.plan_process.refresh_from_db()
         self.assertEqual(self.plan_process.actual_hours, Decimal('8.00'))
 
-        details = ProjectCostDetail.objects.filter(
-            project=self.project, cost_element='DIRECT_LABOR'
-        )
+        details = ProjectCostDetail.objects.filter(project=self.project, cost_element='DIRECT_LABOR')
         self.assertEqual(details.count(), 1)
         detail = details.first()
         self.assertEqual(detail.actual_amount, Decimal('800.00'))  # 8 * 100
@@ -131,9 +126,7 @@ class ReportLaborCostTest(TestCase):
         self.assertIsNotNone(second)
         self.assertEqual(first.id, second.id)
         self.assertEqual(
-            ProjectCostDetail.objects.filter(
-                project=self.project, cost_element='DIRECT_LABOR'
-            ).count(),
+            ProjectCostDetail.objects.filter(project=self.project, cost_element='DIRECT_LABOR').count(),
             1,
         )
         self.assertEqual(first.actual_amount, Decimal('400.00'))  # 4 * 100

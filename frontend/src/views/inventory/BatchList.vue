@@ -265,7 +265,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getBatches, getBatchesExpiringSoon, getBatchesExpired, createBatch, getBatchMovesByBatch, adjustBatchQty, updateBatch } from '@/api/inventory'
@@ -281,19 +281,19 @@ const items = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const viewMode = ref('all')
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   item: null,
   warehouse: null,
   quality_status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const summary = reactive({
+const summary = reactive<Record<string, any>>({
   total: 0,
   expiring: 0,
   expired: 0,
@@ -306,13 +306,13 @@ const adjustDialogVisible = ref(false)
 const statusDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const submitting = ref(false)
-const formRef = ref(null)
-const adjustFormRef = ref(null)
-const currentBatch = ref(null)
+const formRef = ref<any>(null)
+const adjustFormRef = ref<any>(null)
+const currentBatch = ref<any>(null)
 const batchMoves = ref<any[]>([])
 const newStatus = ref('')
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   batch_no: '',
   item: null,
   warehouse: null,
@@ -325,7 +325,7 @@ const form = reactive({
   notes: ''
 })
 
-const adjustForm = reactive({
+const adjustForm = reactive<Record<string, any>>({
   qty: 0,
   reason: ''
 })
@@ -337,27 +337,27 @@ const rules = {
   quality_status: [{ required: true, message: '请选择质量状态', trigger: 'change' }]
 }
 
-const getExpiryClass = (row) => {
+const getExpiryClass = (row: any) => {
   if (row.is_expired) return 'text-danger'
   if (row.days_to_expiry !== null && row.days_to_expiry <= 30) return 'text-warning'
   return ''
 }
 
-const getQualityTagType = (status) => {
+const getQualityTagType = (status: any) => {
   const types = {
     'PENDING': 'warning',
     'PASSED': 'success',
     'FAILED': 'danger',
     'QUARANTINE': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadItems = async () => {
   try {
     const response = await getItemList({ page_size: 500 })
     items.value = response.results || response || [] || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载物料失败:', error)
   }
 }
@@ -366,7 +366,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList({ is_active: true })
     warehouses.value = response.results || response || [] || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -374,12 +374,12 @@ const loadWarehouses = async () => {
 const loadBatches = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
-    
+
     let response
     if (viewMode.value === 'expiring') {
       params.days = 30
@@ -389,7 +389,7 @@ const loadBatches = async () => {
     } else {
       response = await getBatches(params)
     }
-    
+
     if (viewMode.value === 'all') {
       batches.value = response.results || response || []
       pagination.total = response.count || 0
@@ -397,7 +397,7 @@ const loadBatches = async () => {
       batches.value = response || []
       pagination.total = Array.isArray(response) ? response.length : 0
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载批次失败:', error)
   } finally {
     loading.value = false
@@ -409,19 +409,19 @@ const loadSummary = async () => {
     // Get total
     const allData = await getBatches({ page_size: 1 })
     summary.total = allData.count || 0
-    
+
     // Get expiring
     const expiringData = await getBatchesExpiringSoon({ days: 30 })
     summary.expiring = Array.isArray(expiringData) ? expiringData.length : 0
-    
+
     // Get expired
     const expiredData = await getBatchesExpired()
     summary.expired = Array.isArray(expiredData) ? expiredData.length : 0
-    
+
     // Get pending
     const pendingData = await getBatches({ quality_status: 'PENDING', page_size: 1 })
     summary.pending = pendingData.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -449,7 +449,7 @@ const handleAdd = () => {
 
 const handleSubmit = async () => {
   await formRef.value?.validate()
-  
+
   submitting.value = true
   try {
     await createBatch(form)
@@ -457,7 +457,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadBatches()
     loadSummary()
-  } catch (error) {
+  } catch (error: any) {
     console.error('创建失败:', error)
     ElMessage.error('创建失败')
   } finally {
@@ -465,22 +465,22 @@ const handleSubmit = async () => {
   }
 }
 
-const handleView = async (batch) => {
+const handleView = async (batch: any) => {
   currentBatch.value = batch
-  
+
   // Load move history
   try {
     const response = await getBatchMovesByBatch({ batch_id: batch.id })
     batchMoves.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载移动历史失败:', error)
     batchMoves.value = []
   }
-  
+
   detailDialogVisible.value = true
 }
 
-const handleAdjust = (batch) => {
+const handleAdjust = (batch: any) => {
   currentBatch.value = batch
   adjustForm.qty = Number(batch.qty_on_hand)
   adjustForm.reason = ''
@@ -497,7 +497,7 @@ const handleAdjustSubmit = async () => {
     ElMessage.success('调整成功')
     adjustDialogVisible.value = false
     loadBatches()
-  } catch (error) {
+  } catch (error: any) {
     console.error('调整失败:', error)
     ElMessage.error('调整失败')
   } finally {
@@ -505,7 +505,7 @@ const handleAdjustSubmit = async () => {
   }
 }
 
-const handleStatusChange = (batch) => {
+const handleStatusChange = (batch: any) => {
   currentBatch.value = batch
   newStatus.value = batch.quality_status
   statusDialogVisible.value = true
@@ -521,7 +521,7 @@ const handleStatusSubmit = async () => {
     statusDialogVisible.value = false
     loadBatches()
     loadSummary()
-  } catch (error) {
+  } catch (error: any) {
     console.error('状态更新失败:', error)
     ElMessage.error('状态更新失败')
   } finally {
@@ -586,4 +586,3 @@ onMounted(() => {
   color: #67c23a;
 }
 </style>
-

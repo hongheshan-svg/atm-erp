@@ -296,9 +296,12 @@ class UpgradeJob(BaseModel):
     STATUS_FAILED = 'failed'
     STATUS_ROLLED_BACK = 'rolled_back'
     STATUS_CHOICES = [
-        (STATUS_PENDING, '排队中'), (STATUS_RUNNING, '执行中'),
-        (STATUS_HEALTHCHECK, '健康检查'), (STATUS_SUCCESS, '成功'),
-        (STATUS_FAILED, '失败'), (STATUS_ROLLED_BACK, '已回滚'),
+        (STATUS_PENDING, '排队中'),
+        (STATUS_RUNNING, '执行中'),
+        (STATUS_HEALTHCHECK, '健康检查'),
+        (STATUS_SUCCESS, '成功'),
+        (STATUS_FAILED, '失败'),
+        (STATUS_ROLLED_BACK, '已回滚'),
     ]
 
     action = models.CharField('动作', max_length=16, choices=ACTION_CHOICES)
@@ -311,8 +314,12 @@ class UpgradeJob(BaseModel):
     started_at = models.DateTimeField('开始时间', null=True, blank=True)
     finished_at = models.DateTimeField('结束时间', null=True, blank=True)
     triggered_by = models.ForeignKey(
-        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='upgrade_jobs', verbose_name='触发人',
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='upgrade_jobs',
+        verbose_name='触发人',
     )
 
     class Meta:
@@ -322,6 +329,7 @@ class UpgradeJob(BaseModel):
 
     def append_step(self, stage: str, message: str, level: str = 'info') -> None:
         from django.utils import timezone
+
         entry = {'ts': timezone.now().isoformat(), 'stage': stage, 'message': message, 'level': level}
         self.steps = (self.steps or []) + [entry]
         self.save(update_fields=['steps', 'updated_at'])

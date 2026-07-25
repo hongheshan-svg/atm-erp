@@ -54,9 +54,7 @@ class StageGate(BaseModel):
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, verbose_name='阶段')
     title = models.CharField(max_length=200, blank=True, verbose_name='评审标题')
 
-    decision = models.CharField(
-        max_length=20, choices=DECISION_CHOICES, default='PENDING', verbose_name='决策结果'
-    )
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES, default='PENDING', verbose_name='决策结果')
     decision_date = models.DateField(null=True, blank=True, verbose_name='决策日期')
 
     scheduled_date = models.DateField(null=True, blank=True, verbose_name='计划评审日期')

@@ -9,7 +9,7 @@
         <el-button @click="handleGenerateContract">生成合同</el-button>
       </div>
     </div>
-    
+
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="合同模板" name="templates">
         <!-- 模板列表 -->
@@ -51,7 +51,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="条款库" name="clauses">
         <!-- 条款列表 -->
         <el-card shadow="never">
@@ -81,7 +81,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="生成记录" name="generated">
         <!-- 生成的合同列表 -->
         <el-card shadow="never">
@@ -112,7 +112,7 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
-    
+
     <!-- 新增/编辑模板对话框 -->
     <el-dialog v-model="templateDialogVisible" :title="templateDialogTitle" width="800px" destroy-on-close>
       <el-form :model="templateForm" :rules="templateRules" ref="templateFormRef" label-width="100px">
@@ -174,7 +174,7 @@
         <el-button type="primary" @click="handleSubmitTemplate" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 生成合同对话框 -->
     <el-dialog v-model="generateDialogVisible" title="生成合同" width="800px" destroy-on-close>
       <el-form :model="contractForm" :rules="contractRules" ref="contractFormRef" label-width="100px">
@@ -260,7 +260,7 @@
         <el-button type="primary" @click="handleSubmitContract" :loading="generateLoading">生成合同</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 预览对话框 -->
     <el-dialog v-model="previewDialogVisible" title="合同预览" width="900px" destroy-on-close>
       <div class="preview-container" v-html="previewContent"></div>
@@ -307,8 +307,8 @@ const clauseDialogVisible = ref(false)
 const clauseIsEdit = ref(false)
 const clauseSaving = ref(false)
 // TODO: bind via UI when "管理条款 by template" is implemented; left as null for now
-const currentTemplateId = ref(null)
-const clauseForm = reactive({ id: null, title: '', content: '', sort_order: 0, is_required: true })
+const currentTemplateId = ref<any>(null)
+const clauseForm = reactive<Record<string, any>>({ id: null, title: '', content: '', sort_order: 0, is_required: true })
 const generatedLoading = ref(false)
 const submitLoading = ref(false)
 const generateLoading = ref(false)
@@ -324,10 +324,10 @@ const generateDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
 const previewContent = ref('')
 
-const templateFormRef = ref(null)
-const contractFormRef = ref(null)
+const templateFormRef = ref<any>(null)
+const contractFormRef = ref<any>(null)
 
-const templateForm = reactive({
+const templateForm = reactive<Record<string, any>>({
   code: '',
   name: '',
   contract_type: 'SALES',
@@ -344,7 +344,7 @@ const templateRules = {
   contract_type: [{ required: true, message: '请选择合同类型', trigger: 'change' }]
 }
 
-const contractForm = reactive({
+const contractForm = reactive<Record<string, any>>({
   contract_no: '',
   contract_name: '',
   contract_type: 'SALES',
@@ -371,7 +371,7 @@ const fetchTemplates = async () => {
   try {
     const data = await getContractTemplates()
     templates.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -383,7 +383,7 @@ const fetchClauses = async () => {
   try {
     const data = await getContractClauses()
     clauses.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     clauseLoading.value = false
@@ -395,7 +395,7 @@ const fetchGeneratedContracts = async () => {
   try {
     const data = await getGeneratedContracts()
     generatedContracts.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     generatedLoading.value = false
@@ -406,7 +406,7 @@ const fetchContractTypes = async () => {
   try {
     const data = await getContractTypes()
     contractTypes.value = data
-  } catch (e) {
+  } catch (e: any) {
     contractTypes.value = [
       { value: 'SALES', label: '销售合同' },
       { value: 'PURCHASE', label: '采购合同' },
@@ -418,7 +418,7 @@ const fetchContractTypes = async () => {
   }
 }
 
-const handleTabChange = (tab) => {
+const handleTabChange = (tab: any) => {
   if (tab === 'templates') fetchTemplates()
   else if (tab === 'clauses') fetchClauses()
   else if (tab === 'generated') fetchGeneratedContracts()
@@ -443,33 +443,33 @@ const handleAddTemplate = () => {
   templateDialogVisible.value = true
 }
 
-const handleEditTemplate = (row) => {
+const handleEditTemplate = (row: any) => {
   Object.assign(templateForm, row)
   templateDialogTitle.value = '编辑模板'
   templateDialogVisible.value = true
 }
 
-const handlePreview = async (row) => {
+const handlePreview = async (row: any) => {
   try {
     const data = await previewContractTemplate(row.id)
     previewContent.value = data.html_content
     previewDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('预览失败')
   }
 }
 
-const handleSetDefault = async (row) => {
+const handleSetDefault = async (row: any) => {
   try {
     await setDefaultContractTemplate(row.id)
     ElMessage.success('设置成功')
     fetchTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('设置失败')
   }
 }
 
-const handleDeleteTemplate = (row) => {
+const handleDeleteTemplate = (row: any) => {
   ElMessageBox.confirm('确定要删除此模板吗？', '提示', { type: 'warning' })
     .then(async () => {
       await deleteContractTemplate(row.id)
@@ -481,7 +481,7 @@ const handleDeleteTemplate = (row) => {
 const handleSubmitTemplate = async () => {
   const valid = await templateFormRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (templateForm.id) {
@@ -493,7 +493,7 @@ const handleSubmitTemplate = async () => {
     }
     templateDialogVisible.value = false
     fetchTemplates()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('操作失败')
   } finally {
@@ -505,7 +505,7 @@ const addPaymentTerm = () => {
   templateForm.payment_terms.push('')
 }
 
-const removePaymentTerm = (index) => {
+const removePaymentTerm = (index: any) => {
   templateForm.payment_terms.splice(index, 1)
 }
 
@@ -515,7 +515,7 @@ const handleAddClause = () => {
   clauseDialogVisible.value = true
 }
 
-const handleEditClause = (row) => {
+const handleEditClause = (row: any) => {
   clauseIsEdit.value = true
   Object.assign(clauseForm, { id: row.id, title: row.title, content: row.content, sort_order: row.sort_order, is_required: row.is_required })
   clauseDialogVisible.value = true
@@ -533,7 +533,7 @@ const handleClauseSave = async () => {
     }
     clauseDialogVisible.value = false
     fetchClauses()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
   } finally {
@@ -541,13 +541,13 @@ const handleClauseSave = async () => {
   }
 }
 
-const handleDeleteClause = async (row) => {
+const handleDeleteClause = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除该条款吗？', '提示', { type: 'warning' })
     await deleteContractClause(row.id)
     ElMessage.success('删除成功')
     fetchClauses()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
@@ -573,19 +573,19 @@ const handleGenerateContract = () => {
 const handleSubmitContract = async () => {
   const valid = await contractFormRef.value?.validate()
   if (!valid) return
-  
+
   generateLoading.value = true
   try {
     const data = await generateContract(contractForm)
     ElMessage.success('合同生成成功')
     generateDialogVisible.value = false
-    
+
     // 显示预览
     previewContent.value = data.html_content
     previewDialogVisible.value = true
-    
+
     fetchGeneratedContracts()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('生成失败')
   } finally {
@@ -593,17 +593,17 @@ const handleSubmitContract = async () => {
   }
 }
 
-const handleViewContract = async (row) => {
+const handleViewContract = async (row: any) => {
   try {
     const data = await getGeneratedContract(row.id)
     previewContent.value = data.contract_content
     previewDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('获取合同失败')
   }
 }
 
-const handlePrintContract = (row) => {
+const handlePrintContract = (row: any) => {
   handleViewContract(row).then(() => {
     setTimeout(() => {
       window.print()
@@ -611,12 +611,12 @@ const handlePrintContract = (row) => {
   })
 }
 
-const formatAmount = (val) => {
+const formatAmount = (val: any) => {
   if (!val) return '0.00'
   return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getStatusTag = (status) => {
+const getStatusTag = (status: any) => {
   const tags = {
     DRAFT: 'info',
     PENDING: 'warning',
@@ -626,7 +626,7 @@ const getStatusTag = (status) => {
     EXPIRED: '',
     TERMINATED: 'danger'
   }
-  return tags[status] || ''
+  return (tags as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

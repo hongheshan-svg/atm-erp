@@ -39,7 +39,7 @@ class WebSocketService {
         try {
           const data = JSON.parse(event.data)
           this.handleMessage(data)
-        } catch (error) {
+        } catch (error: any) {
           console.error('Failed to parse WebSocket message:', error)
         }
       }
@@ -57,7 +57,7 @@ class WebSocketService {
         }
         this.attemptReconnect(endpoint)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create WebSocket connection:', error)
       this.emit('error', error)
     }
@@ -130,7 +130,7 @@ class WebSocketService {
       this.listeners[event].forEach(callback => {
         try {
           callback(data)
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error in ${event} listener:`, error)
         }
       })

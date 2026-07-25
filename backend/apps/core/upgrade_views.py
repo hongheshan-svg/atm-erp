@@ -1,13 +1,16 @@
 """远程升级 admin API。权限 system:upgrade。"""
+
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import upgrade_service
 from apps.core.permission_service import get_user_permissions
 from apps.core.version import get_deploy_mode
+
+from . import upgrade_service
 
 
 def _check_upgrade_permission(request):
@@ -133,6 +136,7 @@ class UpgradeJobDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id='v1_system_upgrade_job_detail')
     def get(self, request, job_id):
         _check_upgrade_permission(request)
         job = upgrade_service.get_job(job_id)
@@ -148,6 +152,7 @@ class UpgradeJobListView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id='v1_system_upgrade_jobs_list')
     def get(self, request):
         _check_upgrade_permission(request)
         jobs = [upgrade_service.reconcile_job(j) for j in upgrade_service.list_jobs()]

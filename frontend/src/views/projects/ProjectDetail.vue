@@ -69,12 +69,12 @@ const route = useRoute()
 const router = useRouter()
 const activeTab = ref('info')
 const project = ref<Record<string, any>>({})
-const taskManagementRef = ref(null)
-const bomManagementRef = ref(null)
-const memberManagementRef = ref(null)
+const taskManagementRef = ref<any>(null)
+const bomManagementRef = ref<any>(null)
+const memberManagementRef = ref<any>(null)
 
-const projectId = computed(() => route.params.id)
-const isValidProjectId = computed(() => /^\d+$/.test(String(route.params.id || '')))
+const projectId = computed(() => Number(route.params.id))
+const isValidProjectId = computed(() => /^\d+$/.test(String(Number(route.params.id) || '')))
 
 const statusMap = {
   'DRAFT': '草稿',
@@ -86,11 +86,11 @@ const statusMap = {
   'ARCHIVED': '已归档'
 }
 
-const getStatusLabel = (status) => {
-  return statusMap[status] || status
+const getStatusLabel = (status: any) => {
+  return (statusMap as Record<string, any>)[status] || status
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PLANNING': 'primary',
@@ -100,7 +100,7 @@ const getStatusType = (status) => {
     'CANCELLED': 'danger',
     'ARCHIVED': 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 const loadProject = async () => {
@@ -110,9 +110,9 @@ const loadProject = async () => {
   }
 
   try {
-    const response = await getProject(route.params.id)
+    const response = await getProject(Number(route.params.id))
     project.value = response.data || response
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
     ElMessage.error('加载项目失败')
   }
@@ -140,4 +140,3 @@ onMounted(() => {
   margin-right: 12px;
 }
 </style>
-

@@ -220,7 +220,7 @@ import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Check, Close } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getProjectList, getProjectCostAnalysis, getCostDetails, createCostRecord } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -232,9 +232,9 @@ const router = useRouter()
 const loading = ref(false)
 const detailLoading = ref(false)
 const projects = ref<any[]>([])
-const selectedProject = ref(null)
-const summary = ref(null)
-const analysisData = ref(null)
+const selectedProject = ref<any>(null)
+const summary = ref<any>(null)
+const analysisData = ref<any>(null)
 const trendData = ref<any[]>([])
 const topVariances = ref<any[]>([])
 const costDetails = ref<any[]>([])
@@ -242,14 +242,14 @@ const detailPage = ref(1)
 const detailPageSize = ref(10)
 const addCostDialogVisible = ref(false)
 const addCostSaving = ref(false)
-const costForm = reactive({ cost_type: 'MATERIAL', description: '', amount: 0, cost_date: new Date().toISOString().split('T')[0] })
+const costForm = reactive<Record<string, any>>({ cost_type: 'MATERIAL', description: '', amount: 0, cost_date: new Date().toISOString().split('T')[0] })
 const detailTotal = ref(0)
 const elementFilter = ref('')
 
-const elementChartRef = ref(null)
-const trendChartRef = ref(null)
-let elementChart = null
-let trendChart = null
+const elementChartRef = ref<any>(null)
+const trendChartRef = ref<any>(null)
+let elementChart: any = null
+let trendChart: any = null
 
 const phaseData = computed(() => analysisData.value?.by_phase || [])
 
@@ -268,12 +268,12 @@ const cpiType = computed(() => {
   return 'danger'
 })
 
-const formatMoney = (val) => {
+const formatMoney = (val: any) => {
   if (!val) return '0.00'
   return parseFloat(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getPhaseLabel = (phase) => {
+const getPhaseLabel = (phase: any) => {
   const map = {
     REQUIREMENT: '需求分析',
     DESIGN: '设计阶段',
@@ -288,10 +288,10 @@ const getPhaseLabel = (phase) => {
     WARRANTY: '质保期',
     AFTER_SALE: '售后服务'
   }
-  return map[phase] || phase
+  return (map as Record<string, any>)[phase] || phase
 }
 
-const getPercentage = (value) => {
+const getPercentage = (value: any) => {
   if (!summary.value || !summary.value.total_cost) return 0
   return Math.round(parseFloat(value) / parseFloat(summary.value.total_cost) * 100)
 }
@@ -306,7 +306,7 @@ const loadProjectCost = async () => {
     summary.value = null
     return
   }
-  
+
   loading.value = true
   try {
     const res = await getProjectCostAnalysis(selectedProject.value)
@@ -314,11 +314,11 @@ const loadProjectCost = async () => {
     analysisData.value = res.analysis
     trendData.value = res.trend || []
     topVariances.value = res.top_variances || []
-    
+
     await nextTick()
     renderCharts()
     loadDetails()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -327,10 +327,10 @@ const loadProjectCost = async () => {
 
 const loadDetails = async () => {
   if (!selectedProject.value) return
-  
+
   detailLoading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       project: selectedProject.value,
       page: detailPage.value,
       page_size: detailPageSize.value,
@@ -339,7 +339,7 @@ const loadDetails = async () => {
     const res = await getCostDetails(params)
     costDetails.value = res.results || res
     detailTotal.value = res.count || costDetails.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     detailLoading.value = false
@@ -348,7 +348,7 @@ const loadDetails = async () => {
 
 const renderCharts = () => {
   if (!summary.value) return
-  
+
   // 成本要素饼图
   if (elementChartRef.value) {
     if (!elementChart) {
@@ -363,7 +363,7 @@ const renderCharts = () => {
       { name: '设备费用', value: parseFloat(summary.value.equipment_cost) },
       { name: '其他', value: parseFloat(summary.value.other_direct_cost) + parseFloat(summary.value.indirect_cost) },
     ].filter(d => d.value > 0)
-    
+
     elementChart.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
       legend: { orient: 'vertical', right: 10, top: 'center' },
@@ -377,7 +377,7 @@ const renderCharts = () => {
       }]
     })
   }
-  
+
   // 成本趋势图
   if (trendChartRef.value) {
     if (!trendChart) {
@@ -437,7 +437,7 @@ const handleAddCostSave = async () => {
     addCostDialogVisible.value = false
     loadProjectCost()
     loadDetails()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('添加失败')
   } finally {
@@ -452,7 +452,7 @@ watch(() => selectedProject.value, () => {
 
 onMounted(() => {
   loadProjects()
-  
+
   const urlParams = new URLSearchParams(window.location.search)
   const projectId = urlParams.get('project')
   if (projectId) {

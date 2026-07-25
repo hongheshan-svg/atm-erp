@@ -57,9 +57,7 @@ class MaintenanceReminderView(viewsets.ViewSet):
         today = timezone.now().date()
         end_date = today + timedelta(days=days)
 
-        due = Fixture.objects.filter(
-            next_calibration__gte=today, next_calibration__lte=end_date, is_deleted=False
-        )
+        due = Fixture.objects.filter(next_calibration__gte=today, next_calibration__lte=end_date, is_deleted=False)
 
         data = [
             {

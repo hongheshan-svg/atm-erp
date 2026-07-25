@@ -477,29 +477,29 @@ const projectProcesses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建计划')
 const detailVisible = ref(false)
-const currentPlan = ref(null)
+const currentPlan = ref<any>(null)
 const processDialogVisible = ref(false)
 const progressDialogVisible = ref(false)
 const selectedProcessIds = ref<any[]>([])
-const currentProcessRow = ref(null)
-const formRef = ref(null)
+const currentProcessRow = ref<any>(null)
+const formRef = ref<any>(null)
 
 // 筛选条件
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   project: null,
   status: '',
   search: ''
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
 // 表单数据
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   project: null,
   title: '',
@@ -511,7 +511,7 @@ const formData = reactive({
 })
 
 // 报工表单数据
-const progressFormData = reactive({
+const progressFormData = reactive<Record<string, any>>({
   progress_percent: 0,
   actual_hours: 0
 })
@@ -525,7 +525,7 @@ const formRules = {
 }
 
 // 获取状态标签样式
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     'DRAFT': 'info',
     'CONFIRMED': 'primary',
@@ -533,10 +533,10 @@ const getStatusType = (status) => {
     'COMPLETED': 'success',
     'CANCELLED': 'danger'
   }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const getProcessStatusType = (status) => {
+const getProcessStatusType = (status: any) => {
   const map = {
     'PENDING': 'info',
     'IN_PROGRESS': 'warning',
@@ -544,14 +544,14 @@ const getProcessStatusType = (status) => {
     'COMPLETED': 'success',
     'CANCELLED': 'danger'
   }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters
@@ -559,7 +559,7 @@ const loadData = async () => {
     const res = await getPlans(params)
     planList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(planList.value) ? planList.value.length : 0)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载计划列表失败:', error)
   } finally {
     loading.value = false
@@ -571,7 +571,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目列表失败:', error)
   }
 }
@@ -581,7 +581,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户列表失败:', error)
   }
 }
@@ -602,24 +602,24 @@ const handleReset = () => {
 }
 
 // 分页
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadData()
 }
 
-const handlePageChange = (page) => {
+const handlePageChange = (page: any) => {
   pagination.page = page
   loadData()
 }
 
 // 点击行查看详情
-const handleRowClick = async (row) => {
+const handleRowClick = async (row: any) => {
   try {
     const res = await getPlan(row.id)
     currentPlan.value = res
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载计划详情失败:', error)
   }
 }
@@ -641,7 +641,7 @@ const handleAdd = () => {
 }
 
 // 编辑
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑计划'
   Object.assign(formData, {
     id: row.id,
@@ -660,35 +660,35 @@ const handleEdit = (row) => {
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 确认计划
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await confirmPlan(row.id)
     ElMessage.success('计划已确认')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('确认失败:', error)
   }
 }
 
 // 开始生产
-const handleStart = async (row) => {
+const handleStart = async (row: any) => {
   try {
     await startPlan(row.id)
     ElMessage.success('生产已开始')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('开始失败:', error)
   }
 }
 
 // 完成生产
-const handleComplete = async (row) => {
+const handleComplete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要完成该生产计划吗？', '确认完成')
     await completePlan(row.id)
     ElMessage.success('生产已完成')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('完成失败:', error)
     }
@@ -698,11 +698,11 @@ const handleComplete = async (row) => {
 // 保存
 const handleSave = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = { ...formData }
     if (data.id) {
       await updatePlan(data.id, data)
@@ -711,10 +711,10 @@ const handleSave = async () => {
       await createPlan(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('保存失败:', error)
     }
@@ -726,13 +726,13 @@ const handleSave = async () => {
 // 添加工序
 const handleAddProcess = async () => {
   if (!currentPlan.value?.project) return
-  
+
   try {
     const res = await getProcesses({ project: currentPlan.value.project, page_size: 1000 })
     projectProcesses.value = res.results || res || []
     selectedProcessIds.value = []
     processDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载工序失败:', error)
   }
 }
@@ -743,7 +743,7 @@ const handleAddProcessConfirm = async () => {
     ElMessage.warning('请选择工序')
     return
   }
-  
+
   try {
     saving.value = true
     await addPlanProcesses(currentPlan.value.id, {
@@ -751,12 +751,12 @@ const handleAddProcessConfirm = async () => {
     })
     ElMessage.success('工序已添加')
     processDialogVisible.value = false
-    
+
     // 刷新详情
     const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('添加工序失败:', error)
   } finally {
     saving.value = false
@@ -764,37 +764,37 @@ const handleAddProcessConfirm = async () => {
 }
 
 // 开始工序
-const handleStartProcess = async (row) => {
+const handleStartProcess = async (row: any) => {
   try {
     await startPlanProcess(row.id)
     ElMessage.success('工序已开始')
-    
+
     // 刷新详情
     const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('开始工序失败:', error)
   }
 }
 
 // 完成工序
-const handleCompleteProcess = async (row) => {
+const handleCompleteProcess = async (row: any) => {
   try {
     await completePlanProcess(row.id)
     ElMessage.success('工序已完成')
-    
+
     // 刷新详情
     const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('完成工序失败:', error)
   }
 }
 
 // 工序报工
-const handleUpdateProcessProgress = (row) => {
+const handleUpdateProcessProgress = (row: any) => {
   currentProcessRow.value = row
   progressFormData.progress_percent = row.progress_percent || 0
   progressFormData.actual_hours = row.actual_hours || 0
@@ -811,12 +811,12 @@ const handleProgressConfirm = async () => {
     })
     ElMessage.success('报工成功')
     progressDialogVisible.value = false
-    
+
     // 刷新详情
     const res = await getPlan(currentPlan.value.id)
     currentPlan.value = res
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('报工失败:', error)
   } finally {
     saving.value = false

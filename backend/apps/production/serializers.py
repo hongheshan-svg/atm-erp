@@ -239,13 +239,13 @@ class DebugRecordSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['record_no', 'created_at', 'updated_at']
 
-    def get_total_items(self, obj):
+    def get_total_items(self, obj) -> int:
         return obj.check_items.count()
 
-    def get_pass_items(self, obj):
+    def get_pass_items(self, obj) -> int:
         return obj.check_items.filter(result='PASS').count()
 
-    def get_fail_items(self, obj):
+    def get_fail_items(self, obj) -> int:
         return obj.check_items.filter(result='FAIL').count()
 
 
@@ -335,7 +335,7 @@ class QualityInspectionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['inspection_no', 'created_at', 'updated_at']
 
-    def get_pass_rate(self, obj):
+    def get_pass_rate(self, obj) -> float:
         if obj.sample_qty > 0:
             return round(obj.pass_qty / obj.sample_qty * 100, 2)
         return 0

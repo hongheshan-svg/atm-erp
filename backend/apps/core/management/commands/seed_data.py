@@ -1,3 +1,5 @@
+import os
+import secrets
 from datetime import timedelta
 from decimal import Decimal
 
@@ -36,6 +38,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write('Starting data seeding...')
+        demo_password = os.getenv('DEMO_USER_PASSWORD') or secrets.token_urlsafe(16)
 
         # Clear existing data (except admin user) - must delete in correct order due to foreign keys
         self.stdout.write('Cleaning existing sample data...')
@@ -89,7 +92,7 @@ class Command(BaseCommand):
         user_john = User.objects.create_user(
             username='john.smith',
             email='john.smith@example.com',
-            password='password123',
+            password=demo_password,
             first_name='John',
             last_name='Smith',
             employee_id='EMP001',
@@ -102,7 +105,7 @@ class Command(BaseCommand):
         user_sarah = User.objects.create_user(
             username='sarah.johnson',
             email='sarah.johnson@example.com',
-            password='password123',
+            password=demo_password,
             first_name='Sarah',
             last_name='Johnson',
             employee_id='EMP002',
@@ -114,7 +117,7 @@ class Command(BaseCommand):
         user_mike = User.objects.create_user(
             username='mike.chen',
             email='mike.chen@example.com',
-            password='password123',
+            password=demo_password,
             first_name='Mike',
             last_name='Chen',
             employee_id='EMP003',
@@ -723,7 +726,5 @@ class Command(BaseCommand):
         self.stdout.write(f'Stock Moves: {StockMove.objects.count()}')
         self.stdout.write(f'Expenses: {Expense.objects.count()}')
         self.stdout.write(self.style.SUCCESS('\n=== Login Credentials ==='))
-        self.stdout.write('Admin: admin / admin123')
-        self.stdout.write('Manager: john.smith / password123')
-        self.stdout.write('Engineer: sarah.johnson / password123')
-        self.stdout.write('Buyer: mike.chen / password123')
+        self.stdout.write('Admin: admin / <ADMIN_PASSWORD>')
+        self.stdout.write(f'Demo users (john.smith, sarah.johnson, mike.chen): {demo_password}')

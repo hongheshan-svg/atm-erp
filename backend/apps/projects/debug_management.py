@@ -396,6 +396,7 @@ class DebugPlanSerializer(serializers.ModelSerializer):
 
 class DebugPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试计划管理"""
+
     permission_module = 'projects'
     permission_resource = 'debug_plan'
 
@@ -570,6 +571,7 @@ class DebugPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DebugTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试任务管理"""
+
     permission_module = 'projects'
     permission_resource = 'debug_task'
 
@@ -608,6 +610,7 @@ class DebugTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DebugIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试问题管理"""
+
     permission_module = 'projects'
     permission_resource = 'debug_issue'
 
@@ -665,6 +668,7 @@ class DebugIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DebugParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试参数管理"""
+
     permission_module = 'projects'
     permission_resource = 'debug_parameter'
 
@@ -720,6 +724,7 @@ class DebugParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DebugLogViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试日志管理"""
+
     permission_module = 'projects'
     permission_resource = 'debug_log'
 

@@ -11,10 +11,9 @@
 
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class ArApNumberConcurrencySafeTest(TestCase):
     """Item 1:AR/AP 单号生成改走 CodeRule 锁定计数行,连续创建产出不同的同形单号。"""
 
@@ -71,13 +70,15 @@ class ArApNumberConcurrencySafeTest(TestCase):
 
         cust = self._make_customer(code='CN2')
         ar = AccountReceivable.objects.create(
-            ar_no='AR-CUSTOM-001', customer=cust, invoice_date='2026-06-01',
-            due_date='2026-07-01', amount_due=Decimal('10.00'),
+            ar_no='AR-CUSTOM-001',
+            customer=cust,
+            invoice_date='2026-06-01',
+            due_date='2026-07-01',
+            amount_due=Decimal('10.00'),
         )
         self.assertEqual(ar.ar_no, 'AR-CUSTOM-001')
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class CollectionRecordConfirmedWritebackTest(TestCase):
     """Item 2:节点/计划已收金额仅统计已确认记录,反确认/删除可反向核销。"""
 
@@ -88,8 +89,11 @@ class CollectionRecordConfirmedWritebackTest(TestCase):
         cust = Customer.objects.create(code='COLC1', name='回款客户')
         plan = CollectionPlan.objects.create(name='回款计划', customer=cust, total_amount=Decimal('1000.00'))
         milestone = CollectionMilestone.objects.create(
-            plan=plan, milestone_type='ADVANCE', name='预付款',
-            planned_amount=Decimal('500.00'), planned_date='2026-07-01',
+            plan=plan,
+            milestone_type='ADVANCE',
+            name='预付款',
+            planned_amount=Decimal('500.00'),
+            planned_date='2026-07-01',
         )
         return plan, milestone
 
@@ -188,7 +192,6 @@ class CollectionRecordConfirmedWritebackTest(TestCase):
         self.assertTrue(keep.pk is not None)
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class PeriodCloseCarryForwardTest(TestCase):
     """Item 3:期间关闭时把期末余额按余额方向结转为下期期初。"""
 
@@ -222,9 +225,7 @@ class PeriodCloseCarryForwardTest(TestCase):
     def _balance(self, account, period, **amounts):
         from apps.finance.accounting import AccountBalance
 
-        return AccountBalance.objects.create(
-            account=account, fiscal_period=period, created_by=self.user, **amounts
-        )
+        return AccountBalance.objects.create(account=account, fiscal_period=period, created_by=self.user, **amounts)
 
     def test_close_carries_forward_opening_balances_by_direction(self):
         from apps.finance.accounting import AccountBalance
@@ -238,21 +239,30 @@ class PeriodCloseCarryForwardTest(TestCase):
 
         # 借方科目:net = (1000-0)+(500-200) = 1300 -> 期初借 1300
         self._balance(
-            acc_dr, p1,
-            opening_debit=Decimal('1000.00'), opening_credit=Decimal('0'),
-            period_debit=Decimal('500.00'), period_credit=Decimal('200.00'),
+            acc_dr,
+            p1,
+            opening_debit=Decimal('1000.00'),
+            opening_credit=Decimal('0'),
+            period_debit=Decimal('500.00'),
+            period_credit=Decimal('200.00'),
         )
         # 贷方科目:net = (800-0)+(300-100) = 1000 -> 期初贷 1000
         self._balance(
-            acc_cr, p1,
-            opening_debit=Decimal('0'), opening_credit=Decimal('800.00'),
-            period_debit=Decimal('100.00'), period_credit=Decimal('300.00'),
+            acc_cr,
+            p1,
+            opening_debit=Decimal('0'),
+            opening_credit=Decimal('800.00'),
+            period_debit=Decimal('100.00'),
+            period_credit=Decimal('300.00'),
         )
         # 借方科目反向:net = (100-0)+(0-400) = -300 -> 落到贷方 期初贷 300
         self._balance(
-            acc_contra, p1,
-            opening_debit=Decimal('100.00'), opening_credit=Decimal('0'),
-            period_debit=Decimal('0'), period_credit=Decimal('400.00'),
+            acc_contra,
+            p1,
+            opening_debit=Decimal('100.00'),
+            opening_credit=Decimal('0'),
+            period_debit=Decimal('0'),
+            period_credit=Decimal('400.00'),
         )
 
         resp = self.client.post(f'/api/finance/fiscal-periods/{p1.pk}/close/', {}, format='json')
@@ -289,7 +299,6 @@ class PeriodCloseCarryForwardTest(TestCase):
         self.assertEqual(AccountBalance.objects.exclude(fiscal_period=p1).count(), 0)
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class PaymentSoftDeleteReversesArApTest(TestCase):
     """P0 回归守卫:Payment.soft_delete 仍反核销 AR/AP 的已收(付)金额并回退状态。"""
 
@@ -302,8 +311,11 @@ class PaymentSoftDeleteReversesArApTest(TestCase):
             customer=cust, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
         )
         pay = Payment.objects.create(
-            payment_type='AR', ar=ar, payment_date='2026-07-05',
-            payment_method='BANK_TRANSFER', amount=Decimal('400.00'),
+            payment_type='AR',
+            ar=ar,
+            payment_date='2026-07-05',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('400.00'),
         )
         ar.refresh_from_db()
         self.assertEqual(ar.amount_paid, Decimal('400.00'))
@@ -323,8 +335,11 @@ class PaymentSoftDeleteReversesArApTest(TestCase):
             supplier=sup, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
         )
         pay = Payment.objects.create(
-            payment_type='AP', ap=ap, payment_date='2026-07-05',
-            payment_method='BANK_TRANSFER', amount=Decimal('600.00'),
+            payment_type='AP',
+            ap=ap,
+            payment_date='2026-07-05',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('600.00'),
         )
         ap.refresh_from_db()
         self.assertEqual(ap.amount_paid, Decimal('600.00'))
@@ -344,8 +359,11 @@ class PaymentSoftDeleteReversesArApTest(TestCase):
             customer=cust, invoice_date='2026-06-01', due_date='2026-07-01', amount_due=Decimal('1000.00')
         )
         pay = Payment.objects.create(
-            payment_type='AR', ar=ar, payment_date='2026-07-05',
-            payment_method='BANK_TRANSFER', amount=Decimal('400.00'),
+            payment_type='AR',
+            ar=ar,
+            payment_date='2026-07-05',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('400.00'),
         )
         pay.soft_delete()
         pay.soft_delete()  # 二次软删除应为 no-op,不重复回退

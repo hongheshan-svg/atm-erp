@@ -80,8 +80,8 @@
                     <span class="item-name">{{ item.name }}</span>
                     <span class="item-amount">¥{{ formatMoney(item.amount) }}</span>
                   </div>
-                  <el-progress 
-                    :percentage="item.percentage" 
+                  <el-progress
+                    :percentage="item.percentage"
                     :stroke-width="8"
                     :color="getProgressColor(item.usage_rate)"
                   />
@@ -104,8 +104,8 @@
                     <span class="item-name">{{ item.name }}</span>
                     <span class="item-amount">¥{{ formatMoney(item.amount) }}</span>
                   </div>
-                  <el-progress 
-                    :percentage="item.percentage" 
+                  <el-progress
+                    :percentage="item.percentage"
                     :stroke-width="8"
                     :color="getProgressColor(item.usage_rate)"
                   />
@@ -212,24 +212,24 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, Close } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getProjectList, getProjectCostDashboard } from '@/api/projects/project'
 
 const router = useRouter()
 
 const loading = ref(false)
 const projects = ref<any[]>([])
-const selectedProject = ref(null)
-const projectData = ref(null)
+const selectedProject = ref<any>(null)
+const projectData = ref<any>(null)
 
-const comparisonChartRef = ref(null)
-const pieChartRef = ref(null)
-const trendChartRef = ref(null)
-const waterfallChartRef = ref(null)
-let comparisonChart = null
-let pieChart = null
-let trendChart = null
-let waterfallChart = null
+const comparisonChartRef = ref<any>(null)
+const pieChartRef = ref<any>(null)
+const trendChartRef = ref<any>(null)
+const waterfallChartRef = ref<any>(null)
+let comparisonChart: any = null
+let pieChart: any = null
+let trendChart: any = null
+let waterfallChart: any = null
 
 const phaseCosts = computed(() => projectData.value?.phase_costs || [])
 const recentCosts = computed(() => projectData.value?.recent_costs || [])
@@ -284,18 +284,18 @@ const remainingClass = computed(() => {
 })
 
 // 预算使用率进度条颜色
-const getProgressColor = (usageRate) => {
+const getProgressColor = (usageRate: any) => {
   if (usageRate > 100) return '#f56c6c'
   if (usageRate > 80) return '#e6a23c'
   return '#409eff'
 }
 
-const formatMoney = (val) => {
+const formatMoney = (val: any) => {
   if (!val) return '0.00'
   return parseFloat(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getPhaseLabel = (phase) => {
+const getPhaseLabel = (phase: any) => {
   const map = {
     DESIGN: '设计阶段',
     PROCUREMENT: '采购阶段',
@@ -306,7 +306,7 @@ const getPhaseLabel = (phase) => {
     ACCEPTANCE: '验收阶段',
     WARRANTY: '质保期'
   }
-  return map[phase] || phase
+  return (map as Record<string, any>)[phase] || phase
 }
 
 const loadProjects = async () => {
@@ -321,14 +321,14 @@ const loadProjectCost = async () => {
     projectData.value = null
     return
   }
-  
+
   loading.value = true
   try {
     const res = await getProjectCostDashboard(selectedProject.value)
     projectData.value = res
     await nextTick()
     renderCharts()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -337,7 +337,7 @@ const loadProjectCost = async () => {
 
 const renderCharts = () => {
   if (!projectData.value) return
-  
+
   // 预算vs实际对比图
   if (comparisonChartRef.value) {
     if (!comparisonChart) {
@@ -349,13 +349,13 @@ const renderCharts = () => {
       legend: { data: ['预算', '实际', '差异'] },
       xAxis: {
         type: 'category',
-        data: comparison.map(c => c.cost_type_display)
+        data: comparison.map((c: any) => c.cost_type_display)
       },
       yAxis: { type: 'value' },
       series: [
-        { name: '预算', type: 'bar', data: comparison.map(c => c.budget) },
-        { name: '实际', type: 'bar', data: comparison.map(c => c.actual) },
-        { name: '差异', type: 'bar', data: comparison.map(c => c.variance) }
+        { name: '预算', type: 'bar', data: comparison.map((c: any) => c.budget) },
+        { name: '实际', type: 'bar', data: comparison.map((c: any) => c.actual) },
+        { name: '差异', type: 'bar', data: comparison.map((c: any) => c.variance) }
       ]
     })
   }
@@ -371,7 +371,7 @@ const renderCharts = () => {
       series: [{
         type: 'pie',
         radius: ['40%', '70%'],
-        data: comparison.filter(c => c.actual > 0).map(c => ({
+        data: comparison.filter((c: any) => c.actual > 0).map((c: any) => ({
           name: c.cost_type_display,
           value: c.actual
         })),
@@ -390,7 +390,7 @@ const renderCharts = () => {
       tooltip: { trigger: 'axis' },
       xAxis: {
         type: 'category',
-        data: trend.map(t => t.month ? t.month.substring(0, 7) : '')
+        data: trend.map((t: any) => t.month ? t.month.substring(0, 7) : '')
       },
       yAxis: { type: 'value' },
       series: [{
@@ -398,7 +398,7 @@ const renderCharts = () => {
         type: 'line',
         smooth: true,
         areaStyle: { opacity: 0.3 },
-        data: trend.map(t => t.total)
+        data: trend.map((t: any) => t.total)
       }]
     })
   }
@@ -419,7 +419,7 @@ const renderCharts = () => {
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
-        formatter: (params) => {
+        formatter: (params: any) => {
           const item = params[0]
           return `${item.name}<br/>¥${parseFloat(item.value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`
         }
@@ -446,7 +446,7 @@ const renderCharts = () => {
           label: {
             show: true,
             position: 'top',
-            formatter: (params) => `¥${(params.value / 10000).toFixed(1)}万`
+            formatter: (params: any) => `¥${(params.value / 10000).toFixed(1)}万`
           },
           data: [
             { value: revenue, itemStyle: { color: '#409eff' } },
@@ -474,7 +474,7 @@ watch(() => selectedProject.value, () => {
 
 onMounted(() => {
   loadProjects()
-  
+
   // 从URL参数获取项目ID
   const urlParams = new URLSearchParams(window.location.search)
   const projectId = urlParams.get('project')

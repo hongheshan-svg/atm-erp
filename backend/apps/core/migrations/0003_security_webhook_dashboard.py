@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
             model_name='loginlog',
             index=models.Index(fields=['ip_address', '-login_time'], name='login_log_ip_addr_idx'),
         ),
-        
+
         # Sensitive Operation Log
         migrations.CreateModel(
             name='SensitiveOperationLog',
@@ -66,7 +66,7 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-        
+
         # Webhook Endpoint
         migrations.CreateModel(
             name='WebhookEndpoint',
@@ -90,7 +90,7 @@ class Migration(migrations.Migration):
                 'db_table': 'webhook_endpoint',
             },
         ),
-        
+
         # Webhook Delivery
         migrations.CreateModel(
             name='WebhookDelivery',
@@ -119,7 +119,7 @@ class Migration(migrations.Migration):
             model_name='webhookdelivery',
             index=models.Index(fields=['status', 'next_retry_at'], name='webhook_del_status_idx'),
         ),
-        
+
         # Dashboard Widget
         migrations.CreateModel(
             name='DashboardWidget',
@@ -146,7 +146,7 @@ class Migration(migrations.Migration):
                 'ordering': ['name'],
             },
         ),
-        
+
         # User Dashboard
         migrations.CreateModel(
             name='UserDashboard',

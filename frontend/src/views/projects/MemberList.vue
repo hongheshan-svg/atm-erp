@@ -20,7 +20,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 成员统计 -->
       <el-row :gutter="20" class="stats-row" v-if="selectedProject">
         <el-col :span="6">
@@ -39,7 +39,7 @@
           <el-statistic title="总工时" :value="totalHours" :precision="2" suffix="小时" />
         </el-col>
       </el-row>
-      
+
       <!-- 权限提示 -->
       <el-alert
         v-if="!canViewSalary && selectedProject"
@@ -52,7 +52,7 @@
           <span>出于隐私保护，时薪和工时成本信息仅对项目经理、HR和财务部门可见。</span>
         </template>
       </el-alert>
-      
+
       <!-- 成员列表 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -105,7 +105,7 @@
         </el-table-column>
       </el-table>
     </el-card>
-    
+
     <!-- 添加/编辑成员对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -186,15 +186,15 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const loading = ref(false)
-const selectedProject = ref(null)
+const selectedProject = ref<any>(null)
 const projects = ref<any[]>([])
 const members = ref<any[]>([])
 const allUsers = ref<any[]>([])
 const roles = ref<any[]>([])
 const dialogVisible = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   user: null,
   user_name: '',
@@ -209,21 +209,21 @@ const rules = computed(() => ({
   user: [{ required: true, message: '请选择用户', trigger: 'change' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
   // 只有有权限的用户才需要填写时薪
-  hourly_rate: canViewSalary.value 
+  hourly_rate: canViewSalary.value
     ? [{ required: true, message: '请输入时薪', trigger: 'blur' }]
     : []
 }))
 
 const dialogTitle = computed(() => form.id ? '编辑成员' : '添加成员')
 
-const managerCount = computed(() => 
+const managerCount = computed(() =>
   members.value.filter(m => {
     const role = m.role || ''
     return role.includes('经理') || role.includes('负责人') || role.includes('主管') || role.includes('总监')
   }).length
 )
 
-const developerCount = computed(() => 
+const developerCount = computed(() =>
   members.value.filter(m => {
     const role = m.role || ''
     return role.includes('开发') || role.includes('工程师') || role.includes('技术')
@@ -271,20 +271,20 @@ const selectedUserInfo = computed(() => {
 })
 
 // 获取用户显示名称
-const getUserDisplayName = (user) => {
+const getUserDisplayName = (user: any) => {
   const fullName = `${user.last_name || ''}${user.first_name || ''}`.trim()
   return fullName || user.username || `用户${user.id}`
 }
 
 // 用户选择变更时的处理
-const handleUserChange = (userId) => {
+const handleUserChange = (userId: any) => {
   const user = allUsers.value.find(u => u.id === userId)
   if (user) {
     form.user_name = getUserDisplayName(user)
   }
 }
 
-const getRoleType = (role) => {
+const getRoleType = (role: any) => {
   // 根据角色名称返回不同的标签类型
   if (!role) return 'info'
   if (role.includes('经理') || role.includes('总监') || role.includes('主管')) return 'danger'
@@ -293,7 +293,7 @@ const getRoleType = (role) => {
   return ''
 }
 
-const getRoleLabel = (role) => {
+const getRoleLabel = (role: any) => {
   return role || '未分配'
 }
 
@@ -301,7 +301,7 @@ const fetchProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目列表失败:', error)
   }
 }
@@ -311,13 +311,13 @@ const fetchMembers = async () => {
     members.value = []
     return
   }
-  
+
   loading.value = true
   try {
     // 使用查询参数过滤项目成员
     const res = await getMemberList({ project: selectedProject.value })
     members.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取成员列表失败:', error)
     members.value = []
   } finally {
@@ -329,7 +329,7 @@ const fetchUsers = async () => {
   try {
     const res = await getUsers()
     allUsers.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取用户列表失败:', error)
   }
 }
@@ -338,7 +338,7 @@ const fetchRoles = async () => {
   try {
     const res = await getRoles()
     roles.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取角色列表失败:', error)
     // 使用默认角色
     roles.value = [
@@ -367,12 +367,12 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   Object.assign(form, row)
   dialogVisible.value = true
 }
 
-const handleRemove = (row) => {
+const handleRemove = (row: any) => {
   ElMessageBox.confirm(`确定要将 ${row.user_name} 从项目中移除吗？`, '提示', {
     type: 'warning'
   }).then(async () => {
@@ -380,7 +380,7 @@ const handleRemove = (row) => {
       await deleteMember(row.id)
       ElMessage.success('移除成功')
       fetchMembers()
-    } catch (error) {
+    } catch (error: any) {
       ElMessage.error('移除失败')
     }
   }).catch(error => { console.error(error) })
@@ -389,15 +389,15 @@ const handleRemove = (row) => {
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
-    
-    const data = { ...form, project: selectedProject.value }
-    
+
+    const data: Record<string, any> = { ...form, project: selectedProject.value }
+
     // 如果当前用户没有查看薪资权限，移除 hourly_rate 字段
     // 后端会保留原有的时薪值或使用默认值
     if (!canViewSalary.value) {
       delete data.hourly_rate
     }
-    
+
     if (form.id) {
       await updateMember(form.id, data)
       ElMessage.success('更新成功')
@@ -405,10 +405,10 @@ const handleSubmit = async () => {
       await createMember(data)
       ElMessage.success('添加成功')
     }
-    
+
     dialogVisible.value = false
     fetchMembers()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -451,4 +451,3 @@ onMounted(() => {
   border-radius: 8px;
 }
 </style>
-

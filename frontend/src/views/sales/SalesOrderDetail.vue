@@ -160,7 +160,7 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="计划发货日期" required>
-                  <el-date-picker v-model="deliveryForm.delivery_date" type="date" placeholder="选择发货日期" 
+                  <el-date-picker v-model="deliveryForm.delivery_date" type="date" placeholder="选择发货日期"
                                   value-format="YYYY-MM-DD" style="width: 100%" />
                 </el-form-item>
               </el-col>
@@ -205,7 +205,7 @@
               <el-col :span="12">
                 <el-form-item label="需要保险">
                   <el-switch v-model="deliveryForm.needs_insurance" />
-                  <el-input-number v-if="deliveryForm.needs_insurance" v-model="deliveryForm.insurance_amount" 
+                  <el-input-number v-if="deliveryForm.needs_insurance" v-model="deliveryForm.insurance_amount"
                                    :precision="2" :min="0" placeholder="保险金额" style="margin-left: 10px; width: 150px" />
                 </el-form-item>
               </el-col>
@@ -230,7 +230,7 @@
               <el-table-column prop="delivered_qty" label="已发货" width="100" align="right" />
               <el-table-column label="本次发货" width="150">
                 <template #default="{ row }">
-                  <el-input-number v-model="row.delivery_qty" :min="0" :max="row.qty - (row.delivered_qty || 0)" 
+                  <el-input-number v-model="row.delivery_qty" :min="0" :max="row.qty - (row.delivered_qty || 0)"
                                    :step="1" size="small" style="width: 100%" />
                 </template>
               </el-table-column>
@@ -245,7 +245,7 @@
           </el-tab-pane>
         </el-tabs>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="deliveryDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitDelivery">创建发货单</el-button>
@@ -271,7 +271,7 @@ const deliveryOrders = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const deliveryDialogVisible = ref(false)
 const deliveryActiveTab = ref('basic')
-const deliveryForm = ref({
+const deliveryForm = ref<Record<string, any>>({
   warehouse: null,
   delivery_date: new Date().toISOString().split('T')[0],
   notes: '',
@@ -288,7 +288,7 @@ const deliveryForm = ref({
   logistics_notes: ''
 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING_APPROVAL': 'warning',
@@ -300,10 +300,10 @@ const getStatusType = (status) => {
     'DELIVERED': 'success',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'DRAFT': '草稿',
     'PENDING_APPROVAL': '待审批',
@@ -315,29 +315,29 @@ const getStatusLabel = (status) => {
     'DELIVERED': '已完成',
     'CANCELLED': '已取消'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getDeliveryStatusType = (status) => {
+const getDeliveryStatusType = (status: any) => {
   return status === 'COMPLETED' ? 'success' : 'warning'
 }
 
-const getDeliveryStatusLabel = (status) => {
+const getDeliveryStatusLabel = (status: any) => {
   return status === 'COMPLETED' ? '已完成' : '进行中'
 }
 
-const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
+const formatMoney = (val: any) => parseFloat(val || 0).toFixed(2)
 
 const loadOrderDetail = async () => {
   loading.value = true
   try {
-    const response = await getOrder(route.params.id)
+    const response = await getOrder(Number(route.params.id))
     order.value = response.data || response
-    
+
     // 加载关联的发货单
-    const deliveryRes = await getDeliveryOrders({ so: route.params.id })
+    const deliveryRes = await getDeliveryOrders({ so: Number(route.params.id) })
     deliveryOrders.value = deliveryRes.results || deliveryRes.results || deliveryRes || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载订单详情失败:', error)
     ElMessage.error('加载订单详情失败')
   } finally {
@@ -349,7 +349,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -360,7 +360,7 @@ const goBack = () => {
 
 const handleEdit = () => {
   // 订单编辑实际是列表页的对话框，没有独立 /edit 路由；跳列表并带 query 自动打开编辑
-  router.push({ path: '/sales/orders', query: { edit: route.params.id } })
+  router.push({ path: '/sales/orders', query: { edit: Number(route.params.id) } })
 }
 
 const handleConfirm = async () => {
@@ -371,10 +371,10 @@ const handleConfirm = async () => {
       type: 'warning'
     })
 
-    await confirmOrder(route.params.id)
+    await confirmOrder(Number(route.params.id))
     ElMessage.success('订单确认成功')
     loadOrderDetail()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('确认订单失败:', error)
       ElMessage.error('确认订单失败')
@@ -385,8 +385,8 @@ const handleConfirm = async () => {
 const handleReturnToDraft = async () => {
   try {
     await ElMessageBox.confirm(
-      '将订单退回草稿状态后，您可以编辑订单并补充产品明细。确定要退回吗？', 
-      '退回草稿', 
+      '将订单退回草稿状态后，您可以编辑订单并补充产品明细。确定要退回吗？',
+      '退回草稿',
       {
         confirmButtonText: '确定退回',
         cancelButtonText: '取消',
@@ -394,10 +394,10 @@ const handleReturnToDraft = async () => {
       }
     )
 
-    await returnOrderToDraft(route.params.id)
+    await returnOrderToDraft(Number(route.params.id))
     ElMessage.success('订单已退回草稿状态，请点击"编辑订单"补充明细')
     loadOrderDetail()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('退回草稿失败:', error)
       ElMessage.error('退回草稿失败: ' + (error.response?.data?.error || error.message))
@@ -413,10 +413,10 @@ const handleCancel = async () => {
       type: 'warning'
     })
 
-    await cancelOrder(route.params.id)
+    await cancelOrder(Number(route.params.id))
     ElMessage.success('订单取消成功')
     loadOrderDetail()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('取消订单失败:', error)
       ElMessage.error('取消订单失败')
@@ -443,9 +443,9 @@ const handleCreateDelivery = () => {
     insurance_amount: null,
     logistics_notes: ''
   }
-  
+
   // 准备发货明细
-  deliveryForm.value.lines = order.value.lines.map(line => ({
+  deliveryForm.value.lines = order.value.lines.map((line: any) => ({
     order_line: line.id,
     item_id: line.item,
     item_name: line.item_name || line.custom_name,
@@ -453,7 +453,7 @@ const handleCreateDelivery = () => {
     delivered_qty: line.delivered_qty || 0,
     delivery_qty: Math.max(0, line.qty - (line.delivered_qty || 0))
   }))
-  
+
   deliveryDialogVisible.value = true
 }
 
@@ -466,9 +466,9 @@ const submitDelivery = async () => {
   try {
     // 获取订单明细以获取 item_id
     const orderLines = order.value.lines || []
-    
+
     const payload = {
-      so: route.params.id,
+      so: Number(route.params.id),
       warehouse: deliveryForm.value.warehouse,
       delivery_date: deliveryForm.value.delivery_date,
       notes: deliveryForm.value.notes,
@@ -484,9 +484,9 @@ const submitDelivery = async () => {
       logistics_notes: deliveryForm.value.logistics_notes,
       // 产品明细
       lines: deliveryForm.value.lines
-        .filter(line => line.delivery_qty > 0)
-        .map(line => {
-          const orderLine = orderLines.find(ol => ol.id === line.order_line)
+        .filter((line: any) => line.delivery_qty > 0)
+        .map((line: any) => {
+          const orderLine = orderLines.find((ol: any) => ol.id === line.order_line)
           return {
             so_line: line.order_line,
             item: line.item_id || orderLine?.item || orderLine?.item_id,
@@ -502,9 +502,9 @@ const submitDelivery = async () => {
 
     const response = await createDeliveryOrder(payload)
     const newDelivery = response.data || response
-    
+
     deliveryDialogVisible.value = false
-    
+
     // 询问是否立即提交审批
     try {
       await ElMessageBox.confirm(
@@ -516,29 +516,29 @@ const submitDelivery = async () => {
           type: 'success'
         }
       )
-      
+
       // 用户选择立即提交
       try {
         await submitDeliveryOrder(newDelivery.id)
         ElMessage.success('发货单已提交审批')
-      } catch (submitError) {
+      } catch (submitError: any) {
         console.error('提交审批失败:', submitError)
         ElMessage.warning('发货单已创建，但提交审批失败，请稍后在发货单列表中重新提交')
       }
-    } catch (error) {
+    } catch (error: any) {
     console.error(error)
       // 用户选择稍后提交
       ElMessage.success('发货单已创建，可在发货单列表中提交审批')
     }
-    
+
     loadOrderDetail()
-  } catch (error) {
+  } catch (error: any) {
     console.error('创建发货单失败:', error)
     ElMessage.error(error.response?.data?.detail || error.response?.data?.error || '创建发货单失败')
   }
 }
 
-const viewDelivery = (row) => {
+const viewDelivery = (row: any) => {
   // 没有发货单详情独立路由；跳发货管理列表并带单号过滤
   router.push({ path: '/sales/delivery-orders', query: { delivery_no: row.delivery_no } })
 }
@@ -546,7 +546,7 @@ const viewDelivery = (row) => {
 onMounted(async () => {
   await loadOrderDetail()
   await loadWarehouses()
-  
+
   // 如果带有action=create_delivery参数，自动打开创建发货单对话框
   if (route.query.action === 'create_delivery') {
     if (order.value.status === 'CONFIRMED' || order.value.status === 'PARTIAL') {
@@ -563,4 +563,3 @@ onMounted(async () => {
   padding: 20px;
 }
 </style>
-

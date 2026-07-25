@@ -4,15 +4,15 @@ ERP System Browser Simulation Test
 Simulates real user workflows: login, navigate pages, perform CRUD operations.
 Captures all browser console errors and network failures.
 """
+
 import json
-import sys
 import time
 from collections import defaultdict
+
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-BASE_URL = "http://localhost:8080/erp"
-USERNAME = "admin"
-PASSWORD = "admin123"
+from browser_test_config import BASE_URL, PASSWORD, USERNAME
 
 ROUTES = {
     "工作台": ["/dashboard"],
@@ -94,19 +94,23 @@ def run_simulation():
 
         def on_console(msg):
             if msg.type in ("error", "warning"):
-                console_errors.append({
-                    "type": msg.type,
-                    "text": msg.text,
-                    "url": page.url,
-                })
+                console_errors.append(
+                    {
+                        "type": msg.type,
+                        "text": msg.text,
+                        "url": page.url,
+                    }
+                )
 
         def on_response(response):
             if response.status >= 400:
-                network_errors.append({
-                    "status": response.status,
-                    "url": response.url,
-                    "page_url": page.url,
-                })
+                network_errors.append(
+                    {
+                        "status": response.status,
+                        "url": response.url,
+                        "page_url": page.url,
+                    }
+                )
 
         page.on("console", on_console)
         page.on("response", on_response)
@@ -142,7 +146,9 @@ def run_simulation():
                     new_errors = len(console_errors) - errors_before
                     new_net_errors = len(network_errors) - net_errors_before
 
-                    status = "OK" if (new_errors == 0 and new_net_errors == 0) else "ERR"
+                    status = (
+                        "OK" if (new_errors == 0 and new_net_errors == 0) else "ERR"
+                    )
                     detail = ""
                     if new_errors > 0:
                         detail += f" {new_errors} console"
@@ -155,7 +161,7 @@ def run_simulation():
                         "network_errors": new_net_errors,
                     }
                     print(f"    {status} {route}{detail}")
-                except Exception as e:
+                except PlaywrightError as e:
                     page_results[route] = {
                         "status": "timeout",
                         "error": str(e),
@@ -168,9 +174,13 @@ def run_simulation():
         print("=" * 60)
 
         try:
-            page.goto(f"{BASE_URL}/masterdata/items", wait_until="networkidle", timeout=15000)
+            page.goto(
+                f"{BASE_URL}/masterdata/items", wait_until="networkidle", timeout=15000
+            )
             time.sleep(1)
-            new_btn = page.locator('button:has-text("新增"), button:has-text("新建"), button:has-text("添加")')
+            new_btn = page.locator(
+                'button:has-text("新增"), button:has-text("新建"), button:has-text("添加")'
+            )
             if new_btn.count() > 0:
                 new_btn.first.click()
                 time.sleep(1)
@@ -181,24 +191,32 @@ def run_simulation():
                     time.sleep(0.5)
             else:
                 print("  -- Items: No new button found")
-        except Exception as e:
+        except PlaywrightError as e:
             print(f"  ERR Items: {e}")
 
         try:
-            page.goto(f"{BASE_URL}/masterdata/customers", wait_until="networkidle", timeout=15000)
+            page.goto(
+                f"{BASE_URL}/masterdata/customers",
+                wait_until="networkidle",
+                timeout=15000,
+            )
             time.sleep(1)
-            search_input = page.locator('input[placeholder*="搜索"], input[placeholder*="关键字"], input[placeholder*="名称"]')
+            search_input = page.locator(
+                'input[placeholder*="搜索"], input[placeholder*="关键字"], input[placeholder*="名称"]'
+            )
             if search_input.count() > 0:
                 search_input.first.fill("test")
                 time.sleep(0.3)
-                search_btn = page.locator('button:has-text("搜索"), button:has-text("查询")')
+                search_btn = page.locator(
+                    'button:has-text("搜索"), button:has-text("查询")'
+                )
                 if search_btn.count() > 0:
                     search_btn.first.click()
                     time.sleep(1)
                 print("  OK Customers: Search tested")
             else:
                 print("  -- Customers: No search input found")
-        except Exception as e:
+        except PlaywrightError as e:
             print(f"  ERR Customers: {e}")
 
         browser.close()
@@ -213,7 +231,9 @@ def run_simulation():
         key = err["text"][:150]
         error_summary[key].append(err["url"])
 
-    print(f"\nConsole errors/warnings: {len(console_errors)} total, {len(error_summary)} unique")
+    print(
+        f"\nConsole errors/warnings: {len(console_errors)} total, {len(error_summary)} unique"
+    )
     for text, urls in sorted(error_summary.items()):
         unique_urls = sorted(set(urls))[:3]
         print(f"\n  [{text[:120]}]")
@@ -225,7 +245,9 @@ def run_simulation():
         key = f"{err['status']} {err['url']}"
         net_error_summary[key].append(err["page_url"])
 
-    print(f"\nNetwork errors (4xx/5xx): {len(network_errors)} total, {len(net_error_summary)} unique")
+    print(
+        f"\nNetwork errors (4xx/5xx): {len(network_errors)} total, {len(net_error_summary)} unique"
+    )
     for key, pages in sorted(net_error_summary.items()):
         unique_pages = sorted(set(pages))[:3]
         print(f"\n  {key}")
@@ -235,12 +257,20 @@ def run_simulation():
     ok_count = sum(1 for r in page_results.values() if r["status"] == "ok")
     error_count = sum(1 for r in page_results.values() if r["status"] == "error")
     timeout_count = sum(1 for r in page_results.values() if r["status"] == "timeout")
-    print(f"\nPages: {ok_count} ok, {error_count} with errors, {timeout_count} timeouts")
+    print(
+        f"\nPages: {ok_count} ok, {error_count} with errors, {timeout_count} timeouts"
+    )
     print(f"Total pages tested: {len(page_results)}")
 
     report = {
-        "console_errors": [{"text": k, "count": len(v), "pages": sorted(set(v))[:5]} for k, v in error_summary.items()],
-        "network_errors": [{"endpoint": k, "count": len(v), "pages": sorted(set(v))[:5]} for k, v in net_error_summary.items()],
+        "console_errors": [
+            {"text": k, "count": len(v), "pages": sorted(set(v))[:5]}
+            for k, v in error_summary.items()
+        ],
+        "network_errors": [
+            {"endpoint": k, "count": len(v), "pages": sorted(set(v))[:5]}
+            for k, v in net_error_summary.items()
+        ],
         "page_results": page_results,
     }
     with open("/home/administrator/erp/test_browser_report.json", "w") as f:

@@ -27,7 +27,7 @@
           <span>流程定义</span>
           <el-tag size="small">{{ filteredWorkflows.length }} 个</el-tag>
         </div>
-        
+
         <!-- 按业务类型分组的树形结构 -->
         <el-tree
           :data="treeData"
@@ -75,7 +75,7 @@
             </div>
             <div class="header-actions">
               <el-button @click="editWorkflow(selectedWorkflow)">编辑</el-button>
-              <el-button 
+              <el-button
                 :type="selectedWorkflow.is_active ? 'warning' : 'success'"
                 @click="toggleStatus(selectedWorkflow)"
               >
@@ -126,7 +126,7 @@
                 添加步骤
               </el-button>
             </div>
-            
+
             <div class="flow-canvas" v-loading="stepsLoading">
               <!-- 开始节点 -->
               <div class="flow-node start-node">
@@ -141,7 +141,7 @@
 
               <!-- 审批步骤节点 -->
               <template v-for="(step, index) in steps" :key="step.id">
-                <div 
+                <div
                   class="flow-node step-node"
                   :class="{ 'is-selected': selectedStep?.id === step.id }"
                   @click="selectStep(step)"
@@ -173,17 +173,17 @@
                     </div>
                     <!-- 排序按钮 -->
                     <div class="sort-buttons">
-                      <el-button 
-                        size="small" 
-                        circle 
+                      <el-button
+                        size="small"
+                        circle
                         :disabled="index === 0"
                         @click.stop="moveStep(index, -1)"
                       >
                         <el-icon><ArrowUp /></el-icon>
                       </el-button>
-                      <el-button 
-                        size="small" 
-                        circle 
+                      <el-button
+                        size="small"
+                        circle
                         :disabled="index === steps.length - 1"
                         @click.stop="moveStep(index, 1)"
                       >
@@ -192,7 +192,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- 连接线 -->
                 <div class="flow-connector" v-if="index < steps.length - 1"></div>
               </template>
@@ -273,11 +273,11 @@
         <el-form-item label="步骤名称" prop="name">
           <el-input v-model="stepForm.name" placeholder="如: 部门经理审批、财务总监审批" />
         </el-form-item>
-        
+
         <el-form-item label="审批人类型" prop="approver_type">
           <div class="approver-type-selector">
-            <div 
-              v-for="type in approverTypes" 
+            <div
+              v-for="type in approverTypes"
               :key="type.value"
               class="type-option"
               :class="{ 'is-selected': stepForm.approver_type === type.value }"
@@ -321,13 +321,13 @@
         </el-row>
 
         <el-divider content-position="left">抄送设置</el-divider>
-        
+
         <el-form-item label="抄送人员">
-          <el-select 
-            v-model="stepForm.cc_users" 
-            multiple 
-            filterable 
-            style="width: 100%" 
+          <el-select
+            v-model="stepForm.cc_users"
+            multiple
+            filterable
+            style="width: 100%"
             placeholder="选择需要抄送的人员（可多选）"
           >
             <el-option v-for="user in users" :key="user.id" :label="getUserLabel(user)" :value="user.id">
@@ -340,11 +340,11 @@
         </el-form-item>
 
         <el-form-item label="抄送角色">
-          <el-select 
-            v-model="stepForm.cc_roles" 
-            multiple 
-            filterable 
-            style="width: 100%" 
+          <el-select
+            v-model="stepForm.cc_roles"
+            multiple
+            filterable
+            style="width: 100%"
             placeholder="选择需要抄送的角色（可多选）"
           >
             <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
@@ -361,14 +361,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
+import {
   Plus, Refresh, Search, Folder, Document, Briefcase, Money, List, Clock,
-  VideoPlay, CircleCheck, Edit, Delete, User, ArrowUp, ArrowDown,
-  UserFilled, Avatar, OfficeBuilding, Connection
+  VideoPlay, CircleCheck, Edit, Delete, User, ArrowUp, ArrowDown
 } from '@element-plus/icons-vue'
-import { 
+import {
   getWorkflowDefinitions, createWorkflowDefinition, updateWorkflowDefinition, deleteWorkflowDefinition,
   getWorkflowSteps, createWorkflowStep, updateWorkflowStep, deleteWorkflowStep, reorderWorkflowSteps
 } from '@/api/workflow'
@@ -380,8 +379,8 @@ const saving = ref(false)
 const stepsLoading = ref(false)
 const stepSaving = ref(false)
 const workflows = ref<any[]>([])
-const selectedWorkflow = ref(null)
-const selectedStep = ref(null)
+const selectedWorkflow = ref<any>(null)
+const selectedStep = ref<any>(null)
 const steps = ref<any[]>([])
 const users = ref<any[]>([])
 const roles = ref<any[]>([])
@@ -392,12 +391,12 @@ const dialogVisible = ref(false)
 const stepDialogVisible = ref(false)
 const isEdit = ref(false)
 const isEditStep = ref(false)
-const formRef = ref(null)
-const stepFormRef = ref(null)
+const formRef = ref<any>(null)
+const stepFormRef = ref<any>(null)
 
 // 表单
-const form = ref({ code: '', name: '', business_type: '', amount_threshold: null, description: '', is_active: true })
-const stepForm = ref({ name: '', approver_type: 'USER', approver: null, role: null, can_reject: true, timeout_days: 3, cc_users: [], cc_roles: [] })
+const form = ref<Record<string, any>>({ code: '', name: '', business_type: '', amount_threshold: null, description: '', is_active: true })
+const stepForm = ref<Record<string, any>>({ name: '', approver_type: 'USER', approver: null, role: null, can_reject: true, timeout_days: 3, cc_users: [], cc_roles: [] })
 
 // 常量 - 业务类型中文标签
 const businessTypeLabels = {
@@ -453,8 +452,8 @@ const stepRules = {
 const filteredWorkflows = computed(() => {
   if (!searchText.value) return workflows.value
   const search = searchText.value.toLowerCase()
-  return workflows.value.filter(w => 
-    w.name.toLowerCase().includes(search) || 
+  return workflows.value.filter(w =>
+    w.name.toLowerCase().includes(search) ||
     w.code.toLowerCase().includes(search)
   )
 })
@@ -463,20 +462,20 @@ const treeData = computed(() => {
   // 先创建所有业务类型的分组（确保都显示）
   const groups = {}
   Object.keys(businessTypeLabels).forEach(type => {
-    groups[type] = {
+    (groups as Record<string, any>)[type] = {
       id: `group_${type}`,
-      label: businessTypeLabels[type],
+      label: (businessTypeLabels as Record<string, any>)[type],
       children: [],
       isEmpty: true
     }
   })
-  
+
   // 将现有工作流添加到对应分组
   filteredWorkflows.value.forEach(w => {
     const type = w.business_type
-    if (groups[type]) {
-      groups[type].isEmpty = false
-      groups[type].children.push({
+    if ((groups as Record<string, any>)[type]) {
+      ;(groups as Record<string, any>)[type].isEmpty = false
+      ;(groups as Record<string, any>)[type].children.push({
         ...w,
         id: w.id,
         label: w.name,
@@ -493,27 +492,27 @@ const estimatedDays = computed(() => {
 })
 
 // 方法
-const formatAmount = (amount) => Number(amount).toLocaleString()
+const formatAmount = (amount: any) => Number(amount).toLocaleString()
 
-const getBusinessTypeLabel = (type) => businessTypeLabels[type] || type
+const getBusinessTypeLabel = (type: any) => (businessTypeLabels as Record<string, any>)[type] || type
 
-const getApproverTypeLabel = (type) => {
+const getApproverTypeLabel = (type: any) => {
   const t = approverTypes.find(a => a.value === type)
   return t ? t.label : type
 }
 
-const getApproverTypeColor = (type) => {
-  const colors = { 
-    'USER': 'primary', 
-    'ROLE': 'success', 
-    'DEPARTMENT_MANAGER': 'warning', 
+const getApproverTypeColor = (type: any) => {
+  const colors = {
+    'USER': 'primary',
+    'ROLE': 'success',
+    'DEPARTMENT_MANAGER': 'warning',
     'PROJECT_MANAGER': 'danger',
-    'SUPERIOR': 'info' 
+    'SUPERIOR': 'info'
   }
-  return colors[type] || ''
+  return (colors as Record<string, any>)[type] || ''
 }
 
-const getApproverDisplay = (step) => {
+const getApproverDisplay = (step: any) => {
   if (step.approver_type === 'USER') return step.approver_user_name || '未指定用户'
   if (step.approver_type === 'ROLE') return step.approver_role_name || '未指定角色'
   if (step.approver_type === 'DEPARTMENT_HEAD' || step.approver_type === 'DEPARTMENT_MANAGER') return '部门负责人'
@@ -522,13 +521,13 @@ const getApproverDisplay = (step) => {
   return '-'
 }
 
-const getCcCount = (step) => {
+const getCcCount = (step: any) => {
   const userCount = step.cc_users_detail?.length || step.cc_users?.length || 0
   const roleCount = step.cc_roles_detail?.length || step.cc_roles?.length || 0
   return userCount + roleCount
 }
 
-const getUserLabel = (user) => {
+const getUserLabel = (user: any) => {
   let label = user.display_name || user.username
   if (user.department_name) label += ` (${user.department_name})`
   return label
@@ -543,7 +542,7 @@ const loadWorkflows = async () => {
       const updated = workflows.value.find(w => w.id === selectedWorkflow.value.id)
       selectedWorkflow.value = updated || null
     }
-  } catch (error) {
+  } catch (error: any) {
     workflows.value = []
   } finally {
     loading.value = false
@@ -555,8 +554,8 @@ const loadSteps = async () => {
   stepsLoading.value = true
   try {
     const res = await getWorkflowSteps({ workflow: selectedWorkflow.value.id })
-    steps.value = (res.results || res || []).sort((a, b) => (a.step_order || a.order || 0) - (b.step_order || b.order || 0))
-  } catch (error) {
+    steps.value = (res.results || res || []).sort((a: any, b: any) => (a.step_order || a.order || 0) - (b.step_order || b.order || 0))
+  } catch (error: any) {
     steps.value = []
   } finally {
     stepsLoading.value = false
@@ -568,12 +567,12 @@ const loadUsersAndRoles = async () => {
     const [usersRes, rolesRes] = await Promise.all([getUsers(), getRoles()])
     users.value = usersRes.results || usersRes || []
     roles.value = rolesRes.results || rolesRes || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load users/roles:', error)
   }
 }
 
-const handleNodeClick = (data) => {
+const handleNodeClick = (data: any) => {
   if (data.isWorkflow) {
     selectedWorkflow.value = data
     selectedStep.value = null
@@ -585,7 +584,7 @@ const handleNodeClick = (data) => {
   }
 }
 
-const selectStep = (step) => {
+const selectStep = (step: any) => {
   selectedStep.value = step
 }
 
@@ -595,21 +594,21 @@ const showCreateDialog = () => {
   dialogVisible.value = true
 }
 
-const showCreateDialogWithType = (businessType) => {
+const showCreateDialogWithType = (businessType: any) => {
   isEdit.value = false
-  const label = businessTypeLabels[businessType] || businessType
-  form.value = { 
-    code: '', 
-    name: `${label}审批流程`, 
-    business_type: businessType, 
-    amount_threshold: null, 
-    description: '', 
-    is_active: true 
+  const label = (businessTypeLabels as Record<string, any>)[businessType] || businessType
+  form.value = {
+    code: '',
+    name: `${label}审批流程`,
+    business_type: businessType,
+    amount_threshold: null,
+    description: '',
+    is_active: true
   }
   dialogVisible.value = true
 }
 
-const editWorkflow = (workflow) => {
+const editWorkflow = (workflow: any) => {
   isEdit.value = true
   form.value = { ...workflow }
   dialogVisible.value = true
@@ -634,37 +633,37 @@ const saveWorkflow = async () => {
     }
     dialogVisible.value = false
     loadWorkflows()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '操作失败')
   } finally {
     saving.value = false
   }
 }
 
-const toggleStatus = async (workflow) => {
+const toggleStatus = async (workflow: any) => {
   try {
     await updateWorkflowDefinition(workflow.id, { ...workflow, is_active: !workflow.is_active })
     ElMessage.success(workflow.is_active ? '已停用' : '已启用')
     workflow.is_active = !workflow.is_active
     loadWorkflows()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const deleteWorkflow = async (workflow) => {
+const deleteWorkflow = async (workflow: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除流程"${workflow.name}"吗？此操作不可恢复。`, '删除确认', { type: 'warning' })
     await deleteWorkflowDefinition(workflow.id)
     ElMessage.success('删除成功')
     selectedWorkflow.value = null
     loadWorkflows()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
 
-const selectApproverType = (type) => {
+const selectApproverType = (type: any) => {
   stepForm.value.approver_type = type
   stepForm.value.approver = null
   stepForm.value.role = null
@@ -677,9 +676,9 @@ const addStep = async () => {
   stepDialogVisible.value = true
 }
 
-const editStep = async (step) => {
+const editStep = async (step: any) => {
   isEditStep.value = true
-  stepForm.value = { 
+  stepForm.value = {
     ...step,
     approver: step.approver_user || null,
     role: step.approver_role || null,
@@ -704,7 +703,7 @@ const saveStep = async () => {
   stepSaving.value = true
   try {
     const formData = stepForm.value
-    const data = { 
+    const data = {
       name: formData.name,
       workflow: selectedWorkflow.value.id,
       step_order: isEditStep.value ? (formData.step_order || formData.order) : steps.value.length + 1,
@@ -725,25 +724,25 @@ const saveStep = async () => {
     ElMessage.success(isEditStep.value ? '更新成功' : '添加成功')
     stepDialogVisible.value = false
     await loadSteps()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '操作失败')
   } finally {
     stepSaving.value = false
   }
 }
 
-const deleteStep = async (step) => {
+const deleteStep = async (step: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此审批步骤吗？', '提示', { type: 'warning' })
     await deleteWorkflowStep(step.id)
     ElMessage.success('删除成功')
     await loadSteps()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
 
-const moveStep = async (index, direction) => {
+const moveStep = async (index: any, direction: any) => {
   const newIndex = index + direction
   if (newIndex < 0 || newIndex >= steps.value.length) return
   const step1 = steps.value[index]
@@ -752,7 +751,7 @@ const moveStep = async (index, direction) => {
     // 由后端在单事务内交换 step_order，规避并发互换撞 unique_together 唯一约束
     await reorderWorkflowSteps(step1.id, step2.id)
     await loadSteps()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '移动失败')
   }
 }
@@ -985,7 +984,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 0;
-  background: 
+  background:
     linear-gradient(90deg, #f0f0f0 1px, transparent 1px),
     linear-gradient(#f0f0f0 1px, transparent 1px);
   background-size: 20px 20px;

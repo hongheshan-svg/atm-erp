@@ -22,7 +22,6 @@ from django.test import TestCase
 from apps.accounts.models import Role
 from apps.core.workflow.models import (
     WorkflowDefinition,
-    WorkflowInstance,
     WorkflowStep,
     WorkflowTask,
 )
@@ -41,17 +40,13 @@ class WorkflowCountersignTest(TestCase):
         self.addCleanup(p1.stop)
         self.addCleanup(p2.stop)
 
-        self.submitter = User.objects.create_user(
-            username='cs_submitter', password='x', employee_id='cs_submitter'
-        )
+        self.submitter = User.objects.create_user(username='cs_submitter', password='x', employee_id='cs_submitter')
 
         # 会签角色 + 3 名成员
         self.role_cs = Role.objects.create(name='会签组', code='countersign_group')
         self.cs_users = []
         for i in range(3):
-            u = User.objects.create_user(
-                username=f'cs_member_{i}', password='x', employee_id=f'cs_member_{i}'
-            )
+            u = User.objects.create_user(username=f'cs_member_{i}', password='x', employee_id=f'cs_member_{i}')
             u.roles.add(self.role_cs)
             self.cs_users.append(u)
 
@@ -73,9 +68,7 @@ class WorkflowCountersignTest(TestCase):
     # ---------- (a) 会签：3 任务，全部通过才推进 ----------
     def test_countersign_creates_task_per_assignee(self):
         wf, step = self._make_countersign_workflow('cs_wf_a')
-        instance, err = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 1001, 'PR-CS-A', self.submitter
-        )
+        instance, err = WorkflowService.start_workflow('PURCHASE_REQUEST', 1001, 'PR-CS-A', self.submitter)
         self.assertIsNone(err)
         self.assertIsNotNone(instance)
 
@@ -89,13 +82,9 @@ class WorkflowCountersignTest(TestCase):
 
     def test_countersign_does_not_advance_until_all_approve(self):
         wf, step = self._make_countersign_workflow('cs_wf_b')
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 1002, 'PR-CS-B', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 1002, 'PR-CS-B', self.submitter)
 
-        tasks = list(
-            WorkflowTask.objects.filter(instance=instance, step=step).order_by('id')
-        )
+        tasks = list(WorkflowTask.objects.filter(instance=instance, step=step).order_by('id'))
         self.assertEqual(len(tasks), 3)
 
         # 前两人通过 —— 仍不得推进 / 完成
@@ -125,13 +114,9 @@ class WorkflowCountersignTest(TestCase):
     # ---------- (b) 任意拒绝 => 整单拒绝，其余待办 SKIPPED ----------
     def test_countersign_single_rejection_rejects_instance(self):
         wf, step = self._make_countersign_workflow('cs_wf_c')
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 1003, 'PR-CS-C', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 1003, 'PR-CS-C', self.submitter)
 
-        tasks = list(
-            WorkflowTask.objects.filter(instance=instance, step=step).order_by('id')
-        )
+        tasks = list(WorkflowTask.objects.filter(instance=instance, step=step).order_by('id'))
         self.assertEqual(len(tasks), 3)
 
         # 第一人通过，第二人拒绝
@@ -149,33 +134,33 @@ class WorkflowCountersignTest(TestCase):
         # 尚未处理的第三个任务应被取消（SKIPPED），不再遗留待办
         tasks[2].refresh_from_db()
         self.assertEqual(tasks[2].status, 'SKIPPED')
-        self.assertEqual(
-            WorkflowTask.objects.filter(instance=instance, status='PENDING').count(), 0
-        )
+        self.assertEqual(WorkflowTask.objects.filter(instance=instance, status='PENDING').count(), 0)
 
     # ---------- (c) 普通单人审批仍一人通过即推进（回归保护）----------
     def test_single_approver_step_advances_on_one_approval(self):
         wf = WorkflowDefinition.objects.create(
             name='两级单人审批', code='single_wf', business_type='PURCHASE_REQUEST', is_active=True
         )
-        approver1 = User.objects.create_user(
-            username='appr1', password='x', employee_id='appr1'
-        )
-        approver2 = User.objects.create_user(
-            username='appr2', password='x', employee_id='appr2'
-        )
+        approver1 = User.objects.create_user(username='appr1', password='x', employee_id='appr1')
+        approver2 = User.objects.create_user(username='appr2', password='x', employee_id='appr2')
         step1 = WorkflowStep.objects.create(
-            workflow=wf, step_order=1, name='一级', approver_type='USER',
-            approver_user=approver1, action_type='APPROVE',
+            workflow=wf,
+            step_order=1,
+            name='一级',
+            approver_type='USER',
+            approver_user=approver1,
+            action_type='APPROVE',
         )
         WorkflowStep.objects.create(
-            workflow=wf, step_order=2, name='二级', approver_type='USER',
-            approver_user=approver2, action_type='APPROVE',
+            workflow=wf,
+            step_order=2,
+            name='二级',
+            approver_type='USER',
+            approver_user=approver2,
+            action_type='APPROVE',
         )
 
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 2001, 'PR-SINGLE', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 2001, 'PR-SINGLE', self.submitter)
 
         # 第一步只建 1 个任务
         step1_tasks = WorkflowTask.objects.filter(instance=instance, step=step1)
@@ -190,9 +175,7 @@ class WorkflowCountersignTest(TestCase):
         self.assertEqual(instance.status, 'PENDING')
         self.assertEqual(instance.current_step, 2)
         self.assertEqual(
-            WorkflowTask.objects.filter(
-                instance=instance, step__step_order=2, status='PENDING'
-            ).count(),
+            WorkflowTask.objects.filter(instance=instance, step__step_order=2, status='PENDING').count(),
             1,
         )
 
@@ -209,12 +192,14 @@ class WorkflowCountersignTest(TestCase):
             name='角色单审', code='role_single_wf', business_type='PURCHASE_REQUEST', is_active=True
         )
         step = WorkflowStep.objects.create(
-            workflow=wf, step_order=1, name='角色审核', approver_type='ROLE',
-            approver_role=self.role_cs, action_type='APPROVE',
+            workflow=wf,
+            step_order=1,
+            name='角色审核',
+            approver_type='ROLE',
+            approver_role=self.role_cs,
+            action_type='APPROVE',
         )
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 3001, 'PR-ROLE-SINGLE', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 3001, 'PR-ROLE-SINGLE', self.submitter)
         self.assertEqual(
             WorkflowTask.objects.filter(instance=instance, step=step).count(),
             1,

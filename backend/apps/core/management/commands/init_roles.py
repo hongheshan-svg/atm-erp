@@ -13,7 +13,6 @@ from apps.accounts.models import Role
 from apps.core.permission_models_new import DataScope, Permission
 from apps.core.permission_service import collect_permission_ids, normalize_scope_type, on_role_permission_change
 
-
 ROLES = [
     {
         'code': 'admin',
@@ -29,8 +28,15 @@ ROLES = [
         'description': '公司管理层，查看全部数据',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'projects', 'design', 'sales', 'supply',
-            'manufacturing', 'finance', 'oa', 'system:report',
+            'dashboard',
+            'projects',
+            'design',
+            'sales',
+            'supply',
+            'manufacturing',
+            'finance',
+            'oa',
+            'system:report',
         ],
         'sort_order': 1,
     },
@@ -40,12 +46,20 @@ ROLES = [
         'description': '负责项目全生命周期管理',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'projects', 'design',
-            'sales:quotation', 'sales:order',
-            'supply:request', 'supply:order', 'supply:receipt',
-            'supply:stock', 'supply:move',
-            'manufacturing:plan', 'manufacturing:routing',
-            'manufacturing:inspection', 'manufacturing:debug',
+            'dashboard',
+            'projects',
+            'design',
+            'sales:quotation',
+            'sales:order',
+            'supply:request',
+            'supply:order',
+            'supply:receipt',
+            'supply:stock',
+            'supply:move',
+            'manufacturing:plan',
+            'manufacturing:routing',
+            'manufacturing:inspection',
+            'manufacturing:debug',
             'system:report',
         ],
         'sort_order': 2,
@@ -56,8 +70,14 @@ ROLES = [
         'description': '负责设计、BOM和技术文档',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'projects:list', 'projects:task', 'projects:bom',
-            'projects:cost', 'design', 'supply:stock', 'manufacturing:routing',
+            'dashboard',
+            'projects:list',
+            'projects:task',
+            'projects:bom',
+            'projects:cost',
+            'design',
+            'supply:stock',
+            'manufacturing:routing',
         ],
         'sort_order': 3,
     },
@@ -67,8 +87,12 @@ ROLES = [
         'description': '管理销售团队和客户关系',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'sales', 'projects:list',
-            'finance:receivable', 'finance:collection', 'finance:reconciliation',
+            'dashboard',
+            'sales',
+            'projects:list',
+            'finance:receivable',
+            'finance:collection',
+            'finance:reconciliation',
             'system:report',
         ],
         'sort_order': 4,
@@ -79,8 +103,13 @@ ROLES = [
         'description': '负责客户开发和订单跟进',
         'data_scope': 'self',
         'menu_codes': [
-            'dashboard', 'sales:lead', 'sales:quotation', 'sales:order',
-            'sales:contract', 'sales:delivery', 'sales:customer',
+            'dashboard',
+            'sales:lead',
+            'sales:quotation',
+            'sales:order',
+            'sales:contract',
+            'sales:delivery',
+            'sales:customer',
             'projects:list',
         ],
         'sort_order': 5,
@@ -91,8 +120,10 @@ ROLES = [
         'description': '管理采购流程和供应商',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'supply',
-            'finance:payable', 'finance:reconciliation',
+            'dashboard',
+            'supply',
+            'finance:payable',
+            'finance:reconciliation',
             'system:report',
         ],
         'sort_order': 6,
@@ -103,8 +134,13 @@ ROLES = [
         'description': '执行采购操作',
         'data_scope': 'self',
         'menu_codes': [
-            'dashboard', 'supply:request', 'supply:order', 'supply:receipt',
-            'supply:rfq', 'supply:outsource', 'supply:stock',
+            'dashboard',
+            'supply:request',
+            'supply:order',
+            'supply:receipt',
+            'supply:rfq',
+            'supply:outsource',
+            'supply:stock',
         ],
         'sort_order': 7,
     },
@@ -114,8 +150,13 @@ ROLES = [
         'description': '管理仓库和库存',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'supply:stock', 'supply:move', 'supply:mrp',
-            'supply:spare', 'supply:receipt', 'system:report',
+            'dashboard',
+            'supply:stock',
+            'supply:move',
+            'supply:mrp',
+            'supply:spare',
+            'supply:receipt',
+            'system:report',
         ],
         'sort_order': 8,
     },
@@ -125,7 +166,9 @@ ROLES = [
         'description': '执行出入库操作',
         'data_scope': 'self',
         'menu_codes': [
-            'dashboard', 'supply:stock', 'supply:move',
+            'dashboard',
+            'supply:stock',
+            'supply:move',
         ],
         'sort_order': 9,
     },
@@ -135,8 +178,13 @@ ROLES = [
         'description': '管理生产计划和执行',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'manufacturing', 'supply:stock', 'supply:move',
-            'projects:list', 'projects:bom', 'system:report',
+            'dashboard',
+            'manufacturing',
+            'supply:stock',
+            'supply:move',
+            'projects:list',
+            'projects:bom',
+            'system:report',
         ],
         'sort_order': 10,
     },
@@ -146,9 +194,13 @@ ROLES = [
         'description': '执行生产任务',
         'data_scope': 'self',
         'menu_codes': [
-            'dashboard', 'manufacturing:plan', 'manufacturing:inspection',
-            'manufacturing:debug', 'manufacturing:assembly',
-            'manufacturing:kanban', 'supply:move',
+            'dashboard',
+            'manufacturing:plan',
+            'manufacturing:inspection',
+            'manufacturing:debug',
+            'manufacturing:assembly',
+            'manufacturing:kanban',
+            'supply:move',
         ],
         'sort_order': 11,
     },
@@ -158,8 +210,12 @@ ROLES = [
         'description': '负责质量检验和控制',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'manufacturing:inspection', 'manufacturing:debug',
-            'supply:receipt', 'projects:service', 'design:knowledge',
+            'dashboard',
+            'manufacturing:inspection',
+            'manufacturing:debug',
+            'supply:receipt',
+            'projects:service',
+            'design:knowledge',
         ],
         'sort_order': 12,
     },
@@ -169,7 +225,9 @@ ROLES = [
         'description': '管理财务和会计工作',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'finance', 'system:report',
+            'dashboard',
+            'finance',
+            'system:report',
         ],
         'sort_order': 13,
     },
@@ -179,9 +237,15 @@ ROLES = [
         'description': '处理日常财务事务',
         'data_scope': 'self',
         'menu_codes': [
-            'dashboard', 'finance:expense', 'finance:receivable', 'finance:payable',
-            'finance:invoice', 'finance:collection', 'finance:asset',
-            'finance:reconciliation', 'finance:bank_statement',
+            'dashboard',
+            'finance:expense',
+            'finance:receivable',
+            'finance:payable',
+            'finance:invoice',
+            'finance:collection',
+            'finance:asset',
+            'finance:reconciliation',
+            'finance:bank_statement',
         ],
         'sort_order': 14,
     },
@@ -191,7 +255,10 @@ ROLES = [
         'description': '管理人事和行政事务',
         'data_scope': 'all',
         'menu_codes': [
-            'dashboard', 'oa', 'system:user', 'system:department',
+            'dashboard',
+            'oa',
+            'system:user',
+            'system:department',
         ],
         'sort_order': 15,
     },
@@ -201,14 +268,17 @@ ROLES = [
         'description': '基础权限，可查看项目和提交申请',
         'data_scope': 'self',
         'menu_codes': [
-            'dashboard', 'projects:list', 'projects:task',
-            'oa:announcement', 'oa:meeting', 'oa:attendance',
+            'dashboard',
+            'projects:list',
+            'projects:task',
+            'oa:announcement',
+            'oa:meeting',
+            'oa:attendance',
             'oa:workflow',
         ],
         'sort_order': 16,
     },
 ]
-
 
 
 class Command(BaseCommand):
@@ -280,11 +350,19 @@ class Command(BaseCommand):
                     # restore it so users assigned to it actually get its permissions.
                     role.is_deleted = False
                     role.deleted_at = None
-                    role.save(update_fields=[
-                        'name', 'code', 'description', 'permissions',
-                        'sort_order', 'is_active', 'is_deleted', 'deleted_at',
-                        'updated_at',
-                    ])
+                    role.save(
+                        update_fields=[
+                            'name',
+                            'code',
+                            'description',
+                            'permissions',
+                            'sort_order',
+                            'is_active',
+                            'is_deleted',
+                            'deleted_at',
+                            'updated_at',
+                        ]
+                    )
                     self._sync_role_scope(role, role_data['data_scope'])
                     self._sync_role_permissions(role, role_data['menu_codes'])
                     updated_count += 1
@@ -304,6 +382,6 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(f'  [创建] {name} ({code})'))
 
         self.stdout.write('')
-        self.stdout.write(self.style.SUCCESS(
-            f'完成！创建: {created_count}, 更新: {updated_count}, 跳过: {skipped_count}'
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(f'完成！创建: {created_count}, 更新: {updated_count}, 跳过: {skipped_count}')
+        )

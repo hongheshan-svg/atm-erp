@@ -88,16 +88,23 @@ def settle(bank_statement, allocations, user):
         if amount <= 0 or amount > item.remaining:
             raise ValueError(f'核销金额 {amount} 超过待付款项剩余 {item.remaining}')
         payment = Payment.objects.create(
-            payment_type='PAYABLE', payable_item=item,
+            payment_type='PAYABLE',
+            payable_item=item,
             payment_date=payment_date,
-            payment_method='BANK_TRANSFER', amount=amount,
+            payment_method='BANK_TRANSFER',
+            amount=amount,
             currency_id=item.currency_id,
             notes=f'[BS#{bank_statement.id}] 银行流水核销',
-            created_by=user, updated_by=user,
+            created_by=user,
+            updated_by=user,
         )
         settlement = PayableSettlement.objects.create(
-            bank_statement=bank_statement, payable_item=item,
-            payment=payment, amount=amount, created_by=user, updated_by=user,
+            bank_statement=bank_statement,
+            payable_item=item,
+            payment=payment,
+            amount=amount,
+            created_by=user,
+            updated_by=user,
         )
         item.refresh_from_db()
         source = PAYABLE_SOURCES.get(item.source_type)
@@ -122,6 +129,7 @@ def _load_source_obj(item):
     from apps.projects.field_service import ServiceExpense
     from apps.purchase.contract_execution import PaymentRecord
     from apps.purchase.outsource_models import OutsourceOrder
+
     model = {
         'ap': AccountPayable,
         'expense': Expense,

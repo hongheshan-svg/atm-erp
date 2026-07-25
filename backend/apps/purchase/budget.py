@@ -537,7 +537,7 @@ class BudgetLineSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'used_amount']
 
-    def get_usage_rate(self, obj):
+    def get_usage_rate(self, obj) -> float:
         if obj.planned_amount == 0:
             return 0
         return round((obj.used_amount / obj.planned_amount) * 100, 2)

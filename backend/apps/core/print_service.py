@@ -67,7 +67,7 @@ class PrintTemplate:
             <td>{{ order.payment_terms }}</td>
         </tr>
     </table>
-    
+
     <table class="items-table">
         <thead>
             <tr>
@@ -100,17 +100,17 @@ class PrintTemplate:
             </tr>
         </tfoot>
     </table>
-    
+
     <div class="footer">
         <p><strong>备注:</strong> {{ order.notes }}</p>
     </div>
-    
+
     <div class="signature">
         <div>制单人: ________</div>
         <div>审核人: ________</div>
         <div>供应商确认: ________</div>
     </div>
-    
+
     <div class="no-print" style="margin-top: 30px; text-align: center;">
         <button onclick="window.print()">打印</button>
     </div>
@@ -168,7 +168,7 @@ class PrintTemplate:
             <td>{{ order.payment_terms }}</td>
         </tr>
     </table>
-    
+
     <table class="items-table">
         <thead>
             <tr>
@@ -199,11 +199,11 @@ class PrintTemplate:
             </tr>
         </tfoot>
     </table>
-    
+
     <div class="footer">
         <p><strong>备注:</strong> {{ order.notes }}</p>
     </div>
-    
+
     <div class="signature">
         <div>销售代表: ________</div>
         <div>审核人: ________</div>
@@ -253,7 +253,7 @@ class PrintTemplate:
             <td><strong>状态:</strong> {{ requisition.get_status_display }}</td>
         </tr>
     </table>
-    
+
     <table class="items-table">
         <thead>
             <tr>
@@ -280,7 +280,7 @@ class PrintTemplate:
             {% endfor %}
         </tbody>
     </table>
-    
+
     <div class="signature">
         <div>申请人: ________</div>
         <div>审核人: ________</div>
@@ -387,7 +387,7 @@ class PrintTemplate:
             <td>{{ equipment.installation_phone }}</td>
         </tr>
     </table>
-    
+
     <p><strong>备注:</strong> {{ equipment.notes }}</p>
 </body>
 </html>

@@ -70,17 +70,19 @@ def create_invoice_from_delivery(delivery, user):
                 specification = line.so_line.display_spec
                 unit = line.so_line.custom_unit or ''
 
-            item_rows.append({
-                'line_no': idx,
-                'item_name': item_name,
-                'specification': specification,
-                'unit': unit,
-                'quantity': qty,
-                'unit_price': unit_price,
-                'amount': line_amount,
-                'tax_rate': tax_rate,
-                'tax_amount': line_tax,
-            })
+            item_rows.append(
+                {
+                    'line_no': idx,
+                    'item_name': item_name,
+                    'specification': specification,
+                    'unit': unit,
+                    'quantity': qty,
+                    'unit_price': unit_price,
+                    'amount': line_amount,
+                    'tax_rate': tax_rate,
+                    'tax_amount': line_tax,
+                }
+            )
 
         amount_before_tax = _q2(amount_before_tax)
         tax_amount = _q2(amount_before_tax * tax_rate / Decimal('100'))
@@ -159,9 +161,16 @@ def ensure_ar_and_activate_milestone(invoice_or_delivery, user):
             ar.save(update_fields=['invoice_no', 'updated_at'])
 
         # 事件驱动激活 '发货款' 节点（防御式：无则跳过）
-        milestone = PaymentSchedule.objects.filter(
-            sales_order=so, milestone_type='ON_DELIVERY', is_deleted=False,
-        ).exclude(status__in=['PAID', 'CANCELLED']).order_by('milestone_order').first()
+        milestone = (
+            PaymentSchedule.objects.filter(
+                sales_order=so,
+                milestone_type='ON_DELIVERY',
+                is_deleted=False,
+            )
+            .exclude(status__in=['PAID', 'CANCELLED'])
+            .order_by('milestone_order')
+            .first()
+        )
         if milestone is not None:
             update_fields = []
             if milestone.due_date != today:

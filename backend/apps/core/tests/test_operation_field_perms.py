@@ -16,7 +16,7 @@ APIRequestFactory 直接调 check_permissions / get_serializer，真实跑通鉴
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework import serializers, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.test import APIRequestFactory
@@ -41,8 +41,11 @@ _METHOD_FOR_ACTION = {
 def _make_user(username, perms=(), is_superuser=False):
     """Create a user whose single role holds the given Permission objects."""
     user = User.objects.create_user(
-        username=username, password='x', employee_id=username,
-        is_superuser=is_superuser, is_staff=is_superuser,
+        username=username,
+        password='x',
+        employee_id=username,
+        is_superuser=is_superuser,
+        is_staff=is_superuser,
     )
     if perms:
         role = Role.objects.create(name=f'{username}_role', code=f'{username}_role')
@@ -96,7 +99,6 @@ class _StockMoveViewSet(PermissionMixin, viewsets.ModelViewSet):
     serializer_class = _StockMoveSerializer
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class OperationPermissionTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -136,13 +138,16 @@ class OperationPermissionTest(TestCase):
 
     # ---- (b) 操作级限制：配置了部分 CRUD、缺失 edit -> edit 403，view 200 ----
     def test_partial_operation_perms_enforce_missing_action(self):
-        user = _make_user('restricted', perms=[
-            _menu('projects'),  # 即便持菜单权，操作级限制仍应覆盖它
-            _op('projects', 'project', 'view'),
-            _op('projects', 'project', 'create'),
-            _op('projects', 'project', 'delete'),
-            # 故意缺失 edit
-        ])
+        user = _make_user(
+            'restricted',
+            perms=[
+                _menu('projects'),  # 即便持菜单权，操作级限制仍应覆盖它
+                _op('projects', 'project', 'view'),
+                _op('projects', 'project', 'create'),
+                _op('projects', 'project', 'delete'),
+                # 故意缺失 edit
+            ],
+        )
         # 已授予的 action 放行
         self.assertAllowed(_CrudViewSet, user, 'list')
         self.assertAllowed(_CrudViewSet, user, 'retrieve')
@@ -153,12 +158,15 @@ class OperationPermissionTest(TestCase):
         self.assertDenied(_CrudViewSet, user, 'partial_update')
 
     def test_full_operation_perms_allow_all(self):
-        user = _make_user('fullops', perms=[
-            _op('projects', 'project', 'view'),
-            _op('projects', 'project', 'create'),
-            _op('projects', 'project', 'edit'),
-            _op('projects', 'project', 'delete'),
-        ])
+        user = _make_user(
+            'fullops',
+            perms=[
+                _op('projects', 'project', 'view'),
+                _op('projects', 'project', 'create'),
+                _op('projects', 'project', 'edit'),
+                _op('projects', 'project', 'delete'),
+            ],
+        )
         for action in ('list', 'create', 'update', 'destroy'):
             self.assertAllowed(_CrudViewSet, user, action)
 
@@ -169,15 +177,17 @@ class OperationPermissionTest(TestCase):
 
     def test_operation_perms_for_other_resource_do_not_restrict(self):
         # 对 sales:order 配置的操作权不应牵连 projects:project（按 resource 隔离）
-        user = _make_user('otherres', perms=[
-            _menu('projects'),
-            _op('sales', 'order', 'view'),  # 与被测 resource 无关
-        ])
+        user = _make_user(
+            'otherres',
+            perms=[
+                _menu('projects'),
+                _op('sales', 'order', 'view'),  # 与被测 resource 无关
+            ],
+        )
         for action in ('list', 'create', 'update', 'destroy'):
             self.assertAllowed(_CrudViewSet, user, action)
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class FieldPermissionMaskingTest(TestCase):
     def setUp(self):
         cache.clear()

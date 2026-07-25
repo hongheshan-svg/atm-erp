@@ -4,7 +4,7 @@
       <h2>物料需求计划 (MRP)</h2>
       <el-button type="primary" v-permission="'inventory:stock:create'" @click="handleAdd">创建计划</el-button>
     </div>
-    
+
     <el-card shadow="never">
       <template #header>
         <el-form :inline="true">
@@ -26,19 +26,19 @@
           </el-form-item>
         </el-form>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="planList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="plan_no" label="计划编号" width="140" />
@@ -72,16 +72,16 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">查看</el-button>
-            <el-button type="success" link size="small" @click="handleCalculate(row)" 
+            <el-button type="success" link size="small" @click="handleCalculate(row)"
               v-if="row.status === 'DRAFT' || row.status === 'COMPLETED'">计算</el-button>
-            <el-button type="warning" link size="small" @click="handleApprove(row)" 
+            <el-button type="warning" link size="small" @click="handleApprove(row)"
               v-if="row.status === 'COMPLETED'">批准</el-button>
-            <el-button type="info" link size="small" @click="handleGeneratePR(row)" 
+            <el-button type="info" link size="small" @click="handleGeneratePR(row)"
               v-if="row.status === 'APPROVED'">生成采购</el-button>
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
@@ -92,7 +92,7 @@
         style="margin-top: 16px; justify-content: flex-end"
       />
     </el-card>
-    
+
     <!-- 创建计划对话框 -->
     <el-dialog v-model="dialogVisible" title="创建MRP计划" width="600px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
@@ -132,7 +132,7 @@
         <el-button type="primary" @click="submitForm" :loading="submitLoading">创建</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 计划详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentPlan?.name" width="90%" top="5vh">
       <div v-if="currentPlan">
@@ -151,9 +151,9 @@
             <span class="amount">¥{{ formatNumber(currentPlan.total_shortage_amount) }}</span>
           </el-descriptions-item>
         </el-descriptions>
-        
+
         <el-divider content-position="left">物料明细</el-divider>
-        
+
         <el-table :data="currentPlan.lines" border stripe max-height="400">
           <el-table-column prop="item_code" label="物料编码" width="120" fixed />
           <el-table-column prop="item_name" label="物料名称" min-width="180" show-overflow-tooltip />
@@ -198,12 +198,12 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const planList = ref<any[]>([])
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -211,10 +211,10 @@ const pagination = reactive({
 
 const dialogVisible = ref(false)
 const detailDialogVisible = ref(false)
-const formRef = ref(null)
-const currentPlan = ref(null)
+const formRef = ref<any>(null)
+const currentPlan = ref<any>(null)
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   name: '',
   start_date: '',
   end_date: '',
@@ -232,7 +232,7 @@ const rules = {
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       ...queryParams
@@ -240,7 +240,7 @@ const fetchList = async () => {
     const data = await getMRPPlans(params)
     planList.value = data.results || data
     pagination.total = data.count || planList.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -250,7 +250,7 @@ const fetchList = async () => {
 const handleAdd = () => {
   const today = new Date()
   const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate())
-  
+
   Object.assign(formData, {
     name: `MRP计划-${today.toISOString().slice(0, 10)}`,
     start_date: today.toISOString().slice(0, 10),
@@ -265,80 +265,80 @@ const handleAdd = () => {
 const submitForm = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     await createMRPPlan(formData)
     ElMessage.success('创建成功')
     dialogVisible.value = false
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('创建失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getMRPPlan(row.id)
     currentPlan.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleCalculate = async (row) => {
+const handleCalculate = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要执行MRP计算吗？', '提示', { type: 'warning' })
-    
+
     ElMessage.info('正在计算...')
     const data = await calculateMRPPlan(row.id)
     ElMessage.success(`计算完成，共 ${data.total_items} 个物料，${data.shortage_items} 个缺料`)
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error(e.response?.data?.error || '计算失败')
     }
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await approveMRPPlan(row.id)
     ElMessage.success('批准成功')
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '批准失败')
   }
 }
 
-const handleGeneratePR = async (row) => {
+const handleGeneratePR = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要生成采购申请吗？', '提示', { type: 'warning' })
-    
+
     const data = await generateMRPPlanPR(row.id)
     ElMessage.success(`已生成采购申请: ${data.purchase_request_no}`)
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error(e.response?.data?.error || '生成失败')
     }
   }
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     CALCULATING: 'warning',
@@ -347,7 +347,7 @@ const getStatusType = (status) => {
     EXECUTING: '',
     CLOSED: ''
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

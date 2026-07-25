@@ -112,7 +112,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item v-if="form.return_type === 'PROJECT'" label="选择项目" prop="project">
@@ -136,12 +136,12 @@
         </el-row>
 
         <el-divider>退料物料</el-divider>
-        
+
         <!-- 物料选择 -->
         <div class="material-section">
           <el-input v-model="itemSearch" placeholder="搜索物料编码/名称" style="width: 200px; margin-bottom: 10px;" />
           <el-button type="primary" size="small" @click="searchItems" style="margin-left: 10px;">搜索</el-button>
-          
+
           <el-table :data="searchedItems" max-height="200" size="small" style="margin-top: 10px;" @selection-change="handleItemSelect">
             <el-table-column type="selection" width="40" />
             <el-table-column prop="sku" label="物料编码" width="120" />
@@ -187,7 +187,7 @@
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="备注信息" />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
@@ -256,7 +256,7 @@
         <el-descriptions-item label="入库时间">{{ currentItem.receive_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ currentItem.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider>物料明细</el-divider>
       <el-table :data="currentItem?.lines || []" border size="small">
         <el-table-column prop="item_sku" label="物料编码" width="120" />
@@ -307,13 +307,13 @@ const itemSearch = ref('')
 const selectedItems = ref<any[]>([])
 const permissionStore = usePermissionStore()
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   return_type: '',
   return_reason: '',
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -323,7 +323,7 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新建退料单')
 const isEdit = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   return_type: 'PROJECT',
   return_reason: 'SURPLUS',
@@ -340,20 +340,20 @@ const formRules = {
   warehouse: [{ required: true, message: '请选择入库仓库' }]
 }
 
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 const receiveDialogVisible = ref(false)
 const receiveLines = ref<any[]>([])
-const currentReturnId = ref(null)
+const currentReturnId = ref<any>(null)
 
 const rejectDialogVisible = ref(false)
 const rejectReason = ref('')
-const rejectReturnId = ref(null)
+const rejectReturnId = ref<any>(null)
 
 const viewDialogVisible = ref(false)
-const currentItem = ref(null)
+const currentItem = ref<any>(null)
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING': 'warning',
@@ -363,13 +363,13 @@ const getStatusType = (status) => {
     'REJECTED': 'danger',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -377,7 +377,7 @@ const loadList = async () => {
     const response = await getReturns(params)
     list.value = response.results || response || []
     pagination.total = response.count || list.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载退料单列表失败')
   } finally {
     loading.value = false
@@ -394,7 +394,7 @@ const loadProjects = async () => {
     projects.value = response.results || response || []
     projectsLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载项目失败:', error)
     }
@@ -406,7 +406,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList()
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -421,7 +421,7 @@ const loadAftersalesOrders = async () => {
     aftersalesOrders.value = response.results || response || []
     aftersalesOrdersLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载售后工单失败:', error)
     }
@@ -451,7 +451,7 @@ const searchItems = async () => {
   try {
     const response = await getItemList({ search: itemSearch.value })
     searchedItems.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('搜索物料失败:', error)
   }
 }
@@ -461,13 +461,13 @@ const handleTypeChange = () => {
   form.aftersales_order = null
 }
 
-const handleItemSelect = (selection) => {
+const handleItemSelect = (selection: any) => {
   selectedItems.value = selection
 }
 
 const addSelectedItems = () => {
   selectedItems.value.forEach(item => {
-    if (!form.lines.find(l => l.item === item.id)) {
+    if (!form.lines.find((l: any) => l.item === item.id)) {
       form.lines.push({
         item: item.id,
         item_sku: item.sku,
@@ -480,7 +480,7 @@ const addSelectedItems = () => {
   })
 }
 
-const removeLine = (index) => {
+const removeLine = (index: any) => {
   form.lines.splice(index, 1)
 }
 
@@ -494,7 +494,7 @@ const resetSearch = () => {
 const handleAdd = async () => {
   try {
     await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败', error)
     ElMessage.error('加载数据失败')
   }
@@ -515,16 +515,16 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   try {
     await Promise.all([ensureProjectSelectorsLoaded(), ensureAftersalesOrdersLoaded()])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败', error)
     ElMessage.error('加载数据失败')
   }
   dialogTitle.value = '编辑退料单'
   isEdit.value = true
-  
+
   try {
     const response = await getReturn(row.id)
     Object.assign(form, {
@@ -535,7 +535,7 @@ const handleEdit = async (row) => {
       aftersales_order: response.aftersales_order,
       warehouse: response.warehouse,
       notes: response.notes,
-      lines: (response.lines || []).map(l => ({
+      lines: (response.lines || []).map((l: any) => ({
         id: l.id,
         item: l.item,
         item_sku: l.item_sku,
@@ -546,17 +546,17 @@ const handleEdit = async (row) => {
       }))
     })
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载退料单详情失败')
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getReturn(row.id)
     currentItem.value = response
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载退料单详情失败')
   }
 }
@@ -564,16 +564,16 @@ const handleView = async (row) => {
 const handleSave = async () => {
   try {
     await formRef.value.validate()
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     return
   }
-  
+
   if (form.lines.length === 0) {
     ElMessage.warning('请添加退料物料')
     return
   }
-  
+
   saving.value = true
   try {
     const data = {
@@ -583,14 +583,14 @@ const handleSave = async () => {
       aftersales_order: form.aftersales_order,
       warehouse: form.warehouse,
       notes: form.notes,
-      lines: form.lines.map(l => ({
+      lines: form.lines.map((l: any) => ({
         item: l.item,
         qty: l.qty,
         condition: l.condition,
         notes: l.notes
       }))
     }
-    
+
     if (isEdit.value) {
       await updateReturn(form.id, data)
       ElMessage.success('更新成功')
@@ -598,44 +598,44 @@ const handleSave = async () => {
       await createReturn(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.response?.data?.detail || error.message))
   } finally {
     saving.value = false
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定提交该退料申请？', '确认')
     await submitReturn(row.id)
     ElMessage.success('提交成功')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败: ' + (error.response?.data?.error || error.message))
     }
   }
 }
 
-const handleInspect = async (row) => {
+const handleInspect = async (row: any) => {
   try {
     await startInspectReturn(row.id)
     ElMessage.success('开始检验')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
   }
 }
 
-const handleReceive = async (row) => {
+const handleReceive = async (row: any) => {
   try {
     const response = await getReturn(row.id)
     currentReturnId.value = row.id
-    receiveLines.value = (response.lines || []).filter(l => l.qty > l.received_qty).map(l => ({
+    receiveLines.value = (response.lines || []).filter((l: any) => l.qty > l.received_qty).map((l: any) => ({
       id: l.id,
       item_name: l.item_name,
       item_sku: l.item_sku,
@@ -646,7 +646,7 @@ const handleReceive = async (row) => {
       receive_qty: l.qty - l.received_qty
     }))
     receiveDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载明细失败')
   }
 }
@@ -657,26 +657,26 @@ const confirmReceive = async () => {
     received_qty: l.receive_qty,
     condition: l.condition
   }))
-  
+
   if (lines.length === 0) {
     ElMessage.warning('请填写入库数量')
     return
   }
-  
+
   receiving.value = true
   try {
     await receiveReturn(currentReturnId.value, { lines })
     ElMessage.success('入库成功')
     receiveDialogVisible.value = false
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('入库失败: ' + (error.response?.data?.error || error.message))
   } finally {
     receiving.value = false
   }
 }
 
-const handleReject = (row) => {
+const handleReject = (row: any) => {
   rejectReturnId.value = row.id
   rejectReason.value = ''
   rejectDialogVisible.value = true
@@ -687,14 +687,14 @@ const confirmReject = async () => {
     ElMessage.warning('请填写拒绝原因')
     return
   }
-  
+
   rejecting.value = true
   try {
     await rejectReturn(rejectReturnId.value, { reason: rejectReason.value })
     ElMessage.success('已拒绝')
     rejectDialogVisible.value = false
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
   } finally {
     rejecting.value = false
@@ -732,4 +732,3 @@ onMounted(() => {
   color: #999;
 }
 </style>
-

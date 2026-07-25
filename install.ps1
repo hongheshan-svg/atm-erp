@@ -243,7 +243,14 @@ Ok "容器已启动"
 # 10. 等待后端 API 就绪（首次启动含迁移+种子数据，最长约 12 分钟）
 # ---------------------------------------------------------------------------
 Info "等待后端就绪（首次启动需要迁移数据库，可能需要数分钟...）"
-$HealthUrl  = "http://localhost/api/v1/health/"
+$HttpPortVal = (Get-Content ".env" | Where-Object { $_ -match '^HTTP_PORT=' } |
+    ForEach-Object { $_ -replace '^HTTP_PORT=', '' } | Select-Object -First 1)
+if (-not $HttpPortVal) { $HttpPortVal = "80" }
+if ($HttpPortVal -eq "80") {
+    $HealthUrl = "http://localhost/api/v1/health/"
+} else {
+    $HealthUrl = "http://localhost:$HttpPortVal/api/v1/health/"
+}
 $Ready      = $false
 $MaxAttempts = 240   # 240 × 3s = 720s ≈ 12 分钟
 
@@ -255,7 +262,7 @@ for ($i = 1; $i -le $MaxAttempts; $i++) {
     } catch {
         # 每 10 次（约 30 秒）打印一次进度
         if ($i % 10 -eq 0) {
-            Info "等待中... ($i/$MaxAttempts 次，已等待 $($i * 3)s)，可用 'docker compose logs -f backend' 查看进度"
+            Info "等待中... ($i/$MaxAttempts 次，已等待 $($i * 3)s)，可用 'docker compose logs -f app' 查看进度"
         }
         Start-Sleep -Seconds 3
     }
@@ -266,16 +273,12 @@ if ($Ready) {
 } else {
     Warn "健康检查超时，服务可能仍在初始化中"
     Warn "请稍后运行: Invoke-WebRequest $HealthUrl"
-    Warn "或查看日志: cd $WorkDir; docker compose logs -f backend"
+    Warn "或查看日志: cd $WorkDir; docker compose logs -f app"
 }
 
 # ---------------------------------------------------------------------------
 # 11. 确定访问地址
 # ---------------------------------------------------------------------------
-$HttpPortVal = (Get-Content ".env" | Where-Object { $_ -match '^HTTP_PORT=' } |
-    ForEach-Object { $_ -replace '^HTTP_PORT=', '' } | Select-Object -First 1)
-if (-not $HttpPortVal) { $HttpPortVal = "80" }
-
 if ($HttpPortVal -eq "80") {
     $AccessUrl   = "http://localhost/erp/"
     $AccessUrlIp = "http://$HostIP/erp/"
@@ -300,7 +303,7 @@ Write-Host "------------------------------------------------------------"
 Write-Host "  常用命令:"
 Write-Host "    cd $WorkDir"
 Write-Host "    docker compose ps              # 查看容器状态"
-Write-Host "    docker compose logs -f backend # 查看后端日志"
+Write-Host "    docker compose logs -f app     # 查看应用日志"
 Write-Host "    docker compose down            # 停止并移除容器"
 Write-Host "    docker compose down -v         # 停止并清除所有数据"
 Write-Host "============================================================"

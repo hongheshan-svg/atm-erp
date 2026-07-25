@@ -1,7 +1,7 @@
 <template>
   <div class="order-detail" v-loading="loading">
     <el-page-header @back="goBack" :title="'返回'" :content="`售后工单: ${order?.order_no || ''}`" />
-    
+
     <div class="detail-content" v-if="order">
       <!-- 基本信息和状态操作 -->
       <el-row :gutter="20">
@@ -37,7 +37,7 @@
             </el-descriptions>
           </el-card>
         </el-col>
-        
+
         <el-col :span="8">
           <!-- 状态操作 -->
           <el-card class="action-card">
@@ -68,7 +68,7 @@
               </el-button>
             </div>
           </el-card>
-          
+
           <!-- 成本汇总 -->
           <el-card class="cost-card" style="margin-top: 20px;">
             <template #header>
@@ -89,7 +89,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 解决方案 -->
       <el-card v-if="order.solution" style="margin-top: 20px;">
         <template #header>解决方案</template>
@@ -99,7 +99,7 @@
           <el-descriptions-item label="预防措施">{{ order.preventive_action || '-' }}</el-descriptions-item>
         </el-descriptions>
       </el-card>
-      
+
       <!-- 服务记录 -->
       <el-card style="margin-top: 20px;">
         <template #header>
@@ -133,7 +133,7 @@
           </el-table-column>
         </el-table>
       </el-card>
-      
+
       <!-- 备件使用 -->
       <el-card style="margin-top: 20px;">
         <template #header>
@@ -167,7 +167,7 @@
           </el-table-column>
         </el-table>
       </el-card>
-      
+
       <!-- 附件管理 -->
       <el-card style="margin-top: 20px;">
         <template #header>
@@ -189,7 +189,7 @@
             </el-upload>
           </div>
         </template>
-        
+
         <!-- 上传进度 -->
         <div v-if="uploadingFiles.length > 0" class="upload-progress">
           <div v-for="(file, index) in uploadingFiles" :key="index" class="upload-item">
@@ -197,7 +197,7 @@
             <el-progress :percentage="file.progress" :status="file.status" style="width: 200px;" />
           </div>
         </div>
-        
+
         <!-- 附件列表 -->
         <div class="attachment-list" v-if="attachments.length > 0">
           <div v-for="attachment in attachments" :key="attachment.id" class="attachment-item">
@@ -234,7 +234,7 @@
         <el-empty v-else description="暂无附件" :image-size="60" />
       </el-card>
     </div>
-    
+
     <!-- 解决问题对话框 -->
     <el-dialog v-model="resolveDialogVisible" title="解决问题" width="600px">
       <el-form :model="resolveForm" label-width="100px">
@@ -253,7 +253,7 @@
         <el-button type="primary" @click="handleResolve" :loading="submitting">确定解决</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 关闭工单对话框 -->
     <el-dialog v-model="closeDialogVisible" title="关闭工单" width="500px">
       <el-form :model="closeForm" label-width="100px">
@@ -269,7 +269,7 @@
         <el-button type="primary" @click="handleClose" :loading="submitting">确定关闭</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 服务记录对话框 -->
     <el-dialog v-model="serviceDialogVisible" title="添加服务记录" width="600px">
       <el-form :model="serviceForm" :rules="serviceRules" ref="serviceFormRef" label-width="100px">
@@ -334,7 +334,7 @@
         <el-button type="primary" @click="saveServiceRecord" :loading="submitting">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 备件对话框 -->
     <el-dialog v-model="sparePartDialogVisible" title="添加备件" width="500px">
       <el-form :model="sparePartForm" :rules="sparePartRules" ref="sparePartFormRef" label-width="80px">
@@ -370,7 +370,7 @@
         <el-button type="primary" @click="saveSparePart" :loading="submitting">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 成本编辑对话框 -->
     <el-dialog v-model="costDialogVisible" title="编辑成本" width="400px">
       <el-form :model="costForm" label-width="80px">
@@ -412,12 +412,12 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const submitting = ref(false)
-const order = ref(null)
+const order = ref<any>(null)
 const items = ref<any[]>([])
 
 // 附件相关
 const attachments = ref<any[]>([])
-const uploadRef = ref(null)
+const uploadRef = ref<any>(null)
 const uploadingFiles = ref<any[]>([])
 
 const resolveDialogVisible = ref(false)
@@ -426,21 +426,21 @@ const serviceDialogVisible = ref(false)
 const sparePartDialogVisible = ref(false)
 const costDialogVisible = ref(false)
 
-const serviceFormRef = ref(null)
-const sparePartFormRef = ref(null)
+const serviceFormRef = ref<any>(null)
+const sparePartFormRef = ref<any>(null)
 
-const resolveForm = reactive({
+const resolveForm = reactive<Record<string, any>>({
   solution: '',
   root_cause: '',
   preventive_action: ''
 })
 
-const closeForm = reactive({
+const closeForm = reactive<Record<string, any>>({
   satisfaction_score: 5,
   customer_feedback: ''
 })
 
-const serviceForm = reactive({
+const serviceForm = reactive<Record<string, any>>({
   service_type: 'ON_SITE',
   service_date: new Date().toISOString().split('T')[0],
   start_time: null,
@@ -453,7 +453,7 @@ const serviceForm = reactive({
   travel_cost: 0
 })
 
-const sparePartForm = reactive({
+const sparePartForm = reactive<Record<string, any>>({
   item: null,
   qty: 1,
   unit_cost: 0,
@@ -462,7 +462,7 @@ const sparePartForm = reactive({
   notes: ''
 })
 
-const costForm = reactive({
+const costForm = reactive<Record<string, any>>({
   labor_cost: 0,
   travel_cost: 0,
   parts_cost: 0,
@@ -482,19 +482,19 @@ const sparePartRules = {
   unit_cost: [{ required: true, message: '请输入单价', trigger: 'blur' }]
 }
 
-const formatDateTime = (dt) => {
+const formatDateTime = (dt: any) => {
   if (!dt) return '-'
   return new Date(dt).toLocaleString('zh-CN')
 }
 
-const getStatusTagType = (status) => {
+const getStatusTagType = (status: any) => {
   const map = { PENDING: 'info', ASSIGNED: '', IN_PROGRESS: 'primary', ON_SITE: 'primary', WAITING_PARTS: 'warning', RESOLVED: 'success', CLOSED: 'success', CANCELLED: 'info' }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const getPriorityTagType = (priority) => {
+const getPriorityTagType = (priority: any) => {
   const map = { URGENT: 'danger', HIGH: 'warning', MEDIUM: '', LOW: 'info' }
-  return map[priority] || ''
+  return (map as Record<string, any>)[priority] || ''
 }
 
 const goBack = () => {
@@ -504,9 +504,9 @@ const goBack = () => {
 const loadOrder = async () => {
   loading.value = true
   try {
-    const res = await getAfterSalesOrder(route.params.id)
+    const res = await getAfterSalesOrder(Number(route.params.id))
     order.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载工单失败')
     console.error(error)
   } finally {
@@ -518,7 +518,7 @@ const loadItems = async () => {
   try {
     const res = await getItemList()
     items.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载物料失败:', error)
   }
 }
@@ -528,7 +528,7 @@ const handleStartService = async () => {
     await startService(order.value.id)
     ElMessage.success('已开始服务')
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
@@ -538,7 +538,7 @@ const handleOnSite = async () => {
     await onSiteService(order.value.id)
     ElMessage.success('已到达现场')
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
@@ -548,7 +548,7 @@ const handleWaitingParts = async () => {
     await waitingParts(order.value.id)
     ElMessage.success('状态已更新')
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
@@ -571,7 +571,7 @@ const handleResolve = async () => {
     ElMessage.success('问题已解决')
     resolveDialogVisible.value = false
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     submitting.value = false
@@ -591,7 +591,7 @@ const handleClose = async () => {
     ElMessage.success('工单已关闭')
     closeDialogVisible.value = false
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     submitting.value = false
@@ -604,7 +604,7 @@ const handleCancel = async () => {
     await cancelAfterSalesOrder(order.value.id)
     ElMessage.success('工单已取消')
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -629,18 +629,18 @@ const saveServiceRecord = async () => {
   try {
     await serviceFormRef.value.validate()
     submitting.value = true
-    
+
     const data = {
       aftersales_order: order.value.id,
       technician: userStore.userInfo?.id,
       ...serviceForm
     }
-    
+
     await createServiceRecord(data)
     ElMessage.success('服务记录已添加')
     serviceDialogVisible.value = false
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存失败')
     }
@@ -649,13 +649,13 @@ const saveServiceRecord = async () => {
   }
 }
 
-const handleDeleteServiceRecord = async (row) => {
+const handleDeleteServiceRecord = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此服务记录吗？', '删除确认', { type: 'warning' })
     await deleteServiceRecord(row.id)
     ElMessage.success('删除成功')
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -672,7 +672,7 @@ const showSparePartDialog = () => {
   sparePartDialogVisible.value = true
 }
 
-const handleItemChange = (itemId) => {
+const handleItemChange = (itemId: any) => {
   const item = items.value.find(i => i.id === itemId)
   if (item) {
     sparePartForm.unit_cost = item.standard_cost || 0
@@ -683,17 +683,17 @@ const saveSparePart = async () => {
   try {
     await sparePartFormRef.value.validate()
     submitting.value = true
-    
+
     const data = {
       aftersales_order: order.value.id,
       ...sparePartForm
     }
-    
+
     await createSparePart(data)
     ElMessage.success('备件记录已添加')
     sparePartDialogVisible.value = false
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存失败')
     }
@@ -702,13 +702,13 @@ const saveSparePart = async () => {
   }
 }
 
-const handleDeleteSparePart = async (row) => {
+const handleDeleteSparePart = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此备件记录吗？', '删除确认', { type: 'warning' })
     await deleteSparePart(row.id)
     ElMessage.success('删除成功')
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -730,7 +730,7 @@ const saveCost = async () => {
     ElMessage.success('成本更新成功')
     costDialogVisible.value = false
     loadOrder()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('更新失败')
   } finally {
     submitting.value = false
@@ -743,15 +743,15 @@ const loadAttachments = async () => {
   try {
     const res = await getAttachmentList({
       related_model: 'AfterSalesOrder',
-      related_id: route.params.id
+      related_id: Number(route.params.id)
     })
     attachments.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载附件失败:', error)
   }
 }
 
-const handleFileSelect = async (file) => {
+const handleFileSelect = async (file: any) => {
   // 添加到上传队列
   const uploadItem = {
     name: file.name,
@@ -759,13 +759,13 @@ const handleFileSelect = async (file) => {
     status: ''
   }
   uploadingFiles.value.push(uploadItem)
-  
+
   try {
     const formData = new FormData()
     formData.append('file', file.raw)
     formData.append('related_model', 'AfterSalesOrder')
-    formData.append('related_id', route.params.id)
-    
+    formData.append('related_id', String(route.params.id))
+
     // 根据文件类型设置分类
     let category = 'OTHER'
     if (file.raw.type.startsWith('image/')) {
@@ -774,49 +774,49 @@ const handleFileSelect = async (file) => {
       category = 'FAULT_VIDEO'
     }
     formData.append('category', category)
-    
+
     await uploadAttachment(formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
+      onUploadProgress: (progressEvent: any) => {
         uploadItem.progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
       }
     })
-    
+
     uploadItem.status = 'success'
     ElMessage.success(`${file.name} 上传成功`)
     loadAttachments()
-  } catch (error) {
+  } catch (error: any) {
     uploadItem.status = 'exception'
     ElMessage.error(`${file.name} 上传失败`)
   }
-  
+
   // 清理已完成的上传项
   setTimeout(() => {
     uploadingFiles.value = uploadingFiles.value.filter(f => f.status !== 'success' && f.status !== 'exception')
   }, 2000)
 }
 
-const isImage = (fileType) => {
+const isImage = (fileType: any) => {
   return fileType && fileType.startsWith('image/')
 }
 
-const isVideo = (fileType) => {
+const isVideo = (fileType: any) => {
   return fileType && fileType.startsWith('video/')
 }
 
-const getFileExtension = (filename) => {
+const getFileExtension = (filename: any) => {
   const ext = filename.split('.').pop()
   return ext ? ext.toUpperCase() : 'FILE'
 }
 
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: any) => {
   if (!bytes) return '0 B'
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-const getCategoryLabel = (category) => {
+const getCategoryLabel = (category: any) => {
   const map = {
     'FAULT_IMAGE': '故障图片',
     'FAULT_VIDEO': '故障视频',
@@ -824,10 +824,10 @@ const getCategoryLabel = (category) => {
     'VIDEO': '视频',
     'OTHER': '其他'
   }
-  return map[category] || category
+  return (map as Record<string, any>)[category] || category
 }
 
-const previewAttachment = (attachment) => {
+const previewAttachment = (attachment: any) => {
   if (isImage(attachment.file_type)) {
     // 图片预览
     window.open(attachment.file_url, '_blank')
@@ -840,7 +840,7 @@ const previewAttachment = (attachment) => {
   }
 }
 
-const downloadAttachment = async (attachment) => {
+const downloadAttachment = async (attachment: any) => {
   try {
     // 走带 JWT 的 blob 下载，window.open 不会携带 Authorization 头会 401
     const blob = await downloadAttachmentApi(attachment.id)
@@ -852,18 +852,18 @@ const downloadAttachment = async (attachment) => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('下载失败')
   }
 }
 
-const handleDeleteAttachment = async (attachment) => {
+const handleDeleteAttachment = async (attachment: any) => {
   try {
     await ElMessageBox.confirm('确定要删除该附件吗？', '删除确认', { type: 'warning' })
     await deleteAttachment(attachment.id)
     ElMessage.success('删除成功')
     loadAttachments()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }

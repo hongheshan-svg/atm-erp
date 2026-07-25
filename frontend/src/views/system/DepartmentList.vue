@@ -35,7 +35,7 @@
           <el-icon><OfficeBuilding /></el-icon>
           <span>组织架构</span>
         </div>
-        
+
         <div class="tree-container" v-loading="loading">
           <el-tree
             ref="treeRef"
@@ -74,7 +74,7 @@
               </div>
             </template>
           </el-tree>
-          
+
           <el-empty v-if="!loading && treeData.length === 0" description="暂无部门数据">
             <el-button type="primary" v-permission="'system:department'" @click="handleAdd(null)">创建第一个部门</el-button>
           </el-empty>
@@ -192,9 +192,9 @@
               <span>子部门</span>
             </div>
             <div class="sub-dept-list">
-              <div 
-                v-for="child in selectedDept.children" 
-                :key="child.id" 
+              <div
+                v-for="child in selectedDept.children"
+                :key="child.id"
                 class="sub-dept-item"
                 @click="selectDept(child)"
               >
@@ -257,10 +257,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  Plus, Refresh, Search, OfficeBuilding, Folder, Document, Edit, Delete,
+import {
+  Plus, Refresh, Search, OfficeBuilding, Folder, Edit, Delete,
   User, UserFilled, Avatar, InfoFilled, ArrowRight, Expand, Fold
 } from '@element-plus/icons-vue'
 import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment } from '@/api/auth'
@@ -275,18 +275,18 @@ const submitting = ref(false)
 const membersLoading = ref(false)
 const departments = ref<any[]>([])
 const users = ref<any[]>([])
-const selectedDept = ref(null)
+const selectedDept = ref<any>(null)
 const deptMembers = ref<any[]>([])
 const searchText = ref('')
-const treeRef = ref(null)
+const treeRef = ref<any>(null)
 
 // 对话框
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建部门')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   name: '',
   parent: null,
@@ -322,55 +322,55 @@ const deptPath = computed(() => {
 })
 
 // 方法
-const buildTree = (list, parentId = null) => {
+const buildTree = (list: any, parentId = null) => {
   return list
-    .filter(item => item.parent === parentId)
-    .map(item => ({
+    .filter((item: any) => item.parent === parentId)
+    .map((item: any) => ({
       ...item,
       children: buildTree(list, item.id)
     }))
 }
 
-const filterSelfAndChildren = (tree, excludeId) => {
+const filterSelfAndChildren = (tree: any, excludeId: any) => {
   return tree
-    .filter(node => node.id !== excludeId)
-    .map(node => ({
+    .filter((node: any) => node.id !== excludeId)
+    .map((node: any) => ({
       ...node,
       children: node.children?.length ? filterSelfAndChildren(node.children, excludeId) : []
     }))
 }
 
-const getDeptPath = (deptId, list) => {
+const getDeptPath = (deptId: any, list: any) => {
   const path = []
-  let current = list.find(d => d.id === deptId)
+  let current = list.find((d: any) => d.id === deptId)
   while (current) {
     path.unshift(current)
-    current = list.find(d => d.id === current.parent)
+    current = list.find((d: any) => d.id === current.parent)
   }
   return path
 }
 
-const findDeptInTree = (tree, id) => {
+const findDeptInTree = (tree: any, id: any): any => {
   for (const node of tree) {
     if (node.id === id) return node
     if (node.children?.length) {
-      const found = findDeptInTree(node.children, id)
+      const found: any = findDeptInTree(node.children, id)
       if (found) return found
     }
   }
   return null
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getUserLabel = (user) => {
+const getUserLabel = (user: any) => {
   return user.display_name ? `${user.display_name} (${user.username})` : user.username
 }
 
-const filterNode = (value, data) => {
+const filterNode = (value: any, data: any) => {
   if (!value) return true
   return data.name.toLowerCase().includes(value.toLowerCase())
 }
@@ -382,14 +382,14 @@ const handleSearch = () => {
 const expandAll = () => {
   const nodes = treeRef.value?.store?.nodesMap
   if (nodes) {
-    Object.values(nodes).forEach(node => node.expand())
+    Object.values(nodes as Record<string, any>).forEach((node: any) => node.expand())
   }
 }
 
 const collapseAll = () => {
   const nodes = treeRef.value?.store?.nodesMap
   if (nodes) {
-    Object.values(nodes).forEach(node => node.collapse())
+    Object.values(nodes as Record<string, any>).forEach((node: any) => node.collapse())
   }
 }
 
@@ -398,7 +398,7 @@ const loadDepartments = async () => {
   try {
     const response = await getDepartments()
     departments.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载部门失败')
   } finally {
     loading.value = false
@@ -409,49 +409,49 @@ const loadUsers = async () => {
   try {
     const response = await getUsers()
     users.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户失败:', error)
   }
 }
 
-const loadDeptMembers = async (deptId) => {
+const loadDeptMembers = async (deptId: any) => {
   membersLoading.value = true
   try {
     const response = await getUsers({ department: deptId })
     deptMembers.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     deptMembers.value = []
   } finally {
     membersLoading.value = false
   }
 }
 
-const handleNodeClick = (data) => {
+const handleNodeClick = (data: any) => {
   selectedDept.value = data
   loadDeptMembers(data.id)
 }
 
-const selectDept = (dept) => {
+const selectDept = (dept: any) => {
   selectedDept.value = findDeptInTree(treeData.value, dept.id)
   loadDeptMembers(dept.id)
   // 在树中高亮
   treeRef.value?.setCurrentKey(dept.id)
 }
 
-const handleAdd = (parent) => {
+const handleAdd = (parent: any) => {
   dialogTitle.value = parent ? `在"${parent.name}"下新建子部门` : '新建部门'
   isEdit.value = false
-  Object.assign(form, { 
-    id: null, 
-    name: '', 
-    parent: parent?.id || null, 
-    manager: null, 
-    description: '' 
+  Object.assign(form, {
+    id: null,
+    name: '',
+    parent: parent?.id || null,
+    manager: null,
+    description: ''
   })
   dialogVisible.value = true
 }
 
-const handleEdit = (dept) => {
+const handleEdit = (dept: any) => {
   dialogTitle.value = '编辑部门'
   isEdit.value = true
   Object.assign(form, {
@@ -464,7 +464,7 @@ const handleEdit = (dept) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (dept) => {
+const handleDelete = async (dept: any) => {
   if (dept.children?.length) {
     ElMessage.warning('该部门下有子部门，请先删除子部门')
     return
@@ -477,7 +477,7 @@ const handleDelete = async (dept) => {
       selectedDept.value = null
     }
     loadDepartments()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -497,7 +497,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadDepartments()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存失败')
   } finally {
     submitting.value = false

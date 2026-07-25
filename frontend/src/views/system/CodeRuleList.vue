@@ -110,7 +110,7 @@
         </p>
       </el-alert>
 
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+      <el-form :model="form" :rules="formRules" ref="formRef" label-width="120px">
         <el-form-item label="规则类型" prop="rule_type">
           <el-select v-model="form.rule_type" placeholder="选择规则类型" :disabled="isEdit" style="width: 100%;">
             <el-option v-for="type in ruleTypes" :key="type.value" :label="type.label" :value="type.value" />
@@ -173,7 +173,7 @@
         </el-form-item>
 
         <el-divider content-position="left">示例预览</el-divider>
-        
+
         <el-alert
           v-if="form.rule_type !== 'ITEM'"
           :title="`示例编码：${generateExample()}`"
@@ -239,17 +239,17 @@ const historyVisible = ref(false)
 const historyLoading = ref(false)
 const dialogTitle = ref('添加编码规则')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 const rules = ref<any[]>([])
 const historyList = ref<any[]>([])
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   rule_type: null,
   is_active: null
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   rule_type: '',
   rule_name: '',
@@ -291,13 +291,13 @@ const formRules = {
 const fetchRules = async () => {
   loading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (searchForm.rule_type) params.rule_type = searchForm.rule_type
     if (searchForm.is_active !== null) params.is_active = searchForm.is_active
-    
+
     const res = await getCodeRuleList(params)
     rules.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载编码规则失败')
   } finally {
     loading.value = false
@@ -323,7 +323,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑编码规则'
   isEdit.value = true
   Object.assign(form, {
@@ -346,9 +346,9 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = { ...form }
-    
+
     if (form.id) {
       await updateCodeRule(form.id, data)
       ElMessage.success('更新成功')
@@ -356,10 +356,10 @@ const handleSubmit = async () => {
       await createCodeRule(data)
       ElMessage.success('添加成功')
     }
-    
+
     dialogVisible.value = false
     fetchRules()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -368,31 +368,31 @@ const handleSubmit = async () => {
   }
 }
 
-const handleResetSeq = async (row) => {
+const handleResetSeq = async (row: any) => {
   try {
     await ElMessageBox.confirm(
       `确定要重置 ${row.rule_name} 的序列号吗？序列号将重置为起始值 ${row.seq_start}`,
       '重置序列号',
       { type: 'warning' }
     )
-    
+
     await resetCodeRuleSequence(row.id)
     ElMessage.success('序列号已重置')
     fetchRules()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('重置失败')
     }
   }
 }
 
-const handleViewHistory = async (row) => {
+const handleViewHistory = async (row: any) => {
   historyVisible.value = true
   historyLoading.value = true
   try {
     const res = await getCodeRuleHistory(row.id)
     historyList.value = res || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载历史记录失败')
   } finally {
     historyLoading.value = false
@@ -408,12 +408,12 @@ const handleInitDefault = async () => {
       '初始化默认规则',
       { type: 'info' }
     )
-    
+
     initializing.value = true
     const res = await initDefaultCodeRules()
     ElMessage.success(res.message || '初始化成功')
     fetchRules()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('初始化失败')
     }
@@ -424,11 +424,11 @@ const handleInitDefault = async () => {
 
 const generateExample = () => {
   const parts = []
-  
+
   if (form.prefix) {
     parts.push(form.prefix)
   }
-  
+
   if (form.date_format) {
     const now = new Date()
     let dateStr = form.date_format
@@ -438,10 +438,10 @@ const generateExample = () => {
     dateStr = dateStr.replace('DD', now.getDate().toString().padStart(2, '0'))
     parts.push(dateStr)
   }
-  
+
   const seqStr = form.seq_start.toString().padStart(form.seq_length, '0')
   parts.push(seqStr)
-  
+
   return form.separator ? parts.join(form.separator) : parts.join('')
 }
 
@@ -466,4 +466,3 @@ fetchRules()
   margin-top: 4px;
 }
 </style>
-

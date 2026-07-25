@@ -10,7 +10,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 搜索区域 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="项目名称">
@@ -48,7 +48,7 @@
           </el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 汇总统计 -->
       <el-row :gutter="20" class="summary-row">
         <el-col :span="4">
@@ -64,16 +64,16 @@
           <el-statistic title="总成本" :value="summary.totalCost" :precision="2" prefix="¥" />
         </el-col>
         <el-col :span="5">
-          <el-statistic 
-            title="总利润" 
-            :value="summary.totalProfit" 
-            :precision="2" 
+          <el-statistic
+            title="总利润"
+            :value="summary.totalProfit"
+            :precision="2"
             prefix="¥"
             :value-style="{ color: summary.totalProfit >= 0 ? '#67c23a' : '#f56c6c' }"
           />
         </el-col>
       </el-row>
-      
+
       <!-- 数据表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -138,15 +138,15 @@
         </el-table-column>
         <el-table-column label="预算使用" width="120">
           <template #default="{ row }">
-            <el-progress 
-              :percentage="Math.min(row.budget_usage || 0, 100)" 
+            <el-progress
+              :percentage="Math.min(row.budget_usage || 0, 100)"
               :status="getBudgetStatus(row.budget_usage)"
               :stroke-width="10"
             />
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -159,7 +159,7 @@
         @current-change="fetchData"
       />
     </el-card>
-    
+
     <!-- 项目成本详情对话框 -->
     <el-dialog v-model="detailVisible" :title="'项目成本详情 - ' + currentProject.name" width="900px">
       <el-descriptions :column="3" border>
@@ -174,9 +174,9 @@
           </el-tag>
         </el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider>成本明细</el-divider>
-      
+
       <el-row :gutter="20">
         <el-col :span="12">
           <el-card shadow="never">
@@ -214,7 +214,7 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Download } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getProjectCosts, recalculateCosts } from '@/api/analytics'
 import { getUsers } from '@/api/auth'
 import { toFixedSafe } from '@/utils/number'
@@ -228,16 +228,16 @@ const tableData = ref<any[]>([])
 const managers = ref<any[]>([])
 const detailVisible = ref(false)
 const currentProject = ref<Record<string, any>>({})
-const costChartRef = ref(null)
-let costChart = null
+const costChartRef = ref<any>(null)
+let costChart: any = null
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   name: '',
   status: '',
   manager: ''
 })
 
-const summary = reactive({
+const summary = reactive<Record<string, any>>({
   totalProjects: 0,
   totalBudget: 0,
   totalRevenue: 0,
@@ -245,7 +245,7 @@ const summary = reactive({
   totalProfit: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -253,7 +253,7 @@ const pagination = reactive({
 
 const budgetComparison = ref<any[]>([])
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'DRAFT': '草稿',
     'PLANNING': '规划中',
@@ -263,10 +263,10 @@ const getStatusLabel = (status) => {
     'CANCELLED': '已取消',
     'ARCHIVED': '已归档'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PLANNING': 'info',
@@ -276,16 +276,16 @@ const getStatusType = (status) => {
     'CANCELLED': 'danger',
     'ARCHIVED': ''
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getBudgetStatus = (usage) => {
+const getBudgetStatus = (usage: any) => {
   if (usage >= 100) return 'exception'
   if (usage >= 80) return 'warning'
   return 'success'
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -293,22 +293,22 @@ const formatNumber = (num) => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
     if (searchForm.name) params.name = searchForm.name
     if (searchForm.status) params.status = searchForm.status
     if (searchForm.manager) params.manager = searchForm.manager
-    
+
     const res = await getProjectCosts(params)
     const data = res.results || res.results || res || []
     tableData.value = data
     pagination.total = res.count || (res.results || res)?.length || 0
-    
+
     // 计算汇总
     calculateSummary(data)
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目成本失败:', error)
     tableData.value = []
     ElMessage.error('获取项目成本数据失败')
@@ -317,11 +317,11 @@ const fetchData = async () => {
   }
 }
 
-const calculateSummary = (data) => {
+const calculateSummary = (data: any) => {
   summary.totalProjects = data.length
-  summary.totalBudget = data.reduce((sum, item) => sum + (item.budget_total || 0), 0)
-  summary.totalRevenue = data.reduce((sum, item) => sum + (item.revenue || 0), 0)
-  summary.totalCost = data.reduce((sum, item) => sum + (item.total_cost || 0), 0)
+  summary.totalBudget = data.reduce((sum: any, item: any) => sum + (item.budget_total || 0), 0)
+  summary.totalRevenue = data.reduce((sum: any, item: any) => sum + (item.revenue || 0), 0)
+  summary.totalCost = data.reduce((sum: any, item: any) => sum + (item.total_cost || 0), 0)
   summary.totalProfit = summary.totalRevenue - summary.totalCost
 }
 
@@ -329,7 +329,7 @@ const fetchManagers = async () => {
   try {
     const res = await getUsers()
     managers.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取用户列表失败:', error)
   }
 }
@@ -354,7 +354,7 @@ const handleRecalculate = async () => {
     setTimeout(() => {
       fetchData()
     }, 1000)
-  } catch (error) {
+  } catch (error: any) {
     console.error('成本计算失败:', error)
     ElMessage.error('成本计算失败，请稍后重试')
   }
@@ -365,7 +365,7 @@ const handleExport = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel, formatMoney }) => {
     const columns = [
       { field: 'code', title: '项目编号' },
@@ -379,7 +379,7 @@ const handleExport = () => {
       { field: 'expense_cost', title: '费用成本', formatter: formatMoney },
       { field: 'total_cost', title: '总成本', formatter: formatMoney },
       { field: 'profit', title: '利润', formatter: formatMoney },
-      { field: 'profit_margin', title: '利润率(%)', formatter: (val) => (val * 100).toFixed(2) + '%' }
+      { field: 'profit_margin', title: '利润率(%)', formatter: (val: any) => (val * 100).toFixed(2) + '%' }
     ]
     exportToExcel(tableData.value, columns, '项目成本核算表')
     ElMessage.success('导出成功')
@@ -389,7 +389,7 @@ const handleExport = () => {
   })
 }
 
-const handleRowClick = (row) => {
+const handleRowClick = (row: any) => {
   currentProject.value = row
   budgetComparison.value = [
     { category: '材料成本', budget: row.budget_material || 0, actual: row.material_cost || 0, variance: (row.budget_material || 0) - (row.material_cost || 0) },
@@ -398,21 +398,21 @@ const handleRowClick = (row) => {
     { category: '合计', budget: row.budget_total || 0, actual: row.total_cost || 0, variance: (row.budget_total || 0) - (row.total_cost || 0) }
   ]
   detailVisible.value = true
-  
+
   nextTick(() => {
     initCostChart(row)
   })
 }
 
-const initCostChart = (data) => {
+const initCostChart = (data: any) => {
   if (!costChartRef.value) return
-  
+
   if (costChart) {
     costChart.dispose()
   }
-  
+
   costChart = echarts.init(costChartRef.value)
-  
+
   const option = {
     tooltip: {
       trigger: 'item',
@@ -455,7 +455,7 @@ const initCostChart = (data) => {
       }
     ]
   }
-  
+
   costChart.setOption(option)
 }
 

@@ -32,7 +32,7 @@
       <!-- Notification List -->
       <div v-loading="loading" class="notification-list">
         <el-empty v-if="notifications.length === 0" description="暂无通知" />
-        
+
         <div
           v-for="notification in notifications"
           :key="notification.id"
@@ -44,7 +44,7 @@
               <component :is="getNotificationIcon(notification.type)" />
             </el-icon>
           </div>
-          
+
           <div class="notification-content">
             <div class="notification-header">
               <span class="notification-title">{{ notification.title }}</span>
@@ -91,10 +91,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
-import { 
-  Refresh, Check, InfoFilled, WarningFilled, 
-  CircleCheckFilled, CircleCloseFilled 
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import {
+  Refresh, Check, InfoFilled, WarningFilled,
+  CircleCheckFilled, CircleCloseFilled
 } from '@element-plus/icons-vue'
 import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from '@/api/core'
 import { ElMessage, ElNotification } from 'element-plus'
@@ -103,51 +103,51 @@ const loading = ref(false)
 const notifications = ref<any[]>([])
 const activeTab = ref('all')
 const unreadCount = ref(0)
-const wsConnection = ref(null)
+const wsConnection = ref<any>(null)
 const wsConnected = ref(false)
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const getNotificationType = (type) => {
+const getNotificationType = (type: any) => {
   const types = {
     'INFO': 'info',
     'WARNING': 'warning',
     'ERROR': 'danger',
     'SUCCESS': 'success'
   }
-  return types[type] || 'info'
+  return (types as Record<string, any>)[type] || 'info'
 }
 
-const getNotificationColor = (type) => {
+const getNotificationColor = (type: any) => {
   const colors = {
     'INFO': '#409EFF',
     'WARNING': '#E6A23C',
     'ERROR': '#F56C6C',
     'SUCCESS': '#67C23A'
   }
-  return colors[type] || '#909399'
+  return (colors as Record<string, any>)[type] || '#909399'
 }
 
-const getNotificationIcon = (type) => {
+const getNotificationIcon = (type: any) => {
   const icons = {
     'INFO': InfoFilled,
     'WARNING': WarningFilled,
     'ERROR': CircleCloseFilled,
     'SUCCESS': CircleCheckFilled
   }
-  return icons[type] || InfoFilled
+  return (icons as Record<string, any>)[type] || InfoFilled
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
   const now = new Date()
-  const diff = now - date
-  
+  const diff = now.getTime() - date.getTime()
+
   // Less than 1 minute
   if (diff < 60000) {
     return '刚刚'
@@ -164,14 +164,14 @@ const formatDateTime = (dateStr) => {
   if (diff < 604800000) {
     return `${Math.floor(diff / 86400000)}天前`
   }
-  
+
   return date.toLocaleString('zh-CN')
 }
 
 const loadNotifications = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -186,10 +186,10 @@ const loadNotifications = async () => {
     const response = await getNotifications(params)
     notifications.value = response.results || response || []
     pagination.total = response.count || notifications.value.length
-    
+
     // Get unread count
     await loadUnreadCount()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载通知失败')
     console.error(error)
   } finally {
@@ -201,17 +201,17 @@ const loadUnreadCount = async () => {
   try {
     const response = await getUnreadCount()
     unreadCount.value = response.count
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取未读数量失败', error)
   }
 }
 
-const markAsRead = async (id) => {
+const markAsRead = async (id: any) => {
   try {
     await markNotificationRead(id)
     ElMessage.success('已标记为已读')
     loadNotifications()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
     console.error(error)
   }
@@ -222,13 +222,13 @@ const markAllRead = async () => {
     await markAllNotificationsRead()
     ElMessage.success('已全部标记为已读')
     loadNotifications()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
     console.error(error)
   }
 }
 
-const handleNotificationClick = (notification) => {
+const handleNotificationClick = (notification: any) => {
   if (!notification.is_read) {
     markAsRead(notification.id)
   }
@@ -243,12 +243,12 @@ const refreshData = () => {
   loadNotifications()
 }
 
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   loadNotifications()
 }
 
-const handleCurrentChange = (page) => {
+const handleCurrentChange = (page: any) => {
   pagination.page = page
   loadNotifications()
 }
@@ -257,18 +257,18 @@ const handleCurrentChange = (page) => {
 const connectWebSocket = () => {
   const token = localStorage.getItem('access_token')
   if (!token) return
-  
+
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${wsProtocol}//${window.location.host}/ws/notifications/?token=${token}`
-  
+
   try {
     wsConnection.value = new WebSocket(wsUrl)
-    
+
     wsConnection.value.onopen = () => {
       wsConnected.value = true
     }
-    
-    wsConnection.value.onmessage = (event) => {
+
+    wsConnection.value.onmessage = (event: any) => {
       const data = JSON.parse(event.data)
       if (data.type === 'notification') {
         // Show desktop notification
@@ -282,17 +282,17 @@ const connectWebSocket = () => {
         loadNotifications()
       }
     }
-    
+
     wsConnection.value.onclose = () => {
       wsConnected.value = false
       // Reconnect after 5 seconds
       setTimeout(connectWebSocket, 5000)
     }
-    
-    wsConnection.value.onerror = (error) => {
+
+    wsConnection.value.onerror = (error: any) => {
       console.error('WebSocket error:', error)
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('WebSocket connection failed:', error)
   }
 }
@@ -407,4 +407,3 @@ onUnmounted(() => {
   position: relative;
 }
 </style>
-

@@ -15,7 +15,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
@@ -42,14 +42,11 @@ from apps.purchase.rfq_models import (
 from apps.purchase.serializers import PurchaseRequestSerializer
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class BudgetPreControlTest(TestCase):
     """采购申请事前预算控制 + 预算消费/释放。"""
 
     def setUp(self):
-        self.user = User.objects.create(
-            username='p1budget', employee_id='P1B', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='p1budget', employee_id='P1B', is_staff=True, is_superuser=True)
         self.customer = Customer.objects.create(code='P1C', name='客户甲')
         self.item = Item.objects.create(sku='P1-ITEM1', name='测试物料1')
         self.project = Project.objects.create(
@@ -168,21 +165,21 @@ class BudgetPreControlTest(TestCase):
         self.assertEqual(budget.reserved_amount, Decimal('120.00'))
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class ComparisonToPOGovernanceTest(TestCase):
     """比价转 PO：黑名单准入 + BOM 关联回填。"""
 
     def setUp(self):
-        self.user = User.objects.create(
-            username='p1cmp', employee_id='P1CMP', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='p1cmp', employee_id='P1CMP', is_staff=True, is_superuser=True)
         self.customer = Customer.objects.create(code='P1CC', name='客户乙')
         self.item = Item.objects.create(sku='P1-CMP-ITEM', name='比价物料')
 
     def _build_comparison(self, supplier, project=None, bom_item=None):
         rfq = RFQ.objects.create(project=project, response_deadline=date.today() + timedelta(days=7))
         rfq_line = RFQLine.objects.create(
-            rfq=rfq, item=self.item, qty=Decimal('2'), required_date=date.today() + timedelta(days=30),
+            rfq=rfq,
+            item=self.item,
+            qty=Decimal('2'),
+            required_date=date.today() + timedelta(days=30),
             bom_item=bom_item,
         )
         rfq_supplier = RFQSupplier.objects.create(rfq=rfq, supplier=supplier)
@@ -194,12 +191,13 @@ class ComparisonToPOGovernanceTest(TestCase):
             status='ACCEPTED',
         )
         SupplierQuotationLine.objects.create(
-            quotation=quotation, rfq_line=rfq_line, unit_price=Decimal('50.00'), qty=Decimal('2'),
+            quotation=quotation,
+            rfq_line=rfq_line,
+            unit_price=Decimal('50.00'),
+            qty=Decimal('2'),
             lead_time_days=15,
         )
-        comparison = QuotationComparison.objects.create(
-            rfq=rfq, recommended_quotation=quotation, status='APPROVED'
-        )
+        comparison = QuotationComparison.objects.create(rfq=rfq, recommended_quotation=quotation, status='APPROVED')
         return comparison
 
     def test_convert_to_po_refuses_blacklisted_supplier(self):
@@ -234,14 +232,11 @@ class ComparisonToPOGovernanceTest(TestCase):
         self.assertTrue(po.lines.filter(bom_item__isnull=False).exists())
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class SupplierGradeWritebackTest(TestCase):
     """评价审批把等级写入 Supplier.grade，仅在变化时记历史。"""
 
     def setUp(self):
-        self.user = User.objects.create(
-            username='p1grade', employee_id='P1G', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='p1grade', employee_id='P1G', is_staff=True, is_superuser=True)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.supplier = Supplier.objects.create(code='P1SUP', name='被评供应商')

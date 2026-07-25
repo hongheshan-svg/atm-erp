@@ -317,8 +317,8 @@ interface SelectionEntry {
 // ========== 左侧:银行流水 ==========
 const leftLoading = ref(false)
 const statements = ref<any[]>([])
-const leftFilters = reactive({ status: '', search: '' })
-const leftPagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const leftFilters = reactive<Record<string, any>>({ status: '', search: '' })
+const leftPagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
 const selectedStatement = ref<any>(null)
 
 const settlementsCache = reactive<Record<number, any[]>>({})
@@ -420,7 +420,7 @@ const rightTab = ref<'candidates' | 'browse'>('candidates')
 const candidatesLoading = ref(false)
 const candidates = ref<any[]>([])
 
-const rightFilters = reactive({
+const rightFilters = reactive<Record<string, any>>({
   source_type: '',
   supplier: undefined as number | undefined,
   category: '',
@@ -431,7 +431,7 @@ const rightFilters = reactive({
 const dateRange = ref<string[]>([])
 const ledgerLoading = ref(false)
 const ledgerItems = ref<any[]>([])
-const ledgerPagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const ledgerPagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
 const suppliers = ref<any[]>([])
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {

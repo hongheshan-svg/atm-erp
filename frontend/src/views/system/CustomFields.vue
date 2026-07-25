@@ -11,10 +11,10 @@
     <!-- 模型选择 -->
     <el-card class="model-selector" shadow="never">
       <el-tabs v-model="selectedModel" @tab-change="loadFields">
-        <el-tab-pane 
-          v-for="model in supportedModels" 
-          :key="model.value" 
-          :label="model.label" 
+        <el-tab-pane
+          v-for="model in supportedModels"
+          :key="model.value"
+          :label="model.label"
           :name="model.value"
         />
       </el-tabs>
@@ -78,8 +78,8 @@
     </el-card>
 
     <!-- 编辑对话框 -->
-    <el-dialog 
-      v-model="showDialog" 
+    <el-dialog
+      v-model="showDialog"
       :title="editing ? '编辑字段' : '新增字段'"
       width="700px"
       :close-on-click-modal="false"
@@ -102,11 +102,11 @@
           <el-col :span="12">
             <el-form-item label="字段类型" prop="field_type" required>
               <el-select v-model="form.field_type" style="width: 100%" @change="onFieldTypeChange">
-                <el-option 
-                  v-for="t in fieldTypes" 
-                  :key="t.value" 
-                  :label="t.label" 
-                  :value="t.value" 
+                <el-option
+                  v-for="t in fieldTypes"
+                  :key="t.value"
+                  :label="t.label"
+                  :value="t.value"
                 />
               </el-select>
             </el-form-item>
@@ -200,9 +200,9 @@
         拖动字段调整显示顺序
       </el-alert>
       <div class="sort-list">
-        <div 
-          v-for="(field, idx) in sortableFields" 
-          :key="field.id" 
+        <div
+          v-for="(field, idx) in sortableFields"
+          :key="field.id"
           class="sort-item"
           draggable="true"
           @dragstart="onDragStart($event, idx)"
@@ -237,14 +237,14 @@ const loading = ref(false)
 const saving = ref(false)
 const showDialog = ref(false)
 const showSortDialog = ref(false)
-const editing = ref(null)
+const editing = ref<any>(null)
 const selectedModel = ref('')
 const supportedModels = ref<any[]>([])
 const fieldTypes = ref<any[]>([])
 const sortableFields = ref<any[]>([])
-const dragIndex = ref(null)
+const dragIndex = ref<any>(null)
 
-const form = ref({
+const form = ref<Record<string, any>>({
   field_code: '',
   field_name: '',
   field_type: 'TEXT',
@@ -293,7 +293,7 @@ const loadSupportedModels = async () => {
       selectedModel.value = supportedModels.value[0].value
       loadFields()
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载模型列表失败:', e)
   }
 }
@@ -302,7 +302,7 @@ const loadFieldTypes = async () => {
   try {
     const res = await getFieldTypes()
     fieldTypes.value = res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载字段类型失败:', e)
   }
 }
@@ -313,16 +313,16 @@ const loadFields = async () => {
   try {
     const res = await getCustomFieldList({ model_name: selectedModel.value })
     fields.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载字段失败:', e)
   } finally {
     loading.value = false
   }
 }
 
-const editField = (field) => {
+const editField = (field: any) => {
   editing.value = field
-  form.value = { 
+  form.value = {
     ...field,
     validation_rules: field.validation_rules || {},
     options: field.options || []
@@ -341,7 +341,7 @@ const addOption = () => {
   form.value.options.push({ value: '', label: '', color: '' })
 }
 
-const removeOption = (idx) => {
+const removeOption = (idx: any) => {
   form.value.options.splice(idx, 1)
 }
 
@@ -360,7 +360,7 @@ const saveField = async () => {
     editing.value = null
     resetForm()
     loadFields()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -387,23 +387,23 @@ const resetForm = () => {
   }
 }
 
-const toggleVisible = async (field) => {
+const toggleVisible = async (field: any) => {
   try {
     await toggleFieldVisible(field.id)
     ElMessage.success('操作成功')
-  } catch (e) {
+  } catch (e: any) {
     field.is_visible = !field.is_visible
     ElMessage.error('操作失败')
   }
 }
 
-const deleteField = async (field) => {
+const deleteField = async (field: any) => {
   await ElMessageBox.confirm('确定要删除该字段吗？删除后该字段的所有数据将丢失', '确认删除', { type: 'warning' })
   try {
     await deleteCustomField(field.id)
     ElMessage.success('删除成功')
     loadFields()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('删除失败')
   }
 }
@@ -413,12 +413,12 @@ const batchSort = () => {
   showSortDialog.value = true
 }
 
-const onDragStart = (e, idx) => {
+const onDragStart = (e: any, idx: any) => {
   dragIndex.value = idx
   e.dataTransfer.effectAllowed = 'move'
 }
 
-const onDrop = (e, idx) => {
+const onDrop = (e: any, idx: any) => {
   const dragItem = sortableFields.value[dragIndex.value]
   sortableFields.value.splice(dragIndex.value, 1)
   sortableFields.value.splice(idx, 0, dragItem)
@@ -436,7 +436,7 @@ const saveSortOrder = async () => {
     ElMessage.success('排序保存成功')
     showSortDialog.value = false
     loadFields()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -461,7 +461,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  
+
   h2 {
     margin: 0;
     color: #303133;
@@ -498,15 +498,15 @@ onMounted(() => {
     margin-bottom: 8px;
     cursor: grab;
     transition: all 0.3s;
-    
+
     &:hover {
       background: #e6e8eb;
     }
-    
+
     &:active {
       cursor: grabbing;
     }
-    
+
     code {
       margin-left: auto;
       font-size: 12px;

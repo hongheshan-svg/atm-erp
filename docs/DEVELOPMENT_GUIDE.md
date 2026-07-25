@@ -1,6 +1,6 @@
 # ERP系统开发指南
 
-**版本：1.0**  
+**版本：1.0**
 **更新日期：2026年1月15日**
 
 ---
@@ -57,11 +57,11 @@
 
 ```
 Python 3.11
-├── Django 4.2              # Web框架
-│   ├── Django REST Framework 3.14  # RESTful API
-│   ├── Django Channels 4.0         # WebSocket支持
-│   ├── Django Filter 23.5          # 数据过滤
-│   └── DRF Spectacular 0.27        # API文档生成
+├── Django 5.2 LTS          # Web框架
+│   ├── Django REST Framework 3.17  # RESTful API
+│   ├── Django Channels 4.3         # WebSocket支持
+│   ├── Django Filter 26.1          # 数据过滤
+│   └── DRF Spectacular 0.30        # API文档生成
 │
 ├── 数据库
 │   ├── psycopg2-binary 2.9  # PostgreSQL驱动
@@ -72,10 +72,8 @@ Python 3.11
 │   ├── celery-beat          # 定时任务调度
 │   └── redis 5.0            # 消息代理
 │
-├── 搜索引擎
-│   ├── elasticsearch 7.17   # 全文搜索
-│   ├── elasticsearch-dsl 7.4
-│   └── django-elasticsearch-dsl 7.3
+├── 搜索
+│   └── PostgreSQL 数据库查询 # 无外部搜索服务依赖
 │
 ├── 文档生成
 │   ├── reportlab 4.0        # PDF生成
@@ -85,26 +83,26 @@ Python 3.11
 │   └── qrcode 7.4           # 二维码生成
 │
 ├── 图像处理
-│   └── Pillow 10.1          # 图像处理
+│   └── Pillow 12.3          # 图像处理
 │
 └── 工具库
     ├── python-decouple 3.8  # 环境变量管理
     ├── python-dateutil 2.8  # 日期处理
     ├── pytz 2023.3          # 时区处理
-    └── requests 2.31        # HTTP客户端
+    └── requests 2.33        # HTTP客户端
 ```
 
 ### 2.2 前端技术栈
 
 ```
-Node.js 18+
+Node.js 22+
 ├── Vue 3                    # 前端框架
 │   ├── Composition API      # 组合式API
 │   ├── Script Setup         # 语法糖
 │   └── Vue Router 4         # 路由管理
 │
 ├── 构建工具
-│   └── Vite 5               # 构建打包
+│   └── Vite 8               # 构建打包
 │
 ├── 状态管理
 │   └── Pinia                # 状态管理（替代Vuex）
@@ -114,7 +112,7 @@ Node.js 18+
 │   └── @element-plus/icons-vue  # 图标库
 │
 ├── 图表可视化
-│   ├── ECharts 5            # 图表库
+│   ├── ECharts 6            # 图表库
 │   ├── vue-echarts          # Vue封装
 │   └── @toast-ui/vue-gantt  # 甘特图
 │
@@ -133,10 +131,8 @@ Node.js 18+
 Docker & Docker Compose
 ├── PostgreSQL 15-alpine     # 数据库
 ├── Redis 7-alpine           # 缓存/消息队列
-├── Elasticsearch 7.17       # 搜索引擎
-├── Nginx                    # 反向代理/静态文件
-├── Gunicorn/Daphne          # WSGI/ASGI服务器
-└── Certbot                  # SSL证书（可选）
+├── app                      # Nginx + Daphne + Celery + 前端静态资源
+└── erp-updater              # 最小权限升级代理
 ```
 
 ---
@@ -292,23 +288,22 @@ docker-compose up -d --build
 # 3. 查看服务状态
 docker-compose ps
 
-# 4. 查看日志
-docker-compose logs -f backend
+# 4. 查看应用日志
+docker compose logs -f app
 
 # 5. 进入后端容器执行命令
-docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
+docker compose exec app python manage.py migrate
+docker compose exec app python manage.py createsuperuser
 ```
 
 ### 4.5 服务端口说明
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| Nginx | 8080/8443 | HTTP/HTTPS入口 |
-| Backend | 8000 | Django API |
-| PostgreSQL | 5433 | 数据库 |
-| Redis | 6380 | 缓存 |
-| Elasticsearch | 9201 | 搜索引擎 |
+| app / Nginx | `${HTTP_PORT:-80}` / `${HTTPS_PORT:-443}` | HTTP/HTTPS入口 |
+| Backend | 8000（容器内） | Django API |
+| PostgreSQL | 5432（expose override 为 5433） | 数据库 |
+| Redis | 6379（expose override 为 6380） | 缓存 |
 
 ---
 
@@ -453,12 +448,12 @@ def create_purchase_request(
 ) -> PurchaseRequest:
     """
     创建采购申请
-    
+
     Args:
         project_id: 项目ID
         items: 物料列表
         user: 当前用户
-        
+
     Returns:
         创建的采购申请对象
     """
@@ -467,17 +462,17 @@ def create_purchase_request(
 # 3. 模型定义规范
 class PurchaseRequest(models.Model):
     """采购申请模型"""
-    
+
     class Meta:
         verbose_name = '采购申请'
         verbose_name_plural = verbose_name
         ordering = ['-created_at']
-    
+
     # 字段定义
     request_no = models.CharField('申请单号', max_length=50, unique=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES)
-    
+
     def __str__(self):
         return self.request_no
 ```
@@ -641,14 +636,14 @@ docker-compose up -d --build
 # 查看服务状态
 docker-compose ps
 
-# 重启服务
-docker-compose restart backend
+# 重启应用（Django、Celery、Nginx 均由 supervisord 管理）
+docker compose restart app
 
 # 查看日志
-docker-compose logs -f backend --tail=100
+docker compose logs -f app --tail=100
 
 # 进入容器
-docker-compose exec backend bash
+docker compose exec app bash
 
 # 数据库备份
 docker-compose exec postgres pg_dump -U erp_user erp_db > backup.sql

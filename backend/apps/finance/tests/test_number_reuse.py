@@ -17,10 +17,9 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class DocumentNumberReuseTest(TestCase):
     def setUp(self):
         from apps.masterdata.models import Customer

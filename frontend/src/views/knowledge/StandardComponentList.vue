@@ -7,7 +7,7 @@
           <el-button type="primary" @click="handleCreate"><el-icon><Plus /></el-icon> 新建部件</el-button>
         </div>
       </template>
-      
+
       <div class="filter-area">
         <el-input v-model="queryParams.search" placeholder="搜索部件编码/名称" style="width: 240px" clearable @keyup.enter="fetchData">
           <template #prefix><el-icon><Search /></el-icon></template>
@@ -132,12 +132,12 @@ const total = ref(0)
 const viewDialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const queryParams = reactive({ search: '', status: '', page: 1, page_size: 20 })
-const form = reactive({ name: '', code: '', version: '', estimated_cost: 0, description: '', specifications: '' })
+const queryParams = reactive<Record<string, any>>({ search: '', status: '', page: 1, page_size: 20 })
+const form = reactive<Record<string, any>>({ name: '', code: '', version: '', estimated_cost: 0, description: '', specifications: '' })
 const rules = { name: [{ required: true, message: '请输入部件名称', trigger: 'blur' }] }
-const getStatusType = (status) => ({ DRAFT: 'info', ACTIVE: 'success', DEPRECATED: 'danger' }[status] || '')
+const getStatusType = (status: any) => (({ DRAFT: 'info', ACTIVE: 'success', DEPRECATED: 'danger' } as Record<string, any>)[status] || '')
 
 const fetchData = async () => {
   loading.value = true
@@ -145,7 +145,7 @@ const fetchData = async () => {
     const res = await getStandardComponentList(queryParams)
     components.value = res.results || res || []
     total.value = res.count || components.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取数据失败')
   } finally {
     loading.value = false
@@ -158,12 +158,12 @@ const handleCreate = () => {
   createDialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getStandardComponent(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
@@ -178,7 +178,7 @@ const handleSave = async () => {
     ElMessage.success('创建成功')
     createDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false

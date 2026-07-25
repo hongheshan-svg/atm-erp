@@ -33,12 +33,16 @@ class AttachmentIDORTest(TestCase):
             username='att_root', password='x', employee_id='att_root', is_superuser=True
         )
         Attachment.objects.create(
-            related_model='Project', related_id=5,
-            file=SimpleUploadedFile('a.txt', b'x'), original_name='a.txt',
+            related_model='Project',
+            related_id=5,
+            file=SimpleUploadedFile('a.txt', b'x'),
+            original_name='a.txt',
         )
         Attachment.objects.create(
-            related_model='Order', related_id=7,
-            file=SimpleUploadedFile('b.txt', b'y'), original_name='b.txt',
+            related_model='Order',
+            related_id=7,
+            file=SimpleUploadedFile('b.txt', b'y'),
+            original_name='b.txt',
         )
 
     def _list_qs(self, user, params):
@@ -70,9 +74,7 @@ class AttachmentAccessControlTest(TestCase):
 
     def setUp(self):
         cache.clear()
-        self.proj_perm = Permission.objects.create(
-            code='projects:list', name='项目列表', type='menu', is_active=True
-        )
+        self.proj_perm = Permission.objects.create(code='projects:list', name='项目列表', type='menu', is_active=True)
         self.proj_role = Role.objects.create(name='项目角色', code='proj', is_active=True)
         RolePermission.objects.create(role=self.proj_role, permission=self.proj_perm)
 

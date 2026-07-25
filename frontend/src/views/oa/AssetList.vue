@@ -10,7 +10,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 统计卡片 -->
       <el-row :gutter="20" style="margin-bottom: 20px;">
         <el-col :span="6">
@@ -38,7 +38,7 @@
           </div>
         </el-col>
       </el-row>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" class="search-form">
         <el-form-item label="分类">
@@ -61,19 +61,19 @@
           <el-button type="primary" @click="loadData">搜索</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="asset_no" label="资产编号" width="120" />
@@ -105,7 +105,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.pageSize"
@@ -117,7 +117,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 新建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑资产' : '添加资产'" width="800px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -204,7 +204,7 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 分配对话框 -->
     <el-dialog v-model="assignDialogVisible" title="分配资产" width="400px">
       <el-form label-width="80px">
@@ -261,8 +261,8 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const loading = ref(false)
 const saving = ref(false)
 const borrowDialogVisible = ref(false)
-const borrowRow = ref(null)
-const borrowForm = reactive({ borrower: null, borrow_date: '', expected_return_date: '', purpose: '' })
+const borrowRow = ref<any>(null)
+const borrowForm = reactive<Record<string, any>>({ borrower: null, borrow_date: '', expected_return_date: '', purpose: '' })
 const borrowSaving = ref(false)
 const list = ref<any[]>([])
 const categories = ref<any[]>([])
@@ -271,23 +271,23 @@ const stats = ref<Record<string, any>>({})
 const dialogVisible = ref(false)
 const assignDialogVisible = ref(false)
 const isEdit = ref(false)
-const currentItem = ref(null)
-const assignUserId = ref(null)
-const formRef = ref(null)
+const currentItem = ref<any>(null)
+const assignUserId = ref<any>(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   category: null,
   status: '',
   search: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   name: '',
   category: null,
   brand: '',
@@ -307,7 +307,7 @@ const rules = {
   name: [{ required: true, message: '请输入资产名称', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'IDLE': 'info',
     'IN_USE': 'success',
@@ -315,10 +315,10 @@ const getStatusType = (status) => {
     'SCRAPPED': 'danger',
     'LOST': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -334,7 +334,7 @@ const loadCategories = async () => {
     } else {
       categories.value = []
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载分类失败', error)
   }
 }
@@ -344,11 +344,11 @@ const loadUsers = async () => {
     const res = await getUsers({ page_size: 1000 })
     // res 已经是 response.data
     const userData = Array.isArray(res) ? res : (res.results || [])
-    users.value = userData.map(u => ({
+    users.value = userData.map((u: any) => ({
       id: u.id,
       name: u.name || `${u.last_name}${u.first_name}` || u.username
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户失败', error)
   }
 }
@@ -358,7 +358,7 @@ const loadStats = async () => {
     const res = await getAssetStatistics()
     // res 已经是 response.data
     stats.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败', error)
   }
 }
@@ -366,7 +366,7 @@ const loadStats = async () => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -383,7 +383,7 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -410,7 +410,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, row)
   dialogVisible.value = true
@@ -420,7 +420,7 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     if (isEdit.value) {
       await updateAsset(form.id, form)
       ElMessage.success('更新成功')
@@ -428,11 +428,11 @@ const handleSave = async () => {
       await createAsset(form)
       ElMessage.success('添加成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) {
       ElMessage.error(JSON.stringify(error.response.data))
     }
@@ -441,7 +441,7 @@ const handleSave = async () => {
   }
 }
 
-const handleAssign = (row) => {
+const handleAssign = (row: any) => {
   currentItem.value = row
   assignUserId.value = null
   loadUsers()
@@ -461,27 +461,27 @@ const confirmAssign = async () => {
     ElMessage.success('分配成功')
     assignDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('分配失败')
   } finally {
     saving.value = false
   }
 }
 
-const handleReclaim = async (row) => {
+const handleReclaim = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要回收这个资产吗？', '提示', { type: 'warning' })
     await reclaimAsset(row.id)
     ElMessage.success('回收成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('回收失败')
     }
   }
 }
 
-const handleBorrow = (row) => {
+const handleBorrow = (row: any) => {
   borrowRow.value = row
   const today = new Date().toISOString().slice(0, 10)
   Object.assign(borrowForm, { borrower: null, borrow_date: today, expected_return_date: '', purpose: '' })
@@ -501,14 +501,14 @@ const handleBorrowSave = async () => {
     if (borrowId) {
       try {
         await submitAssetBorrow(borrowId)
-      } catch (e) {
+      } catch (e: any) {
         console.error('AssetList submitAssetBorrow error:', e)
       }
     }
     ElMessage.success('借用成功')
     borrowDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
   } finally {
@@ -516,14 +516,14 @@ const handleBorrowSave = async () => {
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除这个资产吗？', '提示', { type: 'warning' })
     await deleteAsset(row.id)
     ElMessage.success('删除成功')
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }

@@ -57,7 +57,10 @@ def _safe_sync_payable(func, instance, source_type, *, action):
     except Exception:
         logger.exception(
             '%s(id=%s, status=%s)台账%s失败,需人工核查',
-            source_type, instance.pk, getattr(instance, 'status', ''), action,
+            source_type,
+            instance.pk,
+            getattr(instance, 'status', ''),
+            action,
         )
         _notify_finance_admins_of_payable_sync_failure(instance, source_type, action)
 

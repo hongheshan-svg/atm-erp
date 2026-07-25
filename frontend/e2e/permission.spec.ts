@@ -1,15 +1,12 @@
 import { test, expect } from '@playwright/test'
+import { loginAsAdmin } from './helpers'
 
 test.describe('Permission Control', () => {
   test('admin user sees full navigation', async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('input[type="text"], input[placeholder*="用户"]', 'admin')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"], button:has-text("登录")')
-    await page.waitForURL(/\/(erp\/)?(?!login)/)
+    await loginAsAdmin(page)
 
     // Admin should see main navigation sections
-    const nav = page.locator('.el-menu, nav, [class*="sidebar"]')
+    const nav = page.locator('.sidebar')
     await expect(nav).toBeVisible({ timeout: 10000 })
 
     // Check core modules are visible
@@ -18,24 +15,21 @@ test.describe('Permission Control', () => {
   })
 
   test('dashboard is accessible after login', async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('input[type="text"], input[placeholder*="用户"]', 'admin')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"], button:has-text("登录")')
-    await page.waitForURL(/\/(erp\/)?(?!login)/)
+    await loginAsAdmin(page)
 
     // Should land on dashboard or home
-    await expect(page.locator('[class*="dashboard"], [class*="home"], .el-card')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('.dashboard')).toBeVisible({ timeout: 10000 })
   })
 
   test('protected routes redirect when not authenticated', async ({ page }) => {
+    await page.goto('/erp/login')
     await page.evaluate(() => localStorage.clear())
 
     const protectedRoutes = [
       '/erp/sales/orders',
       '/erp/purchase/orders',
-      '/erp/inventory',
-      '/erp/finance',
+      '/erp/inventory/stocks',
+      '/erp/finance/ar',
     ]
 
     for (const route of protectedRoutes) {

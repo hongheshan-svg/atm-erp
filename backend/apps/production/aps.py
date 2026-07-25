@@ -711,9 +711,7 @@ def post_completion_stock_moves(order, completed_qty, materials, user):
             except Warehouse.DoesNotExist:
                 raise serializers.ValidationError({'materials': f'领料仓库不存在: {wh_id}'})
         if src_warehouse is None:
-            raise serializers.ValidationError(
-                {'materials': f'物料 {mat_item} 未指定领料仓库且无默认仓库'}
-            )
+            raise serializers.ValidationError({'materials': f'物料 {mat_item} 未指定领料仓库且无默认仓库'})
 
         moves.append(
             StockMove(
@@ -835,9 +833,7 @@ class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         with transaction.atomic():
             order = ScheduleOrder.objects.select_for_update().get(pk=self.get_object().pk)
             if order.status != 'SCHEDULED':
-                return Response(
-                    {'error': '只有已排程的工单可以开始生产'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有已排程的工单可以开始生产'}, status=status.HTTP_400_BAD_REQUEST)
             order.status = 'IN_PROGRESS'
             order.actual_start = timezone.now()
             order.save()
@@ -854,9 +850,7 @@ class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             with transaction.atomic():
                 order = ScheduleOrder.objects.select_for_update().get(pk=self.get_object().pk)
                 if order.status != 'IN_PROGRESS':
-                    return Response(
-                        {'error': '只有生产中的工单可以完成'}, status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({'error': '只有生产中的工单可以完成'}, status=status.HTTP_400_BAD_REQUEST)
 
                 raw_qty = request.data.get('completed_qty', order.quantity)
                 try:
@@ -877,9 +871,7 @@ class ScheduleOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                 order.save()
 
                 # 库存联动（完工入库 + 领料出库）
-                post_completion_stock_moves(
-                    order, completed_qty, request.data.get('materials'), request.user
-                )
+                post_completion_stock_moves(order, completed_qty, request.data.get('materials'), request.user)
         except ValueError as e:
             # StockMove 库存不足等抛 ValueError，整笔事务已回滚，返回干净 400
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -930,9 +922,7 @@ class APSScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         with transaction.atomic():
             task = APSScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
             if task.status not in ('PENDING', 'PAUSED'):
-                return Response(
-                    {'error': '只有待开始或暂停的任务可以开始'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有待开始或暂停的任务可以开始'}, status=status.HTTP_400_BAD_REQUEST)
             task.status = 'IN_PROGRESS'
             if task.actual_start is None:
                 task.actual_start = timezone.now()
@@ -945,9 +935,7 @@ class APSScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         with transaction.atomic():
             task = APSScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
             if task.status != 'IN_PROGRESS':
-                return Response(
-                    {'error': '只有进行中的任务可以完成'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有进行中的任务可以完成'}, status=status.HTTP_400_BAD_REQUEST)
             task.status = 'COMPLETED'
             task.actual_end = timezone.now()
             task.progress = 100

@@ -288,7 +288,7 @@ class DataSourceSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'last_connected_at', 'last_error']
 
-    def get_data_points_count(self, obj):
+    def get_data_points_count(self, obj) -> int:
         return obj.data_points.count()
 
 

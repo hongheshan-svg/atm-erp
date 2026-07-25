@@ -357,9 +357,7 @@ class BatchRFQService:
 
                 # 获取历史价格(可选参考)
                 last_price_record = (
-                    ItemPriceHistory.objects.filter(item=line.item, is_deleted=False)
-                    .order_by('-price_date')
-                    .first()
+                    ItemPriceHistory.objects.filter(item=line.item, is_deleted=False).order_by('-price_date').first()
                 )
 
                 RFQLine.objects.create(
@@ -380,9 +378,7 @@ class BatchRFQService:
 
             # 受邀供应商(去重)
             for supplier_id in dict.fromkeys(supplier_ids):
-                RFQSupplier.objects.get_or_create(
-                    rfq=rfq, supplier_id=supplier_id, defaults={'created_by': user}
-                )
+                RFQSupplier.objects.get_or_create(rfq=rfq, supplier_id=supplier_id, defaults={'created_by': user})
 
             logger.info(f'Created RFQ {rfq.rfq_no} from purchase request {pr.request_no} with {len(pr_lines)} lines')
 

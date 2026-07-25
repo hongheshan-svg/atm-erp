@@ -1,7 +1,7 @@
 <template>
   <div class="routing-template-detail">
     <el-page-header @back="goBack" :content="pageTitle" />
-    
+
     <el-card class="detail-card" v-loading="loading">
       <template #header><span>模板信息</span></template>
       <el-descriptions :column="3" border>
@@ -14,7 +14,7 @@
         <el-descriptions-item label="描述" :span="3">{{ template.description }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-    
+
     <el-card class="operations-card">
       <template #header><span>工序列表</span></template>
       <el-table :data="template.operations || []" stripe>
@@ -45,9 +45,9 @@ const pageTitle = computed(() => template.value.name ? `工艺模板 - ${templat
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getRoutingTemplate(route.params.id)
+    const res = await getRoutingTemplate(Number(route.params.id))
     template.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false

@@ -142,7 +142,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'publisher', 'view_count']
 
-    def get_is_read(self, obj):
+    def get_is_read(self, obj) -> bool:
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False
@@ -180,7 +180,7 @@ class AnnouncementListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_is_read(self, obj):
+    def get_is_read(self, obj) -> bool:
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return False

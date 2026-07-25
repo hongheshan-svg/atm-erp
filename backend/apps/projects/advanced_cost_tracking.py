@@ -492,6 +492,7 @@ class CostVarianceAnalysisSerializer(serializers.ModelSerializer):
 
 class StandardCostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """标准成本分类"""
+
     permission_module = 'projects'
     permission_resource = 'standard_cost_category'
 
@@ -520,6 +521,7 @@ class StandardCostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
 
 class LaborRateStandardViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率标准"""
+
     permission_module = 'projects'
     permission_resource = 'labor_rate_standard'
 
@@ -542,6 +544,7 @@ class LaborRateStandardViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class ProjectCostDetailViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目成本明细"""
+
     permission_module = 'projects'
     permission_resource = 'project_cost_detail'
 
@@ -581,6 +584,7 @@ class ProjectCostDetailViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class ProjectCostSummaryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """项目成本汇总"""
+
     permission_module = 'projects'
     permission_resource = 'project_cost_summary'
 
@@ -616,6 +620,7 @@ class ProjectCostSummaryViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CostVarianceAnalysisViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """成本差异分析"""
+
     permission_module = 'projects'
     permission_resource = 'cost_variance_analysis'
 

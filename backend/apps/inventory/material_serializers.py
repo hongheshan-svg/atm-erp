@@ -86,12 +86,12 @@ class MaterialRequisitionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['requisition_no', 'requestor', 'warehouse_operator', 'issue_date']
 
-    def get_requestor_name(self, obj):
+    def get_requestor_name(self, obj) -> str:
         if obj.requestor:
             return f'{obj.requestor.last_name}{obj.requestor.first_name}' or obj.requestor.username
         return ''
 
-    def get_warehouse_operator_name(self, obj):
+    def get_warehouse_operator_name(self, obj) -> str:
         if obj.warehouse_operator:
             return (
                 f'{obj.warehouse_operator.last_name}{obj.warehouse_operator.first_name}'
@@ -180,12 +180,12 @@ class MaterialRequisitionListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_requestor_name(self, obj):
+    def get_requestor_name(self, obj) -> str:
         if obj.requestor:
             return f'{obj.requestor.last_name}{obj.requestor.first_name}' or obj.requestor.username
         return ''
 
-    def get_line_count(self, obj):
+    def get_line_count(self, obj) -> int:
         return obj.lines.count()
 
 
@@ -275,12 +275,12 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['return_no', 'requestor', 'warehouse_operator', 'receive_date']
 
-    def get_requestor_name(self, obj):
+    def get_requestor_name(self, obj) -> str:
         if obj.requestor:
             return f'{obj.requestor.last_name}{obj.requestor.first_name}' or obj.requestor.username
         return ''
 
-    def get_warehouse_operator_name(self, obj):
+    def get_warehouse_operator_name(self, obj) -> str:
         if obj.warehouse_operator:
             return (
                 f'{obj.warehouse_operator.last_name}{obj.warehouse_operator.first_name}'
@@ -372,10 +372,10 @@ class MaterialReturnListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_requestor_name(self, obj):
+    def get_requestor_name(self, obj) -> str:
         if obj.requestor:
             return f'{obj.requestor.last_name}{obj.requestor.first_name}' or obj.requestor.username
         return ''
 
-    def get_line_count(self, obj):
+    def get_line_count(self, obj) -> int:
         return obj.lines.count()

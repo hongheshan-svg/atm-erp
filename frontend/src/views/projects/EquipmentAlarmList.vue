@@ -2,7 +2,7 @@
   <div class="equipment-alarm-list">
     <el-card>
       <template #header><span>设备告警记录</span></template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="告警级别">
           <el-select v-model="filters.severity" clearable @change="loadData">
@@ -19,19 +19,19 @@
           </el-select>
         </el-form-item>
       </el-form>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="equipment_name" label="设备" width="150" />
@@ -54,7 +54,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
   </div>
@@ -76,29 +76,29 @@ const pageSize = ref(20)
 const total = ref(0)
 const filters = ref({ severity: null, status: null })
 
-const getSeverityType = (s) => ({ 'CRITICAL': 'danger', 'WARNING': 'warning', 'INFO': 'info' }[s] || 'info')
-const getStatusType = (s) => ({ 'ACTIVE': 'danger', 'ACKNOWLEDGED': 'warning', 'RESOLVED': 'success' }[s] || 'info')
+const getSeverityType = (s: any) => (({ 'CRITICAL': 'danger', 'WARNING': 'warning', 'INFO': 'info' } as Record<string, any>)[s] || 'info')
+const getStatusType = (s: any) => (({ 'ACTIVE': 'danger', 'ACKNOWLEDGED': 'warning', 'RESOLVED': 'success' } as Record<string, any>)[s] || 'info')
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = { page: page.value, page_size: pageSize.value, ...filters.value }
+    const params: Record<string, any> = { page: page.value, page_size: pageSize.value, ...filters.value }
     const res = await getEquipmentAlarmList(params)
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleAck = async (row) => {
+const handleAck = async (row: any) => {
   try {
     await acknowledgeEquipmentAlarm(row.id)
     ElMessage.success('已确认')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }

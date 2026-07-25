@@ -229,9 +229,9 @@ class CostCalculationService:
         if not df_labor.empty:
             df_labor['total_cost'] = df_labor['actual_hours'] * df_labor['hourly_rate']
             df_labor['full_name'] = df_labor.apply(
-                lambda x: f"{x['user__first_name']} {x['user__last_name']}"
-                if x['user__first_name']
-                else x['user__username'],
+                lambda x: (
+                    f'{x["user__first_name"]} {x["user__last_name"]}' if x['user__first_name'] else x['user__username']
+                ),
                 axis=1,
             )
             df_labor = df_labor[['full_name', 'role', 'hourly_rate', 'allocated_hours', 'actual_hours', 'total_cost']]

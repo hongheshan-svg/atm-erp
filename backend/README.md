@@ -4,9 +4,9 @@
 
 ## 技术栈
 
-- **Python 3.10+**
-- **Django 4.2.9** - Web 框架
-- **Django REST Framework** - API 开发
+- **Python 3.11+**
+- **Django 5.2 LTS** - Web 框架
+- **Django REST Framework 3.17** - API 开发
 - **PostgreSQL** - 数据库
 - **Redis** - 缓存和 Celery Broker
 - **Celery** - 异步任务队列
@@ -267,4 +267,3 @@ MIT License
 ## 联系方式
 
 如有问题请联系项目维护者。
-

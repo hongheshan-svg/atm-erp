@@ -3,11 +3,11 @@
 # celery-beat + nginx + upgrade-relay 六个服务,部署只需 postgres + redis + app + updater 共 4 个。
 
 # ============ Stage 1: 构建前端 ============
-FROM node:20-alpine AS fe
+FROM node:22-alpine AS fe
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 WORKDIR /fe
 COPY frontend/package*.json ./
-RUN npm config set registry ${NPM_REGISTRY} && npm install --legacy-peer-deps
+RUN npm config set registry ${NPM_REGISTRY} && npm ci
 COPY frontend/ ./
 ENV VITE_API_BASE_URL=/api
 RUN npm run build
@@ -21,6 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     PIP_DEFAULT_TIMEOUT=300 \
     PIP_RETRIES=5
 WORKDIR /app
@@ -32,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip config set global.index-url ${PIP_INDEX_URL} \
     && pip config set global.trusted-host ${PIP_TRUSTED_HOST}
+RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2 setuptools==83.0.0 wheel
 
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt gunicorn \
@@ -47,13 +49,15 @@ COPY --from=fe /fe/dist /var/www/erp
 # nginx 配置(把 upstream backend 指到容器内 127.0.0.1:8000)+ supervisord
 COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
 RUN sed -i 's#server backend:8000;#server 127.0.0.1:8000;#' /etc/nginx/nginx.conf
-COPY docker/app/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/app/supervisord.conf /etc/supervisor/supervisord.conf
 
 # 复用后端 entrypoint(等 pg/redis + RUN_BOOTSTRAP 迁移/初始化/建超管,最后 exec "$@")
 COPY docker/backend/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh \
-    && mkdir -p /app/staticfiles /app/logs /app/uploads /var/log/nginx /var/cache/nginx /var/lib/nginx
+RUN groupadd -r erp && useradd -r -g erp erp \
+    && chmod +x /entrypoint.sh \
+    && mkdir -p /app/staticfiles /app/logs /app/uploads /app/backups /var/log/nginx /var/cache/nginx /var/lib/nginx \
+    && chown -R erp:erp /app/logs /app/uploads /app/backups
 
 EXPOSE 80 443
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf", "-n"]
+CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf", "-n"]

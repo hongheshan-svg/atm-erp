@@ -90,10 +90,10 @@
             <el-button size="small" type="success" @click="handleConvert(row)" v-if="row.status !== 'CONVERTED' && row.status !== 'DISQUALIFIED'">转化</el-button>
             <el-button size="small" type="warning" @click="handleDisqualify(row)" v-if="row.status !== 'CONVERTED' && row.status !== 'DISQUALIFIED'">作废</el-button>
             <!-- 仅管理员显示删除按钮 -->
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -214,6 +214,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import {
   getLeadList,
   getLead,
@@ -252,13 +253,13 @@ const dialogTitle = ref('新建线索')
 const leads = ref<any[]>([])
 const total = ref(0)
 const sourceOptions = ref<any[]>([])
-const statistics = reactive({
+const statistics = reactive<Record<string, any>>({
   total: 0,
   by_status: {},
   conversion_rate: 0
 })
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: '',
   source: '',
@@ -266,8 +267,8 @@ const queryParams = reactive({
   page_size: 20
 })
 
-const formRef = ref(null)
-const formData = reactive({
+const formRef = ref<any>(null)
+const formData = reactive<Record<string, any>>({
   id: null,
   company_name: '',
   contact_name: '',
@@ -281,7 +282,7 @@ const formData = reactive({
   address: ''
 })
 
-const convertData = reactive({
+const convertData = reactive<Record<string, any>>({
   lead_id: null,
   create_customer: true,
   customer_id: null,
@@ -297,14 +298,30 @@ const formRules = {
   contact_name: [{ required: true, message: '请输入联系人', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { NEW: 'info', CONTACTED: '', QUALIFIED: 'warning', CONVERTED: 'success', DISQUALIFIED: 'danger' }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+const batchExport = () => {
+  const rows = selectedRows.value.map((lead: any) => ({
+    线索编号: lead.lead_no,
+    公司名称: lead.company_name,
+    联系人: lead.contact_name,
+    电话: lead.contact_phone,
+    行业: lead.industry,
+    来源: lead.source_name,
+    状态: lead.status_display || lead.status,
+    创建时间: formatDate(lead.created_at),
+  }))
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), '销售线索')
+  XLSX.writeFile(workbook, `销售线索_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 const fetchData = async () => {
@@ -318,7 +335,7 @@ const fetchData = async () => {
     leads.value = listRes.results || listRes || []
     total.value = listRes.count || leads.value.length
     Object.assign(statistics, statsRes || {})
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -330,7 +347,7 @@ const fetchSources = async () => {
     const res = await getLeadSourceList({ is_active: true })
     // request.js已返回response.data，无需再访问.data
     sourceOptions.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取来源失败', error)
   }
 }
@@ -358,7 +375,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑线索'
   try {
     // 列表序列化器缺部分字段，先 GET 详情回填，避免残留上一条记录的值被写库
@@ -377,12 +394,12 @@ const handleEdit = async (row) => {
       address: detail.address ?? ''
     })
     dialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载线索详情失败')
   }
 }
 
-const handleDisqualify = (row) => {
+const handleDisqualify = (row: any) => {
   ElMessageBox.prompt('请输入作废原因', '作废线索', {
     inputType: 'textarea'
   }).then(async ({ value }) => {
@@ -390,7 +407,7 @@ const handleDisqualify = (row) => {
       await disqualifyLead(row.id, { reason: value || '' })
       ElMessage.success('线索已作废')
       fetchData()
-    } catch (e) {
+    } catch (e: any) {
       ElMessage.error('作废失败')
     }
   }).catch(() => {})
@@ -411,14 +428,14 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     submitting.value = false
   }
 }
 
-const handleConvert = (row) => {
+const handleConvert = (row: any) => {
   convertData.lead_id = row.id
   convertData.opportunity_name = `${row.company_name}商机`
   convertData.create_customer = true
@@ -440,7 +457,7 @@ const submitConvert = async () => {
     ElMessage.success('转化成功')
     convertDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('转化失败')
   } finally {
     converting.value = false
@@ -451,7 +468,7 @@ const fetchCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customerOptions.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取客户列表失败', error)
   }
 }
@@ -483,24 +500,24 @@ onMounted(() => {
   padding: 16px;
   background: #f5f7fa;
   border-radius: 8px;
-  
+
   .stat-value {
     font-size: 28px;
     font-weight: 600;
     color: #303133;
   }
-  
+
   .stat-label {
     font-size: 13px;
     color: #909399;
     margin-top: 4px;
   }
-  
+
   &.new {
     background: #ecf5ff;
     .stat-value { color: #409EFF; }
   }
-  
+
   &.success {
     background: #f0f9eb;
     .stat-value { color: #67C23A; }

@@ -11,8 +11,8 @@ from rest_framework.response import Response
 
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_models_new import DataScope, Permission
-from apps.core.permissions import IsSystemAdmin
 from apps.core.permission_serializers import DataScopeSerializer, PermissionSerializer
+from apps.core.permissions import IsSystemAdmin
 
 
 class PermissionViewSet(PermissionMixin, viewsets.ModelViewSet):

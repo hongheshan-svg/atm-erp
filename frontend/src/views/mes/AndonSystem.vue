@@ -9,7 +9,7 @@
         <el-button @click="handleViewBoard">工位看板</el-button>
       </div>
     </div>
-    
+
     <!-- 状态概览 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="4">
@@ -49,7 +49,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-row :gutter="16">
       <!-- 待处理呼叫 -->
       <el-col :span="16">
@@ -63,19 +63,19 @@
               </el-radio-group>
             </div>
           </template>
-          
+
           <!-- 批量操作 -->
-          
+
           <div v-if="selectedRows.length > 0" class="batch-toolbar">
-          
+
             <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-          
+
             <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-          
+
             <el-button size="small" @click="batchExport">导出选中</el-button>
-          
+
           </div>
-          
+
           <el-table :data="callList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="45" />
             <el-table-column prop="call_no" label="呼叫编号" width="120" fixed />
@@ -126,7 +126,7 @@
               </template>
             </el-table-column>
           </el-table>
-          
+
           <el-pagination
             v-model:current-page="pagination.page"
             v-model:page-size="pagination.size"
@@ -137,12 +137,12 @@
           />
         </el-card>
       </el-col>
-      
+
       <!-- 工位状态 -->
       <el-col :span="8">
         <el-card shadow="never" header="工位状态" class="station-card">
           <div class="station-grid">
-            <div v-for="station in stationList" :key="station.id" 
+            <div v-for="station in stationList" :key="station.id"
               class="station-item" :class="station.status.toLowerCase()"
               @click="handleStationClick(station)">
               <div class="station-code">{{ station.code }}</div>
@@ -153,14 +153,14 @@
             </div>
           </div>
         </el-card>
-        
+
         <!-- 今日统计 -->
         <el-card shadow="never" header="今日统计" style="margin-top: 16px">
           <div ref="statsChartRef" style="height: 200px"></div>
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 发起呼叫对话框 -->
     <el-dialog v-model="callDialogVisible" title="发起安灯呼叫" width="600px">
       <el-form :model="callForm" :rules="callRules" ref="callFormRef" label-width="100px">
@@ -171,7 +171,7 @@
         </el-form-item>
         <el-form-item label="异常类型" prop="andon_type">
           <el-select v-model="callForm.andon_type" placeholder="选择类型" style="width: 100%">
-            <el-option v-for="t in andonTypes" :key="t.id" 
+            <el-option v-for="t in andonTypes" :key="t.id"
               :label="t.name" :value="t.id">
               <span :style="{ color: t.color }">●</span> {{ t.name }}
             </el-option>
@@ -189,7 +189,7 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="详细描述">
-          <el-input v-model="callForm.description" type="textarea" :rows="4" 
+          <el-input v-model="callForm.description" type="textarea" :rows="4"
             placeholder="详细描述异常情况..." />
         </el-form-item>
         <el-form-item label="批次号">
@@ -201,7 +201,7 @@
         <el-button type="danger" @click="submitCall" :loading="submitLoading">发起呼叫</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 呼叫详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentCall?.call_no" width="800px">
       <div v-if="currentCall" class="call-detail">
@@ -228,12 +228,12 @@
             {{ currentCall.resolution }}
           </el-descriptions-item>
         </el-descriptions>
-        
+
         <!-- 处理记录 -->
         <h4 style="margin: 16px 0 12px">处理记录</h4>
         <el-timeline>
-          <el-timeline-item 
-            v-for="action in currentCall.actions" 
+          <el-timeline-item
+            v-for="action in currentCall.actions"
             :key="action.id"
             :timestamp="formatDateTime(action.action_time)"
             :type="getActionType(action.action_type)">
@@ -246,12 +246,12 @@
         </el-timeline>
       </div>
     </el-dialog>
-    
+
     <!-- 解决问题对话框 -->
     <el-dialog v-model="resolveDialogVisible" title="解决问题" width="500px">
       <el-form :model="resolveForm" label-width="80px">
         <el-form-item label="解决方案">
-          <el-input v-model="resolveForm.resolution" type="textarea" :rows="4" 
+          <el-input v-model="resolveForm.resolution" type="textarea" :rows="4"
             placeholder="请描述解决方案..." />
         </el-form-item>
       </el-form>
@@ -260,7 +260,7 @@
         <el-button type="success" @click="submitResolve" :loading="submitLoading">确认解决</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 升级对话框 -->
     <el-dialog v-model="escalateDialogVisible" title="升级呼叫" width="500px">
       <el-form :model="escalateForm" label-width="80px">
@@ -290,12 +290,12 @@
         <el-button type="warning" @click="submitEscalate" :loading="submitLoading">确认升级</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 工位看板对话框 -->
     <el-dialog v-model="boardDialogVisible" title="工位状态看板" width="90%" top="5vh" fullscreen>
       <div class="board-container">
         <div class="board-grid">
-          <div v-for="station in stationList" :key="station.id" 
+          <div v-for="station in stationList" :key="station.id"
             class="board-item" :class="station.status.toLowerCase()">
             <div class="board-status-indicator"></div>
             <div class="board-code">{{ station.code }}</div>
@@ -313,12 +313,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
 import { getAndonCallList, getPendingAndonCalls, getAndonStatusBoard, getAndonStationList, getAndonTypeList, getAndonStatistics, createAndonCall, getAndonCallDetail, respondAndon, resolveAndon, escalateAndon } from '@/api/mes'
 import { getUserList } from '@/api/accounts'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/andon-calls/', { onSuccess: () => fetchCalls() })
@@ -336,7 +336,7 @@ const callStats = ref<Record<string, any>>({})
 const stationSummary = ref<Record<string, any>>({})
 const avgResponseTime = ref(0)
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -344,8 +344,8 @@ const pagination = reactive({
 
 // 发起呼叫
 const callDialogVisible = ref(false)
-const callFormRef = ref(null)
-const callForm = reactive({
+const callFormRef = ref<any>(null)
+const callForm = reactive<Record<string, any>>({
   station: null,
   andon_type: null,
   title: '',
@@ -361,14 +361,14 @@ const callRules = {
 
 // 呼叫详情
 const detailDialogVisible = ref(false)
-const currentCall = ref(null)
+const currentCall = ref<any>(null)
 
 // 解决问题
 const resolveDialogVisible = ref(false)
-const resolveForm = reactive({
+const resolveForm = reactive<Record<string, any>>({
   resolution: ''
 })
-const resolveCallId = ref(null)
+const resolveCallId = ref<any>(null)
 
 // 升级
 const escalateDialogVisible = ref(false)
@@ -377,20 +377,20 @@ const userLabel = (u: any) => {
   const name = [u.first_name, u.last_name].filter(Boolean).join('')
   return name || u.username
 }
-const escalateForm = reactive({
+const escalateForm = reactive<Record<string, any>>({
   escalated_to: null,
   reason: ''
 })
-const escalateCallId = ref(null)
+const escalateCallId = ref<any>(null)
 
 // 看板
 const boardDialogVisible = ref(false)
 
 // 统计图表
-const statsChartRef = ref(null)
-let statsChart = null
+const statsChartRef = ref<any>(null)
+let statsChart: any = null
 
-let refreshTimer = null
+let refreshTimer: any = null
 
 const fetchCalls = async () => {
   loading.value = true
@@ -407,7 +407,7 @@ const fetchCalls = async () => {
     }
     callList.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -418,14 +418,14 @@ const fetchStations = async () => {
   try {
     const data = await getAndonStatusBoard()
     stationList.value = data.stations || []
-    
+
     // 计算状态统计
     const summary = {}
-    data.summary?.forEach(s => {
-      summary[s.current_status] = s.count
+    data.summary?.forEach((s: any) => {
+      (summary as Record<string, any>)[s.current_status] = s.count
     })
     stationSummary.value = summary
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -440,7 +440,7 @@ const fetchOptions = async () => {
     stations.value = stationsRes.results || stationsRes || []
     andonTypes.value = typesRes.results || typesRes || []
     userOptions.value = usersRes.results || usersRes || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -448,37 +448,37 @@ const fetchOptions = async () => {
 const fetchStats = async () => {
   try {
     const data = await getAndonStatistics({ days: 1 })
-    
+
     const byStatus = {}
-    data.by_status?.forEach(s => {
-      byStatus[s.status.toLowerCase()] = s.count
+    data.by_status?.forEach((s: any) => {
+      (byStatus as Record<string, any>)[s.status.toLowerCase()] = s.count
     })
     callStats.value = byStatus
-    
+
     avgResponseTime.value = Math.round(data.avg_times?.avg_response || 0)
-    
+
     // 渲染图表
     await nextTick()
     renderStatsChart(data)
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
 
-const renderStatsChart = (data) => {
+const renderStatsChart = (data: any) => {
   if (!statsChartRef.value) return
-  
+
   if (statsChart) statsChart.dispose()
   statsChart = echarts.init(statsChartRef.value)
-  
+
   const byType = data.by_type || []
-  
+
   statsChart.setOption({
     tooltip: { trigger: 'item' },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      data: byType.map(t => ({
+      data: byType.map((t: any) => ({
         name: t.andon_type__name || '未分类',
         value: t.count
       })),
@@ -510,7 +510,7 @@ const handleNewCall = () => {
 const submitCall = async () => {
   const valid = await callFormRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     await createAndonCall(callForm)
@@ -519,36 +519,36 @@ const submitCall = async () => {
     fetchCalls()
     fetchStations()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('发起呼叫失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleViewCall = async (row) => {
+const handleViewCall = async (row: any) => {
   try {
     const data = await getAndonCallDetail(row.id)
     currentCall.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleRespond = async (row) => {
+const handleRespond = async (row: any) => {
   try {
     await respondAndon(row.id)
     ElMessage.success('已响应')
     fetchCalls()
     fetchStations()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleResolve = (row) => {
+const handleResolve = (row: any) => {
   resolveCallId.value = row.id
   resolveForm.resolution = ''
   resolveDialogVisible.value = true
@@ -565,14 +565,14 @@ const submitResolve = async () => {
     fetchCalls()
     fetchStations()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleEscalate = (row) => {
+const handleEscalate = (row: any) => {
   escalateCallId.value = row.id
   escalateForm.escalated_to = null
   escalateForm.reason = ''
@@ -590,14 +590,14 @@ const submitEscalate = async () => {
     escalateDialogVisible.value = false
     fetchCalls()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleStationClick = (station) => {
+const handleStationClick = (station: any) => {
   if (station.active_call) {
     handleViewCall(station.active_call)
   }
@@ -607,17 +607,17 @@ const handleViewBoard = () => {
   boardDialogVisible.value = true
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const types = {
     LOW: 'info',
     MEDIUM: '',
     HIGH: 'warning',
     CRITICAL: 'danger'
   }
-  return types[priority] || ''
+  return (types as Record<string, any>)[priority] || ''
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     PENDING: 'danger',
     RESPONDING: 'warning',
@@ -626,10 +626,10 @@ const getStatusType = (status) => {
     ESCALATED: 'danger',
     CANCELLED: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getActionType = (actionType) => {
+const getActionType = (actionType: any) => {
   const types = {
     RESPONSE: 'success',
     UPDATE: 'primary',
@@ -638,22 +638,22 @@ const getActionType = (actionType) => {
     RESOLVE: 'success',
     CLOSE: 'info'
   }
-  return types[actionType] || ''
+  return (types as Record<string, any>)[actionType] || ''
 }
 
-const getTimeClass = (minutes, limit) => {
+const getTimeClass = (minutes: any, limit: any) => {
   if (minutes > limit) return 'time-over'
   if (minutes > limit * 0.8) return 'time-warning'
   return 'time-ok'
 }
 
-const getWaitingTime = (callTime) => {
+const getWaitingTime = (callTime: any) => {
   if (!callTime) return 0
   const diff = Date.now() - new Date(callTime).getTime()
   return Math.round(diff / 60000)
 }
 
-const formatDateTime = (datetime) => {
+const formatDateTime = (datetime: any) => {
   if (!datetime) return ''
   return new Date(datetime).toLocaleString('zh-CN')
 }
@@ -667,7 +667,7 @@ const refreshData = () => {
 onMounted(() => {
   fetchOptions()
   refreshData()
-  
+
   // 自动刷新
   refreshTimer = setInterval(refreshData, 30000)
 })
@@ -870,8 +870,8 @@ onUnmounted(() => {
 
 .board-item.green .board-status-indicator { background: #67c23a; }
 .board-item.yellow .board-status-indicator { background: #e6a23c; }
-.board-item.red .board-status-indicator { 
-  background: #f56c6c; 
+.board-item.red .board-status-indicator {
+  background: #f56c6c;
   animation: flash 0.5s infinite;
 }
 

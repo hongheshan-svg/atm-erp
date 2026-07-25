@@ -2,12 +2,12 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#409EFF">
     <meta name="description" content="企业资源管理系统 - ERP">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="manifest" href="%BASE_URL%manifest.json">
+    <link rel="apple-touch-icon" href="%BASE_URL%icon-192x192.png">
     <title>ERP管理系统</title>
   </head>
   <body>
@@ -20,7 +20,7 @@
       /*
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/erp/sw.js')
             .then(registration => console.log('SW registered:', registration.scope))
             .catch(error => console.log('SW registration failed:', error))
         })
@@ -29,4 +29,3 @@
     </script>
   </body>
 </html>
-

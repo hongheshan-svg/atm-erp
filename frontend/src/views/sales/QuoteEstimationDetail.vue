@@ -1,7 +1,7 @@
 <template>
   <div class="quote-estimation-detail">
     <el-page-header @back="goBack" :content="pageTitle" />
-    
+
     <el-card class="detail-card" v-loading="loading">
       <template #header>
         <div class="card-header">
@@ -13,7 +13,7 @@
           </div>
         </div>
       </template>
-      
+
       <el-descriptions :column="3" border>
         <el-descriptions-item label="估算编号">{{ estimation.estimation_no }}</el-descriptions-item>
         <el-descriptions-item label="项目名称">{{ estimation.project_name }}</el-descriptions-item>
@@ -25,12 +25,12 @@
         <el-descriptions-item label="创建人">{{ estimation.created_by_name }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-    
+
     <el-card class="cost-summary" v-if="estimation.id">
       <template #header>
         <span>成本汇总</span>
       </template>
-      
+
       <el-row :gutter="20">
         <el-col :span="6">
           <div class="cost-item">
@@ -57,9 +57,9 @@
           </div>
         </el-col>
       </el-row>
-      
+
       <el-divider />
-      
+
       <el-row :gutter="20">
         <el-col :span="8">
           <div class="cost-item success">
@@ -81,13 +81,13 @@
         </el-col>
       </el-row>
     </el-card>
-    
+
     <!-- 成本明细 -->
     <el-card class="cost-details" v-if="estimation.id">
       <template #header>
         <span>成本明细</span>
       </template>
-      
+
       <el-tabs v-model="activeTab">
         <el-tab-pane label="材料明细" name="material">
           <el-table :data="estimation.material_items || []" stripe>
@@ -103,7 +103,7 @@
             </el-table-column>
           </el-table>
         </el-tab-pane>
-        
+
         <el-tab-pane label="人工明细" name="labor">
           <el-table :data="estimation.labor_items || []" stripe>
             <el-table-column prop="work_type_display" label="工种" />
@@ -117,7 +117,7 @@
             </el-table-column>
           </el-table>
         </el-tab-pane>
-        
+
         <el-tab-pane label="外协明细" name="outsource">
           <el-table :data="estimation.outsource_items || []" stripe>
             <el-table-column prop="process_name" label="工序名称" />
@@ -131,7 +131,7 @@
             </el-table-column>
           </el-table>
         </el-tab-pane>
-        
+
         <el-tab-pane label="其他成本" name="other">
           <el-table :data="estimation.other_costs || []" stripe>
             <el-table-column prop="cost_type_display" label="成本类型" />
@@ -167,7 +167,7 @@ const canEdit = computed(() => estimation.value.status === 'DRAFT')
 const canCalculate = computed(() => ['DRAFT', 'CALCULATED'].includes(estimation.value.status))
 const canSubmit = computed(() => estimation.value.status === 'CALCULATED')
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'CALCULATED': 'warning',
@@ -175,21 +175,21 @@ const getStatusType = (status) => {
     'APPROVED': 'success',
     'REJECTED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getProfitClass = (rate) => {
+const getProfitClass = (rate: any) => {
   if (rate >= 0.3) return 'success'
   if (rate >= 0.15) return 'warning'
   return 'danger'
 }
 
-const formatMoney = (value) => {
+const formatMoney = (value: any) => {
   if (!value) return '0.00'
   return parseFloat(value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const formatPercent = (value) => {
+const formatPercent = (value: any) => {
   if (!value) return '0.00'
   return (parseFloat(value) * 100).toFixed(2)
 }
@@ -197,9 +197,9 @@ const formatPercent = (value) => {
 const loadEstimation = async () => {
   loading.value = true
   try {
-    const res = await getQuoteEstimation(route.params.id)
+    const res = await getQuoteEstimation(Number(route.params.id))
     estimation.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载估算详情失败')
   } finally {
     loading.value = false
@@ -211,25 +211,25 @@ const goBack = () => {
 }
 
 const handleEdit = () => {
-  router.push({ name: 'QuoteEstimationEdit', params: { id: route.params.id } })
+  router.push({ name: 'QuoteEstimationEdit', params: { id: Number(route.params.id) } })
 }
 
 const handleCalculate = async () => {
   try {
-    await calculateQuoteEstimation(route.params.id)
+    await calculateQuoteEstimation(Number(route.params.id))
     ElMessage.success('重新核算成功')
     loadEstimation()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('核算失败')
   }
 }
 
 const handleSubmit = async () => {
   try {
-    await submitQuoteEstimation(route.params.id)
+    await submitQuoteEstimation(Number(route.params.id))
     ElMessage.success('提交审核成功')
     loadEstimation()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('提交失败')
   }
 }

@@ -24,7 +24,7 @@ export function assignAfterSalesOrder(id: number, data: any) {
 export function startService(id: number) {
   return request({ url: `/projects/aftersales/${id}/start_service/`, method: 'post' })
 }
-export function onSiteService(id: number, data: any) {
+export function onSiteService(id: number, data: any = {}) {
   return request({ url: `/projects/aftersales/${id}/on_site/`, method: 'post', data })
 }
 export function waitingParts(id: number) {

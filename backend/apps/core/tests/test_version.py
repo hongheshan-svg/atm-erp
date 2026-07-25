@@ -1,4 +1,5 @@
 from django.test import SimpleTestCase
+
 from apps.core.version import compare_versions, get_app_version, get_deploy_mode
 
 

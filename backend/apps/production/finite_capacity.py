@@ -198,9 +198,7 @@ class FiniteCapacityPlanSerializer(serializers.ModelSerializer):
 # ─── ViewSets ───────────────────────────────────────────────────
 
 
-class FiniteCapacityPlanViewSet(
-    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
-):
+class FiniteCapacityPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'production'
     permission_resource = 'finite_capacity_plan'
     serializer_class = FiniteCapacityPlanSerializer
@@ -235,24 +233,26 @@ class FiniteCapacityPlanViewSet(
         tasks = plan.tasks.filter(is_deleted=False).order_by('start_time')
         gantt_items = []
         for task in tasks:
-            gantt_items.append({
-                'id': task.id,
-                'name': task.work_order,
-                'start': task.start_time.isoformat() if task.start_time else None,
-                'end': task.end_time.isoformat() if task.end_time else None,
-                'resource': task.resource,
-                'status': task.status,
-                'sequence': task.sequence,
-            })
-        return Response({
-            'plan': FiniteCapacityPlanSerializer(plan).data,
-            'gantt_items': gantt_items,
-        })
+            gantt_items.append(
+                {
+                    'id': task.id,
+                    'name': task.work_order,
+                    'start': task.start_time.isoformat() if task.start_time else None,
+                    'end': task.end_time.isoformat() if task.end_time else None,
+                    'resource': task.resource,
+                    'status': task.status,
+                    'sequence': task.sequence,
+                }
+            )
+        return Response(
+            {
+                'plan': FiniteCapacityPlanSerializer(plan).data,
+                'gantt_items': gantt_items,
+            }
+        )
 
 
-class ScheduledTaskViewSet(
-    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
-):
+class ScheduledTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     permission_module = 'production'
     permission_resource = 'scheduled_task'
     serializer_class = ScheduledTaskSerializer

@@ -9,7 +9,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 统计卡片 -->
       <el-row :gutter="20" class="stats-row">
         <el-col :span="4">
@@ -31,7 +31,7 @@
           <el-statistic title="即将过保" :value="stats.warranty_expiring" :value-style="{ color: '#f56c6c' }" />
         </el-col>
       </el-row>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="设备编号">
@@ -62,7 +62,7 @@
           <el-button @click="resetSearch">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 数据表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -102,7 +102,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -115,7 +115,7 @@
         style="margin-top: 20px;"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px">
       <el-tabs v-model="activeTab">
@@ -183,7 +183,7 @@
             </el-row>
           </el-form>
         </el-tab-pane>
-        
+
         <el-tab-pane label="铭牌信息" name="nameplate">
           <el-form :model="formData" label-width="120px">
             <el-row :gutter="20">
@@ -224,7 +224,7 @@
             </el-row>
           </el-form>
         </el-tab-pane>
-        
+
         <el-tab-pane label="质保信息" name="warranty">
           <el-form :model="formData" label-width="120px">
             <el-row :gutter="20">
@@ -265,7 +265,7 @@
         <el-button type="primary" @click="handleSubmit">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 铭牌对话框 -->
     <el-dialog v-model="nameplateVisible" title="设备铭牌" width="600px">
       <div class="nameplate-card" v-if="currentEquipment">
@@ -353,17 +353,17 @@ const loading = ref(false)
 const maintDialogVisible = ref(false)
 const maintRecords = ref<any[]>([])
 const maintLoading = ref(false)
-const currentEquipment = ref(null)
+const currentEquipment = ref<any>(null)
 const tableData = ref<any[]>([])
 const projects = ref<any[]>([])
 const customers = ref<any[]>([])
 const dialogVisible = ref(false)
 const nameplateVisible = ref(false)
 const dialogTitle = ref('新增设备档案')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const activeTab = ref('basic')
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   total: 0,
   manufacturing: 0,
   running: 0,
@@ -372,19 +372,19 @@ const stats = reactive({
   warranty_expiring: 0
 })
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   equipment_no: '',
   equipment_type: '',
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   equipment_no: '',
   serial_number: '',
@@ -419,7 +419,7 @@ const formRules = {
   customer: [{ required: true, message: '请选择客户', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'MANUFACTURING': 'info',
     'TESTING': 'warning',
@@ -429,21 +429,21 @@ const getStatusType = (status) => {
     'MAINTENANCE': 'warning',
     'DECOMMISSIONED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const isWarrantyExpiring = (date) => {
+const isWarrantyExpiring = (date: any) => {
   if (!date) return false
   const warrantyDate = new Date(date)
   const today = new Date()
-  const diffDays = (warrantyDate - today) / (1000 * 60 * 60 * 24)
+  const diffDays = (warrantyDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   return diffDays <= 30 && diffDays >= 0
 }
 
 const loadData = async () => {
   try {
     loading.value = true
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -451,7 +451,7 @@ const loadData = async () => {
     const res = await getEquipmentArchiveList(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败:', error)
   } finally {
     loading.value = false
@@ -467,7 +467,7 @@ const loadStats = async () => {
     stats.maintenance = res.by_status?.MAINTENANCE?.count || 0
     stats.delivered = res.by_status?.DELIVERED?.count || 0
     stats.warranty_expiring = res.warranty_expiring_30_days || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -476,7 +476,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -485,7 +485,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
@@ -517,37 +517,37 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   Object.assign(formData, row)
   dialogTitle.value = '编辑设备档案'
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   Object.assign(formData, row)
   dialogTitle.value = '查看设备档案'
   dialogVisible.value = true
 }
 
-const handleNameplate = async (row) => {
+const handleNameplate = async (row: any) => {
   try {
     const res = await getEquipmentArchiveNameplate(row.id)
     currentEquipment.value = { ...row, ...res }
     nameplateVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     currentEquipment.value = row
     nameplateVisible.value = true
   }
 }
 
-const handleMaintenance = async (row) => {
+const handleMaintenance = async (row: any) => {
   currentEquipment.value = row
   maintDialogVisible.value = true
   maintLoading.value = true
   try {
     const res = await getEquipmentArchiveMaintenanceRecords(row.id)
     maintRecords.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     maintRecords.value = []
   } finally {
@@ -572,7 +572,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存失败:', error)
   }
 }

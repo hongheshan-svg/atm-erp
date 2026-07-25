@@ -311,7 +311,7 @@ class TechDocumentCategorySerializer(serializers.ModelSerializer):
         model = TechDocumentCategory
         fields = '__all__'
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list:
         children = obj.children.filter(is_deleted=False)
         return TechDocumentCategorySerializer(children, many=True).data
 
@@ -324,7 +324,7 @@ class DocumentAnnotationSerializer(serializers.ModelSerializer):
         model = DocumentAnnotation
         fields = '__all__'
 
-    def get_replies(self, obj):
+    def get_replies(self, obj) -> list:
         replies = obj.replies.filter(is_deleted=False)
         return DocumentAnnotationSerializer(replies, many=True).data
 
@@ -369,6 +369,7 @@ class TechnicalDocumentDetailSerializer(TechnicalDocumentSerializer):
 
 class TechDocumentCategoryViewSet(PermissionMixin, viewsets.ModelViewSet):
     """技术文档分类管理"""
+
     permission_module = 'projects'
     permission_resource = 'tech_document_category'
 
@@ -385,6 +386,7 @@ class TechDocumentCategoryViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class TechnicalDocumentViewSet(PermissionMixin, viewsets.ModelViewSet):
     """技术文档管理"""
+
     permission_module = 'projects'
     permission_resource = 'technical_document'
 
@@ -563,6 +565,7 @@ class TechnicalDocumentViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DocumentAnnotationViewSet(PermissionMixin, viewsets.ModelViewSet):
     """文档批注管理"""
+
     permission_module = 'projects'
     permission_resource = 'document_annotation'
 
@@ -592,6 +595,7 @@ class DocumentAnnotationViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class DocumentReviewViewSet(PermissionMixin, viewsets.ModelViewSet):
     """文档评审管理"""
+
     permission_module = 'projects'
     permission_resource = 'document_review'
 

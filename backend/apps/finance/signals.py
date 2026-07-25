@@ -79,8 +79,9 @@ def sync_purchase_schedules_from_ap(sender, instance, **kwargs):
     from apps.finance.models import PurchasePaymentSchedule
 
     schedules = list(
-        PurchasePaymentSchedule.objects.filter(purchase_order_id=instance.po_id, is_deleted=False)
-        .order_by('milestone_order', 'id')
+        PurchasePaymentSchedule.objects.filter(purchase_order_id=instance.po_id, is_deleted=False).order_by(
+            'milestone_order', 'id'
+        )
     )
     if not schedules:
         return
@@ -212,7 +213,10 @@ def _safe_sync_payable(func, instance, source_type, *, action):
     except Exception:
         logger.exception(
             '%s(id=%s, status=%s)台账%s失败,需人工核查',
-            source_type, instance.pk, getattr(instance, 'status', ''), action,
+            source_type,
+            instance.pk,
+            getattr(instance, 'status', ''),
+            action,
         )
         _notify_finance_admins_of_payable_sync_failure(instance, source_type, action)
 
@@ -226,10 +230,7 @@ def _notify_finance_admins_of_payable_sync_failure(instance, source_type, action
         recipients = User.objects.filter(is_active=True, is_deleted=False, is_superuser=True)
         source_no = getattr(instance, 'source_no', None) or getattr(instance, 'pk', '')
         title = '待付款项台账同步失败'
-        message = (
-            f'{source_type} 单据 {source_no} (id={instance.pk}) 的待付款项台账{action}失败,'
-            f'请人工核查。'
-        )
+        message = f'{source_type} 单据 {source_no} (id={instance.pk}) 的待付款项台账{action}失败,请人工核查。'
         SystemNotification.objects.bulk_create(
             [SystemNotification(user=user, type='ERROR', title=title, message=message) for user in recipients]
         )

@@ -104,11 +104,10 @@ Vite 已配置 `/api` 与 `/ws` 反向代理到 `http://backend:8000`（Docker �
 docker compose up -d
 
 # 查看日志
-docker compose logs -f backend
-docker compose logs -f celery
+docker compose logs -f app
 
 # 重建后端
-docker compose up -d --build backend
+docker compose up -d --build app
 ```
 
 ### Pre-commit Hooks
@@ -144,8 +143,8 @@ celery -A config beat -l info
 
 ### Backend (`backend/`)
 
-- **Framework**: Django 4.2 + DRF 3.14, ASGI via Daphne + Channels
-- **Database**: PostgreSQL 15, Redis 7 (缓存/消息队列), Elasticsearch 7.17 (搜索)
+- **Framework**: Django 5.2 LTS + DRF 3.17, ASGI via Daphne + Channels
+- **Database**: PostgreSQL 15, Redis 7 (缓存/消息队列)；全局搜索使用数据库查询
 - **Auth**: JWT (simplejwt), Bearer token, RBAC 权限控制
 - **Settings**: `backend/config/settings.py`, 环境变量通过 `python-decouple` 读取
 - **URL 入口**: `backend/config/urls.py`, 所有 API 前缀 `/api/`
@@ -169,7 +168,7 @@ celery -A config beat -l info
 
 ### Frontend (`frontend/`)
 
-- **Framework**: Vue 3 (Composition API) + TypeScript + Vite 5
+- **Framework**: Vue 3 (Composition API) + TypeScript + Vite 8
 - **UI**: Element Plus, ECharts, vue-ganttastic
 - **State**: Pinia (`stores/` 下 user、permission、websocket、companyConfig)
 - **HTTP**: Axios，封装在 `src/utils/request.ts`，自动刷新 JWT、401 排队重试
@@ -196,7 +195,7 @@ celery -A config beat -l info
 > **注意**：`docker-compose.yml` 已重构为「精简部署」编排，与早期文档差异很大。
 
 - **Docker Compose（精简部署）**: 主编排 `docker-compose.yml` 现为 **4 服务**——`postgres`、`redis`、`app`（全合一：Django/Daphne + Celery worker+beat + 升级进度中转 + 前端静态 + Nginx，由 supervisord 统一拉起，对外暴露 80/443）、`erp-updater`（唯一持有 `docker.sock` 的最小服务，平时空转，一键升级时重建 `app` 容器）。镜像来自 GHCR。
-- **Elasticsearch 已下线**: 精简编排不再部署 ES，全局搜索降级为数据库查询（代码已有 try/except 兜底）。`ELASTICSEARCH_HOST` 留空即走降级。
+- **Elasticsearch 已下线**: 精简编排与 Python 依赖均不再包含 ES；全局搜索和知识库检索直接使用数据库查询。
 - **Compose override 文件**: `docker-compose.build.yml`（本地构建镜像而非拉 GHCR）、`docker-compose.expose.yml`（把 postgres/redis/es 以 `5433/6380/9201` 暴露到宿主机，方便本地连库）、`docker-compose.linux-host.yml`（Linux 宿主直连）。**`5433/6380/9201` 端口偏移只在叠加了这些 override 时才存在**；主编排里 DB 仅在 `erp-network` 内部以 `5432/6379` 暴露。
 - **Celery**: 不再是独立 service，随 `app` 容器内 supervisord 一起启动。改了 Celery 任务后重建/重启 `app` 即可（`docker compose up -d --build app`），不要再找 `celery`/`celery-beat` 服务。
 - **环境变量**: `.env`（本地开发）、`.env.example` / `.env.docker.example`（模板）。

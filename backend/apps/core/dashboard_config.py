@@ -117,8 +117,7 @@ class UserDashboard(models.Model):
         """重置为默认布局"""
         default_widgets = DashboardWidget.objects.filter(is_active=True, is_system=True)
         self.layout = [
-            {'widget': w.code, 'x': 0, 'y': i, 'w': w.default_width, 'h': 1}
-            for i, w in enumerate(default_widgets[:6])
+            {'widget': w.code, 'x': 0, 'y': i, 'w': w.default_width, 'h': 1} for i, w in enumerate(default_widgets[:6])
         ]
         self.theme = 'light'
         self.save()

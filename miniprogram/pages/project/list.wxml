@@ -2,9 +2,9 @@
 <view class="container">
   <!-- 搜索栏 -->
   <view class="search-bar">
-    <input 
-      class="search-input" 
-      placeholder="搜索项目名称/编号" 
+    <input
+      class="search-input"
+      placeholder="搜索项目名称/编号"
       value="{{keyword}}"
       bindinput="onSearchInput"
       bindconfirm="doSearch"
@@ -14,9 +14,9 @@
 
   <!-- 状态筛选 -->
   <scroll-view class="filter-bar" scroll-x>
-    <view 
-      wx:for="{{statusList}}" 
-      wx:key="value" 
+    <view
+      wx:for="{{statusList}}"
+      wx:key="value"
       class="filter-item {{currentStatus === item.value ? 'active' : ''}}"
       bindtap="filterByStatus"
       data-status="{{item.value}}"

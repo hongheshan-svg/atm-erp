@@ -4,7 +4,7 @@
       <h2>方案设计</h2>
       <el-button type="primary" @click="handleAdd">新建方案</el-button>
     </div>
-    
+
     <!-- 统计 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -32,7 +32,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-card shadow="never">
       <template #header>
         <el-form :inline="true">
@@ -63,19 +63,19 @@
           </el-form-item>
         </el-form>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="proposalList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="proposal_no" label="方案编号" width="130" fixed />
@@ -120,7 +120,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
@@ -131,7 +131,7 @@
         style="margin-top: 16px; justify-content: flex-end"
       />
     </el-card>
-    
+
     <!-- 新增对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑方案' : '新建方案'" width="900px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
@@ -188,7 +188,7 @@
         <el-button type="primary" @click="submitForm" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentProposal?.title" width="1000px">
       <el-tabs v-if="currentProposal">
@@ -256,13 +256,13 @@ const submitLoading = ref(false)
 const proposalList = ref<any[]>([])
 const stats = ref<Record<string, any>>({})
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: null,
   proposal_type: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -271,10 +271,10 @@ const pagination = reactive({
 const dialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentProposal = ref(null)
+const formRef = ref<any>(null)
+const currentProposal = ref<any>(null)
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   title: '',
   proposal_type: 'SCHEME',
   estimated_cost: null,
@@ -293,13 +293,13 @@ const rules = {
 
 const approvedCount = computed(() => {
   const byStatus = stats.value.by_status || []
-  return byStatus.find(s => s.status === 'APPROVED')?.count || 0
+  return byStatus.find((s: any) => s.status === 'APPROVED')?.count || 0
 })
 
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       ...queryParams
@@ -307,7 +307,7 @@ const fetchList = async () => {
     const data = await getProposalList(params)
     proposalList.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -318,7 +318,7 @@ const fetchStats = async () => {
   try {
     const data = await getProposalStatistics()
     stats.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -342,7 +342,7 @@ const handleAdd = () => {
 const submitForm = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -354,24 +354,24 @@ const submitForm = async () => {
     dialogVisible.value = false
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getProposal(row.id)
     currentProposal.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   try {
     const data = await getProposal(row.id)
     currentProposal.value = data
@@ -388,80 +388,80 @@ const handleEdit = async (row) => {
       risk_analysis: data.risk_analysis || ''
     })
     dialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleRequestRevision = async (row) => {
+const handleRequestRevision = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定退回方案要求修改吗?', '提示')
     await requestProposalRevision(row.id)
     ElMessage.success('已退回修改')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleReject = async (row) => {
+const handleReject = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定拒绝该方案吗?', '提示', { type: 'warning' })
     await rejectProposal(row.id)
     ElMessage.success('已拒绝')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await submitProposal(row.id)
     ElMessage.success('已提交')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleStartReview = async (row) => {
+const handleStartReview = async (row: any) => {
   try {
     await startProposalReview(row.id, { review_type: '技术评审' })
     ElMessage.success('已开始评审')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await approveProposal(row.id)
     ElMessage.success('已批准')
     fetchList()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '操作失败')
   }
 }
 
-const handleNewVersion = async (row) => {
+const handleNewVersion = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定创建新版本吗?', '提示')
     await createProposalVersion(row.id)
     ElMessage.success('新版本已创建')
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     console.error('ProposalList fetchList error:', e)
   }
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     SUBMITTED: 'warning',
@@ -471,7 +471,7 @@ const getStatusType = (status) => {
     REJECTED: 'danger',
     ARCHIVED: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

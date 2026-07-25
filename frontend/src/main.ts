@@ -46,7 +46,6 @@ try {
     const wsStore = useWebSocketStore()
     wsStore.connect()
   }
-} catch (err) {
+} catch (err: any) {
   console.warn('Global WebSocket connect skipped:', err)
 }
-

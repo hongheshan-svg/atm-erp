@@ -62,10 +62,10 @@
               </div>
             </div>
             <p class="channel-desc">支持群机器人 Webhook 和工作通知两种方式。</p>
-            <el-button 
-              type="primary" 
-              size="small" 
-              @click="handleTestDingTalk" 
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleTestDingTalk"
               :loading="testing.dingtalk"
               :disabled="!channelStatus.dingtalk?.configured"
             >
@@ -97,10 +97,10 @@
               </div>
             </div>
             <p class="channel-desc">支持群机器人 Webhook 和应用消息两种方式。</p>
-            <el-button 
-              type="primary" 
-              size="small" 
-              @click="handleTestWeChatWork" 
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleTestWeChatWork"
               :loading="testing.wechat_work"
               :disabled="!channelStatus.wechat_work?.configured"
             >
@@ -126,7 +126,7 @@
 
       <!-- Configuration Guide -->
       <el-divider content-position="left">配置指南</el-divider>
-      
+
       <el-collapse accordion>
         <el-collapse-item title="邮件配置说明" name="email">
           <div class="config-guide">
@@ -155,7 +155,7 @@ DEFAULT_FROM_EMAIL=ERP系统 &lt;your-email@qq.com&gt;</pre>
             <p class="tip">注意：授权码不是邮箱登录密码，需要在邮箱设置中单独生成。</p>
           </div>
         </el-collapse-item>
-        
+
         <el-collapse-item title="钉钉配置说明" name="dingtalk">
           <div class="config-guide">
             <h4>群机器人 Webhook</h4>
@@ -179,7 +179,7 @@ DINGTALK_AGENT_ID=xxx</pre>
             </ol>
           </div>
         </el-collapse-item>
-        
+
         <el-collapse-item title="企业微信配置说明" name="wechat_work">
           <div class="config-guide">
             <h4>群机器人 Webhook</h4>
@@ -217,13 +217,13 @@ const loading = ref(false)
 const channelStatus = ref<Record<string, any>>({})
 const enabledChannels = ref<any[]>([])
 
-const testing = reactive({
+const testing = reactive<Record<string, any>>({
   dingtalk: false,
   wechat_work: false,
   broadcast: false
 })
 
-const broadcastForm = reactive({
+const broadcastForm = reactive<Record<string, any>>({
   title: 'ERP系统通知',
   content: '这是一条广播测试消息'
 })
@@ -234,7 +234,7 @@ const refreshStatus = async () => {
     const response = await getNotificationChannelStatus()
     channelStatus.value = response.channels || {}
     enabledChannels.value = response.enabled || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取状态失败:', error)
   } finally {
     loading.value = false
@@ -249,7 +249,7 @@ const handleTestDingTalk = async () => {
       content: '这是一条钉钉测试消息，用于验证通知配置是否正确。\n\n发送时间: ' + new Date().toLocaleString()
     })
     ElMessage.success(response.message || '发送成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('发送失败')
   } finally {
     testing.dingtalk = false
@@ -264,7 +264,7 @@ const handleTestWeChatWork = async () => {
       content: '这是一条企业微信测试消息，用于验证通知配置是否正确。\n\n发送时间: ' + new Date().toLocaleString()
     })
     ElMessage.success(response.message || '发送成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('发送失败')
   } finally {
     testing.wechat_work = false
@@ -276,23 +276,23 @@ const sendBroadcast = async () => {
     ElMessage.warning('请输入标题和内容')
     return
   }
-  
+
   testing.broadcast = true
   try {
     const response = await broadcastNotification( {
       title: broadcastForm.title,
       content: broadcastForm.content
     })
-    
+
     const successCount = Object.values(response.results || {}).filter(v => v).length
     const totalCount = Object.keys(response.results || {}).length
-    
+
     if (successCount > 0) {
       ElMessage.success(`广播完成: ${successCount}/${totalCount} 个渠道成功`)
     } else {
       ElMessage.warning('没有渠道发送成功，请检查配置')
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('广播失败')
   } finally {
     testing.broadcast = false
@@ -405,4 +405,3 @@ onMounted(() => {
   margin-top: 10px;
 }
 </style>
-

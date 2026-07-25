@@ -8,7 +8,7 @@
       :trigger-on-focus="false"
       clearable
       size="large"
-      style="width: 400px;"
+      class="search-input"
       @select="handleSelect"
       @keyup.enter="performSearch"
     >
@@ -39,7 +39,7 @@
             <div class="results-summary">
               找到 {{ totalHits }} 条结果
             </div>
-            
+
             <!-- Items Results -->
             <div class="result-section" v-if="results.items && results.items.total > 0">
               <h3>
@@ -114,6 +114,17 @@ import { Search, Box, Avatar, Management, ShoppingCart } from '@element-plus/ico
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 
+interface SearchSuggestion {
+  id: string | number
+  text: string
+  type: string
+  meta?: string | null
+}
+
+interface SearchSuggestionResponse {
+  suggestions?: SearchSuggestion[]
+}
+
 const router = useRouter()
 const searchRef = ref<any>(null)
 const searchQuery = ref('')
@@ -144,38 +155,41 @@ const totalHits = computed(() => {
   return Object.values(results.value).reduce((sum, r) => sum + (r.total || 0), 0)
 })
 
-const getIcon = (type) => {
+const getIcon = (type: any) => {
   const icons = {
     'items': Box,
     'customers': Avatar,
     'suppliers': ShoppingCart,
     'projects': Management
   }
-  return icons[type] || Box
+  return (icons as Record<string, any>)[type] || Box
 }
 
-const fetchSuggestions = async (queryString, cb) => {
+const fetchSuggestions = async (
+  queryString: string,
+  cb: (_suggestions: SearchSuggestion[]) => void
+): Promise<void> => {
   if (queryString.length < 2) {
     cb([])
     return
   }
 
   try {
-    const { data } = await request.get('/core/search/suggest/', {
+    const data = await request.get<SearchSuggestionResponse | undefined>('/core/search/suggest/', {
       params: {
         q: queryString,
         type: 'items',
         limit: 8
       }
     })
-    cb(data.suggestions || [])
-  } catch (error) {
+    cb(data?.suggestions || [])
+  } catch (error: any) {
     console.error('Failed to fetch suggestions:', error)
     cb([])
   }
 }
 
-const handleSelect = (item) => {
+const handleSelect = (item: any) => {
   viewDetails(item, item.type)
 }
 
@@ -188,30 +202,34 @@ const performSearch = async () => {
   resultsVisible.value = true
 
   try {
-    const { data } = await request.get('/core/search/search/', {
+    const data = await request.get<{ results?: Record<string, any> }>('/core/search/search/', {
       params: {
         q: searchQuery.value,
         limit: 20
       }
     })
-    results.value = data.results || {}
-  } catch (error) {
+    results.value = data?.results || {}
+  } catch (error: any) {
     console.error('Search failed:', error)
   } finally {
     loading.value = false
   }
 }
 
-const viewDetails = (item, type) => {
+const viewDetails = (item: any, type: any) => {
   // Navigate to list page based on type (detail routes don't exist for masterdata)
   const routes = {
     'item': '/masterdata/items',
+    'items': '/masterdata/items',
     'customer': '/masterdata/customers',
+    'customers': '/masterdata/customers',
     'supplier': '/masterdata/suppliers',
-    'project': `/projects/${item.id}`
+    'suppliers': '/masterdata/suppliers',
+    'project': `/projects/${item.id}`,
+    'projects': `/projects/${item.id}`
   }
 
-  const route = routes[type]
+  const route = (routes as Record<string, any>)[type]
   if (route) {
     resultsVisible.value = false
     router.push(route)
@@ -223,6 +241,12 @@ const viewDetails = (item, type) => {
 .global-search {
   display: flex;
   align-items: center;
+  width: 400px;
+  max-width: 100%;
+}
+
+.search-input {
+  width: 100%;
 }
 
 .suggestion-item {
@@ -276,4 +300,3 @@ const viewDetails = (item, type) => {
   color: #409EFF;
 }
 </style>
-

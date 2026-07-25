@@ -66,7 +66,7 @@ ATM-ERP 是为**非标自动化设备制造企业**量身打造的一体化业�
 - 🧾 **完整财务体系**：应收/应付、费用报销、税务、会计、资产、银行对账、账龄分析。
 - 🔔 **实时通知 + 企业微信推送**：审批待办、采购到货、销售交期、项目截止精准推送到责任人。
 - 📱 **移动审批小程序**：微信小程序端随时随地审批、查看看板。
-- 🔍 **全文检索**：基于 Elasticsearch 的业务数据搜索。
+- 🔍 **业务检索**：基于 PostgreSQL 的跨模块数据库搜索，无外部搜索服务依赖。
 - 📊 **BI 与报表**：仪表盘 Widget、项目利润分析（Pandas 驱动）、多维报表导出。
 - 🧱 **软删除 + 审计日志**：所有业务模型继承 `BaseModel`，自动记录变更轨迹。
 - 🐳 **开箱即用部署**：Docker Compose 一键拉起 / Ubuntu 一键原生部署脚本。
@@ -100,12 +100,12 @@ ATM-ERP 是为**非标自动化设备制造企业**量身打造的一体化业�
 
 | 类别 | 技术 |
 |------|------|
-| 语言/框架 | Python 3.10+ · Django 4.2 · Django REST Framework 3.14 |
+| 语言/框架 | Python 3.11+ · Django 5.2 LTS · Django REST Framework 3.17 |
 | 异步/实时 | ASGI（Daphne）· Django Channels 4 · WebSocket |
 | 数据库 | PostgreSQL 15 |
 | 缓存/消息 | Redis 7（缓存 + Celery broker）· django-redis |
 | 异步任务 | Celery 5.3 + Celery Beat |
-| 搜索 | Elasticsearch 7.17 + django-elasticsearch-dsl |
+| 搜索 | PostgreSQL 数据库检索（无外部搜索服务依赖） |
 | 认证 | JWT（simplejwt）· RBAC |
 | 数据处理 | Pandas · NumPy |
 | 导入导出 | openpyxl · xlrd · xlsxwriter · reportlab（PDF）· qrcode / python-barcode |
@@ -118,7 +118,7 @@ ATM-ERP 是为**非标自动化设备制造企业**量身打造的一体化业�
 | 类别 | 技术 |
 |------|------|
 | 框架 | Vue 3（Composition API）· TypeScript |
-| 构建 | Vite 5 |
+| 构建 | Vite 8 |
 | UI | Element Plus · @element-plus/icons-vue |
 | 可视化 | ECharts / vue-echarts · vue-ganttastic（甘特图）· Three.js（3D） |
 | 状态管理 | Pinia |
@@ -130,38 +130,28 @@ ATM-ERP 是为**非标自动化设备制造企业**量身打造的一体化业�
 
 ### 基础设施
 
-Docker Compose 编排 7 个服务：`postgres` · `redis` · `elasticsearch` · `backend` ·
-`celery` · `celery-beat` · `nginx`。
+Docker Compose 编排 4 个服务：`postgres` · `redis` · `app`（Nginx、Daphne、Celery Worker/Beat、
+前端静态资源）· `erp-updater`。
 
 ## 系统架构
 
 ```
-                          ┌─────────────────────────┐
-   Web 浏览器  ──────────►│  Nginx (8080/8443)       │
-   微信小程序  ──────────►│  反向代理 / 静态资源     │
-                          └───────────┬─────────────┘
-                                      │ /api  /ws
-                          ┌───────────▼─────────────┐
-                          │  Backend (Daphne/ASGI)   │
-                          │  Django REST + Channels  │
-                          │  JWT · RBAC · Workflow   │
-                          └──┬─────────┬─────────┬───┘
-                             │         │         │
-                ┌────────────▼──┐ ┌────▼────┐ ┌──▼──────────────┐
-                │ PostgreSQL 15 │ │ Redis 7 │ │ Elasticsearch   │
-                │  业务数据      │ │ 缓存/MQ │ │  全文检索        │
-                └───────────────┘ └────┬────┘ └─────────────────┘
-                                       │
-                          ┌────────────▼────────────┐
-                          │ Celery Worker / Beat     │
-                          │ 异步任务 · 定时提醒推送  │
-                          │ （host 网络访问考勤机）  │
-                          └──────────────────────────┘
+                          ┌─────────────────────────────┐
+   Web 浏览器  ──────────►│ app: Nginx + 前端静态资源   │
+   微信小程序  ──────────►│ Daphne + Celery Worker/Beat │
+                          └─────────────┬───────────────┘
+                                        │
+                          ┌─────────────┴───────────────┐
+                          │                             │
+                ┌─────────▼─────┐               ┌──────▼─────┐
+                │ PostgreSQL 15 │               │  Redis 7   │
+                │ 业务数据/检索 │               │ 缓存 / MQ  │
+                └───────────────┘               └────────────┘
 ```
 
 - **前后端分离**：前端 `base: '/erp/'`，所有路由带 `/erp/` 前缀，与 Nginx 路由一致。
 - **API 入口**：接口前缀 `/api/`，WebSocket 前缀 `/ws/`。
-- **Celery Worker** 使用 host 网络模式，以便访问局域网设备（如 ZKTeco 考勤机）。
+- **统一应用容器**：Nginx、Daphne、Celery Worker/Beat 与升级进度中转由 supervisord 管理。
 
 ## 快速开始
 
@@ -203,37 +193,36 @@ cp .env.docker.example .env.docker
 docker compose up -d
 
 # 4. 查看启动日志
-docker compose logs -f backend
+docker compose logs -f app
 
 # 5. 首次启动需执行初始化（见下文）
-docker compose exec backend python manage.py migrate
-docker compose exec backend python manage.py init_permissions
-docker compose exec backend python manage.py init_roles --force
-docker compose exec backend python manage.py init_dashboard_widgets
-docker compose exec backend python manage.py createsuperuser
+docker compose exec app python manage.py migrate
+docker compose exec app python manage.py init_permissions
+docker compose exec app python manage.py init_roles --force
+docker compose exec app python manage.py init_dashboard_widgets
+docker compose exec app python manage.py createsuperuser
 ```
 
 启动完成后访问：
 
-- 前端应用：`http://localhost:8080/erp/`
-- API 文档（Swagger）：`http://localhost:8080/api/docs/`
+- 前端应用：`http://localhost/erp/`（或 `.env` 中配置的 `HTTP_PORT`）
+- API 文档（Swagger）：`http://localhost/api/docs/`
 
-> ⚠️ **端口偏移说明**：为避开宿主机已有服务，Compose 对外暴露的端口做了偏移
-> （PostgreSQL `5433`、Redis `6380`、Elasticsearch `9201`）。**从宿主机连接**这些服务请用
-> 偏移端口；**容器内部互联**仍用标准端口（5432/6379/9200）。
+> 仅叠加 `docker-compose.expose.yml` 时才会向宿主机开放 PostgreSQL `5433` 和 Redis `6380`；
+> 容器内部互联始终使用标准端口 `5432` / `6379`。
 
 常用运维命令：
 
 ```bash
-docker compose logs -f celery              # 查看 Celery 日志
-docker compose up -d --build backend       # 重建并重启后端
-docker compose restart celery celery-beat  # 修改 Celery 任务后必须重启
-docker compose down                        # 停止全部服务
+docker compose logs -f app           # 查看 Django / Celery / Nginx 日志
+docker compose up -d --build app      # 重建并重启统一应用容器
+docker compose restart app            # 修改 Celery 任务后重启 app
+docker compose down                   # 停止全部服务
 ```
 
 ### 方式二：Ubuntu 一键原生部署
 
-适合生产/准生产服务器（无 Docker）。脚本自动安装并配置 PostgreSQL、Redis、Node.js 18、
+适合生产/准生产服务器（无 Docker）。脚本自动安装并配置 PostgreSQL、Redis、Node.js 22、
 Python venv、Gunicorn、Celery、Nginx 与 systemd 服务。支持
 **Ubuntu 20.04 / 22.04 / 24.04、Debian 11 / 12**。
 
@@ -243,7 +232,7 @@ sudo bash install.sh
 
 脚本执行的主要步骤（`scripts/deploy-native-ubuntu.sh`）：
 
-1. 安装系统依赖（Python、Node.js 18、Nginx 等）
+1. 安装系统依赖（Python、Node.js 22、Nginx 等）
 2. 配置并启动 PostgreSQL（建库建用户）
 3. 配置并启动 Redis
 4. 创建 Python 虚拟环境并安装依赖（含 gunicorn）
@@ -262,7 +251,7 @@ sudo systemctl restart erp-backend erp-celery erp-celery-beat
 
 ### 方式三：本地手动开发环境
 
-适合开发调试。需自行准备 PostgreSQL 15、Redis 7（Elasticsearch 可选）。
+适合开发调试。需自行准备 PostgreSQL 15 和 Redis 7。
 
 **后端（`backend/`）：**
 
@@ -327,11 +316,10 @@ python manage.py collectstatic --noinput  # 收集静态文件（生产环境）
 
 | 服务 | 容器内端口 | 宿主机映射端口 | 说明 |
 |------|-----------|---------------|------|
-| Nginx | 80 / 443 | **8080 / 8443** | Web 入口 |
-| Backend (Daphne) | 8000 | — | 经 Nginx 代理 |
-| PostgreSQL | 5432 | **5433** | 宿主机连接用 5433 |
-| Redis | 6379 | **6380** | 宿主机连接用 6380 |
-| Elasticsearch | 9200 | **9201** | 宿主机连接用 9201 |
+| app / Nginx | 80 / 443 | `${HTTP_PORT:-80}` / `${HTTPS_PORT:-443}` | Web 入口 |
+| Backend (Daphne) | 8000 | — | app 容器内经 Nginx 代理 |
+| PostgreSQL | 5432 | **5433**（仅 expose override） | 可选宿主机调试端口 |
+| Redis | 6379 | **6380**（仅 expose override） | 可选宿主机调试端口 |
 | 前端 Dev Server | — | **3000** | 仅本地开发 `npm run dev` |
 
 ## 环境变量配置
@@ -347,7 +335,6 @@ python manage.py collectstatic --noinput  # 收集静态文件（生产环境）
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | PostgreSQL 配置 |
 | `REDIS_HOST` / `REDIS_URL` | Redis 配置 |
 | `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery 配置 |
-| `ELASTICSEARCH_HOST` | Elasticsearch 地址 |
 | `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` | 跨域与 CSRF 白名单 |
 | `FRONTEND_URL` | 前端地址 |
 | `JWT_ACCESS_LIFETIME_MINUTES` / `JWT_REFRESH_LIFETIME_DAYS` | JWT 有效期 |

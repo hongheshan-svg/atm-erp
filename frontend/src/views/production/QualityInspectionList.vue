@@ -570,7 +570,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, Search, Refresh, Clock, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import {
   getInspections, getInspection, createInspection, updateInspection,
@@ -599,14 +599,14 @@ const users = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建检验单')
 const detailVisible = ref(false)
-const currentInspection = ref(null)
+const currentInspection = ref<any>(null)
 const completeDialogVisible = ref(false)
 const itemDialogVisible = ref(false)
 const newItems = ref<any[]>([])
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 // 筛选条件
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   project: null,
   inspection_type: '',
   status: '',
@@ -614,7 +614,7 @@ const filters = reactive({
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -630,7 +630,7 @@ const stats = computed(() => {
 })
 
 // 表单数据
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   project: null,
   title: '',
@@ -644,14 +644,14 @@ const formData = reactive({
 })
 
 // 完成检验表单
-const completeFormData = reactive({
+const completeFormData = reactive<Record<string, any>>({
   result: 'PASS',
   conclusion: '',
   treatment: ''
 })
 
 // 检验项表单
-const itemFormData = reactive({
+const itemFormData = reactive<Record<string, any>>({
   item_name: '',
   standard: '',
   method: '',
@@ -668,7 +668,7 @@ const formRules = {
 }
 
 // 获取样式
-const getInspectionTypeTag = (type) => {
+const getInspectionTypeTag = (type: any) => {
   const map = {
     'INCOMING': 'primary',
     'FIRST_PIECE': 'warning',
@@ -676,42 +676,42 @@ const getInspectionTypeTag = (type) => {
     'FINAL': 'success',
     'OUTGOING': 'danger'
   }
-  return map[type] || ''
+  return (map as Record<string, any>)[type] || ''
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     'PENDING': 'info',
     'IN_PROGRESS': 'warning',
     'COMPLETED': 'success'
   }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const getResultType = (result) => {
+const getResultType = (result: any) => {
   const map = {
     'PASS': 'success',
     'FAIL': 'danger',
     'CONDITIONAL': 'warning'
   }
-  return map[result] || ''
+  return (map as Record<string, any>)[result] || ''
 }
 
-const getItemResultType = (result) => {
+const getItemResultType = (result: any) => {
   const map = {
     'PASS': 'success',
     'FAIL': 'danger',
     'NA': 'info',
     'PENDING': ''
   }
-  return map[result] || ''
+  return (map as Record<string, any>)[result] || ''
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters
@@ -719,7 +719,7 @@ const loadData = async () => {
     const res = await getInspections(params)
     inspectionList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(inspectionList.value) ? inspectionList.value.length : 0)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载检验单失败:', error)
   } finally {
     loading.value = false
@@ -731,7 +731,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目列表失败:', error)
   }
 }
@@ -741,7 +741,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户列表失败:', error)
   }
 }
@@ -763,24 +763,24 @@ const handleReset = () => {
 }
 
 // 分页
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadData()
 }
 
-const handlePageChange = (page) => {
+const handlePageChange = (page: any) => {
   pagination.page = page
   loadData()
 }
 
 // 点击行查看详情
-const handleRowClick = async (row) => {
+const handleRowClick = async (row: any) => {
   try {
     const res = await getInspection(row.id)
     currentInspection.value = res
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载详情失败:', error)
   }
 }
@@ -804,7 +804,7 @@ const handleAdd = () => {
 }
 
 // 编辑
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑检验单'
   Object.assign(formData, {
     id: row.id,
@@ -825,18 +825,18 @@ const handleEdit = (row) => {
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 开始检验
-const handleStartInspection = async (row) => {
+const handleStartInspection = async (row: any) => {
   try {
     await startInspection(row.id)
     ElMessage.success('检验已开始')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('开始检验失败:', error)
   }
 }
 
 // 完成检验
-const handleCompleteInspection = (row) => {
+const handleCompleteInspection = (row: any) => {
   currentInspection.value = row
   Object.assign(completeFormData, {
     result: 'PASS',
@@ -852,14 +852,14 @@ const handleCompleteConfirm = async () => {
     ElMessage.warning('请选择检验结果')
     return
   }
-  
+
   try {
     saving.value = true
     await completeInspection(currentInspection.value.id, completeFormData)
     ElMessage.success('检验已完成')
     completeDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('完成检验失败:', error)
   } finally {
     saving.value = false
@@ -869,11 +869,11 @@ const handleCompleteConfirm = async () => {
 // 保存
 const handleSave = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = { ...formData }
     if (data.id) {
       await updateInspection(data.id, data)
@@ -882,10 +882,10 @@ const handleSave = async () => {
       await createInspection(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('保存失败:', error)
     }
@@ -931,7 +931,7 @@ const handleItemsConfirm = async () => {
     ElMessage.warning('请至少添加一个检验项')
     return
   }
-  
+
   try {
     saving.value = true
     await addInspectionItems(currentInspection.value.id, {
@@ -939,11 +939,11 @@ const handleItemsConfirm = async () => {
     })
     ElMessage.success('检验项已添加')
     itemDialogVisible.value = false
-    
+
     // 刷新详情
     const res = await getInspection(currentInspection.value.id)
     currentInspection.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error('添加检验项失败:', error)
   } finally {
     saving.value = false

@@ -182,7 +182,9 @@ def _build_lines(source_type, obj):
         net = amount - tax
         customer = getattr(obj, 'customer', None)
         project = getattr(obj, 'project', None)
-        lines.append({'account': acct('1122'), 'debit': amount, 'credit': zero, 'customer': customer, 'project': project})
+        lines.append(
+            {'account': acct('1122'), 'debit': amount, 'credit': zero, 'customer': customer, 'project': project}
+        )
         lines.append({'account': acct('6001'), 'debit': zero, 'credit': net, 'project': project})
         if tax > zero:
             lines.append({'account': acct('2221'), 'debit': zero, 'credit': tax})
@@ -195,10 +197,14 @@ def _build_lines(source_type, obj):
         project = getattr(obj, 'project', None)
         # 有采购订单(po)视为采购入库 -> 库存商品;否则视为费用类应付 -> 管理费用。
         debit_code = '1405' if getattr(obj, 'po_id', None) else '6602'
-        lines.append({'account': acct(debit_code), 'debit': net, 'credit': zero, 'supplier': supplier, 'project': project})
+        lines.append(
+            {'account': acct(debit_code), 'debit': net, 'credit': zero, 'supplier': supplier, 'project': project}
+        )
         if tax > zero:
             lines.append({'account': acct('2221'), 'debit': tax, 'credit': zero})
-        lines.append({'account': acct('2202'), 'debit': zero, 'credit': amount, 'supplier': supplier, 'project': project})
+        lines.append(
+            {'account': acct('2202'), 'debit': zero, 'credit': amount, 'supplier': supplier, 'project': project}
+        )
 
     elif source_type == 'AR_RECEIPT':
         amount = _to_decimal(getattr(obj, 'amount', None))
@@ -206,20 +212,26 @@ def _build_lines(source_type, obj):
         customer = getattr(ar, 'customer', None) if ar else None
         project = getattr(ar, 'project', None) if ar else None
         lines.append({'account': acct('1002'), 'debit': amount, 'credit': zero})
-        lines.append({'account': acct('1122'), 'debit': zero, 'credit': amount, 'customer': customer, 'project': project})
+        lines.append(
+            {'account': acct('1122'), 'debit': zero, 'credit': amount, 'customer': customer, 'project': project}
+        )
 
     elif source_type == 'AP_PAYMENT':
         amount = _to_decimal(getattr(obj, 'amount', None))
         ap = getattr(obj, 'ap', None)
         supplier = getattr(ap, 'supplier', None) if ap else None
         project = getattr(ap, 'project', None) if ap else None
-        lines.append({'account': acct('2202'), 'debit': amount, 'credit': zero, 'supplier': supplier, 'project': project})
+        lines.append(
+            {'account': acct('2202'), 'debit': amount, 'credit': zero, 'supplier': supplier, 'project': project}
+        )
         lines.append({'account': acct('1002'), 'debit': zero, 'credit': amount})
 
     if missing:
         logger.warning(
             '缺少标准科目 %s,跳过自动过账(请先执行 seed_standard_accounts) source=%s id=%s',
-            missing, source_type, getattr(obj, 'pk', None),
+            missing,
+            source_type,
+            getattr(obj, 'pk', None),
         )
         return []
 
@@ -237,7 +249,8 @@ def post_document(source_type, obj, user=None):
     except Exception:
         logger.exception(
             '自动过账失败 source_type=%s id=%s(已回滚本次凭证写入,不影响业务操作)',
-            source_type, getattr(obj, 'pk', None),
+            source_type,
+            getattr(obj, 'pk', None),
         )
         return None
 
@@ -260,9 +273,7 @@ def _post_document_inner(source_type, obj, user):
         return None
 
     # 幂等:一张业务单据最多一张凭证。
-    existing = JournalVoucher.objects.filter(
-        source_type=source_type, source_id=source_id, is_deleted=False
-    ).first()
+    existing = JournalVoucher.objects.filter(source_type=source_type, source_id=source_id, is_deleted=False).first()
     if existing:
         return existing
 
@@ -278,13 +289,14 @@ def _post_document_inner(source_type, obj, user):
     open_period = FiscalPeriod.objects.filter(
         start_date__lte=voucher_date, end_date__gte=voucher_date, status='OPEN', is_deleted=False
     ).first()
-    period = open_period or FiscalPeriod.objects.filter(
-        start_date__lte=voucher_date, end_date__gte=voucher_date, is_deleted=False
-    ).first()
+    period = (
+        open_period
+        or FiscalPeriod.objects.filter(
+            start_date__lte=voucher_date, end_date__gte=voucher_date, is_deleted=False
+        ).first()
+    )
     if period is None:
-        logger.warning(
-            '日期 %s 无匹配会计期间,跳过自动过账 source=%s id=%s', voucher_date, source_type, source_id
-        )
+        logger.warning('日期 %s 无匹配会计期间,跳过自动过账 source=%s id=%s', voucher_date, source_type, source_id)
         return None
 
     voucher = JournalVoucher.objects.create(
@@ -318,7 +330,10 @@ def _post_document_inner(source_type, obj, user):
     if voucher.debit_total != voucher.credit_total or voucher.debit_total == 0:
         logger.error(
             '自动生成凭证不平衡/金额为零,保留草稿不过账 source=%s id=%s dr=%s cr=%s',
-            source_type, source_id, voucher.debit_total, voucher.credit_total,
+            source_type,
+            source_id,
+            voucher.debit_total,
+            voucher.credit_total,
         )
         return voucher
 
@@ -327,6 +342,8 @@ def _post_document_inner(source_type, obj, user):
     else:
         logger.info(
             '会计期间 %s 未开放(status=%s),凭证 %s 留草稿待人工过账',
-            period, period.status, voucher.voucher_no,
+            period,
+            period.status,
+            voucher.voucher_no,
         )
     return voucher

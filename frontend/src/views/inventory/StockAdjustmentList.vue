@@ -14,9 +14,9 @@
       <!-- 批量操作工具栏 -->
       <div class="table-toolbar" v-permission="'inventory:stock_adjustment:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -51,10 +51,10 @@
             <el-button size="small" type="warning" @click="handleSubmitApproval(row)" v-if="row.status === 'DRAFT' || row.status === 'REJECTED'">提交审批</el-button>
             <el-button size="small" type="info" @click="showWorkflowProgress(row)" v-if="row.status === 'PENDING'">审批进度</el-button>
             <el-button size="small" type="success" @click="handleConfirm(row)" v-if="row.status === 'APPROVED'">确认盘点</el-button>
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -89,9 +89,9 @@
         <el-form-item label="原因" prop="reason">
           <el-input v-model="adjustmentForm.reason" placeholder="例如：定期盘点、异常盘点" />
         </el-form-item>
-        
+
         <el-divider>盘点明细</el-divider>
-        
+
         <el-table :data="adjustmentForm.lines" border max-height="400">
           <el-table-column prop="item_sku" label="物料编码" width="150" />
           <el-table-column prop="item_name" label="物料名称" />
@@ -177,10 +177,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'STOCK_ADJUSTMENT'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -193,9 +193,9 @@ const adjustments = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const formRef = ref(null)
-const adjustmentForm = reactive({
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
+const formRef = ref<any>(null)
+const adjustmentForm = reactive<Record<string, any>>({
   warehouse: null,
   adjustment_date: new Date().toISOString().split('T')[0],
   reason: '',
@@ -208,7 +208,7 @@ const rules = {
   reason: [{ required: true, message: '请输入盘点原因', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     PENDING: 'warning',
@@ -217,10 +217,10 @@ const getStatusType = (status) => {
     CONFIRMED: 'success',
     COMPLETED: 'success'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     DRAFT: '草稿',
     PENDING: '审批中',
@@ -229,7 +229,7 @@ const getStatusLabel = (status) => {
     CONFIRMED: '已确认',
     COMPLETED: '已完成'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
 const loadAdjustments = async () => {
@@ -238,7 +238,7 @@ const loadAdjustments = async () => {
     const response = await getAdjustments({ page: pagination.page, page_size: pagination.pageSize })
     adjustments.value = response.results || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载盘点记录失败')
   } finally {
     loading.value = false
@@ -249,7 +249,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -258,7 +258,7 @@ const loadStockForAdjustment = async () => {
   if (!adjustmentForm.warehouse) return
   try {
     const response = await getStocks({ warehouse: adjustmentForm.warehouse, page_size: 500 })
-    adjustmentForm.lines = (response.results || response || []).map(s => ({
+    adjustmentForm.lines = (response.results || response || []).map((s: any) => ({
       item: s.item,
       item_sku: s.item_sku,
       item_name: s.item_name,
@@ -266,12 +266,12 @@ const loadStockForAdjustment = async () => {
       qty_actual: s.qty_on_hand || 0,
       qty_diff: 0
     }))
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载库存失败')
   }
 }
 
-const calculateDiff = (row) => {
+const calculateDiff = (row: any) => {
   row.qty_diff = (row.qty_actual || 0) - (row.qty_system || 0)
 }
 
@@ -284,18 +284,18 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getAdjustment(row.id)
     viewDetail.value = response.data || response
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     viewDetail.value = row
     viewDialogVisible.value = true
   }
 }
 
-const handleSubmitApproval = async (row) => {
+const handleSubmitApproval = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交该盘点单进行审批吗？', '提交审批', { type: 'warning' })
     const response = await apiSubmitAdjustment(row.id)
@@ -306,7 +306,7 @@ const handleSubmitApproval = async (row) => {
       ElMessage.success(data.message || '操作成功')
     }
     loadAdjustments()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       const msg = error.response?.data?.error || '提交失败'
       ElMessage.error(msg)
@@ -314,13 +314,13 @@ const handleSubmitApproval = async (row) => {
   }
 }
 
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要确认此盘点吗？确认后将调整库存。', '提示', { type: 'warning' })
     await confirmAdjustment(row.id)
     ElMessage.success('盘点确认成功')
     loadAdjustments()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('确认盘点失败')
   }
 }
@@ -340,26 +340,11 @@ const submitAdjustment = async () => {
     ElMessage.success('盘点单创建成功')
     dialogVisible.value = false
     loadAdjustments()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('创建盘点单失败')
   } finally {
     submitting.value = false
   }
-}
-
-const addLine = () => {
-  adjustmentForm.lines.push({ item: null, qty_system: 0, qty_actual: 0, qty_diff: 0 })
-}
-
-const removeLine = (index) => {
-  adjustmentForm.lines.splice(index, 1)
-}
-
-const resetForm = () => {
-  adjustmentForm.warehouse = null
-  adjustmentForm.adjustment_date = new Date().toISOString().split('T')[0]
-  adjustmentForm.reason = ''
-  adjustmentForm.lines = []
 }
 
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代

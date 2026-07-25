@@ -143,9 +143,7 @@ class MRPNetRequirementTest(TestCase):
         """需求日期临近/过期时，按提前期倒推的建议日期不得早于今天。"""
         item = Item.objects.create(sku='SKU_PAST', name='紧急物料', purchase_price=Decimal('10'), lead_time=7)
         # 需求日期=今天，提前期 7 天 → 倒推 = 今天-7（过去）→ 应收敛到今天
-        ProjectBOM.objects.create(
-            project=self.project, item=item, planned_qty=Decimal('5'), required_date=self.today
-        )
+        ProjectBOM.objects.create(project=self.project, item=item, planned_qty=Decimal('5'), required_date=self.today)
         plan = self._make_plan()
         MRPService.calculate_plan(plan)
         line = MRPLine.objects.get(plan=plan, item=item)

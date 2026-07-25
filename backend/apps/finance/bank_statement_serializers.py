@@ -72,7 +72,7 @@ class BankStatementSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['import_batch', 'import_date', 'created_at', 'updated_at']
 
-    def get_amount(self, obj):
+    def get_amount(self, obj) -> float:
         return float(obj.amount)
 
 

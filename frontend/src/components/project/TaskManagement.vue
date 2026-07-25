@@ -154,10 +154,10 @@ const tasks = ref<any[]>([])
 const projectMembers = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const submitting = ref(false)
 const isEdit = ref(false)
-const currentTaskId = ref(null)
+const currentTaskId = ref<any>(null)
 
 const formData = ref({
   name: '',
@@ -179,10 +179,10 @@ const rules = {
 
 // 构建任务树选项（排除当前任务及其子任务）
 const taskTreeOptions = computed(() => {
-  const buildTree = (items, excludeId = null) => {
+  const buildTree = (items: any, excludeId = null) => {
     return items
-      .filter(item => item.id !== excludeId)
-      .map(item => ({
+      .filter((item: any) => item.id !== excludeId)
+      .map((item: any) => ({
         id: item.id,
         name: item.name,
         children: item.children ? buildTree(item.children, excludeId) : []
@@ -191,24 +191,24 @@ const taskTreeOptions = computed(() => {
   return buildTree(tasks.value, currentTaskId.value)
 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'PENDING': 'info',
     'IN_PROGRESS': 'warning',
     'COMPLETED': 'success',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'PENDING': '待开始',
     'IN_PROGRESS': '进行中',
     'COMPLETED': '已完成',
     'CANCELLED': '已取消'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
 const loadTasks = async () => {
@@ -220,7 +220,7 @@ const loadTasks = async () => {
     const data = response.data || response
     // 构建树形结构
     tasks.value = buildTaskTree(data.results || data)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载任务失败:', error)
     ElMessage.error('加载任务失败')
   } finally {
@@ -235,23 +235,23 @@ const loadProjectMembers = async () => {
     })
     const data = response.data || response
     projectMembers.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目成员失败:', error)
   }
 }
 
 // 构建任务树
-const buildTaskTree = (flatTasks) => {
+const buildTaskTree = (flatTasks: any) => {
   const taskMap = new Map()
-  const rootTasks = []
+  const rootTasks: any[] = []
 
   // 先创建所有任务的映射
-  flatTasks.forEach(task => {
+  flatTasks.forEach((task: any) => {
     taskMap.set(task.id, { ...task, children: [] })
   })
 
   // 构建树形结构
-  flatTasks.forEach(task => {
+  flatTasks.forEach((task: any) => {
     const taskNode = taskMap.get(task.id)
     if (task.parent) {
       const parentNode = taskMap.get(task.parent)
@@ -275,7 +275,7 @@ const handleAddTask = () => {
   dialogVisible.value = true
 }
 
-const handleAddSubTask = (row) => {
+const handleAddSubTask = (row: any) => {
   isEdit.value = false
   dialogTitle.value = '新增子任务'
   resetForm()
@@ -283,7 +283,7 @@ const handleAddSubTask = (row) => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   currentTaskId.value = row.id
   dialogTitle.value = '编辑任务'
@@ -302,7 +302,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除该任务吗？', '提示', {
       confirmButtonText: '确定',
@@ -314,7 +314,7 @@ const handleDelete = async (row) => {
     ElMessage.success('删除成功')
     loadTasks()
     emit('refresh')
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除任务失败:', error)
       ElMessage.error('删除任务失败')
@@ -325,7 +325,7 @@ const handleDelete = async (row) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
 
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
 
     submitting.value = true
@@ -346,7 +346,7 @@ const handleSubmit = async () => {
       dialogVisible.value = false
       loadTasks()
       emit('refresh')
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存任务失败:', error)
       ElMessage.error(isEdit.value ? '更新任务失败' : '创建任务失败')
     } finally {
@@ -395,4 +395,3 @@ defineExpose({
   align-items: center;
 }
 </style>
-

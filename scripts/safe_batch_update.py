@@ -12,13 +12,13 @@ def get_all_vue_files(base_path: Path) -> list:
     """获取所有需要更新的Vue文件"""
     views_path = base_path / 'frontend' / 'src' / 'views'
     vue_files = []
-    
+
     for root, dirs, files in os.walk(views_path):
         for file in files:
             if file.endswith('.vue') and not file.endswith('.bak') and not file.endswith('.bak2') and not file.endswith('.bak3') and not file.endswith('.backup'):
                 if 'List' in file:
                     vue_files.append(Path(root) / file)
-    
+
     return sorted(vue_files)
 
 
@@ -44,7 +44,7 @@ def has_syntax_error(content: str) -> bool:
         r'/ @',  # 自闭合标签后有事件
         r'width="\d+"[^/]*/ @',  # 错误格式
     ]
-    
+
     for pattern in patterns:
         if re.search(pattern, content):
             return True
@@ -54,12 +54,12 @@ def has_syntax_error(content: str) -> bool:
 def safe_add_delete_feature(content: str, api_path: str, name: str) -> Tuple[str, bool, list]:
     """安全地添加删除功能"""
     changes = []
-    
+
     # 检查是否已经正确配置
     if 'useBatchDelete' in content and 'const { canDelete }' in content:
         if not has_syntax_error(content):
             return content, False, ['已是最新']
-    
+
     # 1. 添加imports（如果没有）
     if 'useBatchDelete' not in content:
         # 找到script setup标签
@@ -71,13 +71,13 @@ import { usePermission } from '@/composables/usePermission'
             insert_pos = script_match.end()
             content = content[:insert_pos] + imports + content[insert_pos:]
             changes.append('imports')
-    
+
     # 2. 添加composable使用（如果没有）
     if 'const { canDelete }' not in content:
         # 找到刷新函数名
         refresh_match = re.search(r'const\s+(fetch\w+|load\w+|get\w+)\s*=', content)
         refresh_func = refresh_match.group(1) if refresh_match else 'fetchData'
-        
+
         composable_code = f"""
 // 权限检查
 const {{ canDelete }} = usePermission()
@@ -100,7 +100,7 @@ const {{ selectedRows, loading: deleteLoading, handleSelectionChange, batchDelet
             last_import_end = import_matches[-1].end()
             content = content[:last_import_end] + composable_code + content[last_import_end:]
             changes.append('composable')
-    
+
     # 3. 在el-table上添加@selection-change（如果没有）
     if '@selection-change=' not in content:
         # 只在el-table标签上添加
@@ -112,7 +112,7 @@ const {{ selectedRows, loading: deleteLoading, handleSelectionChange, batchDelet
                 new_tag = tag_content + ' @selection-change="handleSelectionChange"' + match.group(2)
                 content = content.replace(match.group(0), new_tag)
                 changes.append('selection事件')
-    
+
     # 4. 添加选择列（如果没有）
     if 'type="selection"' not in content:
         # 在第一个数据列前添加选择列
@@ -134,7 +134,7 @@ const {{ selectedRows, loading: deleteLoading, handleSelectionChange, batchDelet
                 content
             )
             changes.append('选择列权限')
-    
+
     # 5. 添加工具栏（如果没有）
     if 'table-toolbar' not in content:
         toolbar_html = '''    <!-- 批量操作工具栏 -->
@@ -152,12 +152,12 @@ const {{ selectedRows, loading: deleteLoading, handleSelectionChange, batchDelet
         if match:
             content = content.replace(match.group(0), '\n' + toolbar_html + match.group(0))
             changes.append('工具栏')
-    
+
     # 6. 更新删除按钮（handleDelete -> deleteRow）
     if '@click="handleDelete(row)"' in content:
         content = content.replace('@click="handleDelete(row)"', '@click="deleteRow(row)"')
         changes.append('删除按钮')
-    
+
     # 7. 添加删除按钮权限控制
     if '@click="deleteRow(row)"' in content:
         # 检查是否已有v-if="canDelete"
@@ -171,7 +171,7 @@ const {{ selectedRows, loading: deleteLoading, handleSelectionChange, batchDelet
                     new_btn = btn_tag.replace('type="danger"', 'v-if="canDelete" type="danger"')
                     content = content[:match.start()] + new_btn + content[match.end():]
                     changes.append('按钮权限')
-    
+
     # 8. 添加样式（如果没有）
     if '.table-toolbar' not in content:
         style_code = """
@@ -197,7 +197,7 @@ const {{ selectedRows, loading: deleteLoading, handleSelectionChange, batchDelet
         elif '<style' not in content:
             content += f'\n<style scoped>{style_code}</style>\n'
             changes.append('样式')
-    
+
     return content, bool(changes), changes
 
 
@@ -205,13 +205,13 @@ def get_api_path_and_name(file_path: Path) -> Tuple[str, str]:
     """根据文件路径推断API路径和名称"""
     file_name = file_path.stem
     parent_dir = file_path.parent.name
-    
+
     # 移除List后缀获取实体名
     entity = file_name.replace('List', '')
-    
+
     # 构建API路径
     api_path = f'/{parent_dir}/{entity.lower()}s/'
-    
+
     # 中文名映射
     name_map = {
         'Role': '角色',
@@ -268,9 +268,9 @@ def get_api_path_and_name(file_path: Path) -> Tuple[str, str]:
         'SharedExpense': '公摊',
         'DeliveryOrder': '发货单',
     }
-    
+
     name = name_map.get(entity, entity)
-    
+
     return api_path, name
 
 
@@ -279,25 +279,25 @@ def main():
     print("=" * 70)
     print("安全批量更新脚本 - 批量删除功能")
     print("=" * 70)
-    
+
     base_path = Path('/home/administrator/erp')
     vue_files = get_all_vue_files(base_path)
-    
+
     print(f"\n找到 {len(vue_files)} 个列表页面\n")
-    
+
     success = 0
     skip = 0
     restore = 0
     fail = 0
-    
+
     for i, file_path in enumerate(vue_files, 1):
         rel_path = file_path.relative_to(base_path / 'frontend' / 'src' / 'views')
         print(f"[{i}/{len(vue_files)}] {rel_path}")
-        
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # 检查是否有语法错误
             if has_syntax_error(content):
                 print(f"  ⚠️  检测到语法错误，正在恢复...")
@@ -310,30 +310,30 @@ def main():
                     print(f"  ❌ 无法恢复，跳过")
                     fail += 1
                     continue
-            
+
             api_path, name = get_api_path_and_name(file_path)
             new_content, updated, changes = safe_add_delete_feature(content, api_path, name)
-            
+
             if updated:
                 # 创建备份
                 backup_path = file_path.with_suffix('.vue.safe_bak')
                 with open(backup_path, 'w', encoding='utf-8') as f:
                     f.write(content)
-                
+
                 # 保存更新
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
-                
+
                 print(f"  ✅ 更新: {', '.join(changes)}")
                 success += 1
             else:
                 print(f"  ⚪ {changes[0] if changes else '跳过'}")
                 skip += 1
-                
+
         except Exception as e:
             print(f"  ❌ 错误: {e}")
             fail += 1
-    
+
     print("\n" + "=" * 70)
     print(f"更新完成!")
     print(f"  ✅ 成功: {success}")

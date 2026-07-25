@@ -126,10 +126,10 @@ def check_expiring_batches(days=30):
 
     for item in items[:10]:
         content += (
-            f"- **{item['sku']}** {item['name']}\n"
-            f"  - 批次: {item['batch_no']}\n"
-            f"  - 数量: {item['qty_on_hand']}\n"
-            f"  - 过期日期: {item['expiry_date']} ({item['days_to_expiry']}天后)\n"
+            f'- **{item["sku"]}** {item["name"]}\n'
+            f'  - 批次: {item["batch_no"]}\n'
+            f'  - 数量: {item["qty_on_hand"]}\n'
+            f'  - 过期日期: {item["expiry_date"]} ({item["days_to_expiry"]}天后)\n'
         )
 
     try:

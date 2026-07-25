@@ -60,7 +60,7 @@ export function useBatchDelete(apiEndpoint: string, options: BatchDeleteOptions 
       ElMessage.success(`${config.successMessage}（共 ${ids.length} 条）`)
       selectedRows.value = []
       config.onSuccess()
-    } catch (error) {
+    } catch (error: any) {
       if (error !== 'cancel') {
         console.error('批量删除失败:', error)
         ElMessage.error(config.errorMessage)
@@ -88,7 +88,7 @@ export function useBatchDelete(apiEndpoint: string, options: BatchDeleteOptions 
 
       ElMessage.success(config.successMessage)
       config.onSuccess()
-    } catch (error) {
+    } catch (error: any) {
       if (error !== 'cancel') {
         console.error('删除失败:', error)
         ElMessage.error(config.errorMessage)

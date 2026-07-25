@@ -375,7 +375,7 @@
         <el-button type="primary" @click="goToDetail" v-if="currentOrder">处理工单</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 附件对话框 -->
     <el-dialog v-model="attachmentDialogVisible" title="附件管理" width="800px" destroy-on-close>
       <div class="attachment-header">
@@ -394,15 +394,15 @@
         </el-upload>
         <span class="tip">支持图片、视频、PDF、Word、Excel等格式</span>
       </div>
-      
+
       <el-table :data="attachmentList" border stripe v-loading="attachmentLoading" style="margin-top: 15px;">
         <el-table-column label="预览" width="80" align="center">
           <template #default="{ row }">
-            <el-image 
-              v-if="row.file_type?.startsWith('image/')" 
-              :src="row.file_url" 
+            <el-image
+              v-if="row.file_type?.startsWith('image/')"
+              :src="row.file_url"
               :preview-src-list="[row.file_url]"
-              fit="cover" 
+              fit="cover"
               style="width: 50px; height: 50px;"
             />
             <el-icon v-else-if="row.file_type?.startsWith('video/')" :size="30" color="#409EFF"><VideoPlay /></el-icon>
@@ -432,7 +432,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <template #footer>
         <el-button @click="attachmentDialogVisible = false">关闭</el-button>
       </template>
@@ -479,15 +479,15 @@ const dialogVisible = ref(false)
 const assignDialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const attachmentDialogVisible = ref(false)
-const currentOrder = ref(null)
-const formRef = ref(null)
+const currentOrder = ref<any>(null)
+const formRef = ref<any>(null)
 
 // 附件相关
 const attachmentList = ref<any[]>([])
 const attachmentLoading = ref(false)
-const currentAttachmentOrderId = ref(null)
+const currentAttachmentOrderId = ref<any>(null)
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   pending: 0,
   inProgress: 0,
   monthlyCount: 0,
@@ -495,7 +495,7 @@ const stats = reactive({
   avgSatisfaction: 0
 })
 
-const searchParams = reactive({
+const searchParams = reactive<Record<string, any>>({
   search: '',
   project: null,
   order_type: '',
@@ -503,7 +503,7 @@ const searchParams = reactive({
   priority: ''
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   project: null,
   customer: null,
@@ -520,7 +520,7 @@ const form = reactive({
   is_warranty: true
 })
 
-const assignForm = reactive({
+const assignForm = reactive<Record<string, any>>({
   order_id: null,
   assigned_to: null
 })
@@ -538,12 +538,12 @@ const rules = {
 
 const dialogTitle = computed(() => form.id ? '编辑工单' : '新建工单')
 
-const formatDateTime = (dt) => {
+const formatDateTime = (dt: any) => {
   if (!dt) return '-'
   return new Date(dt).toLocaleString('zh-CN')
 }
 
-const getTypeTagType = (type) => {
+const getTypeTagType = (type: any) => {
   const map = {
     WARRANTY: 'success',
     REPAIR: 'warning',
@@ -554,20 +554,20 @@ const getTypeTagType = (type) => {
     COMPLAINT: 'danger',
     OTHER: ''
   }
-  return map[type] || ''
+  return (map as Record<string, any>)[type] || ''
 }
 
-const getPriorityTagType = (priority) => {
+const getPriorityTagType = (priority: any) => {
   const map = {
     URGENT: 'danger',
     HIGH: 'warning',
     MEDIUM: '',
     LOW: 'info'
   }
-  return map[priority] || ''
+  return (map as Record<string, any>)[priority] || ''
 }
 
-const getStatusTagType = (status) => {
+const getStatusTagType = (status: any) => {
   const map = {
     PENDING: 'info',
     ASSIGNED: '',
@@ -578,28 +578,28 @@ const getStatusTagType = (status) => {
     CLOSED: 'success',
     CANCELLED: 'info'
   }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
 const loadOrders = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: currentPage.value,
       page_size: pageSize.value,
       ...searchParams
     }
     // Remove empty values
     Object.keys(params).forEach(key => {
-      if (params[key] === '' || params[key] === null) {
-        delete params[key]
+      if ((params as Record<string, any>)[key] === '' || (params as Record<string, any>)[key] === null) {
+        delete (params as Record<string, any>)[key]
       }
     })
-    
+
     const res = await getAfterSalesOrderList(params)
     orders.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载工单列表失败:', error)
     ElMessage.error('加载工单列表失败')
   } finally {
@@ -611,22 +611,22 @@ const loadStatistics = async () => {
   try {
     const res = await getAfterSalesStatistics()
     const data = res
-    
+
     stats.monthlyCount = data.monthly_count || 0
     stats.avgSatisfaction = data.satisfaction_avg || 0
-    
+
     // 计算状态统计
     const statusStats = data.status_stats || []
-    stats.pending = statusStats.filter(s => ['PENDING', 'ASSIGNED'].includes(s.status))
-      .reduce((sum, s) => sum + s.count, 0)
-    stats.inProgress = statusStats.filter(s => ['IN_PROGRESS', 'ON_SITE', 'WAITING_PARTS'].includes(s.status))
-      .reduce((sum, s) => sum + s.count, 0)
-    
+    stats.pending = statusStats.filter((s: any) => ['PENDING', 'ASSIGNED'].includes(s.status))
+      .reduce((sum: any, s: any) => sum + s.count, 0)
+    stats.inProgress = statusStats.filter((s: any) => ['IN_PROGRESS', 'ON_SITE', 'WAITING_PARTS'].includes(s.status))
+      .reduce((sum: any, s: any) => sum + s.count, 0)
+
     // 成本统计
     const cost = data.cost_stats || {}
-    stats.totalCost = (cost.total_labor || 0) + (cost.total_travel || 0) + 
+    stats.totalCost = (cost.total_labor || 0) + (cost.total_travel || 0) +
                       (cost.total_parts || 0) + (cost.total_other || 0)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -635,7 +635,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目列表失败:', error)
   }
 }
@@ -644,7 +644,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList()
     customers.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户列表失败:', error)
   }
 }
@@ -653,7 +653,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers()
     users.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户列表失败:', error)
   }
 }
@@ -692,7 +692,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   try {
     // 列表序列化器缺 description/equipment_info/fault_code/site_address 等字段，
     // 先 GET 详情回填，避免编辑时这些字段为 undefined 被空值覆盖
@@ -714,12 +714,12 @@ const handleEdit = async (row) => {
       is_warranty: detail.is_warranty
     })
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载工单详情失败')
   }
 }
 
-const handleProjectChange = (projectId) => {
+const handleProjectChange = (projectId: any) => {
   const project = projects.value.find(p => p.id === projectId)
   if (project && project.customer) {
     form.customer = project.customer
@@ -730,9 +730,9 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     submitting.value = true
-    
+
     const data = { ...form }
-    
+
     if (form.id) {
       await updateAfterSalesOrder(form.id, data)
       ElMessage.success('更新成功')
@@ -740,11 +740,11 @@ const handleSubmit = async () => {
       await createAfterSalesOrder(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadOrders()
     loadStatistics()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.detail || '操作失败')
     }
@@ -753,17 +753,17 @@ const handleSubmit = async () => {
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getAfterSalesOrder(row.id)
     currentOrder.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载工单详情失败')
   }
 }
 
-const handleRowClick = (row) => {
+const handleRowClick = (row: any) => {
   handleView(row)
 }
 
@@ -772,7 +772,7 @@ const goToDetail = () => {
   router.push(`/aftersales/orders/${currentOrder.value.id}`)
 }
 
-const handleAssign = (row) => {
+const handleAssign = (row: any) => {
   assignForm.order_id = row.id
   assignForm.assigned_to = row.assigned_to
   assignDialogVisible.value = true
@@ -783,7 +783,7 @@ const confirmAssign = async () => {
     ElMessage.warning('请选择负责人')
     return
   }
-  
+
   submitting.value = true
   try {
     await assignAfterSalesOrder(assignForm.order_id, {
@@ -792,7 +792,7 @@ const confirmAssign = async () => {
     ElMessage.success('派单成功')
     assignDialogVisible.value = false
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('派单失败')
   } finally {
     submitting.value = false
@@ -802,7 +802,7 @@ const confirmAssign = async () => {
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // ========== 附件相关函数 ==========
-const handleAttachments = async (row) => {
+const handleAttachments = async (row: any) => {
   currentAttachmentOrderId.value = row.id
   attachmentDialogVisible.value = true
   loadAttachments()
@@ -816,20 +816,20 @@ const loadAttachments = async () => {
       related_id: currentAttachmentOrderId.value
     })
     attachmentList.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载附件失败:', error)
   } finally {
     attachmentLoading.value = false
   }
 }
 
-const handleFileUpload = async (file) => {
+const handleFileUpload = async (file: any) => {
   try {
     const formData = new FormData()
     formData.append('file', file.raw)
     formData.append('related_model', 'AfterSalesOrder')
     formData.append('related_id', currentAttachmentOrderId.value)
-    
+
     let category = 'OTHER'
     if (file.raw.type.startsWith('image/')) {
       category = 'FAULT_IMAGE'
@@ -837,26 +837,26 @@ const handleFileUpload = async (file) => {
       category = 'FAULT_VIDEO'
     }
     formData.append('category', category)
-    
+
     await uploadAttachment(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    
+
     ElMessage.success(`${file.name} 上传成功`)
     loadAttachments()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(`${file.name} 上传失败`)
   }
 }
 
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: any) => {
   if (!bytes) return '0 B'
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-const getCategoryLabel = (category) => {
+const getCategoryLabel = (category: any) => {
   const map = {
     'FAULT_IMAGE': '故障图片',
     'FAULT_VIDEO': '故障视频',
@@ -864,10 +864,10 @@ const getCategoryLabel = (category) => {
     'VIDEO': '视频',
     'OTHER': '其他'
   }
-  return map[category] || category
+  return (map as Record<string, any>)[category] || category
 }
 
-const downloadAttachment = async (attachment) => {
+const downloadAttachment = async (attachment: any) => {
   try {
     // 走带 JWT 的 blob 下载，window.open 不会携带 Authorization 头会 401
     const blob = await downloadAttachmentApi(attachment.id)
@@ -879,18 +879,18 @@ const downloadAttachment = async (attachment) => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('下载失败')
   }
 }
 
-const handleDeleteAttachment = async (attachment) => {
+const handleDeleteAttachment = async (attachment: any) => {
   try {
     await ElMessageBox.confirm('确定要删除该附件吗？', '删除确认', { type: 'warning' })
     await deleteAttachment(attachment.id)
     ElMessage.success('删除成功')
     loadAttachments()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }

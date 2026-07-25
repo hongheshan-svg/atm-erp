@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from django.db import models
 from django.db.models import Count, Q
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -271,6 +272,7 @@ class InspectionResult(BaseModel):
 # =====================
 
 
+@extend_schema_serializer(component_name='ProjectInspectionItem')
 class InspectionItemSerializer(serializers.ModelSerializer):
     check_type_display = serializers.CharField(source='get_check_type_display', read_only=True)
     result_type_display = serializers.CharField(source='get_result_type_display', read_only=True)
@@ -291,7 +293,7 @@ class InspectionTemplateSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_item_count(self, obj):
+    def get_item_count(self, obj) -> int:
         return obj.items.filter(is_deleted=False).count()
 
 

@@ -374,7 +374,7 @@ class TaxRateSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_rate_percent(self, obj):
+    def get_rate_percent(self, obj) -> str:
         return f'{obj.rate * 100}%'
 
 
@@ -388,7 +388,7 @@ class TaxPeriodSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'declared_at', 'declared_by']
 
-    def get_period_name(self, obj):
+    def get_period_name(self, obj) -> str:
         return str(obj)
 
 
@@ -411,7 +411,7 @@ class TaxDeclarationSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'declaration_no', 'payable_amount']
 
-    def get_period_name(self, obj):
+    def get_period_name(self, obj) -> str:
         return str(obj.tax_period)
 
 

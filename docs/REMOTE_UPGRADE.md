@@ -1,6 +1,6 @@
 # 远程升级 / Remote Upgrade
 
-> **适用版本**: 0.3.0+
+> **适用版本**: 0.2.0+
 > **部署模式**: Docker Compose（`DEPLOY_MODE=docker`）/ 原生 Ubuntu（`DEPLOY_MODE=native`）
 
 ---
@@ -39,7 +39,7 @@
       │  POST /api/v1/system/upgrade
       ▼
   ┌─────────────────────────────────────────┐
-  │  Django Backend (erp-backend)           │
+  │  app 容器内 Django Backend              │
   │  UpgradeService.perform()               │
   │    ├─ 获取清单 → 版本比对               │
   │    ├─ 写 UpgradeJob(status=pending)     │
@@ -62,7 +62,7 @@
   Redis PUBLISH erp:upgrade:events
           │
   ┌───────▼────────────────────────────────────────────────┐
-  │  erp-upgrade-relay 容器 (upgrade_progress_relay 命令)  │
+  │  app 容器内 upgrade_progress_relay 进程                │
   │    SUBSCRIBE erp:upgrade:events                        │
   │    → 写 UpgradeJob.steps (JSON)                        │
   │    → Django Channels PUBLISH → WS 推送管理员浏览器      │
@@ -74,8 +74,8 @@
 
 **要点说明**
 
-- **进度持久化，UI 可重连**：`relay` 把每条进度事件写入数据库；前端断线重连或 backend 重启后，可通过 `GET /api/v1/system/upgrade/jobs/<id>` 取回完整日志，无需重新升级。
-- **Docker 升级时 backend 本身会重启**，WebSocket 中断属预期行为，前端会自动轮询 job 状态直到 `success` 或 `failed`。
+- **进度持久化，UI 可重连**：`relay` 把每条进度事件写入数据库；前端断线重连或 `app` 重启后，可通过 `GET /api/v1/system/upgrade/jobs/<id>` 取回完整日志，无需重新升级。
+- **Docker 升级时 `app` 本身会重启**，WebSocket 中断属预期行为，前端会自动轮询 job 状态直到 `success` 或 `failed`。
 - **进度锁**：Redis 键 `erp:upgrade:lock` 确保同一时刻只有一个升级任务运行，防止并发升级相互干扰。
 
 ---
@@ -135,27 +135,13 @@ https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json
   "docker": {
     "image_tag": "1.3.0",
     "registry": "ghcr.io",
-    "image_owner": "hongheshan-svg",
-    "images": [
-      {
-        "name": "atm-erp-backend",
-        "digest": "sha256:abc123...（64 位十六进制）"
-      },
-      {
-        "name": "atm-erp-frontend",
-        "digest": "sha256:def456..."
-      },
-      {
-        "name": "atm-erp-updater",
-        "digest": "sha256:789abc..."
-      }
-    ]
+    "owner": "hongheshan-svg",
+    "digests": {
+      "app": "sha256:abc123...（64 位十六进制）",
+      "updater": "sha256:789abc...（64 位十六进制）"
+    }
   },
-  "native": {
-    "download_url": "https://github.com/hongheshan-svg/atm-erp/releases/download/v1.3.0/atm-erp-v1.3.0.tar.gz",
-    "sha256": "0a1b2c...（64 位十六进制，tar.gz 文件的 SHA-256）",
-    "target_version": "1.3.0"
-  }
+  "native": null
 }
 ```
 
@@ -169,8 +155,9 @@ https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json
 | `min_upgradable_from` | string | 是 | 最低可直接升级的起始版本；低于此版本须手动迁移 |
 | `docker.image_tag` | string | Docker 必填 | `docker compose pull` 使用的标签 |
 | `docker.registry` | string | Docker 必填 | 镜像注册中心，默认 `ghcr.io` |
-| `docker.image_owner` | string | Docker 必填 | 镜像所有者 namespace |
-| `docker.images[].digest` | string | Docker 必填 | `sha256:` 前缀的镜像摘要，拉取后校验完整性 |
+| `docker.owner` | string | Docker 必填 | 镜像所有者 namespace |
+| `docker.digests.app` | string | Docker 必填 | 全合一应用镜像摘要 |
+| `docker.digests.updater` | string | Docker 必填 | 升级代理镜像摘要 |
 | `native.download_url` | string | Native 必填 | tar.gz 下载地址，需在 SSRF 白名单内 |
 | `native.sha256` | string | Native 必填 | 下载包的 SHA-256 校验值 |
 | `native.target_version` | string | Native 必填 | 用于路径合法性校验（semver，防路径穿越） |
@@ -364,8 +351,8 @@ ws://<host>/ws/system/upgrade/<job_id>/
 2. **更新 `.env`** (`_apply_docker`)：将 `IMAGE_TAG=<target_version>` 写入项目根目录的 `.env` 文件。
 3. **拉取镜像**：在项目目录执行 `docker compose pull`，拉取新版本镜像。
 4. **校验摘要**：对清单中每个 `digest` 调用 `docker inspect` 验证拉到的镜像 sha256 与清单一致，防止中间人攻击。
-5. **滚动重启**：执行 `docker compose up -d`，Compose 依次重启各服务（backend/celery/celery-beat 先重启，nginx 最后）。
-6. **健康门控** (`health_gate`)：循环轮询 `http://nginx/api/v1/health/`，最多等待 600 秒。健康门控要求 HTTP 响应码为 200 **且** 响应体中 `version` 字段等于 `target_version`。
+5. **重建应用容器**：执行 `docker compose up -d app`；Django、Celery worker/beat、升级进度中转与 Nginx 均由 `app` 内的 supervisord 拉起。
+6. **健康门控** (`health_gate`)：循环轮询 `http://app/api/v1/health/`，最多等待 600 秒。健康门控要求 HTTP 响应码为 200 **且** 响应体中 `version` 字段等于 `target_version`。
 7. **成功**：写 `UpgradeJob.status=success`，推送进度事件。
 
 ### 原生模式
@@ -475,17 +462,18 @@ docker compose exec erp-updater pg_restore -h postgres -U erp_user -d erp_db \
 # 在主仓库 CI 中（.github/workflows/release.yml）
 IMAGE_TAG="1.3.0"
 
-# 构建多架构镜像
+# 构建全合一应用镜像
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/hongheshan-svg/atm-erp-backend:${IMAGE_TAG} \
-  --push ./backend
+  -f docker/app/Dockerfile \
+  -t ghcr.io/hongheshan-svg/atm-erp-app:${IMAGE_TAG} \
+  --push .
 
 # 获取镜像摘要
-BACKEND_DIGEST=$(docker manifest inspect \
-  ghcr.io/hongheshan-svg/atm-erp-backend:${IMAGE_TAG} \
+APP_DIGEST=$(docker buildx imagetools inspect \
+  ghcr.io/hongheshan-svg/atm-erp-app:${IMAGE_TAG} \
   | jq -r '.config.digest')
 
-# 同样处理 frontend、updater 镜像...
+# 同样构建并获取 atm-erp-updater 镜像摘要
 ```
 
 ### 2. 为原生包计算 sha256
@@ -510,18 +498,13 @@ cat > manifest.json <<'EOF'
   "docker": {
     "image_tag": "1.3.0",
     "registry": "ghcr.io",
-    "image_owner": "hongheshan-svg",
-    "images": [
-      {"name": "atm-erp-backend",  "digest": "sha256:<backend-digest>"},
-      {"name": "atm-erp-frontend", "digest": "sha256:<frontend-digest>"},
-      {"name": "atm-erp-updater",  "digest": "sha256:<updater-digest>"}
-    ]
+    "owner": "hongheshan-svg",
+    "digests": {
+      "app": "sha256:<app-digest>",
+      "updater": "sha256:<updater-digest>"
+    }
   },
-  "native": {
-    "download_url": "https://github.com/hongheshan-svg/atm-erp/releases/download/v1.3.0/atm-erp-v1.3.0.tar.gz",
-    "sha256": "<tar-gz-sha256>",
-    "target_version": "1.3.0"
-  }
+  "native": null
 }
 EOF
 git add manifest.json && git commit -m "release: v1.3.0" && git push
@@ -532,9 +515,9 @@ git add manifest.json && git commit -m "release: v1.3.0" && git push
 ## 手动端到端测试流程（MANUAL）
 
 > **前提条件**：
-> - 本地已运行 ATM-ERP Docker 堆栈（`docker compose up -d` 且 backend 健康）
+> - 本地已运行 ATM-ERP Docker 堆栈（`docker compose up -d` 且 `app` 健康）
 > - `erp-updater` 容器正常（`docker compose ps erp-updater`）
-> - `erp-upgrade-relay` 容器正常
+> - `app` 容器内 `upgrade-relay` 进程正常
 > - 已有超级管理员账号（拥有 `system:upgrade` 权限）
 > - 仓库已发布目标版本的 manifest.json 且镜像已推送到 GHCR
 
@@ -545,17 +528,17 @@ git add manifest.json && git commit -m "release: v1.3.0" && git push
 # 例如清单写 latest_version=1.3.0，则本地设为
 echo 'IMAGE_TAG=1.2.0' >> .env
 
-# 重启 backend 使 APP_VERSION 生效
-docker compose up -d backend
+# 重启 app 使 APP_VERSION 生效
+docker compose up -d app
 
 # 验证版本
-curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
+curl -s http://localhost/api/v1/health/ | python3 -m json.tool
 # 期望: "version": "1.2.0"
 ```
 
 ### 步骤二：以管理员登录前端
 
-1. 浏览器打开 `http://localhost:8080/erp/`
+1. 浏览器打开 `http://localhost/erp/`
 2. 以超级管理员账号登录
 3. 导航至「系统设置 → 系统升级」（URL: `/erp/system/upgrade`）
 
@@ -573,7 +556,7 @@ curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
    ```bash
    TOKEN="<your-jwt-token>"
    curl -s -H "Authorization: Bearer $TOKEN" \
-     http://localhost:8080/api/v1/system/check-update | python3 -m json.tool
+     http://localhost/api/v1/system/check-update | python3 -m json.tool
    ```
 
 ### 步骤四：执行升级
@@ -593,28 +576,28 @@ curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
    [step] pull: docker compose pull 完成
    [step] digest: all digests verified
    [step] apply: docker compose up -d 完成
-   [step] health_gate: backend healthy at 1.3.0
+   [step] health_gate: app healthy at 1.3.0
    [done] status=success
    ```
 
-4. backend 重启后前端会短暂断线（正常），自动轮询 job 状态
+4. `app` 重启后前端会短暂断线（正常），自动轮询 job 状态
 5. 约 60–120 秒后（含镜像拉取时间），前端显示「升级成功」
 
 ### 步骤五：验证升级结果
 
 ```bash
 # 检查运行版本
-curl -s http://localhost:8080/api/v1/health/ | python3 -m json.tool
+curl -s http://localhost/api/v1/health/ | python3 -m json.tool
 # 期望: "version": "1.3.0"
 
 # 检查 job 详情（status 应为 success）
 curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/system/upgrade/jobs | python3 -m json.tool
+  http://localhost/api/v1/system/upgrade/jobs | python3 -m json.tool
 
 # 检查容器镜像
 docker compose ps
-docker inspect erp-backend | jq '.[0].Config.Image'
-# 期望: ghcr.io/hongheshan-svg/atm-erp-backend:1.3.0
+docker inspect erp-app | jq '.[0].Config.Image'
+# 期望: ghcr.io/hongheshan-svg/atm-erp-app:1.3.0
 
 # 检查 .env 文件
 grep IMAGE_TAG .env
@@ -626,7 +609,7 @@ grep IMAGE_TAG .env
 在实际升级前，可通过以下方式模拟失败来测试自动回滚：
 
 ```bash
-# 方法：将 docker-compose.yml 中 backend healthcheck 临时改为总是失败
+# 方法：将 docker-compose.yml 中 app healthcheck 临时改为总是失败
 # 或直接修改清单中 digest 为错误值，触发完整性校验失败
 
 # 观察 updater 日志，期望看到：
@@ -635,7 +618,7 @@ grep IMAGE_TAG .env
 # [done] status=rolled_back
 
 # 验证版本已回滚
-curl -s http://localhost:8080/api/v1/health/ | jq '.version'
+curl -s http://localhost/api/v1/health/ | jq '.version'
 # 期望: "1.2.0"
 ```
 
@@ -643,7 +626,7 @@ curl -s http://localhost:8080/api/v1/health/ | jq '.version'
 
 ```bash
 curl -s -X POST -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/system/rollback | python3 -m json.tool
+  http://localhost/api/v1/system/rollback | python3 -m json.tool
 # 期望: {"job_id": "...", "status": "pending"}
 ```
 
@@ -655,7 +638,7 @@ sed -i 's/IMAGE_TAG=1.2.0/IMAGE_TAG=1.3.0/' .env
 docker compose up -d
 
 # 清理升级日志（可选）
-docker compose exec backend python manage.py shell -c \
+docker compose exec app python manage.py shell -c \
   "from apps.core.models import UpgradeJob; UpgradeJob.objects.all().delete(); print('cleared')"
 ```
 

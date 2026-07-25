@@ -1354,7 +1354,7 @@ router.beforeEach(async (to, from, next) => {
     if (!userStore.userInfo) {
       try {
         await userStore.getProfile()
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load user profile:', error)
         // 清理无效状态
         localStorage.removeItem('access_token')
@@ -1383,7 +1383,7 @@ router.beforeEach(async (to, from, next) => {
     }
 
     // 检查权限：优先使用 permission 字段，回退到 menuId 保持兼容
-    const requiredPermission = to.meta.permission || to.meta.menuId
+    const requiredPermission = (to.meta.permission || to.meta.menuId) as string | undefined
     if (requiredPermission && !permissionStore.hasPermission(requiredPermission)) {
       console.warn(`Access denied to ${to.path}, missing permission: ${requiredPermission}`)
       // 避免无限重定向：dashboard是默认落地页，无权限时直接放行

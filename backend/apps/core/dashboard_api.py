@@ -124,9 +124,7 @@ class ExecutiveDashboardView(APIView):
         return {
             'in_progress': plans.filter(status='IN_PROGRESS').count(),
             'pending': plans.filter(status__in=['DRAFT', 'CONFIRMED']).count(),
-            'completed_this_month': plans.filter(
-                status='COMPLETED', actual_end__month=timezone.now().month
-            ).count(),
+            'completed_this_month': plans.filter(status='COMPLETED', actual_end__month=timezone.now().month).count(),
         }
 
     def _get_finance_overview(self, month_start):

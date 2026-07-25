@@ -29,4 +29,3 @@ class Migration(migrations.Migration):
             field=models.ManyToManyField(blank=True, related_name='workflow_step_cc', to=settings.AUTH_USER_MODEL, verbose_name='抄送人'),
         ),
     ]
-

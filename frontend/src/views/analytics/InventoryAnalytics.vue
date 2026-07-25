@@ -164,7 +164,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Box, Goods, Refresh, Warning } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getAnalyticsDashboard, getInventoryTurnover, getSlowMovingItems, getInventoryStocks } from '@/api/analytics'
 import { ElMessage } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -176,7 +176,7 @@ const loading = ref(false)
 const turnoverDays = ref(30)
 const slowMovingDays = ref(90)
 
-const metrics = reactive({
+const metrics = reactive<Record<string, any>>({
   inventory_value: 0,
   total_items: 0,
   turnover_rate: 0,
@@ -185,16 +185,16 @@ const metrics = reactive({
 
 const slowMovingItems = ref<any[]>([])
 const slowMovingTotal = ref(0)
-const warehouseChart = ref(null)
-const turnoverChart = ref(null)
-const abcChart = ref(null)
+const warehouseChart = ref<any>(null)
+const turnoverChart = ref<any>(null)
+const abcChart = ref<any>(null)
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20
 })
 
-const formatCurrency = (value) => {
+const formatCurrency = (value: any) => {
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
     currency: 'CNY'
@@ -207,7 +207,7 @@ const loadInventoryMetrics = async () => {
     metrics.inventory_value = data.inventory?.inventory_value || 0
     metrics.total_items = data.inventory?.total_items || 0
     metrics.low_stock_items = data.inventory?.low_stock_items || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载库存指标失败', error)
     // 使用默认值
   }
@@ -218,7 +218,7 @@ const loadTurnoverData = async () => {
     const data = await getInventoryTurnover({ days: turnoverDays.value })
     metrics.turnover_rate = data.turnover_rate || 0
     renderTurnoverChart(data)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载周转率数据失败', error)
     metrics.turnover_rate = 0
     renderTurnoverChart({ period_days: turnoverDays.value, turnover_rate: 0 })
@@ -235,7 +235,7 @@ const loadSlowMovingItems = async () => {
     })
     slowMovingItems.value = data.results || (Array.isArray(data) ? data : [])
     slowMovingTotal.value = data.count ?? slowMovingItems.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载滞销物料失败', error)
     slowMovingItems.value = []
     slowMovingTotal.value = 0
@@ -247,32 +247,32 @@ const loadSlowMovingItems = async () => {
 const loadWarehouseDistribution = async () => {
   try {
     const response = await getInventoryStocks()
-    
+
     // Group by warehouse（Stock 序列化器暴露 weighted_avg_cost，无 unit_cost）
-    const warehouseValues = {}
+    const warehouseValues: Record<string, number> = {}
     const stocks = response.results || response || []
-    stocks.forEach(stock => {
+    stocks.forEach((stock: any) => {
       const warehouse = stock.warehouse_name || 'Unknown'
       const value = (Number(stock.qty_on_hand) || 0) * (Number(stock.weighted_avg_cost) || 0)
       warehouseValues[warehouse] = (warehouseValues[warehouse] || 0) + value
     })
-    
+
     renderWarehouseChart(warehouseValues)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库分布失败', error)
   }
 }
 
-const renderWarehouseChart = (warehouseValues) => {
+const renderWarehouseChart = (warehouseValues: any) => {
   if (!warehouseChart.value) return
-  
+
   const chart = echarts.init(warehouseChart.value)
-  
+
   const data = Object.entries(warehouseValues).map(([name, value]) => ({
     name,
     value
   }))
-  
+
   const option = {
     tooltip: {
       trigger: 'item',
@@ -298,15 +298,15 @@ const renderWarehouseChart = (warehouseValues) => {
       }
     ]
   }
-  
+
   chart.setOption(option)
 }
 
-const renderTurnoverChart = (data) => {
+const renderTurnoverChart = (data: any) => {
   if (!turnoverChart.value) return
-  
+
   const chart = echarts.init(turnoverChart.value)
-  
+
   const option = {
     tooltip: {
       trigger: 'axis'
@@ -339,22 +339,22 @@ const renderTurnoverChart = (data) => {
       }
     ]
   }
-  
+
   chart.setOption(option)
 }
 
 const renderABCChart = () => {
   if (!abcChart.value) return
-  
+
   const chart = echarts.init(abcChart.value)
-  
+
   // ABC分析: A类(高价值少量) B类(中等) C类(低价值大量)
   // 基于标准ABC分类原则：A类占总价值70-80%，B类15-25%，C类5-10%
   const totalItems = metrics.total_items || 100
   const aCount = Math.round(totalItems * 0.2)
   const bCount = Math.round(totalItems * 0.3)
   const cCount = totalItems - aCount - bCount
-  
+
   const option = {
     tooltip: {
       trigger: 'axis',
@@ -396,7 +396,7 @@ const renderABCChart = () => {
       }
     ]
   }
-  
+
   chart.setOption(option)
 }
 
@@ -405,7 +405,7 @@ const exportSlowMoving = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel, formatMoney }) => {
     const columns = [
       { field: 'item_code', title: '物料编码' },
@@ -421,13 +421,13 @@ const exportSlowMoving = () => {
   })
 }
 
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadSlowMovingItems()
 }
 
-const handleCurrentChange = (page) => {
+const handleCurrentChange = (page: any) => {
   pagination.page = page
   loadSlowMovingItems()
 }
@@ -437,7 +437,7 @@ onMounted(async () => {
   await loadTurnoverData()
   await loadSlowMovingItems()
   await loadWarehouseDistribution()
-  
+
   setTimeout(() => {
     renderABCChart()
   }, 500)
@@ -506,4 +506,3 @@ onMounted(async () => {
   justify-content: flex-end;
 }
 </style>
-

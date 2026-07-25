@@ -27,6 +27,6 @@ export function resolveAlert(id: number, data: any) {
   return request({ url: `/projects/alerts/${id}/resolve/`, method: 'post', data })
 }
 
-export function ignoreAlert(id: number) {
-  return request({ url: `/projects/alerts/${id}/ignore/`, method: 'post' })
+export function ignoreAlert(id: number, data: any = {}) {
+  return request({ url: `/projects/alerts/${id}/ignore/`, method: 'post', data })
 }

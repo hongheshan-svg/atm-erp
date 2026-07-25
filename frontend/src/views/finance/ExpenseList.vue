@@ -84,7 +84,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -143,7 +143,7 @@
         <el-form-item label="费用说明" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请详细描述费用用途" />
         </el-form-item>
-        
+
         <!-- 附件上传 -->
         <el-form-item label="报销凭证">
           <!-- 编辑时使用完整附件组件 -->
@@ -185,7 +185,7 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 查看详情对话框 -->
     <el-dialog v-model="viewDialogVisible" title="费用报销详情" width="600px">
       <el-descriptions :column="2" border v-if="currentExpense">
@@ -215,7 +215,7 @@
         :disabled="currentExpense.status === 'PAID'"
       />
       <div v-if="currentExpense?.status === 'DRAFT'" class="attachment-tip">
-        <el-alert 
+        <el-alert
           title="请上传报销相关凭证，如发票、收据、付款截图等"
           type="info"
           :closable="false"
@@ -252,8 +252,8 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   { onSuccess: () => loadExpenses(), confirmTitle: '删除费用', confirmMessage: '确定要删除该费用报销吗？' }
 )
 
-const attachmentRef = ref(null)
-const tempUploadRef = ref(null)
+const attachmentRef = ref<any>(null)
+const tempUploadRef = ref<any>(null)
 const tempFiles = ref<any[]>([])
 
 const loading = ref(false)
@@ -267,22 +267,22 @@ const viewDialogVisible = ref(false)
 const attachmentDialogVisible = ref(false)
 const dialogTitle = ref('提交报销')
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentExpense = ref(null)
+const formRef = ref<any>(null)
+const currentExpense = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   project: null,
   category: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   category: 'TRAVEL',
   expense_date: '',
@@ -299,7 +299,7 @@ const rules = {
   description: [{ required: true, message: '请输入费用说明', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     SUBMITTED: 'warning',
@@ -307,10 +307,10 @@ const getStatusType = (status) => {
     REJECTED: 'danger',
     PAID: ''
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     DRAFT: '草稿',
     SUBMITTED: '已提交',
@@ -318,36 +318,36 @@ const getStatusLabel = (status) => {
     REJECTED: '已拒绝',
     PAID: '已报销'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getCategoryLabel = (category) => {
-  const labels = { 
-    TRAVEL: '差旅费', 
-    MEAL: '餐饮费', 
-    OFFICE: '办公用品', 
+const getCategoryLabel = (category: any) => {
+  const labels = {
+    TRAVEL: '差旅费',
+    MEAL: '餐饮费',
+    OFFICE: '办公用品',
     COMMUNICATION: '通讯费',
     TRAINING: '培训费',
-    OTHER: '其他' 
+    OTHER: '其他'
   }
-  return labels[category] || category
+  return (labels as Record<string, any>)[category] || category
 }
 
 const loadExpenses = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
     if (searchForm.project) params.project = searchForm.project
     if (searchForm.category) params.category = searchForm.category
     if (searchForm.status) params.status = searchForm.status
-    
+
     const res = await getExpenses(params)
     expenses.value = res.results || res.results || res || []
     pagination.total = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载费用列表失败')
   } finally {
     loading.value = false
@@ -364,7 +364,7 @@ const loadProjects = async () => {
     projects.value = res.results || res.results || res || []
     projectsLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载项目失败:', error)
     }
@@ -386,7 +386,7 @@ const loadDepartments = async () => {
   try {
     const res = await getDepartments()
     departments.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载部门失败:', error)
   }
 }
@@ -399,7 +399,7 @@ const resetSearch = () => {
   loadExpenses()
 }
 
-const handleTempFileChange = (file, fileList) => {
+const handleTempFileChange = (file: any, fileList: any) => {
   if (file.size > 10 * 1024 * 1024) {
     ElMessage.warning(`文件 "${file.name}" 超过10MB限制`)
     fileList.pop()
@@ -408,27 +408,27 @@ const handleTempFileChange = (file, fileList) => {
   tempFiles.value = fileList
 }
 
-const handleTempFileRemove = (file, fileList) => {
+const handleTempFileRemove = (file: any, fileList: any) => {
   tempFiles.value = fileList
 }
 
-const uploadTempFiles = async (expenseId) => {
+const uploadTempFiles = async (expenseId: any) => {
   if (!tempFiles.value.length) return
-  
+
   const formData = new FormData()
   formData.append('related_model', 'Expense')
   formData.append('related_id', expenseId)
   formData.append('category', 'INVOICE')
-  
+
   for (const file of tempFiles.value) {
     formData.append('files', file.raw)
   }
-  
+
   try {
     await batchUploadAttachments(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('附件上传失败:', error)
     ElMessage.warning('报销已保存，但部分附件上传失败')
   }
@@ -451,11 +451,11 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   await ensureProjectsLoaded()
   dialogTitle.value = '编辑报销'
   isEdit.value = true
-  
+
   Object.assign(form, {
     id: row.id,
     category: row.category,
@@ -465,16 +465,16 @@ const handleEdit = async (row) => {
     amount: parseFloat(row.amount || 0),
     description: row.description || ''
   })
-  
+
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   currentExpense.value = row
   viewDialogVisible.value = true
 }
 
-const handleAttachments = (row) => {
+const handleAttachments = (row: any) => {
   currentExpense.value = row
   attachmentDialogVisible.value = true
 }
@@ -482,14 +482,14 @@ const handleAttachments = (row) => {
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
-    
+
     if (!form.project && !form.department) {
       ElMessage.warning('请至少选择一个关联项目或部门')
       return
     }
-    
+
     saving.value = true
-    
+
     const payload = {
       category: form.category,
       expense_date: form.expense_date,
@@ -498,7 +498,7 @@ const handleSave = async () => {
       amount: form.amount,
       description: form.description
     }
-    
+
     if (isEdit.value) {
       await updateExpense(form.id, payload)
       ElMessage.success('更新费用报销成功')
@@ -510,11 +510,11 @@ const handleSave = async () => {
       }
       ElMessage.success('创建费用报销成功')
     }
-    
+
     dialogVisible.value = false
     tempFiles.value = []
     loadExpenses()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存费用报销失败')
       console.error(error)
@@ -524,39 +524,39 @@ const handleSave = async () => {
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交该费用报销吗？提交后将进入审批流程。', '提交确认', { type: 'warning' })
     await submitExpense(row.id)
     ElMessage.success('提交成功')
     loadExpenses()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败')
     }
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要批准该费用报销吗？', '批准确认', { type: 'warning' })
     await approveExpense(row.id)
     ElMessage.success('批准成功')
     loadExpenses()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('批准失败')
     }
   }
 }
 
-const handleReject = async (row) => {
+const handleReject = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要拒绝该费用报销吗？', '拒绝确认', { type: 'warning' })
     await rejectExpense(row.id)
     ElMessage.success('已拒绝')
     loadExpenses()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }

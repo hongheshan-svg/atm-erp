@@ -34,6 +34,7 @@ User = get_user_model()
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_jwt_client(user) -> APIClient:
     client = APIClient()
     token = RefreshToken.for_user(user).access_token
@@ -82,6 +83,7 @@ def _make_user_with_scope(username: str, scope_type: str, admin_user) -> User:
 # Test 1 – superuser ('all' scope) sees everything
 # ---------------------------------------------------------------------------
 
+
 def test_scope_all_sees_everything(api_client_admin, make_project):
     """Superuser (is_superuser=True → scope='all') can see all projects."""
     # Create two projects by admin
@@ -89,7 +91,7 @@ def test_scope_all_sees_everything(api_client_admin, make_project):
     p2 = make_project(name='Scope-All-P2')
 
     resp = api_client_admin.get(PROJECTS_URL)
-    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.data}"
+    assert resp.status_code == 200, f'Expected 200 but got {resp.status_code}: {resp.data}'
 
     ids_returned = {item['id'] for item in resp.data.get('results', resp.data)}
     assert p1.id in ids_returned
@@ -100,6 +102,7 @@ def test_scope_all_sees_everything(api_client_admin, make_project):
 # Test 2 – 'self' scope user only sees their own records
 # ---------------------------------------------------------------------------
 
+
 def test_scope_self_filters(admin_user, make_customer):
     """User with scope='self' on projects module only sees records they created."""
     user_self = _make_user_with_scope('ci_self_user', 'self', admin_user)
@@ -107,6 +110,7 @@ def test_scope_self_filters(admin_user, make_customer):
 
     # Create one project as admin (created_by=admin_user)
     from apps.projects.models import Project
+
     other_project = Project.objects.create(
         code='PRJ-SCOPE-OTHER',
         name='Other user project',
@@ -129,16 +133,17 @@ def test_scope_self_filters(admin_user, make_customer):
     )
 
     resp = client_self.get(PROJECTS_URL)
-    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.data}"
+    assert resp.status_code == 200, f'Expected 200 but got {resp.status_code}: {resp.data}'
 
     ids_returned = {item['id'] for item in resp.data.get('results', resp.data)}
-    assert own_project.id in ids_returned, "Own project should be visible"
+    assert own_project.id in ids_returned, 'Own project should be visible'
     assert other_project.id not in ids_returned, "Other user's project should be hidden"
 
 
 # ---------------------------------------------------------------------------
 # Test 3 – 'dept' scope user sees nothing for projects (no department field)
 # ---------------------------------------------------------------------------
+
 
 def test_scope_department_filters(admin_user):
     """User with scope='dept' on projects module sees empty list.
@@ -151,6 +156,7 @@ def test_scope_department_filters(admin_user):
 
     # Create a project as admin
     from apps.projects.models import Project
+
     Project.objects.create(
         code='PRJ-SCOPE-DEPT',
         name='Department scope test project',
@@ -162,13 +168,12 @@ def test_scope_department_filters(admin_user):
     )
 
     resp = client_dept.get(PROJECTS_URL)
-    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.data}"
+    assert resp.status_code == 200, f'Expected 200 but got {resp.status_code}: {resp.data}'
 
     results = resp.data.get('results', resp.data)
     # Project model has no 'department' field → scope filter returns queryset.none()
     assert len(results) == 0, (
-        f"Expected 0 results for 'dept' scope on projects (no department field), "
-        f"got {len(results)}"
+        f"Expected 0 results for 'dept' scope on projects (no department field), got {len(results)}"
     )
 
 
@@ -182,6 +187,7 @@ _customer_cache: dict = {}
 def _ensure_customer(admin_user):
     """Return (or create) a reusable test customer."""
     from apps.masterdata.models import Customer
+
     obj, _ = Customer.objects.get_or_create(
         code='CUST-SCOPE-TEST',
         defaults={'name': 'Scope Test Customer', 'created_by': admin_user},

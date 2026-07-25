@@ -2,19 +2,19 @@
   <div class="diagnostic-session-list">
     <el-card>
       <template #header><span>远程诊断会话</span></template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="session_no" label="会话编号" width="150" />
@@ -34,7 +34,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -77,7 +77,7 @@ const total = ref(0)
 const viewDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 
-const getStatusType = (s) => ({ 'IN_PROGRESS': 'primary', 'COMPLETED': 'success', 'PENDING': 'warning' }[s] || 'info')
+const getStatusType = (s: any) => (({ 'IN_PROGRESS': 'primary', 'COMPLETED': 'success', 'PENDING': 'warning' } as Record<string, any>)[s] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -85,19 +85,19 @@ const loadData = async () => {
     const res = await getDiagnosticSessionList({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getDiagnosticSession(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true

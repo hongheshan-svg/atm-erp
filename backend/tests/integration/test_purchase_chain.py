@@ -36,6 +36,7 @@ def _today_plus(days: int) -> str:
 # Test 1 – create a purchase request via API
 # ---------------------------------------------------------------------------
 
+
 def test_create_purchase_request(api_client_admin, admin_user, make_supplier, make_item):
     """POST /api/purchase/requests/ creates a PR in DRAFT status."""
     supplier = make_supplier()
@@ -60,7 +61,7 @@ def test_create_purchase_request(api_client_admin, admin_user, make_supplier, ma
     }
 
     resp = api_client_admin.post(PR_URL, payload, format='json')
-    assert resp.status_code == 201, f"Expected 201 but got {resp.status_code}: {resp.data}"
+    assert resp.status_code == 201, f'Expected 201 but got {resp.status_code}: {resp.data}'
     data = resp.data
     assert data['status'] == 'DRAFT'
     assert data['id']
@@ -69,6 +70,7 @@ def test_create_purchase_request(api_client_admin, admin_user, make_supplier, ma
 # ---------------------------------------------------------------------------
 # Test 2 – create a purchase order linked to a PR
 # ---------------------------------------------------------------------------
+
 
 def test_create_po_from_request(api_client_admin, admin_user, make_supplier, make_item, make_project):
     """Creating a PO with a reference to a PR; verify PR linkage via project."""
@@ -95,7 +97,7 @@ def test_create_po_from_request(api_client_admin, admin_user, make_supplier, mak
     }
 
     resp = api_client_admin.post(PO_URL, payload, format='json')
-    assert resp.status_code == 201, f"Expected 201 but got {resp.status_code}: {resp.data}"
+    assert resp.status_code == 201, f'Expected 201 but got {resp.status_code}: {resp.data}'
     data = resp.data
     assert data['status'] == 'DRAFT'
     assert data['project'] == project.id
@@ -106,9 +108,8 @@ def test_create_po_from_request(api_client_admin, admin_user, make_supplier, mak
 # Test 3 – confirming a GoodsReceipt increases stock
 # ---------------------------------------------------------------------------
 
-def test_goods_receipt_updates_stock(
-    api_client_admin, admin_user, make_supplier, make_item, make_warehouse
-):
+
+def test_goods_receipt_updates_stock(api_client_admin, admin_user, make_supplier, make_item, make_warehouse):
     """Confirming a GoodsReceipt creates StockMove(IN_PURCHASE, COMPLETED) → Stock updated."""
     supplier = make_supplier()
     item = make_item(standard_cost=Decimal('75.00'))
@@ -132,7 +133,6 @@ def test_goods_receipt_updates_stock(
     )
 
     # Step 2: create a GoodsReceipt via API
-    from apps.purchase.models import GoodsReceiptLine
 
     receipt_payload = {
         'po': po.id,
@@ -149,29 +149,19 @@ def test_goods_receipt_updates_stock(
     }
 
     create_resp = api_client_admin.post(RECEIPT_URL, receipt_payload, format='json')
-    assert create_resp.status_code == 201, (
-        f"Receipt creation failed: {create_resp.status_code}: {create_resp.data}"
-    )
+    assert create_resp.status_code == 201, f'Receipt creation failed: {create_resp.status_code}: {create_resp.data}'
     receipt_id = create_resp.data['id']
 
     # Verify no stock yet
     assert not Stock.objects.filter(warehouse=warehouse, item=item).exists()
 
     # Step 3: confirm the receipt
-    confirm_resp = api_client_admin.post(
-        f'{RECEIPT_URL}{receipt_id}/confirm/', {}, format='json'
-    )
-    assert confirm_resp.status_code == 200, (
-        f"Confirm failed: {confirm_resp.status_code}: {confirm_resp.data}"
-    )
+    confirm_resp = api_client_admin.post(f'{RECEIPT_URL}{receipt_id}/confirm/', {}, format='json')
+    assert confirm_resp.status_code == 200, f'Confirm failed: {confirm_resp.status_code}: {confirm_resp.data}'
     assert confirm_resp.data['status'] == 'CONFIRMED'
 
     # Step 4: verify stock was created
     stock = Stock.objects.filter(warehouse=warehouse, item=item).first()
     assert stock is not None, 'Stock record should have been created after receipt confirmation'
-    assert stock.qty_on_hand == Decimal('20'), (
-        f"Expected qty_on_hand=20 but got {stock.qty_on_hand}"
-    )
-    assert stock.weighted_avg_cost == Decimal('75.00'), (
-        f"Expected WAC=75.00 but got {stock.weighted_avg_cost}"
-    )
+    assert stock.qty_on_hand == Decimal('20'), f'Expected qty_on_hand=20 but got {stock.qty_on_hand}'
+    assert stock.weighted_avg_cost == Decimal('75.00'), f'Expected WAC=75.00 but got {stock.weighted_avg_cost}'

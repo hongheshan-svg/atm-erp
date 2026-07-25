@@ -1,6 +1,7 @@
 /**
  * 验收管理 API
  */
+import type { AxiosResponse } from 'axios'
 import request from '@/utils/request'
 
 export function getAcceptanceList(params?: Record<string, any>) {
@@ -25,6 +26,15 @@ export function getAcceptanceStatistics() {
 
 export function getAcceptanceReport(id: number) {
   return request({ url: `/projects/acceptances/${id}/report/`, method: 'get' })
+}
+
+export function downloadAcceptanceReport(id: number) {
+  return request<AxiosResponse<Blob>>({
+    url: `/projects/acceptances/${id}/report/`,
+    method: 'get',
+    params: { download: 'pdf' },
+    responseType: 'blob'
+  })
 }
 
 export function applyAcceptanceTemplate(id: number, data: any) {

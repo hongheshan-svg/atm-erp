@@ -26,7 +26,7 @@
                 </div>
               </div>
             </template>
-            
+
             <el-descriptions :column="2" border>
               <el-descriptions-item label="Bug编号">{{ bug.bug_number }}</el-descriptions-item>
               <el-descriptions-item label="Bug类型">{{ bug.bug_type_display }}</el-descriptions-item>
@@ -65,7 +65,7 @@
             <template #header>
               <span>评论 ({{ bug.comments?.length || 0 }})</span>
             </template>
-            
+
             <!-- 评论列表 -->
             <div class="comment-list">
               <div v-for="comment in bug.comments" :key="comment.id" class="comment-item">
@@ -80,7 +80,7 @@
               </div>
               <el-empty v-if="!bug.comments?.length" description="暂无评论" />
             </div>
-            
+
             <!-- 添加评论 -->
             <div class="add-comment">
               <el-input
@@ -114,7 +114,7 @@
                 </el-upload>
               </div>
             </template>
-            
+
             <div class="attachment-list">
               <div v-for="att in bug.attachments" :key="att.id" class="attachment-item">
                 <el-icon><Document /></el-icon>
@@ -130,7 +130,7 @@
             <template #header>
               <span>变更历史</span>
             </template>
-            
+
             <el-timeline>
               <el-timeline-item
                 v-for="history in bug.histories"
@@ -182,30 +182,28 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
 import { getBug, changeBugStatus, addBugComment } from '@/api/projects/bug'
-import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
 
 const loading = ref(false)
 const addingComment = ref(false)
 const changingStatus = ref(false)
-const bug = ref(null)
+const bug = ref<any>(null)
 const newComment = ref('')
 const statusDialogVisible = ref(false)
 
-const statusForm = reactive({
+const statusForm = reactive<Record<string, any>>({
   status: '',
   resolution: '',
   solution: ''
 })
 
-const bugId = computed(() => route.params.id)
+const bugId = computed(() => Number(route.params.id))
 
 const uploadUrl = computed(() => `/api/projects/bugs/${bugId.value}/attachments/`)
 const uploadHeaders = computed(() => ({
-  Authorization: `Bearer ${userStore.token}`
+  Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`
 }))
 
 const statusOptions = [
@@ -230,7 +228,7 @@ const resolutionOptions = [
   { value: 'BY_DESIGN', label: '设计如此' }
 ]
 
-const getSeverityType = (severity) => {
+const getSeverityType = (severity: any) => {
   const types = {
     'CRITICAL': 'danger',
     'MAJOR': 'warning',
@@ -238,20 +236,20 @@ const getSeverityType = (severity) => {
     'MINOR': 'success',
     'SUGGESTION': ''
   }
-  return types[severity] || ''
+  return (types as Record<string, any>)[severity] || ''
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const types = {
     'P0': 'danger',
     'P1': 'warning',
     'P2': 'info',
     'P3': 'success'
   }
-  return types[priority] || ''
+  return (types as Record<string, any>)[priority] || ''
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'NEW': '',
     'CONFIRMED': 'warning',
@@ -264,10 +262,10 @@ const getStatusType = (status) => {
     'BY_DESIGN': 'info',
     'DUPLICATE': 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {
@@ -276,7 +274,7 @@ const formatDate = (dateStr) => {
   })
 }
 
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: any) => {
   if (!bytes) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
@@ -292,7 +290,7 @@ const loadBug = async () => {
   loading.value = true
   try {
     bug.value = await getBug(bugId.value)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载Bug详情失败')
     router.push('/projects/bugs')
   } finally {
@@ -316,14 +314,14 @@ const handleStatusSubmit = async () => {
     ElMessage.warning('请选择状态')
     return
   }
-  
+
   changingStatus.value = true
   try {
     await changeBugStatus(bugId.value, statusForm)
     ElMessage.success('状态变更成功')
     statusDialogVisible.value = false
     loadBug()
-  } catch (error) {
+  } catch (error: any) {
     const msg = error.response?.data?.error || '状态变更失败'
     ElMessage.error(msg)
   } finally {
@@ -336,7 +334,7 @@ const handleAddComment = async () => {
     ElMessage.warning('请输入评论内容')
     return
   }
-  
+
   addingComment.value = true
   try {
     await addBugComment(bugId.value, {
@@ -345,7 +343,7 @@ const handleAddComment = async () => {
     ElMessage.success('评论发表成功')
     newComment.value = ''
     loadBug()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('发表评论失败')
   } finally {
     addingComment.value = false
@@ -505,4 +503,3 @@ onMounted(() => {
   color: #409eff;
 }
 </style>
-

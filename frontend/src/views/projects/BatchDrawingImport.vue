@@ -167,8 +167,8 @@
       <!-- 错误信息 -->
       <div v-if="importResult.errors?.length" class="error-list">
         <h4>错误信息</h4>
-        <el-alert 
-          v-for="(err, idx) in importResult.errors" 
+        <el-alert
+          v-for="(err, idx) in importResult.errors"
           :key="idx"
           type="error"
           :title="err.filename"
@@ -192,9 +192,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { 
-  UploadFilled, FolderOpened, Delete, Upload, RefreshLeft, 
-  QuestionFilled, Link 
+import {
+  UploadFilled, FolderOpened, Delete, Upload, RefreshLeft,
+  QuestionFilled, Link
 } from '@element-plus/icons-vue'
 import { getDrawingImportSupportedFormats, batchImportDrawings } from '@/api/projects/drawing'
 import { getProjectList } from '@/api/projects/project'
@@ -208,14 +208,14 @@ const fileList = ref<any[]>([])
 const zipFileList = ref<any[]>([])
 const parsedFiles = ref<any[]>([])
 const importing = ref(false)
-const importResult = ref(null)
+const importResult = ref<any>(null)
 const formatsDialogVisible = ref(false)
 const supportedFormats = ref<any[]>([])
 
-const uploadRef = ref(null)
-const zipUploadRef = ref(null)
+const uploadRef = ref<any>(null)
+const zipUploadRef = ref<any>(null)
 
-const importForm = reactive({
+const importForm = reactive<Record<string, any>>({
   project_id: null,
   auto_link: true,
   overwrite: false
@@ -231,7 +231,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load projects failed:', error)
   }
 }
@@ -240,26 +240,26 @@ const loadFormats = async () => {
   try {
     const res = await getDrawingImportSupportedFormats()
     supportedFormats.value = res.formats || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load formats failed:', error)
   }
 }
 
-const parseFilename = (filename) => {
+const parseFilename = (filename: any) => {
   const ext = filename.split('.').pop().toLowerCase()
   const nameWithoutExt = filename.replace(/\.[^.]+$/, '')
-  
+
   // 尝试解析版本号
   let version = 'A0'
   let drawingNo = nameWithoutExt
-  
+
   const versionPatterns = [
     /^(.+)[-_]([A-Z]\d+)$/i,  // ABC-001-A1
     /^(.+)[-_]Rev(\d+)$/i,    // ABC-001-Rev01
     /^(.+)[-_]V(\d+)$/i,      // ABC-001-V2
     /^(.+)[-_]([A-Z])$/i,     // ABC-001-A
   ]
-  
+
   for (const pattern of versionPatterns) {
     const match = nameWithoutExt.match(pattern)
     if (match) {
@@ -275,7 +275,7 @@ const parseFilename = (filename) => {
       break
     }
   }
-  
+
   const typeMap = {
     'pdf': 'PDF', 'dwg': 'DWG', 'dxf': 'DXF',
     'step': 'STEP', 'stp': 'STP', 'iges': 'IGES', 'igs': 'IGES',
@@ -283,26 +283,26 @@ const parseFilename = (filename) => {
     'prt': 'CREO', 'asm': 'CREO', 'drw': 'CREO',
     'ipt': 'INVENTOR', 'iam': 'INVENTOR', 'idw': 'INVENTOR'
   }
-  
+
   return {
     original_filename: filename,
     drawing_no: drawingNo.toUpperCase(),
     version: version,
-    file_type: typeMap[ext] || 'OTHER'
+    file_type: (typeMap as Record<string, any>)[ext] || 'OTHER'
   }
 }
 
-const handleFileChange = (file, newFileList) => {
+const handleFileChange = (file: any, newFileList: any) => {
   fileList.value = newFileList
   updateParsedFiles()
 }
 
-const handleFileRemove = (file, newFileList) => {
+const handleFileRemove = (file: any, newFileList: any) => {
   fileList.value = newFileList
   updateParsedFiles()
 }
 
-const handleZipChange = (file, newFileList) => {
+const handleZipChange = (file: any, newFileList: any) => {
   zipFileList.value = newFileList
 }
 
@@ -314,7 +314,7 @@ const updateParsedFiles = () => {
   parsedFiles.value = fileList.value.map(f => parseFilename(f.name))
 }
 
-const removeFile = (index) => {
+const removeFile = (index: any) => {
   fileList.value.splice(index, 1)
   parsedFiles.value.splice(index, 1)
 }
@@ -333,16 +333,16 @@ const startImport = async () => {
     ElMessage.warning('请选择项目并上传文件')
     return
   }
-  
+
   importing.value = true
   importResult.value = null
-  
+
   try {
     const formData = new FormData()
     formData.append('project_id', importForm.project_id)
     formData.append('auto_link', importForm.auto_link)
     formData.append('overwrite', importForm.overwrite)
-    
+
     if (zipFileList.value.length > 0) {
       formData.append('zip_file', zipFileList.value[0].raw)
     } else {
@@ -350,13 +350,13 @@ const startImport = async () => {
         formData.append('files', file.raw)
       })
     }
-    
+
     const res = await batchImportDrawings( formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    
+
     importResult.value = res
-    
+
     if (res.error) {
       ElMessage.error(res.error)
     } else if (res.errors?.length) {
@@ -364,11 +364,11 @@ const startImport = async () => {
     } else {
       ElMessage.success(`成功导入${res.imported}个图纸`)
     }
-    
+
     // 清空文件列表
     clearAll()
-    
-  } catch (error) {
+
+  } catch (error: any) {
     ElMessage.error('导入失败')
     console.error(error)
   } finally {
@@ -380,22 +380,22 @@ const showFormats = () => {
   formatsDialogVisible.value = true
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'IMPORTED': 'success',
     'SKIPPED': 'info',
     'ERROR': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'IMPORTED': '已导入',
     'SKIPPED': '已跳过',
     'ERROR': '失败'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
 onMounted(() => {

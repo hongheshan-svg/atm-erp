@@ -31,8 +31,8 @@ Page({
         url: '/core/workflow/instances/my_submitted/',
         showLoading: false
       })
-      this.setData({ 
-        submittedCount: (submittedRes.slice ? submittedRes : submittedRes.results || []).length 
+      this.setData({
+        submittedCount: (submittedRes.slice ? submittedRes : submittedRes.results || []).length
       })
 
     } catch (err) {

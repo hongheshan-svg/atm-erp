@@ -14,6 +14,7 @@ from .after_sales_service import (
     ServiceContractViewSet,
     ServiceRequestViewSet,
 )
+from .change_order import SalesOrderChangeViewSet
 from .contract_templates import ContractClauseViewSet, ContractTemplateViewSet, GeneratedContractViewSet
 from .crm_views import (
     CRMDashboardView,
@@ -56,7 +57,6 @@ from .quote_prediction import (
     QuoteVersionViewSet,
 )
 from .quote_templates import QuoteHistoryViewSet, QuoteTemplateViewSet
-from .change_order import SalesOrderChangeViewSet
 from .views import (
     DeliveryOrderLineViewSet,
     DeliveryOrderViewSet,

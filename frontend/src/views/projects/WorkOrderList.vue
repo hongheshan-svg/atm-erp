@@ -6,7 +6,7 @@
         <el-icon><Plus /></el-icon> 新建工单
       </el-button>
     </div>
-    
+
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stats-row">
       <el-col :span="4">
@@ -46,7 +46,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 筛选 -->
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" :model="queryParams">
@@ -77,7 +77,7 @@
         </el-form-item>
       </el-form>
     </el-card>
-    
+
     <!-- 工单列表 -->
     <el-card shadow="never">
       <!-- 批量操作 -->
@@ -123,16 +123,16 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleDispatch(row)" 
+            <el-button type="success" link size="small" @click="handleDispatch(row)"
               v-if="['PENDING', 'ASSIGNED'].includes(row.status)">派工</el-button>
-            <el-button type="warning" link size="small" @click="handleStart(row)" 
+            <el-button type="warning" link size="small" @click="handleStart(row)"
               v-if="row.status === 'ASSIGNED'">开始</el-button>
-            <el-button type="success" link size="small" @click="handleComplete(row)" 
+            <el-button type="success" link size="small" @click="handleComplete(row)"
               v-if="row.status === 'IN_PROGRESS'">完成</el-button>
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         class="pagination"
         v-model:current-page="queryParams.page"
@@ -144,7 +144,7 @@
         @current-change="fetchData"
       />
     </el-card>
-    
+
     <!-- 新建/编辑工单对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -187,13 +187,13 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="计划开始" prop="planned_start">
-              <el-date-picker v-model="form.planned_start" type="datetime" style="width: 100%" 
+              <el-date-picker v-model="form.planned_start" type="datetime" style="width: 100%"
                 value-format="YYYY-MM-DDTHH:mm:ss" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="计划结束" prop="planned_end">
-              <el-date-picker v-model="form.planned_end" type="datetime" style="width: 100%" 
+              <el-date-picker v-model="form.planned_end" type="datetime" style="width: 100%"
                 value-format="YYYY-MM-DDTHH:mm:ss" />
             </el-form-item>
           </el-col>
@@ -222,7 +222,7 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 派工对话框 -->
     <el-dialog v-model="dispatchDialogVisible" title="工单派工" width="500px">
       <el-form label-width="80px">
@@ -264,13 +264,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getWorkOrderList, getWorkOrder, createWorkOrder, updateWorkOrder, getWorkOrderStatistics, getWorkOrderTypes, dispatchWorkOrder, startWorkOrder, completeWorkOrder } from '@/api/projects/work-order'
 import { getProjectList } from '@/api/projects/project'
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { getPaginationTotal } from '@/utils/pagination'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/work-orders/', { onSuccess: () => fetchData() })
 
@@ -286,15 +287,15 @@ const dialogVisible = ref(false)
 const dispatchDialogVisible = ref(false)
 const dialogTitle = ref('新建工单')
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentOrder = ref(null)
+const formRef = ref<any>(null)
+const currentOrder = ref<any>(null)
 
 const projects = ref<any[]>([])
 const users = ref<any[]>([])
 const orderTypes = ref<any[]>([])
 const stats = ref<Record<string, any>>({})
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   page: 1,
   page_size: 10,
   order_type: null,
@@ -302,7 +303,7 @@ const queryParams = reactive({
   status: null
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   order_no: '',
   order_type: 'PRODUCTION',
   title: '',
@@ -316,7 +317,7 @@ const form = reactive({
   requirements: ''
 })
 
-const dispatchForm = reactive({
+const dispatchForm = reactive<Record<string, any>>({
   worker_ids: []
 })
 
@@ -334,8 +335,8 @@ const fetchData = async () => {
   try {
     const data = await getWorkOrderList(queryParams)
     tableData.value = data.results || data
-    total.value = data.count || data.length
-  } catch (e) {
+    total.value = getPaginationTotal(data)
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -346,7 +347,7 @@ const fetchStats = async () => {
   try {
     const data = await getWorkOrderStatistics()
     stats.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -355,7 +356,7 @@ const fetchProjects = async () => {
   try {
     const data = await getProjectList({ page_size: 500 })
     projects.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -363,11 +364,11 @@ const fetchProjects = async () => {
 const fetchUsers = async () => {
   try {
     const data = await getUsers({ page_size: 200 })
-    users.value = (data.results || data).map(u => ({
+    users.value = (data.results || data).map((u: any) => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
     }))
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -376,7 +377,7 @@ const fetchOrderTypes = async () => {
   try {
     const data = await getWorkOrderTypes()
     orderTypes.value = data
-  } catch (e) {
+  } catch (e: any) {
     orderTypes.value = [
       { value: 'PRODUCTION', label: '生产工单' },
       { value: 'ASSEMBLY', label: '装配工单' },
@@ -388,8 +389,8 @@ const fetchOrderTypes = async () => {
   }
 }
 
-const getStatusCount = (status) => {
-  const item = (stats.value.by_status || []).find(s => s.status === status)
+const getStatusCount = (status: any) => {
+  const item = (stats.value.by_status || []).find((s: any) => s.status === status)
   return item?.count || 0
 }
 
@@ -401,7 +402,7 @@ const resetQuery = () => {
   fetchData()
 }
 
-const filterByStatus = (status) => {
+const filterByStatus = (status: any) => {
   queryParams.status = status || null
   fetchData()
 }
@@ -426,11 +427,11 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getWorkOrder(row.id)
     viewDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
   }
@@ -440,7 +441,7 @@ const handleView = async (row) => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -453,7 +454,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('操作失败')
   } finally {
@@ -461,7 +462,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleDispatch = (row) => {
+const handleDispatch = (row: any) => {
   currentOrder.value = row
   dispatchForm.worker_ids = []
   dispatchDialogVisible.value = true
@@ -472,7 +473,7 @@ const confirmDispatch = async () => {
     ElMessage.warning('请选择执行人')
     return
   }
-  
+
   dispatchLoading.value = true
   try {
     await dispatchWorkOrder(currentOrder.value.id, {
@@ -481,14 +482,14 @@ const confirmDispatch = async () => {
     ElMessage.success('派工成功')
     dispatchDialogVisible.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('派工失败')
   } finally {
     dispatchLoading.value = false
   }
 }
 
-const handleStart = (row) => {
+const handleStart = (row: any) => {
   ElMessageBox.confirm('确定要开始执行此工单吗？', '提示', { type: 'warning' })
     .then(async () => {
       await startWorkOrder(row.id)
@@ -498,7 +499,7 @@ const handleStart = (row) => {
     })
 }
 
-const handleComplete = (row) => {
+const handleComplete = (row: any) => {
   ElMessageBox.confirm('确定要完成此工单吗？', '提示', { type: 'warning' })
     .then(async () => {
       await completeWorkOrder(row.id)
@@ -508,27 +509,27 @@ const handleComplete = (row) => {
     })
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('zh-CN')
 }
 
-const getOrderTypeTag = (type) => {
+const getOrderTypeTag = (type: any) => {
   const tags = { PRODUCTION: 'primary', ASSEMBLY: '', DEBUG: 'success', REPAIR: 'danger', INSTALLATION: 'warning' }
-  return tags[type] || 'info'
+  return (tags as Record<string, any>)[type] || 'info'
 }
 
-const getPriorityTag = (priority) => {
+const getPriorityTag = (priority: any) => {
   const tags = { LOW: 'info', NORMAL: '', HIGH: 'warning', URGENT: 'danger' }
-  return tags[priority] || ''
+  return (tags as Record<string, any>)[priority] || ''
 }
 
-const getStatusTag = (status) => {
+const getStatusTag = (status: any) => {
   const tags = { DRAFT: 'info', PENDING: 'warning', ASSIGNED: '', IN_PROGRESS: 'primary', COMPLETED: 'success', CANCELLED: 'info' }
-  return tags[status] || ''
+  return (tags as Record<string, any>)[status] || ''
 }
 
-const getProgressColor = (progress, isOverdue) => {
+const getProgressColor = (progress: any, isOverdue: any) => {
   if (isOverdue) return '#f56c6c'
   if (progress >= 80) return '#67c23a'
   if (progress >= 50) return '#409eff'

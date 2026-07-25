@@ -208,37 +208,37 @@ const activeAlarms = ref<any[]>([])
 const pendingPM = ref<any[]>([])
 const connections = ref<any[]>([])
 const diagnosisDialogVisible = ref(false)
-const currentEquipment = ref(null)
-let refreshInterval = null
+const currentEquipment = ref<any>(null)
+let refreshInterval: any = null
 
-const diagnosisForm = reactive({
+const diagnosisForm = reactive<Record<string, any>>({
   reason: 'PROACTIVE',
   description: ''
 })
 
-const getSeverityType = (severity) => {
+const getSeverityType = (severity: any) => {
   const map = { INFO: 'info', WARNING: 'warning', ALARM: 'danger', CRITICAL: 'danger' }
-  return map[severity] || 'info'
+  return (map as Record<string, any>)[severity] || 'info'
 }
 
-const getUrgencyType = (urgency) => {
+const getUrgencyType = (urgency: any) => {
   const map = { LOW: 'info', MEDIUM: 'warning', HIGH: 'danger', IMMEDIATE: 'danger' }
-  return map[urgency] || 'info'
+  return (map as Record<string, any>)[urgency] || 'info'
 }
 
-const formatTime = (datetime) => {
+const formatTime = (datetime: any) => {
   if (!datetime) return '-'
   const d = new Date(datetime)
   return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
 }
 
-const formatDateTime = (datetime) => {
+const formatDateTime = (datetime: any) => {
   if (!datetime) return '-'
   const d = new Date(datetime)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
 }
 
-const isHeartbeatOld = (datetime) => {
+const isHeartbeatOld = (datetime: any) => {
   if (!datetime) return true
   const diff = Date.now() - new Date(datetime).getTime()
   return diff > 5 * 60 * 1000 // 5分钟
@@ -251,7 +251,7 @@ const loadDashboard = async () => {
     stats.value = res.equipment_stats || {}
     activeAlarms.value = res.active_alarms || []
     pendingPM.value = res.pending_pm || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -262,7 +262,7 @@ const loadConnections = async () => {
   try {
     const res = await getEquipmentConnectionList({ page_size: 100 })
     connections.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -272,17 +272,17 @@ const refreshData = () => {
   loadConnections()
 }
 
-const handleAckAlarm = async (alarm) => {
+const handleAckAlarm = async (alarm: any) => {
   try {
     await acknowledgeEquipmentAlarm(alarm.id)
     ElMessage.success('报警已确认')
     loadDashboard()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleActionPM = async (pm) => {
+const handleActionPM = async (pm: any) => {
   try {
     const { value } = await ElMessageBox.prompt('请输入处理措施', '处理维护提醒', {
       confirmButtonText: '确认',
@@ -291,24 +291,24 @@ const handleActionPM = async (pm) => {
     await takePMAction(pm.id, { action_taken: value })
     ElMessage.success('已标记处理')
     loadDashboard()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }
 
-const toggleCollection = async (conn) => {
+const toggleCollection = async (conn: any) => {
   try {
     await patchEquipmentConnection(conn.id, {
       is_enabled: conn.is_enabled
     })
     ElMessage.success(conn.is_enabled ? '采集已启用' : '采集已停止')
-  } catch (e) {
+  } catch (e: any) {
     conn.is_enabled = !conn.is_enabled
     ElMessage.error('操作失败')
   }
 }
 
-const testConnection = async (conn) => {
+const testConnection = async (conn: any) => {
   try {
     const res = await testEquipmentConnection(conn.id)
     if (res.success) {
@@ -316,16 +316,16 @@ const testConnection = async (conn) => {
     } else {
       ElMessage.error('连接失败')
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('测试失败')
   }
 }
 
-const viewEquipmentData = (conn) => {
+const viewEquipmentData = (conn: any) => {
   router.push(`/projects/equipment-data?equipment=${conn.equipment}`)
 }
 
-const startDiagnosis = (conn) => {
+const startDiagnosis = (conn: any) => {
   currentEquipment.value = conn
   diagnosisForm.reason = 'PROACTIVE'
   diagnosisForm.description = ''
@@ -343,7 +343,7 @@ const handleStartDiagnosis = async () => {
     ElMessage.success('诊断会话已创建')
     diagnosisDialogVisible.value = false
     router.push(`/projects/diagnostic-session/${res.id}`)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('创建失败')
   } finally {
     submitting.value = false

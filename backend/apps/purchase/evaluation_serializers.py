@@ -35,7 +35,7 @@ class SupplierEvaluationTemplateSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_criteria_count(self, obj):
+    def get_criteria_count(self, obj) -> int:
         return obj.criteria.count()
 
 

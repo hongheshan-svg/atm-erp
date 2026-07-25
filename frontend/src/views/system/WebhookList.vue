@@ -104,10 +104,10 @@ const submitting = ref(false)
 const showForm = ref(false)
 const webhooks = ref<any[]>([])
 const eventTypes = ref<any[]>([])
-const editingId = ref(null)
-const formRef = ref(null)
+const editingId = ref<any>(null)
+const formRef = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   name: '',
   url: '',
   secret: '',
@@ -140,17 +140,17 @@ const fetchEventTypes = async () => {
   eventTypes.value = res
 }
 
-const toggleStatus = async (row) => {
+const toggleStatus = async (row: any) => {
   try {
     await webhookApi.toggleWebhook(row.id)
     ElMessage.success('状态已更新')
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     row.is_active = !row.is_active
   }
 }
 
-const testWebhook = async (row) => {
+const testWebhook = async (row: any) => {
   try {
     const res = await webhookApi.testWebhook(row.id)
     if (res.success) {
@@ -158,12 +158,12 @@ const testWebhook = async (row) => {
     } else {
       ElMessage.error(`测试失败: ${res.error_message}`)
     }
-  } catch (err) {
+  } catch (err: any) {
     ElMessage.error('测试请求失败')
   }
 }
 
-const editWebhook = (row) => {
+const editWebhook = (row: any) => {
   editingId.value = row.id
   Object.assign(form, {
     name: row.name,
@@ -176,7 +176,7 @@ const editWebhook = (row) => {
   showForm.value = true
 }
 
-const deleteWebhook = async (row) => {
+const deleteWebhook = async (row: any) => {
   await ElMessageBox.confirm('确定删除此Webhook?', '确认')
   await webhookApi.deleteWebhook(row.id)
   ElMessage.success('删除成功')

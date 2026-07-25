@@ -16,7 +16,7 @@
         </el-upload>
       </div>
     </div>
-    
+
     <el-row :gutter="16">
       <!-- 模型列表 -->
       <el-col :span="6">
@@ -24,16 +24,16 @@
           <template #header>
             <div class="card-header">
               <span>模型文件</span>
-              <el-input 
-                v-model="searchKeyword" 
-                placeholder="搜索模型..." 
+              <el-input
+                v-model="searchKeyword"
+                placeholder="搜索模型..."
                 size="small"
                 style="width: 120px"
                 clearable
               />
             </div>
           </template>
-          
+
           <el-tree
             :data="modelTree"
             :props="treeProps"
@@ -53,7 +53,7 @@
             </template>
           </el-tree>
         </el-card>
-        
+
         <!-- 模型信息 -->
         <el-card shadow="never" class="info-card" v-if="currentModel">
           <template #header>模型信息</template>
@@ -66,7 +66,7 @@
           </el-descriptions>
         </el-card>
       </el-col>
-      
+
       <!-- 3D预览区域 -->
       <el-col :span="18">
         <el-card shadow="never" class="viewer-card">
@@ -94,7 +94,7 @@
                     <el-button :icon="FullScreen" @click="toggleFullscreen" />
                   </el-tooltip>
                 </el-button-group>
-                
+
                 <el-dropdown>
                   <el-button :icon="Download">导出</el-button>
                   <template #dropdown>
@@ -107,21 +107,21 @@
               </div>
             </div>
           </template>
-          
+
           <div class="viewer-container" ref="viewerContainer">
             <div v-if="!currentModel" class="empty-viewer">
               <el-icon :size="64"><View /></el-icon>
               <p>请从左侧选择模型文件进行预览</p>
               <p class="tips">支持格式: STL, OBJ, GLTF, GLB, STEP</p>
             </div>
-            
+
             <div v-else-if="loadingModel" class="loading-viewer">
               <el-icon class="is-loading" :size="48"><Loading /></el-icon>
               <p>正在加载模型...</p>
             </div>
-            
+
             <canvas ref="canvas" class="model-canvas" v-show="currentModel && !loadingModel"></canvas>
-            
+
             <!-- 颜色选择器 -->
             <div class="color-panel" v-if="currentModel && !loadingModel">
               <el-tooltip content="模型颜色">
@@ -139,36 +139,50 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { getDrawingList } from '@/api/projects/drawing'
 import { ElMessage } from 'element-plus'
-import { 
-  Upload, Folder, Document, RefreshRight, Grid, FullScreen, 
-  Download, View, Loading 
+import {
+  Upload, Folder, Document, RefreshRight, Grid, FullScreen,
+  Download, View, Loading
 } from '@element-plus/icons-vue'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
+import {
+  AmbientLight,
+  AxesHelper,
+  Box3,
+  Color,
+  DirectionalLight,
+  GridHelper,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  Scene,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+} from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 // 数据
 const loading = ref(false)
 const loadingModel = ref(false)
 const searchKeyword = ref('')
 const modelTree = ref<any[]>([])
-const currentModel = ref(null)
+const currentModel = ref<any>(null)
 const wireframe = ref(false)
 const modelColor = ref('#4a90d9')
 const bgColor = ref('#1a1a2e')
 
 // DOM refs
-const viewerContainer = ref(null)
-const canvas = ref(null)
+const viewerContainer = ref<any>(null)
+const canvas = ref<any>(null)
 
 // Three.js 变量
-let scene, camera, renderer, controls, model
-let animationId = null
+let scene: any, camera: any, renderer: any, controls: any, model: any
+let animationId: any = null
 
 // Tree配置
 const treeProps = {
@@ -183,19 +197,19 @@ const uploadHeaders = {
 }
 
 // 格式化方法
-const formatSize = (bytes) => {
+const formatSize = (bytes: any) => {
   if (!bytes) return '-'
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return '-'
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
-const getFileColor = (type) => {
+const getFileColor = (type: any) => {
   const colors = {
     'stl': '#e74c3c',
     'obj': '#3498db',
@@ -204,7 +218,7 @@ const getFileColor = (type) => {
     'step': '#9b59b6',
     'stp': '#9b59b6'
   }
-  return colors[type?.toLowerCase()] || '#909399'
+  return (colors as Record<string, any>)[type?.toLowerCase()] || '#909399'
 }
 
 // 3D 可预览文件类型白名单（Drawing 无 drawing_type 字段，按 file_type 本地过滤）
@@ -220,30 +234,30 @@ const fetchModels = async () => {
 
     // 仅保留 3D 模型类文件，避免 PDF/DWG 等混入
     const allItems = data.results || data
-    const items = (allItems || []).filter(item =>
+    const items = (allItems || []).filter((item: any) =>
       MODEL_FILE_TYPES.includes((item.file_type || '').toLowerCase())
     )
 
     // 按项目分组
     const grouped = {}
-    items.forEach(item => {
+    items.forEach((item: any) => {
       const projectName = item.project_name || '未分类'
-      if (!grouped[projectName]) {
-        grouped[projectName] = {
+      if (!(grouped as Record<string, any>)[projectName]) {
+        (grouped as Record<string, any>)[projectName] = {
           id: `project-${projectName}`,
           name: projectName,
           type: 'folder',
           children: []
         }
       }
-      grouped[projectName].children.push({
+      (grouped as Record<string, any>)[projectName].children.push({
         ...item,
         type: 'file'
       })
     })
-    
+
     modelTree.value = Object.values(grouped)
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -251,7 +265,7 @@ const fetchModels = async () => {
 }
 
 // 处理节点点击
-const handleNodeClick = (data) => {
+const handleNodeClick = (data: any) => {
   if (data.type === 'file') {
     currentModel.value = data
     loadModel(data)
@@ -261,28 +275,28 @@ const handleNodeClick = (data) => {
 // 初始化Three.js场景
 const initScene = () => {
   if (!canvas.value || !viewerContainer.value) return
-  
+
   const container = viewerContainer.value
   const width = Math.max(container.clientWidth || 100, 100)
   const height = Math.max((container.clientHeight || 100) - 60, 100)
-  
+
   // 防止尺寸为0或负数
   if (width <= 0 || height <= 0) {
     console.warn('ModelViewer: Invalid container dimensions, retrying...')
     setTimeout(initScene, 100)
     return
   }
-  
+
   // 场景
-  scene = new THREE.Scene()
-  scene.background = new THREE.Color(bgColor.value)
-  
+  scene = new Scene()
+  scene.background = new Color(bgColor.value)
+
   // 相机
-  camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 10000)
+  camera = new PerspectiveCamera(45, width / height, 0.1, 10000)
   camera.position.set(100, 100, 100)
-  
+
   // 渲染器
-  renderer = new THREE.WebGLRenderer({ 
+  renderer = new WebGLRenderer({
     canvas: canvas.value,
     antialias: true,
     preserveDrawingBuffer: true
@@ -290,33 +304,33 @@ const initScene = () => {
   renderer.setSize(width, height)
   renderer.setPixelRatio(window.devicePixelRatio)
   renderer.shadowMap.enabled = true
-  
+
   // 控制器
   controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
   controls.dampingFactor = 0.05
-  
+
   // 灯光
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+  const ambientLight = new AmbientLight(0xffffff, 0.6)
   scene.add(ambientLight)
-  
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+
+  const directionalLight = new DirectionalLight(0xffffff, 0.8)
   directionalLight.position.set(100, 100, 100)
   directionalLight.castShadow = true
   scene.add(directionalLight)
-  
-  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4)
+
+  const directionalLight2 = new DirectionalLight(0xffffff, 0.4)
   directionalLight2.position.set(-100, 100, -100)
   scene.add(directionalLight2)
-  
+
   // 网格辅助
-  const gridHelper = new THREE.GridHelper(200, 20, 0x444444, 0x333333)
+  const gridHelper = new GridHelper(200, 20, 0x444444, 0x333333)
   scene.add(gridHelper)
-  
+
   // 坐标轴
-  const axesHelper = new THREE.AxesHelper(50)
+  const axesHelper = new AxesHelper(50)
   scene.add(axesHelper)
-  
+
   // 开始渲染循环
   animate()
 }
@@ -324,33 +338,33 @@ const initScene = () => {
 // 渲染循环
 const animate = () => {
   animationId = requestAnimationFrame(animate)
-  
+
   // 检查渲染器和相机是否有效
   if (!renderer || !camera || !scene) return
-  
+
   // 检查渲染器尺寸是否有效
-  const size = renderer.getSize(new THREE.Vector2())
+  const size = renderer.getSize(new Vector2())
   if (size.x <= 0 || size.y <= 0) return
-  
+
   controls?.update()
   renderer.render(scene, camera)
 }
 
 // 加载3D模型
-const loadModel = async (modelData) => {
+const loadModel = async (modelData: any) => {
   loadingModel.value = true
-  
+
   // 清除旧模型
   if (model) {
     scene.remove(model)
     model = null
   }
-  
+
   try {
     const fileUrl = modelData.file_url || modelData.file
-    const fileType = modelData.file_type?.toLowerCase() || 
+    const fileType = modelData.file_type?.toLowerCase() ||
                      fileUrl.split('.').pop().toLowerCase()
-    
+
     let loader
     switch (fileType) {
       case 'stl':
@@ -368,52 +382,50 @@ const loadModel = async (modelData) => {
         loadingModel.value = false
         return
     }
-    
+
     loader.load(
       fileUrl,
-      (result) => {
+      (result: any) => {
         if (fileType === 'stl') {
           const geometry = result
-          const material = new THREE.MeshStandardMaterial({ 
+          const material = new MeshStandardMaterial({
             color: modelColor.value,
             metalness: 0.3,
             roughness: 0.5,
             wireframe: wireframe.value
           })
-          model = new THREE.Mesh(geometry, material)
+          model = new Mesh(geometry, material)
         } else if (fileType === 'gltf' || fileType === 'glb') {
           model = result.scene
         } else {
           model = result
         }
-        
+
         // 居中模型
-        const box = new THREE.Box3().setFromObject(model)
-        const center = box.getCenter(new THREE.Vector3())
-        const size = box.getSize(new THREE.Vector3())
-        
+        const box = new Box3().setFromObject(model)
+        const center = box.getCenter(new Vector3())
+        const size = box.getSize(new Vector3())
+
         model.position.sub(center)
-        
+
         // 调整相机位置
         const maxDim = Math.max(size.x, size.y, size.z)
         camera.position.set(maxDim * 1.5, maxDim * 1.5, maxDim * 1.5)
         camera.lookAt(0, 0, 0)
         controls.target.set(0, 0, 0)
         controls.update()
-        
+
         scene.add(model)
         loadingModel.value = false
       },
-      (progress) => {
-        // 加载进度
-      },
-      (error) => {
+      undefined,
+      (error: any) => {
         console.error('模型加载失败:', error)
         ElMessage.error('模型加载失败')
         loadingModel.value = false
       }
     )
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     loadingModel.value = false
   }
@@ -422,11 +434,11 @@ const loadModel = async (modelData) => {
 // 重置相机
 const resetCamera = () => {
   if (!model) return
-  
-  const box = new THREE.Box3().setFromObject(model)
-  const size = box.getSize(new THREE.Vector3())
+
+  const box = new Box3().setFromObject(model)
+  const size = box.getSize(new Vector3())
   const maxDim = Math.max(size.x, size.y, size.z)
-  
+
   camera.position.set(maxDim * 1.5, maxDim * 1.5, maxDim * 1.5)
   camera.lookAt(0, 0, 0)
   controls.target.set(0, 0, 0)
@@ -434,13 +446,13 @@ const resetCamera = () => {
 }
 
 // 设置视角
-const setViewAngle = (view) => {
+const setViewAngle = (view: any) => {
   if (!model) return
-  
-  const box = new THREE.Box3().setFromObject(model)
-  const size = box.getSize(new THREE.Vector3())
+
+  const box = new Box3().setFromObject(model)
+  const size = box.getSize(new Vector3())
   const maxDim = Math.max(size.x, size.y, size.z) * 2
-  
+
   switch (view) {
     case 'top':
       camera.position.set(0, maxDim, 0)
@@ -452,7 +464,7 @@ const setViewAngle = (view) => {
       camera.position.set(maxDim, 0, 0)
       break
   }
-  
+
   camera.lookAt(0, 0, 0)
   controls.update()
 }
@@ -463,7 +475,7 @@ const toggleWireframe = () => {
   if (model && model.material) {
     model.material.wireframe = wireframe.value
   } else if (model) {
-    model.traverse((child) => {
+    model.traverse((child: any) => {
       if (child.isMesh && child.material) {
         child.material.wireframe = wireframe.value
       }
@@ -472,11 +484,11 @@ const toggleWireframe = () => {
 }
 
 // 更新模型颜色
-const updateModelColor = (color) => {
+const updateModelColor = (color: any) => {
   if (model && model.material) {
     model.material.color.set(color)
   } else if (model) {
-    model.traverse((child) => {
+    model.traverse((child: any) => {
       if (child.isMesh && child.material) {
         child.material.color.set(color)
       }
@@ -485,9 +497,9 @@ const updateModelColor = (color) => {
 }
 
 // 更新背景颜色
-const updateBgColor = (color) => {
+const updateBgColor = (color: any) => {
   if (scene) {
-    scene.background = new THREE.Color(color)
+    scene.background = new Color(color)
   }
 }
 
@@ -503,7 +515,7 @@ const toggleFullscreen = () => {
 // 导出截图
 const exportScreenshot = () => {
   if (!renderer) return
-  
+
   const dataUrl = renderer.domElement.toDataURL('image/png')
   const link = document.createElement('a')
   link.download = `${currentModel.value?.name || 'model'}_screenshot.png`
@@ -518,7 +530,7 @@ const downloadModel = () => {
 }
 
 // 上传处理
-const beforeUpload = (file) => {
+const beforeUpload = (file: any) => {
   const allowedTypes = ['stl', 'obj', 'gltf', 'glb', 'step', 'stp']
   const ext = file.name.split('.').pop().toLowerCase()
   if (!allowedTypes.includes(ext)) {
@@ -536,13 +548,13 @@ const handleUploadSuccess = () => {
 // 窗口大小调整
 const handleResize = () => {
   if (!renderer || !camera || !viewerContainer.value) return
-  
+
   const width = Math.max(viewerContainer.value.clientWidth || 100, 100)
   const height = Math.max((viewerContainer.value.clientHeight || 100) - 60, 100)
-  
+
   // 防止尺寸为0或负数导致WebGL错误
   if (width <= 0 || height <= 0) return
-  
+
   camera.aspect = width / height
   camera.updateProjectionMatrix()
   renderer.setSize(width, height)
@@ -562,7 +574,7 @@ onUnmounted(() => {
     cancelAnimationFrame(animationId)
   }
   window.removeEventListener('resize', handleResize)
-  
+
   // 清理Three.js资源
   if (renderer) {
     renderer.dispose()

@@ -79,20 +79,20 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             'is_deducted',
         ]
 
-    def get_tax_amount(self, obj):
+    def get_tax_amount(self, obj) -> float:
         """获取税额"""
         if obj.line_type == 'INVOICE':
             # 假设税率为13%
             return float(obj.debit_amount or 0) * 0.13 / 1.13
         return 0
 
-    def get_payment_method(self, obj):
+    def get_payment_method(self, obj) -> str:
         """获取付款方式"""
         if obj.line_type == 'PAYMENT':
             return obj.notes or '银行转账'
         return ''
 
-    def get_order_items(self, obj):
+    def get_order_items(self, obj) -> list[dict]:
         """获取订单行明细"""
         if obj.line_type != 'ORDER' or not obj.po:
             return []
@@ -117,7 +117,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             )
         return items
 
-    def get_description(self, obj):
+    def get_description(self, obj) -> str:
         """获取物料描述"""
         if obj.line_type != 'ORDER' or not obj.po:
             return obj.notes or ''
@@ -128,7 +128,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             return first_line.description or ''
         return ''
 
-    def get_specification(self, obj):
+    def get_specification(self, obj) -> str:
         """获取规格"""
         if obj.line_type != 'ORDER' or not obj.po:
             return ''
@@ -137,7 +137,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             return getattr(first_line.material, 'specification', '') or getattr(first_line.material, 'model', '')
         return ''
 
-    def get_drawing_no(self, obj):
+    def get_drawing_no(self, obj) -> str:
         """获取图号"""
         if obj.line_type != 'ORDER' or not obj.po:
             return ''
@@ -146,7 +146,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             return getattr(first_line.material, 'drawing_no', '') or ''
         return ''
 
-    def get_unit_price(self, obj):
+    def get_unit_price(self, obj) -> float:
         """获取单价"""
         if obj.line_type != 'ORDER' or not obj.po:
             return 0
@@ -155,7 +155,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             return float(first_line.unit_price or 0)
         return 0
 
-    def get_unit(self, obj):
+    def get_unit(self, obj) -> str:
         """获取单位"""
         if obj.line_type != 'ORDER' or not obj.po:
             return ''
@@ -164,14 +164,14 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
             return first_line.unit or ''
         return ''
 
-    def get_quantity(self, obj):
+    def get_quantity(self, obj) -> float:
         """获取数量"""
         if obj.line_type != 'ORDER' or not obj.po:
             return 0
         total_qty = sum(line.qty for line in obj.po.lines.filter(is_deleted=False))
         return float(total_qty)
 
-    def get_received_amount(self, obj):
+    def get_received_amount(self, obj) -> int:
         """计算已收货金额"""
         if obj.line_type != 'ORDER' or not obj.po:
             return 0
@@ -182,7 +182,7 @@ class PurchaseReconciliationLineSerializer(serializers.ModelSerializer):
                     total += float(line.qty * line.po_line.unit_price)
         return total
 
-    def get_invoice_amount(self, obj):
+    def get_invoice_amount(self, obj) -> float:
         """获取已开票金额"""
         if obj.line_type != 'ORDER' or not obj.po:
             return 0
@@ -208,7 +208,7 @@ class PurchaseReconciliationSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     lines = PurchaseReconciliationLineSerializer(many=True, read_only=True)
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
@@ -288,7 +288,7 @@ class PurchaseReconciliationListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_line_count(self, obj):
+    def get_line_count(self, obj) -> int:
         return obj.lines.count()
 
 
@@ -355,20 +355,20 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             'payment_method',
         ]
 
-    def get_tax_amount(self, obj):
+    def get_tax_amount(self, obj) -> float:
         """获取税额"""
         if obj.line_type == 'INVOICE':
             # 假设税率为13%
             return float(obj.debit_amount or 0) * 0.13 / 1.13
         return 0
 
-    def get_payment_method(self, obj):
+    def get_payment_method(self, obj) -> str:
         """获取收款方式"""
         if obj.line_type == 'RECEIPT':
             return obj.notes or '银行转账'
         return ''
 
-    def get_order_items(self, obj):
+    def get_order_items(self, obj) -> list[dict]:
         """获取订单行明细"""
         if obj.line_type != 'ORDER' or not obj.so:
             return []
@@ -393,7 +393,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             )
         return items
 
-    def get_description(self, obj):
+    def get_description(self, obj) -> str:
         """获取物料描述"""
         if obj.line_type != 'ORDER' or not obj.so:
             return obj.notes or ''
@@ -404,7 +404,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             return first_line.description or ''
         return ''
 
-    def get_specification(self, obj):
+    def get_specification(self, obj) -> str:
         """获取规格"""
         if obj.line_type != 'ORDER' or not obj.so:
             return ''
@@ -413,7 +413,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             return getattr(first_line.material, 'specification', '') or getattr(first_line.material, 'model', '')
         return ''
 
-    def get_drawing_no(self, obj):
+    def get_drawing_no(self, obj) -> str:
         """获取图号"""
         if obj.line_type != 'ORDER' or not obj.so:
             return ''
@@ -422,7 +422,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             return getattr(first_line.material, 'drawing_no', '') or ''
         return ''
 
-    def get_unit_price(self, obj):
+    def get_unit_price(self, obj) -> float:
         """获取单价"""
         if obj.line_type != 'ORDER' or not obj.so:
             return 0
@@ -431,7 +431,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             return float(first_line.unit_price or 0)
         return 0
 
-    def get_unit(self, obj):
+    def get_unit(self, obj) -> str:
         """获取单位"""
         if obj.line_type != 'ORDER' or not obj.so:
             return ''
@@ -440,14 +440,14 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
             return first_line.unit or ''
         return ''
 
-    def get_quantity(self, obj):
+    def get_quantity(self, obj) -> float:
         """获取数量"""
         if obj.line_type != 'ORDER' or not obj.so:
             return 0
         total_qty = sum(line.qty for line in obj.so.lines.filter(is_deleted=False))
         return float(total_qty)
 
-    def get_delivered_amount(self, obj):
+    def get_delivered_amount(self, obj) -> int:
         """计算已发货金额"""
         if obj.line_type != 'ORDER' or not obj.so:
             return 0
@@ -458,7 +458,7 @@ class SalesReconciliationLineSerializer(serializers.ModelSerializer):
                     total += float(line.qty * line.so_line.unit_price)
         return total
 
-    def get_invoice_amount(self, obj):
+    def get_invoice_amount(self, obj) -> float:
         """获取已开票金额"""
         if obj.line_type != 'ORDER' or not obj.so:
             return 0
@@ -485,7 +485,7 @@ class SalesReconciliationSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     lines = SalesReconciliationLineSerializer(many=True, read_only=True)
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
@@ -565,7 +565,7 @@ class SalesReconciliationListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_line_count(self, obj):
+    def get_line_count(self, obj) -> int:
         return obj.lines.count()
 
 

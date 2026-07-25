@@ -1,10 +1,6 @@
-"""
-Global search views using Elasticsearch
-"""
+"""Database-backed global search views."""
 
-from django.conf import settings
-from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search
+from django.db.models import Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -12,171 +8,132 @@ from rest_framework.response import Response
 
 
 class GlobalSearchViewSet(viewsets.ViewSet):
-    """
-    Global search across all indexed models
-    """
+    """Search the primary business entities without an external search service."""
 
     permission_classes = [IsAuthenticated]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Initialize Elasticsearch client
-        es_config = settings.ELASTICSEARCH_DSL['default']
-        self.es = Elasticsearch([es_config['hosts']])
+    search_types = {'items', 'customers', 'suppliers', 'projects', 'tasks'}
 
     @action(detail=False, methods=['get'])
     def search(self, request):
-        """
-        Perform global search across all indexes
-
-        Query params:
-        - q: search query string
-        - type: optional filter by type (items, customers, suppliers, projects, tasks)
-        - limit: number of results per type (default: 10)
-        """
         query = request.query_params.get('q', '').strip()
-        search_type = request.query_params.get('type', None)
-        limit = int(request.query_params.get('limit', 10))
+        search_type = request.query_params.get('type')
+        limit = self._parse_limit(request.query_params.get('limit'), default=10)
 
         if not query:
             return Response({'error': 'Search query is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if search_type and search_type not in self.search_types:
+            return Response({'error': f'Invalid type: {search_type}'}, status=status.HTTP_400_BAD_REQUEST)
 
-        results = {}
-
-        # Define indexes to search
-        indexes_to_search = {
-            'items': 'items',
-            'customers': 'customers',
-            'suppliers': 'suppliers',
-            'projects': 'projects',
-            'tasks': 'project_tasks',
-        }
-
-        # Filter by type if specified
-        if search_type:
-            if search_type not in indexes_to_search:
-                return Response({'error': f'Invalid type: {search_type}'}, status=status.HTTP_400_BAD_REQUEST)
-            indexes_to_search = {search_type: indexes_to_search[search_type]}
-
-        # Search each index
-        for key, index_name in indexes_to_search.items():
-            try:
-                search = Search(using=self.es, index=index_name)
-
-                # Build multi-field query
-                search = search.query('multi_match', query=query, fields=self._get_search_fields(key), fuzziness='AUTO')
-
-                # Execute search
-                response = search[0:limit].execute()
-
-                # Format results
-                results[key] = {
-                    'total': response.hits.total.value,
-                    'hits': [self._format_hit(hit, key) for hit in response],
-                }
-            except Exception as e:
-                results[key] = {'error': str(e), 'total': 0, 'hits': []}
-
-        return Response(
-            {'query': query, 'results': results, 'total_hits': sum(r.get('total', 0) for r in results.values())}
-        )
+        types_to_search = {search_type} if search_type else self.search_types
+        return Response(self._database_search(query, types_to_search, limit))
 
     @action(detail=False, methods=['get'])
     def suggest(self, request):
-        """
-        Get search suggestions/autocomplete
-
-        Query params:
-        - q: partial query string
-        - type: filter by type
-        - limit: number of suggestions (default: 5)
-        """
         query = request.query_params.get('q', '').strip()
         search_type = request.query_params.get('type', 'items')
-        limit = int(request.query_params.get('limit', 5))
+        limit = self._parse_limit(request.query_params.get('limit'), default=5)
 
-        if not query or len(query) < 2:
+        if search_type not in self.search_types:
+            return Response({'error': f'Invalid type: {search_type}'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(query) < 2:
             return Response({'suggestions': []})
 
-        # Map type to index
-        index_map = {
-            'items': 'items',
-            'customers': 'customers',
-            'suppliers': 'suppliers',
-            'projects': 'projects',
-            'tasks': 'project_tasks',
-        }
+        return Response({'suggestions': self._database_suggestions(query, search_type, limit)})
 
-        index_name = index_map.get(search_type, 'items')
-
+    @staticmethod
+    def _parse_limit(raw_limit, default):
         try:
-            search = Search(using=self.es, index=index_name)
-            search = search.query('match_phrase_prefix', name={'query': query})
+            return min(max(int(raw_limit or default), 1), 100)
+        except (TypeError, ValueError):
+            return default
 
-            response = search[0:limit].execute()
-
-            suggestions = []
-            for hit in response:
-                suggestions.append(
-                    {
-                        'id': hit.meta.id,
-                        'text': hit.name,
-                        'type': search_type,
-                        'meta': getattr(hit, 'code', None) or getattr(hit, 'sku', None),
-                    }
-                )
-
-            return Response({'suggestions': suggestions})
-        except Exception as e:
-            return Response({'error': str(e), 'suggestions': []})
-
-    def _get_search_fields(self, doc_type):
-        """Get searchable fields for each document type"""
-        field_mapping = {
-            'items': ['sku^3', 'name^2', 'specification', 'barcode^3'],
-            'customers': ['code^3', 'name^2', 'contact_person', 'phone', 'email'],
-            'suppliers': ['code^3', 'name^2', 'contact_person', 'phone', 'email'],
-            'projects': ['code^3', 'name^2', 'customer.name'],
-            'tasks': ['name^2', 'description', 'project.name'],
+    def _database_search(self, query, search_types, limit):
+        results = {}
+        for search_type in sorted(search_types):
+            queryset = self._database_queryset(query, search_type)
+            hits = [self._format_database_hit(obj, search_type) for obj in queryset[:limit]]
+            results[search_type] = {'total': queryset.count(), 'hits': hits}
+        return {
+            'query': query,
+            'results': results,
+            'total_hits': sum(result['total'] for result in results.values()),
         }
-        return field_mapping.get(doc_type, ['*'])
 
-    def _format_hit(self, hit, doc_type):
-        """Format search hit for response"""
-        result = {'id': hit.meta.id, 'score': hit.meta.score, 'type': doc_type}
+    def _database_suggestions(self, query, search_type, limit):
+        queryset = self._database_queryset(query, search_type)
+        return [
+            {
+                'id': obj.id,
+                'text': obj.name,
+                'type': search_type,
+                'meta': getattr(obj, 'code', None) or getattr(obj, 'sku', None),
+            }
+            for obj in queryset[:limit]
+        ]
 
-        # Add relevant fields based on document type
-        if doc_type == 'items':
-            result.update(
-                {
-                    'sku': getattr(hit, 'sku', ''),
-                    'name': getattr(hit, 'name', ''),
-                    'specification': getattr(hit, 'specification', ''),
-                }
-            )
-        elif doc_type in ['customers', 'suppliers']:
-            result.update(
-                {
-                    'code': getattr(hit, 'code', ''),
-                    'name': getattr(hit, 'name', ''),
-                    'contact_person': getattr(hit, 'contact_person', ''),
-                    'phone': getattr(hit, 'phone', ''),
-                }
-            )
-        elif doc_type == 'projects':
-            result.update(
-                {
-                    'code': getattr(hit, 'code', ''),
-                    'name': getattr(hit, 'name', ''),
-                    'status': getattr(hit, 'status', ''),
-                }
-            )
-        elif doc_type == 'tasks':
-            result.update(
-                {
-                    'name': getattr(hit, 'name', ''),
-                    'status': getattr(hit, 'status', ''),
-                }
-            )
+    @staticmethod
+    def _database_queryset(query, search_type):
+        if search_type == 'items':
+            from apps.masterdata.models import Item
 
+            return Item.objects.filter(
+                Q(sku__icontains=query)
+                | Q(name__icontains=query)
+                | Q(specification__icontains=query)
+                | Q(barcode__icontains=query)
+            ).order_by('name')
+        if search_type == 'customers':
+            from apps.masterdata.models import Customer
+
+            return Customer.objects.filter(
+                Q(code__icontains=query)
+                | Q(name__icontains=query)
+                | Q(contact_person__icontains=query)
+                | Q(phone__icontains=query)
+                | Q(email__icontains=query)
+            ).order_by('name')
+        if search_type == 'suppliers':
+            from apps.masterdata.models import Supplier
+
+            return Supplier.objects.filter(
+                Q(code__icontains=query)
+                | Q(name__icontains=query)
+                | Q(contact_person__icontains=query)
+                | Q(phone__icontains=query)
+                | Q(email__icontains=query)
+            ).order_by('name')
+        if search_type == 'projects':
+            from apps.projects.models import Project
+
+            return Project.objects.filter(
+                Q(code__icontains=query) | Q(name__icontains=query) | Q(customer__name__icontains=query)
+            ).order_by('name')
+
+        from apps.projects.models import ProjectTask
+
+        return ProjectTask.objects.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+            | Q(project__name__icontains=query)
+        ).order_by('name')
+
+    @staticmethod
+    def _format_database_hit(obj, search_type):
+        result = {'id': obj.id, 'score': None, 'type': search_type}
+        if search_type == 'items':
+            result.update({'sku': obj.sku, 'name': obj.name, 'specification': obj.specification})
+        elif search_type in {'customers', 'suppliers'}:
+            result.update(
+                {
+                    'code': obj.code,
+                    'name': obj.name,
+                    'contact_person': obj.contact_person,
+                    'phone': obj.phone,
+                }
+            )
+        elif search_type == 'projects':
+            result.update({'code': obj.code, 'name': obj.name, 'status': obj.status})
+        else:
+            result.update({'name': obj.name, 'status': obj.status})
         return result

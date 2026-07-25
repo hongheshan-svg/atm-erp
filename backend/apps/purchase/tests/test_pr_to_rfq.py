@@ -7,7 +7,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -18,14 +18,11 @@ from apps.purchase.rfq_models import RFQ, RFQLine, RFQSupplier
 from apps.purchase.rfq_service import BatchRFQService
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class PRToRFQServiceTest(TestCase):
     """service 层 create_rfq_from_purchase_request。"""
 
     def setUp(self):
-        self.user = User.objects.create(
-            username='pr2rfq', employee_id='PR2RFQ', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='pr2rfq', employee_id='PR2RFQ', is_staff=True, is_superuser=True)
         self.customer = Customer.objects.create(code='PRC', name='转询价客户')
         self.project = Project.objects.create(
             code='PRPRJ',
@@ -50,9 +47,7 @@ class PRToRFQServiceTest(TestCase):
         )
         bom = None
         if with_bom:
-            bom = ProjectBOM.objects.create(
-                project=self.project, item=self.item1, planned_qty=Decimal('3')
-            )
+            bom = ProjectBOM.objects.create(project=self.project, item=self.item1, planned_qty=Decimal('3'))
         PurchaseRequestLine.objects.create(
             pr=pr,
             item=self.item1,
@@ -136,14 +131,11 @@ class PRToRFQServiceTest(TestCase):
             BatchRFQService.create_rfq_from_purchase_request(pr, self.user)
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class PRToRFQApiTest(TestCase):
     """RFQ ViewSet detail=False action create_from_pr。"""
 
     def setUp(self):
-        self.user = User.objects.create(
-            username='pr2rfqapi', employee_id='PR2RFQAPI', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='pr2rfqapi', employee_id='PR2RFQAPI', is_staff=True, is_superuser=True)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.customer = Customer.objects.create(code='PRAC', name='API客户')
@@ -166,9 +158,7 @@ class PRToRFQApiTest(TestCase):
             status=status,
             created_by=self.user,
         )
-        PurchaseRequestLine.objects.create(
-            pr=pr, item=self.item, qty=Decimal('4.00'), created_by=self.user
-        )
+        PurchaseRequestLine.objects.create(pr=pr, item=self.item, qty=Decimal('4.00'), created_by=self.user)
         return pr
 
     def test_api_convert_approved_pr(self):

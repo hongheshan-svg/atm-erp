@@ -25,12 +25,9 @@ from apps.purchase.matching import assert_can_pay, three_way_match
 from apps.purchase.models import GoodsReceipt, GoodsReceiptLine, PurchaseOrder, PurchaseOrderLine
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class BaseMatchIQCTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create(
-            username='iqcadmin', employee_id='IQC1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='iqcadmin', employee_id='IQC1', is_staff=True, is_superuser=True)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.supplier = Supplier.objects.create(code='IQCSUP', name='来料供应商')
@@ -58,8 +55,11 @@ class BaseMatchIQCTest(TestCase):
 
     def _make_receipt(self, po, po_line, qty=Decimal('10'), item=None):
         receipt = GoodsReceipt.objects.create(
-            po=po, warehouse=self.warehouse, receipt_date=date(2026, 9, 2),
-            status='DRAFT', created_by=self.user,
+            po=po,
+            warehouse=self.warehouse,
+            receipt_date=date(2026, 9, 2),
+            status='DRAFT',
+            created_by=self.user,
         )
         line = GoodsReceiptLine.objects.create(
             receipt=receipt, po_line=po_line, item=item or self.item, qty=qty, created_by=self.user
@@ -80,9 +80,15 @@ class IQCGateTest(BaseMatchIQCTest):
         po, po_line = self._make_po()
         receipt, r_line = self._make_receipt(po, po_line)
         IncomingInspection.objects.create(
-            goods_receipt=receipt, receipt_line=r_line, item=self.item,
-            inspected_qty=Decimal('10'), defect_qty=Decimal('4'),
-            result='FAIL', disposition='REJECT', status='SUBMITTED', created_by=self.user,
+            goods_receipt=receipt,
+            receipt_line=r_line,
+            item=self.item,
+            inspected_qty=Decimal('10'),
+            defect_qty=Decimal('4'),
+            result='FAIL',
+            disposition='REJECT',
+            status='SUBMITTED',
+            created_by=self.user,
         )
 
         resp = self._confirm(receipt)
@@ -99,9 +105,15 @@ class IQCGateTest(BaseMatchIQCTest):
         po, po_line = self._make_po()
         receipt, r_line = self._make_receipt(po, po_line)
         IncomingInspection.objects.create(
-            goods_receipt=receipt, receipt_line=r_line, item=self.item,
-            inspected_qty=Decimal('10'), defect_qty=Decimal('0'),
-            result='PASS', disposition='ACCEPT', status='SUBMITTED', created_by=self.user,
+            goods_receipt=receipt,
+            receipt_line=r_line,
+            item=self.item,
+            inspected_qty=Decimal('10'),
+            defect_qty=Decimal('0'),
+            result='PASS',
+            disposition='ACCEPT',
+            status='SUBMITTED',
+            created_by=self.user,
         )
 
         resp = self._confirm(receipt)
@@ -154,9 +166,14 @@ class IQCGateTest(BaseMatchIQCTest):
         po, po_line = self._make_po()
         receipt, r_line = self._make_receipt(po, po_line)
         IncomingInspection.objects.create(
-            goods_receipt=receipt, receipt_line=r_line, item=self.item,
-            inspected_qty=Decimal('10'), result='PASS', disposition='ACCEPT',
-            status='SUBMITTED', created_by=self.user,
+            goods_receipt=receipt,
+            receipt_line=r_line,
+            item=self.item,
+            inspected_qty=Decimal('10'),
+            result='PASS',
+            disposition='ACCEPT',
+            status='SUBMITTED',
+            created_by=self.user,
         )
         resp = self._confirm(receipt)
         self.assertEqual(resp.status_code, 200, getattr(resp, 'data', resp))
@@ -167,9 +184,14 @@ class IQCGateTest(BaseMatchIQCTest):
         po, po_line = self._make_po()
         receipt, r_line = self._make_receipt(po, po_line)
         IncomingInspection.objects.create(
-            goods_receipt=receipt, receipt_line=r_line, item=self.item,
-            inspected_qty=Decimal('10'), result='FAIL', disposition='REJECT',
-            status='DRAFT', created_by=self.user,
+            goods_receipt=receipt,
+            receipt_line=r_line,
+            item=self.item,
+            inspected_qty=Decimal('10'),
+            result='FAIL',
+            disposition='REJECT',
+            status='DRAFT',
+            created_by=self.user,
         )
         # DRAFT 不生效 -> 默认放行
         self.assertEqual(evaluate_line_inspection(r_line)[0], 'ALLOW')

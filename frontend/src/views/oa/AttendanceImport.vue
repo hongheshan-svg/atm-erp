@@ -15,7 +15,7 @@
           <template #header>
             <span>导入企业微信考勤数据</span>
           </template>
-          
+
           <!-- 操作指南 -->
           <el-alert type="info" :closable="false" class="guide-alert">
             <template #title>
@@ -105,18 +105,18 @@
               <el-tag type="danger" v-if="previewStats.error">错误: {{ previewStats.error }}</el-tag>
             </div>
           </template>
-          
+
           <!-- 批量操作 -->
-          
+
           <div v-if="selectedRows.length > 0" class="batch-toolbar">
-          
+
             <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-          
-          
+
+
             <el-button size="small" @click="batchExport">导出选中</el-button>
-          
+
           </div>
-          
+
           <el-table :data="previewData" max-height="400" size="small" stripe @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="45" />
             <el-table-column type="index" width="50" label="#" />
@@ -173,7 +173,7 @@
           <template #header>
             <span>本月考勤统计</span>
           </template>
-          
+
           <el-row :gutter="15" class="stats-row">
             <el-col :span="8">
               <el-statistic title="应出勤天数" :value="monthStats.work_days" />
@@ -196,7 +196,7 @@
           <template #header>
             <span>导入历史</span>
           </template>
-          
+
           <el-table :data="importHistory" size="small" max-height="300">
             <el-table-column prop="import_time" label="导入时间" width="150">
               <template #default="{ row }">
@@ -219,7 +219,7 @@
           <template #header>
             <span>快速操作</span>
           </template>
-          
+
           <el-space direction="vertical" fill style="width: 100%">
             <el-button style="width: 100%" @click="handleCalculateMonth">
               <el-icon><Calendar /></el-icon> 重新计算本月考勤
@@ -269,20 +269,20 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 // 数据
-const uploadRef = ref(null)
+const uploadRef = ref<any>(null)
 const fileList = ref<any[]>([])
 const previewing = ref(false)
 const importing = ref(false)
 const previewData = ref<any[]>([])
 const showResult = ref(false)
 
-const importForm = reactive({
+const importForm = reactive<Record<string, any>>({
   month: new Date().toISOString().slice(0, 7), // 默认当月
   source: 'WECHAT_WORK',
   overwrite: false
 })
 
-const importResult = reactive({
+const importResult = reactive<Record<string, any>>({
   success: true,
   total: 0,
   success_count: 0,
@@ -310,7 +310,7 @@ const previewStats = computed(() => {
 })
 
 // 方法
-const handleFileChange = (file) => {
+const handleFileChange = (file: any) => {
   fileList.value = [file]
   previewData.value = [] // 清空预览
 }
@@ -329,7 +329,7 @@ const handlePreview = async () => {
   try {
     const file = fileList.value[0].raw || fileList.value[0]
     const data = await readExcelFile(file)
-    
+
     if (!data || !data.length) {
       ElMessage.warning('文件中没有找到有效数据')
       return
@@ -338,8 +338,8 @@ const handlePreview = async () => {
     // 解析数据
     previewData.value = parseAttendanceData(data)
     ElMessage.success(`成功解析 ${previewData.value.length} 条记录`)
-    
-  } catch (error) {
+
+  } catch (error: any) {
     console.error('预览失败:', error)
     ElMessage.error('文件解析失败，请检查文件格式')
   } finally {
@@ -347,17 +347,17 @@ const handlePreview = async () => {
   }
 }
 
-const readExcelFile = (file) => {
-  return new Promise((resolve, reject) => {
+const readExcelFile = (file: File): Promise<any[]> => {
+  return new Promise<any[]>((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = () => {
       try {
-        const workbook = XLSX.read(e.target.result, { type: 'binary' })
+        const workbook = XLSX.read(reader.result, { type: 'binary' })
         const sheetName = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[sheetName]
         const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-        resolve(data)
-      } catch (error) {
+        resolve(data as any[])
+      } catch (error: any) {
         reject(error)
       }
     }
@@ -366,11 +366,11 @@ const readExcelFile = (file) => {
   })
 }
 
-const parseAttendanceData = (rawData) => {
+const parseAttendanceData = (rawData: any) => {
   // 检测是企业微信月报格式还是每日明细格式
   const firstRow = rawData[0] || []
   const isMonthlyReport = firstRow[0] && String(firstRow[0]).includes('月报')
-  
+
   if (isMonthlyReport) {
     return parseWechatMonthlyReport(rawData)
   } else {
@@ -379,43 +379,22 @@ const parseAttendanceData = (rawData) => {
 }
 
 // 解析企业微信月报格式
-const parseWechatMonthlyReport = (rawData) => {
+const parseWechatMonthlyReport = (rawData: any) => {
   const result = []
-  
-  // 从第2行获取日期范围 "统计时间:01-01 ～ 01-20"
-  const dateRangeRow = rawData[1] || []
-  const dateRangeStr = String(dateRangeRow[0] || '')
-  let year = new Date().getFullYear()
-  let startDay = 1, endDay = 31
-  
-  // 解析日期范围
-  const rangeMatch = dateRangeStr.match(/(\d{2})-(\d{2})\s*[～~]\s*(\d{2})-(\d{2})/)
-  if (rangeMatch) {
-    startDay = parseInt(rangeMatch[2])
-    endDay = parseInt(rangeMatch[4])
-  }
-  
-  // 从制表时间获取年份
-  const yearMatch = dateRangeStr.match(/(\d{4})-\d{2}-\d{2}/)
-  if (yearMatch) {
-    year = parseInt(yearMatch[1])
-  }
-  
+
   // 找到表头行（包含"姓名"的行）
-  let headerRowIndex = 2
   let subHeaderRowIndex = 3
   for (let i = 0; i < Math.min(10, rawData.length); i++) {
     const row = rawData[i]
     if (row && row[0] === '姓名') {
-      headerRowIndex = i
       subHeaderRowIndex = i + 1
       break
     }
   }
-  
+
   // 获取子表头（包含日期列和列名映射）
   const subHeaders = rawData[subHeaderRowIndex] || []
-  
+
   // 构建列索引映射（基于第4行的子表头）
   const colMap = {
     department: 3,        // 部门
@@ -462,7 +441,7 @@ const parseWechatMonthlyReport = (rawData) => {
     overtimeHolidayComp: 44,  // 节假日加班计为调休
     overtimeHolidayPay: 45,   // 节假日加班计为加班费
   }
-  
+
   // 找到每日状态的起始列（格式如 "1\n星期四"）
   let dailyStartCol = -1
   const dailyCols = []
@@ -477,20 +456,20 @@ const parseWechatMonthlyReport = (rawData) => {
       })
     }
   }
-  
+
   // 解析选择的月份
   const selectedMonth = importForm.month // 格式: "2026-01"
   const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number)
-  
+
   // 辅助函数：解析数值
-  const parseNum = (val) => {
+  const parseNum = (val: any) => {
     if (val === '--' || val === '' || val === null || val === undefined) return 0
     const num = parseFloat(val)
     return isNaN(num) ? 0 : num
   }
-  
+
   // 辅助函数：从每日状态中提取详细信息
-  const parseDayDetails = (dayStatus) => {
+  const parseDayDetails = (dayStatus: any) => {
     const details = {
       overtime: 0,        // 加班小时数
       outHours: 0,        // 外出小时数
@@ -502,15 +481,15 @@ const parseWechatMonthlyReport = (rawData) => {
       absentMinutes: 0,   // 旷工分钟
       missCount: 0,       // 缺卡次数
     }
-    
+
     // 提取加班时长 "加班9.5小时"
     const otMatch = dayStatus.match(/加班([\d.]+)小时/)
     if (otMatch) details.overtime = parseFloat(otMatch[1])
-    
+
     // 提取外出时长 "外出1.5小时" 或 "外出9.0小时"
     const outMatch = dayStatus.match(/外出([\d.]+)小时/)
     if (outMatch) details.outHours = parseFloat(outMatch[1])
-    
+
     // 提取出差时长 "出差1天9.5小时" 或 "出差12.9小时"
     const travelMatch = dayStatus.match(/出差(?:(\d+)天)?([\d.]+)小时/)
     if (travelMatch) {
@@ -518,7 +497,7 @@ const parseWechatMonthlyReport = (rawData) => {
       const hours = parseFloat(travelMatch[2])
       details.travelHours = days * 8 + hours // 假设1天=8小时
     }
-    
+
     // 提取请假类型和时长
     const leavePatterns = [
       { pattern: /年假([\d.]+)小时/, type: 'ANNUAL' },
@@ -538,36 +517,36 @@ const parseWechatMonthlyReport = (rawData) => {
         break
       }
     }
-    
+
     // 提取迟到分钟
     const lateMatch = dayStatus.match(/迟到(\d+)分钟/)
     if (lateMatch) details.lateMinutes = parseInt(lateMatch[1])
-    
+
     // 提取早退分钟
     const earlyMatch = dayStatus.match(/早退(\d+)分钟/)
     if (earlyMatch) details.earlyMinutes = parseInt(earlyMatch[1])
-    
+
     // 提取旷工分钟
     const absentMatch = dayStatus.match(/旷工(\d+)分钟/)
     if (absentMatch) details.absentMinutes = parseInt(absentMatch[1])
-    
+
     // 提取缺卡次数
     const missMatch = dayStatus.match(/缺卡(\d+)次/)
     if (missMatch) details.missCount = parseInt(missMatch[1])
-    
+
     return details
   }
-  
+
   // 解析数据行（从表头后开始）
   for (let i = subHeaderRowIndex + 1; i < rawData.length; i++) {
     const row = rawData[i]
     if (!row || !row.length) continue
-    
+
     const name = String(row[0] || '').trim()
     const account = String(row[1] || '').trim()
-    
+
     if (!name || name === '姓名') continue
-    
+
     // 获取汇总数据
     const summary = {
       department: String(row[colMap.department] || '').trim(),
@@ -587,23 +566,23 @@ const parseWechatMonthlyReport = (rawData) => {
       travelDays: parseNum(row[colMap.travelDays]),
       overtimeTotal: parseNum(row[colMap.overtimeTotal]),
     }
-    
+
     // 解析每天的状态
     for (const dayCol of dailyCols) {
       const dayStatus = String(row[dayCol.col] || '').trim()
       if (!dayStatus) continue
-      
+
       // 构建日期
       const dateStr = `${selectedYear}-${String(selectedMonthNum).padStart(2, '0')}-${String(dayCol.day).padStart(2, '0')}`
-      
+
       // 解析每日详细信息
       const dayDetails = parseDayDetails(dayStatus)
-      
+
       // 解析状态（改进逻辑：正确处理复合状态）
       let statusCode = 'NORMAL'
       let statusText = '正常'
       const isRest = dayStatus.includes('休息')
-      
+
       if (dayStatus.includes('旷工')) {
         statusCode = 'ABSENT'
         statusText = '旷工'
@@ -639,7 +618,7 @@ const parseWechatMonthlyReport = (rawData) => {
         statusCode = 'NORMAL'
         statusText = '正常'
       }
-      
+
       // 生成详细备注
       const remarkParts = []
       if (dayDetails.lateMinutes > 0) remarkParts.push(`迟到${dayDetails.lateMinutes}分钟`)
@@ -653,10 +632,10 @@ const parseWechatMonthlyReport = (rawData) => {
         const leaveTypeName = getLeaveTypeName(dayDetails.leaveType)
         remarkParts.push(`${leaveTypeName}${dayDetails.leaveHours}小时`)
       }
-      
+
       // 决定是否导入（纯休息日且无加班跳过）
       const shouldImport = !(statusCode === 'REST' && dayDetails.overtime === 0)
-      
+
       result.push({
         employee_name: name,
         employee_id: account || summary.employeeId,
@@ -681,12 +660,12 @@ const parseWechatMonthlyReport = (rawData) => {
       })
     }
   }
-  
+
   return result
 }
 
 // 获取请假类型名称
-const getLeaveTypeName = (type) => {
+const getLeaveTypeName = (type: any) => {
   const names = {
     'ANNUAL': '年假',
     'PERSONAL': '事假',
@@ -697,11 +676,11 @@ const getLeaveTypeName = (type) => {
     'PATERNITY': '陪产假',
     'BEREAVEMENT': '丧假',
   }
-  return names[type] || '请假'
+  return (names as Record<string, any>)[type] || '请假'
 }
 
 // 解析每日明细格式（原有逻辑）
-const parseDailyDetailReport = (rawData) => {
+const parseDailyDetailReport = (rawData: any) => {
   // 找到表头行
   let headerIndex = 0
   for (let i = 0; i < Math.min(10, rawData.length); i++) {
@@ -717,14 +696,14 @@ const parseDailyDetailReport = (rawData) => {
 
   // 列映射（适配企业微信导出格式）
   const colMap = {
-    name: headers.findIndex(h => h && (h.includes('姓名') || h.includes('员工姓名') || h === '成员')),
-    id: headers.findIndex(h => h && (h.includes('工号') || h.includes('员工编号') || h.includes('账号'))),
-    date: headers.findIndex(h => h && (h.includes('日期') || h.includes('打卡日期'))),
-    checkIn: headers.findIndex(h => h && (h.includes('上班') || h.includes('签到') || h.includes('最早'))),
-    checkOut: headers.findIndex(h => h && (h.includes('下班') || h.includes('签退') || h.includes('最晚'))),
-    workHours: headers.findIndex(h => h && (h.includes('工时') || h.includes('时长'))),
-    status: headers.findIndex(h => h && (h.includes('状态') || h.includes('结果') || h.includes('异常'))),
-    remark: headers.findIndex(h => h && (h.includes('备注') || h.includes('说明')))
+    name: headers.findIndex((h: any) => h && (h.includes('姓名') || h.includes('员工姓名') || h === '成员')),
+    id: headers.findIndex((h: any) => h && (h.includes('工号') || h.includes('员工编号') || h.includes('账号'))),
+    date: headers.findIndex((h: any) => h && (h.includes('日期') || h.includes('打卡日期'))),
+    checkIn: headers.findIndex((h: any) => h && (h.includes('上班') || h.includes('签到') || h.includes('最早'))),
+    checkOut: headers.findIndex((h: any) => h && (h.includes('下班') || h.includes('签退') || h.includes('最晚'))),
+    workHours: headers.findIndex((h: any) => h && (h.includes('工时') || h.includes('时长'))),
+    status: headers.findIndex((h: any) => h && (h.includes('状态') || h.includes('结果') || h.includes('异常'))),
+    remark: headers.findIndex((h: any) => h && (h.includes('备注') || h.includes('说明')))
   }
 
   // 解析数据行
@@ -734,7 +713,7 @@ const parseDailyDetailReport = (rawData) => {
 
     const name = colMap.name >= 0 ? row[colMap.name] : ''
     const date = colMap.date >= 0 ? row[colMap.date] : ''
-    
+
     if (!name || !date) continue
 
     // 解析日期
@@ -750,7 +729,7 @@ const parseDailyDetailReport = (rawData) => {
     }
 
     // 解析时间
-    const parseTime = (val) => {
+    const parseTime = (val: any) => {
       if (!val) return ''
       if (typeof val === 'number') {
         // Excel时间小数
@@ -764,7 +743,7 @@ const parseDailyDetailReport = (rawData) => {
 
     const checkIn = parseTime(colMap.checkIn >= 0 ? row[colMap.checkIn] : '')
     const checkOut = parseTime(colMap.checkOut >= 0 ? row[colMap.checkOut] : '')
-    
+
     // 计算工时
     let workHours = colMap.workHours >= 0 ? row[colMap.workHours] : ''
     if (!workHours && checkIn && checkOut) {
@@ -804,7 +783,7 @@ const parseDailyDetailReport = (rawData) => {
   return result
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status: any) => {
   const texts = {
     'NORMAL': '正常',
     'LATE': '迟到',
@@ -817,10 +796,10 @@ const getStatusText = (status) => {
     'TRAVEL': '出差',
     'REMOTE': '远程'
   }
-  return texts[status] || status
+  return (texts as Record<string, any>)[status] || status
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'NORMAL': 'success',
     'LATE': 'warning',
@@ -833,7 +812,7 @@ const getStatusType = (status) => {
     'TRAVEL': '',
     'REMOTE': ''
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const handleImport = async () => {
@@ -848,7 +827,7 @@ const handleImport = async () => {
       '确认导入',
       { type: 'warning' }
     )
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     return
   }
@@ -888,20 +867,20 @@ const handleImport = async () => {
     importResult.success_count = res.success_count || 0
     importResult.skip_count = res.skip_count || 0
     importResult.error_count = res.error_count || 0
-    
+
     showResult.value = true
-    
+
     // 刷新统计和历史
     loadMonthStats()
     loadImportHistory()
-    
+
     // 清空预览
     if (importResult.success) {
       previewData.value = []
       fileList.value = []
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('导入失败:', error)
     ElMessage.error(error.response?.data?.detail || '导入失败')
   } finally {
@@ -929,15 +908,15 @@ const handleDownloadTemplate = () => {
 const handleCalculateMonth = async () => {
   try {
     await ElMessageBox.confirm('将根据已导入的打卡记录重新计算本月考勤统计，是否继续？', '确认', { type: 'warning' })
-    
+
     const res = await recalculateMonthAttendance({
       month: importForm.month
     })
-    
+
     ElMessage.success(res.message || '计算完成')
     loadMonthStats()
-    
-  } catch (error) {
+
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('计算失败')
     }
@@ -947,7 +926,7 @@ const handleCalculateMonth = async () => {
 const handleExportReport = async () => {
   try {
     const res = await exportAttendanceReport({ month: importForm.month }, { responseType: 'blob' })
-    
+
     // 下载文件
     const url = window.URL.createObjectURL(new Blob([res]))
     const link = document.createElement('a')
@@ -956,8 +935,8 @@ const handleExportReport = async () => {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    
-  } catch (error) {
+
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }
@@ -968,7 +947,7 @@ const loadMonthStats = async () => {
       params: { month: importForm.month }
     })
     monthStats.value = res || monthStats.value
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -977,12 +956,12 @@ const loadImportHistory = async () => {
   try {
     const res = await getAttendanceImportHistory()
     importHistory.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载历史失败:', error)
   }
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {

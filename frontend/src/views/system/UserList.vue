@@ -31,9 +31,9 @@
       <!-- 批量操作工具栏 - 仅系统管理员可见 -->
       <div class="table-toolbar" v-if="canManage && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -64,8 +64,8 @@
             <!-- 仅系统管理员显示删除按钮 -->
             <el-button
               v-if="canManage"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -148,7 +148,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { getUsers, createUser, updateUser, getRoles, getDepartments } from '@/api/auth'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
@@ -176,21 +176,21 @@ const roles = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   username: '',
   email: '',
   is_active: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   username: '',
   email: '',
@@ -203,7 +203,7 @@ const form = reactive({
   is_active: true
 })
 
-const validatePasswordConfirm = (rule, value, callback) => {
+const validatePasswordConfirm = (rule: any, value: any, callback: any) => {
   if (!isEdit.value && value !== form.password) {
     callback(new Error('两次输入的密码不一致'))
   } else {
@@ -230,7 +230,7 @@ const rules = {
 const loadUsers = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -247,7 +247,7 @@ const loadUsers = async () => {
       users.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载用户失败')
     users.value = []
   } finally {
@@ -259,7 +259,7 @@ const loadDepartments = async () => {
   try {
     const response = await getDepartments()
     departments.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载部门失败:', error)
     departments.value = []
   }
@@ -269,7 +269,7 @@ const loadRoles = async () => {
   try {
     const response = await getRoles()
     roles.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载角色失败:', error)
     roles.value = []
   }
@@ -281,7 +281,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑用户'
   isEdit.value = true
   // 合并姓名
@@ -308,7 +308,7 @@ const handleSubmit = async () => {
     const fullName = form.full_name || ''
     const lastName = fullName.length > 0 ? fullName.charAt(0) : ''
     const firstName = fullName.length > 1 ? fullName.slice(1) : ''
-    
+
     if (isEdit.value) {
       const updateData = {
         email: form.email,
@@ -339,7 +339,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadUsers()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存用户失败')
   }
 }

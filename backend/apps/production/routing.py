@@ -457,7 +457,7 @@ class RoutingTemplateSerializer(serializers.ModelSerializer):
         model = RoutingTemplate
         fields = '__all__'
 
-    def get_operation_count(self, obj):
+    def get_operation_count(self, obj) -> int:
         return obj.operations.filter(is_deleted=False).count()
 
 
@@ -485,7 +485,7 @@ class RoutingTemplateListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_operation_count(self, obj):
+    def get_operation_count(self, obj) -> int:
         return obj.operations.filter(is_deleted=False).count()
 
 

@@ -16,9 +16,9 @@
             <span>模板列表</span>
           </template>
           <el-scrollbar height="calc(100vh - 280px)">
-            <div 
-              v-for="tpl in templates" 
-              :key="tpl.id" 
+            <div
+              v-for="tpl in templates"
+              :key="tpl.id"
               class="template-card"
               :class="{ active: selectedTemplate?.id === tpl.id }"
               @click="selectTemplate(tpl)"
@@ -236,18 +236,18 @@
           </el-col>
         </el-row>
         <el-form-item label="表头配置">
-          <el-input 
-            v-model="templateForm.header_config_json" 
-            type="textarea" 
-            :rows="4" 
+          <el-input
+            v-model="templateForm.header_config_json"
+            type="textarea"
+            :rows="4"
             placeholder='{"company_name": "公司名称"}'
           />
         </el-form-item>
         <el-form-item label="表尾配置">
-          <el-input 
-            v-model="templateForm.footer_config_json" 
-            type="textarea" 
-            :rows="4" 
+          <el-input
+            v-model="templateForm.footer_config_json"
+            type="textarea"
+            :rows="4"
             placeholder='{"terms": ["条款1", "条款2"]}'
           />
         </el-form-item>
@@ -275,10 +275,10 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const templates = ref<any[]>([])
-const selectedTemplate = ref(null)
+const selectedTemplate = ref<any>(null)
 const showTemplateDialog = ref(false)
 const showGenerateDialog = ref(false)
-const editingTemplate = ref(null)
+const editingTemplate = ref<any>(null)
 const saving = ref(false)
 const generating = ref(false)
 
@@ -311,12 +311,12 @@ const loadTemplates = async () => {
   try {
     const res = await getQuoteTemplates()
     templates.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载模板失败:', e)
   }
 }
 
-const selectTemplate = (tpl) => {
+const selectTemplate = (tpl: any) => {
   selectedTemplate.value = tpl
 }
 
@@ -338,20 +338,20 @@ const saveTemplate = async () => {
     try {
       headerConfig = JSON.parse(templateForm.value.header_config_json || '{}')
       footerConfig = JSON.parse(templateForm.value.footer_config_json || '{}')
-    } catch (e) {
+    } catch (e: any) {
       ElMessage.error('JSON格式错误')
       saving.value = false
       return
     }
-    
-    const data = {
+
+    const data: Record<string, any> = {
       ...templateForm.value,
       header_config: headerConfig,
       footer_config: footerConfig
     }
     delete data.header_config_json
     delete data.footer_config_json
-    
+
     if (editingTemplate.value) {
       await updateQuoteTemplate(editingTemplate.value.id, data)
       ElMessage.success('更新成功')
@@ -362,7 +362,7 @@ const saveTemplate = async () => {
     showTemplateDialog.value = false
     editingTemplate.value = null
     loadTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -374,7 +374,7 @@ const setDefault = async () => {
     await setDefaultQuoteTemplate(selectedTemplate.value.id)
     ElMessage.success('设置成功')
     loadTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('设置失败')
   }
 }
@@ -391,11 +391,11 @@ const addItem = () => {
   })
 }
 
-const removeItem = (idx) => {
+const removeItem = (idx: any) => {
   quoteForm.value.items.splice(idx, 1)
 }
 
-const calcAmount = (row) => {
+const calcAmount = (row: any) => {
   row.amount = (row.quantity || 0) * (row.unit_price || 0)
 }
 
@@ -404,7 +404,7 @@ const generateQuote = async () => {
     ElMessage.warning('请填写报价单号和客户名称')
     return
   }
-  
+
   generating.value = true
   try {
     const res = await generateQuoteFromTemplate({
@@ -412,7 +412,7 @@ const generateQuote = async () => {
       ...quoteForm.value,
       output_format: 'excel'
     })
-    
+
     if (res.success) {
       ElMessage.success('报价单生成成功')
       // 下载文件
@@ -421,7 +421,7 @@ const generateQuote = async () => {
       }
       showGenerateDialog.value = false
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('生成失败')
   } finally {
     generating.value = false
@@ -447,7 +447,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  
+
   h2 {
     margin: 0;
     color: #303133;
@@ -464,24 +464,24 @@ onMounted(() => {
   margin-bottom: 12px;
   cursor: pointer;
   transition: all 0.3s;
-  
+
   &:hover {
     background: #f5f7fa;
     border-color: #c0c4cc;
   }
-  
+
   &.active {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-color: transparent;
     color: white;
-    
+
     .template-meta :deep(.el-tag) {
       background: rgba(255, 255, 255, 0.2);
       color: white;
       border-color: transparent;
     }
   }
-  
+
   .template-icon {
     width: 50px;
     height: 50px;
@@ -491,20 +491,20 @@ onMounted(() => {
     background: #f0f0f0;
     border-radius: 8px;
   }
-  
+
   &.active .template-icon {
     background: rgba(255, 255, 255, 0.2);
   }
-  
+
   .template-info {
     flex: 1;
   }
-  
+
   .template-name {
     font-weight: 500;
     margin-bottom: 8px;
   }
-  
+
   .template-meta {
     display: flex;
     gap: 8px;
@@ -535,7 +535,7 @@ onMounted(() => {
   padding: 16px;
   background: #f5f7fa;
   border-radius: 8px;
-  
+
   .total-amount {
     font-size: 24px;
     font-weight: bold;

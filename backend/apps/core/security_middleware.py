@@ -189,7 +189,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
         # Log slow requests
         if duration > 5:  # More than 5 seconds
             logger.warning(
-                f'Slow request: {request.method} {request.path} ' f'took {duration:.2f}s, status={response.status_code}'
+                f'Slow request: {request.method} {request.path} took {duration:.2f}s, status={response.status_code}'
             )
 
         # Log failed authentication attempts
@@ -199,7 +199,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
 
         # Log server errors
         if response.status_code >= 500:
-            logger.error(f'Server error: {request.method} {request.path} ' f'status={response.status_code}')
+            logger.error(f'Server error: {request.method} {request.path} status={response.status_code}')
 
         return response
 

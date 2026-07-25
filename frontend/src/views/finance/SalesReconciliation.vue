@@ -20,7 +20,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="对账期间">
-          <el-date-picker v-model="searchForm.period" type="monthrange" range-separator="至" 
+          <el-date-picker v-model="searchForm.period" type="monthrange" range-separator="至"
             start-placeholder="开始月" end-placeholder="结束月" value-format="YYYY-MM" style="width: 220px;" />
         </el-form-item>
         <el-form-item label="状态">
@@ -356,16 +356,16 @@ const reconciliations = ref<any[]>([])
 const customers = ref<any[]>([])
 const createDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
-const currentReconciliation = ref(null)
+const currentReconciliation = ref<any>(null)
 const reconciliationLines = ref<any[]>([])
 const detailTab = ref('order')
 
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const searchForm = reactive({ customer: null, period: null, status: null })
-const summary = reactive({ total_sales: 0, total_invoiced: 0, total_received: 0, total_balance: 0 })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
+const searchForm = reactive<Record<string, any>>({ customer: null, period: null, status: null })
+const summary = reactive<Record<string, any>>({ total_sales: 0, total_invoiced: 0, total_received: 0, total_balance: 0 })
 
-const createFormRef = ref(null)
-const createForm = reactive({
+const createFormRef = ref<any>(null)
+const createForm = reactive<Record<string, any>>({
   customer: null,
   period: null,
   opening_balance: 0,
@@ -404,28 +404,28 @@ const agingOverduePercent = computed(() => {
   return Math.round(agingOverdue.value / total * 100)
 })
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = { DRAFT: 'info', PENDING: 'warning', CONFIRMED: 'success', DISPUTED: 'danger', CLOSED: '' }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status: any) => {
   const texts = { DRAFT: '草稿', PENDING: '待确认', CONFIRMED: '已确认', DISPUTED: '有争议', CLOSED: '已关闭' }
-  return texts[status] || status
+  return (texts as Record<string, any>)[status] || status
 }
 
-const getMatchType = (row) => {
+const getMatchType = (row: any) => {
   if (row.received_amount >= row.invoice_amount && row.invoice_amount > 0) return 'success'
   if (row.invoice_amount > 0) return 'warning'
   return 'info'
 }
 
-const getMatchText = (row) => {
+const getMatchText = (row: any) => {
   if (row.received_amount >= row.invoice_amount && row.invoice_amount > 0) return '已结清'
   if (row.invoice_amount > 0) return '部分收款'
   return '待开票'
@@ -435,7 +435,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000, status: 'ACTIVE' })
     customers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load customers failed:', error)
   }
 }
@@ -443,7 +443,7 @@ const loadCustomers = async () => {
 const loadReconciliations = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -453,15 +453,15 @@ const loadReconciliations = async () => {
       params.period_end = searchForm.period[1]
     }
     delete params.period
-    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === null || (params as Record<string, any>)[k] === '') delete (params as Record<string, any>)[k] })
+
     const res = await getSalesReconciliations(params)
     reconciliations.value = res.results || res || []
     pagination.total = res.count || 0
-    
+
     // 加载汇总
     loadSummary()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载对账单失败')
   } finally {
     loading.value = false
@@ -477,7 +477,7 @@ const loadSummary = async () => {
       summary.total_received = res.total_received_amount || 0
       summary.total_balance = res.total_balance || 0
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load summary failed:', error)
   }
 }
@@ -496,7 +496,7 @@ const handleCreate = () => {
 }
 
 // 获取客户期初余额
-const fetchOpeningBalance = async (customerId) => {
+const fetchOpeningBalance = async (customerId: any) => {
   if (!customerId) {
     createForm.opening_balance = 0
     return
@@ -511,7 +511,7 @@ const fetchOpeningBalance = async (customerId) => {
     } else if (res.source === 'account_receivable') {
       ElMessage.info('已自动填入应收账款余额')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取期初余额失败:', error)
   }
 }
@@ -520,7 +520,7 @@ const submitCreate = async () => {
   try {
     await createFormRef.value.validate()
     submitting.value = true
-    
+
     const data = {
       customer: createForm.customer,
       period_start: createForm.period[0],
@@ -528,51 +528,51 @@ const submitCreate = async () => {
       opening_balance: createForm.opening_balance,
       notes: createForm.notes
     }
-    
+
     const res = await createSalesReconciliation(data)
-    
+
     // 自动生成明细
     await generateSalesReconciliationLines(res.id)
-    
+
     ElMessage.success('对账单创建成功')
     createDialogVisible.value = false
     loadReconciliations()
-    
+
     // 打开明细
     handleDetail(res)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('创建失败: ' + (error.response?.data?.error || error.message))
   } finally {
     submitting.value = false
   }
 }
 
-const handleDetail = async (row) => {
+const handleDetail = async (row: any) => {
   try {
     const res = await getSalesReconciliation(row.id)
     currentReconciliation.value = res
     reconciliationLines.value = res.lines || []
     detailTab.value = 'order'
     detailDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载明细失败')
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定提交此对账单吗？提交后将发送给客户确认。', '提交确认')
     await submitSalesReconciliation(row.id)
     ElMessage.success('提交成功')
     loadReconciliations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败')
     }
   }
 }
 
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定确认此对账单吗？确认后将完成对账。', '确认对账')
     await confirmSalesReconciliation(row.id)
@@ -581,45 +581,49 @@ const handleConfirm = async (row) => {
     if (detailDialogVisible.value) {
       handleDetail(row)
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('确认失败')
     }
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定删除此对账单吗？', '删除确认', { type: 'warning' })
     await deleteSalesReconciliation(row.id)
     ElMessage.success('删除成功')
     loadReconciliations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
   }
 }
 
-const confirmDelivery = async (line) => {
+const confirmDelivery = async (line: any) => {
   try {
     await confirmSalesReconciliationDelivery(currentReconciliation.value.id, line.id)
     ElMessage.success('确认收货成功')
     handleDetail(currentReconciliation.value)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('确认失败')
   }
 }
 
-const handlePrint = (row) => {
+const handlePrint = (row: any) => {
   const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    ElMessage.error('无法打开打印窗口，请检查浏览器弹窗设置')
+    return
+  }
   const html = generatePrintHtml(row)
   printWindow.document.write(html)
   printWindow.document.close()
   printWindow.focus()
 }
 
-const generatePrintHtml = (data) => {
+const generatePrintHtml = (data: any) => {
   // 生成订单明细行
   const orderRows = orderLines.value.map((line, idx) => `
     <tr>
@@ -633,7 +637,7 @@ const generatePrintHtml = (data) => {
       <td style="text-align:right;">${formatNumber(line.received_amount)}</td>
     </tr>
   `).join('')
-  
+
   // 生成发货明细行
   const deliveryRows = deliveryLines.value.map((line, idx) => `
     <tr>
@@ -645,7 +649,7 @@ const generatePrintHtml = (data) => {
       <td>${line.delivery_confirmed ? '已确认' : '待确认'}</td>
     </tr>
   `).join('')
-  
+
   // 生成发票明细行
   const invoiceRows = invoiceLines.value.map((line, idx) => `
     <tr>
@@ -657,7 +661,7 @@ const generatePrintHtml = (data) => {
       <td style="text-align:right;">${formatNumber(line.tax_amount || 0)}</td>
     </tr>
   `).join('')
-  
+
   // 生成收款明细行
   const receiptRows = receiptLines.value.map((line, idx) => `
     <tr>
@@ -669,9 +673,9 @@ const generatePrintHtml = (data) => {
       <td>${line.payment_method || ''}</td>
     </tr>
   `).join('')
-  
+
   const today = new Date().toISOString().slice(0, 10)
-  
+
   return `<!DOCTYPE html>
 <html>
 <head>

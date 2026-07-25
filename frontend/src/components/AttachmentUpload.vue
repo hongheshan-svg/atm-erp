@@ -10,7 +10,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 隐藏的文件输入 -->
       <input
         ref="fileInput"
@@ -20,7 +20,7 @@
         style="display: none;"
         @change="handleFileChange"
       />
-      
+
       <!-- 上传提示 -->
       <div v-if="!attachments.length && !uploading" class="empty-tip">
         <el-icon size="48" color="#c0c4cc"><Folder /></el-icon>
@@ -28,13 +28,13 @@
         <p class="tip-text">支持格式：{{ acceptText }}</p>
         <p class="tip-text">单个文件最大：{{ maxSizeText }}</p>
       </div>
-      
+
       <!-- 上传中状态 -->
       <div v-if="uploading" class="uploading-status">
         <el-progress :percentage="uploadProgress" :stroke-width="10" />
         <p>正在上传...</p>
       </div>
-      
+
       <!-- 附件列表 -->
       <el-table v-if="attachments.length" :data="attachments" size="small" border stripe>
         <el-table-column label="文件名" min-width="200">
@@ -70,7 +70,7 @@
         </el-table-column>
       </el-table>
     </el-card>
-    
+
     <!-- 图片预览对话框 -->
     <el-dialog v-model="previewVisible" title="文件预览" width="800px" destroy-on-close>
       <div class="preview-content">
@@ -83,7 +83,7 @@
         </div>
       </div>
     </el-dialog>
-    
+
     <!-- 上传分类选择对话框 -->
     <el-dialog v-model="categoryDialogVisible" title="选择文件分类" width="400px">
       <el-form label-width="80px">
@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Folder, View, Download, Delete, Document, Picture, VideoPlay, Headset, FolderOpened } from '@element-plus/icons-vue'
 import request from '@/utils/request'
@@ -155,16 +155,16 @@ const props = defineProps({
 
 const emit = defineEmits(['uploaded', 'deleted'])
 
-const fileInput = ref(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const attachments = ref<any[]>([])
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const previewVisible = ref(false)
-const previewFile = ref(null)
+const previewFile = ref<any>(null)
 const categoryDialogVisible = ref(false)
 const uploadCategory = ref('OTHER')
 const uploadDescription = ref('')
-const pendingFiles = ref<any[]>([])
+const pendingFiles = ref<File[]>([])
 
 const categoryOptions = [
   { value: 'DRAWING', label: '图纸' },
@@ -187,7 +187,7 @@ const maxSizeText = computed(() => {
 })
 
 // 获取文件图标
-const getFileIcon = (fileType) => {
+const getFileIcon = (fileType: any) => {
   if (!fileType) return Document
   if (fileType.startsWith('image/')) return Picture
   if (fileType.startsWith('video/')) return VideoPlay
@@ -200,7 +200,7 @@ const getFileIcon = (fileType) => {
 }
 
 // 获取文件图标颜色
-const getFileIconColor = (fileType) => {
+const getFileIconColor = (fileType: any) => {
   if (!fileType) return '#909399'
   if (fileType.startsWith('image/')) return '#67c23a'
   if (fileType.includes('pdf')) return '#f56c6c'
@@ -210,17 +210,17 @@ const getFileIconColor = (fileType) => {
 }
 
 // 判断是否为图片
-const isImage = (fileType) => {
+const isImage = (fileType: any) => {
   return fileType && fileType.startsWith('image/')
 }
 
 // 判断是否为PDF
-const isPdf = (fileType) => {
+const isPdf = (fileType: any) => {
   return fileType && fileType.includes('pdf')
 }
 
 // 格式化日期时间
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {
@@ -235,7 +235,7 @@ const formatDateTime = (dateStr) => {
 // 加载附件列表
 const loadAttachments = async () => {
   if (!props.relatedId) return
-  
+
   try {
     const res = await request.get('/core/attachments/', {
       params: {
@@ -244,7 +244,7 @@ const loadAttachments = async () => {
       }
     })
     attachments.value = res.data?.results || res.results || res.data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载附件失败:', error)
   }
 }
@@ -255,10 +255,11 @@ const triggerUpload = () => {
 }
 
 // 处理文件选择
-const handleFileChange = (event) => {
-  const files = Array.from(event.target.files)
+const handleFileChange = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
   if (!files.length) return
-  
+
   // 验证文件
   const validFiles = []
   for (const file of files) {
@@ -269,54 +270,56 @@ const handleFileChange = (event) => {
     }
     validFiles.push(file)
   }
-  
+
   if (!validFiles.length) {
-    event.target.value = ''
+    input.value = ''
     return
   }
-  
+
   pendingFiles.value = validFiles
   uploadCategory.value = 'OTHER'
   uploadDescription.value = ''
   categoryDialogVisible.value = true
-  
+
   // 清空input
-  event.target.value = ''
+  input.value = ''
 }
 
 // 确认上传
 const confirmUpload = async () => {
   if (!pendingFiles.value.length) return
-  
+
   uploading.value = true
   uploadProgress.value = 0
   categoryDialogVisible.value = false
-  
+
   try {
     const formData = new FormData()
     formData.append('related_model', props.relatedModel)
-    formData.append('related_id', props.relatedId)
+    formData.append('related_id', String(props.relatedId))
     formData.append('category', uploadCategory.value)
     formData.append('description', uploadDescription.value)
-    
+
     // 批量上传
     for (const file of pendingFiles.value) {
       formData.append('files', file)
     }
-    
+
     const res = await request.post('/core/attachments/batch_upload/', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       },
       onUploadProgress: (progressEvent) => {
-        uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        if (progressEvent.total) {
+          uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        }
       }
     })
-    
+
     ElMessage.success('上传成功')
     loadAttachments()
     emit('uploaded', res.data || res)
-  } catch (error) {
+  } catch (error: any) {
     console.error('上传失败:', error)
     ElMessage.error('上传失败，请重试')
   } finally {
@@ -327,13 +330,13 @@ const confirmUpload = async () => {
 }
 
 // 预览文件
-const handlePreview = (attachment) => {
+const handlePreview = (attachment: any) => {
   previewFile.value = attachment
   previewVisible.value = true
 }
 
 // 下载文件
-const handleDownload = (attachment) => {
+const handleDownload = (attachment: any) => {
   const link = document.createElement('a')
   link.href = attachment.file_url
   link.download = attachment.original_name
@@ -344,19 +347,19 @@ const handleDownload = (attachment) => {
 }
 
 // 删除文件
-const handleDelete = async (attachment) => {
+const handleDelete = async (attachment: any) => {
   try {
     await ElMessageBox.confirm(
       `确定要删除附件 "${attachment.original_name}" 吗？`,
       '删除确认',
       { type: 'warning' }
     )
-    
+
     await request.delete(`/core/attachments/${attachment.id}/`)
     ElMessage.success('删除成功')
     loadAttachments()
     emit('deleted', attachment)
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -438,4 +441,3 @@ defineExpose({
   margin: 20px 0;
 }
 </style>
-

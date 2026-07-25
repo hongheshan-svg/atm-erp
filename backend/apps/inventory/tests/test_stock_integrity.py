@@ -58,13 +58,23 @@ class InOutBalanceOpeningTest(TestCase):
         self.item = Item.objects.create(sku='SKU_B', name='平衡物料')
         # 期初前入库 10（move_date < 期初）→ 期初结存应为 10
         StockMove.objects.create(
-            item=self.item, warehouse_to=self.wh, qty=Decimal('10'), unit_cost=Decimal('1'),
-            move_type='IN_PURCHASE', move_date=date(2026, 5, 1), status='COMPLETED',
+            item=self.item,
+            warehouse_to=self.wh,
+            qty=Decimal('10'),
+            unit_cost=Decimal('1'),
+            move_type='IN_PURCHASE',
+            move_date=date(2026, 5, 1),
+            status='COMPLETED',
         )
         # 期间内入库 5
         StockMove.objects.create(
-            item=self.item, warehouse_to=self.wh, qty=Decimal('5'), unit_cost=Decimal('1'),
-            move_type='IN_PURCHASE', move_date=date(2026, 6, 5), status='COMPLETED',
+            item=self.item,
+            warehouse_to=self.wh,
+            qty=Decimal('5'),
+            unit_cost=Decimal('1'),
+            move_type='IN_PURCHASE',
+            move_date=date(2026, 6, 5),
+            status='COMPLETED',
         )
         # 此时 Stock.qty_on_hand 由移动自动维护为 15
 

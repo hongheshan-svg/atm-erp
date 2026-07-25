@@ -121,7 +121,7 @@ export function submitRequisition(id: number) {
 export function approveRequisition(id: number) {
   return request({ url: `/inventory/requisitions/${id}/approve/`, method: 'post' })
 }
-export function rejectRequisition(id: number, data: any) {
+export function rejectRequisition(id: number, data: any = {}) {
   return request({ url: `/inventory/requisitions/${id}/reject/`, method: 'post', data })
 }
 export function startPreparingRequisition(id: number) {
@@ -268,7 +268,7 @@ export function getValidationResults(params?: Record<string, any>) {
 export function handleValidationResult(id: number, data: any) {
   return request({ url: `/inventory/validation-results/${id}/handle/`, method: 'post', data })
 }
-export function runValidationChecks(data: any) {
+export function runValidationChecks(data: any = {}) {
   return request({ url: '/inventory/validation-results/run_checks/', method: 'post', data })
 }
 

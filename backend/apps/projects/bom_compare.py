@@ -288,7 +288,7 @@ class BOMCompareService:
             'statistics': {
                 '原BOM项数': summary['total_old'],
                 '新BOM项数': summary['total_new'],
-                '变更率': f"{(summary['added'] + summary['removed'] + summary['modified']) / max(summary['total_old'], 1) * 100:.1f}%",
+                '变更率': f'{(summary["added"] + summary["removed"] + summary["modified"]) / max(summary["total_old"], 1) * 100:.1f}%',
             },
             'changes': {
                 'added': [d for d in details if d['change_type'] == 'ADDED'],
@@ -451,7 +451,7 @@ class BOMSnapshotSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['item_count', 'total_cost']
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
@@ -527,6 +527,7 @@ class BOMCompareViewSet(viewsets.ViewSet):
 
 class BOMSnapshotViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """BOM快照管理"""
+
     permission_module = 'projects'
     permission_resource = 'bom_snapshot'
 

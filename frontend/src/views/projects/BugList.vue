@@ -149,7 +149,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click.stop="handleEdit(row)">编辑</el-button>
-            <el-dropdown @command="(cmd) => handleCommand(cmd, row)" trigger="click">
+            <el-dropdown @command="(cmd: any) => handleCommand(cmd, row)" trigger="click">
               <el-button size="small" @click.stop>
                 更多<el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </el-button>
@@ -256,7 +256,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 编辑时显示状态和解决方案 -->
         <template v-if="isEdit">
           <el-divider content-position="left">状态信息</el-divider>
@@ -332,9 +332,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import { getBugList, createBug, updateBug, getBugStatistics, assignBug, changeBugStatus } from '@/api/projects/bug'
 import { getProjectList } from '@/api/projects/project'
@@ -361,17 +361,17 @@ const changingStatus = ref(false)
 const bugs = ref<any[]>([])
 const projects = ref<any[]>([])
 const users = ref<any[]>([])
-const stats = ref(null)
+const stats = ref<any>(null)
 const dialogVisible = ref(false)
 const assignDialogVisible = ref(false)
 const statusDialogVisible = ref(false)
 const dialogTitle = ref('新建Bug')
 const isEdit = ref(false)
-const currentBug = ref(null)
-const formRef = ref(null)
+const currentBug = ref<any>(null)
+const formRef = ref<any>(null)
 const quickFilter = ref('')
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   project: null,
   status: '',
   severity: '',
@@ -380,13 +380,13 @@ const searchForm = reactive({
   search: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   title: '',
   description: '',
   project: null,
@@ -402,11 +402,11 @@ const form = reactive({
   solution: ''
 })
 
-const assignForm = reactive({
+const assignForm = reactive<Record<string, any>>({
   assignee: null
 })
 
-const statusForm = reactive({
+const statusForm = reactive<Record<string, any>>({
   status: '',
   resolution: '',
   solution: ''
@@ -468,7 +468,7 @@ const resolutionOptions = [
   { value: 'BY_DESIGN', label: '设计如此' }
 ]
 
-const getSeverityType = (severity) => {
+const getSeverityType = (severity: any) => {
   const types = {
     'CRITICAL': 'danger',
     'MAJOR': 'warning',
@@ -476,20 +476,20 @@ const getSeverityType = (severity) => {
     'MINOR': 'success',
     'SUGGESTION': ''
   }
-  return types[severity] || ''
+  return (types as Record<string, any>)[severity] || ''
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const types = {
     'P0': 'danger',
     'P1': 'warning',
     'P2': 'info',
     'P3': 'success'
   }
-  return types[priority] || ''
+  return (types as Record<string, any>)[priority] || ''
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'NEW': '',
     'CONFIRMED': 'warning',
@@ -502,13 +502,13 @@ const getStatusType = (status) => {
     'BY_DESIGN': 'info',
     'DUPLICATE': 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', { 
+  return date.toLocaleString('zh-CN', {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit'
   })
@@ -517,23 +517,23 @@ const formatDate = (dateStr) => {
 const loadBugs = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
-    
+
     // 清理空值
     Object.keys(params).forEach(key => {
-      if (params[key] === '' || params[key] === null) {
-        delete params[key]
+      if ((params as Record<string, any>)[key] === '' || (params as Record<string, any>)[key] === null) {
+        delete (params as Record<string, any>)[key]
       }
     })
-    
+
     const response = await getBugList(params)
     bugs.value = response.results || response || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载Bug列表失败')
   } finally {
     loading.value = false
@@ -545,7 +545,7 @@ const loadStats = async () => {
     const params = searchForm.project ? { project: searchForm.project } : {}
     const response = await getBugStatistics(params)
     stats.value = response
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -554,7 +554,7 @@ const loadProjects = async () => {
   try {
     const response = await getProjectList({ page_size: 1000 })
     projects.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -563,16 +563,16 @@ const loadUsers = async () => {
   try {
     const response = await getUsers({ is_active: true, page_size: 1000 })
     const data = response.results || response || []
-    users.value = data.map(u => ({
+    users.value = data.map((u: any) => ({
       id: u.id,
       name: `${u.last_name || ''}${u.first_name || ''}` || u.username
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户失败:', error)
   }
 }
 
-const handleQuickFilter = (value) => {
+const handleQuickFilter = (value: any) => {
   if (value === 'my_assigned') {
     searchForm.assignee = null // 后端会根据my_bugs参数处理
   } else if (value === 'my_reported') {
@@ -622,20 +622,20 @@ const handleAdd = () => {
   dialogTitle.value = '新建Bug'
   isEdit.value = false
   resetForm()
-  
+
   // 如果当前有选中项目，自动填充
   if (searchForm.project) {
     form.project = searchForm.project
   }
-  
+
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = `编辑Bug - ${row.bug_number}`
   isEdit.value = true
   currentBug.value = row
-  
+
   Object.assign(form, {
     title: row.title,
     description: row.description || '',
@@ -651,15 +651,15 @@ const handleEdit = (row) => {
     resolution: row.resolution || '',
     solution: row.solution || ''
   })
-  
+
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/projects/bugs/${row.id}`)
 }
 
-const handleRowClick = (row) => {
+const handleRowClick = () => {
   // 可选：点击行查看详情
 }
 
@@ -667,9 +667,9 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = { ...form }
-    
+
     if (isEdit.value) {
       await updateBug(currentBug.value.id, data)
       ElMessage.success('更新成功')
@@ -677,11 +677,11 @@ const handleSubmit = async () => {
       await createBug( data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadBugs()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel' && error !== false) {
       const msg = error.response?.data?.detail || '保存失败'
       ElMessage.error(msg)
@@ -691,9 +691,9 @@ const handleSubmit = async () => {
   }
 }
 
-const handleCommand = (command, row) => {
+const handleCommand = (command: any, row: any) => {
   currentBug.value = row
-  
+
   if (command === 'assign') {
     assignForm.assignee = row.assignee
     assignDialogVisible.value = true
@@ -714,7 +714,7 @@ const handleAssignSubmit = async () => {
     ElMessage.warning('请选择处理人')
     return
   }
-  
+
   assigning.value = true
   try {
     await assignBug(currentBug.value.id, {
@@ -723,7 +723,7 @@ const handleAssignSubmit = async () => {
     ElMessage.success('分配成功')
     assignDialogVisible.value = false
     loadBugs()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('分配失败')
   } finally {
     assigning.value = false
@@ -735,7 +735,7 @@ const handleStatusSubmit = async () => {
     ElMessage.warning('请选择状态')
     return
   }
-  
+
   changingStatus.value = true
   try {
     await changeBugStatus(currentBug.value.id, statusForm)
@@ -743,7 +743,7 @@ const handleStatusSubmit = async () => {
     statusDialogVisible.value = false
     loadBugs()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     const msg = error.response?.data?.error || '状态变更失败'
     ElMessage.error(msg)
   } finally {
@@ -839,4 +839,3 @@ onMounted(() => {
   background-color: #f5f7fa !important;
 }
 </style>
-

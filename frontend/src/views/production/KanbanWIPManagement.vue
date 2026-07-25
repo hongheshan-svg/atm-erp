@@ -100,7 +100,7 @@
             <el-table-column label="类型" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.alert_type === 'critical' ? 'danger' : (row.alert_type === 'warning' ? 'warning' : 'info')" size="small">
-                  {{ { warning: '预警', critical: '超限', blocked: '阻塞' }[row.alert_type] || row.alert_type }}
+                  {{ alertTypeLabels[row.alert_type] || row.alert_type }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -152,26 +152,31 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 const wipStatus = ref<any[]>([])
 const rules = ref<any[]>([])
 const alerts = ref<any[]>([])
+const alertTypeLabels: Record<string, string> = {
+  warning: '预警',
+  critical: '超限',
+  blocked: '阻塞',
+}
 const ruleLoading = ref(false)
 const alertLoading = ref(false)
 const showRuleDialog = ref(false)
 const alertFilter = ref('')
-const ruleFormRef = ref(null)
-let refreshTimer = null
+const ruleFormRef = ref<any>(null)
+let refreshTimer: any = null
 
-const ruleForm = reactive({ id: null, process_name: '', wip_limit: 10, warning_threshold: 80, is_active: true })
+const ruleForm = reactive<Record<string, any>>({ id: null, process_name: '', wip_limit: 10, warning_threshold: 80, is_active: true })
 
 const totalWIP = computed(() => wipStatus.value.reduce((s, w) => s + (w.current_wip || 0), 0))
 const warningCount = computed(() => wipStatus.value.filter(w => w.utilization > 80 && w.utilization <= 100).length)
 const overLimitCount = computed(() => wipStatus.value.filter(w => w.utilization > 100).length)
 
-const wipCardClass = (ws) => ws.utilization > 100 ? 'over-limit' : ws.utilization > 80 ? 'warning' : 'normal'
+const wipCardClass = (ws: any) => ws.utilization > 100 ? 'over-limit' : ws.utilization > 80 ? 'warning' : 'normal'
 
 const loadWIPStatus = async () => {
   try {
     const res = await getKanbanWIPStatus()
     wipStatus.value = res.statuses || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('KanbanWIPManagement getKanbanWIPStatus error:', error)
   }
 }
@@ -187,14 +192,14 @@ const loadRules = async () => {
 const loadAlerts = async () => {
   alertLoading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (alertFilter.value) params.alert_type = alertFilter.value
     const res = await getKanbanWIPAlerts(params)
     alerts.value = res.results || res.results || []
   } finally { alertLoading.value = false }
 }
 
-const editRule = (row) => {
+const editRule = (row: any) => {
   Object.assign(ruleForm, row)
   showRuleDialog.value = true
 }
@@ -212,12 +217,12 @@ const submitRule = async () => {
     Object.assign(ruleForm, { id: null, process_name: '', wip_limit: 10, warning_threshold: 80, is_active: true })
     loadRules()
     loadWIPStatus()
-  } catch (error) {
+  } catch (error: any) {
     console.error('KanbanWIPManagement loadWIPStatus error:', error)
   }
 }
 
-const deleteRule = async (row) => {
+const deleteRule = async (row: any) => {
   await ElMessageBox.confirm('确认删除？', '提示')
   await deleteKanbanWIPRule(row.id)
   ElMessage.success('删除成功')

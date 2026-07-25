@@ -71,13 +71,13 @@ class AttachmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'file_size', 'file_type', 'uploaded_by', 'uploaded_at']
 
-    def get_file_url(self, obj):
+    def get_file_url(self, obj) -> str | None:
         if obj.file:
             # 返回相对路径，让前端使用当前域名访问
             return f'/media/{obj.file.name}'
         return None
 
-    def get_file_size_display(self, obj):
+    def get_file_size_display(self, obj) -> str:
         """将文件大小转换为人类可读格式"""
         size = obj.file_size
         if size < 1024:

@@ -146,7 +146,7 @@ class EmailTemplateSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_extracted_variables(self, obj):
+    def get_extracted_variables(self, obj) -> list:
         return obj.extract_variables()
 
 

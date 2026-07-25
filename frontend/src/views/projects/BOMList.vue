@@ -29,6 +29,9 @@
                   <el-dropdown-item @click="handleImport">
                     <el-icon><Upload /></el-icon> 导入Excel
                   </el-dropdown-item>
+                  <el-dropdown-item @click="handleImportQuoteBOM">
+                    <el-icon><Upload /></el-icon> 导入询价结果
+                  </el-dropdown-item>
                   <el-dropdown-item divided @click="handleDownloadTemplate">
                     <el-icon><Document /></el-icon> 下载导入模板
                   </el-dropdown-item>
@@ -49,7 +52,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- BOM统计 -->
       <el-row :gutter="20" class="stats-row" v-if="bomItems.length > 0">
         <el-col :span="4">
@@ -71,7 +74,7 @@
           <el-statistic title="已询价" :value="bomItems.length - pendingQuoteCount" suffix="项" />
         </el-col>
       </el-row>
-      
+
       <!-- 筛选和搜索栏 -->
       <div class="filter-bar" v-if="pagination.total > 0 || selectedProject">
         <el-row :gutter="15" style="margin-bottom: 15px;">
@@ -97,19 +100,19 @@
             </el-select>
           </el-col>
           <el-col :span="5">
-            <el-input 
-              v-model="filterBrand" 
-              placeholder="版本/品牌筛选" 
+            <el-input
+              v-model="filterBrand"
+              placeholder="版本/品牌筛选"
               clearable
               @clear="applyFilters"
               @keyup.enter="applyFilters"
             />
           </el-col>
           <el-col :span="6">
-        <el-input 
-          v-model="searchKeyword" 
-          placeholder="搜索物料编码/名称/规格" 
-          clearable 
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索物料编码/名称/规格"
+          clearable
           @clear="applyFilters"
           @keyup.enter="applyFilters"
         >
@@ -129,16 +132,16 @@
             </el-button>
           </el-col>
         </el-row>
-        
+
         <!-- 筛选结果提示和操作 -->
         <div class="filter-actions">
           <span class="filter-result">
             共 <el-tag type="info">{{ pagination.total }}</el-tag> 项
           </span>
-          <el-button 
-            type="success" 
-            size="small" 
-            @click="handleExportFiltered" 
+          <el-button
+            type="success"
+            size="small"
+            @click="handleExportFiltered"
             :disabled="bomItems.length === 0"
             style="margin-left: 15px;"
           >
@@ -165,18 +168,18 @@
         </span>
         </div>
       </div>
-      
+
       <!-- BOM列表 -->
-      <el-table 
-        :data="bomItems" 
-        border 
-        stripe 
+      <el-table
+        :data="bomItems"
+        border
+        stripe
         v-loading="loading"
         ref="tableRef"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" />
-        <el-table-column type="index" label="序号" width="60" :index="(index) => (pagination.page - 1) * pagination.pageSize + index + 1" />
+        <el-table-column type="index" label="序号" width="60" :index="(index: any) => (pagination.page - 1) * pagination.pageSize + index + 1" />
         <el-table-column prop="project_name" label="所属项目" width="150" show-overflow-tooltip v-if="!selectedProject" />
         <el-table-column prop="item_sku" label="物料编码" width="120" />
         <el-table-column prop="item_name" label="物料名称" width="150" />
@@ -187,8 +190,8 @@
         <el-table-column prop="planned_qty" label="计划数量" width="90" align="right" />
         <el-table-column prop="order_status_display" label="采购状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag 
-              :type="getOrderStatusType(row.order_status)" 
+            <el-tag
+              :type="getOrderStatusType(row.order_status)"
               size="small"
             >
               {{ row.order_status_display || '未下单' }}
@@ -239,7 +242,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -252,7 +255,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 添加/编辑物料对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -322,9 +325,9 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="需求日期">
-              <el-date-picker 
-                v-model="form.required_date" 
-                type="date" 
+              <el-date-picker
+                v-model="form.required_date"
+                type="date"
                 placeholder="选择日期"
                 format="YYYY-MM-DD"
                 value-format="YYYY-MM-DD"
@@ -345,7 +348,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 采购与库存信息 -->
         <el-divider content-position="left">采购与库存信息</el-divider>
         <el-row :gutter="20">
@@ -363,9 +366,9 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="交期">
-              <el-date-picker 
-                v-model="form.delivery_date" 
-                type="date" 
+              <el-date-picker
+                v-model="form.delivery_date"
+                type="date"
                 placeholder="选择交期"
                 format="YYYY-MM-DD"
                 value-format="YYYY-MM-DD"
@@ -407,7 +410,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-form-item label="备注">
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="备注信息" />
         </el-form-item>
@@ -420,7 +423,7 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 导入BOM对话框 -->
     <el-dialog v-model="importDialogVisible" title="导入BOM" width="550px">
       <el-alert
@@ -436,7 +439,7 @@
           <div>3. 计划数量为必填项，单价可选</div>
         </template>
       </el-alert>
-      
+
       <el-upload
         ref="uploadRef"
         class="upload-area"
@@ -456,7 +459,7 @@
           <div class="el-upload__tip">只支持 .xlsx 或 .xls 格式文件</div>
         </template>
       </el-upload>
-      
+
       <div style="margin-top: 15px;">
         <el-checkbox v-model="importOptions.updateExisting">
           更新已存在的BOM（不勾选则跳过已存在的）
@@ -467,11 +470,11 @@
           自动创建不存在的物料（勾选后，若物料编码不存在则自动在物料主数据中创建）
         </el-checkbox>
       </div>
-      
+
       <!-- 导入结果 -->
       <div v-if="importResult" class="import-result">
         <el-divider content-position="left">导入结果</el-divider>
-        
+
         <!-- 成功结果 -->
         <el-descriptions v-if="importResult.created !== undefined || importResult.updated !== undefined" :column="2" border size="small">
           <el-descriptions-item label="新增BOM">
@@ -484,12 +487,12 @@
             <el-tag type="warning">{{ importResult.items_created }} 个</el-tag>
           </el-descriptions-item>
         </el-descriptions>
-        
+
         <!-- 错误信息 -->
         <div v-if="importResult.error" class="error-summary" style="margin: 10px 0;">
           <el-alert :title="importResult.error" type="error" show-icon :closable="false" />
         </div>
-        
+
         <!-- 详细错误列表 -->
         <div v-if="importResult.errors && importResult.errors.length > 0" class="error-list" style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
           <el-alert title="详细错误" type="warning" show-icon :closable="false">
@@ -500,7 +503,7 @@
             </template>
           </el-alert>
         </div>
-        
+
         <!-- 必需列提示 -->
         <div v-if="importResult.required_columns" style="margin-top: 10px;">
           <el-alert type="info" show-icon :closable="false">
@@ -508,7 +511,7 @@
           </el-alert>
         </div>
       </div>
-      
+
       <template #footer>
         <el-button @click="handleDownloadTemplate">下载模板</el-button>
         <el-button @click="importDialogVisible = false">关闭</el-button>
@@ -517,7 +520,7 @@
         </el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 导入已报价BOM对话框 -->
     <el-dialog v-model="quoteImportDialogVisible" title="导入已报价BOM" width="550px">
       <el-alert
@@ -534,7 +537,7 @@
           <div>4. 导入成功后，物料将标记为"已询价"状态</div>
         </template>
       </el-alert>
-      
+
       <el-upload
         ref="quoteUploadRef"
         class="upload-area"
@@ -554,7 +557,7 @@
           <div class="el-upload__tip">只支持 .xlsx 或 .xls 格式文件</div>
         </template>
       </el-upload>
-      
+
       <template #footer>
         <el-button @click="handleExportQuoteBOM">导出询价BOM</el-button>
         <el-button @click="quoteImportDialogVisible = false">取消</el-button>
@@ -563,7 +566,7 @@
         </el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 从其他项目复制对话框 -->
     <el-dialog v-model="copyDialogVisible" title="从其他项目复制BOM" width="450px">
       <el-form label-width="100px">
@@ -639,8 +642,8 @@
         <!-- 齐套率进度条 -->
         <div class="progress-section" v-if="materialCheckData.summary">
           <span>整体齐套进度：</span>
-          <el-progress 
-            :percentage="materialCheckData.summary.completion_rate || 0" 
+          <el-progress
+            :percentage="materialCheckData.summary.completion_rate || 0"
             :status="materialCheckData.summary.completion_rate >= 100 ? 'success' : materialCheckData.summary.completion_rate >= 80 ? '' : 'warning'"
             :stroke-width="20"
             style="flex: 1; margin-left: 10px;"
@@ -704,15 +707,15 @@ import { toFixedSafe } from '@/utils/number'
 const router = useRouter()
 
 const loading = ref(false)
-const selectedProject = ref(null)
+const selectedProject = ref<any>(null)
 const projects = ref<any[]>([])
 const bomItems = ref<any[]>([])
 const items = ref<any[]>([])
 const users = ref<any[]>([])
 const suppliers = ref<any[]>([])
 const dialogVisible = ref(false)
-const formRef = ref(null)
-const tableRef = ref(null)
+const formRef = ref<any>(null)
+const tableRef = ref<any>(null)
 
 // 搜索、筛选和多选
 const searchKeyword = ref('')
@@ -722,7 +725,7 @@ const filterBrand = ref('')       // 版本/品牌筛选
 const selectedRows = ref<any[]>([])
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 50,
   total: 0
@@ -735,22 +738,25 @@ const copyDialogVisible = ref(false)
 // 齐套检查
 const materialCheckDialogVisible = ref(false)
 const materialCheckLoading = ref(false)
-const materialCheckData = ref({
+const materialCheckData = ref<{
+  summary: Record<string, any>
+  details: any[]
+}>({
   summary: {},
   details: []
 })
-const uploadRef = ref(null)
-const importFile = ref(null)
+const uploadRef = ref<any>(null)
+const importFile = ref<any>(null)
 const importing = ref(false)
 const copying = ref(false)
-const copySourceProject = ref(null)
-const importResult = ref(null)
-const importOptions = reactive({
+const copySourceProject = ref<any>(null)
+const importResult = ref<any>(null)
+const importOptions = reactive<Record<string, any>>({
   updateExisting: false,
   autoCreateItems: false
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   item: null,
   item_code: '',
@@ -787,15 +793,15 @@ const currentProjectName = computed(() => {
   return project ? `${project.code} - ${project.name}` : ''
 })
 
-const totalPlannedQty = computed(() => 
+const totalPlannedQty = computed(() =>
   bomItems.value.reduce((sum, item) => sum + parseFloat(item.planned_qty || 0), 0)
 )
 
-const totalActualQty = computed(() => 
+const totalActualQty = computed(() =>
   bomItems.value.reduce((sum, item) => sum + parseFloat(item.actual_qty || 0), 0)
 )
 
-const totalEstimatedCost = computed(() => 
+const totalEstimatedCost = computed(() =>
   bomItems.value.reduce((sum, item) => sum + parseFloat(item.planned_qty || 0) * parseFloat(item.estimated_cost || 0), 0)
 )
 
@@ -813,7 +819,7 @@ const fetchPendingQuoteCount = async () => {
       params: { project: selectedProject.value }
     })
     pendingQuoteCount.value = res.data?.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取待询价数量失败:', error)
     pendingQuoteCount.value = 0
   }
@@ -839,18 +845,11 @@ const applyFilters = () => {
   fetchBOM()
 }
 
-const getProgressStatus = (row) => {
-  const percentage = ((row.actual_qty || 0) / (row.planned_qty || 1)) * 100
-  if (percentage >= 100) return 'success'
-  if (percentage >= 50) return ''
-  return 'warning'
-}
-
 const fetchProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.data?.results || res.results || res.data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目列表失败:', error)
   }
 }
@@ -859,7 +858,7 @@ const fetchBOM = async () => {
   loading.value = true
   try {
     // 构建查询参数
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -870,7 +869,7 @@ const fetchBOM = async () => {
     if (filterHasDrawing.value) {
       // 转换前端值到后端值: HAS_DRAWING->YES, NO_DRAWING->NO, PENDING->PENDING
       const hasDrawingMap = { 'HAS_DRAWING': 'YES', 'NO_DRAWING': 'NO', 'PENDING': 'PENDING' }
-      params.has_drawing = hasDrawingMap[filterHasDrawing.value] || filterHasDrawing.value
+      params.has_drawing = (hasDrawingMap as Record<string, any>)[filterHasDrawing.value] || filterHasDrawing.value
     }
     if (filterItemType.value) {
       params.item_type = filterItemType.value
@@ -881,12 +880,12 @@ const fetchBOM = async () => {
     if (searchKeyword.value.trim()) {
       params.search = searchKeyword.value.trim()
     }
-    
+
     const res = await getBOMList(params)
     bomItems.value = res.data?.results || res.results || res.data || res || []
     // 更新分页总数
     pagination.total = res.data?.count || res.count || bomItems.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取BOM列表失败:', error)
     bomItems.value = []
     pagination.total = 0
@@ -897,12 +896,12 @@ const fetchBOM = async () => {
 }
 
 // 分页变化处理
-const handlePageChange = (page) => {
+const handlePageChange = (page: any) => {
   pagination.page = page
   fetchBOM()
 }
 
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   fetchBOM()
@@ -912,7 +911,7 @@ const fetchItems = async () => {
   try {
     const res = await getItemList()
     items.value = res.data?.results || res.results || res.data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取物料列表失败:', error)
   }
 }
@@ -921,11 +920,11 @@ const fetchUsers = async () => {
   try {
     const res = await getUsers()
     const userList = res.data?.results || res.results || res.data || []
-    users.value = userList.map(u => ({
+    users.value = userList.map((u: any) => ({
       id: u.id,
       name: `${u.last_name || ''}${u.first_name || ''}`.trim() || u.username || `用户${u.id}`
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取用户列表失败:', error)
   }
 }
@@ -934,7 +933,7 @@ const fetchSuppliers = async () => {
   try {
     const res = await getSupplierList()
     suppliers.value = res.data?.results || res.results || res.data || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取供应商列表失败:', error)
   }
 }
@@ -964,7 +963,7 @@ const resetForm = () => {
   form.issued_qty = 0
 }
 
-const handleItemChange = (itemId) => {
+const handleItemChange = (itemId: any) => {
   const item = items.value.find(i => i.id === itemId)
   if (item) {
     form.item_code = item.sku
@@ -984,12 +983,12 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   Object.assign(form, row)
   dialogVisible.value = true
 }
 
-const handleDelete = (row) => {
+const handleDelete = (row: any) => {
   ElMessageBox.confirm(`确定要删除物料 ${row.item_name} 吗？`, '提示', {
     type: 'warning'
   }).then(async () => {
@@ -997,7 +996,7 @@ const handleDelete = (row) => {
       await deleteBOM(row.id)
       ElMessage.success('删除成功')
       fetchBOM()
-    } catch (error) {
+    } catch (error: any) {
       ElMessage.error('删除失败')
     }
   }).catch(error => { console.error(error) })
@@ -1006,9 +1005,9 @@ const handleDelete = (row) => {
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
-    
+
     const data = { ...form, project: form.project || selectedProject.value }
-    
+
     if (form.id) {
       await updateBOM(form.id, data)
       ElMessage.success('更新成功')
@@ -1016,10 +1015,10 @@ const handleSubmit = async () => {
       await createBOM( data)
       ElMessage.success('添加成功')
     }
-    
+
     dialogVisible.value = false
     fetchBOM()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       const errData = error.response?.data
       if (errData?.non_field_errors) {
@@ -1034,7 +1033,7 @@ const handleSubmit = async () => {
 }
 
 // 多选处理
-const handleSelectionChange = (rows) => {
+const handleSelectionChange = (rows: any) => {
   selectedRows.value = rows
 }
 
@@ -1052,22 +1051,22 @@ const handleBatchDelete = async () => {
     ElMessage.warning('请先选择要删除的物料')
     return
   }
-  
+
   try {
     await ElMessageBox.confirm(
       `确定要删除选中的 ${selectedRows.value.length} 项物料吗？此操作不可恢复！`,
       '批量删除',
       { type: 'warning' }
     )
-    
+
     // 使用批量删除接口
     const ids = selectedRows.value.map(row => row.id)
     await bulkDeleteBOM(ids)
-    
+
     ElMessage.success(`成功删除 ${selectedRows.value.length} 项物料`)
     clearSelection()
     fetchBOM()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
@@ -1076,7 +1075,7 @@ const handleBatchDelete = async () => {
 
 // 生成采购申请的可下单判定，与后端 generate_purchase_request 口径一致：
 // 仅已询价(QUOTED)且未下单(NOT_ORDERED)、且仍有剩余需求(planned_qty-actual_qty>0)的行
-const isOrderable = (item) => {
+const isOrderable = (item: any) => {
   const remaining = (item.planned_qty || 0) - (item.actual_qty || 0)
   return item.quote_status === 'QUOTED' && (item.order_status || 'NOT_ORDERED') === 'NOT_ORDERED' && remaining > 0
 }
@@ -1110,7 +1109,7 @@ const handleGeneratePR = () => {
 }
 
 // 通用的生成采购申请函数
-const generatePurchaseRequest = (itemsToOrder) => {
+const generatePurchaseRequest = (itemsToOrder: any) => {
   // 确定项目：优先使用选中的项目，否则从物料行中提取
   const projectId = selectedProject.value || itemsToOrder[0]?.project || null
   const projectName = selectedProject.value
@@ -1118,21 +1117,21 @@ const generatePurchaseRequest = (itemsToOrder) => {
     : (itemsToOrder[0]?.project_name || '')
 
   // 检查是否涉及多个项目
-  const projectIds = [...new Set(itemsToOrder.map(i => i.project).filter(Boolean))]
+  const projectIds = [...new Set(itemsToOrder.map((i: any) => i.project).filter(Boolean))]
   if (!selectedProject.value && projectIds.length > 1) {
     ElMessage.warning('选中的物料来自多个项目，请先选择项目后再生成采购申请')
     return
   }
 
   ElMessageBox.confirm(
-    `将根据选中物料生成采购申请，包含 ${itemsToOrder.length} 种物料。确定继续？`, 
-    '生成采购申请', 
+    `将根据选中物料生成采购申请，包含 ${itemsToOrder.length} 种物料。确定继续？`,
+    '生成采购申请',
     { type: 'info' }
   ).then(() => {
     const prData = {
       project: projectId,
       projectName: projectName,
-      lines: itemsToOrder.map(item => ({
+      lines: itemsToOrder.map((item: any) => ({
         item: item.item,
         item_sku: item.item_sku,
         item_name: item.item_name,
@@ -1149,7 +1148,7 @@ const generatePurchaseRequest = (itemsToOrder) => {
 // ========== 状态显示辅助函数 ==========
 
 // 获取采购状态标签类型
-const getOrderStatusType = (status) => {
+const getOrderStatusType = (status: any) => {
   const statusTypeMap = {
     'NOT_ORDERED': 'info',       // 未下单 - 灰色
     'PR_PENDING': 'warning',     // 采购申请中 - 橙色
@@ -1162,7 +1161,7 @@ const getOrderStatusType = (status) => {
     'RETURNED': 'danger',        // 已退货 - 红色
     'CANCELLED': 'danger',       // 已取消 - 红色
   }
-  return statusTypeMap[status] || 'info'
+  return (statusTypeMap as Record<string, any>)[status] || 'info'
 }
 
 // ========== 导入导出功能 ==========
@@ -1172,16 +1171,16 @@ const handleExportExcel = async () => {
     ElMessage.warning('没有可导出的数据')
     return
   }
-  
+
   try {
     const response = await exportBOMExcel({ project: selectedProject.value })
-    
+
     // 获取实际的blob数据
     const blobData = response.data || response
-    const blob = new Blob([blobData], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    const blob = new Blob([blobData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1190,9 +1189,9 @@ const handleExportExcel = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
+
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
   }
@@ -1204,7 +1203,7 @@ const handleExportFiltered = async () => {
     ElMessage.warning('没有可导出的数据')
     return
   }
-  
+
   // 获取当前页的物料ID列表
   const itemIds = bomItems.value.map(item => item.id)
   await exportForQuote(itemIds, '筛选结果')
@@ -1216,14 +1215,14 @@ const handleExportSelected = async () => {
     ElMessage.warning('请先选择要导出的物料')
     return
   }
-  
+
   // 获取选中的物料ID列表
   const itemIds = selectedRows.value.map(item => item.id)
   await exportForQuote(itemIds, '选中项')
 }
 
 // 通用导出函数（带历史价格）
-const exportForQuote = async (bomIds, exportName) => {
+const exportForQuote = async (bomIds: any, exportName: any) => {
   try {
     const response = await exportBOMForQuote({
       project: selectedProject.value,
@@ -1231,12 +1230,12 @@ const exportForQuote = async (bomIds, exportName) => {
     }, {
       responseType: 'blob'
     })
-    
+
     const blobData = response.data || response
-    const blob = new Blob([blobData], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    const blob = new Blob([blobData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1246,9 +1245,9 @@ const exportForQuote = async (bomIds, exportName) => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
+
     ElMessage.success(`导出${exportName}成功，共${bomIds.length}项`)
-  } catch (error) {
+  } catch (error: any) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
   }
@@ -1257,13 +1256,13 @@ const exportForQuote = async (bomIds, exportName) => {
 const handleDownloadTemplate = async () => {
   try {
     const response = await exportBOMTemplate()
-    
+
     // 获取实际的blob数据
     const blobData = response.data || response
-    const blob = new Blob([blobData], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    const blob = new Blob([blobData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1272,9 +1271,9 @@ const handleDownloadTemplate = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
+
     ElMessage.success('模板下载成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载模板失败:', error)
     ElMessage.error('下载模板失败')
   }
@@ -1287,20 +1286,20 @@ const handleExportQuoteBOM = async () => {
     ElMessage.warning('请先选择项目')
     return
   }
-  
+
   if (!pendingQuoteCount.value) {
     ElMessage.warning('没有待询价的物料')
     return
   }
-  
+
   try {
     const response = await exportQuoteBOM({ project: selectedProject.value })
-    
+
     const blobData = response.data || response
-    const blob = new Blob([blobData], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    const blob = new Blob([blobData], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     })
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1309,9 +1308,9 @@ const handleExportQuoteBOM = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    
+
     ElMessage.success(`导出成功，共 ${pendingQuoteCount.value} 项待询价物料`)
-  } catch (error) {
+  } catch (error: any) {
     console.error('导出询价BOM失败:', error)
     ElMessage.error('导出询价BOM失败')
   }
@@ -1319,9 +1318,9 @@ const handleExportQuoteBOM = async () => {
 
 // 询价BOM导入对话框
 const quoteImportDialogVisible = ref(false)
-const quoteImportFile = ref(null)
+const quoteImportFile = ref<any>(null)
 const quoteImporting = ref(false)
-const quoteUploadRef = ref(null)
+const quoteUploadRef = ref<any>(null)
 
 const handleImportQuoteBOM = () => {
   if (!selectedProject.value) {
@@ -1335,7 +1334,7 @@ const handleImportQuoteBOM = () => {
   quoteImportDialogVisible.value = true
 }
 
-const handleQuoteFileChange = (file) => {
+const handleQuoteFileChange = (file: any) => {
   quoteImportFile.value = file.raw
 }
 
@@ -1344,28 +1343,28 @@ const handleConfirmQuoteImport = async () => {
     ElMessage.warning('请选择要导入的文件')
     return
   }
-  
+
   quoteImporting.value = true
   try {
     const formData = new FormData()
     formData.append('file', quoteImportFile.value)
     formData.append('project', selectedProject.value)
-    
+
     const response = await importQuoteBOM(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    
+
     const data = response.data || response
-    
+
     ElMessage.success(data.message || `询价导入成功，已更新 ${data.updated} 条物料`)
     quoteImportDialogVisible.value = false
     fetchBOM()
     fetchPendingQuoteCount()
-  } catch (error) {
+  } catch (error: any) {
     console.error('询价导入失败:', error)
     const errData = error.response?.data
     if (errData?.errors?.length) {
-      const preview = errData.errors.slice(0, 3).map(e => `行${e.row}: ${e.error}`).join('；')
+      const preview = errData.errors.slice(0, 3).map((e: any) => `行${e.row}: ${e.error}`).join('；')
       ElMessage.error(`导入失败: ${errData.error || preview}`)
     } else {
       ElMessage.error(errData?.error || '询价导入失败')
@@ -1386,7 +1385,7 @@ const handleImport = () => {
   importDialogVisible.value = true
 }
 
-const handleFileChange = (file) => {
+const handleFileChange = (file: any) => {
   importFile.value = file.raw
   importResult.value = null
 }
@@ -1400,7 +1399,7 @@ const handleConfirmImport = async () => {
     ElMessage.warning('请选择要导入的文件')
     return
   }
-  
+
   importing.value = true
   try {
     const formData = new FormData()
@@ -1408,21 +1407,21 @@ const handleConfirmImport = async () => {
     formData.append('project', selectedProject.value)
     formData.append('update_existing', importOptions.updateExisting.toString())
     formData.append('auto_create_items', importOptions.autoCreateItems.toString())
-    
+
     const response = await importBOMExcel(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    
+
     const data = response.data || response
     importResult.value = data
-    
+
     if (data.created > 0 || data.updated > 0) {
       ElMessage.success(data.message || `导入成功：新增${data.created}条，更新${data.updated}条`)
       fetchBOM()
     } else if (data.errors && data.errors.length > 0) {
       ElMessage.warning('导入完成，但存在错误，请查看详情')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('导入失败:', error)
     // request.js interceptor 已经解包过，error.response?.data 或直接 error 可能包含信息
     const errData = error.response?.data || error
@@ -1451,19 +1450,19 @@ const handleConfirmCopy = async () => {
     ElMessage.warning('请选择源项目')
     return
   }
-  
+
   copying.value = true
   try {
     const response = await copyBOMFromProject({
         source_project: copySourceProject.value,
         target_project: selectedProject.value
     })
-    
+
     const data = response.data || response
     ElMessage.success(data.message || '复制成功')
     copyDialogVisible.value = false
     fetchBOM()
-  } catch (error) {
+  } catch (error: any) {
     console.error('复制失败:', error)
     ElMessage.error(error.response?.data?.error || '复制失败')
   } finally {
@@ -1477,16 +1476,16 @@ const handleMaterialCheck = async () => {
     ElMessage.warning('请先选择项目')
     return
   }
-  
+
   materialCheckLoading.value = true
   materialCheckDialogVisible.value = true
-  
+
   try {
     const response = await getBOMMaterialCheck({
       params: { project: selectedProject.value }
     })
     materialCheckData.value = response.data || response
-  } catch (error) {
+  } catch (error: any) {
     console.error('齐套检查失败:', error)
     ElMessage.error(error.response?.data?.error || '齐套检查失败')
   } finally {
@@ -1494,14 +1493,14 @@ const handleMaterialCheck = async () => {
   }
 }
 
-const getMaterialCheckStatusType = (status) => {
+const getMaterialCheckStatusType = (status: any) => {
   const types = {
     'COMPLETE': 'success',
     'READY': 'success',
     'PARTIAL': 'warning',
     'SHORTAGE': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 watch(selectedProject, () => {

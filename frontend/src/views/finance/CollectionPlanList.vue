@@ -339,10 +339,10 @@ const plans = ref<any[]>([])
 const total = ref(0)
 const customerOptions = ref<any[]>([])
 const projectOptions = ref<any[]>([])
-const currentPlan = ref(null)
-const currentMilestone = ref(null)
+const currentPlan = ref<any>(null)
+const currentMilestone = ref<any>(null)
 
-const statistics = reactive({
+const statistics = reactive<Record<string, any>>({
   total_amount: 0,
   collected_amount: 0,
   remaining_amount: 0,
@@ -353,15 +353,15 @@ const statistics = reactive({
   upcoming_amount: 0
 })
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: '',
   page: 1,
   page_size: 20
 })
 
-const formRef = ref(null)
-const formData = reactive({
+const formRef = ref<any>(null)
+const formData = reactive<Record<string, any>>({
   id: null,
   name: '',
   customer: null,
@@ -370,7 +370,7 @@ const formData = reactive({
   notes: ''
 })
 
-const recordData = reactive({
+const recordData = reactive<Record<string, any>>({
   milestone_id: null,
   amount: 0,
   collection_date: '',
@@ -385,19 +385,19 @@ const formRules = {
   total_amount: [{ required: true, message: '请输入合同总金额', trigger: 'blur' }]
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   return num ? Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { DRAFT: 'info', CONFIRMED: '', IN_PROGRESS: 'warning', COMPLETED: 'success', CANCELLED: 'danger' }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const getMilestoneStatusType = (status, isOverdue) => {
+const getMilestoneStatusType = (status: any, isOverdue: any) => {
   if (isOverdue) return 'danger'
   const map = { PENDING: 'info', PARTIAL: 'warning', COLLECTED: 'success', CANCELLED: 'info' }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
 const fetchData = async () => {
@@ -417,7 +417,7 @@ const fetchData = async () => {
       plans.value = res.results || res || []
       total.value = res.count || plans.value.length
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -428,7 +428,7 @@ const fetchStatistics = async () => {
   try {
     const res = await getCollectionPlanStatistics()
     Object.assign(statistics, res || {})
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -441,7 +441,7 @@ const fetchOptions = async () => {
     ])
     customerOptions.value = customerRes.results || customerRes || []
     projectOptions.value = projectRes.results || projectRes || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取选项失败', error)
   }
 }
@@ -461,18 +461,18 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑回款计划'
   Object.assign(formData, row)
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getCollectionPlan(row.id)
     currentPlan.value = res
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取详情失败')
   }
 }
@@ -493,14 +493,14 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     submitting.value = false
   }
 }
 
-const handleAddRecord = (milestone) => {
+const handleAddRecord = (milestone: any) => {
   currentMilestone.value = milestone
   recordData.milestone_id = milestone.id
   recordData.amount = milestone.planned_amount - milestone.collected_amount
@@ -523,7 +523,7 @@ const submitRecord = async () => {
       currentPlan.value = res
     }
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('添加失败')
   } finally {
     recording.value = false
@@ -535,7 +535,7 @@ const milestoneDialogVisible = ref(false)
 const addingMilestone = ref(false)
 const generating = ref(false)
 const confirming = ref(false)
-const milestoneForm = reactive({
+const milestoneForm = reactive<Record<string, any>>({
   name: '',
   milestone_type: 'OTHER',
   planned_amount: 0,
@@ -571,7 +571,7 @@ const submitMilestone = async () => {
     milestoneDialogVisible.value = false
     await refreshCurrentPlan()
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('添加节点失败')
   } finally {
     addingMilestone.value = false
@@ -586,7 +586,7 @@ const handleGenerateStandard = async () => {
     ElMessage.success('标准节点已生成')
     await refreshCurrentPlan()
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('生成失败')
   } finally {
     generating.value = false
@@ -602,7 +602,7 @@ const handleConfirmPlan = async () => {
     await refreshCurrentPlan()
     fetchData()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('确认失败')
   } finally {
     confirming.value = false
@@ -627,7 +627,7 @@ onMounted(() => {
 
 .stat-card {
   border-radius: 8px;
-  
+
   &.warning { border-left: 4px solid #E6A23C; }
   &.danger { border-left: 4px solid #F56C6C; }
 }
@@ -646,7 +646,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   font-size: 24px;
-  
+
   &.primary { background: #ecf5ff; color: #409EFF; }
   &.success { background: #f0f9eb; color: #67C23A; }
   &.warning { background: #fdf6ec; color: #E6A23C; }
@@ -659,7 +659,7 @@ onMounted(() => {
     font-weight: 600;
     color: #303133;
   }
-  
+
   .stat-label {
     font-size: 13px;
     color: #909399;

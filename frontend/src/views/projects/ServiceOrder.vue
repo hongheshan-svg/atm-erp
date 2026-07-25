@@ -266,13 +266,13 @@ const stats = ref<Record<string, any>>({})
 const createDialogVisible = ref(false)
 const dispatchDialogVisible = ref(false)
 const submitting = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const customers = ref<any[]>([])
 const equipments = ref<any[]>([])
 const technicians = ref<any[]>([])
-const currentOrder = ref(null)
+const currentOrder = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   service_type: 'DEBUGGING',
   priority: 'NORMAL',
   title: '',
@@ -286,7 +286,7 @@ const form = reactive({
   description: ''
 })
 
-const dispatchForm = reactive({
+const dispatchForm = reactive<Record<string, any>>({
   technician_id: null,
   role: 'MEMBER',
   planned_start: '',
@@ -303,20 +303,20 @@ const rules = {
   requested_date: [{ required: true, message: '请选择期望日期', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { PENDING: 'info', ASSIGNED: 'warning', ON_SITE: 'primary', COMPLETED: 'success', CANCELLED: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const map = { LOW: 'info', NORMAL: '', HIGH: 'warning', URGENT: 'danger' }
-  return map[priority] || ''
+  return (map as Record<string, any>)[priority] || ''
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: currentPage.value,
       page_size: pageSize.value,
       search: searchText.value || undefined,
@@ -326,7 +326,7 @@ const loadData = async () => {
     const res = await getServiceOrderList(params)
     tableData.value = res.results || res || []
     total.value = res.count || tableData.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -338,12 +338,12 @@ const loadStats = async () => {
     const res = await getServiceOrderDashboard()
     const statusStats = res.status_stats || []
     stats.value = {
-      pending: statusStats.find(s => s.status === 'PENDING')?.count || 0,
-      on_site: statusStats.find(s => s.status === 'ON_SITE')?.count || 0,
+      pending: statusStats.find((s: any) => s.status === 'PENDING')?.count || 0,
+      on_site: statusStats.find((s: any) => s.status === 'ON_SITE')?.count || 0,
       completed: res.month_completed || 0,
       urgent: res.urgent_count || 0
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -358,7 +358,7 @@ const loadTechnicians = async () => {
   technicians.value = res.results || res || []
 }
 
-const handleCustomerChange = async (customerId) => {
+const handleCustomerChange = async (customerId: any) => {
   if (customerId) {
     const customer = customers.value.find(c => c.id === customerId)
     if (customer) {
@@ -388,11 +388,11 @@ const handleCreate = () => {
   createDialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/projects/service-order/${row.id}`)
 }
 
-const handleDispatch = async (row) => {
+const handleDispatch = async (row: any) => {
   currentOrder.value = row
   dispatchForm.technician_id = null
   dispatchForm.role = 'MEMBER'
@@ -402,14 +402,14 @@ const handleDispatch = async (row) => {
   dispatchDialogVisible.value = true
 }
 
-const handleComplete = async (row) => {
+const handleComplete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定完成此服务单?', '提示')
     await completeServiceOrder(row.id)
     ElMessage.success('服务已完成')
     loadData()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -417,7 +417,7 @@ const handleComplete = async (row) => {
 const handleSubmitCreate = async () => {
   if (!formRef.value) return
   await formRef.value.validate()
-  
+
   submitting.value = true
   try {
     await createServiceOrder(form)
@@ -425,7 +425,7 @@ const handleSubmitCreate = async () => {
     createDialogVisible.value = false
     loadData()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('创建失败')
   } finally {
@@ -438,14 +438,14 @@ const handleSubmitDispatch = async () => {
     ElMessage.warning('请选择技术人员')
     return
   }
-  
+
   submitting.value = true
   try {
     await dispatchServiceOrder(currentOrder.value.id, dispatchForm)
     ElMessage.success('派工成功')
     dispatchDialogVisible.value = false
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('派工失败')
   } finally {

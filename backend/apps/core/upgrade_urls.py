@@ -9,6 +9,7 @@ paths are:
     GET  /api/v1/system/upgrade/jobs/<int:job_id>
     POST /api/v1/system/rollback
 """
+
 from django.urls import path
 
 from .upgrade_views import (

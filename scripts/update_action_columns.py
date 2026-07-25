@@ -32,7 +32,7 @@ PAGES = [
 def update_action_column(content: str) -> tuple[str, bool]:
     """更新操作列"""
     updated = False
-    
+
     # 模式1: 简单的删除按钮
     # <el-button ... @click="handleDelete(row)">删除</el-button>
     pattern1 = r'(<el-button[^>]*?)(@click="handleDelete\(row\)">删除</el-button>)'
@@ -42,7 +42,7 @@ def update_action_column(content: str) -> tuple[str, bool]:
             replacement = r'\1v-if="canDelete"\n              \2'
             content = re.sub(pattern1, replacement, content)
             updated = True
-    
+
     # 模式2: link类型的删除按钮
     # <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
     pattern2 = r'(<el-button[^>]*?type="danger"[^>]*?)(@click="(?:handleDelete|deleteRow)\([^)]*\)">删除</el-button>)'
@@ -56,7 +56,7 @@ def update_action_column(content: str) -> tuple[str, bool]:
             )
             content = content.replace(button_tag, new_button, 1)
             updated = True
-    
+
     # 更新操作列宽度 - 根据canDelete动态调整
     # <el-table-column label="操作" width="280"
     pattern3 = r'<el-table-column label="操作" width="(\d+)"'
@@ -67,11 +67,11 @@ def update_action_column(content: str) -> tuple[str, bool]:
             # 如果删除按钮占用70px，则减去这个宽度
             new_width_with = original_width
             new_width_without = max(100, original_width - 80)  # 删除按钮约占80px
-            
+
             new_tag = f'<el-table-column label="操作" :width="canDelete ? {new_width_with} : {new_width_without}"'
             content = content.replace(match.group(0), new_tag, 1)
             updated = True
-    
+
     return content, updated
 
 
@@ -80,54 +80,54 @@ def main():
     print("=" * 70)
     print("批量更新操作列 - 添加删除按钮权限控制")
     print("=" * 70)
-    
+
     base_path = Path('/home/administrator/erp')
     success_count = 0
     skip_count = 0
-    
+
     for i, page in enumerate(PAGES, 1):
         file_path = base_path / page
         page_name = file_path.stem
-        
+
         print(f"\n[{i}/{len(PAGES)}] {page_name}")
-        
+
         if not file_path.exists():
             print(f"  ⚪ 文件不存在，跳过")
             skip_count += 1
             continue
-        
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             original_content = content
             content, updated = update_action_column(content)
-            
+
             if updated:
                 # 备份
                 backup_path = file_path.with_suffix('.vue.bak2')
                 with open(backup_path, 'w', encoding='utf-8') as f:
                     f.write(original_content)
-                
+
                 # 保存更新
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(content)
-                
+
                 print(f"  ✅ 已更新操作列")
                 success_count += 1
             else:
                 print(f"  ⚪ 无需更新或已更新")
                 skip_count += 1
-                
+
         except Exception as e:
             print(f"  ❌ 更新失败: {e}")
-    
+
     print("\n" + "=" * 70)
     print(f"操作列更新完成!")
     print(f"  ✅ 成功: {success_count} 个")
     print(f"  ⚪ 跳过: {skip_count} 个")
     print("=" * 70)
-    
+
     print("\n✅ 所有自动化更新完成！")
     print("📝 请手动检查以下页面的特殊情况:")
     print("   • RequestList.vue - 有多个操作按钮，需要调整宽度")

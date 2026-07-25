@@ -145,16 +145,15 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { Management, Money, TrendCharts } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getProjectProfitability } from '@/api/analytics'
-import { ElMessage } from 'element-plus'
 import { toFixedSafe } from '@/utils/number'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/analytics/')
 
 
-const summary = reactive({
+const summary = reactive<Record<string, any>>({
   total_projects: 0,
   total_revenue: 0,
   total_profit: 0
@@ -163,18 +162,18 @@ const summary = reactive({
 const topProjects = ref<any[]>([])
 const sortBy = ref('margin')
 
-const statusChart = ref(null)
-const profitChart = ref(null)
-const costChart = ref(null)
+const statusChart = ref<any>(null)
+const profitChart = ref<any>(null)
+const costChart = ref<any>(null)
 
-const formatCurrency = (value) => {
+const formatCurrency = (value: any) => {
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
     currency: 'CNY'
   }).format(value || 0)
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'DRAFT': '草稿',
     'PLANNING': '规划中',
@@ -184,10 +183,10 @@ const getStatusLabel = (status) => {
     'CANCELLED': '已取消',
     'ARCHIVED': '已归档'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PLANNING': 'info',
@@ -197,10 +196,10 @@ const getStatusType = (status) => {
     'CANCELLED': 'danger',
     'ARCHIVED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getMarginType = (margin) => {
+const getMarginType = (margin: any) => {
   if (margin < 0) return 'danger'
   if (margin < 10) return 'warning'
   if (margin < 20) return 'info'
@@ -219,14 +218,14 @@ const loadProjectPerformance = async () => {
     } else if (res.results) {
       data = res.results
     }
-    
+
     // Calculate summary
     summary.total_projects = data.length
-    summary.total_revenue = data.reduce((sum, p) => sum + (parseFloat(p.revenue) || 0), 0)
-    summary.total_profit = data.reduce((sum, p) => sum + (parseFloat(p.profit) || 0), 0)
-    
+    summary.total_revenue = data.reduce((sum: any, p: any) => sum + (parseFloat(p.revenue) || 0), 0)
+    summary.total_profit = data.reduce((sum: any, p: any) => sum + (parseFloat(p.profit) || 0), 0)
+
     // 标准化数据格式 - 后端返回 margin_percent，前端需要 profit_margin
-    const normalizedData = data.map(p => ({
+    const normalizedData = data.map((p: any) => ({
       ...p,
       profit_margin: parseFloat(p.margin_percent) || parseFloat(p.profit_margin) || 0,
       total_cost: parseFloat(p.total_cost) || 0,
@@ -236,18 +235,18 @@ const loadProjectPerformance = async () => {
       labor_cost: parseFloat(p.labor_cost) || 0,
       expense_cost: parseFloat(p.expense_cost) || 0,
     }))
-    
+
     // Sort projects
     const sorted = [...normalizedData].sort((a, b) => {
       if (sortBy.value === 'margin') return (b.profit_margin || 0) - (a.profit_margin || 0)
       if (sortBy.value === 'revenue') return (b.revenue || 0) - (a.revenue || 0)
       return (b.profit || 0) - (a.profit || 0)
     })
-    
+
     topProjects.value = sorted.slice(0, 10)
-    
+
     renderCharts(normalizedData)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目分析数据失败', error)
     // 使用空数据
     summary.total_projects = 0
@@ -258,28 +257,28 @@ const loadProjectPerformance = async () => {
   }
 }
 
-const renderCharts = (projects) => {
+const renderCharts = (projects: any) => {
   renderStatusChart(projects)
   renderProfitChart(projects)
   renderCostChart(projects)
 }
 
-const renderStatusChart = (projects) => {
+const renderStatusChart = (projects: any) => {
   if (!statusChart.value) return
-  
+
   const chart = echarts.init(statusChart.value)
-  
+
   // Count by status
   const statusCount = {}
-  projects.forEach(p => {
-    statusCount[p.status] = (statusCount[p.status] || 0) + 1
+  projects.forEach((p: any) => {
+    (statusCount as Record<string, any>)[p.status] = ((statusCount as Record<string, any>)[p.status] || 0) + 1
   })
-  
+
   const data = Object.entries(statusCount).map(([status, count]) => ({
     name: getStatusLabel(status),
     value: count
   }))
-  
+
   const option = {
     tooltip: {
       trigger: 'item',
@@ -305,15 +304,15 @@ const renderStatusChart = (projects) => {
       }
     ]
   }
-  
+
   chart.setOption(option)
 }
 
-const renderProfitChart = (projects) => {
+const renderProfitChart = (projects: any) => {
   if (!profitChart.value) return
-  
+
   const chart = echarts.init(profitChart.value)
-  
+
   // Group by profit margin ranges
   const ranges = {
     '负利润': 0,
@@ -322,8 +321,8 @@ const renderProfitChart = (projects) => {
     '20-30%': 0,
     '30%以上': 0
   }
-  
-  projects.forEach(p => {
+
+  projects.forEach((p: any) => {
     const margin = p.profit_margin
     if (margin < 0) ranges['负利润']++
     else if (margin < 10) ranges['0-10%']++
@@ -331,7 +330,7 @@ const renderProfitChart = (projects) => {
     else if (margin < 30) ranges['20-30%']++
     else ranges['30%以上']++
   })
-  
+
   const option = {
     tooltip: {
       trigger: 'axis',
@@ -355,30 +354,28 @@ const renderProfitChart = (projects) => {
       }
     ]
   }
-  
+
   chart.setOption(option)
 }
 
-const renderCostChart = (projects) => {
+const renderCostChart = (projects: any) => {
   if (!costChart.value) return
-  
+
   const chart = echarts.init(costChart.value)
-  
+
   // Calculate average cost structure
   const avgCosts = {
     material_cost: 0,
     labor_cost: 0,
     expense_cost: 0
   }
-  
-  projects.forEach(p => {
+
+  projects.forEach((p: any) => {
     avgCosts.material_cost += p.material_cost || 0
     avgCosts.labor_cost += p.labor_cost || 0
     avgCosts.expense_cost += p.expense_cost || 0
   })
-  
-  const total = Object.values(avgCosts).reduce((sum, v) => sum + v, 0)
-  
+
   const option = {
     tooltip: {
       trigger: 'item',
@@ -400,7 +397,7 @@ const renderCostChart = (projects) => {
         },
         label: {
           show: true,
-          formatter: (params) => `${params.name}\n¥${params.value.toFixed(2)}`
+          formatter: (params: any) => `${params.name}\n¥${params.value.toFixed(2)}`
         },
         data: [
           { value: avgCosts.material_cost, name: '材料成本' },
@@ -410,7 +407,7 @@ const renderCostChart = (projects) => {
       }
     ]
   }
-  
+
   chart.setOption(option)
 }
 

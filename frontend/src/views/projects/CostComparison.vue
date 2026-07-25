@@ -2,7 +2,7 @@
   <div class="cost-comparison">
     <el-card>
       <template #header><span>项目成本对比</span></template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="选择项目">
           <el-select v-model="selectedProjects" multiple placeholder="选择多个项目进行对比" style="width: 400px">
@@ -13,20 +13,20 @@
           <el-button type="primary" @click="loadComparison">对比</el-button>
         </el-form-item>
       </el-form>
-      
+
       <div v-if="comparisonData.length" class="comparison-chart" ref="chartRef" style="height: 400px;"></div>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
-      
+
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="comparisonData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="project_name" label="项目" />
@@ -51,7 +51,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getProjectList, getProjectCostComparison } from '@/api/projects/project'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/projects_project/')
@@ -61,15 +61,15 @@ const loading = ref(false)
 const projects = ref<any[]>([])
 const selectedProjects = ref<any[]>([])
 const comparisonData = ref<any[]>([])
-const chartRef = ref(null)
+const chartRef = ref<any>(null)
 
-const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMoney = (v: any) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
 
 const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('CostComparison getProjectList error:', error)
   }
 }
@@ -84,7 +84,7 @@ const loadComparison = async () => {
     const res = await getProjectCostComparison({ project_ids: selectedProjects.value.join(',') })
     comparisonData.value = res.projects || res.projects || []
     renderChart()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载对比数据失败')
   } finally {
     loading.value = false

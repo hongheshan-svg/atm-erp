@@ -30,7 +30,7 @@ class ItemCategorySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_item_count(self, obj):
+    def get_item_count(self, obj) -> int:
         return obj.items.filter(is_deleted=False).count()
 
 
@@ -135,7 +135,7 @@ class ItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at', 'full_specification']
 
-    def get_tax_rate_display(self, obj):
+    def get_tax_rate_display(self, obj) -> str:
         return f'{obj.tax_rate}%'
 
 
@@ -293,7 +293,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_location_count(self, obj):
+    def get_location_count(self, obj) -> int:
         return obj.locations.filter(is_deleted=False).count()
 
 
@@ -334,7 +334,7 @@ class WarehouseLocationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['full_path', 'created_at', 'updated_at']
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
 

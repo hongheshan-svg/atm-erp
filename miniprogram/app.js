@@ -29,7 +29,7 @@ App({
   // 统一请求方法
   request(options) {
     const { url, method = 'GET', data = {}, showLoading = true } = options
-    
+
     return new Promise((resolve, reject) => {
       if (showLoading) {
         wx.showLoading({ title: '加载中...' })
@@ -45,7 +45,7 @@ App({
         },
         success: (res) => {
           if (showLoading) wx.hideLoading()
-          
+
           if (res.statusCode === 200 || res.statusCode === 201) {
             resolve(res.data)
           } else if (res.statusCode === 401) {

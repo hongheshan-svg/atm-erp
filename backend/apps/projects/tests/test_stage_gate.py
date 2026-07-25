@@ -4,7 +4,7 @@
 创建 Customer/Project 时关闭 ES 实时索引(override_settings)。
 """
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -14,12 +14,9 @@ from apps.projects.models import Project
 from apps.projects.stage_gate import StageGate, StageGateSerializer, StageGateViewSet
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class StageGateTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create(
-            username='ipd_admin', employee_id='IPD1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='ipd_admin', employee_id='IPD1', is_staff=True, is_superuser=True)
         self.customer = Customer.objects.create(code='CUST-IPD', name='IPD客户')
         self.project = Project.objects.create(
             code='PRJ-IPD',

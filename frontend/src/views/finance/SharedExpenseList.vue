@@ -148,7 +148,7 @@
         </el-descriptions>
 
         <el-divider content-position="left">选择分摊项目</el-divider>
-        
+
         <el-checkbox-group v-model="selectedProjectIds" class="project-select">
           <el-checkbox v-for="project in projects" :key="project.id" :value="project.id">
             {{ project.code }} - {{ project.name }}
@@ -257,12 +257,12 @@ const expenses = ref<any[]>([])
 const projects = ref<any[]>([])
 const projectsLoaded = ref(false)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   category: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -273,14 +273,14 @@ const dialogVisible = ref(false)
 const allocateDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
 const submitting = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const isEdit = ref(false)
-const currentExpense = ref(null)
+const currentExpense = ref<any>(null)
 const selectedProjectIds = ref<any[]>([])
 const customRatios = ref<Record<string, any>>({})
 const allocationPreview = ref<any[]>([])
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   name: '',
   category: 'OTHER',
@@ -301,20 +301,20 @@ const rules = {
   allocation_method: [{ required: true, message: '请选择分摊方式', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING': 'warning',
     'ALLOCATED': 'success',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -322,7 +322,7 @@ const loadData = async () => {
     const response = await getSharedExpenses(params)
     expenses.value = response.results || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败:', error)
   } finally {
     loading.value = false
@@ -339,7 +339,7 @@ const loadProjects = async () => {
     projects.value = response.results || response || [] || []
     projectsLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载项目失败:', error)
     }
@@ -379,10 +379,10 @@ const handleAdd = () => {
 
 const handleSubmit = async () => {
   await formRef.value?.validate()
-  
+
   submitting.value = true
   try {
-    const payload = {
+    const payload: Record<string, any> = {
       name: form.name,
       category: form.category,
       amount: form.amount,
@@ -394,7 +394,7 @@ const handleSubmit = async () => {
       notes: form.notes,
       status: 'PENDING'
     }
-    
+
     if (isEdit.value) {
       await patchSharedExpense(form.id, payload)
       ElMessage.success('更新成功')
@@ -402,10 +402,10 @@ const handleSubmit = async () => {
       await createSharedExpense(payload)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存失败:', error)
     ElMessage.error('保存失败')
   } finally {
@@ -413,17 +413,17 @@ const handleSubmit = async () => {
   }
 }
 
-const handleView = async (expense) => {
+const handleView = async (expense: any) => {
   try {
     const response = await getSharedExpense(expense.id)
     currentExpense.value = response
     detailDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载详情失败:', error)
   }
 }
 
-const handleAllocate = async (expense) => {
+const handleAllocate = async (expense: any) => {
   await ensureProjectsLoaded()
   currentExpense.value = expense
   selectedProjectIds.value = []
@@ -432,7 +432,7 @@ const handleAllocate = async (expense) => {
   allocateDialogVisible.value = true
 }
 
-const getProjectLabel = (pid) => {
+const getProjectLabel = (pid: any) => {
   const project = projects.value.find(p => p.id === pid)
   return project ? `${project.code} - ${project.name}` : pid
 }
@@ -442,19 +442,19 @@ const handlePreviewAllocation = async () => {
     ElMessage.warning('请选择至少一个项目')
     return
   }
-  
+
   try {
-    const payload = {
+    const payload: Record<string, any> = {
       project_ids: selectedProjectIds.value
     }
-    
+
     if (currentExpense.value.allocation_method === 'CUSTOM') {
       payload.custom_ratios = customRatios.value
     }
-    
+
     const response = await calculateSharedExpenseAllocation(currentExpense.value.id, payload)
     allocationPreview.value = response.allocations || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('计算分摊失败:', error)
     ElMessage.error('计算分摊失败')
   }
@@ -463,20 +463,20 @@ const handlePreviewAllocation = async () => {
 const handleConfirmAllocation = async () => {
   submitting.value = true
   try {
-    const payload = {
+    const payload: Record<string, any> = {
       project_ids: selectedProjectIds.value
     }
-    
+
     if (currentExpense.value.allocation_method === 'CUSTOM') {
       payload.custom_ratios = customRatios.value
     }
-    
+
     await allocateSharedExpense(currentExpense.value.id, payload)
-    
+
     ElMessage.success('分摊成功')
     allocateDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('分摊失败:', error)
     ElMessage.error(error.response?.data?.error || '分摊失败')
   } finally {
@@ -484,14 +484,14 @@ const handleConfirmAllocation = async () => {
   }
 }
 
-const handleCancelAllocation = async (expense) => {
+const handleCancelAllocation = async (expense: any) => {
   try {
     await ElMessageBox.confirm('确定要撤销该费用的分摊吗？', '确认撤销', { type: 'warning' })
-    
+
     await cancelSharedExpenseAllocation(expense.id)
     ElMessage.success('撤销成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('撤销失败:', error)
       ElMessage.error('撤销失败')
@@ -546,4 +546,3 @@ onMounted(() => {
   color: #999;
 }
 </style>
-

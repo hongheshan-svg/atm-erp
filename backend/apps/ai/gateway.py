@@ -82,9 +82,7 @@ class AnthropicProvider(BaseProvider):
         try:
             import anthropic  # noqa: F401  (惰性导入,避免无依赖时 import 失败)
         except ImportError as exc:  # pragma: no cover - 依赖缺失路径
-            raise RuntimeError(
-                "AI_PROVIDER='anthropic' 但未安装 anthropic SDK,请先 `pip install anthropic`。"
-            ) from exc
+            raise RuntimeError("AI_PROVIDER='anthropic' 但未安装 anthropic SDK,请先 `pip install anthropic`。") from exc
 
         # 真实调用实现(流式/计量/重试)为后续里程碑。此处保留清晰的占位实现,
         # 拆分出 system 与对话消息以对齐 Anthropic Messages API 的入参形态。
@@ -130,7 +128,7 @@ class LLMGateway:
             return NullProvider(model=self.model)
         provider_cls = PROVIDER_REGISTRY.get(name)
         if provider_cls is None:
-            logger.warning("未知的 AI_PROVIDER=%r,回落到 NullProvider", self.provider_name)
+            logger.warning('未知的 AI_PROVIDER=%r,回落到 NullProvider', self.provider_name)
             return NullProvider(model=self.model)
         return provider_cls(api_key=self.api_key, model=self.model)
 

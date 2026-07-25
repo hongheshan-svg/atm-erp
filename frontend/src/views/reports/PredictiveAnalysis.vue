@@ -79,7 +79,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { getCostTrend, getDeliveryRisk, getCapacityLoad } from '@/api/reports'
 import { useBatchOperation } from '@/composables/useBatchOperation'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
 
@@ -90,15 +90,15 @@ const deliveryLoading = ref(false)
 const capacityLoading = ref(false)
 
 const costTrends = ref<any[]>([])
-const costChartRef = ref(null)
+const costChartRef = ref<any>(null)
 const deliveryRisks = ref<any[]>([])
 const capacityData = ref<any[]>([])
-const capacityChartRef = ref(null)
+const capacityChartRef = ref<any>(null)
 
-const formatMoney = (v) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
-const formatMonth = (m) => (m ? String(m).substring(0, 7) : '')
-const riskLevelType = (l) => ({ low: 'success', medium: 'warning', high: 'danger', critical: 'danger' }[l] || 'info')
-const riskLevelLabel = (l) => ({ low: '低', medium: '中', high: '高', critical: '严重' }[l] || l)
+const formatMoney = (v: any) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMonth = (m: any) => (m ? String(m).substring(0, 7) : '')
+const riskLevelType = (l: any) => (({ low: 'success', medium: 'warning', high: 'danger', critical: 'danger' } as Record<string, any>)[l] || 'info')
+const riskLevelLabel = (l: any) => (({ low: '低', medium: '中', high: '高', critical: '严重' } as Record<string, any>)[l] || l)
 
 const renderCostChart = () => {
   if (!costChartRef.value || !costTrends.value.length) return

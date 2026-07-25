@@ -5,6 +5,7 @@ Workflow Visualization API
 
 from django.db.models import Avg, Count, F
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,7 +26,7 @@ class WorkflowVisualizationView(APIView):
 
     def get_workflow_detail(self, workflow_id):
         """获取单个工作流详情"""
-        from apps.core.workflow.models import WorkflowInstance, WorkflowStep
+        from apps.core.workflow.models import WorkflowInstance
 
         try:
             instance = WorkflowInstance.objects.get(id=workflow_id)
@@ -150,6 +151,16 @@ class WorkflowVisualizationView(APIView):
         )
 
 
+@extend_schema_view(get=extend_schema(operation_id='core_workflow_visualization_overview'))
+class WorkflowOverviewView(WorkflowVisualizationView):
+    """Schema-specific view for the workflow overview route."""
+
+
+@extend_schema_view(get=extend_schema(operation_id='core_workflow_visualization_detail'))
+class WorkflowDetailView(WorkflowVisualizationView):
+    """Schema-specific view for the workflow detail route."""
+
+
 class WorkflowStepStatisticsView(APIView):
     """
     审批步骤统计API
@@ -206,7 +217,7 @@ class WorkflowTimelineView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, workflow_id):
-        from apps.core.workflow.models import WorkflowInstance, WorkflowStep
+        from apps.core.workflow.models import WorkflowInstance
 
         try:
             instance = WorkflowInstance.objects.get(id=workflow_id)

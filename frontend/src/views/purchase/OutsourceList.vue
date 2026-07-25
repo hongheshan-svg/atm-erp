@@ -133,14 +133,14 @@
         <el-form-item label="送货地址">
           <el-input v-model="form.delivery_address" placeholder="送货地址" />
         </el-form-item>
-        
+
         <!-- 加工明细 -->
         <el-divider content-position="left">加工明细</el-divider>
         <el-button type="primary" size="small" @click="addLine" style="margin-bottom: 10px;">
           <el-icon><Plus /></el-icon>
           添加加工项
         </el-button>
-        
+
         <el-table :data="form.lines" border size="small">
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
@@ -200,7 +200,7 @@
             </template>
           </el-table-column>
         </el-table>
-        
+
         <div class="total-section">
           <div class="total-row">
             <span class="label">加工费合计：</span>
@@ -215,7 +215,7 @@
             <span class="amount">¥{{ calculateTotalWithTax().toFixed(2) }}</span>
           </div>
         </div>
-        
+
         <el-form-item label="备注">
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="备注" />
         </el-form-item>
@@ -241,7 +241,7 @@
         <el-descriptions-item label="联系电话">{{ currentOrder.contact_phone || '-' }}</el-descriptions-item>
         <el-descriptions-item label="含税总额">¥{{ parseFloat(currentOrder.total_with_tax || 0).toFixed(2) }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider content-position="left">加工明细</el-divider>
       <el-table :data="currentOrder?.lines || []" border size="small">
         <el-table-column prop="item_sku" label="物料编码" width="100" />
@@ -293,7 +293,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-divider content-position="left">发料明细</el-divider>
         <el-table :data="issueForm.lines" border size="small">
           <el-table-column prop="item_name" label="物料" min-width="150" />
@@ -336,7 +336,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-divider content-position="left">收货明细</el-divider>
         <el-table :data="receiptForm.lines" border size="small">
           <el-table-column prop="item_name" label="物料" min-width="150" />
@@ -401,24 +401,24 @@ const dialogTitle = ref('新建外协单')
 const viewDialogVisible = ref(false)
 const issueDialogVisible = ref(false)
 const receiptDialogVisible = ref(false)
-const currentOrder = ref(null)
-const formRef = ref(null)
-const issueFormRef = ref(null)
-const receiptFormRef = ref(null)
+const currentOrder = ref<any>(null)
+const formRef = ref<any>(null)
+const issueFormRef = ref<any>(null)
+const receiptFormRef = ref<any>(null)
 const isEdit = ref(false)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   supplier: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   supplier: null,
   project: null,
@@ -431,7 +431,7 @@ const form = reactive({
   lines: []
 })
 
-const issueForm = reactive({
+const issueForm = reactive<Record<string, any>>({
   outsource_order: null,
   warehouse: null,
   issue_date: new Date().toISOString().split('T')[0],
@@ -440,7 +440,7 @@ const issueForm = reactive({
   lines: []
 })
 
-const receiptForm = reactive({
+const receiptForm = reactive<Record<string, any>>({
   outsource_order: null,
   warehouse: null,
   receipt_date: new Date().toISOString().split('T')[0],
@@ -452,7 +452,7 @@ const rules = {
   required_date: [{ required: true, message: '请选择要求完成日期', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'CONFIRMED': 'warning',
@@ -461,23 +461,23 @@ const getStatusType = (status) => {
     'COMPLETED': 'success',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadOrders = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
-    Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
-    
+    Object.keys(params).forEach(k => { if (!(params as Record<string, any>)[k]) delete (params as Record<string, any>)[k] })
+
     const res = await getOutsourceOrders(params)
     orders.value = res.results || res || []
     pagination.total = res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载外协单列表失败')
   } finally {
     loading.value = false
@@ -488,7 +488,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 500 })
     suppliers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载供应商失败:', error)
   }
 }
@@ -497,7 +497,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 200 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -506,7 +506,7 @@ const loadItems = async () => {
   try {
     const res = await getItemList({ page_size: 1000 })
     items.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载物料失败:', error)
   }
 }
@@ -515,7 +515,7 @@ const loadWarehouses = async () => {
   try {
     const res = await getWarehouseList()
     warehouses.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -545,14 +545,14 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑外协单'
   isEdit.value = true
-  
+
   try {
     const res = await getOutsourceOrder(row.id)
     const data = res
-    
+
     Object.assign(form, {
       id: data.id,
       supplier: data.supplier,
@@ -563,7 +563,7 @@ const handleEdit = async (row) => {
       contact_phone: data.contact_phone || '',
       delivery_address: data.delivery_address || '',
       notes: data.notes || '',
-      lines: (data.lines || []).map(line => ({
+      lines: (data.lines || []).map((line: any) => ({
         item: line.item,
         process_type: line.process_type,
         process_content: line.process_content || '',
@@ -573,23 +573,23 @@ const handleEdit = async (row) => {
         material_provided: line.material_provided
       }))
     })
-    
+
     if (form.lines.length === 0) {
       form.lines = [{ item: null, process_type: 'OTHER', process_content: '', drawing_no: '', qty: 1, unit_price: 0, material_provided: true }]
     }
-    
+
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取外协单详情失败')
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getOutsourceOrder(row.id)
     currentOrder.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取外协单详情失败')
   }
 }
@@ -598,7 +598,7 @@ const addLine = () => {
   form.lines.push({ item: null, process_type: 'OTHER', process_content: '', drawing_no: '', qty: 1, unit_price: 0, material_provided: true })
 }
 
-const removeLine = (index) => {
+const removeLine = (index: any) => {
   if (form.lines.length > 1) {
     form.lines.splice(index, 1)
   } else {
@@ -607,7 +607,7 @@ const removeLine = (index) => {
 }
 
 const calculateTotal = () => {
-  return form.lines.reduce((sum, line) => sum + (line.qty || 0) * (line.unit_price || 0), 0)
+  return form.lines.reduce((sum: any, line: any) => sum + (line.qty || 0) * (line.unit_price || 0), 0)
 }
 
 const calculateTax = () => {
@@ -621,15 +621,15 @@ const calculateTotalWithTax = () => {
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
-    
-    const validLines = form.lines.filter(line => line.item && line.qty > 0)
+
+    const validLines = form.lines.filter((line: any) => line.item && line.qty > 0)
     if (validLines.length === 0) {
       ElMessage.warning('请至少添加一行有效的加工明细')
       return
     }
-    
+
     saving.value = true
-    
+
     const payload = {
       supplier: form.supplier,
       project: form.project,
@@ -641,7 +641,7 @@ const handleSave = async () => {
       notes: form.notes,
       lines: validLines
     }
-    
+
     if (isEdit.value) {
       await updateOutsourceOrder(form.id, payload)
       ElMessage.success('更新外协单成功')
@@ -649,55 +649,55 @@ const handleSave = async () => {
       await createOutsourceOrder(payload)
       ElMessage.success('创建外协单成功')
     }
-    
+
     dialogVisible.value = false
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '保存失败')
   } finally {
     saving.value = false
   }
 }
 
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要确认该外协单吗？确认后将无法修改。', '确认外协单', { type: 'warning' })
     await confirmOutsourceOrder(row.id)
     ElMessage.success('外协单已确认')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '确认失败')
     }
   }
 }
 
-const handleCancel = async (row) => {
+const handleCancel = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要取消该外协单吗？', '取消外协单', { type: 'warning' })
     await cancelOutsourceOrder(row.id)
     ElMessage.success('外协单已取消')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '取消失败')
     }
   }
 }
 
-const handleIssue = async (row) => {
+const handleIssue = async (row: any) => {
   try {
     const res = await getOutsourceOrder(row.id)
     const data = res
-    
+
     issueForm.outsource_order = data.id
     issueForm.warehouse = null
     issueForm.issue_date = new Date().toISOString().split('T')[0]
     issueForm.logistics_company = ''
     issueForm.tracking_number = ''
     issueForm.lines = (data.lines || [])
-      .filter(line => line.qty > line.sent_qty)
-      .map(line => ({
+      .filter((line: any) => line.qty > line.sent_qty)
+      .map((line: any) => ({
         outsource_line: line.id,
         item: line.item,
         item_name: `${line.item_sku} - ${line.item_name}`,
@@ -706,14 +706,14 @@ const handleIssue = async (row) => {
         qty: line.qty - line.sent_qty,
         weight: 0
       }))
-    
+
     if (issueForm.lines.length === 0) {
       ElMessage.warning('没有待发料的明细')
       return
     }
-    
+
     issueDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取外协单详情失败')
   }
 }
@@ -723,13 +723,13 @@ const submitIssue = async () => {
     ElMessage.warning('请选择发料仓库')
     return
   }
-  
-  const validLines = issueForm.lines.filter(line => line.qty > 0)
+
+  const validLines = issueForm.lines.filter((line: any) => line.qty > 0)
   if (validLines.length === 0) {
     ElMessage.warning('请输入发料数量')
     return
   }
-  
+
   saving.value = true
   try {
     // 创建发料单
@@ -739,38 +739,38 @@ const submitIssue = async () => {
       issue_date: issueForm.issue_date,
       logistics_company: issueForm.logistics_company,
       tracking_number: issueForm.tracking_number,
-      lines: validLines.map(line => ({
+      lines: validLines.map((line: any) => ({
         outsource_line: line.outsource_line,
         item: line.item,
         qty: line.qty,
         weight: line.weight
       }))
     })
-    
+
     // 确认发料
     await confirmOutsourceIssue(issueRes.id)
-    
+
     ElMessage.success('发料成功')
     issueDialogVisible.value = false
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '发料失败')
   } finally {
     saving.value = false
   }
 }
 
-const handleReceipt = async (row) => {
+const handleReceipt = async (row: any) => {
   try {
     const res = await getOutsourceOrder(row.id)
     const data = res
-    
+
     receiptForm.outsource_order = data.id
     receiptForm.warehouse = null
     receiptForm.receipt_date = new Date().toISOString().split('T')[0]
     receiptForm.lines = (data.lines || [])
-      .filter(line => line.sent_qty > line.received_qty)
-      .map(line => ({
+      .filter((line: any) => line.sent_qty > line.received_qty)
+      .map((line: any) => ({
         outsource_line: line.id,
         item: line.item,
         item_name: `${line.item_sku} - ${line.item_name}`,
@@ -780,14 +780,14 @@ const handleReceipt = async (row) => {
         qty: line.sent_qty - line.received_qty,
         qualified_qty: line.sent_qty - line.received_qty
       }))
-    
+
     if (receiptForm.lines.length === 0) {
       ElMessage.warning('没有待收货的明细')
       return
     }
-    
+
     receiptDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取外协单详情失败')
   }
 }
@@ -797,13 +797,13 @@ const submitReceipt = async () => {
     ElMessage.warning('请选择入库仓库')
     return
   }
-  
-  const validLines = receiptForm.lines.filter(line => line.qty > 0)
+
+  const validLines = receiptForm.lines.filter((line: any) => line.qty > 0)
   if (validLines.length === 0) {
     ElMessage.warning('请输入收货数量')
     return
   }
-  
+
   saving.value = true
   try {
     // 创建收货单
@@ -811,7 +811,7 @@ const submitReceipt = async () => {
       outsource_order: receiptForm.outsource_order,
       warehouse: receiptForm.warehouse,
       receipt_date: receiptForm.receipt_date,
-      lines: validLines.map(line => ({
+      lines: validLines.map((line: any) => ({
         outsource_line: line.outsource_line,
         item: line.item,
         qty: line.qty,
@@ -819,14 +819,14 @@ const submitReceipt = async () => {
         rejected_qty: line.qty - line.qualified_qty
       }))
     })
-    
+
     // 确认收货
     await confirmOutsourceReceipt(receiptRes.id)
-    
+
     ElMessage.success('收货成功')
     receiptDialogVisible.value = false
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '收货失败')
   } finally {
     saving.value = false
@@ -899,4 +899,3 @@ onMounted(() => {
   color: #909399;
 }
 </style>
-

@@ -22,7 +22,7 @@ export function submitPurchaseRequest(id: number) {
   return request({ url: `/purchase/requests/${id}/submit/`, method: 'post' })
 }
 
-export function approvePurchaseRequest(id: number, data: any) {
+export function approvePurchaseRequest(id: number, data: any = {}) {
   return request({ url: `/purchase/requests/${id}/approve/`, method: 'post', data })
 }
 
@@ -42,8 +42,8 @@ export function importPurchaseRequests(data: any, config?: Record<string, any>) 
   return request({ url: '/purchase/requests/import_excel/', method: 'post', data, ...config })
 }
 
-export function exportPurchaseRequestTemplate() {
-  return request({ url: '/purchase/requests/export_template/', method: 'get', responseType: 'blob' })
+export function exportPurchaseRequestTemplate(config = {}) {
+  return request({ url: '/purchase/requests/export_template/', method: 'get', responseType: 'blob', ...config })
 }
 
 // ==================== 采购订单 ====================
@@ -180,7 +180,7 @@ export function getAvailableRFQsForComparison() {
   return request({ url: '/purchase/comparisons/available_rfqs/', method: 'get' })
 }
 
-export function approveComparison(id: number, data: any) {
+export function approveComparison(id: number, data: any = {}) {
   return request({ url: `/purchase/comparisons/${id}/approve/`, method: 'post', data })
 }
 
@@ -188,7 +188,7 @@ export function completeComparison(id: number) {
   return request({ url: `/purchase/comparisons/${id}/complete/`, method: 'post' })
 }
 
-export function convertComparisonToPO(id: number, data: any) {
+export function convertComparisonToPO(id: number, data: any = {}) {
   return request({ url: `/purchase/comparisons/${id}/convert_to_po/`, method: 'post', data })
 }
 
@@ -242,8 +242,8 @@ export function activatePurchaseBudget(id: number) {
   return request({ url: `/purchase/budgets/${id}/activate/`, method: 'post' })
 }
 
-export function getPurchaseBudgetStatistics() {
-  return request({ url: '/purchase/budgets/statistics/', method: 'get' })
+export function getPurchaseBudgetStatistics(params?: Record<string, any>) {
+  return request({ url: '/purchase/budgets/statistics/', method: 'get', params })
 }
 
 export function getPurchaseBudgetUsageRecords(id: number) {
@@ -278,7 +278,7 @@ export function cancelOutsourceOrder(id: number) {
 
 // ==================== 委外发料与收货 = ===================
 
-export function createOutsourceIssue(data) {
+export function createOutsourceIssue(data: any) {
   return request({ url: '/purchase/outsource-issues/', method: 'post', data })
 }
 

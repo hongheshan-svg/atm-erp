@@ -305,7 +305,7 @@ class CapacityPlanningService:
                             'type': 'OVERLOAD',
                             'severity': 'HIGH' if data['utilization'] > 150 else 'MEDIUM',
                             'date': dt,
-                            'description': f"资源{resource.name}在{dt}超负荷，利用率{data['utilization']}%",
+                            'description': f'资源{resource.name}在{dt}超负荷，利用率{data["utilization"]}%',
                             'allocations': allocs,
                         }
                     )
@@ -374,7 +374,7 @@ class ResourceTypeSerializer(serializers.ModelSerializer):
         model = ResourceType
         fields = '__all__'
 
-    def get_resource_count(self, obj):
+    def get_resource_count(self, obj) -> int:
         return obj.resources.filter(is_deleted=False).count()
 
 

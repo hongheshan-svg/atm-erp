@@ -9,7 +9,7 @@
         <el-icon><Refresh /></el-icon> 刷新
       </el-button>
     </el-card>
-    
+
     <template v-if="dashboard">
       <!-- 基本信息和状态 -->
       <el-row :gutter="20">
@@ -55,7 +55,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 进度和工时 -->
       <el-row :gutter="20" style="margin-top: 20px;">
         <el-col :span="8">
@@ -97,8 +97,8 @@
               <el-divider />
               <el-statistic title="实际工时" :value="dashboard.time.actual_hours" suffix="小时" />
               <el-divider />
-              <el-progress 
-                :percentage="Math.min(dashboard.time.hours_utilization, 100)" 
+              <el-progress
+                :percentage="Math.min(dashboard.time.hours_utilization, 100)"
                 :status="dashboard.time.hours_utilization > 100 ? 'exception' : 'success'"
               >
                 <span>工时使用率 {{ dashboard.time.hours_utilization }}%</span>
@@ -114,7 +114,7 @@
               <el-divider />
               <el-statistic title="实际支出" :value="dashboard.budget.actual_total" :precision="2" prefix="¥" />
               <el-divider />
-              <el-progress 
+              <el-progress
                 :percentage="Math.min(dashboard.budget.budget_utilization, 100)"
                 :status="dashboard.budget.budget_utilization > 90 ? 'exception' : 'success'"
               >
@@ -127,7 +127,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 财务和采购 -->
       <el-row :gutter="20" style="margin-top: 20px;">
         <el-col :span="12">
@@ -207,7 +207,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- BOM成本 -->
       <el-row :gutter="20" style="margin-top: 20px;">
         <el-col :span="24">
@@ -238,7 +238,7 @@
         </el-col>
       </el-row>
     </template>
-    
+
     <el-empty v-else-if="!loading" description="请选择一个项目查看仪表盘" />
     <!-- BOM成本详情 -->
     <el-dialog v-model="bomDialogVisible" title="BOM成本详情" width="800px">
@@ -272,8 +272,8 @@ import { toFixedSafe } from '@/utils/number'
 
 const loading = ref(false)
 const projects = ref<any[]>([])
-const selectedProjectId = ref(null)
-const dashboard = ref(null)
+const selectedProjectId = ref<any>(null)
+const dashboard = ref<any>(null)
 const bomDialogVisible = ref(false)
 const bomItems = ref<any[]>([])
 const bomLoading = ref(false)
@@ -291,7 +291,7 @@ const statusMap = {
   'ARCHIVED': '已归档',
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PLANNING': 'info',
@@ -304,35 +304,35 @@ const getStatusType = (status) => {
     'CANCELLED': 'danger',
     'ARCHIVED': 'info',
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusName = (status) => statusMap[status] || status
+const getStatusName = (status: any) => (statusMap as Record<string, any>)[status] || status
 
 const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-    
+
     // 自动选择第一个进行中的项目
     const activeProject = projects.value.find(p => ['IN_PROGRESS', 'ACTIVE'].includes(p.status))
     if (activeProject) {
       selectedProjectId.value = activeProject.id
       loadDashboard()
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
 
 const loadDashboard = async () => {
   if (!selectedProjectId.value) return
-  
+
   try {
     loading.value = true
     const res = await getProjectDashboard(selectedProjectId.value)
     dashboard.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仪表盘失败:', error)
     ElMessage.error('加载仪表盘失败')
   } finally {
@@ -347,7 +347,7 @@ const loadBOMCost = async () => {
   try {
     const res = await getProjectBOMItems(selectedProjectId.value)
     bomItems.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     bomItems.value = []
   } finally {

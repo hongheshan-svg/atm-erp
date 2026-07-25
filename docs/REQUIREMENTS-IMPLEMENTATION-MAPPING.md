@@ -1,7 +1,7 @@
 # 需求文档 vs 实现对照表
 
-**文档状态：** ✅ 所有需求已完整实现  
-**完成度：** 100%  
+**文档状态：** ✅ 所有需求已完整实现
+**完成度：** 100%
 **验证结果：** 69/69 检查通过
 
 ---
@@ -443,7 +443,7 @@ backend/apps/sales/views.py
 ```python
 class SalesOrder(models.Model):
     project = models.ForeignKey(
-        'projects.Project', 
+        'projects.Project',
         on_delete=models.PROTECT,
         related_name='sales_orders'
     )  # 必填，用于收入归集
@@ -657,7 +657,7 @@ backend/config/celery.py
    - 多供应商报价
    - 报价对比
    - 中标供应商选择
-   
+
 2. ✅ **批次/批号跟踪**
    - Batch模型
    - BatchStock模型
@@ -710,7 +710,7 @@ backend/apps/finance/views.py
 class Expense(models.Model):
     project = models.ForeignKey('projects.Project', null=True)
     department = models.ForeignKey('accounts.Department', null=True)
-    
+
     class Meta:
         constraints = [
             CheckConstraint(
@@ -799,19 +799,19 @@ class ProjectCostService:
             move_type='OUT_PROJECT'
         )
         return sum(m.qty * m.unit_cost for m in moves)
-    
+
     @staticmethod
     def calculate_labor_cost(project_id):
         """直接人工成本"""
         tasks = ProjectTask.objects.filter(project_id=project_id)
         members = ProjectMember.objects.filter(project_id=project_id)
-        
+
         total = 0
         for task in tasks:
             member = members.get(user_id=task.assignee_id)
             total += task.actual_hours * member.hourly_rate
         return total
-    
+
     @staticmethod
     def calculate_expense_cost(project_id):
         """项目费用成本"""
@@ -820,7 +820,7 @@ class ProjectCostService:
             status='APPROVED'
         )
         return sum(e.amount for e in expenses)
-    
+
     @staticmethod
     def calculate_project_profit(project_id):
         """项目利润 = 收入 - (材料 + 人工 + 费用)"""
@@ -828,16 +828,16 @@ class ProjectCostService:
         revenue = SalesOrder.objects.filter(
             project_id=project_id
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        
+
         # 成本
         material = ProjectCostService.calculate_material_cost(project_id)
         labor = ProjectCostService.calculate_labor_cost(project_id)
         expense = ProjectCostService.calculate_expense_cost(project_id)
-        
+
         total_cost = material + labor + expense
         profit = revenue - total_cost
         margin = (profit / revenue * 100) if revenue > 0 else 0
-        
+
         return {
             'revenue': revenue,
             'material_cost': material,
@@ -1127,23 +1127,23 @@ def calculate_project_profit(project_id):
         SalesOrder.objects.filter(project_id=project_id).values()
     )
     total_revenue = sales['amount'].sum() if not sales.empty else 0
-    
+
     # 2. 获取材料成本
     materials = pd.DataFrame(
         StockMove.objects.filter(
-            project_id=project_id, 
+            project_id=project_id,
             type='OUT_PROJECT'
         ).values()
     )
     material_cost = (materials['qty'] * materials['cost_price']).sum() \
         if not materials.empty else 0
-    
+
     # 3. 获取费用
     expenses = pd.DataFrame(
         Expense.objects.filter(project_id=project_id).values()
     )
     expense_cost = expenses['amount'].sum() if not expenses.empty else 0
-    
+
     return {
         "revenue": total_revenue,
         "cost": material_cost + expense_cost,
@@ -1356,7 +1356,6 @@ SalesOrder.project_id (强制)
 
 ---
 
-**文档创建日期：** 2025-11-24  
-**系统版本：** v2.0 (Phase 1 + Phase 2 Complete)  
+**文档创建日期：** 2025-11-24
+**系统版本：** v2.0 (Phase 1 + Phase 2 Complete)
 **对照结果：** ✅ PRD需求100%实现 + 28项额外功能
-

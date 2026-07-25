@@ -475,7 +475,7 @@ class TrainingPlanSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['plan_no']
 
-    def get_trainee_count(self, obj):
+    def get_trainee_count(self, obj) -> int:
         return obj.trainees.count()
 
 
@@ -506,10 +506,10 @@ class TrainingPlanListSerializer(serializers.ModelSerializer):
             'is_chargeable',
         ]
 
-    def get_trainee_count(self, obj):
+    def get_trainee_count(self, obj) -> int:
         return obj.trainees.count()
 
-    def get_course_count(self, obj):
+    def get_course_count(self, obj) -> int:
         return obj.plan_courses.count()
 
 
@@ -520,6 +520,7 @@ class TrainingPlanListSerializer(serializers.ModelSerializer):
 
 class TrainingCourseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训课程管理"""
+
     permission_module = 'sales'
     permission_resource = 'training_course'
 
@@ -533,6 +534,7 @@ class TrainingCourseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 class TrainingMaterialViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训资料管理"""
+
     permission_module = 'sales'
     permission_resource = 'training_material'
 
@@ -545,6 +547,7 @@ class TrainingMaterialViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class TrainingPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训计划管理"""
+
     permission_module = 'sales'
     permission_resource = 'training_plan'
 
@@ -703,6 +706,7 @@ class TrainingPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class TraineeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """学员管理"""
+
     permission_module = 'sales'
     permission_resource = 'trainee'
 
@@ -724,6 +728,7 @@ class TraineeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
 class TrainingExamViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训考核管理"""
+
     permission_module = 'sales'
     permission_resource = 'training_exam'
 
@@ -777,6 +782,7 @@ class TrainingExamViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class TrainingFeedbackViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """培训反馈管理"""
+
     permission_module = 'sales'
     permission_resource = 'training_feedback'
 

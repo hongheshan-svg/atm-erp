@@ -35,8 +35,8 @@ export function exportBOMExcel(params?: Record<string, any>) {
   return request({ url: '/projects/bom/export_excel/', method: 'get', params, responseType: 'blob' })
 }
 
-export function exportBOMForQuote(data: any) {
-  return request({ url: '/projects/bom/export_for_quote/', method: 'post', data, responseType: 'blob' })
+export function exportBOMForQuote(data: any, config = {}) {
+  return request({ url: '/projects/bom/export_for_quote/', method: 'post', data, responseType: 'blob', ...config })
 }
 
 export function exportBOMTemplate(params?: Record<string, any>) {

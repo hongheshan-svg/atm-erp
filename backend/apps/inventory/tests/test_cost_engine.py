@@ -11,7 +11,7 @@
 from datetime import date
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from apps.inventory.batch_models import InventoryLot, LotConsumption
 from apps.inventory.cost_accounting import InventoryCostConfig, ItemCostRecord
@@ -20,7 +20,6 @@ from apps.inventory.models import Stock, StockMove
 from apps.masterdata.models import Item, Warehouse
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class CostLedgerRecordingTest(TestCase):
     """StockMove 完成时按是否启用成本核算登记 ItemCostRecord。"""
 
@@ -30,14 +29,21 @@ class CostLedgerRecordingTest(TestCase):
 
     def _inbound(self, qty, unit_cost):
         return StockMove.objects.create(
-            item=self.item, warehouse_to=self.wh,
-            qty=Decimal(str(qty)), unit_cost=Decimal(str(unit_cost)),
-            move_type='IN_PURCHASE', move_date=date.today(), status='COMPLETED',
+            item=self.item,
+            warehouse_to=self.wh,
+            qty=Decimal(str(qty)),
+            unit_cost=Decimal(str(unit_cost)),
+            move_type='IN_PURCHASE',
+            move_date=date.today(),
+            status='COMPLETED',
         )
 
     def test_inbound_records_cost_ledger_when_config_active(self):
         InventoryCostConfig.objects.create(
-            name='默认', costing_method='WEIGHTED_AVG', is_active=True, is_default=True,
+            name='默认',
+            costing_method='WEIGHTED_AVG',
+            is_active=True,
+            is_default=True,
         )
         self._inbound(10, 5)
         rec = ItemCostRecord.objects.filter(item=self.item, warehouse=self.wh).first()
@@ -60,17 +66,21 @@ class CostLedgerRecordingTest(TestCase):
         InventoryCostConfig.objects.create(name='默认', costing_method='WEIGHTED_AVG', is_active=True)
         self._inbound(10, 8)
         StockMove.objects.create(
-            item=self.item, warehouse_from=self.wh, qty=Decimal('4'), unit_cost=Decimal('0'),
-            move_type='OUT_SALES', move_date=date.today(), status='COMPLETED',
+            item=self.item,
+            warehouse_from=self.wh,
+            qty=Decimal('4'),
+            unit_cost=Decimal('0'),
+            move_type='OUT_SALES',
+            move_date=date.today(),
+            status='COMPLETED',
         )
-        out_rec = ItemCostRecord.objects.filter(
-            item=self.item, transaction_type='SALES_OUT'
-        ).order_by('-created_at').first()
+        out_rec = (
+            ItemCostRecord.objects.filter(item=self.item, transaction_type='SALES_OUT').order_by('-created_at').first()
+        )
         self.assertIsNotNone(out_rec)
         self.assertEqual(out_rec.unit_cost, Decimal('8.0000'))  # 结存加权成本,非 0
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class FIFOConsumptionTest(TestCase):
     """FIFO 按批次先进先出消耗,返回分层实耗成本;缺量抛错回滚。"""
 
@@ -80,23 +90,29 @@ class FIFOConsumptionTest(TestCase):
 
     def _lot(self, lot_no, qty, unit_cost):
         return InventoryLot.objects.create(
-            lot_no=lot_no, warehouse=self.wh, item=self.item,
-            initial_qty=Decimal(str(qty)), remaining_qty=Decimal(str(qty)),
+            lot_no=lot_no,
+            warehouse=self.wh,
+            item=self.item,
+            initial_qty=Decimal(str(qty)),
+            remaining_qty=Decimal(str(qty)),
             unit_cost=Decimal(str(unit_cost)),
         )
 
     def test_consume_oldest_first_layered_cost(self):
-        self._lot('LOT_A', 10, 3)   # 先建 -> 先进先出先消耗
+        self._lot('LOT_A', 10, 3)  # 先建 -> 先进先出先消耗
         self._lot('LOT_B', 10, 5)
         total_cost, consumptions = FIFOCostingService.consume_stock(
-            warehouse=self.wh, item=self.item, qty=Decimal('15'), update_stock=False,
+            warehouse=self.wh,
+            item=self.item,
+            qty=Decimal('15'),
+            update_stock=False,
         )
         # 10@3 + 5@5 = 55
         self.assertEqual(total_cost, Decimal('55'))
         self.assertEqual(len(consumptions), 2)
         a = InventoryLot.objects.get(lot_no='LOT_A')
         b = InventoryLot.objects.get(lot_no='LOT_B')
-        self.assertEqual(a.remaining_qty, Decimal('0'))     # 老批次先耗尽
+        self.assertEqual(a.remaining_qty, Decimal('0'))  # 老批次先耗尽
         self.assertEqual(b.remaining_qty, Decimal('5'))
         self.assertEqual(LotConsumption.objects.filter(lot__item=self.item).count(), 2)
 
@@ -104,7 +120,10 @@ class FIFOConsumptionTest(TestCase):
         self._lot('LOT_C', 10, 3)
         with self.assertRaises(ValueError):
             FIFOCostingService.consume_stock(
-                warehouse=self.wh, item=self.item, qty=Decimal('15'), update_stock=False,
+                warehouse=self.wh,
+                item=self.item,
+                qty=Decimal('15'),
+                update_stock=False,
             )
         # 回滚:批次余量不变,无消耗记录残留
         self.assertEqual(InventoryLot.objects.get(lot_no='LOT_C').remaining_qty, Decimal('10'))
@@ -115,7 +134,9 @@ class FIFOConsumptionTest(TestCase):
         Stock.objects.create(warehouse=self.wh, item=self.item, qty_on_hand=Decimal('10'))
         self._lot('LOT_D', 10, 4)
         FIFOCostingService.consume_stock(
-            warehouse=self.wh, item=self.item, qty=Decimal('6'),
+            warehouse=self.wh,
+            item=self.item,
+            qty=Decimal('6'),
             update_stock=False,
         )
         stock = Stock.objects.get(warehouse=self.wh, item=self.item)

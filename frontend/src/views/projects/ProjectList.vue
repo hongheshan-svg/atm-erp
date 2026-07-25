@@ -89,9 +89,9 @@
             <el-button size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleViewAttachments(row)">附件</el-button>
             <!-- 提交审批按钮 - 仅草稿/规划中/已拒绝状态可见 -->
-            <el-button 
+            <el-button
               v-if="['DRAFT', 'PLANNING', 'REJECTED'].includes(row.status)"
-              size="small" 
+              size="small"
               type="success"
               @click="handleSubmitApproval(row)"
               :loading="submitLoading === row.id"
@@ -99,19 +99,19 @@
               提交审批
             </el-button>
             <!-- 查看审批流程 - 审批中状态可见 -->
-            <el-button 
+            <el-button
               v-if="row.status === 'PENDING'"
-              size="small" 
+              size="small"
               type="info"
               @click="handleViewWorkflow(row)"
             >
               审批进度
             </el-button>
             <!-- 仅管理员显示删除按钮 -->
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -137,23 +137,23 @@
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px">
       <el-form :model="form" ref="formRef" label-width="150px">
         <el-form-item label="关联销售订单">
-          <el-select 
-            v-model="form.sales_order" 
-            filterable 
+          <el-select
+            v-model="form.sales_order"
+            filterable
             clearable
             placeholder="选择销售订单 (可选)"
             @change="handleSalesOrderChange"
             style="width: 100%"
           >
-            <el-option 
-              v-for="so in salesOrders" 
-              :key="so.id" 
-              :label="`${so.order_no} - ${so.customer_name} (¥${so.total_with_tax?.toLocaleString()})`" 
+            <el-option
+              v-for="so in salesOrders"
+              :key="so.id"
+              :label="`${so.order_no} - ${so.customer_name} (¥${so.total_with_tax?.toLocaleString()})`"
               :value="so.id"
             />
           </el-select>
         </el-form-item>
-        
+
         <!-- 选中订单后显示订单详情 -->
         <el-form-item v-if="selectedOrder" label="订单详情">
           <el-card shadow="never" class="order-detail-card">
@@ -169,7 +169,7 @@
                 <span style="color: #67C23A; font-weight: bold">¥{{ selectedOrder.total_with_tax?.toLocaleString() }}</span>
               </el-descriptions-item>
             </el-descriptions>
-            
+
             <div style="margin-top: 12px">
               <div style="font-weight: bold; margin-bottom: 8px; color: #606266">📦 产品明细</div>
               <el-table :data="selectedOrder.lines" size="small" border stripe max-height="200">
@@ -184,10 +184,10 @@
                 </el-table-column>
               </el-table>
             </div>
-            
-            <el-alert 
-              type="info" 
-              :closable="false" 
+
+            <el-alert
+              type="info"
+              :closable="false"
               style="margin-top: 12px"
               show-icon
             >
@@ -197,9 +197,9 @@
             </el-alert>
           </el-card>
         </el-form-item>
-        
+
         <el-divider v-if="selectedOrder" />
-        
+
         <el-form-item label="项目编号">
           <el-input v-model="form.code" placeholder="留空自动生成" />
         </el-form-item>
@@ -245,7 +245,7 @@
         <el-button type="primary" @click="handleSubmit">提交</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 附件管理对话框 -->
     <el-dialog v-model="attachmentDialogVisible" :title="`项目 ${currentProject?.name || ''} - 附件管理`" width="900px" destroy-on-close>
       <AttachmentUpload
@@ -300,10 +300,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 const router = useRouter()
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'PROJECT'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -313,14 +313,14 @@ const projects = ref<any[]>([])
 const customers = ref<any[]>([])
 
 // 搜索/筛选条件
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   search: '',
   status: '',
   customer: null
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -331,12 +331,12 @@ const salesOrdersLoaded = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建项目')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const attachmentDialogVisible = ref(false)
-const currentProject = ref(null)
-const submitLoading = ref(null)  // 提交审批loading状态
+const currentProject = ref<any>(null)
+const submitLoading = ref<any>(null)  // 提交审批loading状态
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   code: '',
   name: '',
@@ -349,7 +349,7 @@ const form = reactive({
   status: 'DRAFT'
 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     PENDING: 'warning',
@@ -362,10 +362,10 @@ const getStatusType = (status) => {
     CANCELLED: 'danger',
     ARCHIVED: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     DRAFT: '草稿',
     PENDING: '审批中',
@@ -378,10 +378,10 @@ const getStatusLabel = (status) => {
     CANCELLED: '已取消',
     ARCHIVED: '已归档'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getUserDisplayName = (user) => {
+const getUserDisplayName = (user: any) => {
   // 优先显示姓名，如果没有则显示用户名
   const fullName = (user.last_name || '') + (user.first_name || '')
   if (fullName.trim() && fullName !== user.username) {
@@ -393,7 +393,7 @@ const getUserDisplayName = (user) => {
 const loadProjects = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -405,7 +405,7 @@ const loadProjects = async () => {
     const data = response.data || response
     projects.value = data.results || data || []
     pagination.total = data.count ?? projects.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载项目失败')
   } finally {
     loading.value = false
@@ -425,13 +425,13 @@ const handleResetFilters = () => {
   loadProjects()
 }
 
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadProjects()
 }
 
-const handleCurrentChange = (page) => {
+const handleCurrentChange = (page: any) => {
   pagination.page = page
   loadProjects()
 }
@@ -440,7 +440,7 @@ const loadCustomers = async () => {
   try {
     const response = await getCustomerList()
     customers.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load customers')
   }
 }
@@ -449,7 +449,7 @@ const loadUsers = async () => {
   try {
     const response = await getUsers()
     users.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load users')
   }
 }
@@ -464,7 +464,7 @@ const loadSalesOrders = async () => {
     salesOrders.value = response.data || response || []
     salesOrdersLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('Failed to load sales orders', error)
     }
@@ -489,21 +489,21 @@ const selectedOrder = computed(() => {
 })
 
 // 当选择销售订单时，自动填充相关信息
-const handleSalesOrderChange = (soId) => {
+const handleSalesOrderChange = (soId: any) => {
   if (soId) {
     const order = salesOrders.value.find(so => so.id === soId)
     if (order) {
       // 自动填充客户
       form.customer = order.customer
-      
+
       // 自动填充预算（使用含税金额）
       form.budget_total = order.total_with_tax || 0
-      
+
       // 自动设置结束日期为交货日期
       if (order.delivery_date) {
         form.end_date = order.delivery_date
       }
-      
+
       // 自动设置开始日期为今天
       if (!form.start_date) {
         const today = new Date()
@@ -516,7 +516,7 @@ const handleSalesOrderChange = (soId) => {
   }
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/projects/${row.id}`)
 }
 
@@ -528,7 +528,7 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑项目'
   isEdit.value = true
   await ensureSalesOrdersLoaded()
@@ -544,10 +544,10 @@ const handleSubmit = async () => {
     ElMessage.warning('请填写所有必填字段（项目名称、客户、项目经理、开始日期、结束日期）')
     return
   }
-  
+
   try {
     // 构建提交数据，只发送需要的字段
-    const payload = {
+    const payload: Record<string, any> = {
       name: form.name,
       customer: form.customer,
       manager: form.manager,
@@ -561,17 +561,17 @@ const handleSubmit = async () => {
     if (!isEdit.value) {
       payload.status = form.status || 'DRAFT'
     }
-    
+
     // 项目编号（可选，留空自动生成）
     if (form.code) {
       payload.code = form.code
     }
-    
+
     // 关联销售订单（可选）
     if (form.sales_order) {
       payload.sales_order = form.sales_order
     }
-    
+
     if (isEdit.value) {
       payload.code = form.code  // 编辑时必须有编号
       await updateProject(form.id, payload)
@@ -586,13 +586,13 @@ const handleSubmit = async () => {
       salesOrdersLoaded.value = false
       await ensureSalesOrdersLoaded()
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存项目失败:', error)
     ElMessage.error(error.response?.data?.detail || '保存项目失败')
   }
 }
 
-const handleViewAttachments = (row) => {
+const handleViewAttachments = (row: any) => {
   currentProject.value = row
   attachmentDialogVisible.value = true
 }
@@ -602,31 +602,31 @@ const handleExport = async () => {
     ElMessage.info('正在导出...')
     await exportProjects()
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }
 
 // 提交项目审批
-const handleSubmitApproval = async (row) => {
+const handleSubmitApproval = async (row: any) => {
   try {
     await ElMessageBox.confirm(
       `确定要提交项目「${row.name}」进行审批吗？提交后将按照流程配置中的"项目立项"流程进行审批。`,
       '提交审批确认',
       { type: 'info', confirmButtonText: '确认提交', cancelButtonText: '取消' }
     )
-    
+
     submitLoading.value = row.id
     const response = await submitProject(row.id)
-    
+
     if (response.workflow_started) {
       ElMessage.success(response.message || '已成功提交审批，请等待审批人处理')
     } else {
       ElMessage.warning(response.message || '未配置审批流程，项目已直接启动')
     }
-    
+
     loadProjects()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('提交审批失败:', error)
       ElMessage.error(error.response?.data?.error || error.response?.data?.detail || '提交审批失败')
@@ -637,7 +637,7 @@ const handleSubmitApproval = async (row) => {
 }
 
 // 查看审批流程进度
-const handleViewWorkflow = (row) => {
+const handleViewWorkflow = (row: any) => {
   showWorkflowProgress(row)
 }
 
@@ -686,4 +686,3 @@ onMounted(() => {
   padding: 12px;
 }
 </style>
-

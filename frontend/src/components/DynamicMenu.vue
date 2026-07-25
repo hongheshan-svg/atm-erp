@@ -22,12 +22,9 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
+import type { MenuItem } from '@/types'
 
-defineProps({
-  menus: {
-    type: Array,
-    default: () => []
-  }
+withDefaults(defineProps<{ menus?: MenuItem[] }>(), {
+  menus: () => [],
 })
 </script>

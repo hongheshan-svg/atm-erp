@@ -20,8 +20,8 @@ export function deleteAttachment(id: number) {
   return request({ url: `/core/attachments/${id}/`, method: 'delete' })
 }
 
-export function downloadAttachment(id: number) {
-  return request({ url: `/core/attachments/${id}/download/`, method: 'get', responseType: 'blob' })
+export function downloadAttachment(id: number, config = {}) {
+  return request({ url: `/core/attachments/${id}/download/`, method: 'get', responseType: 'blob', ...config })
 }
 
 // ========== 导出 ==========

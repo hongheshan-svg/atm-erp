@@ -1,4 +1,5 @@
 """应用版本与部署模式来源,以及 semver 比较。"""
+
 from __future__ import annotations
 
 import os
@@ -33,7 +34,7 @@ def compare_versions(a: str, b: str) -> int:
     n = max(len(pa), len(pb))
     pa += [0] * (n - len(pa))
     pb += [0] * (n - len(pb))
-    for x, y in zip(pa, pb):
+    for x, y in zip(pa, pb, strict=False):
         if x < y:
             return -1
         if x > y:

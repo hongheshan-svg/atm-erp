@@ -2,7 +2,7 @@
   <div class="equipment-lifecycle-report">
     <el-card>
       <template #header><span>设备生命周期报表</span></template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="设备状态">
           <el-select v-model="filters.status" clearable @change="loadData" style="width: 160px;">
@@ -29,17 +29,17 @@
         <el-col :span="6"><el-statistic title="验收/质保中" :value="stats.in_warranty" /></el-col>
         <el-col :span="6"><el-statistic title="已报废" :value="stats.scrapped" /></el-col>
       </el-row>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="equipment_no" label="设备编号" width="140" />
@@ -73,7 +73,7 @@ const tableData = ref<any[]>([])
 const filters = ref<{ status: string | null }>({ status: null })
 const stats = ref({ total_equipment: 0, running: 0, in_warranty: 0, scrapped: 0 })
 
-const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMoney = (v: any) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
 
 const loadData = async () => {
   loading.value = true
@@ -81,7 +81,7 @@ const loadData = async () => {
     const res = await getEquipmentLifecycleReport(filters.value)
     tableData.value = res.equipments || []
     stats.value = res.stats || stats.value
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false

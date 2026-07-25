@@ -4,9 +4,9 @@
     <el-card class="filter-card">
       <el-form :inline="true">
         <el-form-item label="选择项目">
-          <el-select 
-            v-model="selectedProject" 
-            filterable 
+          <el-select
+            v-model="selectedProject"
+            filterable
             clearable
             :loading="projectLoading"
             placeholder="选择项目"
@@ -124,8 +124,8 @@
           </el-table-column>
           <el-table-column label="占比" width="200">
             <template #default="{ row }">
-              <el-progress 
-                :percentage="getLaborPercentage(row.hours)" 
+              <el-progress
+                :percentage="getLaborPercentage(row.hours)"
                 :stroke-width="12"
                 :color="getProgressColor(getLaborPercentage(row.hours))"
               />
@@ -153,7 +153,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import request from '@/utils/request'
 import { getProjectList } from '@/api/projects/project'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { usePermissionStore } from '@/stores/permission'
 import { toFixedSafe } from '@/utils/number'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -161,35 +161,23 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/projects_project/')
 
 
-const selectedProject = ref(null)
+const selectedProject = ref<any>(null)
 const hourlyRate = ref(100)
 const projectOptions = ref<any[]>([])
 const projectLoading = ref(false)
 const projectsLoaded = ref(false)
-const costData = ref(null)
+const costData = ref<any>(null)
 const comparisonData = ref<any[]>([])
 const permissionStore = usePermissionStore()
 
-const pieChart = ref(null)
-const comparisonChart = ref(null)
-let pieChartInstance = null
-let comparisonChartInstance = null
+const pieChart = ref<any>(null)
+const comparisonChart = ref<any>(null)
+let pieChartInstance: any = null
+let comparisonChartInstance: any = null
 
-const taskTypeMap = {
-  'DESIGN': '设计',
-  'ASSEMBLY': '组装',
-  'DEBUG': '调试',
-  'INSTALL': '安装',
-  'TRAINING': '培训',
-  'MEETING': '会议',
-  'OTHER': '其他'
-}
-
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   return (num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-
-const getTaskTypeName = (type) => taskTypeMap[type] || type || '未分类'
 
 const loadProjects = async () => {
   if (projectsLoaded.value) {
@@ -202,7 +190,7 @@ const loadProjects = async () => {
     projectOptions.value = res.results || res || []
     projectsLoaded.value = true
     return true
-  } catch (e) {
+  } catch (e: any) {
     if (e?.response?.status !== 403) {
       console.error('加载项目列表失败:', e)
     }
@@ -223,7 +211,7 @@ const ensureProjectsLoaded = async () => {
   return loadProjects()
 }
 
-const handleProjectSelectorVisibleChange = async (visible) => {
+const handleProjectSelectorVisibleChange = async (visible: any) => {
   if (visible) {
     await ensureProjectsLoaded()
   }
@@ -231,7 +219,7 @@ const handleProjectSelectorVisibleChange = async (visible) => {
 
 const fetchCostAnalysis = async () => {
   if (!selectedProject.value) return
-  
+
   try {
     const res = await request({
       url: '/reports/cost/analysis/',
@@ -240,7 +228,7 @@ const fetchCostAnalysis = async () => {
     })
     costData.value = res  // request.js already returns response.data
     nextTick(() => renderPieChart())
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取成本分析失败')
     console.error(error)
   }
@@ -254,17 +242,17 @@ const fetchComparison = async () => {
     })
     comparisonData.value = res?.comparison || []  // request.js already returns response.data
     nextTick(() => renderComparisonChart())
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   }
 }
 
-const getLaborPercentage = (hours) => {
+const getLaborPercentage = (hours: any) => {
   const totalHours = costData.value?.cost_summary?.labor_hours || 1
   return Math.round((hours / totalHours) * 100)
 }
 
-const getProgressColor = (percentage) => {
+const getProgressColor = (percentage: any) => {
   if (percentage > 50) return '#f56c6c'
   if (percentage > 30) return '#e6a23c'
   return '#67c23a'
@@ -272,15 +260,15 @@ const getProgressColor = (percentage) => {
 
 const renderPieChart = () => {
   if (!pieChart.value || !costData.value) return
-  
+
   if (!pieChartInstance) {
     pieChartInstance = echarts.init(pieChart.value)
   }
-  
-  const data = costData.value.cost_breakdown.filter(d => d.value > 0)
-  
+
+  const data = costData.value.cost_breakdown.filter((d: any) => d.value > 0)
+
   pieChartInstance.setOption({
-    tooltip: { 
+    tooltip: {
       trigger: 'item',
       formatter: '{b}: ¥{c} ({d}%)'
     },
@@ -295,7 +283,7 @@ const renderPieChart = () => {
         borderWidth: 2
       },
       label: { show: true, formatter: '{b}\n{d}%' },
-      data: data.map((d, i) => ({
+      data: data.map((d: any, i: any) => ({
         name: d.name,
         value: d.value,
         itemStyle: { color: ['#5470c6', '#91cc75', '#fac858', '#ee6666'][i] }
@@ -306,16 +294,16 @@ const renderPieChart = () => {
 
 const renderComparisonChart = () => {
   if (!comparisonChart.value || !comparisonData.value.length) return
-  
+
   if (!comparisonChartInstance) {
     comparisonChartInstance = echarts.init(comparisonChart.value)
   }
-  
+
   const projects = comparisonData.value.map(d => d.project_name.substring(0, 10))
   const contractAmounts = comparisonData.value.map(d => d.contract_amount)
   const totalCosts = comparisonData.value.map(d => d.total_cost)
   const margins = comparisonData.value.map(d => d.gross_margin)
-  
+
   comparisonChartInstance.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
     legend: { data: ['合同金额', '总成本', '毛利率'] },

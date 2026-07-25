@@ -62,9 +62,9 @@ Page({
       }, 1000)
 
     } catch (err) {
-      wx.showToast({ 
-        title: err.detail || '登录失败', 
-        icon: 'none' 
+      wx.showToast({
+        title: err.detail || '登录失败',
+        icon: 'none'
       })
     } finally {
       this.setData({ loading: false })

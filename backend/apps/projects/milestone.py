@@ -228,7 +228,7 @@ class MilestoneSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_checklist_progress(self, obj):
+    def get_checklist_progress(self, obj) -> dict[str, float | int]:
         total = obj.checklist_items.count()
         if total == 0:
             return {'total': 0, 'completed': 0, 'percentage': 0}
@@ -274,6 +274,7 @@ class MilestoneListSerializer(serializers.ModelSerializer):
 
 class MilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目里程碑管理"""
+
     permission_module = 'projects'
     permission_resource = 'milestone'
 
@@ -484,6 +485,7 @@ class MilestoneViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
 class MilestoneChecklistViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """里程碑检查项管理"""
+
     permission_module = 'projects'
     permission_resource = 'milestone_checklist'
 

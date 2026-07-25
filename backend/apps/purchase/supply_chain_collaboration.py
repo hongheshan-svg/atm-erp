@@ -516,10 +516,10 @@ class RFQCollaborationListSerializer(serializers.ModelSerializer):
             'response_count',
         ]
 
-    def get_item_count(self, obj):
+    def get_item_count(self, obj) -> int:
         return obj.items.count()
 
-    def get_response_count(self, obj):
+    def get_response_count(self, obj) -> int:
         return obj.responses.filter(status='QUOTED').count()
 
 

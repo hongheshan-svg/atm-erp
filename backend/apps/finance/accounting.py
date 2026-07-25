@@ -407,7 +407,7 @@ class AccountCategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_account_count(self, obj):
+    def get_account_count(self, obj) -> int:
         return obj.accounts.filter(is_deleted=False).count()
 
 
@@ -422,7 +422,7 @@ class ChartOfAccountSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'level']
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
 
@@ -435,7 +435,7 @@ class FiscalPeriodSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'closed_at', 'closed_by']
 
-    def get_voucher_count(self, obj):
+    def get_voucher_count(self, obj) -> int:
         return obj.vouchers.filter(is_deleted=False).count()
 
 
@@ -477,7 +477,7 @@ class JournalVoucherSerializer(serializers.ModelSerializer):
             'source_id',
         ]
 
-    def get_period_name(self, obj):
+    def get_period_name(self, obj) -> str:
         return str(obj.fiscal_period)
 
 
@@ -491,7 +491,7 @@ class AccountBalanceSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_period_name(self, obj):
+    def get_period_name(self, obj) -> str:
         return str(obj.fiscal_period)
 
 

@@ -94,9 +94,9 @@ const showCreateDialog = ref(false)
 const isEdit = ref(false)
 
 const resourceTypes = ref<any[]>([])
-const editingId = ref(null)
+const editingId = ref<any>(null)
 
-const typeForm = reactive({
+const typeForm = reactive<Record<string, any>>({
   code: '',
   name: '',
   category: 'WORKSTATION',
@@ -109,18 +109,16 @@ const typeRules = {
   category: [{ required: true, message: '请选择类别', trigger: 'change' }]
 }
 
-const typeFormRef = ref(null)
+const typeFormRef = ref<any>(null)
 
-const formatMoney = (val) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
-
-const getCategoryType = (category) => {
+const getCategoryType = (category: any) => {
   const map = {
     WORKSTATION: 'warning',
     EQUIPMENT: 'primary',
     PERSONNEL: 'success',
     TOOL: 'info'
   }
-  return map[category] || 'info'
+  return (map as Record<string, any>)[category] || 'info'
 }
 
 const loadResourceTypes = async () => {
@@ -128,24 +126,14 @@ const loadResourceTypes = async () => {
   try {
     const res = await getResourceTypes()
     resourceTypes.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载资源类型失败')
   } finally {
     loading.value = false
   }
 }
 
-const resetForm = () => {
-  typeForm.code = ''
-  typeForm.name = ''
-  typeForm.category = 'MACHINE'
-  typeForm.description = ''
-  typeForm.default_efficiency = 1.0
-  typeForm.default_cost_rate = 100
-  typeForm.capabilities = []
-}
-
-const editType = (row) => {
+const editType = (row: any) => {
   isEdit.value = true
   editingId.value = row.id
   Object.assign(typeForm, {
@@ -164,7 +152,7 @@ const saveType = async () => {
   try {
     await typeFormRef.value.validate()
     submitting.value = true
-    
+
     if (isEdit.value) {
       await updateResourceType(editingId.value, typeForm)
       ElMessage.success('资源类型已更新')
@@ -172,31 +160,24 @@ const saveType = async () => {
       await createResourceType(typeForm)
       ElMessage.success('资源类型已创建')
     }
-    
+
     showCreateDialog.value = false
     loadResourceTypes()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('保存失败')
   } finally {
     submitting.value = false
   }
 }
 
-const toggleActive = async (row) => {
+const toggleActive = async (row: any) => {
   try {
     await patchResourceType(row.id, { is_active: !row.is_active })
     ElMessage.success('状态已更新')
     loadResourceTypes()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
-}
-
-// 监听对话框关闭
-const closeDialog = () => {
-  isEdit.value = false
-  editingId.value = null
-  resetForm()
 }
 
 onMounted(() => {

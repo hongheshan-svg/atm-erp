@@ -140,20 +140,24 @@ const order = ref<Record<string, any>>({})
 const receipts = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const receiptDialogVisible = ref(false)
-const receiptForm = ref({ warehouse: null, receipt_date: new Date().toISOString().split('T')[0], lines: [] })
+const receiptForm = ref<Record<string, any>>({
+  warehouse: null,
+  receipt_date: new Date().toISOString().split('T')[0],
+  lines: [],
+})
 
-const getStatusType = (s) => ({ 'DRAFT': 'info', 'PENDING': 'warning', 'APPROVED': 'primary', 'REJECTED': 'danger', 'CONFIRMED': 'warning', 'PARTIAL': 'primary', 'COMPLETED': 'success', 'CANCELLED': 'danger' }[s] || 'info')
-const getStatusLabel = (s) => ({ 'DRAFT': '草稿', 'PENDING': '待审批', 'APPROVED': '已审批', 'REJECTED': '已拒绝', 'CONFIRMED': '已确认', 'PARTIAL': '部分收货', 'COMPLETED': '完成', 'CANCELLED': '已取消' }[s] || s)
-const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
+const getStatusType = (s: any) => (({ 'DRAFT': 'info', 'PENDING': 'warning', 'APPROVED': 'primary', 'REJECTED': 'danger', 'CONFIRMED': 'warning', 'PARTIAL': 'primary', 'COMPLETED': 'success', 'CANCELLED': 'danger' } as Record<string, any>)[s] || 'info')
+const getStatusLabel = (s: any) => (({ 'DRAFT': '草稿', 'PENDING': '待审批', 'APPROVED': '已审批', 'REJECTED': '已拒绝', 'CONFIRMED': '已确认', 'PARTIAL': '部分收货', 'COMPLETED': '完成', 'CANCELLED': '已取消' } as Record<string, any>)[s] || s)
+const formatMoney = (val: any) => parseFloat(val || 0).toFixed(2)
 
 const loadOrderDetail = async () => {
   loading.value = true
   try {
-    const response = await getPurchaseOrder(route.params.id)
+    const response = await getPurchaseOrder(Number(route.params.id))
     order.value = response.data || response
-    const receiptRes = await getGoodsReceipts({ po: route.params.id })
+    const receiptRes = await getGoodsReceipts({ po: Number(route.params.id) })
     receipts.value = receiptRes.results || receiptRes.results || receiptRes || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载订单详情失败:', error)
     ElMessage.error('加载订单详情失败')
   } finally {
@@ -165,7 +169,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -175,10 +179,10 @@ const goBack = () => router.back()
 const handleConfirm = async () => {
   try {
     await ElMessageBox.confirm('确定要确认此订单吗？', '提示', { type: 'warning' })
-    await confirmPurchaseOrder(route.params.id)
+    await confirmPurchaseOrder(Number(route.params.id))
     ElMessage.success('订单确认成功')
     loadOrderDetail()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('确认订单失败')
   }
 }
@@ -186,16 +190,16 @@ const handleConfirm = async () => {
 const handleCancel = async () => {
   try {
     await ElMessageBox.confirm('确定要取消此订单吗？', '提示', { type: 'warning' })
-    await cancelPurchaseOrder(route.params.id)
+    await cancelPurchaseOrder(Number(route.params.id))
     ElMessage.success('订单取消成功')
     loadOrderDetail()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('取消订单失败')
   }
 }
 
 const handleCreateReceipt = () => {
-  receiptForm.value.lines = order.value.lines.map(line => ({
+  receiptForm.value.lines = order.value.lines.map((line: any) => ({
     po_line: line.id,
     item: line.item,
     item_name: line.item_name,
@@ -210,12 +214,12 @@ const submitReceipt = async () => {
   if (!receiptForm.value.warehouse) return ElMessage.warning('请选择收货仓库')
   try {
     const payload = {
-      po: route.params.id,
+      po: Number(route.params.id),
       warehouse: receiptForm.value.warehouse,
       receipt_date: receiptForm.value.receipt_date,
       lines: receiptForm.value.lines
-        .filter(l => l.receipt_qty > 0)
-        .map(l => ({ po_line: l.po_line, item: l.item, qty: l.receipt_qty }))
+        .filter((line: any) => line.receipt_qty > 0)
+        .map((line: any) => ({ po_line: line.po_line, item: line.item, qty: line.receipt_qty }))
     }
     if (payload.lines.length === 0) return ElMessage.warning('请至少选择一项要收货的明细')
     await createGoodsReceipt(payload)
@@ -228,7 +232,7 @@ const submitReceipt = async () => {
 }
 
 // 收货单无独立详情路由，跳转列表页并通过查询参数自动打开详情弹窗
-const viewReceipt = (row) => router.push(`/purchase/goods-receipts?receipt_id=${row.id}`)
+const viewReceipt = (row: any) => router.push(`/purchase/goods-receipts?receipt_id=${row.id}`)
 
 onMounted(() => {
   loadOrderDetail()
@@ -239,4 +243,3 @@ onMounted(() => {
 <style scoped>
 .purchase-order-detail { padding: 20px; }
 </style>
-

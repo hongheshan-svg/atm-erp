@@ -137,10 +137,10 @@ const loading = ref(false)
 const bomList = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const submitting = ref(false)
 const isEdit = ref(false)
-const currentBomId = ref(null)
+const currentBomId = ref<any>(null)
 
 const itemOptions = ref<any[]>([])
 const searchingItems = ref(false)
@@ -166,7 +166,7 @@ const loadBOMList = async () => {
     })
     const data = response.data || response
     bomList.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载BOM失败:', error)
     ElMessage.error('加载BOM失败')
   } finally {
@@ -174,7 +174,7 @@ const loadBOMList = async () => {
   }
 }
 
-const searchItems = async (query) => {
+const searchItems = async (query: any) => {
   if (!query) {
     itemOptions.value = []
     return
@@ -187,14 +187,14 @@ const searchItems = async (query) => {
     })
     const data = response.data || response
     itemOptions.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('搜索物料失败:', error)
   } finally {
     searchingItems.value = false
   }
 }
 
-const handleItemChange = (itemId) => {
+const handleItemChange = (itemId: any) => {
   const selectedItem = itemOptions.value.find(item => item.id === itemId)
   if (selectedItem) {
     // 自动填充预估成本（使用标准成本）
@@ -213,7 +213,7 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   currentBomId.value = row.id
   dialogTitle.value = '编辑物料'
@@ -234,7 +234,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除该物料吗？', '提示', {
       confirmButtonText: '确定',
@@ -246,7 +246,7 @@ const handleDelete = async (row) => {
     ElMessage.success('删除成功')
     loadBOMList()
     emit('refresh')
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除BOM失败:', error)
       ElMessage.error('删除BOM失败')
@@ -257,7 +257,7 @@ const handleDelete = async (row) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
 
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
 
     submitting.value = true
@@ -278,7 +278,7 @@ const handleSubmit = async () => {
       dialogVisible.value = false
       loadBOMList()
       emit('refresh')
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存BOM失败:', error)
       ElMessage.error(isEdit.value ? '更新BOM失败' : '添加BOM失败')
     } finally {

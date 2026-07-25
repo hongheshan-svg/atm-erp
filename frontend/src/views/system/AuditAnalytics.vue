@@ -63,9 +63,9 @@
             </el-table-column>
             <el-table-column label="占比" width="150">
               <template #default="{ row }">
-                <el-progress 
-                  :percentage="getPercentage(row.count)" 
-                  :stroke-width="10" 
+                <el-progress
+                  :percentage="getPercentage(row.count)"
+                  :stroke-width="10"
                   :show-text="false"
                 />
               </template>
@@ -89,7 +89,7 @@
           <el-button type="primary" size="small" @click="fetchSecurityData">刷新</el-button>
         </div>
       </template>
-      
+
       <el-row :gutter="20">
         <el-col :span="6">
           <el-statistic title="敏感操作(本周)" :value="security.sensitive_operations?.count || 0" />
@@ -131,8 +131,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import request from '@/utils/request'
-import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/unknown/')
@@ -142,24 +141,24 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 const stats = ref<Record<string, any>>({})
 const security = ref<Record<string, any>>({})
 
-const trendChart = ref(null)
-const actionPieChart = ref(null)
-const hourlyChart = ref(null)
-let trendChartInstance = null
-let pieChartInstance = null
-let hourlyChartInstance = null
+const trendChart = ref<any>(null)
+const actionPieChart = ref<any>(null)
+const hourlyChart = ref<any>(null)
+let trendChartInstance: any = null
+let pieChartInstance: any = null
+let hourlyChartInstance: any = null
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getPercentage = (count) => {
-  const maxCount = Math.max(...(stats.value.by_user || []).map(u => u.count), 1)
+const getPercentage = (count: any) => {
+  const maxCount = Math.max(...(stats.value.by_user || []).map((u: any) => u.count), 1)
   return Math.round((count / maxCount) * 100)
 }
 
-const getActionType = (action) => {
+const getActionType = (action: any) => {
   const types = {
     'delete': 'danger',
     'bulk_delete': 'danger',
@@ -167,7 +166,7 @@ const getActionType = (action) => {
     'approve': 'success',
     'reject': 'warning'
   }
-  return types[action] || 'info'
+  return (types as Record<string, any>)[action] || 'info'
 }
 
 const fetchStats = async () => {
@@ -179,7 +178,7 @@ const fetchStats = async () => {
       renderPieChart()
       renderHourlyChart()
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -188,31 +187,31 @@ const fetchSecurityData = async () => {
   try {
     const res = await request({ url: '/core/audit-analytics/security/', method: 'get' })
     security.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取安全数据失败', error)
   }
 }
 
 const renderTrendChart = () => {
   if (!trendChart.value) return
-  
+
   if (!trendChartInstance) {
     trendChartInstance = echarts.init(trendChart.value)
   }
-  
+
   const data = stats.value.daily_trend || []
-  
+
   trendChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: {
       type: 'category',
-      data: data.map(d => d.date?.substring(5) || ''),
+      data: data.map((d: any) => d.date?.substring(5) || ''),
       axisLabel: { rotate: 45 }
     },
     yAxis: { type: 'value', name: '操作数' },
     series: [{
       type: 'line',
-      data: data.map(d => d.count),
+      data: data.map((d: any) => d.count),
       smooth: true,
       areaStyle: { opacity: 0.3 },
       itemStyle: { color: '#409eff' }
@@ -222,19 +221,19 @@ const renderTrendChart = () => {
 
 const renderPieChart = () => {
   if (!actionPieChart.value) return
-  
+
   if (!pieChartInstance) {
     pieChartInstance = echarts.init(actionPieChart.value)
   }
-  
+
   const data = (stats.value.by_action || []).slice(0, 8)
-  
+
   pieChartInstance.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      data: data.map(d => ({
+      data: data.map((d: any) => ({
         name: d.action,
         value: d.count
       })),
@@ -245,20 +244,20 @@ const renderPieChart = () => {
 
 const renderHourlyChart = () => {
   if (!hourlyChart.value) return
-  
+
   if (!hourlyChartInstance) {
     hourlyChartInstance = echarts.init(hourlyChart.value)
   }
-  
+
   const data = stats.value.hourly_distribution || []
-  
+
   // 填充24小时数据
   const hourlyData = Array(24).fill(0)
-  data.forEach(d => {
+  data.forEach((d: any) => {
     const hour = new Date(d.hour).getHours()
     hourlyData[hour] = d.count
   })
-  
+
   hourlyChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: {

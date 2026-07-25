@@ -11,7 +11,7 @@
         </el-button>
       </div>
     </div>
-    
+
     <!-- 今日打卡状态 -->
     <el-card shadow="never" class="status-card">
       <el-row :gutter="20">
@@ -43,31 +43,31 @@
         </el-col>
       </el-row>
     </el-card>
-    
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="考勤记录" name="records">
         <el-card shadow="never">
           <template #header>
             <el-form :inline="true">
               <el-form-item label="月份">
-                <el-date-picker v-model="queryMonth" type="month" placeholder="选择月份" 
+                <el-date-picker v-model="queryMonth" type="month" placeholder="选择月份"
                   value-format="YYYY-MM" @change="fetchRecords" style="width: 150px" />
               </el-form-item>
             </el-form>
           </template>
-          
+
           <!-- 批量操作 -->
-          
+
           <div v-if="selectedRows.length > 0" class="batch-toolbar">
-          
+
             <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-          
+
             <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-          
+
             <el-button size="small" @click="batchExport">导出选中</el-button>
-          
+
           </div>
-          
+
           <el-table :data="records" v-loading="loading" border stripe @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="45" />
             <el-table-column prop="attendance_date" label="日期" width="110" />
@@ -104,7 +104,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="请假申请" name="leaves">
         <el-card shadow="never">
           <template #header>
@@ -113,7 +113,7 @@
               <el-button type="primary" size="small" @click="handleAddLeave">申请请假</el-button>
             </div>
           </template>
-          
+
           <el-table :data="leaveRequests" border stripe>
             <el-table-column prop="leave_type_display" label="类型" width="90" />
             <el-table-column label="时间" min-width="200">
@@ -130,16 +130,16 @@
             <el-table-column prop="approver_name" label="审批人" width="100" />
             <el-table-column label="操作" width="120" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" link size="small" @click="handleSubmitLeave(row)" 
+                <el-button type="primary" link size="small" @click="handleSubmitLeave(row)"
                   v-if="row.status === 'DRAFT'">提交</el-button>
-                <el-button type="info" link size="small" @click="handleCancelLeave(row)" 
+                <el-button type="info" link size="small" @click="handleCancelLeave(row)"
                   v-if="row.status === 'PENDING'">撤回</el-button>
               </template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="加班申请" name="overtime">
         <el-card shadow="never">
           <template #header>
@@ -148,7 +148,7 @@
               <el-button type="primary" size="small" @click="handleAddOvertime">申请加班</el-button>
             </div>
           </template>
-          
+
           <el-table :data="overtimeRequests" border stripe>
             <el-table-column prop="overtime_date" label="日期" width="110" />
             <el-table-column label="时间" width="150">
@@ -170,27 +170,27 @@
             </el-table-column>
             <el-table-column label="操作" width="100" fixed="right">
               <template #default="{ row }">
-                <el-button type="primary" link size="small" @click="handleSubmitOvertime(row)" 
+                <el-button type="primary" link size="small" @click="handleSubmitOvertime(row)"
                   v-if="row.status === 'DRAFT'">提交</el-button>
               </template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="月度汇总" name="summary">
         <el-card shadow="never">
           <template #header>
             <el-form :inline="true">
               <el-form-item label="月份">
-                <el-date-picker v-model="summaryMonth" type="month" placeholder="选择月份" 
+                <el-date-picker v-model="summaryMonth" type="month" placeholder="选择月份"
                   value-format="YYYY-MM" @change="fetchSummary" style="width: 150px" />
               </el-form-item>
             </el-form>
           </template>
-          
+
           <el-row :gutter="16">
-            <el-col :span="4" v-for="(item, key) in summaryData" :key="key">
+            <el-col :span="4" v-for="item in summaryData" :key="item.label">
               <el-card shadow="never" class="summary-card">
                 <div class="summary-value">{{ item.value }}</div>
                 <div class="summary-label">{{ item.label }}</div>
@@ -200,7 +200,7 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
-    
+
     <!-- 请假申请对话框 -->
     <el-dialog v-model="leaveDialogVisible" title="申请请假" width="500px">
       <el-form :model="leaveForm" :rules="leaveRules" ref="leaveFormRef" label-width="80px">
@@ -227,7 +227,7 @@
         <el-button type="primary" @click="submitLeaveForm" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 加班申请对话框 -->
     <el-dialog v-model="overtimeDialogVisible" title="申请加班" width="500px">
       <el-form :model="overtimeForm" :rules="overtimeRules" ref="overtimeFormRef" label-width="80px">
@@ -293,10 +293,10 @@ const leaveTypes = ref<any[]>([])
 
 const leaveDialogVisible = ref(false)
 const overtimeDialogVisible = ref(false)
-const leaveFormRef = ref(null)
-const overtimeFormRef = ref(null)
+const leaveFormRef = ref<any>(null)
+const overtimeFormRef = ref<any>(null)
 
-const leaveForm = reactive({
+const leaveForm = reactive<Record<string, any>>({
   leave_type: 'PERSONAL',
   start_date: '',
   end_date: '',
@@ -304,7 +304,7 @@ const leaveForm = reactive({
   reason: ''
 })
 
-const overtimeForm = reactive({
+const overtimeForm = reactive<Record<string, any>>({
   overtime_date: '',
   start_time: '18:00:00',
   end_time: '21:00:00',
@@ -325,24 +325,24 @@ const overtimeRules = {
   reason: [{ required: true, message: '请填写加班原因', trigger: 'blur' }]
 }
 
-const summaryData = computed(() => {
-  if (!monthlySummary.value.length) return {}
+const summaryData = computed<any[]>(() => {
+  if (!monthlySummary.value.length) return []
   const s = monthlySummary.value[0]
-  return {
-    total: { label: '出勤天数', value: s.total_days || 0 },
-    normal: { label: '正常', value: s.normal_days || 0 },
-    late: { label: '迟到', value: s.late_days || 0 },
-    early: { label: '早退', value: s.early_days || 0 },
-    leave: { label: '请假', value: s.leave_days || 0 },
-    overtime: { label: '加班(h)', value: s.total_overtime_hours || 0 }
-  }
+  return [
+    { label: '出勤天数', value: s.total_days || 0 },
+    { label: '正常', value: s.normal_days || 0 },
+    { label: '迟到', value: s.late_days || 0 },
+    { label: '早退', value: s.early_days || 0 },
+    { label: '请假', value: s.leave_days || 0 },
+    { label: '加班(h)', value: s.total_overtime_hours || 0 },
+  ]
 })
 
 const fetchTodayStatus = async () => {
   try {
     const data = await getAttendanceToday()
     todayStatus.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -352,7 +352,7 @@ const fetchRecords = async () => {
   try {
     const data = await getMyAttendanceRecords({ month: queryMonth.value })
     records.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -363,7 +363,7 @@ const fetchLeaveRequests = async () => {
   try {
     const data = await getMyLeaveRequests()
     leaveRequests.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -372,7 +372,7 @@ const fetchOvertimeRequests = async () => {
   try {
     const data = await getMyOvertimeRequests()
     overtimeRequests.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -381,7 +381,7 @@ const fetchSummary = async () => {
   try {
     const data = await getAttendanceMonthlySummary({ month: summaryMonth.value })
     monthlySummary.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -390,7 +390,7 @@ const fetchLeaveTypes = async () => {
   try {
     const data = await getLeaveTypes()
     leaveTypes.value = data
-  } catch (e) {
+  } catch (e: any) {
     leaveTypes.value = [
       { value: 'ANNUAL', label: '年假' },
       { value: 'SICK', label: '病假' },
@@ -406,7 +406,7 @@ const handleCheckIn = async () => {
     todayStatus.value = data
     ElMessage.success('签到成功')
     fetchRecords()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '签到失败')
   }
 }
@@ -417,7 +417,7 @@ const handleCheckOut = async () => {
     todayStatus.value = data
     ElMessage.success('签退成功')
     fetchRecords()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '签退失败')
   }
 }
@@ -446,14 +446,14 @@ const handleAddOvertime = () => {
 const submitLeaveForm = async () => {
   const valid = await leaveFormRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     await createLeaveRequest(leaveForm)
     ElMessage.success('申请已保存')
     leaveDialogVisible.value = false
     fetchLeaveRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
@@ -463,58 +463,58 @@ const submitLeaveForm = async () => {
 const submitOvertimeForm = async () => {
   const valid = await overtimeFormRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     await createOvertimeRequest(overtimeForm)
     ElMessage.success('申请已保存')
     overtimeDialogVisible.value = false
     fetchOvertimeRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleSubmitLeave = async (row) => {
+const handleSubmitLeave = async (row: any) => {
   try {
     await submitLeaveRequest(row.id)
     ElMessage.success('已提交审批')
     fetchLeaveRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '提交失败')
   }
 }
 
-const handleSubmitOvertime = async (row) => {
+const handleSubmitOvertime = async (row: any) => {
   try {
     await submitOvertimeRequest(row.id)
     ElMessage.success('已提交审批')
     fetchOvertimeRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error(e.response?.data?.error || '提交失败')
   }
 }
 
-const handleCancelLeave = async (row) => {
+const handleCancelLeave = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要撤回该请假申请吗？', '提示', { type: 'warning' })
     await cancelLeaveRequest(row.id)
     ElMessage.success('撤回成功')
     fetchLeaveRequests()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error(error.response?.data?.error || '撤回失败')
   }
 }
 
-const formatTime = (dateTimeStr) => {
+const formatTime = (dateTimeStr: any) => {
   if (!dateTimeStr) return '--:--'
   const date = new Date(dateTimeStr)
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     NORMAL: 'success',
     LATE: 'warning',
@@ -524,10 +524,10 @@ const getStatusType = (status) => {
     OVERTIME: 'primary',
     NOT_CHECKED: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     NORMAL: '正常',
     LATE: '迟到',
@@ -537,10 +537,10 @@ const getStatusLabel = (status) => {
     OVERTIME: '加班',
     NOT_CHECKED: '未打卡'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getLeaveStatusType = (status) => {
+const getLeaveStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     PENDING: 'warning',
@@ -548,7 +548,7 @@ const getLeaveStatusType = (status) => {
     REJECTED: 'danger',
     CANCELLED: ''
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

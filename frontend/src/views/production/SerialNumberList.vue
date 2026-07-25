@@ -11,7 +11,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 快速搜索 -->
       <el-card class="search-card" shadow="never">
         <el-input
@@ -29,7 +29,7 @@
           </template>
         </el-input>
       </el-card>
-      
+
       <!-- 统计卡片 -->
       <el-row :gutter="20" class="stats-row">
         <el-col :span="4">
@@ -51,7 +51,7 @@
           <el-statistic title="已安装" :value="stats.installed" />
         </el-col>
       </el-row>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="物料">
@@ -79,7 +79,7 @@
           <el-button @click="resetSearch">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 数据表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -112,7 +112,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -125,7 +125,7 @@
         style="margin-top: 20px;"
       />
     </el-card>
-    
+
     <!-- 批量生成对话框 -->
     <el-dialog v-model="generateDialogVisible" title="批量生成序列号" width="500px">
       <el-form :model="generateForm" :rules="generateRules" ref="generateFormRef" label-width="100px">
@@ -159,7 +159,7 @@
         <el-button type="primary" @click="handleGenerate">生成</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 追溯详情对话框 -->
     <el-dialog v-model="traceDialogVisible" title="序列号追溯" width="900px">
       <div v-if="traceData">
@@ -174,7 +174,7 @@
           <el-descriptions-item label="物料名称">{{ traceData.serial_number?.item_name }}</el-descriptions-item>
           <el-descriptions-item label="项目">{{ traceData.serial_number?.project_name || '-' }}</el-descriptions-item>
         </el-descriptions>
-        
+
         <!-- 追溯时间线 -->
         <el-divider>追溯时间线</el-divider>
         <el-timeline>
@@ -200,7 +200,7 @@
             </el-card>
           </el-timeline-item>
         </el-timeline>
-        
+
         <!-- 组件绑定 -->
         <div v-if="traceData.components?.children?.length > 0">
           <el-divider>子组件</el-divider>
@@ -215,7 +215,7 @@
             </el-table-column>
           </el-table>
         </div>
-        
+
         <!-- 质量汇总 -->
         <div v-if="traceData.quality_summary">
           <el-divider>质量检验汇总</el-divider>
@@ -237,7 +237,7 @@
         <el-button type="primary" @click="printTrace">打印</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 添加追溯记录对话框 -->
     <el-dialog v-model="addTraceDialogVisible" title="添加追溯记录" width="500px">
       <el-form :model="traceForm" :rules="traceRules" ref="traceFormRef" label-width="100px">
@@ -302,12 +302,12 @@ const quickSearch = ref('')
 const generateDialogVisible = ref(false)
 const traceDialogVisible = ref(false)
 const addTraceDialogVisible = ref(false)
-const generateFormRef = ref(null)
-const traceFormRef = ref(null)
-const traceData = ref(null)
-const currentSN = ref(null)
+const generateFormRef = ref<any>(null)
+const traceFormRef = ref<any>(null)
+const traceData = ref<any>(null)
+const currentSN = ref<any>(null)
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   total: 0,
   generated: 0,
   in_production: 0,
@@ -316,19 +316,19 @@ const stats = reactive({
   installed: 0
 })
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   item: null,
   project: null,
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const generateForm = reactive({
+const generateForm = reactive<Record<string, any>>({
   rule_id: null,
   item_id: null,
   project_id: null,
@@ -342,7 +342,7 @@ const generateRules = {
   quantity: [{ required: true, message: '请输入数量', trigger: 'blur' }]
 }
 
-const traceForm = reactive({
+const traceForm = reactive<Record<string, any>>({
   operation: '',
   description: '',
   location: '',
@@ -355,7 +355,7 @@ const traceRules = {
   description: [{ required: true, message: '请输入操作描述', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'GENERATED': 'info',
     'ASSIGNED': 'info',
@@ -366,10 +366,10 @@ const getStatusType = (status) => {
     'RETURNED': 'warning',
     'SCRAPPED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getTimelineType = (operation) => {
+const getTimelineType = (operation: any) => {
   const types = {
     'GENERATE': 'primary',
     'ASSIGN': 'info',
@@ -385,10 +385,10 @@ const getTimelineType = (operation) => {
     'RETURN': 'danger',
     'SCRAP': 'danger'
   }
-  return types[operation] || 'info'
+  return (types as Record<string, any>)[operation] || 'info'
 }
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return ''
   return new Date(date).toLocaleString('zh-CN')
 }
@@ -396,7 +396,7 @@ const formatDate = (date) => {
 const loadData = async () => {
   try {
     loading.value = true
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -404,7 +404,7 @@ const loadData = async () => {
     const res = await getSerialNumbers(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败:', error)
   } finally {
     loading.value = false
@@ -420,7 +420,7 @@ const loadStats = async () => {
     stats.completed = res.by_status?.COMPLETED?.count || 0
     stats.delivered = res.by_status?.DELIVERED?.count || 0
     stats.installed = res.by_status?.INSTALLED?.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -429,7 +429,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -438,7 +438,7 @@ const loadItems = async () => {
   try {
     const res = await getItemList({ page_size: 1000 })
     items.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载物料失败:', error)
   }
 }
@@ -447,7 +447,7 @@ const loadSNRules = async () => {
   try {
     const res = await getSnRules({ is_active: true, page_size: 100 })
     snRules.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载规则失败:', error)
   }
 }
@@ -469,12 +469,12 @@ const handleQuickSearch = async () => {
     const res = await searchSerialNumbers({ q: quickSearch.value })
     tableData.value = res
     pagination.total = res.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('搜索失败:', error)
   }
 }
 
-const handleRowClick = (row) => {
+const handleRowClick = (row: any) => {
   handleTrace(row)
 }
 
@@ -495,22 +495,22 @@ const handleGenerate = async () => {
     generateDialogVisible.value = false
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     console.error('生成失败:', error)
   }
 }
 
-const handleTrace = async (row) => {
+const handleTrace = async (row: any) => {
   try {
     const res = await getSerialNumberFullTrace(row.id)
     traceData.value = res
     traceDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取追溯信息失败:', error)
   }
 }
 
-const handleAddTrace = (row) => {
+const handleAddTrace = (row: any) => {
   currentSN.value = row
   traceForm.operation = ''
   traceForm.description = ''
@@ -527,7 +527,7 @@ const handleSubmitTrace = async () => {
     ElMessage.success('记录添加成功')
     addTraceDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('添加失败:', error)
   }
 }

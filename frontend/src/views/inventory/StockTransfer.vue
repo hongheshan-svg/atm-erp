@@ -113,14 +113,14 @@ import { useBatchOperation } from '@/composables/useBatchOperation'
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/inventory/')
 
 
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const submitting = ref(false)
 const warehouses = ref<any[]>([])
 const fromStock = ref<any[]>([])
 const history = ref<any[]>([])
 const loadingHistory = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   from_warehouse: null,
   to_warehouse: null,
   transfer_date: new Date().toISOString().split('T')[0],
@@ -138,7 +138,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList({ page_size: 100 })
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -147,8 +147,8 @@ const loadFromStock = async () => {
   if (!form.from_warehouse) return
   try {
     const response = await getStocks({ warehouse: form.from_warehouse, page_size: 500 })
-    fromStock.value = (response.results || response || []).filter(s => (s.qty_available || 0) > 0)
-  } catch (error) {
+    fromStock.value = (response.results || response || []).filter((s: any) => (s.qty_available || 0) > 0)
+  } catch (error: any) {
     ElMessage.error('加载库存失败')
   }
 }
@@ -158,7 +158,7 @@ const loadHistory = async () => {
   try {
     const response = await getMoves({ move_type: 'TRANSFER', page_size: 50 })
     history.value = response.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载调拨历史失败:', error)
   } finally {
     loadingHistory.value = false
@@ -169,11 +169,11 @@ const addLine = () => {
   form.lines.push({ item: null, qty: 0, available_qty: 0, unit: '', notes: '' })
 }
 
-const removeLine = (index) => {
+const removeLine = (index: any) => {
   form.lines.splice(index, 1)
 }
 
-const handleItemChange = (index) => {
+const handleItemChange = (index: any) => {
   const line = form.lines[index]
   const stock = fromStock.value.find(s => s.item === line.item)
   if (stock) {
@@ -185,18 +185,18 @@ const handleItemChange = (index) => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
     if (form.lines.length === 0) return ElMessage.warning('请至少添加一项调拨明细')
-    if (form.lines.some(l => !l.item || l.qty <= 0)) return ElMessage.warning('请完善调拨明细')
-    
+    if (form.lines.some((l: any) => !l.item || l.qty <= 0)) return ElMessage.warning('请完善调拨明细')
+
     submitting.value = true
     try {
       await createTransfer(form)
       ElMessage.success('调拨成功')
       resetForm()
       loadHistory()
-    } catch (error) {
+    } catch (error: any) {
       // 后端库存不足等校验错误以可读消息返回（error/detail 字段）
       const msg = error?.response?.data?.error || error?.response?.data?.detail || '调拨失败'
       ElMessage.error(msg)
@@ -225,4 +225,3 @@ onMounted(() => {
 <style scoped>
 .stock-transfer { padding: 20px; }
 </style>
-

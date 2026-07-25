@@ -7,6 +7,3 @@ services:
   redis:
     ports:
       - "127.0.0.1:6380:6379"
-  elasticsearch:
-    ports:
-      - "127.0.0.1:9201:9200"

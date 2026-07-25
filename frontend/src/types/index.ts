@@ -30,8 +30,16 @@ export interface User {
   department?: Department
   roles: Role[]
   permissions: string[]
-  menus: string[]
+  menus: MenuItem[]
   data_scopes: Record<string, string>
+}
+
+export interface MenuItem {
+  code: string
+  name: string
+  route: string
+  icon?: string | null
+  children: MenuItem[]
 }
 
 export interface Role {

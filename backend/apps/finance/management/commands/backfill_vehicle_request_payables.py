@@ -28,6 +28,4 @@ class Command(BaseCommand):
                 register_payable(req, 'vehicle_request')
                 count += 1
 
-        self.stdout.write(
-            self.style.SUCCESS(f'✓ 回填 {count} 条已归还结算(RETURNED、行程费>0)的用车申请到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'✓ 回填 {count} 条已归还结算(RETURNED、行程费>0)的用车申请到台账'))

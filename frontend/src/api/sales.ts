@@ -533,7 +533,7 @@ export function getPreventiveMaintenanceItem(id: number) {
 // ========== 培训课程 = =========
 // ========== 培训计划 ==========
 // ========== 销售合同操作 ==========
-export function createContractFromSalesOrder(data) {
+export function createContractFromSalesOrder(data: any) {
   return request({ url: '/sales/contracts/create_from_so/', method: 'post', data })
 }
 // ========== 合同模板 ==========
@@ -612,6 +612,6 @@ export function getSalesRanking(params?: Record<string, any>) {
 }
 
 // ========== 报价版本 ==========
-export function createQuotationVersion(id: number, data: any) {
+export function createQuotationVersion(id: number, data: any = {}) {
   return request({ url: `/sales/quotations/${id}/create_version/`, method: 'post', data })
 }

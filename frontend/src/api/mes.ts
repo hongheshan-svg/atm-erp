@@ -48,7 +48,7 @@ export function getScheduleOrderList(params?: Record<string, any>) {
 export function createScheduleOrder(data: any) {
   return request({ url: '/production/schedule-orders/', method: 'post', data })
 }
-export function autoSchedule(data: any) {
+export function autoSchedule(data: any = {}) {
   return request({ url: '/production/schedule-orders/auto_schedule/', method: 'post', data })
 }
 export function startScheduleOrder(id: number) {
@@ -131,7 +131,7 @@ export function getActiveAlarms() {
 export function acknowledgeAlarm(id: number) {
   return request({ url: `/production/data-alarms/${id}/acknowledge/`, method: 'post' })
 }
-export function resolveAlarm(id: number, data: any) {
+export function resolveAlarm(id: number, data: any = {}) {
   return request({ url: `/production/data-alarms/${id}/resolve/`, method: 'post', data })
 }
 export function getAlarmStatistics(params?: Record<string, any>) {

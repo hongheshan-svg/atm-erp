@@ -13,7 +13,7 @@
 
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -23,13 +23,15 @@ from apps.masterdata.models import Item, Supplier
 from apps.purchase.outsource_models import OutsourceOrder, OutsourceOrderLine
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class OutsourceCancelReversesLedgerTest(TestCase):
     def setUp(self):
         self.supplier = Supplier.objects.create(code='OSAP1', name='外协商乙')
         self.item = Item.objects.create(sku='OSAP-ITEM1', name='外协测试物料')
         self.user = User.objects.create(
-            username='osapadmin', employee_id='OSAP1', is_staff=True, is_superuser=True,
+            username='osapadmin',
+            employee_id='OSAP1',
+            is_staff=True,
+            is_superuser=True,
         )
         self.client = APIClient()
         self.client.force_authenticate(self.user)
@@ -37,11 +39,16 @@ class OutsourceCancelReversesLedgerTest(TestCase):
     def _make_order(self):
         # tax_rate 默认 13%,line qty=10 * unit_price=45 => 加工费 450,含税 508.50。
         order = OutsourceOrder.objects.create(
-            supplier=self.supplier, required_date='2026-08-01', status='DRAFT',
+            supplier=self.supplier,
+            required_date='2026-08-01',
+            status='DRAFT',
         )
         OutsourceOrderLine.objects.create(
-            outsource_order=order, item=self.item, process_content='车削',
-            qty=Decimal('10'), unit_price=Decimal('45.00'),
+            outsource_order=order,
+            item=self.item,
+            process_content='车削',
+            qty=Decimal('10'),
+            unit_price=Decimal('45.00'),
         )
         return order
 

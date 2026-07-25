@@ -478,6 +478,7 @@ class PeriodCostSummarySerializer(serializers.ModelSerializer):
 
 class InventoryCostConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """库存成本配置管理"""
+
     permission_module = 'inventory'
     permission_resource = 'inventory_cost_config'
 
@@ -501,6 +502,7 @@ class InventoryCostConfigViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 class ItemCostRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """物料成本记录"""
+
     permission_module = 'inventory'
     permission_resource = 'item_cost_record'
 
@@ -551,6 +553,7 @@ class ItemCostRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
 class PeriodCostSummaryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """期间成本汇总"""
+
     permission_module = 'inventory'
     permission_resource = 'period_cost_summary'
 

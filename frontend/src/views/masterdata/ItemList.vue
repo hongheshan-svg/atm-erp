@@ -47,16 +47,16 @@
       <!-- 批量操作工具栏 - 仅管理员可见 -->
       <div class="table-toolbar" v-permission="'masterdata:item:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="loading"
         >
           批量删除
         </el-button>
       </div>
-      
+
       <el-table :data="items" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <!-- 仅管理员显示选择列 -->
         <el-table-column v-permission="'masterdata:item:delete'" v-if="canDelete" type="selection" width="55" fixed />
@@ -110,10 +110,10 @@
           <template #default="{ row }">
             <el-button size="small" v-permission="'masterdata:item:edit'" @click="handleEdit(row)">编辑</el-button>
             <!-- 仅管理员显示删除按钮 -->
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="loading"
             >
@@ -305,7 +305,7 @@
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="物料描述" />
         </el-form-item>
-        
+
         <!-- 附件上传 -->
         <el-form-item label="相关附件">
           <!-- 编辑时使用完整附件组件 -->
@@ -400,7 +400,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Upload, Download, Document, ArrowDown, Setting } from '@element-plus/icons-vue'
 import { getItemList, createItem, updateItem, exportItems, exportItemTemplate, importItems, generateItemCode } from '@/api/masterdata'
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
@@ -409,7 +409,7 @@ import { usePermission } from '@/composables/usePermission'
 import { batchUploadAttachments } from '@/api/core'
 
 // 权限检查
-const { canDelete, isAdmin } = usePermission()
+const { canDelete } = usePermission()
 
 // 批量删除功能
 const { selectedRows, loading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
@@ -423,36 +423,36 @@ const { selectedRows, loading, handleSelectionChange, batchDelete, deleteRow } =
   }
 )
 
-const attachmentRef = ref(null)
-const tempUploadRef = ref(null)
+const attachmentRef = ref<any>(null)
+const tempUploadRef = ref<any>(null)
 const tempFiles = ref<any[]>([])
 
 const items = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增物料')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 // 编码生成器
 const showCodeGenerator = ref(false)
 const generating = ref(false)
 const generatedCode = ref('')
-const codeGenForm = reactive({
+const codeGenForm = reactive<Record<string, any>>({
   level1: '1',  // 默认有图
   level2: ''
 })
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   search: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   sku: '',
   name: '',
@@ -493,7 +493,7 @@ const rules = {
 const loadItems = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -501,14 +501,14 @@ const loadItems = async () => {
     const response = await getItemList(params)
     items.value = response.results || response || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载物料失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleTempFileChange = (file, fileList) => {
+const handleTempFileChange = (file: any, fileList: any) => {
   // 检查文件大小
   if (file.size > 50 * 1024 * 1024) {
     ElMessage.warning(`文件 "${file.name}" 超过50MB限制`)
@@ -518,27 +518,27 @@ const handleTempFileChange = (file, fileList) => {
   tempFiles.value = fileList
 }
 
-const handleTempFileRemove = (file, fileList) => {
+const handleTempFileRemove = (file: any, fileList: any) => {
   tempFiles.value = fileList
 }
 
-const uploadTempFiles = async (itemId) => {
+const uploadTempFiles = async (itemId: any) => {
   if (!tempFiles.value.length) return
-  
+
   const formData = new FormData()
   formData.append('related_model', 'Item')
   formData.append('related_id', itemId)
   formData.append('category', 'OTHER')
-  
+
   for (const file of tempFiles.value) {
     formData.append('files', file.raw)
   }
-  
+
   try {
     await batchUploadAttachments(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('附件上传失败:', error)
     ElMessage.warning('物料已保存，但部分附件上传失败')
   }
@@ -582,7 +582,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑物料'
   isEdit.value = true
   Object.assign(form, row)
@@ -603,7 +603,7 @@ const handleExport = async () => {
     link.click()
     document.body.removeChild(link)
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }
@@ -620,7 +620,7 @@ const handleDownloadTemplate = async () => {
     link.click()
     document.body.removeChild(link)
     ElMessage.success('模板下载成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('模板下载失败')
   }
 }
@@ -631,13 +631,14 @@ const handleImport = () => {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.xlsx,.xls'
-  input.onchange = async (e) => {
-    const file = e.target.files[0]
+  input.onchange = async (e: Event) => {
+    const target = e.target as HTMLInputElement
+    const file = target.files?.[0]
     if (!file) return
-    
+
     const formData = new FormData()
     formData.append('file', file)
-    
+
     try {
       const res = await importItems(formData)
       const data = res
@@ -657,7 +658,7 @@ const handleImport = () => {
         ElMessage.warning(`有 ${data.errors.length} 行导入失败，请检查数据`)
       }
       loadItems()
-    } catch (error) {
+    } catch (error: any) {
       ElMessage.error('导入失败: ' + (error.response?.data?.error || '未知错误'))
     }
   }
@@ -679,7 +680,7 @@ const generateCode = async () => {
     })
     generatedCode.value = res.code
     ElMessage.success('编码生成成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('生成编码失败')
   } finally {
     generating.value = false
@@ -712,7 +713,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     tempFiles.value = []
     loadItems()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存物料失败')
   }
 }

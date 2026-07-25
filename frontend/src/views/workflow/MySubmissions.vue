@@ -5,9 +5,9 @@
         <div class="card-header">
           <span>我的提交</span>
           <div class="header-actions">
-            <el-button 
-              v-if="isAdmin && selectedWorkflows.length > 0" 
-              type="danger" 
+            <el-button
+              v-if="isAdmin && selectedWorkflows.length > 0"
+              type="danger"
               @click="handleBatchDelete"
               :loading="deleting"
             >
@@ -22,9 +22,9 @@
         </div>
       </template>
 
-      <el-table 
-        :data="workflows" 
-        v-loading="loading" 
+      <el-table
+        :data="workflows"
+        v-loading="loading"
         stripe
         @selection-change="handleSelectionChange"
       >
@@ -47,8 +47,8 @@
         </el-table-column>
         <el-table-column label="进度" width="150">
           <template #default="{ row }">
-            <el-progress 
-              :percentage="getProgress(row)" 
+            <el-progress
+              :percentage="getProgress(row)"
               :status="getProgressStatus(row.status)"
               :stroke-width="10"
             />
@@ -69,18 +69,18 @@
             <el-button type="info" size="small" @click="viewDetail(row)">
               详情
             </el-button>
-            <el-button 
+            <el-button
               v-if="row.status === 'PENDING'"
-              type="warning" 
-              size="small" 
+              type="warning"
+              size="small"
               @click="handleWithdraw(row)"
             >
               撤回
             </el-button>
-            <el-button 
-              v-if="isAdmin" 
-              type="danger" 
-              size="small" 
+            <el-button
+              v-if="isAdmin"
+              type="danger"
+              size="small"
               @click="handleDelete(row)"
               plain
             >
@@ -163,14 +163,14 @@ const deleting = ref(false)
 const workflows = ref<any[]>([])
 const selectedWorkflows = ref<any[]>([])
 const detailDialogVisible = ref(false)
-const currentWorkflow = ref(null)
+const currentWorkflow = ref<any>(null)
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'PENDING': 'warning',
     'APPROVED': 'success',
@@ -179,30 +179,30 @@ const getStatusType = (status) => {
     'WITHDRAWN': 'info',
     'SKIPPED': 'info',
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getProgress = (row) => {
+const getProgress = (row: any) => {
   if (row.status === 'APPROVED') return 100
   if (row.status === 'REJECTED' || row.status === 'WITHDRAWN') return 100
   if (!row.total_steps) return 0
   return Math.round((row.current_step - 1) / row.total_steps * 100)
 }
 
-const getProgressStatus = (status) => {
+const getProgressStatus = (status: any) => {
   if (status === 'APPROVED') return 'success'
   if (status === 'REJECTED') return 'exception'
   return null
 }
 
-const getTaskTimelineType = (status) => {
+const getTaskTimelineType = (status: any) => {
   const types = {
     'PENDING': 'warning',
     'APPROVED': 'success',
     'REJECTED': 'danger',
     'SKIPPED': 'info',
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadData = async () => {
@@ -210,7 +210,7 @@ const loadData = async () => {
   try {
     const res = await getMySubmittedWorkflows()
     workflows.value = res.results || res || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load workflows:', error)
     workflows.value = []
   } finally {
@@ -218,12 +218,12 @@ const loadData = async () => {
   }
 }
 
-const viewDetail = (row) => {
+const viewDetail = (row: any) => {
   currentWorkflow.value = row
   detailDialogVisible.value = true
 }
 
-const handleWithdraw = async (row) => {
+const handleWithdraw = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要撤回此审批吗？', '确认撤回', {
       type: 'warning'
@@ -231,18 +231,18 @@ const handleWithdraw = async (row) => {
     await withdrawWorkflow(row.id)
     ElMessage.success('已撤回')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '操作失败')
     }
   }
 }
 
-const handleSelectionChange = (selection) => {
+const handleSelectionChange = (selection: any) => {
   selectedWorkflows.value = selection
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此审批记录吗？删除后不可恢复', '确认删除', {
       type: 'warning'
@@ -251,7 +251,7 @@ const handleDelete = async (row) => {
     await deleteWorkflowInstance(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '删除失败')
     }
@@ -262,11 +262,11 @@ const handleDelete = async (row) => {
 
 const handleBatchDelete = async () => {
   if (selectedWorkflows.value.length === 0) return
-  
+
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedWorkflows.value.length} 条审批记录吗？删除后不可恢复`, 
-      '批量删除', 
+      `确定要删除选中的 ${selectedWorkflows.value.length} 条审批记录吗？删除后不可恢复`,
+      '批量删除',
       { type: 'warning' }
     )
     deleting.value = true
@@ -275,7 +275,7 @@ const handleBatchDelete = async () => {
     ElMessage.success(`成功删除 ${ids.length} 条记录`)
     selectedWorkflows.value = []
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '批量删除失败')
     }

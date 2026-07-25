@@ -287,7 +287,7 @@ class SalesPerformanceService:
                 {
                     'rank': i,
                     'user_id': item['created_by'],
-                    'name': f"{item['created_by__first_name'] or ''}{item['created_by__last_name'] or ''}".strip()
+                    'name': f'{item["created_by__first_name"] or ""}{item["created_by__last_name"] or ""}'.strip()
                     or '未知',
                     'order_count': item['order_count'],
                     'total_amount': float(item['total_amount'] or 0),
@@ -353,6 +353,7 @@ class SalesCommissionSerializer(serializers.ModelSerializer):
 
 class SalesTargetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售目标管理"""
+
     permission_module = 'sales'
     permission_resource = 'sales_target'
 
@@ -441,6 +442,7 @@ class SalesTargetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
 
 class SalesCommissionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售提成管理"""
+
     permission_module = 'sales'
     permission_resource = 'sales_commission'
 

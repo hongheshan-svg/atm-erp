@@ -82,46 +82,46 @@ class ProjectSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_sales_order_no(self, obj):
+    def get_sales_order_no(self, obj) -> str | None:
         return obj.sales_order.order_no if obj.sales_order else None
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
 
-    def get_actual_material_cost(self, obj):
+    def get_actual_material_cost(self, obj) -> int:
         # Will be calculated in reports service
         return 0
 
-    def get_actual_labor_cost(self, obj):
+    def get_actual_labor_cost(self, obj) -> float:
         return float(obj.get_actual_labor_cost())
 
-    def get_actual_expense_cost(self, obj):
+    def get_actual_expense_cost(self, obj) -> int:
         return 0
 
-    def get_total_actual_cost(self, obj):
+    def get_total_actual_cost(self, obj) -> float:
         return self.get_actual_material_cost(obj) + self.get_actual_labor_cost(obj) + self.get_actual_expense_cost(obj)
 
-    def get_actual_cost(self, obj):
+    def get_actual_cost(self, obj) -> float:
         """前端兼容字段"""
         return self.get_total_actual_cost(obj)
 
-    def get_material_cost(self, obj):
+    def get_material_cost(self, obj) -> float:
         """前端兼容字段"""
         return self.get_actual_material_cost(obj)
 
-    def get_labor_cost(self, obj):
+    def get_labor_cost(self, obj) -> float:
         """前端兼容字段"""
         return self.get_actual_labor_cost(obj)
 
-    def get_revenue(self, obj):
+    def get_revenue(self, obj) -> float:
         """获取收入（销售订单金额）"""
         if obj.sales_order:
             return float(obj.sales_order.total_with_tax or obj.sales_order.total_amount or 0)
         return 0
 
-    def get_profit(self, obj):
+    def get_profit(self, obj) -> float:
         """获取利润（收入-成本）"""
         return self.get_revenue(obj) - self.get_total_actual_cost(obj)
 
@@ -197,19 +197,19 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at', 'labor_cost', 'can_view_salary']
 
-    def get_user_department(self, obj):
+    def get_user_department(self, obj) -> str:
         """获取用户部门名称"""
         if obj.user and hasattr(obj.user, 'department') and obj.user.department:
             return obj.user.department.name
         return ''
 
-    def get_join_date(self, obj):
+    def get_join_date(self, obj) -> str:
         """获取加入日期"""
         if obj.created_at:
             return obj.created_at.strftime('%Y-%m-%d')
         return ''
 
-    def get_labor_cost(self, obj):
+    def get_labor_cost(self, obj) -> float | None:
         """
         获取人工成本（工时×时薪）
         需要有查看薪资权限才返回真实值，否则返回null
@@ -218,7 +218,7 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
             return float(obj.actual_hours * obj.hourly_rate)
         return None
 
-    def get_can_view_salary(self, obj):
+    def get_can_view_salary(self, obj) -> bool:
         """标记当前用户是否有查看薪资的权限"""
         return self._can_view_salary_info(obj)
 
@@ -304,7 +304,7 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at', 'actual_hours']  # actual_hours 设为只读
 
-    def get_time_log_count(self, obj):
+    def get_time_log_count(self, obj) -> int:
         """获取该任务的已审批工时记录数"""
         return obj.time_logs.filter(status='APPROVED', is_deleted=False).count()
 
@@ -507,13 +507,13 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             'total_cost',
         ]
 
-    def get_item_property_display(self, obj):
+    def get_item_property_display(self, obj) -> str:
         """获取物料属性显示值"""
         if obj.item_property:
             return obj.get_item_property_display()
         return f'[继承]{obj.item.get_item_property_display()}' if obj.item else ''
 
-    def get_version_brand_display(self, obj):
+    def get_version_brand_display(self, obj) -> str:
         """
         版本/品牌显示规则：
         - 如果BOM行填写了 version_brand，则优先展示（允许项目级覆盖）
@@ -527,13 +527,13 @@ class ProjectBOMSerializer(serializers.ModelSerializer):
             return f'{brand}/{model}'
         return brand or model or ''
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
-    def get_has_children(self, obj):
+    def get_has_children(self, obj) -> bool:
         return obj.children.filter(is_deleted=False).exists()
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list | None:
         """递归获取子BOM项（仅顶层请求时展开）"""
         request = self.context.get('request')
         expand = request.query_params.get('expand_children', 'false') if request else 'false'
@@ -577,7 +577,7 @@ class TimeLogSerializer(serializers.ModelSerializer):
             'task': {'required': False},
         }
 
-    def get_task_name(self, obj):
+    def get_task_name(self, obj) -> str | None:
         return obj.task.name if obj.task else None
 
     def create(self, validated_data):
@@ -631,7 +631,7 @@ class ECNItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_bom_item_name(self, obj):
+    def get_bom_item_name(self, obj) -> str | None:
         if obj.bom_item:
             return f'{obj.bom_item.item.sku} - {obj.bom_item.item.name}'
         return None
@@ -731,13 +731,13 @@ class ECNSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_approved_by_name(self, obj):
+    def get_approved_by_name(self, obj) -> str | None:
         return obj.approved_by.get_full_name() if obj.approved_by else None
 
-    def get_implemented_by_name(self, obj):
+    def get_implemented_by_name(self, obj) -> str | None:
         return obj.implemented_by.get_full_name() if obj.implemented_by else None
 
-    def get_items_count(self, obj):
+    def get_items_count(self, obj) -> int:
         return obj.items.count()
 
     def create(self, validated_data):
@@ -926,10 +926,10 @@ class AfterSalesOrderSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_service_count(self, obj):
+    def get_service_count(self, obj) -> int:
         return obj.service_records.count()
 
-    def get_total_work_hours(self, obj):
+    def get_total_work_hours(self, obj) -> int:
         from django.db.models import Sum
 
         result = obj.service_records.aggregate(total=Sum('work_hours'))
@@ -980,7 +980,7 @@ class AfterSalesOrderListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_service_count(self, obj):
+    def get_service_count(self, obj) -> int:
         return obj.service_records.count()
 
 
@@ -999,7 +999,7 @@ class DrawingSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
 
-    def get_file_url(self, obj):
+    def get_file_url(self, obj) -> str:
         if obj.file:
             try:
                 request = self.context.get('request')
@@ -1009,7 +1009,7 @@ class DrawingSerializer(serializers.ModelSerializer):
                 return ''
         return ''
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''

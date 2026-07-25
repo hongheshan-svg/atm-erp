@@ -42,9 +42,8 @@ def balance_sheet(period):
 
     period = _as_period(period)
 
-    balances = (
-        AccountBalance.objects.filter(fiscal_period=period, is_deleted=False)
-        .select_related('account', 'account__category')
+    balances = AccountBalance.objects.filter(fiscal_period=period, is_deleted=False).select_related(
+        'account', 'account__category'
     )
 
     assets, liabilities, equity = [], [], []
@@ -115,17 +114,14 @@ def income_statement(period=None, start_date=None, end_date=None):
     else:
         label = f'{start_date} ~ {end_date}'
 
-    lines = (
-        VoucherLine.objects.filter(
-            is_deleted=False,
-            voucher__is_deleted=False,
-            voucher__status='POSTED',
-            voucher__voucher_date__gte=start_date,
-            voucher__voucher_date__lte=end_date,
-            account__category__category_type='PROFIT_LOSS',
-        )
-        .select_related('account')
-    )
+    lines = VoucherLine.objects.filter(
+        is_deleted=False,
+        voucher__is_deleted=False,
+        voucher__status='POSTED',
+        voucher__voucher_date__gte=start_date,
+        voucher__voucher_date__lte=end_date,
+        account__category__category_type='PROFIT_LOSS',
+    ).select_related('account')
 
     revenue_items = {}
     expense_items = {}

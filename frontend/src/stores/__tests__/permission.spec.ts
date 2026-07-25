@@ -29,9 +29,14 @@ describe('usePermissionStore', () => {
   describe('setMenus', () => {
     it('stores menu list', () => {
       const store = usePermissionStore()
-      store.setMenus(['purchase', 'sales', 'inventory'])
+      const menus = [
+        { code: 'purchase', name: '采购', route: '/purchase', children: [] },
+        { code: 'sales', name: '销售', route: '/sales', children: [] },
+        { code: 'inventory', name: '库存', route: '/inventory', children: [] },
+      ]
+      store.setMenus(menus)
 
-      expect(store.menus).toEqual(['purchase', 'sales', 'inventory'])
+      expect(store.menus).toEqual(menus)
     })
   })
 
@@ -107,7 +112,7 @@ describe('usePermissionStore', () => {
     it('clears all state', () => {
       const store = usePermissionStore()
       store.setPermissions(['test'])
-      store.setMenus(['menu1'])
+      store.setMenus([{ code: 'menu1', name: '菜单', route: '/menu1', children: [] }])
       store.setDataScopes({ mod: 'all' })
 
       store.clear()

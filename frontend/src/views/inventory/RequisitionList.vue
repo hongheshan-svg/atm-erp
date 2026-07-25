@@ -122,7 +122,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item v-if="form.requisition_type === 'PROJECT'" label="选择项目" prop="project">
@@ -144,7 +144,7 @@
         </el-row>
 
         <el-divider>领料物料</el-divider>
-        
+
         <!-- 物料选择区域 -->
         <div class="material-section">
           <div class="material-source">
@@ -198,7 +198,7 @@
           <el-input v-model="form.notes" type="textarea" :rows="2" placeholder="备注信息" />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
@@ -242,7 +242,7 @@
         <el-descriptions-item label="出库时间">{{ currentItem.issue_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ currentItem.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider>物料明细</el-divider>
       <el-table :data="currentItem?.lines || []" border size="small">
         <el-table-column prop="item_sku" label="物料编码" width="120" />
@@ -302,13 +302,13 @@ const materialTab = ref('project')
 const selectedProjectItems = ref<any[]>([])
 const selectedStockItems = ref<any[]>([])
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   requisition_type: '',
   status: '',
   project: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -318,7 +318,7 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新建领料单')
 const isEdit = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   requisition_type: 'PROJECT',
   project: null,
@@ -334,16 +334,16 @@ const formRules = {
   warehouse: [{ required: true, message: '请选择出库仓库' }]
 }
 
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 const issueDialogVisible = ref(false)
 const issueLines = ref<any[]>([])
-const currentRequisitionId = ref(null)
+const currentRequisitionId = ref<any>(null)
 
 const viewDialogVisible = ref(false)
-const currentItem = ref(null)
+const currentItem = ref<any>(null)
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'SUBMITTED': 'warning',  // 待审批
@@ -356,13 +356,13 @@ const getStatusType = (status) => {
     'REJECTED': 'danger',    // 已拒绝
     'CANCELLED': 'info'      // 已取消
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -370,7 +370,7 @@ const loadList = async () => {
     const response = await getRequisitions(params)
     list.value = response.results || response || []
     pagination.total = response.count || list.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载领料单列表失败')
   } finally {
     loading.value = false
@@ -381,7 +381,7 @@ const loadProjects = async () => {
   try {
     const response = await getProjectList()
     projects.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -390,7 +390,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList()
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -399,7 +399,7 @@ const loadAftersalesOrders = async () => {
   try {
     const response = await getAfterSalesOrderList()
     aftersalesOrders.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载售后工单失败:', error)
   }
 }
@@ -411,13 +411,13 @@ const loadProjectItems = async () => {
   }
   try {
     const response = await getBOMList({ project: form.project })
-    projectItems.value = (response.results || response || []).map(item => ({
+    projectItems.value = (response.results || response || []).map((item: any) => ({
       item: item.item,
       item_sku: item.item_sku,
       item_name: item.item_name,
       qty: item.qty
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目BOM失败:', error)
   }
 }
@@ -428,18 +428,18 @@ const loadStockItems = async () => {
     return
   }
   try {
-    const params = { warehouse: form.warehouse }
+    const params: Record<string, any> = { warehouse: form.warehouse }
     if (stockSearch.value) {
       params.item_name = stockSearch.value
     }
     const response = await getStocks(params)
-    stockItems.value = (response.results || response || []).map(item => ({
+    stockItems.value = (response.results || response || []).map((item: any) => ({
       item: item.item,
       item_sku: item.item_sku,
       item_name: item.item_name,
       qty_available: item.qty_available
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载库存失败:', error)
   }
 }
@@ -452,18 +452,18 @@ const handleTypeChange = () => {
   materialTab.value = form.requisition_type === 'PROJECT' ? 'project' : 'stock'
 }
 
-const handleProjectItemSelect = (selection) => {
+const handleProjectItemSelect = (selection: any) => {
   selectedProjectItems.value = selection
 }
 
-const handleStockItemSelect = (selection) => {
+const handleStockItemSelect = (selection: any) => {
   selectedStockItems.value = selection
 }
 
 const addSelectedItems = () => {
   const items = materialTab.value === 'project' ? selectedProjectItems.value : selectedStockItems.value
   items.forEach(item => {
-    if (!form.lines.find(l => l.item === item.item)) {
+    if (!form.lines.find((l: any) => l.item === item.item)) {
       form.lines.push({
         item: item.item,
         item_sku: item.item_sku,
@@ -475,7 +475,7 @@ const addSelectedItems = () => {
   })
 }
 
-const removeLine = (index) => {
+const removeLine = (index: any) => {
   form.lines.splice(index, 1)
 }
 
@@ -503,10 +503,10 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑领料单'
   isEdit.value = true
-  
+
   try {
     const response = await getRequisition(row.id)
     Object.assign(form, {
@@ -517,7 +517,7 @@ const handleEdit = async (row) => {
       warehouse: response.warehouse,
       required_date: response.required_date,
       notes: response.notes,
-      lines: (response.lines || []).map(l => ({
+      lines: (response.lines || []).map((l: any) => ({
         id: l.id,
         item: l.item,
         item_sku: l.item_sku,
@@ -530,17 +530,17 @@ const handleEdit = async (row) => {
     if (form.project) loadProjectItems()
     if (form.warehouse) loadStockItems()
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载领料单详情失败')
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getRequisition(row.id)
     currentItem.value = response
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载领料单详情失败')
   }
 }
@@ -548,16 +548,16 @@ const handleView = async (row) => {
 const handleSave = async () => {
   try {
     await formRef.value.validate()
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     return
   }
-  
+
   if (form.lines.length === 0) {
     ElMessage.warning('请添加领料物料')
     return
   }
-  
+
   saving.value = true
   try {
     const data = {
@@ -567,13 +567,13 @@ const handleSave = async () => {
       warehouse: form.warehouse,
       required_date: form.required_date || null,
       notes: form.notes,
-      lines: form.lines.map(l => ({
+      lines: form.lines.map((l: any) => ({
         item: l.item,
         qty: l.qty,
         notes: l.notes
       }))
     }
-    
+
     if (isEdit.value) {
       await updateRequisition(form.id, data)
       ElMessage.success('更新成功')
@@ -581,80 +581,80 @@ const handleSave = async () => {
       await createRequisition(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存失败: ' + (error.response?.data?.detail || error.message))
   } finally {
     saving.value = false
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定提交该领料申请？提交后将进入审批流程。', '提交申请')
     await submitRequisition(row.id)
     ElMessage.success('申请已提交，等待审批')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败: ' + (error.response?.data?.error || error.message))
     }
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定批准该领料申请？批准后仓库将开始备料。', '批准申请')
     await approveRequisition(row.id)
     ElMessage.success('申请已批准，等待仓库备料')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
     }
   }
 }
 
-const handleReject = async (row) => {
+const handleReject = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定拒绝该领料申请？', '拒绝申请', { type: 'warning' })
     await rejectRequisition(row.id)
     ElMessage.success('申请已拒绝')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
     }
   }
 }
 
-const handlePrepare = async (row) => {
+const handlePrepare = async (row: any) => {
   try {
     await startPreparingRequisition(row.id)
     ElMessage.success('开始备料')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
   }
 }
 
-const handleReady = async (row) => {
+const handleReady = async (row: any) => {
   try {
     await readyRequisition(row.id)
     ElMessage.success('备料完成，等待出库')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
   }
 }
 
-const handleIssue = async (row) => {
+const handleIssue = async (row: any) => {
   try {
     const response = await getRequisition(row.id)
     currentRequisitionId.value = row.id
-    issueLines.value = (response.lines || []).filter(l => l.qty > l.issued_qty).map(l => ({
+    issueLines.value = (response.lines || []).filter((l: any) => l.qty > l.issued_qty).map((l: any) => ({
       id: l.id,
       item_name: l.item_name,
       item_sku: l.item_sku,
@@ -664,7 +664,7 @@ const handleIssue = async (row) => {
       issue_qty: l.qty - l.issued_qty
     }))
     issueDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载明细失败')
   }
 }
@@ -674,19 +674,19 @@ const confirmIssue = async () => {
     id: l.id,
     issued_qty: l.issue_qty
   }))
-  
+
   if (lines.length === 0) {
     ElMessage.warning('请填写出库数量')
     return
   }
-  
+
   issuing.value = true
   try {
     await issueRequisition(currentRequisitionId.value, { lines })
     ElMessage.success('出库成功')
     issueDialogVisible.value = false
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('出库失败: ' + (error.response?.data?.error || error.message))
   } finally {
     issuing.value = false
@@ -736,4 +736,3 @@ onMounted(() => {
   color: #999;
 }
 </style>
-

@@ -282,7 +282,7 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_dispatch_count(self, obj):
+    def get_dispatch_count(self, obj) -> int:
         return obj.dispatches.filter(is_deleted=False).count()
 
 

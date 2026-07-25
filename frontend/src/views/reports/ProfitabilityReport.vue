@@ -110,19 +110,19 @@ const projects = ref<any[]>([])
 const projectsLoaded = ref(false)
 const permissionStore = usePermissionStore()
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   project: null,
   status: ''
 })
 
-const formatCurrency = (value) => {
+const formatCurrency = (value: any) => {
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
     currency: 'CNY'
   }).format(value || 0)
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'DRAFT': '草稿',
     'PLANNING': '规划中',
@@ -138,10 +138,10 @@ const getStatusLabel = (status) => {
     'CANCELLED': '已取消',
     'ARCHIVED': '已归档'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PLANNING': 'info',
@@ -157,13 +157,13 @@ const getStatusType = (status) => {
     'CANCELLED': 'danger',
     'ARCHIVED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadReport = async () => {
   loading.value = true
   try {
-    const params = { ...searchForm }
+    const params: Record<string, any> = { ...searchForm }
     // 移除空值参数
     Object.keys(params).forEach(key => {
       if (params[key] === null || params[key] === '') {
@@ -173,7 +173,7 @@ const loadReport = async () => {
     const res = await getProfitabilityReport(params)
     // 后端可能返回数组或 {results: [...]}
     reportData.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载利润报表失败:', error)
     ElMessage.error('加载利润报表失败')
     reportData.value = []
@@ -192,7 +192,7 @@ const loadProjects = async () => {
     projects.value = response.results || response || []
     projectsLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载项目失败:', error)
     }
@@ -205,19 +205,19 @@ const exportExcel = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel: doExport, formatMoney }) => {
     const columns = [
       { field: 'code', title: '项目编号' },
       { field: 'name', title: '项目名称' },
-      { field: 'status', title: '状态', formatter: v => getStatusLabel(v) },
+      { field: 'status', title: '状态', formatter: (v: any) => getStatusLabel(v) },
       { field: 'revenue', title: '收入', formatter: formatMoney },
       { field: 'material_cost', title: '材料成本', formatter: formatMoney },
       { field: 'labor_cost', title: '人工成本', formatter: formatMoney },
       { field: 'expense_cost', title: '费用', formatter: formatMoney },
       { field: 'total_cost', title: '总成本', formatter: formatMoney },
       { field: 'profit', title: '利润', formatter: formatMoney },
-      { field: 'margin_percent', title: '利润率(%)', formatter: v => toFixedSafe(v) }
+      { field: 'margin_percent', title: '利润率(%)', formatter: (v: any) => toFixedSafe(v) }
     ]
     doExport(reportData.value, columns, '项目利润分析')
     ElMessage.success('导出成功')

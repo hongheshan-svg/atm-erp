@@ -34,11 +34,7 @@ SYSTEM_ADMIN_CODE = 'system'
 
 def _is_system_admin(user) -> bool:
     """True for Django superusers and holders of the top-level ``system`` grant."""
-    return bool(
-        user
-        and user.is_authenticated
-        and (user.is_superuser or user_has_permission(user, SYSTEM_ADMIN_CODE))
-    )
+    return bool(user and user.is_authenticated and (user.is_superuser or user_has_permission(user, SYSTEM_ADMIN_CODE)))
 
 
 class IsSystemAdmin(BasePermission):

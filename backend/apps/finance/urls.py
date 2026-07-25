@@ -23,13 +23,13 @@ from .asset import (
     FixedAssetViewSet,
 )
 from .bank_statement_views import BankStatementImportLogViewSet, BankStatementViewSet
-from .payable_views import PayableItemViewSet, PayableReconcileViewSet
 from .collection_views import (
     CollectionMilestoneViewSet,
     CollectionPlanViewSet,
     CollectionRecordViewSet,
     CollectionReminderViewSet,
 )
+from .payable_views import PayableItemViewSet, PayableReconcileViewSet
 from .reconciliation_views import (
     InvoiceReconciliationViewSet,
     PurchaseReconciliationViewSet,

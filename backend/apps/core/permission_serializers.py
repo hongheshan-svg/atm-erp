@@ -33,7 +33,7 @@ class PermissionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list:
         """递归获取子节点"""
         if hasattr(obj, '_children'):
             return PermissionSerializer(obj._children, many=True).data
@@ -49,7 +49,7 @@ class PermissionTreeSerializer(serializers.ModelSerializer):
         model = Permission
         fields = ['id', 'code', 'name', 'type', 'icon', 'sort_order', 'is_active', 'children']
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list:
         children = obj.children.filter(is_deleted=False).order_by('sort_order')
         return PermissionTreeSerializer(children, many=True).data
 

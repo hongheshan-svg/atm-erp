@@ -83,7 +83,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['opportunity_no', 'weighted_amount', 'actual_close_date']
 
-    def get_recent_activity(self, obj):
+    def get_recent_activity(self, obj) -> dict | None:
         activity = obj.activities.order_by('-activity_date').first()
         if activity:
             return {
@@ -93,14 +93,12 @@ class OpportunitySerializer(serializers.ModelSerializer):
             }
         return None
 
-    def get_days_in_stage(self, obj):
+    def get_days_in_stage(self, obj) -> int:
         from django.utils import timezone
 
         # 优先以"最近一次阶段变更活动"的时间计算停留天数，避免改备注/联系人等编辑导致清零；
         # 无阶段变更记录时回退到 created_at(自创建以来始终处于当前阶段)。
-        last_stage_change = (
-            obj.activities.filter(subject__startswith='阶段变更').order_by('-activity_date').first()
-        )
+        last_stage_change = obj.activities.filter(subject__startswith='阶段变更').order_by('-activity_date').first()
         anchor = last_stage_change.activity_date if last_stage_change else obj.created_at
         return (timezone.now() - anchor).days
 

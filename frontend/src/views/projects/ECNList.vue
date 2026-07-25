@@ -438,10 +438,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 // 数据
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'ECN'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -457,11 +457,11 @@ const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const approvalDialogVisible = ref(false)
 const isEdit = ref(false)
-const currentECN = ref(null)
-const formRef = ref(null)
+const currentECN = ref<any>(null)
+const formRef = ref<any>(null)
 
 // 搜索表单
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   project: null,
   change_type: '',
   status: '',
@@ -469,14 +469,14 @@ const searchForm = reactive({
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
 // 表单
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   project: null,
   title: '',
@@ -496,7 +496,7 @@ const approvalAction = ref('')
 const approvalComment = ref('')
 const implementationNotes = ref('')
 const approvalDialogTitle = ref('')
-const approvalECN = ref(null)
+const approvalECN = ref<any>(null)
 
 // 表单验证规则
 const rules = {
@@ -511,30 +511,30 @@ const rules = {
 
 // 计算属性
 const hasReplaceItem = computed(() => {
-  return form.items.some(item => item.change_type === 'REPLACE' || item.change_type === 'ADD')
+  return form.items.some((item: any) => item.change_type === 'REPLACE' || item.change_type === 'ADD')
 })
 
 // 加载ECN列表
 const loadECNList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
     // 过滤空值
     Object.keys(params).forEach(key => {
-      if (params[key] === '' || params[key] === null) {
-        delete params[key]
+      if ((params as Record<string, any>)[key] === '' || (params as Record<string, any>)[key] === null) {
+        delete (params as Record<string, any>)[key]
       }
     })
-    
+
     const response = await getECNList(params)
     const data = response.data || response
     ecnList.value = data.results || data
     pagination.total = data.count || ecnList.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载ECN列表失败:', error)
     ElMessage.error('加载ECN列表失败')
   } finally {
@@ -548,13 +548,13 @@ const loadProjects = async () => {
     const response = await getProjectList({ page_size: 1000 })
     const data = response.data || response
     projects.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
 
 // 加载当前项目的BOM行（供变更明细选择，确保提交 bom_item）
-const loadBomItems = async (projectId) => {
+const loadBomItems = async (projectId: any) => {
   if (!projectId) {
     bomItems.value = []
     return
@@ -563,14 +563,14 @@ const loadBomItems = async (projectId) => {
     const response = await getBOMList({ project: projectId, page_size: 1000 })
     const data = response.data || response
     bomItems.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载BOM失败:', error)
     bomItems.value = []
   }
 }
 
 // 选择BOM行后同步 item，便于后端反查与展示
-const onBomItemChange = (row) => {
+const onBomItemChange = (row: any) => {
   const bom = bomItems.value.find(b => b.id === row.bom_item)
   row.item = bom ? bom.item : null
 }
@@ -581,7 +581,7 @@ watch(() => form.project, (projectId) => {
 })
 
 // 搜索物料
-const searchItems = async (query) => {
+const searchItems = async (query: any) => {
   if (!query) {
     itemOptions.value = []
     return
@@ -590,7 +590,7 @@ const searchItems = async (query) => {
     const response = await getItemList({ search: query, page_size: 20 })
     const data = response.data || response
     itemOptions.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('搜索物料失败:', error)
   }
 }
@@ -628,7 +628,7 @@ const handleCreate = () => {
 }
 
 // 编辑ECN
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   isEdit.value = true
   try {
     const response = await getECN(row.id)
@@ -645,7 +645,7 @@ const handleEdit = async (row) => {
       impact_analysis: data.impact_analysis || '',
       cost_impact: data.cost_impact || 0,
       schedule_impact: data.schedule_impact || '',
-      items: data.items.map(item => ({
+      items: data.items.map((item: any) => ({
         change_type: item.change_type,
         bom_item: item.bom_item,
         item: item.item,
@@ -656,19 +656,19 @@ const handleEdit = async (row) => {
       }))
     })
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载ECN详情失败:', error)
     ElMessage.error('加载ECN详情失败')
   }
 }
 
 // 查看ECN
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getECN(row.id)
     currentECN.value = response.data || response
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载ECN详情失败:', error)
     ElMessage.error('加载ECN详情失败')
   }
@@ -688,12 +688,12 @@ const addItem = () => {
 }
 
 // 移除变更项
-const removeItem = (index) => {
+const removeItem = (index: any) => {
   form.items.splice(index, 1)
 }
 
 // 变更项类型变化
-const onItemChangeTypeChange = (row) => {
+const onItemChangeTypeChange = (row: any) => {
   if (row.change_type === 'ADD') {
     // 新增不依赖既有BOM行
     row.bom_item = null
@@ -710,10 +710,10 @@ const onItemChangeTypeChange = (row) => {
 // 保存ECN
 const handleSave = async () => {
   if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid) => {
+
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
-    
+
     saving.value = true
     try {
       const payload = {
@@ -727,14 +727,14 @@ const handleSave = async () => {
         impact_analysis: form.impact_analysis,
         cost_impact: form.cost_impact,
         schedule_impact: form.schedule_impact,
-        items: form.items.filter(item => {
+        items: form.items.filter((item: any) => {
           // 过滤无效的变更项；非新增类必须选中BOM行(bom_item)
           if (item.change_type === 'ADD') return item.new_item || item.item
           if (item.change_type === 'DELETE') return item.bom_item
           if (item.change_type === 'MODIFY') return item.bom_item
           if (item.change_type === 'REPLACE') return item.bom_item && item.new_item
           return false
-        }).map(item => ({
+        }).map((item: any) => ({
           change_type: item.change_type,
           // 非新增类提交 bom_item(ProjectBOM行id)，确保审批后能命中BOM
           bom_item: item.change_type === 'ADD' ? null : item.bom_item,
@@ -745,7 +745,7 @@ const handleSave = async () => {
           notes: item.notes
         }))
       }
-      
+
       if (isEdit.value) {
         await updateECN(form.id, payload)
         ElMessage.success('更新成功')
@@ -753,10 +753,10 @@ const handleSave = async () => {
         await createECN( payload)
         ElMessage.success('创建成功')
       }
-      
+
       dialogVisible.value = false
       loadECNList()
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存ECN失败:', error)
       ElMessage.error('保存ECN失败')
     } finally {
@@ -766,7 +766,7 @@ const handleSave = async () => {
 }
 
 // 提交审批
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交此ECN进行评审吗？', '提示', {
       confirmButtonText: '确定',
@@ -775,7 +775,7 @@ const handleSubmit = async (row) => {
     })
     const response = await submitECN(row.id)
     const data = response.data || response
-    
+
     if (data.workflow_instance_id) {
       ElMessage.success('已提交审批流程')
       // 询问是否查看审批进度
@@ -786,7 +786,7 @@ const handleSubmit = async (row) => {
           type: 'success'
         })
         router.push('/workflow/my-submissions')
-      } catch (error) {
+      } catch (error: any) {
     console.error(error)
         // 用户选择稍后查看
       }
@@ -794,7 +794,7 @@ const handleSubmit = async (row) => {
       ElMessage.success('提交成功')
     }
     loadECNList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('提交失败:', error)
       ElMessage.error('提交失败')
@@ -803,30 +803,12 @@ const handleSubmit = async (row) => {
 }
 
 // 查看审批进度
-const viewWorkflow = (row) => {
+const viewWorkflow = (row: any) => {
   showWorkflowProgress(row)
 }
 
-// 批准
-const handleApprove = (row) => {
-  approvalAction.value = 'approve'
-  approvalDialogTitle.value = '批准ECN'
-  approvalComment.value = ''
-  approvalECN.value = row
-  approvalDialogVisible.value = true
-}
-
-// 拒绝
-const handleReject = (row) => {
-  approvalAction.value = 'reject'
-  approvalDialogTitle.value = '拒绝ECN'
-  approvalComment.value = ''
-  approvalECN.value = row
-  approvalDialogVisible.value = true
-}
-
 // 开始实施
-const handleImplement = async (row) => {
+const handleImplement = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要开始实施此ECN吗？', '提示', {
       confirmButtonText: '确定',
@@ -836,7 +818,7 @@ const handleImplement = async (row) => {
     await startECNImplementation(row.id)
     ElMessage.success('已开始实施')
     loadECNList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('操作失败:', error)
       ElMessage.error('操作失败')
@@ -845,7 +827,7 @@ const handleImplement = async (row) => {
 }
 
 // 完成实施
-const handleComplete = (row) => {
+const handleComplete = (row: any) => {
   approvalAction.value = 'complete'
   approvalDialogTitle.value = '完成实施'
   approvalComment.value = ''
@@ -858,11 +840,11 @@ const handleComplete = (row) => {
 const confirmApproval = async () => {
   approving.value = true
   try {
-    const payload = { comment: approvalComment.value }
+    const payload: Record<string, any> = { comment: approvalComment.value }
     if (approvalAction.value === 'complete') {
       payload.implementation_notes = implementationNotes.value
     }
-    
+
     let url = ''
     switch (approvalAction.value) {
       case 'approve':
@@ -875,12 +857,12 @@ const confirmApproval = async () => {
         url = `/projects/ecn/${approvalECN.value.id}/complete/`
         break
     }
-    
+
     await request.post(url, payload)
     ElMessage.success('操作成功')
     approvalDialogVisible.value = false
     loadECNList()
-  } catch (error) {
+  } catch (error: any) {
     console.error('操作失败:', error)
     ElMessage.error('操作失败')
   } finally {
@@ -889,7 +871,7 @@ const confirmApproval = async () => {
 }
 
 // 标签类型
-const getStatusTagType = (status) => {
+const getStatusTagType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING': 'warning',
@@ -900,20 +882,20 @@ const getStatusTagType = (status) => {
     'COMPLETED': '',
     'CANCELLED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getPriorityTagType = (priority) => {
+const getPriorityTagType = (priority: any) => {
   const types = {
     'URGENT': 'danger',
     'HIGH': 'warning',
     'MEDIUM': '',
     'LOW': 'info'
   }
-  return types[priority] || 'info'
+  return (types as Record<string, any>)[priority] || 'info'
 }
 
-const getChangeTypeTagType = (type) => {
+const getChangeTypeTagType = (type: any) => {
   const types = {
     'DESIGN': 'primary',
     'PROCESS': 'success',
@@ -922,17 +904,17 @@ const getChangeTypeTagType = (type) => {
     'DRAWING': '',
     'OTHER': 'info'
   }
-  return types[type] || 'info'
+  return (types as Record<string, any>)[type] || 'info'
 }
 
-const getItemChangeTypeTagType = (type) => {
+const getItemChangeTypeTagType = (type: any) => {
   const types = {
     'ADD': 'success',
     'DELETE': 'danger',
     'MODIFY': 'warning',
     'REPLACE': 'primary'
   }
-  return types[type] || 'info'
+  return (types as Record<string, any>)[type] || 'info'
 }
 
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
@@ -959,4 +941,3 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 </style>
-

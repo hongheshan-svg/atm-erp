@@ -218,15 +218,15 @@ const searchKeyword = ref('')
 const articles = ref<any[]>([])
 const total = ref(0)
 const categoryTree = ref<any[]>([])
-const currentArticle = ref(null)
+const currentArticle = ref<any>(null)
 
-const statistics = reactive({
+const statistics = reactive<Record<string, any>>({
   total: 0,
   published: 0,
   draft: 0
 })
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   category: '',
   article_type: '',
@@ -235,8 +235,8 @@ const queryParams = reactive({
   page_size: 12
 })
 
-const formRef = ref(null)
-const formData = reactive({
+const formRef = ref<any>(null)
+const formData = reactive<Record<string, any>>({
   id: null,
   title: '',
   category: null,
@@ -252,8 +252,8 @@ const formRules = {
 }
 
 const flatCategories = computed(() => {
-  const flatten = (items, result = []) => {
-    items.forEach(item => {
+  const flatten = (items: any, result: any[] = []) => {
+    items.forEach((item: any) => {
       result.push(item)
       if (item.children?.length) {
         flatten(item.children, result)
@@ -264,7 +264,7 @@ const flatCategories = computed(() => {
   return flatten(categoryTree.value || [])
 })
 
-const getTypeTagType = (type) => {
+const getTypeTagType = (type: any) => {
   const map = {
     SOLUTION: 'success',
     STANDARD: '',
@@ -273,15 +273,15 @@ const getTypeTagType = (type) => {
     CASE: '',
     LESSON: 'danger'
   }
-  return map[type] || 'info'
+  return (map as Record<string, any>)[type] || 'info'
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleDateString('zh-CN')
 }
 
-const formatContent = (content) => {
+const formatContent = (content: any) => {
   if (!content) return ''
   // 简单处理Markdown格式
   return content
@@ -296,7 +296,7 @@ const fetchData = async () => {
     const res = await getKnowledgeArticleList(queryParams)
     articles.value = res.results || res || []
     total.value = res.count || articles.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -307,7 +307,7 @@ const fetchCategories = async () => {
   try {
     const res = await getKnowledgeCategoryTree()
     categoryTree.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取分类失败', error)
   }
 }
@@ -316,7 +316,7 @@ const fetchStatistics = async () => {
   try {
     const res = await getKnowledgeArticleStatistics()
     Object.assign(statistics, res)
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -327,7 +327,7 @@ const handleSearch = async () => {
       const res = await searchKnowledgeArticles(searchKeyword.value)
       articles.value = res
       total.value = articles.value.length
-    } catch (error) {
+    } catch (error: any) {
       console.error('搜索失败', error)
     }
   } else {
@@ -340,7 +340,7 @@ const handleFilter = () => {
   fetchData()
 }
 
-const handleCategoryClick = (data) => {
+const handleCategoryClick = (data: any) => {
   queryParams.category = data.id
   queryParams.page = 1
   fetchData()
@@ -360,19 +360,19 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (article) => {
+const handleEdit = (article: any) => {
   dialogTitle.value = '编辑文章'
   Object.assign(formData, article)
   dialogVisible.value = true
   detailVisible.value = false
 }
 
-const handleView = async (article) => {
+const handleView = async (article: any) => {
   try {
     const res = await getKnowledgeArticle(article.id)
     currentArticle.value = res
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取详情失败')
   }
 }
@@ -394,7 +394,7 @@ const handleSaveDraft = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存失败')
   } finally {
     submitting.value = false
@@ -418,7 +418,7 @@ const handlePublish = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('发布失败')
   } finally {
     submitting.value = false
@@ -432,7 +432,7 @@ const handleLike = async () => {
     const res = await likeKnowledgeArticle(currentArticle.value.id)
     currentArticle.value.like_count = res.like_count
     ElMessage.success('点赞成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('点赞失败')
   } finally {
     liking.value = false
@@ -468,7 +468,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  
+
   .article-count {
     color: #909399;
     font-size: 12px;
@@ -484,16 +484,16 @@ onMounted(() => {
   align-items: center;
   gap: 24px;
   justify-content: flex-end;
-  
+
   .stat-item {
     text-align: center;
-    
+
     .stat-value {
       font-size: 24px;
       font-weight: 600;
       color: #303133;
     }
-    
+
     .stat-label {
       font-size: 12px;
       color: #909399;
@@ -520,7 +520,7 @@ onMounted(() => {
 .article-card {
   cursor: pointer;
   transition: all 0.2s;
-  
+
   &:hover {
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     transform: translateY(-2px);
@@ -532,7 +532,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-  
+
   .article-date {
     font-size: 12px;
     color: #909399;
@@ -561,18 +561,18 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  
+
   .tags {
     display: flex;
     gap: 4px;
   }
-  
+
   .meta {
     display: flex;
     gap: 12px;
     font-size: 12px;
     color: #909399;
-    
+
     span {
       display: flex;
       align-items: center;
@@ -602,7 +602,7 @@ onMounted(() => {
   gap: 20px;
   font-size: 14px;
   color: #909399;
-  
+
   span {
     display: flex;
     align-items: center;

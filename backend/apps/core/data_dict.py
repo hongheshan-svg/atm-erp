@@ -95,7 +95,7 @@ class DictTypeSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_items_count(self, obj):
+    def get_items_count(self, obj) -> int:
         return obj.items.filter(is_deleted=False, is_enabled=True).count()
 
 
@@ -108,7 +108,7 @@ class DictTypeListSerializer(serializers.ModelSerializer):
         model = DictType
         fields = ['id', 'code', 'name', 'description', 'is_system', 'sort_order', 'items_count']
 
-    def get_items_count(self, obj):
+    def get_items_count(self, obj) -> int:
         return obj.items.filter(is_deleted=False, is_enabled=True).count()
 
 

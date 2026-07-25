@@ -25,7 +25,7 @@
             <el-button type="warning" @click="handleBatchPdfUpload">
               <el-icon><Files /></el-icon> 批量导入PDF
             </el-button>
-            <input 
+            <input
               ref="pdfInputRef"
               type="file"
               accept=".pdf"
@@ -79,10 +79,10 @@
               批量删除 ({{ selectedInvoices.length }})
             </el-button>
           </div>
-          
+
           <el-table :data="invoices" v-loading="loading" border stripe style="width: 100%;" @selection-change="handleSelectionChange">
             <el-table-column type="selection" width="45" />
-            <el-table-column type="index" label="序号" width="55" align="center" :index="(index) => (pagination.page - 1) * pagination.pageSize + index + 1" />
+            <el-table-column type="index" label="序号" width="55" align="center" :index="(index: any) => (pagination.page - 1) * pagination.pageSize + index + 1" />
             <el-table-column prop="digital_invoice_no" label="数电发票号码" width="200" show-overflow-tooltip>
               <template #default="{ row }">
                 {{ row.digital_invoice_no || row.invoice_no }}
@@ -190,7 +190,7 @@
               <el-icon><Plus /></el-icon> 新建对账单
             </el-button>
           </div>
-          
+
           <el-table :data="reconciliationList" v-loading="reconciliationLoading" stripe border style="margin-top: 15px;">
             <el-table-column prop="reconciliation_no" label="对账单号" width="150" />
             <el-table-column prop="invoice_type_display" label="类型" width="100" />
@@ -297,7 +297,7 @@
         <el-descriptions-item label="创建人">{{ currentInvoice.created_by_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ currentInvoice.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <!-- 发票明细 -->
       <div v-if="currentInvoice.items && currentInvoice.items.length > 0" style="margin-top: 20px;">
         <el-divider content-position="left">
@@ -329,7 +329,7 @@
           </el-table-column>
         </el-table>
       </div>
-      
+
       <!-- 附件列表 -->
       <div v-if="invoiceAttachments.length > 0" style="margin-top: 20px;">
         <el-divider content-position="left">
@@ -349,7 +349,7 @@
           </el-table-column>
         </el-table>
       </div>
-      
+
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
       </template>
@@ -390,7 +390,7 @@
           <el-tag :type="getReconciliationStatusType(currentReconciliation.status)">{{ currentReconciliation.status_display }}</el-tag>
         </el-descriptions-item>
       </el-descriptions>
-      
+
       <el-descriptions :column="4" border v-if="currentReconciliation" style="margin-top: 15px;">
         <el-descriptions-item label="发票数量">{{ currentReconciliation.total_invoice_count }}</el-descriptions-item>
         <el-descriptions-item label="发票金额">
@@ -405,9 +405,9 @@
           </span>
         </el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider>发票明细</el-divider>
-      
+
         <el-table :data="currentReconciliation?.lines || []" border size="small" max-height="400">
         <el-table-column prop="invoice_date" label="日期" width="100" />
         <el-table-column prop="invoice_no" label="发票号" width="140" />
@@ -462,7 +462,7 @@
           <span :class="pdfImportResult.unmatched > 0 ? 'text-warning' : ''">{{ pdfImportResult.unmatched }} 个</span>
         </el-descriptions-item>
       </el-descriptions>
-      
+
       <div v-if="pdfImportResult?.matched_files?.length > 0" style="margin-top: 15px;">
         <el-divider content-position="left">匹配成功的文件</el-divider>
         <el-table :data="pdfImportResult.matched_files" size="small" max-height="200">
@@ -470,7 +470,7 @@
           <el-table-column prop="invoice_no" label="发票号码" width="200" />
         </el-table>
       </div>
-      
+
       <div v-if="pdfImportResult?.unmatched_files?.length > 0" style="margin-top: 15px;">
         <el-divider content-position="left">未匹配的文件</el-divider>
         <el-table :data="pdfImportResult.unmatched_files" size="small" max-height="200">
@@ -478,7 +478,7 @@
           <el-table-column prop="reason" label="原因" width="250" />
         </el-table>
       </div>
-      
+
       <template #footer>
         <el-button type="primary" @click="pdfImportResultVisible = false">确定</el-button>
       </template>
@@ -490,7 +490,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download, Document, Files, Link } from '@element-plus/icons-vue'
-import { getInvoices, getInvoice, createInvoice, updateInvoice, deleteInvoice, certifyInvoice, autoMatchInvoices, matchInvoiceOrder, getInvoiceAttachments, bulkDeleteInvoices, downloadInvoiceTemplate, exportInvoices, getInvoiceReconciliations, getInvoiceReconciliation, createInvoiceReconciliation, generateInvoiceReconciliationLines, confirmInvoiceReconciliation } from '@/api/finance'
+import { getInvoices, getInvoice, createInvoice, updateInvoice, deleteInvoice, autoMatchInvoices, matchInvoiceOrder, getInvoiceAttachments, bulkDeleteInvoices, downloadInvoiceTemplate, exportInvoices, getInvoiceReconciliations, getInvoiceReconciliation, createInvoiceReconciliation, generateInvoiceReconciliationLines, confirmInvoiceReconciliation } from '@/api/finance'
 import { deleteAttachment, downloadAttachment } from '@/api/core'
 import request from '@/utils/request'
 
@@ -511,48 +511,44 @@ const reconciliationDetailVisible = ref(false)
 
 const dialogTitle = ref('')
 const reconciliationDetailTitle = ref('')
-const formRef = ref(null)
-const reconciliationFormRef = ref(null)
+const formRef = ref<any>(null)
+const reconciliationFormRef = ref<any>(null)
 
 const currentInvoice = ref<Record<string, any>>({})
-const currentReconciliation = ref(null)
+const currentReconciliation = ref<any>(null)
 const invoiceAttachments = ref<any[]>([])
 const isEdit = ref(false)
-const currentId = ref(null)
-const uploadRef = ref(null)
-const pdfInputRef = ref(null)
+const currentId = ref<any>(null)
+const uploadRef = ref<any>(null)
+const pdfInputRef = ref<any>(null)
 const importResultVisible = ref(false)
-const importResult = ref(null)
+const importResult = ref<any>(null)
 const pdfImportResultVisible = ref(false)
-const pdfImportResult = ref(null)
+const pdfImportResult = ref<any>(null)
 
 // Upload configuration
 const uploadUrl = computed(() => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
   return `${baseUrl}/finance/invoices/import_excel/`
 })
-const pdfUploadUrl = computed(() => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
-  return `${baseUrl}/finance/invoices/import_pdf/`
-})
 const uploadHeaders = computed(() => {
   const token = localStorage.getItem('access_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 })
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   invoice_type: null,
   invoice_no: '',
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   invoice_type: 'INPUT',
   invoice_no: '',
   invoice_date: new Date().toISOString().split('T')[0],
@@ -564,7 +560,7 @@ const formData = reactive({
   notes: ''
 })
 
-const reconciliationForm = reactive({
+const reconciliationForm = reactive<Record<string, any>>({
   invoice_type: 'INPUT',
   period_start: '',
   period_end: '',
@@ -586,47 +582,22 @@ const reconciliationRules = {
   period_end: [{ required: true, message: '请选择结束日期' }]
 }
 
-const formatNumber = (num) => parseFloat(num || 0).toFixed(2)
-const formatDate = (dateStr) => {
+const formatNumber = (num: any) => parseFloat(num || 0).toFixed(2)
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '-'
   const d = new Date(dateStr)
   return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-const getInvoiceStatusType = (s) => ({ 'REGISTERED': 'info', 'CERTIFIED': 'success', 'VOID': 'danger', 'NORMAL': 'success', 'RED': 'warning' }[s] || 'info')
-const getInvoiceStatusLabel = (s) => ({ 'REGISTERED': '已登记', 'CERTIFIED': '已认证', 'VOID': '已作废', 'NORMAL': '正常', 'RED': '红冲' }[s] || s)
+const getInvoiceStatusType = (s: any) => (({ 'REGISTERED': 'info', 'CERTIFIED': 'success', 'VOID': 'danger', 'NORMAL': 'success', 'RED': 'warning' } as Record<string, any>)[s] || 'info')
+const getInvoiceStatusLabel = (s: any) => (({ 'REGISTERED': '已登记', 'CERTIFIED': '已认证', 'VOID': '已作废', 'NORMAL': '正常', 'RED': '红冲' } as Record<string, any>)[s] || s)
 
-const getInvoiceProgress = (row) => {
-  // 进项发票：未认证=50%，已认证=100%，已作废=0%
-  // 销项发票：已登记=100%，已作废=0%
-  if (row.status === 'VOID') return 0
-  if (row.invoice_type === 'INPUT') {
-    return row.status === 'CERTIFIED' ? 100 : 50
-  }
-  return 100 // 销项发票登记即完成
-}
-
-const getInvoiceProgressColor = (row) => {
-  if (row.status === 'VOID') return '#909399'
-  if (row.status === 'CERTIFIED') return '#67c23a'
-  if (row.invoice_type === 'INPUT' && row.status === 'REGISTERED') return '#e6a23c'
-  return '#67c23a'
-}
-
-const getInvoiceProgressLabel = (row) => {
-  if (row.status === 'VOID') return '作废'
-  if (row.invoice_type === 'INPUT') {
-    return row.status === 'CERTIFIED' ? '已认证' : '待认证'
-  }
-  return '完成'
-}
-
-const getReconciliationStatusType = (status) => {
+const getReconciliationStatusType = (status: any) => {
   const types = { DRAFT: 'info', MATCHED: 'success', PARTIAL: 'warning', UNMATCHED: 'danger', CONFIRMED: 'success' }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const handleTabChange = (tab) => {
+const handleTabChange = (tab: any) => {
   if (tab === 'invoices') loadInvoices()
   else if (tab === 'reconciliation') loadReconciliationList()
 }
@@ -634,12 +605,12 @@ const handleTabChange = (tab) => {
 const loadInvoices = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
-    Object.keys(params).forEach(k => { if (params[k] === '' || params[k] === null) delete params[k] })
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === '' || (params as Record<string, any>)[k] === null) delete (params as Record<string, any>)[k] })
     const response = await getInvoices(params)
     invoices.value = response.results || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载发票失败')
   } finally {
     loading.value = false
@@ -653,7 +624,7 @@ const loadReconciliationList = async () => {
       invoice_type: invoiceType.value
     })
     reconciliationList.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载发票对账单失败')
   } finally {
     reconciliationLoading.value = false
@@ -668,7 +639,7 @@ const resetSearch = () => {
   loadInvoices()
 }
 
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadInvoices()
@@ -688,35 +659,35 @@ const handleAutoMatch = async () => {
       confirmButtonText: '开始匹配',
       cancelButtonText: '取消'
     })
-    
+
     const response = await autoMatchInvoices()
     ElMessage.success(response.message || `成功匹配 ${response.matched_count} 张发票`)
     loadInvoices()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('自动匹配失败')
     }
   }
 }
 
-const handleMatchOrder = async (row) => {
+const handleMatchOrder = async (row: any) => {
   // 根据发票类型显示不同的匹配对话框
   const orderType = row.invoice_type === 'OUTPUT' ? '销售订单' : '采购订单'
   const orderApiPath = row.invoice_type === 'OUTPUT' ? '/sales/orders/' : '/purchase/orders/'
-  
+
   try {
     // 获取订单列表
     const response = await request.get(orderApiPath, { params: { page_size: 100, status: 'CONFIRMED' } })
     const orders = response.results || response || []
-    
+
     if (orders.length === 0) {
       ElMessage.warning(`没有可匹配的${orderType}`)
       return
     }
-    
+
     // 让用户选择订单
     const { value: selectedOrderId } = await ElMessageBox.prompt(
-      `请输入要匹配的${orderType}号（可用订单: ${orders.slice(0, 5).map(o => o.order_no).join(', ')}${orders.length > 5 ? '...' : ''}）`,
+      `请输入要匹配的${orderType}号（可用订单: ${orders.slice(0, 5).map((o: any) => o.order_no).join(', ')}${orders.length > 5 ? '...' : ''}）`,
       `匹配${orderType}`,
       {
         inputPlaceholder: `输入${orderType}号`,
@@ -724,60 +695,60 @@ const handleMatchOrder = async (row) => {
         cancelButtonText: '取消'
       }
     )
-    
+
     if (!selectedOrderId) {
       ElMessage.warning('请输入订单号')
       return
     }
-    
+
     // 查找订单
-    const matchedOrder = orders.find(o => o.order_no === selectedOrderId.trim())
+    const matchedOrder = orders.find((o: any) => o.order_no === selectedOrderId.trim())
     if (!matchedOrder) {
       ElMessage.error(`未找到${orderType}: ${selectedOrderId}`)
       return
     }
-    
+
     // 调用匹配接口
     await matchInvoiceOrder(row.id, {
       order_type: row.invoice_type === 'OUTPUT' ? 'SALES_ORDER' : 'PURCHASE_ORDER',
       order_id: matchedOrder.id
     })
-    
+
     ElMessage.success(`成功匹配到${orderType}: ${matchedOrder.order_no}`)
     loadInvoices()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '匹配失败')
     }
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getInvoice(row.id)
     currentInvoice.value = response
-    
+
     // 加载附件
     try {
       const attachments = await getInvoiceAttachments(row.id)
       invoiceAttachments.value = attachments
-    } catch (error) {
+    } catch (error: any) {
     console.error(error)
       invoiceAttachments.value = []
     }
-    
+
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载发票详情失败')
   }
 }
 
-const handleDownloadAttachment = async (attachment) => {
+const handleDownloadAttachment = async (attachment: any) => {
   try {
     const response = await downloadAttachment(attachment.id, {
       responseType: 'blob'
     })
-    
+
     // response 是完整的 axios 响应对象，数据在 response.data 中
     const blob = response.data
     const url = window.URL.createObjectURL(blob)
@@ -788,13 +759,13 @@ const handleDownloadAttachment = async (attachment) => {
     link.click()
     link.remove()
     window.URL.revokeObjectURL(url)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Download error:', error)
     ElMessage.error('下载失败')
   }
 }
 
-const handleDeleteAttachment = async (attachment) => {
+const handleDeleteAttachment = async (attachment: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此附件吗？', '提示', { type: 'warning' })
     await deleteAttachment(attachment.id)
@@ -804,14 +775,14 @@ const handleDeleteAttachment = async (attachment) => {
     invoiceAttachments.value = attachments
     // 刷新发票列表以更新附件数量
     loadInvoices()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
   }
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   currentId.value = row.id
   dialogTitle.value = '编辑发票'
@@ -829,20 +800,9 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleCertify = async (row) => {
-  try {
-    await ElMessageBox.confirm('确定要认证此发票吗？', '提示', { type: 'warning' })
-    await certifyInvoice(row.id)
-    ElMessage.success('发票认证成功')
-    loadInvoices()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error('发票认证失败')
-  }
-}
-
 const handleSubmit = async () => {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
     try {
       const payload = {
@@ -858,7 +818,7 @@ const handleSubmit = async () => {
       }
       dialogVisible.value = false
       loadInvoices()
-    } catch (error) {
+    } catch (error: any) {
       ElMessage.error(isEdit.value ? '更新失败' : '登记失败')
     }
   })
@@ -880,18 +840,18 @@ const resetForm = () => {
   if (formRef.value) formRef.value.clearValidate()
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除发票 ${row.invoice_no} 吗？此操作不可恢复！`, '删除发票', { type: 'warning' })
     await deleteInvoice(row.id)
     ElMessage.success('发票已删除')
     loadInvoices()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除发票失败')
   }
 }
 
-const handleSelectionChange = (selection) => {
+const handleSelectionChange = (selection: any) => {
   selectedInvoices.value = selection
 }
 
@@ -900,21 +860,21 @@ const handleBatchDelete = async () => {
     ElMessage.warning('请先选择要删除的发票')
     return
   }
-  
+
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedInvoices.value.length} 条发票吗？此操作不可恢复！`, 
-      '批量删除', 
+      `确定要删除选中的 ${selectedInvoices.value.length} 条发票吗？此操作不可恢复！`,
+      '批量删除',
       { type: 'warning' }
     )
-    
+
     const ids = selectedInvoices.value.map(item => item.id)
     const response = await bulkDeleteInvoices({ ids })
-    
+
     ElMessage.success(`成功删除 ${response.deleted_count} 条发票`)
     selectedInvoices.value = []
     loadInvoices()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('批量删除失败')
   }
 }
@@ -933,48 +893,48 @@ const saveReconciliation = async () => {
     ElMessage.success('创建成功')
     reconciliationDialogVisible.value = false
     loadReconciliationList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('保存失败')
   } finally {
     saving.value = false
   }
 }
 
-const handleViewReconciliation = async (row) => {
+const handleViewReconciliation = async (row: any) => {
   try {
     const res = await getInvoiceReconciliation(row.id)
     currentReconciliation.value = res
     reconciliationDetailTitle.value = `发票对账单 - ${row.reconciliation_no}`
     reconciliationDetailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleGenerateReconciliation = async (row) => {
+const handleGenerateReconciliation = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要生成发票对账明细吗？', '确认')
     await generateInvoiceReconciliationLines(row.id)
     ElMessage.success('生成成功')
     loadReconciliationList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('生成失败: ' + (error.response?.data?.error || error.message))
   }
 }
 
-const handleConfirmReconciliation = async (row) => {
+const handleConfirmReconciliation = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要确认该对账单吗？', '确认')
     await confirmInvoiceReconciliation(row.id)
     ElMessage.success('确认成功')
     loadReconciliationList()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('确认失败')
   }
 }
 
 // 导入导出功能
-const beforeUpload = (file) => {
+const beforeUpload = (file: any) => {
   const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
   if (!isExcel) {
     ElMessage.error('只支持Excel文件格式(.xlsx, .xls)')
@@ -983,7 +943,7 @@ const beforeUpload = (file) => {
   return true
 }
 
-const handleUploadSuccess = (response) => {
+const handleUploadSuccess = (response: any) => {
   importResult.value = response
   importResultVisible.value = true
   const itemInfo = response.item_count ? `，明细 ${response.item_count} 条` : ''
@@ -991,7 +951,7 @@ const handleUploadSuccess = (response) => {
   loadInvoices()
 }
 
-const handleUploadError = (error) => {
+const handleUploadError = (error: any) => {
   console.error('Upload error:', error)
   ElMessage.error('导入失败，请检查文件格式')
 }
@@ -1001,10 +961,10 @@ const handleBatchPdfUpload = () => {
   pdfInputRef.value?.click()
 }
 
-const handlePdfFilesSelected = async (event) => {
+const handlePdfFilesSelected = async (event: any) => {
   const files = event.target.files
   if (!files || files.length === 0) return
-  
+
   // 验证文件
   const validFiles = []
   for (let i = 0; i < files.length; i++) {
@@ -1019,25 +979,25 @@ const handlePdfFilesSelected = async (event) => {
     }
     validFiles.push(file)
   }
-  
+
   if (validFiles.length === 0) {
     ElMessage.error('没有有效的PDF文件')
     event.target.value = ''
     return
   }
-  
+
   // 创建 FormData 并添加所有文件
   const formData = new FormData()
   validFiles.forEach(file => {
     formData.append('files', file)
   })
-  
+
   try {
     ElMessage.info(`正在上传 ${validFiles.length} 个PDF文件...`)
-    
+
     const token = localStorage.getItem('access_token')
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
-    
+
     const response = await fetch(`${baseUrl}/finance/invoices/import_pdf/`, {
       method: 'POST',
       headers: {
@@ -1045,27 +1005,27 @@ const handlePdfFilesSelected = async (event) => {
       },
       body: formData
     })
-    
+
     if (!response.ok) {
       const errorData = await response.json()
       throw new Error(errorData.error || 'Upload failed')
     }
-    
+
     const result = await response.json()
     pdfImportResult.value = result
     pdfImportResultVisible.value = true
-    
+
     if (result.matched > 0) {
       ElMessage.success(`PDF导入完成：成功匹配 ${result.matched} 个文件`)
       loadInvoices()
     } else {
       ElMessage.warning('未匹配到任何发票，请检查文件名是否包含正确的数电发票号码')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('PDF Upload error:', error)
     ElMessage.error(`PDF导入失败: ${error.message}`)
   }
-  
+
   // 清空文件输入
   event.target.value = ''
 }
@@ -1075,19 +1035,19 @@ const downloadTemplate = async () => {
     const response = await downloadInvoiceTemplate({
       responseType: 'blob'
     })
-    
+
     if (!response || !response.data) {
       ElMessage.error('下载失败：没有收到响应数据')
       return
     }
-    
+
     const contentDisposition = response.headers?.['content-disposition'] || ''
     let filename = '发票导入模板.xlsx'
     const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
     if (filenameMatch && filenameMatch[1]) {
       filename = filenameMatch[1].replace(/['"]/g, '')
     }
-    
+
     const blob = response.data
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -1096,14 +1056,14 @@ const downloadTemplate = async () => {
     link.download = filename
     document.body.appendChild(link)
     link.click()
-    
+
     setTimeout(() => {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     }, 100)
-    
+
     ElMessage.success('模板下载成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('下载模板失败:', error)
     ElMessage.error('下载模板失败: ' + (error.message || '未知错误'))
   }
@@ -1111,16 +1071,16 @@ const downloadTemplate = async () => {
 
 const handleExport = async () => {
   try {
-    const params = { ...searchForm }
+    const params: Record<string, any> = { ...searchForm }
     Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    
+
     const response = await exportInvoices(params, {
       responseType: 'blob'
     })
-    
+
     const filename = `发票列表_${new Date().toISOString().split('T')[0]}.xlsx`
     const blob = response.data
-    
+
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.style.display = 'none'
@@ -1128,14 +1088,14 @@ const handleExport = async () => {
     link.download = filename
     document.body.appendChild(link)
     link.click()
-    
+
     setTimeout(() => {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
     }, 100)
-    
+
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }

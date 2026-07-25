@@ -130,7 +130,9 @@ class OutsourceOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     search_fields = ['item__sku', 'item__name', 'drawing_no']
 
 
-class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceMaterialIssueViewSet(
+    WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     permission_module = 'purchase'
     permission_resource = 'outsource_material_issue'
     workflow_business_type = 'OUTSOURCE_MATERIAL_ISSUE'
@@ -154,17 +156,17 @@ class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, S
             return Response({'error': '只能提交草稿状态的发料单'}, status=status.HTTP_400_BAD_REQUEST)
 
         result = self.start_workflow_or_auto_approve(
-            issue, request.user,
-            approved_status='CONFIRMED',
-            submitted_status='DRAFT'
+            issue, request.user, approved_status='CONFIRMED', submitted_status='DRAFT'
         )
         if result['auto_approved']:
             return self.confirm(request, pk)
-        return Response({
-            **OutsourceMaterialIssueSerializer(issue).data,
-            'workflow_started': True,
-            'message': result['message'],
-        })
+        return Response(
+            {
+                **OutsourceMaterialIssueSerializer(issue).data,
+                'workflow_started': True,
+                'message': result['message'],
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
@@ -210,9 +212,8 @@ class OutsourceMaterialIssueViewSet(WorkflowEnforcementMixin, PermissionMixin, S
 
                 # 更新外协单明细的发料数量（F() 防止并发竞争）
                 from django.db.models import F
-                OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(
-                    sent_qty=F('sent_qty') + line.qty
-                )
+
+                OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(sent_qty=F('sent_qty') + line.qty)
 
             issue.status = 'CONFIRMED'
             issue.save()
@@ -238,7 +239,9 @@ class OutsourceMaterialIssueLineViewSet(PermissionMixin, SoftDeleteMixin, UserTr
     filterset_fields = ['issue', 'item', 'is_deleted']
 
 
-class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class OutsourceReceiptViewSet(
+    WorkflowEnforcementMixin, PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
+):
     permission_module = 'purchase'
     permission_resource = 'outsource_receipt'
     workflow_business_type = 'OUTSOURCE_RECEIPT'
@@ -262,17 +265,17 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
             return Response({'error': '只能提交草稿状态的收货单'}, status=status.HTTP_400_BAD_REQUEST)
 
         result = self.start_workflow_or_auto_approve(
-            receipt, request.user,
-            approved_status='CONFIRMED',
-            submitted_status='DRAFT'
+            receipt, request.user, approved_status='CONFIRMED', submitted_status='DRAFT'
         )
         if result['auto_approved']:
             return self.confirm(request, pk)
-        return Response({
-            **OutsourceReceiptSerializer(receipt).data,
-            'workflow_started': True,
-            'message': result['message'],
-        })
+        return Response(
+            {
+                **OutsourceReceiptSerializer(receipt).data,
+                'workflow_started': True,
+                'message': result['message'],
+            }
+        )
 
     @action(detail=True, methods=['post'])
     def start_inspect(self, request, pk=None):
@@ -307,13 +310,17 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
                 # 不得超过订单量
                 if float(ol.received_qty) + float(line.qualified_qty) > float(ol.qty):
                     return Response(
-                        {'error': f'物料 {line.item.sku} 超收：订单量 {ol.qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'},
+                        {
+                            'error': f'物料 {line.item.sku} 超收：订单量 {ol.qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 # 不得超过已发料量（收货合格累计 ≤ 已发）
                 if float(ol.received_qty) + float(line.qualified_qty) > float(ol.sent_qty):
                     return Response(
-                        {'error': f'物料 {line.item.sku} 收货超过已发料量：已发 {ol.sent_qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'},
+                        {
+                            'error': f'物料 {line.item.sku} 收货超过已发料量：已发 {ol.sent_qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -334,6 +341,7 @@ class OutsourceReceiptViewSet(WorkflowEnforcementMixin, PermissionMixin, SoftDel
 
                 # 更新外协单明细的收货数量（F() 防止并发竞争）
                 from django.db.models import F
+
                 OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(
                     received_qty=F('received_qty') + line.qualified_qty
                 )

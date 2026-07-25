@@ -26,9 +26,7 @@ class BuildPersonalArrivalTest(SimpleTestCase):
     def test_groups_by_created_by(self):
         u = _User()
         today = date(2026, 6, 17)
-        messages, has_unassigned = build_personal_arrival_reminders(
-            [_order('PO-1', u, date(2026, 6, 10))], [], today
-        )
+        messages, has_unassigned = build_personal_arrival_reminders([_order('PO-1', u, date(2026, 6, 10))], [], today)
         self.assertEqual(len(messages), 1)
         self.assertIn('PO-1', messages[0][1])
         self.assertFalse(has_unassigned)

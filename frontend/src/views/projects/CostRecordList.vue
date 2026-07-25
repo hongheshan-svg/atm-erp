@@ -7,7 +7,7 @@
           <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate">新增记录</el-button>
         </div>
       </template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="项目">
           <el-select v-model="filters.project" placeholder="选择项目" clearable @change="loadData">
@@ -23,19 +23,19 @@
           </el-select>
         </el-form-item>
       </el-form>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="project_name" label="项目" width="150" />
@@ -56,7 +56,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -111,9 +111,9 @@ const pageSize = ref(20)
 const total = ref(0)
 const filters = ref({ project: null, cost_type: null })
 const dialogVisible = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   project: null, cost_type: '', description: '', amount: 0, cost_date: ''
 })
 
@@ -124,16 +124,16 @@ const rules = {
   cost_date: [{ required: true, message: '请选择日期', trigger: 'change' }]
 }
 
-const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMoney = (v: any) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = { page: page.value, page_size: pageSize.value, ...filters.value }
+    const params: Record<string, any> = { page: page.value, page_size: pageSize.value, ...filters.value }
     const res = await getCostRecordList(params)
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -144,7 +144,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('CostRecordList getProjectList error:', error)
   }
 }
@@ -163,20 +163,20 @@ const handleSave = async () => {
     ElMessage.success('创建成功')
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此记录吗？', '提示', { type: 'warning' })
     await deleteCostRecord(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }

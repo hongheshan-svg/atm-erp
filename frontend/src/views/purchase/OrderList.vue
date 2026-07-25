@@ -39,9 +39,9 @@
       <!-- 批量操作工具栏 -->
       <div class="table-toolbar" v-permission="'purchase:purchase_order:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -50,7 +50,7 @@
       </div>
 
       <el-table :data="orders" v-loading="loading" stripe border @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'purchase:purchase_order:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row) => ['DRAFT', 'REJECTED', 'CANCELLED'].includes(row.status)" />
+        <el-table-column v-permission="'purchase:purchase_order:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row: any) => ['DRAFT', 'REJECTED', 'CANCELLED'].includes(row.status)" />
         <el-table-column prop="order_no" label="采购订单号" width="140" fixed />
         <el-table-column prop="project_name" label="项目" width="150" show-overflow-tooltip />
         <el-table-column label="物料名称" width="150" show-overflow-tooltip>
@@ -110,7 +110,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -123,7 +123,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="950px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -178,7 +178,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="付款方式">
@@ -203,14 +203,14 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <!-- 订单明细 -->
         <el-divider content-position="left">订单明细</el-divider>
         <el-button type="primary" size="small" @click="addLine" style="margin-bottom: 10px;">
           <el-icon><Plus /></el-icon>
           添加物料
         </el-button>
-        
+
         <el-table :data="form.lines" border size="small">
           <el-table-column label="物料" min-width="200">
             <template #default="{ row, $index }">
@@ -242,7 +242,7 @@
             </template>
           </el-table-column>
         </el-table>
-        
+
         <div class="total-section">
           <div class="total-row">
             <span class="label">不含税金额：</span>
@@ -263,7 +263,7 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 附件管理对话框 -->
     <el-dialog v-model="attachmentDialogVisible" :title="`采购订单 ${currentOrder?.order_no || ''} - 附件管理`" width="900px" destroy-on-close>
       <AttachmentUpload
@@ -307,7 +307,7 @@ const router = useRouter()
 const { canDelete } = usePermission()
 
 // 批量删除功能
-const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete, deleteRow } = useBatchDelete(
+const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete } = useBatchDelete(
   '/purchase/orders/',
   {
     confirmTitle: '确认删除采购订单',
@@ -318,10 +318,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
   }
 )
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'PURCHASE_ORDER'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -335,22 +335,22 @@ const items = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建采购订单')
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const attachmentDialogVisible = ref(false)
-const currentOrder = ref(null)
+const currentOrder = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   supplier: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   supplier: null,
   project: null,
@@ -368,35 +368,35 @@ const rules = {
   delivery_date: [{ required: true, message: '请选择交货日期', trigger: 'change' }]
 }
 
-const getStatusType = (status) => {
-  const types = { 
-    DRAFT: 'info', 
+const getStatusType = (status: any) => {
+  const types = {
+    DRAFT: 'info',
     PENDING: 'warning',
     APPROVED: 'primary',
     REJECTED: 'danger',
-    CONFIRMED: 'success', 
+    CONFIRMED: 'success',
     PARTIAL: 'warning',
-    COMPLETED: '', 
-    CANCELLED: 'danger' 
+    COMPLETED: '',
+    CANCELLED: 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
-  const labels = { 
-    DRAFT: '草稿', 
+const getStatusLabel = (status: any) => {
+  const labels = {
+    DRAFT: '草稿',
     PENDING: '待审批',
     APPROVED: '已审批',
     REJECTED: '已拒绝',
-    CONFIRMED: '已确认', 
+    CONFIRMED: '已确认',
     PARTIAL: '部分收货',
-    COMPLETED: '已完成', 
-    CANCELLED: '已取消' 
+    COMPLETED: '已完成',
+    CANCELLED: '已取消'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const formatMoney = (value) => {
+const formatMoney = (value: any) => {
   const amount = Number.parseFloat(value ?? 0)
   return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
 }
@@ -404,17 +404,17 @@ const formatMoney = (value) => {
 const loadOrders = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
     if (searchForm.supplier) params.supplier = searchForm.supplier
     if (searchForm.status) params.status = searchForm.status
-    
+
     const res = await getPurchaseOrders(params)
     orders.value = res.results || res.results || res || []
     pagination.total = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载采购订单失败')
   } finally {
     loading.value = false
@@ -425,7 +425,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList()
     suppliers.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载供应商失败:', error)
   }
 }
@@ -434,7 +434,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -443,7 +443,7 @@ const loadItems = async () => {
   try {
     const res = await getItemList()
     items.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载物料失败:', error)
   }
 }
@@ -473,14 +473,14 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑采购订单'
   isEdit.value = true
-  
+
   try {
     const res = await getPurchaseOrder(row.id)
     const data = res
-    
+
     Object.assign(form, {
       id: data.id,
       supplier: data.supplier,
@@ -491,25 +491,25 @@ const handleEdit = async (row) => {
       payment_method: data.payment_method || 'WIRE',
       payment_terms_detail: data.payment_terms_detail || '',
       notes: data.notes || '',
-      lines: (data.lines || []).map(line => ({
+      lines: (data.lines || []).map((line: any) => ({
         id: line.id,
         item: line.item,
         qty: line.qty,
         unit_price: parseFloat(line.unit_price || 0)
       }))
     })
-    
+
     if (form.lines.length === 0) {
       form.lines = [{ item: null, qty: 1, unit_price: 0 }]
     }
-    
+
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取采购订单详情失败')
   }
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/purchase/orders/${row.id}`)
 }
 
@@ -517,7 +517,7 @@ const addLine = () => {
   form.lines.push({ item: null, qty: 1, unit_price: 0 })
 }
 
-const removeLine = (index) => {
+const removeLine = (index: any) => {
   if (form.lines.length > 1) {
     form.lines.splice(index, 1)
   } else {
@@ -525,7 +525,7 @@ const removeLine = (index) => {
   }
 }
 
-const onItemChange = (index) => {
+const onItemChange = (index: any) => {
   const line = form.lines[index]
   const item = items.value.find(i => i.id === line.item)
   if (item) {
@@ -534,7 +534,7 @@ const onItemChange = (index) => {
 }
 
 const calculateTotal = () => {
-  return form.lines.reduce((sum, line) => {
+  return form.lines.reduce((sum: any, line: any) => {
     return sum + (line.qty || 0) * (line.unit_price || 0)
   }, 0)
 }
@@ -550,15 +550,15 @@ const calculateTotalWithTax = () => {
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
-    
-    const validLines = form.lines.filter(line => line.item && line.qty > 0)
+
+    const validLines = form.lines.filter((line: any) => line.item && line.qty > 0)
     if (validLines.length === 0) {
       ElMessage.warning('请至少添加一行有效的物料明细')
       return
     }
-    
+
     saving.value = true
-    
+
     const payload = {
       supplier: form.supplier,
       project: form.project,
@@ -568,13 +568,13 @@ const handleSave = async () => {
       payment_method: form.payment_method,
       payment_terms_detail: form.payment_terms_detail,
       notes: form.notes,
-      lines: validLines.map(line => ({
+      lines: validLines.map((line: any) => ({
         item: line.item,
         qty: line.qty,
         unit_price: line.unit_price
       }))
     }
-    
+
     if (isEdit.value) {
       await updatePurchaseOrder(form.id, payload)
       ElMessage.success('更新采购订单成功')
@@ -582,10 +582,10 @@ const handleSave = async () => {
       await createPurchaseOrder(payload)
       ElMessage.success('创建采购订单成功')
     }
-    
+
     dialogVisible.value = false
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存采购订单失败')
       console.error(error)
@@ -595,7 +595,7 @@ const handleSave = async () => {
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交该采购订单审批吗？', '提交审批', { type: 'warning' })
     const res = await submitPurchaseOrder(row.id)
@@ -605,58 +605,58 @@ const handleSubmit = async (row) => {
       ElMessage.warning(res.message || '未配置审批流程，订单已直接确认')
     }
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '提交审批失败')
     }
   }
 }
 
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要确认该采购订单吗？确认后将无法修改。', '确认订单', { type: 'warning' })
     await confirmPurchaseOrder(row.id)
     ElMessage.success('订单已确认')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('确认订单失败')
     }
   }
 }
 
-const handleCancel = async (row) => {
+const handleCancel = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要取消该采购订单吗？', '取消订单', { type: 'warning' })
     await cancelPurchaseOrder(row.id)
     ElMessage.success('订单已取消')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('取消订单失败')
     }
   }
 }
 
-const handleWithdraw = async (row) => {
+const handleWithdraw = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要撤回该采购订单吗？撤回后将恢复为草稿状态，关联的应付账款和付款计划将被删除。', '撤回确认', { type: 'warning' })
     await withdrawPurchaseOrder(row.id)
     ElMessage.success('订单已撤回')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '撤回失败')
     }
   }
 }
 
-const handleContract = async (row) => {
+const handleContract = async (row: any) => {
   try {
     // 检查是否已有合同
     const contractRes = await getPurchaseContracts({ po: row.id })
     const contracts = contractRes.results || contractRes || []
-    
+
     if (contracts.length > 0) {
       // 已有合同，打开打印预览
       const contract = contracts[0]
@@ -668,33 +668,37 @@ const handleContract = async (row) => {
       ElMessage.success(`合同 ${res.contract_no} 创建成功`)
       handlePrintContract(res)
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '合同操作失败')
     }
   }
 }
 
-const handlePrintContract = async (contract) => {
+const handlePrintContract = async (contract: any) => {
   try {
     const res = await printPreviewContract(contract.id)
     // 打开打印预览窗口
     const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      ElMessage.error('无法打开打印窗口，请检查浏览器弹窗设置')
+      return
+    }
     printWindow.document.write(generateContractHtml(res))
     printWindow.document.close()
     printWindow.focus()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取合同详情失败')
   }
 }
 
-const generateContractHtml = (data) => {
-  const { contract, company, supplier, lines, po } = data
-  const totalAmount = lines.reduce((sum, l) => sum + l.line_amount, 0)
+const generateContractHtml = (data: any) => {
+  const { contract, supplier, lines, po } = data
+  const totalAmount = lines.reduce((sum: any, l: any) => sum + l.line_amount, 0)
   const taxRate = contract.tax_rate || 13
-  
+
   // 金额大写转换
-  const toChineseMoney = (n) => {
+  const toChineseMoney = (n: any) => {
     const fraction = ['角', '分']
     const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖']
     const unit = [['元', '万', '亿'], ['', '拾', '佰', '仟']]
@@ -715,20 +719,20 @@ const generateContractHtml = (data) => {
     }
     return s.replace(/(零.)*零元/, '元').replace(/(零.)+/g, '零').replace(/^整$/, '零元整')
   }
-  
-  const formatDate = (dateStr) => {
+
+  const formatDate = (dateStr: any) => {
     if (!dateStr) return ''
     const d = new Date(dateStr)
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
   }
-  
+
   const today = new Date()
   const contractDate = formatDate(contract.created_at) || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  
+
   // 动态计算空行数，根据实际数据行填充到合适行数
   const targetRows = 10
   const emptyRows = Math.max(0, targetRows - lines.length)
-  
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -804,7 +808,7 @@ table.items .right { text-align: right; }
     <th style="width:60px;">项目号</th>
     <th style="width:60px;">备注</th>
   </tr>
-  ${lines.map((line, idx) => `<tr>
+  ${lines.map((line: any, idx: any) => `<tr>
     <td>${idx + 1}</td>
     <td class="left">${line.item_name || ''}</td>
     <td class="left">${line.specification || ''}</td>
@@ -864,26 +868,26 @@ table.items .right { text-align: right; }
 </html>`
 }
 
-const receiveGoods = (row) => {
+const receiveGoods = (row: any) => {
   router.push(`/purchase/goods-receipts?po_id=${row.id}`)
 }
 
-const handleViewAttachments = (row) => {
+const handleViewAttachments = (row: any) => {
   currentOrder.value = row
   attachmentDialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除采购订单 ${row.order_no} 吗？此操作不可恢复！`, 
-      '删除订单', 
+      `确定要删除采购订单 ${row.order_no} 吗？此操作不可恢复！`,
+      '删除订单',
       { type: 'warning' }
     )
     await deletePurchaseOrder(row.id)
     ElMessage.success('订单已删除')
     loadOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除订单失败')
     }

@@ -7,19 +7,19 @@
           <el-button type="primary" v-permission="'projects:project:create'" @click="handleCreate">添加技术员</el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="employee_no" label="工号" width="120" />
@@ -40,7 +40,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -131,11 +131,11 @@ const total = ref(0)
 const dialogVisible = ref(false)
 const scheduleDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentRow = ref(null)
+const formRef = ref<any>(null)
+const currentRow = ref<any>(null)
 
-const form = reactive({ id: null, user: null, employee_no: '', skill_level: '', phone: '', skills: '', is_available: true })
-const scheduleForm = reactive({ date: '', shift: 'MORNING', project: null })
+const form = reactive<Record<string, any>>({ id: null, user: null, employee_no: '', skill_level: '', phone: '', skills: '', is_available: true })
+const scheduleForm = reactive<Record<string, any>>({ date: '', shift: 'MORNING', project: null })
 
 const rules = {
   user: [{ required: true, message: '请选择用户', trigger: 'change' }],
@@ -148,7 +148,7 @@ const loadData = async () => {
     const res = await getTechnicianProfileList({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -159,7 +159,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('TechnicianList getUsers error:', error)
   }
 }
@@ -168,7 +168,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projectList.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('TechnicianList getProjectList error:', error)
   }
 }
@@ -180,7 +180,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, { id: row.id, user: row.user, employee_no: row.employee_no, skill_level: row.skill_level, phone: row.phone, skills: row.skills, is_available: row.is_available })
   dialogVisible.value = true
@@ -199,14 +199,14 @@ const handleSave = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false
   }
 }
 
-const handleSchedule = (row) => {
+const handleSchedule = (row: any) => {
   currentRow.value = row
   scheduleForm.date = new Date().toISOString().split('T')[0]
   scheduleForm.shift = 'MORNING'
@@ -220,20 +220,20 @@ const saveSchedule = async () => {
     await scheduleTechnician(currentRow.value.id, scheduleForm)
     ElMessage.success('排班成功')
     scheduleDialogVisible.value = false
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('排班失败')
   } finally {
     saving.value = false
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此技术员吗？', '提示', { type: 'warning' })
     await deleteTechnicianProfile(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }

@@ -258,7 +258,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import {
   Search, Refresh, Plus, ArrowDown, Tools, OfficeBuilding, CircleCheck, Warning
 } from '@element-plus/icons-vue'
@@ -282,33 +282,33 @@ const loading = ref(false)
 const submitting = ref(false)
 const actionDialogVisible = ref(false)
 const actionType = ref('')
-const actionRow = ref(null)
+const actionRow = ref<any>(null)
 const actionSaving = ref(false)
-const actionForm = reactive({ date: new Date().toISOString().split('T')[0], remarks: '' })
+const actionForm = reactive<Record<string, any>>({ date: new Date().toISOString().split('T')[0], remarks: '' })
 const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const dialogMode = ref('add')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 const stats = ref<Record<string, any>>({})
 const tableData = ref<any[]>([])
 const customers = ref<any[]>([])
 const projects = ref<any[]>([])
-const currentEquipment = ref(null)
+const currentEquipment = ref<any>(null)
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   status: '',
   customer: '',
   search: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   name: '',
   model: '',
   serial_no: '',
@@ -330,7 +330,7 @@ const formRules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters
@@ -338,7 +338,7 @@ const fetchData = async () => {
     const res = await getEquipmentList(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || tableData.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取设备列表失败')
   } finally {
     loading.value = false
@@ -349,7 +349,7 @@ const fetchStats = async () => {
   try {
     const res = await getEquipmentStatistics()
     stats.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -358,7 +358,7 @@ const fetchCustomers = async () => {
   try {
     const res = await getCustomerList()
     customers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取客户失败', error)
   }
 }
@@ -367,7 +367,7 @@ const fetchProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目失败', error)
   }
 }
@@ -379,7 +379,7 @@ const resetFilters = () => {
   fetchData()
 }
 
-const showDialog = async (mode, row = null) => {
+const showDialog = async (mode: any, row: any = null) => {
   dialogMode.value = mode
   if (mode === 'edit' && row) {
     // 列表行来自精简序列化器，缺质保月数/联系人/电话/备注等字段；
@@ -387,7 +387,7 @@ const showDialog = async (mode, row = null) => {
     try {
       const detail = await getEquipment(row.id)
       Object.assign(formData, detail.data || detail || row)
-    } catch (error) {
+    } catch (error: any) {
       Object.assign(formData, row)
     }
   } else {
@@ -398,12 +398,12 @@ const showDialog = async (mode, row = null) => {
   dialogVisible.value = true
 }
 
-const showDetail = (row) => {
+const showDetail = (row: any) => {
   currentEquipment.value = row
   detailVisible.value = true
 }
 
-const handleRowClick = (row) => {
+const handleRowClick = (row: any) => {
   showDetail(row)
 }
 
@@ -411,7 +411,7 @@ const submitForm = async () => {
   try {
     await formRef.value.validate()
     submitting.value = true
-    
+
     if (dialogMode.value === 'add') {
       await createEquipment(formData)
       ElMessage.success('新增成功')
@@ -419,11 +419,11 @@ const submitForm = async () => {
       await updateEquipment(formData.id, formData)
       ElMessage.success('更新成功')
     }
-    
+
     dialogVisible.value = false
     fetchData()
     fetchStats()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== false) {
       ElMessage.error('操作失败')
     }
@@ -433,7 +433,7 @@ const submitForm = async () => {
 }
 
 
-const actionTitles = { ship: '发货确认', install: '安装确认', accept: '验收确认' }
+const actionTitles: Record<string, string> = { ship: '发货确认', install: '安装确认', accept: '验收确认' }
 // 设备台账动作定义在 EquipmentViewSet(/projects/equipment/)，而非 equipment-archives；
 // 开始安装的后端动作名为 start_installation
 const actionEndpoints = { ship: 'ship', install: 'start_installation', accept: 'accept' }
@@ -455,18 +455,18 @@ const handleActionSave = async () => {
     } else if (actionType.value === 'accept') {
       payload = { acceptance_date: actionForm.date, notes: actionForm.remarks }
     }
-    await request.post(`/projects/equipment/${actionRow.value.id}/${actionEndpoints[actionType.value]}/`, payload)
+    await request.post(`/projects/equipment/${actionRow.value.id}/${(actionEndpoints as Record<string, any>)[actionType.value]}/`, payload)
     ElMessage.success('操作成功')
     actionDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
   } finally {
     actionSaving.value = false
   }
 }
-const handleCommand = async (command, row) => {
+const handleCommand = async (command: any, row: any) => {
   switch (command) {
     case 'ship':
     case 'install':
@@ -487,7 +487,7 @@ const handleCommand = async (command, row) => {
   }
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     PRODUCING: 'info',
     TESTING: 'warning',
@@ -500,14 +500,14 @@ const getStatusType = (status) => {
     POST_WARRANTY: 'info',
     SCRAPPED: 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const isExpiringSoon = (date) => {
+const isExpiringSoon = (date: any) => {
   if (!date) return false
   const endDate = new Date(date)
   const now = new Date()
-  const diff = (endDate - now) / (1000 * 60 * 60 * 24)
+  const diff = (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   return diff > 0 && diff <= 30
 }
 

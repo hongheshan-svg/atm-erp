@@ -32,7 +32,7 @@ def sync_attendance_device(self, device_id: int):
         service = AttendanceSyncService(device)
         result = service.sync()
 
-        logger.info(f"Device {device.device_sn} synced: {result['new_records']} new records")
+        logger.info(f'Device {device.device_sn} synced: {result["new_records"]} new records')
         return {'status': 'success', 'device_sn': device.device_sn, 'new_records': result['new_records']}
 
     except AttendanceDevice.DoesNotExist:
@@ -201,7 +201,7 @@ def sync_wechat_work_attendance():
 
             results.append({'config': config.name, 'new_records': result['new']})
 
-            logger.info(f"企业微信同步完成: {config.name}, 新增 {result['new']} 条")
+            logger.info(f'企业微信同步完成: {config.name}, 新增 {result["new"]} 条')
 
         except Exception as e:
             logger.error(f'企业微信同步失败 {config.name}: {e}')

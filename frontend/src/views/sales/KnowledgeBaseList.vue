@@ -151,13 +151,13 @@
             <span>更新于: {{ formatDate(currentArticle.updated_at) }}</span>
             <span>{{ currentArticle.view_count }}次查看</span>
           </div>
-          
+
           <el-divider />
-          
+
           <div class="detail-content" v-html="renderMarkdown(currentArticle.content)"></div>
-          
+
           <el-divider />
-          
+
           <div class="detail-footer">
             <span>这篇文章对您有帮助吗？</span>
             <el-button-group>
@@ -189,18 +189,18 @@ const showDetailDrawer = ref(false)
 const articles = ref<any[]>([])
 const popularArticles = ref<any[]>([])
 const popularTags = ref<any[]>([])
-const currentArticle = ref(null)
+const currentArticle = ref<any>(null)
 
 const searchKeyword = ref('')
 const categoryFilter = ref('')
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-const articleForm = reactive({
+const articleForm = reactive<Record<string, any>>({
   title: '',
   category: 'HOW_TO',
   tags: [],
@@ -217,19 +217,19 @@ const articleRules = {
   content: [{ required: true, message: '请输入文章内容', trigger: 'blur' }]
 }
 
-const articleFormRef = ref(null)
+const articleFormRef = ref<any>(null)
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return '-'
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
-const truncate = (text, length) => {
+const truncate = (text: any, length: any) => {
   if (!text) return ''
   return text.length > length ? text.substring(0, length) + '...' : text
 }
 
-const getCategoryType = (category) => {
+const getCategoryType = (category: any) => {
   const map = {
     TROUBLESHOOTING: 'danger',
     HOW_TO: 'primary',
@@ -237,10 +237,10 @@ const getCategoryType = (category) => {
     SPECIFICATION: 'info',
     BEST_PRACTICE: 'warning'
   }
-  return map[category] || 'info'
+  return (map as Record<string, any>)[category] || 'info'
 }
 
-const escapeHtml = (text) => {
+const escapeHtml = (text: any) => {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -249,7 +249,7 @@ const escapeHtml = (text) => {
     .replace(/'/g, '&#39;')
 }
 
-const renderMarkdown = (content) => {
+const renderMarkdown = (content: any) => {
   // 先整体转义原始 HTML（防止 <img onerror>/<script> 等存储型 XSS），再做受控的 Markdown 替换
   if (!content) return ''
   return escapeHtml(content)
@@ -265,14 +265,14 @@ const renderMarkdown = (content) => {
 const loadArticles = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize }
     if (searchKeyword.value) params.search = searchKeyword.value
     if (categoryFilter.value) params.category = categoryFilter.value
 
     const res = await getKnowledgeArticles(params)
     articles.value = res.results || res
     pagination.total = res.count || articles.value.length
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载文章列表失败')
   } finally {
     loading.value = false
@@ -283,7 +283,7 @@ const loadPopularArticles = async () => {
   try {
     const res = await getPopularArticles()
     popularArticles.value = res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载热门文章失败')
   }
 }
@@ -293,24 +293,24 @@ const loadPopularTags = async () => {
     const res = await getKnowledgeTags()
     // 后端返回 { tags: [字符串数组] }
     popularTags.value = res?.tags || (Array.isArray(res) ? res : [])
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载热门标签失败')
   }
 }
 
-const viewArticle = async (article) => {
+const viewArticle = async (article: any) => {
   try {
     const res = await getKnowledgeArticle(article.id)
     currentArticle.value = res
     showDetailDrawer.value = true
     // 增加查看次数
     viewKnowledgeArticle(article.id)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载文章详情失败')
   }
 }
 
-const searchByTag = (tag) => {
+const searchByTag = (tag: any) => {
   searchKeyword.value = tag
   loadArticles()
 }
@@ -323,7 +323,7 @@ const saveDraft = async () => {
     ElMessage.success('草稿已保存')
     showCreateDialog.value = false
     loadArticles()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('保存失败')
   } finally {
     submitting.value = false
@@ -338,21 +338,21 @@ const publishArticle = async () => {
     ElMessage.success('文章已发布')
     showCreateDialog.value = false
     loadArticles()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('发布失败')
   } finally {
     submitting.value = false
   }
 }
 
-const markHelpful = async (helpful) => {
+const markHelpful = async (helpful: any) => {
   try {
     await feedbackKnowledgeArticle(currentArticle.value.id, { helpful })
     ElMessage.success('感谢您的反馈')
     // 刷新文章
     const res = await getKnowledgeArticle(currentArticle.value.id)
     currentArticle.value = res
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('反馈失败')
   }
 }

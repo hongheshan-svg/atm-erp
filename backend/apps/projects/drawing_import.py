@@ -492,7 +492,7 @@ class BatchDrawingImportService:
 
             except Exception as e:
                 errors.append({'filename': f.name if hasattr(f, 'name') else str(f), 'error': str(e)})
-                logger.exception(f"导入图纸失败: {f.name if hasattr(f, 'name') else f}")
+                logger.exception(f'导入图纸失败: {f.name if hasattr(f, "name") else f}')
 
         return {'imported': imported, 'skipped': skipped, 'errors': errors, 'details': details}
 

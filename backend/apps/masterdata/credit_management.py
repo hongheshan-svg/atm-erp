@@ -272,7 +272,7 @@ class CreditLevelSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_customer_count(self, obj):
+    def get_customer_count(self, obj) -> int:
         return obj.customers.filter(is_deleted=False).count()
 
 

@@ -43,10 +43,10 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_cc_users_detail(self, obj):
+    def get_cc_users_detail(self, obj) -> list[dict]:
         return [{'id': u.id, 'name': u.get_full_name() or u.username} for u in obj.cc_users.all()]
 
-    def get_cc_roles_detail(self, obj):
+    def get_cc_roles_detail(self, obj) -> list[dict]:
         return [{'id': r.id, 'name': r.name} for r in obj.cc_roles.all()]
 
 
@@ -149,5 +149,5 @@ class WorkflowInstanceSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_total_steps(self, obj):
+    def get_total_steps(self, obj) -> int:
         return obj.workflow.steps.filter(is_deleted=False).count()

@@ -391,9 +391,9 @@ class CollectionRecord(BaseModel):
         from decimal import Decimal
 
         # 节点级:仅统计已确认记录
-        milestone_collected = (
-            milestone.records.filter(confirmed=True).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
-        )
+        milestone_collected = milestone.records.filter(confirmed=True).aggregate(total=models.Sum('amount'))[
+            'total'
+        ] or Decimal('0')
         milestone.collected_amount = milestone_collected
 
         if milestone.planned_amount and milestone_collected >= milestone.planned_amount:
@@ -413,12 +413,9 @@ class CollectionRecord(BaseModel):
 
         # 计划级:同样仅统计已确认记录
         plan = milestone.plan
-        plan_collected = (
-            CollectionRecord.objects.filter(milestone__plan=plan, confirmed=True).aggregate(
-                total=models.Sum('amount')
-            )['total']
-            or Decimal('0')
-        )
+        plan_collected = CollectionRecord.objects.filter(milestone__plan=plan, confirmed=True).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0')
         plan.collected_amount = plan_collected
 
         if plan.total_amount and plan_collected >= plan.total_amount:

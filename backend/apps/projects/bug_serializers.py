@@ -18,7 +18,7 @@ class BugAttachmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'bug', 'file', 'filename', 'file_size', 'uploaded_by', 'uploaded_by_name', 'created_at']
         read_only_fields = ['uploaded_by', 'file_size', 'created_at']
 
-    def get_uploaded_by_name(self, obj):
+    def get_uploaded_by_name(self, obj) -> str:
         if obj.uploaded_by:
             return f'{obj.uploaded_by.last_name}{obj.uploaded_by.first_name}' or obj.uploaded_by.username
         return ''
@@ -43,13 +43,13 @@ class BugCommentSerializer(serializers.ModelSerializer):
         fields = ['id', 'bug', 'user', 'user_name', 'user_avatar', 'content', 'created_at', 'updated_at']
         read_only_fields = ['user', 'created_at', 'updated_at']
 
-    def get_user_name(self, obj):
+    def get_user_name(self, obj) -> str:
         if obj.user:
             name = f'{obj.user.last_name}{obj.user.first_name}'
             return name if name else obj.user.username
         return ''
 
-    def get_user_avatar(self, obj):
+    def get_user_avatar(self, obj) -> str | None:
         if obj.user and obj.user.avatar:
             return obj.user.avatar.url
         return None
@@ -69,7 +69,7 @@ class BugHistorySerializer(serializers.ModelSerializer):
         fields = ['id', 'bug', 'user', 'user_name', 'field_name', 'field_label', 'old_value', 'new_value', 'created_at']
         read_only_fields = ['created_at']
 
-    def get_user_name(self, obj):
+    def get_user_name(self, obj) -> str:
         if obj.user:
             name = f'{obj.user.last_name}{obj.user.first_name}'
             return name if name else obj.user.username
@@ -119,22 +119,22 @@ class BugListSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_reporter_name(self, obj):
+    def get_reporter_name(self, obj) -> str:
         if obj.reporter:
             name = f'{obj.reporter.last_name}{obj.reporter.first_name}'
             return name if name else obj.reporter.username
         return ''
 
-    def get_assignee_name(self, obj):
+    def get_assignee_name(self, obj) -> str:
         if obj.assignee:
             name = f'{obj.assignee.last_name}{obj.assignee.first_name}'
             return name if name else obj.assignee.username
         return ''
 
-    def get_comment_count(self, obj):
+    def get_comment_count(self, obj) -> int:
         return obj.comments.count()
 
-    def get_attachment_count(self, obj):
+    def get_attachment_count(self, obj) -> int:
         return obj.attachments.count()
 
 
@@ -196,13 +196,13 @@ class BugDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['bug_number', 'reporter', 'resolved_at', 'closed_at', 'created_at', 'updated_at']
 
-    def get_reporter_name(self, obj):
+    def get_reporter_name(self, obj) -> str:
         if obj.reporter:
             name = f'{obj.reporter.last_name}{obj.reporter.first_name}'
             return name if name else obj.reporter.username
         return ''
 
-    def get_assignee_name(self, obj):
+    def get_assignee_name(self, obj) -> str:
         if obj.assignee:
             name = f'{obj.assignee.last_name}{obj.assignee.first_name}'
             return name if name else obj.assignee.username

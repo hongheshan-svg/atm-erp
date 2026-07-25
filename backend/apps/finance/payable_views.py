@@ -57,10 +57,7 @@ class PayableReconcileViewSet(PermissionMixin, viewsets.ViewSet):
             return Response({'detail': '银行流水不存在'}, status=status.HTTP_404_NOT_FOUND)
         raw = request.data.get('allocations') or []
         try:
-            allocations = [
-                {'payable_item_id': a['payable_item_id'], 'amount': Decimal(str(a['amount']))}
-                for a in raw
-            ]
+            allocations = [{'payable_item_id': a['payable_item_id'], 'amount': Decimal(str(a['amount']))} for a in raw]
         except (KeyError, TypeError, InvalidOperation):
             return Response({'detail': 'allocations 参数格式错误'}, status=status.HTTP_400_BAD_REQUEST)
         if not allocations:
@@ -72,12 +69,14 @@ class PayableReconcileViewSet(PermissionMixin, viewsets.ViewSet):
         # 附带本次生成的付款单号(Payment.payment_no),供前端在核销成功提示里展示;
         # settlement.payment 在 svc.settle 内创建时已直接赋值,无需额外查询。
         payment_nos = [s.payment.payment_no for s in settlements if s.payment_id]
-        return Response({
-            'ok': True,
-            'settlement_ids': [s.id for s in settlements],
-            'payment_nos': payment_nos,
-            'bank_statement_status': bs.status,
-        })
+        return Response(
+            {
+                'ok': True,
+                'settlement_ids': [s.id for s in settlements],
+                'payment_nos': payment_nos,
+                'bank_statement_status': bs.status,
+            }
+        )
 
     @action(detail=False, methods=['post'])
     def unsettle(self, request):

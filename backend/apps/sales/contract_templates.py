@@ -299,7 +299,7 @@ class ContractGenerationService:
             <h1 class="contract-title">{{ contract.contract_name }}</h1>
             <p class="contract-no">合同编号：{{ contract.contract_no }}</p>
         </div>
-        
+
         <div class="section">
             <div class="party-info">
                 <div class="party-box">
@@ -318,13 +318,13 @@ class ContractGenerationService:
                 </div>
             </div>
         </div>
-        
+
         <div class="section">
             <p style="text-indent: 2em;">
                 甲乙双方本着平等互利、诚实信用的原则，经友好协商，就甲方向乙方采购非标自动化设备事宜达成如下协议：
             </p>
         </div>
-        
+
         <div class="section">
             <h3 class="section-title">第一条 合同标的</h3>
             <div class="article">
@@ -335,7 +335,7 @@ class ContractGenerationService:
                 </p>
             </div>
         </div>
-        
+
         <div class="section">
             <h3 class="section-title">第二条 付款方式</h3>
             {% for term in payment_terms %}
@@ -350,7 +350,7 @@ class ContractGenerationService:
             </div>
             {% endfor %}
         </div>
-        
+
         <div class="section">
             <h3 class="section-title">第三条 交货期限</h3>
             <div class="article">
@@ -359,7 +359,7 @@ class ContractGenerationService:
                 </p>
             </div>
         </div>
-        
+
         <div class="section">
             <h3 class="section-title">第四条 质量保证</h3>
             <div class="article">
@@ -368,7 +368,7 @@ class ContractGenerationService:
                 </p>
             </div>
         </div>
-        
+
         {% for clause_type, clause_list in clauses.items %}
         <div class="section">
             <h3 class="section-title">{{ clause_type }}</h3>
@@ -379,7 +379,7 @@ class ContractGenerationService:
             {% endfor %}
         </div>
         {% endfor %}
-        
+
         <div class="section">
             <h3 class="section-title">其他约定</h3>
             <div class="article">
@@ -388,7 +388,7 @@ class ContractGenerationService:
                 </p>
             </div>
         </div>
-        
+
         <div class="signature-area">
             <div class="signature-box">
                 <h4>甲方（盖章）：</h4>
@@ -498,6 +498,7 @@ class GeneratedContractListSerializer(serializers.ModelSerializer):
 
 class ContractTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同模板管理"""
+
     permission_module = 'sales'
     permission_resource = 'contract_template'
 
@@ -631,6 +632,7 @@ class ContractTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class ContractClauseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """合同条款管理"""
+
     permission_module = 'sales'
     permission_resource = 'contract_clause'
 
@@ -662,6 +664,7 @@ class ContractClauseViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
 
 class GeneratedContractViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """生成的合同管理"""
+
     permission_module = 'sales'
     permission_resource = 'generated_contract'
 

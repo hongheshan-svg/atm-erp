@@ -38,7 +38,7 @@ def check_delivery_reminders():
     2. Deliveries expected within the next 3 days
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import PurchaseOrder
@@ -72,7 +72,7 @@ def check_delivery_reminders():
         for order in overdue_orders[:10]:
             days_overdue = (today - order.delivery_date).days
             message_lines.append(
-                f'- {order.order_no} | {order.supplier.name} | ' f'¥{order.total_amount:,.2f} | 逾期{days_overdue}天'
+                f'- {order.order_no} | {order.supplier.name} | ¥{order.total_amount:,.2f} | 逾期{days_overdue}天'
             )
             overdue_items.append(
                 {
@@ -88,7 +88,7 @@ def check_delivery_reminders():
         for order in upcoming_orders[:10]:
             days_until = (order.delivery_date - today).days
             message_lines.append(
-                f'- {order.order_no} | {order.supplier.name} | ' f'¥{order.total_amount:,.2f} | {days_until}天后到货'
+                f'- {order.order_no} | {order.supplier.name} | ¥{order.total_amount:,.2f} | {days_until}天后到货'
             )
             upcoming_items.append(
                 {
@@ -110,12 +110,11 @@ def check_delivery_reminders():
 
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=user_id,
             title='采购订单到货提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/purchase/orders',
+            message=message,
+            type='WARNING',
         )
 
     # 外部推送:个人优先 + 群播兜底

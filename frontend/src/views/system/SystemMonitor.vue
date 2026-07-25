@@ -58,18 +58,18 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
-      
+
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="services" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="name" label="服务名称" width="200" />
@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
 import { Monitor, CircleCheck, User, Tickets, Refresh } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -162,24 +162,23 @@ const services = ref([
   { name: '数据库 (PostgreSQL)', status: 'running', port: '5432', memory: '-', cpu: '-', last_check: '-' },
   { name: '缓存 (Redis)', status: 'running', port: '6379', memory: '-', cpu: '-', last_check: '-' },
   { name: '任务队列 (Celery)', status: 'running', port: '-', memory: '-', cpu: '-', last_check: '-' },
-  { name: '搜索引擎 (Elasticsearch)', status: 'running', port: '9200', memory: '-', cpu: '-', last_check: '-' },
 ])
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getActionType = (action) => {
+const getActionType = (action: any) => {
   const map = { CREATE: 'success', UPDATE: 'warning', DELETE: 'danger', LOGIN: 'primary' }
-  return map[action] || 'info'
+  return (map as Record<string, any>)[action] || 'info'
 }
 
 const fetchHealthStatus = async () => {
   try {
     const res = await request({ url: '/core/health/', method: 'get' })
     systemHealth.value = res || { status: 'unknown' }
-  } catch (error) {
+  } catch (error: any) {
     systemHealth.value = { status: 'error' }
   }
 }
@@ -189,7 +188,7 @@ const fetchSystemStatus = async () => {
     const res = await request({ url: '/core/health/status/', method: 'get' })
     systemStatus.value = res || {}
     dataStats.value = res?.data_stats || {}
-    
+
     // 更新服务状态
     if (res?.services) {
       services.value = services.value.map(s => {
@@ -197,7 +196,7 @@ const fetchSystemStatus = async () => {
         return { ...s, ...svcData, last_check: new Date().toLocaleTimeString('zh-CN') }
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取系统状态失败', error)
   }
 }
@@ -206,7 +205,7 @@ const fetchSecurityStatus = async () => {
   try {
     const res = await request({ url: '/core/health/security/', method: 'get' })
     securityStatus.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取安全状态失败', error)
   }
 }
@@ -215,7 +214,7 @@ const fetchRecentLogs = async () => {
   try {
     const res = await request({ url: '/core/audit-logs/', method: 'get', params: { page_size: 10 } })
     recentLogs.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取日志失败', error)
   }
 }
@@ -231,7 +230,7 @@ const refreshStatus = async () => {
   loading.value = false
 }
 
-let refreshInterval
+let refreshInterval: any
 
 onMounted(() => {
   refreshStatus()

@@ -130,7 +130,7 @@ class WinLossReasonSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_usage_count(self, obj):
+    def get_usage_count(self, obj) -> int:
         return obj.close_records.count()
 
 
@@ -146,7 +146,7 @@ class OpportunityCloseRecordSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'price_difference', 'sales_cycle_days']
 
-    def get_secondary_reason_names(self, obj):
+    def get_secondary_reason_names(self, obj) -> list[str]:
         return [r.name for r in obj.secondary_reasons.all()]
 
 
@@ -190,6 +190,7 @@ class OpportunityCloseRecordCreateSerializer(serializers.ModelSerializer):
 
 class WinLossReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """赢单/丢单原因管理"""
+
     permission_module = 'sales'
     permission_resource = 'win_loss_reason'
 
@@ -202,6 +203,7 @@ class WinLossReasonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class OpportunityCloseRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机关闭记录管理"""
+
     permission_module = 'sales'
     permission_resource = 'opportunity_close_record'
 

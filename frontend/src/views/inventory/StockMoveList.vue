@@ -6,7 +6,7 @@
           <span>库存流水</span>
         </div>
       </template>
-      
+
       <!-- 搜索区域 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="物料">
@@ -73,7 +73,7 @@
           </el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 统计卡片 -->
       <el-row :gutter="20" class="stats-row">
         <el-col :span="6">
@@ -101,7 +101,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 数据表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -164,7 +164,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -198,7 +198,7 @@ const items = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const projects = ref<any[]>([])
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   item: '',
   warehouse: '',
   move_type: '',
@@ -206,20 +206,20 @@ const searchForm = reactive({
   dateRange: []
 })
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   totalIn: 0,
   totalOut: 0,
   totalInValue: 0,
   totalOutValue: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const getMoveTypeLabel = (type) => {
+const getMoveTypeLabel = (type: any) => {
   const labels = {
     'IN_PURCHASE': '采购入库',
     'OUT_SALES': '销售出库',
@@ -227,10 +227,10 @@ const getMoveTypeLabel = (type) => {
     'TRANSFER': '仓库调拨',
     'ADJUSTMENT': '库存调整'
   }
-  return labels[type] || type
+  return (labels as Record<string, any>)[type] || type
 }
 
-const getMoveTypeTag = (type) => {
+const getMoveTypeTag = (type: any) => {
   const tags = {
     'IN_PURCHASE': 'success',
     'OUT_SALES': 'danger',
@@ -238,25 +238,25 @@ const getMoveTypeTag = (type) => {
     'TRANSFER': 'info',
     'ADJUSTMENT': ''
   }
-  return tags[type] || ''
+  return (tags as Record<string, any>)[type] || ''
 }
 
 // StockMove 状态为 DRAFT/COMPLETED/CANCELLED（无 CONFIRMED），按真实状态映射标签颜色
-const moveStatusType = (status) => {
+const moveStatusType = (status: any) => {
   const types = {
     COMPLETED: 'success',
     CANCELLED: 'info',
     DRAFT: 'warning'
   }
-  return types[status] || 'warning'
+  return (types as Record<string, any>)[status] || 'warning'
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const formatQty = (num) => {
+const formatQty = (num: any) => {
   if (num === null || num === undefined) return '0'
   const n = Number(num)
   if (isNaN(n)) return '0'
@@ -266,7 +266,7 @@ const formatQty = (num) => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -278,14 +278,14 @@ const fetchData = async () => {
       params.start_date = searchForm.dateRange[0]
       params.end_date = searchForm.dateRange[1]
     }
-    
+
     const res = await getMoves(params)
     tableData.value = res.results || res.results || res || []
     pagination.total = res.count || res.count || 0
-    
+
     // 计算统计数据
     calculateStats()
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取库存流水失败:', error)
     ElMessage.error('获取数据失败')
   } finally {
@@ -317,7 +317,7 @@ const fetchItems = async () => {
   try {
     const res = await getItemList()
     items.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取物料列表失败:', error)
   }
 }
@@ -326,7 +326,7 @@ const fetchWarehouses = async () => {
   try {
     const res = await getWarehouseList()
     warehouses.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取仓库列表失败:', error)
   }
 }
@@ -335,7 +335,7 @@ const fetchProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目列表失败:', error)
   }
 }
@@ -359,7 +359,7 @@ const handleExport = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel, formatMoney }) => {
     const columns = [
       { field: 'move_no', title: '流水号' },
@@ -450,4 +450,3 @@ onMounted(() => {
   justify-content: flex-end;
 }
 </style>
-

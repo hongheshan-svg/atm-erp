@@ -370,16 +370,16 @@ const reconciliations = ref<any[]>([])
 const suppliers = ref<any[]>([])
 const createDialogVisible = ref(false)
 const detailDialogVisible = ref(false)
-const currentReconciliation = ref(null)
+const currentReconciliation = ref<any>(null)
 const reconciliationLines = ref<any[]>([])
 const detailTab = ref('order')
 
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const searchForm = reactive({ supplier: null, period: null, status: null })
-const summary = reactive({ total_purchase: 0, total_invoiced: 0, total_paid: 0, total_balance: 0 })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
+const searchForm = reactive<Record<string, any>>({ supplier: null, period: null, status: null })
+const summary = reactive<Record<string, any>>({ total_purchase: 0, total_invoiced: 0, total_paid: 0, total_balance: 0 })
 
-const createFormRef = ref(null)
-const createForm = reactive({
+const createFormRef = ref<any>(null)
+const createForm = reactive<Record<string, any>>({
   supplier: null,
   period: null,
   opening_balance: 0,
@@ -399,23 +399,23 @@ const paymentLines = computed(() => reconciliationLines.value.filter(l => l.line
 // 三方匹配状态
 const matchStatus = computed(() => {
   if (!currentReconciliation.value) return { hasIssue: false }
-  
+
   const orderAmt = currentReconciliation.value.total_order_amount || 0
   const receiptAmt = currentReconciliation.value.total_received_amount || 0
   const invoiceAmt = currentReconciliation.value.total_invoice_amount || 0
-  
+
   const issues = []
-  
+
   if (Math.abs(orderAmt - receiptAmt) > 0.01 && receiptAmt > 0) {
     const diff = orderAmt - receiptAmt
     issues.push(`订单金额与收货金额差异 ¥${formatNumber(Math.abs(diff))}${diff > 0 ? '（收货不足）' : '（超额收货）'}`)
   }
-  
+
   if (Math.abs(receiptAmt - invoiceAmt) > 0.01 && invoiceAmt > 0) {
     const diff = receiptAmt - invoiceAmt
     issues.push(`收货金额与发票金额差异 ¥${formatNumber(Math.abs(diff))}${diff > 0 ? '（发票不足）' : '（发票超额）'}`)
   }
-  
+
   return {
     hasIssue: issues.length > 0,
     type: issues.length > 0 ? 'warning' : 'success',
@@ -445,36 +445,36 @@ const agingOverduePercent = computed(() => {
   return Math.round(agingOverdue.value / total * 100)
 })
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = { DRAFT: 'info', PENDING: 'warning', CONFIRMED: 'success', DISPUTED: 'danger', CLOSED: '' }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status: any) => {
   const texts = { DRAFT: '草稿', PENDING: '待确认', CONFIRMED: '已确认', DISPUTED: '有争议', CLOSED: '已关闭' }
-  return texts[status] || status
+  return (texts as Record<string, any>)[status] || status
 }
 
-const getThreeWayMatchType = (row) => {
+const getThreeWayMatchType = (row: any) => {
   const order = row.order_amount || 0
   const receipt = row.received_amount || 0
   const invoice = row.invoice_amount || 0
-  
+
   if (order > 0 && Math.abs(order - receipt) < 0.01 && Math.abs(receipt - invoice) < 0.01) return 'success'
   if (receipt > 0 && invoice > 0) return 'warning'
   return 'info'
 }
 
-const getThreeWayMatchText = (row) => {
+const getThreeWayMatchText = (row: any) => {
   const order = row.order_amount || 0
   const receipt = row.received_amount || 0
   const invoice = row.invoice_amount || 0
-  
+
   if (order > 0 && Math.abs(order - receipt) < 0.01 && Math.abs(receipt - invoice) < 0.01) return '完全匹配'
   if (receipt > 0 && invoice > 0) return '部分匹配'
   if (receipt > 0) return '待开票'
@@ -485,7 +485,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 1000, status: 'ACTIVE' })
     suppliers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load suppliers failed:', error)
   }
 }
@@ -493,7 +493,7 @@ const loadSuppliers = async () => {
 const loadReconciliations = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -503,14 +503,14 @@ const loadReconciliations = async () => {
       params.period_end = searchForm.period[1]
     }
     delete params.period
-    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
-    
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === null || (params as Record<string, any>)[k] === '') delete (params as Record<string, any>)[k] })
+
     const res = await getPurchaseReconciliations(params)
     reconciliations.value = res.results || res || []
     pagination.total = res.count || 0
-    
+
     loadSummary()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载对账单失败')
   } finally {
     loading.value = false
@@ -526,7 +526,7 @@ const loadSummary = async () => {
       summary.total_paid = res.total_paid_amount || 0
       summary.total_balance = res.total_balance || 0
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load summary failed:', error)
   }
 }
@@ -545,7 +545,7 @@ const handleCreate = () => {
 }
 
 // 获取供应商期初余额
-const fetchOpeningBalance = async (supplierId) => {
+const fetchOpeningBalance = async (supplierId: any) => {
   if (!supplierId) {
     createForm.opening_balance = 0
     return
@@ -560,7 +560,7 @@ const fetchOpeningBalance = async (supplierId) => {
     } else if (res.source === 'account_payable') {
       ElMessage.info('已自动填入应付账款余额')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取期初余额失败:', error)
   }
 }
@@ -569,7 +569,7 @@ const submitCreate = async () => {
   try {
     await createFormRef.value.validate()
     submitting.value = true
-    
+
     const data = {
       supplier: createForm.supplier,
       period_start: createForm.period[0],
@@ -577,86 +577,90 @@ const submitCreate = async () => {
       opening_balance: createForm.opening_balance,
       notes: createForm.notes
     }
-    
+
     const res = await createPurchaseReconciliation(data)
     await generatePurchaseReconciliationLines(res.id)
-    
+
     ElMessage.success('对账单创建成功')
     createDialogVisible.value = false
     loadReconciliations()
     handleDetail(res)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('创建失败: ' + (error.response?.data?.error || error.message))
   } finally {
     submitting.value = false
   }
 }
 
-const handleDetail = async (row) => {
+const handleDetail = async (row: any) => {
   try {
     const res = await getPurchaseReconciliation(row.id)
     currentReconciliation.value = res
     reconciliationLines.value = res.lines || []
     detailTab.value = 'order'
     detailDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载明细失败')
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定提交此对账单吗？', '提交确认')
     await submitPurchaseReconciliation(row.id)
     ElMessage.success('提交成功')
     loadReconciliations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('提交失败')
   }
 }
 
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定确认此对账单吗？', '确认对账')
     await confirmPurchaseReconciliation(row.id)
     ElMessage.success('确认成功')
     loadReconciliations()
     if (detailDialogVisible.value) handleDetail(row)
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('确认失败')
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定删除此对账单吗？', '删除确认', { type: 'warning' })
     await deletePurchaseReconciliation(row.id)
     ElMessage.success('删除成功')
     loadReconciliations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }
 
-const confirmReceipt = async (line) => {
+const confirmReceipt = async (line: any) => {
   try {
     await confirmPurchaseReconciliationReceipt(currentReconciliation.value.id, line.id)
     ElMessage.success('确认收货成功')
     handleDetail(currentReconciliation.value)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('确认失败')
   }
 }
 
-const handlePrint = (row) => {
+const handlePrint = (row: any) => {
   const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    ElMessage.error('无法打开打印窗口，请检查浏览器弹窗设置')
+    return
+  }
   const html = generatePrintHtml(row)
   printWindow.document.write(html)
   printWindow.document.close()
   printWindow.focus()
 }
 
-const generatePrintHtml = (data) => {
+const generatePrintHtml = (data: any) => {
   // 生成采购订单明细行
   const orderRows = orderLines.value.map((line, idx) => `
     <tr>
@@ -675,7 +679,7 @@ const generatePrintHtml = (data) => {
       <td>${getThreeWayMatchText(line)}</td>
     </tr>
   `).join('')
-  
+
   // 生成收货明细行
   const receiptRows = receiptLines.value.map((line, idx) => `
     <tr>
@@ -687,7 +691,7 @@ const generatePrintHtml = (data) => {
       <td>${line.receipt_confirmed ? '已确认' : '待确认'}</td>
     </tr>
   `).join('')
-  
+
   // 生成发票明细行
   const invoiceRows = invoiceLines.value.map((line, idx) => `
     <tr>
@@ -700,7 +704,7 @@ const generatePrintHtml = (data) => {
       <td>${line.is_deducted ? '已抵扣' : '未抵扣'}</td>
     </tr>
   `).join('')
-  
+
   // 生成付款明细行
   const paymentRows = paymentLines.value.map((line, idx) => `
     <tr>
@@ -712,7 +716,7 @@ const generatePrintHtml = (data) => {
       <td>${line.payment_method || ''}</td>
     </tr>
   `).join('')
-  
+
   // 三方匹配差异
   const orderAmt = data.total_order_amount || 0
   const receiptAmt = data.total_received_amount || 0
@@ -724,9 +728,9 @@ const generatePrintHtml = (data) => {
   if (Math.abs(receiptAmt - invoiceAmt) > 0.01) {
     matchIssues.push('收货与发票差异: ¥' + formatNumber(Math.abs(receiptAmt - invoiceAmt)))
   }
-  
+
   const today = new Date().toISOString().slice(0, 10)
-  
+
   return `<!DOCTYPE html>
 <html>
 <head>

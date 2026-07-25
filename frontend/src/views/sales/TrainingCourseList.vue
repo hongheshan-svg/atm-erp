@@ -7,19 +7,19 @@
           <el-button type="primary" v-permission="'sales:order:create'" @click="handleCreate">新建课程</el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="code" label="课程编号" width="150" />
@@ -37,7 +37,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -90,9 +90,9 @@ const pageSize = ref(20)
 const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const form = reactive({ id: null, name: '', course_type: '', duration_hours: 1, description: '', is_active: true })
+const form = reactive<Record<string, any>>({ id: null, name: '', course_type: '', duration_hours: 1, description: '', is_active: true })
 const rules = {
   name: [{ required: true, message: '请输入课程名称', trigger: 'blur' }],
   course_type: [{ required: true, message: '请选择课程类型', trigger: 'change' }]
@@ -104,7 +104,7 @@ const loadData = async () => {
     const res = await getTrainingCourses({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -118,7 +118,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, { id: row.id, name: row.name, course_type: row.course_type, duration_hours: row.duration_hours, description: row.description, is_active: row.is_active })
   dialogVisible.value = true
@@ -137,7 +137,7 @@ const handleSave = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false

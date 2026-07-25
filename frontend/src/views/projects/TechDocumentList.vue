@@ -4,11 +4,11 @@
     <el-card class="filter-card">
       <el-form :inline="true" :model="filters">
         <el-form-item label="文档编号">
-          <el-input v-model="filters.keyword" placeholder="编号/标题" clearable style="width: 200px" 
+          <el-input v-model="filters.keyword" placeholder="编号/标题" clearable style="width: 200px"
                     @keyup.enter="loadDocuments" />
         </el-form-item>
         <el-form-item label="分类">
-          <el-cascader v-model="filters.category" :options="categoryTree" 
+          <el-cascader v-model="filters.category" :options="categoryTree"
                        :props="{ value: 'id', label: 'name', checkStrictly: true }"
                        clearable placeholder="选择分类" style="width: 200px" />
         </el-form-item>
@@ -98,7 +98,7 @@
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click.stop="viewDocument(row)">查看</el-button>
             <el-button size="small" link type="primary" @click.stop="downloadDocument(row)">下载</el-button>
-            <el-dropdown @command="(cmd) => handleCommand(cmd, row)" @click.stop>
+            <el-dropdown @command="(cmd: any) => handleCommand(cmd, row)" @click.stop>
               <el-button size="small" link>更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -258,30 +258,30 @@ const uploading = ref(false)
 const showUploadDialog = ref(false)
 const showDetailDrawer = ref(false)
 const distributeDialogVisible = ref(false)
-const distributeRow = ref(null)
-const distributeForm = reactive({ recipients: [], remarks: '' })
+const distributeRow = ref<any>(null)
+const distributeForm = reactive<Record<string, any>>({ recipients: [], remarks: '' })
 const distributeSaving = ref(false)
 const showAnnotationDialog = ref(false)
 
 const documents = ref<any[]>([])
 const categoryTree = ref<any[]>([])
 const projects = ref<any[]>([])
-const currentDocument = ref(null)
+const currentDocument = ref<any>(null)
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   keyword: '',
   category: null,
   status: '',
   project: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const uploadForm = reactive({
+const uploadForm = reactive<Record<string, any>>({
   title: '',
   category: null,
   project: null,
@@ -296,24 +296,24 @@ const uploadRules = {
   control_level: [{ required: true, message: '请选择受控级别', trigger: 'change' }]
 }
 
-const uploadFormRef = ref(null)
+const uploadFormRef = ref<any>(null)
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return '-'
   return new Date(date).toLocaleString('zh-CN')
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { DRAFT: 'info', REVIEWING: 'warning', APPROVED: 'success', RELEASED: 'primary', OBSOLETE: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getControlType = (level) => {
+const getControlType = (level: any) => {
   const map = { UNCONTROLLED: 'info', CONTROLLED: 'warning', CONFIDENTIAL: 'danger' }
-  return map[level] || 'info'
+  return (map as Record<string, any>)[level] || 'info'
 }
 
-const getFileColor = (type) => {
+const getFileColor = (type: any) => {
   if (type?.includes('pdf')) return '#F56C6C'
   if (type?.includes('word') || type?.includes('doc')) return '#409EFF'
   if (type?.includes('excel') || type?.includes('xls')) return '#67C23A'
@@ -323,7 +323,7 @@ const getFileColor = (type) => {
 const loadDocuments = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -335,7 +335,7 @@ const loadDocuments = async () => {
     const res = await getTechDocumentList(params)
     documents.value = res.results || res
     pagination.total = res.count || documents.value.length
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载文档列表失败')
   } finally {
     loading.value = false
@@ -346,7 +346,7 @@ const loadCategories = async () => {
   try {
     const res = await getTechDocCategoryTree()
     categoryTree.value = res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载分类失败')
   }
 }
@@ -355,7 +355,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载项目列表失败')
   }
 }
@@ -368,29 +368,29 @@ const resetFilters = () => {
   loadDocuments()
 }
 
-const viewDocument = async (row) => {
+const viewDocument = async (row: any) => {
   try {
     const res = await getTechDocument(row.id)
     currentDocument.value = res
     showDetailDrawer.value = true
     // 记录访问
     logTechDocAccess(row.id, { access_type: 'VIEW' })
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载文档详情失败')
   }
 }
 
-const downloadDocument = async (row) => {
+const downloadDocument = async (row: any) => {
   try {
     await logTechDocAccess(row.id, { access_type: 'DOWNLOAD' })
     ElMessage.success('开始下载')
     // 实际下载逻辑
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('下载失败')
   }
 }
 
-const handleFileChange = (file) => {
+const handleFileChange = (file: any) => {
   uploadForm.file = file.raw
 }
 
@@ -398,7 +398,7 @@ const submitUpload = async () => {
   try {
     await uploadFormRef.value.validate()
     uploading.value = true
-    
+
     const formData = new FormData()
     formData.append('title', uploadForm.title)
     if (uploadForm.category) formData.append('category', uploadForm.category)
@@ -414,14 +414,14 @@ const submitUpload = async () => {
     ElMessage.success('文档上传成功')
     showUploadDialog.value = false
     loadDocuments()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('上传失败')
   } finally {
     uploading.value = false
   }
 }
 
-const handleCommand = async (cmd, row) => {
+const handleCommand = async (cmd: any, row: any) => {
   switch (cmd) {
     case 'review':
       ElMessageBox.prompt('请输入评审人ID（逗号分隔）', '提交评审').then(async ({ value }) => {
@@ -469,7 +469,7 @@ const handleDistributeSave = async () => {
     ElMessage.success('发放成功')
     distributeDialogVisible.value = false
     loadDocuments()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('发放失败')
   } finally {

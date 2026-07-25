@@ -5,6 +5,7 @@ PAYABLE_SOURCES = {}
 
 class PayableSource:
     """来源适配器基类。子类设 source_type / category,并实现 to_payable / write_back。"""
+
     source_type = ''
     category = ''
 
@@ -33,7 +34,9 @@ def register_payable(obj, source_type: str) -> PayableItem:
     # update_or_create 的重复调用只刷新静态字段、不会覆盖已由核销/反核销正确维护的核销进度。
     # 若将来往任何 to_payable() 里加 status/amount_paid,会在反核销场景悄悄复位台账,务必避免。
     item, _ = PayableItem.objects.update_or_create(
-        source_type=source_type, source_id=obj.pk, defaults=defaults,
+        source_type=source_type,
+        source_id=obj.pk,
+        defaults=defaults,
     )
     return item
 
@@ -88,6 +91,7 @@ class ExpensePayableSource(PayableSource):
 
     def write_back(self, obj, item) -> None:
         from django.utils import timezone
+
         if item.status == item.STATUS_PAID:
             obj.status = 'PAID'
             if not obj.reimbursement_date:
@@ -120,8 +124,10 @@ class ContractPaymentSource(PayableSource):
 
     def write_back(self, obj, item) -> None:
         from decimal import Decimal
+
         from django.db.models import Sum
         from django.utils import timezone
+
         if item.status == item.STATUS_PAID and obj.status != 'PAID':
             obj.status = 'PAID'
             if not obj.actual_date:
@@ -146,6 +152,7 @@ class OutsourcePayableSource(PayableSource):
     付款语义、也无 amount_paid 等字段。统一台账 PayableItem 是该来源付款事实的唯一来源,
     PayableSettlement 已完整记账,故 write_back 为 no-op,不回写/不新增字段,避免污染
     源单据既有的进度状态机(settle/unsettle 对源单据均无副作用)。"""
+
     source_type = 'outsource'
     category = '委外加工'
 
@@ -175,11 +182,13 @@ class VehicleRequestPayableSource(PayableSource):
     other_cost 四项,amount_due 取 total_cost(四项之和);该模型无供应商/项目字段,
     payee_name 用申请人姓名(报销对象是内部员工),due_date 取实际归还时间
     (actual_end_time)当天。"""
+
     source_type = 'vehicle_request'
     category = '用车行程费'
 
     def to_payable(self, obj) -> dict:
         from django.utils.dateparse import parse_datetime
+
         payee_name = obj.applicant.get_full_name() if obj.applicant_id else ''
         # actual_end_time 在实例未经数据库往返读取时可能仍是原始字符串(Django 仅在从
         # 数据库读回时才反序列化为 datetime),与 payable_service 里对 transaction_time
@@ -207,6 +216,7 @@ class SharedExpensePayableSource(PayableSource):
     views.py 的 allocate() 依赖 status=='ALLOCATED' 判断"已分摊"并拒绝重复分摊),不含
     付款语义。统一台账 PayableItem 是该来源付款事实的唯一来源,write_back 为 no-op,
     不回写/不新增字段,避免破坏分摊状态机(settle/unsettle 对源单据均无副作用)。"""
+
     source_type = 'shared_expense'
     category = '公共费用'
 
@@ -231,6 +241,7 @@ class SharedExpensePayableSource(PayableSource):
 class TaxPayableSource(PayableSource):
     """缴税:TaxDeclaration 本身已有干净的"已付"语义(status='PAID' + paid_amount/paid_at),
     直接复用,不新增字段。收款方固定为"税务局"(无对应供应商实体)。"""
+
     source_type = 'tax'
     category = '税务'
 
@@ -248,7 +259,9 @@ class TaxPayableSource(PayableSource):
 
     def write_back(self, obj, item) -> None:
         from decimal import Decimal
+
         from django.utils import timezone
+
         if item.status == item.STATUS_PAID and obj.status != 'PAID':
             obj.status = 'PAID'
             obj.paid_amount = item.amount_paid
@@ -267,6 +280,7 @@ class TaxPayableSource(PayableSource):
 class PaymentRequestPayableSource(PayableSource):
     """付款申请:PaymentRequest 已有干净的"已付"语义(status='PAID' + paid_at + payment FK),
     直接复用,不新增字段。"""
+
     source_type = 'payment_request'
     category = '付款申请'
 
@@ -283,6 +297,7 @@ class PaymentRequestPayableSource(PayableSource):
 
     def write_back(self, obj, item) -> None:
         from django.utils import timezone
+
         if item.status == item.STATUS_PAID and obj.status != 'PAID':
             obj.status = 'PAID'
             if not obj.paid_at:
@@ -307,6 +322,7 @@ class AssetMaintenancePayableSource(PayableSource):
     (settle/unsettle 对源单据均无副作用)。
     该模型本身无供应商/服务商字段(处理人 handler 是内部员工,非外部维修商),
     payee_name 留空,人工核对时以 source_no(维修单号)定位。"""
+
     source_type = 'asset_maintenance'
     category = '资产维护'
 
@@ -337,6 +353,7 @@ class ServiceExpensePayableSource(PayableSource):
     payee_name 优先取该笔费用挂靠的派工记录(dispatch)的技术人员姓名(谁跑现场、
     实际垫付、向谁核销);dispatch 可空(如订单级公共费用未挂靠具体派工),此时回退
     到费用提交人 created_by。该模型无独立业务单号,source_no 用 SE<pk>。"""
+
     source_type = 'service_expense'
     category = '服务费报销'
 
@@ -367,6 +384,7 @@ class VehicleMaintenancePayableSource(PayableSource):
     无 status、无 amount_paid/paid 等付款字段,也无审批状态机。统一台账 PayableItem 是
     该来源付款事实的唯一来源,write_back 为 no-op,不回写/不新增字段(settle/unsettle
     对源单据均无副作用)。payee_name 取服务商 vendor;该模型无维护单号,source_no 用 VM<pk>。"""
+
     source_type = 'vehicle_maintenance'
     category = '车辆维护'
 

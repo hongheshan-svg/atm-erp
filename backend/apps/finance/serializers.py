@@ -90,8 +90,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         ]
         # status 只经 submit/approve/reject/工作流 与 核销 write_back 流转,reimbursement_date
         # 由核销回写,均不经通用 PATCH——设为只读,堵住绕过核销台账直接标 PAID 的旁路。
-        read_only_fields = ['expense_no', 'base_amount', 'created_at', 'updated_at',
-                            'status', 'reimbursement_date']
+        read_only_fields = ['expense_no', 'base_amount', 'created_at', 'updated_at', 'status', 'reimbursement_date']
 
 
 class AccountReceivableSerializer(serializers.ModelSerializer):
@@ -103,16 +102,16 @@ class AccountReceivableSerializer(serializers.ModelSerializer):
     project_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
-    def get_so_no(self, obj):
+    def get_so_no(self, obj) -> str | None:
         return obj.so.order_no if obj.so else None
 
-    def get_sales_order_no(self, obj):
+    def get_sales_order_no(self, obj) -> str | None:
         return obj.so.order_no if obj.so else None
 
-    def get_project_name(self, obj):
+    def get_project_name(self, obj) -> str:
         return obj.project.name if obj.project else '未关联项目'
 
-    def get_amount_remaining(self, obj):
+    def get_amount_remaining(self, obj) -> float:
         return float(obj.amount_remaining) if obj.amount_remaining else float(obj.amount_due - obj.amount_paid)
 
     currency_code = serializers.CharField(source='currency.code', read_only=True)
@@ -188,12 +187,12 @@ class AccountPayableSerializer(serializers.ModelSerializer):
         # 避免绕过待付款项台账核销把 status 和实际已付金额改得不一致(同合同付款收口口径)。
         read_only_fields = ['ap_no', 'amount_paid', 'status', 'created_at', 'updated_at']
 
-    def get_project_name(self, obj):
+    def get_project_name(self, obj) -> str | None:
         if obj.po and obj.po.project:
             return obj.po.project.name
         return None
 
-    def get_amount_remaining(self, obj):
+    def get_amount_remaining(self, obj) -> float:
         return float(obj.amount_remaining)
 
 
@@ -233,12 +232,14 @@ class PaymentSerializer(serializers.ModelSerializer):
         # ORM Payment.objects.create() 直连,不经本序列化器,不受此校验影响。
         payment_type = attrs.get('payment_type') or (self.instance.payment_type if self.instance else None)
         if payment_type == 'AP':
-            raise serializers.ValidationError({
-                'payment_type': (
-                    '应付账款付款已收口到待付款项核销台账,请通过「付款核销工作台」核销银行流水'
-                    '(POST /api/finance/payable-reconcile/settle/)登记,不支持直接创建该类型付款记录。'
-                )
-            })
+            raise serializers.ValidationError(
+                {
+                    'payment_type': (
+                        '应付账款付款已收口到待付款项核销台账,请通过「付款核销工作台」核销银行流水'
+                        '(POST /api/finance/payable-reconcile/settle/)登记,不支持直接创建该类型付款记录。'
+                    )
+                }
+            )
         return attrs
 
 
@@ -327,15 +328,15 @@ class InvoiceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['total_amount', 'created_at', 'updated_at']
 
-    def get_item_count(self, obj):
+    def get_item_count(self, obj) -> int:
         return obj.items.count()
 
-    def get_attachment_count(self, obj):
+    def get_attachment_count(self, obj) -> int:
         from apps.core.models import Attachment
 
         return Attachment.objects.filter(related_model='Invoice', related_id=obj.id).count()
 
-    def get_sales_order_no(self, obj):
+    def get_sales_order_no(self, obj) -> str | None:
         """获取关联的销售订单号"""
         if obj.reference_type == 'SALES_ORDER' and obj.reference_id:
             from apps.sales.models import SalesOrder
@@ -347,7 +348,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 pass
         return None
 
-    def get_purchase_order_no(self, obj):
+    def get_purchase_order_no(self, obj) -> str | None:
         """获取关联的采购订单号"""
         if obj.reference_type == 'PURCHASE_ORDER' and obj.reference_id:
             from apps.purchase.models import PurchaseOrder
@@ -422,7 +423,7 @@ class SharedExpenseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['expense_no', 'allocated_at', 'created_at', 'updated_at']
 
-    def get_total_allocated(self, obj):
+    def get_total_allocated(self, obj) -> float:
         return sum(a.allocated_amount for a in obj.allocations.all())
 
 
@@ -558,8 +559,7 @@ class PurchasePaymentScheduleSerializer(serializers.ModelSerializer):
         ]
         # amount_paid/status/actual_paid_date 由所属 AP 的核销进度派生(sync_purchase_schedules_from_ap),
         # 不经通用 PATCH——设为只读,堵住绕过核销台账直接改里程碑已付/状态的旁路。
-        read_only_fields = ['schedule_no', 'created_at', 'updated_at',
-                            'amount_paid', 'status', 'actual_paid_date']
+        read_only_fields = ['schedule_no', 'created_at', 'updated_at', 'amount_paid', 'status', 'actual_paid_date']
 
 
 class PaymentRequestSerializer(serializers.ModelSerializer):

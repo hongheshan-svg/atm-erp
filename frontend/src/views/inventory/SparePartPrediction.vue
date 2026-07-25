@@ -148,11 +148,11 @@ const costLoading = ref(false)
 
 const lifecycleData = ref<any[]>([])
 const purchaseSuggestions = ref<any[]>([])
-const costAnalysis = ref(null)
+const costAnalysis = ref<any>(null)
 
-const formatMoney = (v) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
-const sugStatusType = (s) => ({ pending: 'warning', accepted: 'success', rejected: 'info', ordered: '' }[s] || 'info')
-const sugStatusLabel = (s) => ({ pending: '待处理', accepted: '已接受', rejected: '已忽略', ordered: '已下单' }[s] || s)
+const formatMoney = (v: any) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const sugStatusType = (s: any) => (({ pending: 'warning', accepted: 'success', rejected: 'info', ordered: '' } as Record<string, any>)[s] || 'info')
+const sugStatusLabel = (s: any) => (({ pending: '待处理', accepted: '已接受', rejected: '已忽略', ordered: '已下单' } as Record<string, any>)[s] || s)
 
 const loadLifecycle = async () => {
   lifecycleLoading.value = true
@@ -178,22 +178,22 @@ const loadCostAnalysis = async () => {
   } finally { costLoading.value = false }
 }
 
-const acceptSuggestion = async (row) => {
+const acceptSuggestion = async (row: any) => {
   try {
     await updatePurchaseSuggestion(row.id, 'accepted')
     row.status = 'accepted'
     ElMessage.success('已接受采购建议')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const rejectSuggestion = async (row) => {
+const rejectSuggestion = async (row: any) => {
   try {
     await updatePurchaseSuggestion(row.id, 'rejected')
     row.status = 'rejected'
     ElMessage.info('已忽略')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }

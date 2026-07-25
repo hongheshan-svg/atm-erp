@@ -304,7 +304,7 @@ class SalespersonRankingView(APIView):
                     {
                         'rank': idx + 1,
                         'user_id': item['created_by__id'],
-                        'name': f"{item['created_by__last_name'] or ''}{item['created_by__first_name'] or ''}"
+                        'name': f'{item["created_by__last_name"] or ""}{item["created_by__first_name"] or ""}'
                         or item['created_by__username'],
                         'order_count': item['order_count'],
                         'total_amount': float(item['total_amount']) if item['total_amount'] else 0,

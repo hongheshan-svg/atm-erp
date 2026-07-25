@@ -170,7 +170,7 @@ class SparePart(BaseModel):
             self.part_no = generate_code('SP', rule_type='SPARE_PART')
         super().save(*args, **kwargs)
 
-    def get_current_stock(self):
+    def get_current_stock(self) -> int:
         """获取当前库存"""
         if self.item:
             from apps.inventory.models import Stock
@@ -409,7 +409,7 @@ class SparePartCategorySerializer(serializers.ModelSerializer):
         model = SparePartCategory
         fields = '__all__'
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list:
         children = obj.children.filter(is_deleted=False)
         return SparePartCategorySerializer(children, many=True).data
 
@@ -427,7 +427,7 @@ class SparePartSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['part_no']
 
-    def get_current_stock(self, obj):
+    def get_current_stock(self, obj) -> float:
         return obj.get_current_stock()
 
 
@@ -458,7 +458,7 @@ class SparePartListSerializer(serializers.ModelSerializer):
             'is_active',
         ]
 
-    def get_current_stock(self, obj):
+    def get_current_stock(self, obj) -> float:
         return obj.get_current_stock()
 
 
@@ -473,7 +473,7 @@ class SparePartEquipmentRelationSerializer(serializers.ModelSerializer):
         model = SparePartEquipmentRelation
         fields = '__all__'
 
-    def get_current_stock(self, obj):
+    def get_current_stock(self, obj) -> float:
         return obj.spare_part.get_current_stock()
 
 
@@ -517,6 +517,7 @@ class SparePartAlertSerializer(serializers.ModelSerializer):
 
 class SparePartCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件类别管理"""
+
     permission_module = 'inventory'
     permission_resource = 'spare_part_category'
 
@@ -532,6 +533,7 @@ class SparePartCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class SparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件管理"""
+
     permission_module = 'inventory'
     permission_resource = 'spare_part'
 
@@ -610,6 +612,7 @@ class SparePartViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
 class SparePartEquipmentRelationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """设备备件关联管理"""
+
     permission_module = 'inventory'
     permission_resource = 'spare_part_equipment_relation'
 
@@ -656,6 +659,7 @@ class SparePartEquipmentRelationViewSet(PermissionMixin, SoftDeleteMixin, UserTr
 
 class SparePartConsumptionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """备件消耗记录"""
+
     permission_module = 'inventory'
     permission_resource = 'spare_part_consumption'
 
@@ -709,6 +713,7 @@ class SparePartConsumptionViewSet(PermissionMixin, SoftDeleteMixin, UserTracking
 
 class SparePartAlertViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """备件预警管理"""
+
     permission_module = 'inventory'
     permission_resource = 'spare_part_alert'
 

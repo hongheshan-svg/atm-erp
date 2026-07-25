@@ -15,7 +15,7 @@ export const loadCompanyConfig = async (): Promise<void> => {
     loaded.value = true
 
     updateDocumentTitle()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load company config:', error)
   }
 }

@@ -2,19 +2,19 @@
   <div class="delivery-collaboration-list">
     <el-card>
       <template #header><span>送货协作</span></template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="采购订单" width="150" />
@@ -34,7 +34,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -99,10 +99,10 @@ const total = ref(0)
 const viewDialogVisible = ref(false)
 const confirmDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
-const currentRow = ref(null)
-const confirmForm = reactive({ actual_delivery_date: '', remarks: '' })
+const currentRow = ref<any>(null)
+const confirmForm = reactive<Record<string, any>>({ actual_delivery_date: '', remarks: '' })
 
-const getStatusType = (s) => ({ 'PENDING': 'warning', 'CONFIRMED': 'primary', 'DELIVERED': 'success', 'REJECTED': 'danger' }[s] || 'info')
+const getStatusType = (s: any) => (({ 'PENDING': 'warning', 'CONFIRMED': 'primary', 'DELIVERED': 'success', 'REJECTED': 'danger' } as Record<string, any>)[s] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -110,26 +110,26 @@ const loadData = async () => {
     const res = await getDeliveryCollaborations({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getDeliveryCollaboration(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }
 }
 
-const handleConfirm = (row) => {
+const handleConfirm = (row: any) => {
   currentRow.value = row
   confirmForm.actual_delivery_date = new Date().toISOString().split('T')[0]
   confirmForm.remarks = ''

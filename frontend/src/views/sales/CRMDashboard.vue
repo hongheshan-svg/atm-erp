@@ -154,12 +154,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { User, TrendCharts, OfficeBuilding, Trophy, Plus, Edit } from '@element-plus/icons-vue'
 import { getCRMDashboardStats, getSalesAnalysisStages, getLeads, getSalesRanking } from '@/api/sales'
 import { getCustomerFollowUpList } from '@/api/masterdata'
-
-const router = useRouter()
 
 const stats = ref<Record<string, any>>({})
 const pipelineStages = ref<any[]>([])
@@ -169,12 +166,12 @@ const salesRanking = ref<any[]>([])
 
 const maxStageAmount = ref(1)
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-const getStageColor = (stage) => {
+const getStageColor = (stage: any) => {
   const colors = {
     QUALIFICATION: '#409eff',
     NEEDS_ANALYSIS: '#67c23a',
@@ -183,22 +180,22 @@ const getStageColor = (stage) => {
     CLOSED_WON: '#67c23a',
     CLOSED_LOST: '#909399'
   }
-  return colors[stage] || '#409eff'
+  return (colors as Record<string, any>)[stage] || '#409eff'
 }
 
-const getStagePercent = (amount) => {
+const getStagePercent = (amount: any) => {
   if (!maxStageAmount.value) return 0
   return Math.round((amount / maxStageAmount.value) * 100)
 }
 
-const getLeadStatusType = (status) => {
+const getLeadStatusType = (status: any) => {
   const types = { NEW: 'info', CONTACTED: 'primary', QUALIFIED: 'success', CONVERTED: 'success', DISQUALIFIED: 'danger' }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getResultType = (result) => {
+const getResultType = (result: any) => {
   const types = { POSITIVE: 'success', NEUTRAL: 'warning', NEGATIVE: 'danger', PENDING: 'info' }
-  return types[result] || 'info'
+  return (types as Record<string, any>)[result] || 'info'
 }
 
 const fetchDashboardData = async () => {
@@ -217,7 +214,7 @@ const fetchDashboardData = async () => {
     recentLeads.value = leadsData.results || leadsData || []
     recentFollowups.value = followupsData.results || followupsData || []
     salesRanking.value = (rankingData.ranking || []).slice(0, 5)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load dashboard data:', error)
   }
 }

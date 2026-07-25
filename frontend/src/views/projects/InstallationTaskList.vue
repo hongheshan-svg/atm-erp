@@ -126,10 +126,10 @@ const submitLoading = ref(false)
 const taskList = ref<any[]>([])
 const total = ref(0)
 const showCreateDialog = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const queryParams = reactive({ page: 1, page_size: 20, search: '', status: '' })
-const form = reactive({ project: '', site_address: '', site_contact: '', site_phone: '', dateRange: [], equipment_list_text: '', notes: '' })
+const queryParams = reactive<Record<string, any>>({ page: 1, page_size: 20, search: '', status: '' })
+const form = reactive<Record<string, any>>({ project: '', site_address: '', site_contact: '', site_phone: '', dateRange: [], equipment_list_text: '', notes: '' })
 const formRules = {
   project: [{ required: true, message: '必填' }],
   site_address: [{ required: true, message: '必填' }]
@@ -142,8 +142,8 @@ const statusOptions = [
   { value: 'acceptance', label: '验收中' }, { value: 'completed', label: '已完成' }
 ]
 
-const statusType = (s) => ({ pending: 'info', dispatched: '', in_transit: 'warning', on_site: 'warning', installing: '', commissioning: '', acceptance: 'warning', completed: 'success' }[s] || 'info')
-const statusLabel = (s) => statusOptions.find(o => o.value === s)?.label || s
+const statusType = (s: any) => (({ pending: 'info', dispatched: '', in_transit: 'warning', on_site: 'warning', installing: '', commissioning: '', acceptance: 'warning', completed: 'success' } as Record<string, any>)[s] || 'info')
+const statusLabel = (s: any) => statusOptions.find(o => o.value === s)?.label || s
 
 const summary = ref<Record<string, any>>({})
 const statusStats = computed(() => [
@@ -158,7 +158,7 @@ const statusStats = computed(() => [
 const loadList = async () => {
   loading.value = true
   try {
-    const params = { ...queryParams }
+    const params: Record<string, any> = { ...queryParams }
     if (!params.search) delete params.search
     if (!params.status) delete params.status
     const res = await getInstallationTasks(params)
@@ -171,16 +171,16 @@ const loadSummary = async () => {
   try {
     const res = await getInstallationTaskSummary()
     summary.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('InstallationTaskList getInstallationTaskSummary error:', error)
   }
 }
 
-const goDetail = (row) => {
+const goDetail = (row: any) => {
   router.push({ name: 'InstallationTaskDetail', params: { id: row.id } })
 }
 
-const dispatchTask = async (row) => {
+const dispatchTask = async (row: any) => {
   await ElMessageBox.confirm('确认派工？', '提示')
   await dispatchInstallationTask(row.id)
   ElMessage.success('派工成功')
@@ -188,7 +188,7 @@ const dispatchTask = async (row) => {
   loadSummary()
 }
 
-const updateStatus = async (row, status) => {
+const updateStatus = async (row: any, status: any) => {
   await updateInstallationTaskStatus(row.id, { status })
   ElMessage.success('状态更新成功')
   loadList()
@@ -199,7 +199,7 @@ const handleCreate = async () => {
   await formRef.value.validate()
   submitLoading.value = true
   try {
-    const data = {
+    const data: Record<string, any> = {
       ...form,
       planned_start: form.dateRange?.[0],
       planned_end: form.dateRange?.[1],

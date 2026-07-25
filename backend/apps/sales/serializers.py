@@ -1,6 +1,7 @@
 """
 Serializers for sales app.
 """
+
 from decimal import Decimal
 
 from django.db import transaction
@@ -48,25 +49,25 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['line_amount']
 
-    def get_item_name(self, obj):
+    def get_item_name(self, obj) -> str:
         """返回产品名称：优先物料，其次手动填写"""
         if obj.item:
             return obj.item.name
         return obj.custom_name or ''
 
-    def get_item_sku(self, obj):
+    def get_item_sku(self, obj) -> str:
         """返回产品编码"""
         if obj.item:
             return obj.item.sku
         return ''
 
-    def get_item_unit(self, obj):
+    def get_item_unit(self, obj) -> str:
         """返回单位"""
         if obj.item:
             return obj.item.get_unit_display()
         return obj.custom_unit or '件'
 
-    def get_item_spec(self, obj):
+    def get_item_spec(self, obj) -> str:
         """返回规格型号"""
         if obj.item:
             return obj.item.specification or ''
@@ -83,7 +84,7 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     lines = SalesQuotationLineSerializer(many=True, read_only=True)
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
@@ -116,7 +117,16 @@ class SalesQuotationSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['quote_no', 'quote_date', 'parent_quote', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
+        read_only_fields = [
+            'quote_no',
+            'quote_date',
+            'parent_quote',
+            'tax_amount',
+            'total_with_tax',
+            'status',
+            'created_at',
+            'updated_at',
+        ]
 
     def create(self, validated_data):
         """Create quotation with lines."""
@@ -231,31 +241,31 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['line_amount', 'delivered_qty']
 
-    def get_item_name(self, obj):
+    def get_item_name(self, obj) -> str:
         """返回产品名称：优先物料，其次手动填写"""
         if obj.item:
             return obj.item.name
         return obj.custom_name or ''
 
-    def get_item_sku(self, obj):
+    def get_item_sku(self, obj) -> str:
         """返回产品编码"""
         if obj.item:
             return obj.item.sku
         return ''
 
-    def get_item_unit(self, obj):
+    def get_item_unit(self, obj) -> str:
         """返回单位"""
         if obj.item:
             return obj.item.get_unit_display()
         return obj.custom_unit or '件'
 
-    def get_item_spec(self, obj):
+    def get_item_spec(self, obj) -> str:
         """返回规格型号"""
         if obj.item:
             return obj.item.specification or ''
         return obj.custom_spec or ''
 
-    def get_remaining_qty(self, obj):
+    def get_remaining_qty(self, obj) -> float:
         return float(obj.qty - obj.delivered_qty)
 
 
@@ -289,10 +299,10 @@ class SalesOrderSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     lines = SalesOrderLineSerializer(many=True, read_only=True)
 
-    def get_project_name(self, obj):
+    def get_project_name(self, obj) -> str:
         return obj.project.name if obj.project else '未关联项目'
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
@@ -449,27 +459,27 @@ class DeliveryOrderLineSerializer(serializers.ModelSerializer):
     unit = serializers.SerializerMethodField()  # 前端兼容字段
     specification = serializers.SerializerMethodField()  # 规格型号
 
-    def get_item_name(self, obj):
+    def get_item_name(self, obj) -> str:
         if obj.item:
             return obj.item.name
         return ''
 
-    def get_item_sku(self, obj):
+    def get_item_sku(self, obj) -> str:
         if obj.item:
             return obj.item.sku
         return ''
 
-    def get_item_unit(self, obj):
+    def get_item_unit(self, obj) -> str:
         if obj.item:
             return obj.item.get_unit_display()
         return ''
 
-    def get_unit(self, obj):
+    def get_unit(self, obj) -> str:
         if obj.item:
             return obj.item.get_unit_display()
         return ''
 
-    def get_specification(self, obj):
+    def get_specification(self, obj) -> str:
         if obj.item:
             return obj.item.specification or ''
         return ''
@@ -508,7 +518,7 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     lines = DeliveryOrderLineSerializer(many=True, read_only=True)
     invoice_no = serializers.SerializerMethodField()
 
-    def get_invoice_no(self, obj):
+    def get_invoice_no(self, obj) -> str | None:
         """勾稽展示：本发货单自动生成的销项发票号（无则 None）。"""
         inv = obj.invoices.filter(is_deleted=False).order_by('-id').first()
         return inv.invoice_no if inv else None
@@ -571,8 +581,9 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
     def _build_lines(self, delivery, lines_data):
         """构建发货明细：以 so_line 为有效性判据（非标产品 item 为空，从 so_line 回填），
         并校验本次发货数量不超过订单明细剩余可发数（含其他草稿发货单占用）。"""
-        from apps.sales.models import SalesOrderLine
         from django.db.models import Sum
+
+        from apps.sales.models import SalesOrderLine
 
         for line_data in lines_data:
             so_line_id = line_data.get('so_line')
@@ -588,8 +599,10 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
             qty = Decimal(str(qty))
             # 其他未完成草稿发货单已占用、但尚未计入 delivered_qty 的数量
             reserved = DeliveryOrderLine.objects.filter(
-                so_line=so_line, is_deleted=False,
-                delivery__is_deleted=False, delivery__status='DRAFT',
+                so_line=so_line,
+                is_deleted=False,
+                delivery__is_deleted=False,
+                delivery__status='DRAFT',
             ).exclude(delivery_id=delivery.id).aggregate(s=Sum('qty'))['s'] or Decimal('0')
             allowed = (so_line.qty or Decimal('0')) - (so_line.delivered_qty or Decimal('0')) - reserved
             if qty > allowed:

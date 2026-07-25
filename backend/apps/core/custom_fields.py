@@ -4,6 +4,8 @@ Custom Fields Configuration
 支持为各业务模块动态添加自定义字段
 """
 
+from typing import Any
+
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
@@ -138,7 +140,7 @@ class CustomFieldValue(BaseModel):
     def __str__(self):
         return f'{self.field_definition.field_code}: {self.get_value()}'
 
-    def get_value(self):
+    def get_value(self) -> Any:
         """获取字段值"""
         field_type = self.field_definition.field_type
 
@@ -383,7 +385,7 @@ class CustomFieldValueSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_value(self, obj):
+    def get_value(self, obj) -> Any:
         return obj.get_value()
 
 

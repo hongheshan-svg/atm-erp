@@ -7,19 +7,19 @@
           <el-button type="primary" @click="handleCreate">发起询价</el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="rfq_no" label="询价单号" width="150" />
@@ -40,7 +40,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -143,17 +143,17 @@ const total = ref(0)
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const compareDialogVisible = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const viewDetail = ref<Record<string, any>>({})
 const compareData = ref<any[]>([])
-const currentRFQId = ref(null)
+const currentRFQId = ref<any>(null)
 
-const form = reactive({ title: '', deadline: '', description: '' })
+const form = reactive<Record<string, any>>({ title: '', deadline: '', description: '' })
 const rules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
   deadline: [{ required: true, message: '请选择截止日期', trigger: 'change' }]
 }
-const getStatusType = (s) => ({ 'DRAFT': 'info', 'OPEN': 'primary', 'CLOSED': 'success', 'CANCELLED': 'danger' }[s] || 'info')
+const getStatusType = (s: any) => (({ 'DRAFT': 'info', 'OPEN': 'primary', 'CLOSED': 'success', 'CANCELLED': 'danger' } as Record<string, any>)[s] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -161,7 +161,7 @@ const loadData = async () => {
     const res = await getRFQCollaborations({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -174,38 +174,38 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getRFQCollaboration(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
   }
 }
 
-const handleCompare = async (row) => {
+const handleCompare = async (row: any) => {
   try {
     const res = await compareRFQCollaboration(row.id)
     compareData.value = res.results || res.results || res || res || []
     currentRFQId.value = row.id
     compareDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     ElMessage.error('加载比价数据失败')
   }
 }
 
-const selectSupplier = async (row) => {
+const selectSupplier = async (row: any) => {
   try {
     await ElMessageBox.confirm(`确定选定 ${row.supplier_name} 吗？`, '确认')
     await selectRFQCollaborationSupplier(currentRFQId.value, { supplier_id: row.supplier_id || row.id })
     ElMessage.success('选定成功')
     compareDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -218,7 +218,7 @@ const handleSave = async () => {
     ElMessage.success('创建成功')
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false

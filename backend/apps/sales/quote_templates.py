@@ -295,7 +295,7 @@ class QuoteGenerationService:
             output_dir = os.path.join(settings.MEDIA_ROOT, 'quotes', 'generated')
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(
-                output_dir, f"{quote_data.get('quote_no', 'quote')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+                output_dir, f'{quote_data.get("quote_no", "quote")}_{datetime.now().strftime("%Y%m%d%H%M%S")}.xlsx'
             )
 
         wb.save(output_path)
@@ -366,7 +366,7 @@ class QuoteGenerationService:
             <div class="company-name">{{ header.company_name|default:"公司名称" }}</div>
             <div class="quote-title">报 价 单</div>
         </div>
-        
+
         <div class="info-section">
             <div class="info-item"><span class="info-label">报价单号：</span>{{ quote.quote_no }}</div>
             <div class="info-item"><span class="info-label">报价日期：</span>{{ quote.quote_date }}</div>
@@ -375,7 +375,7 @@ class QuoteGenerationService:
             <div class="info-item"><span class="info-label">项目名称：</span>{{ quote.project_name }}</div>
             <div class="info-item"><span class="info-label">联 系 人：</span>{{ quote.contact_person }}</div>
         </div>
-        
+
         <table class="items-table">
             <thead>
                 <tr>
@@ -409,14 +409,14 @@ class QuoteGenerationService:
                 </tr>
             </tbody>
         </table>
-        
+
         <div class="footer-section">
             {% if quote.remarks %}
             <div class="remarks">
                 <strong>备注：</strong>{{ quote.remarks }}
             </div>
             {% endif %}
-            
+
             {% if footer.terms %}
             <div class="terms">
                 <strong>条款与条件：</strong>
@@ -428,7 +428,7 @@ class QuoteGenerationService:
             </div>
             {% endif %}
         </div>
-        
+
         <div class="signature-area">
             <div class="signature-box">
                 <div>供方（盖章）：</div>
@@ -502,6 +502,7 @@ class QuoteTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     """
     报价单模板管理
     """
+
     permission_module = 'sales'
     permission_resource = 'quote_template'
 
@@ -687,6 +688,7 @@ class QuoteHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """
     报价单历史（只读）
     """
+
     permission_module = 'sales'
     permission_resource = 'quote_history'
 

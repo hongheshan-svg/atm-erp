@@ -135,11 +135,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, WarningFilled } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import {
 getFiniteCapacityPlans, createFiniteCapacityPlan, updateFiniteCapacityPlan,
-  deleteFiniteCapacityPlan, runFiniteCapacitySchedule, publishFiniteCapacitySchedule,
-  getGanttData
+  deleteFiniteCapacityPlan, runFiniteCapacitySchedule, publishFiniteCapacitySchedule
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -152,13 +151,13 @@ const planList = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const selectedPlan = ref(null)
-const formRef = ref(null)
-const ganttRef = ref(null)
+const selectedPlan = ref<any>(null)
+const formRef = ref<any>(null)
+const ganttRef = ref<any>(null)
 
-const stats = reactive({ totalPlans: 0, scheduledTasks: 0, avgUtilization: 0, delayRisks: 0 })
-const queryParams = reactive({ page: 1, page_size: 20, status: '' })
-const form = reactive({
+const stats = reactive<Record<string, any>>({ totalPlans: 0, scheduledTasks: 0, avgUtilization: 0, delayRisks: 0 })
+const queryParams = reactive<Record<string, any>>({ page: 1, page_size: 20, status: '' })
+const form = reactive<Record<string, any>>({
   id: null, name: '', dateRange: [], scheduling_strategy: 'earliest_start', consider_setup_time: true
 })
 const rules = {
@@ -167,14 +166,14 @@ const rules = {
   scheduling_strategy: [{ required: true, message: '请选择策略', trigger: 'change' }]
 }
 
-const statusType = (s) => ({ draft: 'info', running: 'warning', completed: 'success', published: '', failed: 'danger' }[s] || 'info')
-const statusLabel = (s) => ({ draft: '草稿', running: '运行中', completed: '已完成', published: '已发布', failed: '失败' }[s] || s)
-const strategyLabel = (s) => ({ earliest_start: '最早开始', latest_start: '最晚开始', bottleneck_first: '瓶颈优先', priority_based: '订单优先级' }[s] || s)
+const statusType = (s: any) => (({ draft: 'info', running: 'warning', completed: 'success', published: '', failed: 'danger' } as Record<string, any>)[s] || 'info')
+const statusLabel = (s: any) => (({ draft: '草稿', running: '运行中', completed: '已完成', published: '已发布', failed: '失败' } as Record<string, any>)[s] || s)
+const strategyLabel = (s: any) => (({ earliest_start: '最早开始', latest_start: '最晚开始', bottleneck_first: '瓶颈优先', priority_based: '订单优先级' } as Record<string, any>)[s] || s)
 
 const loadList = async () => {
   loading.value = true
   try {
-    const params = { ...queryParams }
+    const params: Record<string, any> = { ...queryParams }
     if (params.status === '') delete params.status
     const res = await getFiniteCapacityPlans(params)
     planList.value = res.results || res.results || []
@@ -191,7 +190,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   selectedPlan.value = row
 }
 
@@ -219,35 +218,35 @@ const handleSubmit = async () => {
   }
 }
 
-const runSchedule = async (row) => {
+const runSchedule = async (row: any) => {
   await ElMessageBox.confirm('确认运行排程计算？', '提示')
   try {
     await runFiniteCapacitySchedule(row.id)
     ElMessage.success('排程已开始运行')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     console.error('FiniteCapacityList loadList error:', error)
   }
 }
 
-const publishSchedule = async (row) => {
+const publishSchedule = async (row: any) => {
   await ElMessageBox.confirm('确认发布排程？', '提示')
   try {
     await publishFiniteCapacitySchedule(row.id)
     ElMessage.success('排程已发布')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     console.error('FiniteCapacityList loadList error:', error)
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   await ElMessageBox.confirm('确认删除？', '提示')
   try {
     await deleteFiniteCapacityPlan(row.id)
     ElMessage.success('删除成功')
     loadList()
-  } catch (error) {
+  } catch (error: any) {
     console.error('FiniteCapacityList loadList error:', error)
   }
 }

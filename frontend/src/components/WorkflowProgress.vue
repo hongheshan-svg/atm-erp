@@ -102,7 +102,7 @@ const visible = computed({
 })
 
 const loading = ref(false)
-const progressData = ref(null)
+const progressData = ref<any>(null)
 
 const activeStep = computed(() => {
   if (!progressData.value) return 0
@@ -122,12 +122,12 @@ const finishStatus = computed(() => {
   return 'success'
 })
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const statusType = (status) => {
+const statusType = (status: any) => {
   const map = {
     PENDING: 'warning',
     APPROVED: 'success',
@@ -138,10 +138,10 @@ const statusType = (status) => {
     SKIPPED: 'info',
     TIMEOUT: 'danger',
   }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const timelineType = (status) => {
+const timelineType = (status: any) => {
   const map = {
     PENDING: 'warning',
     APPROVED: 'success',
@@ -150,10 +150,10 @@ const timelineType = (status) => {
     SKIPPED: 'info',
     TIMEOUT: 'danger',
   }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getElStepStatus = (node) => {
+const getElStepStatus = (node: any) => {
   const map = {
     APPROVED: 'success',
     REJECTED: 'error',
@@ -162,10 +162,10 @@ const getElStepStatus = (node) => {
     SKIPPED: 'success',
     TIMEOUT: 'error',
   }
-  return map[node.status] || 'wait'
+  return (map as Record<string, any>)[node.status] || 'wait'
 }
 
-const getStepDescription = (node) => {
+const getStepDescription = (node: any) => {
   let desc = node.assignee_name || '待分配'
   if (node.status === 'APPROVED') desc += ' · 已通过'
   else if (node.status === 'REJECTED') desc += ' · 已拒绝'
@@ -179,7 +179,7 @@ const loadProgress = async () => {
   progressData.value = null
   try {
     if (props.instanceId) {
-      progressData.value = await getWorkflowProgress(props.instanceId)
+      progressData.value = await getWorkflowProgress(Number(props.instanceId))
     } else if (props.businessType && props.businessId) {
       const res = await getWorkflowByBusiness(props.businessType, props.businessId)
       const inst = res.instance
@@ -187,7 +187,7 @@ const loadProgress = async () => {
         progressData.value = await getWorkflowProgress(inst.id)
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取审批进度失败:', error)
     ElMessage.error('获取审批进度失败')
   } finally {

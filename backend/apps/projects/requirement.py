@@ -239,7 +239,7 @@ class RequirementCategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
 
@@ -280,7 +280,7 @@ class RequirementSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'req_no']
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
 
@@ -318,7 +318,7 @@ class RequirementListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_children_count(self, obj):
+    def get_children_count(self, obj) -> int:
         return obj.children.filter(is_deleted=False).count()
 
 

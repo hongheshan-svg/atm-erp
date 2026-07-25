@@ -167,8 +167,8 @@ import { getAgingReport } from '@/api/reports'
 import { getCustomerList } from '@/api/masterdata'
 import { getSupplierList } from '@/api/masterdata'
 import { ElMessage } from 'element-plus'
-import { Clock, TrendCharts, Money, Warning, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import { Warning, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import * as echarts from '@/utils/echarts'
 import { subtractFixedSafe, toFixedSafe } from '@/utils/number'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -180,14 +180,13 @@ const reportData = ref<any[]>([])
 const customers = ref<any[]>([])
 const suppliers = ref<any[]>([])
 const activeTab = ref('ar')
-const chartRef = ref(null)
-const pieChartRef = ref(null)
-const searchForm = reactive({ customer: null, supplier: null })
-const agingSummary = reactive({ current: 0, days_1_30: 0, days_31_60: 0, days_60_plus: 0 })
+const pieChartRef = ref<any>(null)
+const searchForm = reactive<Record<string, any>>({ customer: null, supplier: null })
+const agingSummary = reactive<Record<string, any>>({ current: 0, days_1_30: 0, days_31_60: 0, days_60_plus: 0 })
 
-const getOverdueDaysColor = (days) => days <= 0 ? '#67C23A' : days <= 30 ? '#E6A23C' : '#F56C6C'
-const getAgingType = (days) => days <= 0 ? 'success' : days <= 30 ? 'warning' : 'danger'
-const getAgingLabel = (days) => {
+const getOverdueDaysColor = (days: any) => days <= 0 ? '#67C23A' : days <= 30 ? '#E6A23C' : '#F56C6C'
+const getAgingType = (days: any) => days <= 0 ? 'success' : days <= 30 ? 'warning' : 'danger'
+const getAgingLabel = (days: any) => {
   if (days <= 0) return '未逾期'
   if (days <= 30) return '1-30天'
   if (days <= 60) return '31-60天'
@@ -198,15 +197,15 @@ const loadReport = async () => {
   loading.value = true
   try {
     // 使用统一的 /reports/aging/ 接口，通过 type 参数区分 AR/AP
-    const params = { type: activeTab.value }
+    const params: Record<string, any> = { type: activeTab.value }
     if (activeTab.value === 'ar' && searchForm.customer) {
       params.customer = searchForm.customer
     } else if (activeTab.value === 'ap' && searchForm.supplier) {
       params.supplier = searchForm.supplier
     }
-    
+
     const response = await getAgingReport(params)
-    
+
     // 映射后端的 summary 字段到前端期望的格式
     // 后端桶：current(未逾期) / 1_30 / 31_60 / 61_90 / over_90
     const summary = response.summary || {}
@@ -216,17 +215,17 @@ const loadReport = async () => {
       days_31_60: summary['31_60'] || 0,
       days_60_plus: (summary['61_90'] || 0) + (summary.over_90 || 0)
     })
-    
+
     // 映射后端字段到前端显示字段
     const results = response.results || response || []
-    reportData.value = results.map(item => ({
+    reportData.value = results.map((item: any) => ({
       ...item,
       overdue_days: item.days_overdue || 0
     }))
-    
+
     await nextTick()
     renderPieChart()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载账龄分析失败')
   } finally {
     loading.value = false
@@ -237,7 +236,7 @@ const loadCustomers = async () => {
   try {
     const response = await getCustomerList({ page_size: 100 })
     customers.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
@@ -246,7 +245,7 @@ const loadSuppliers = async () => {
   try {
     const response = await getSupplierList({ page_size: 100 })
     suppliers.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载供应商失败:', error)
   }
 }
@@ -262,7 +261,7 @@ const exportToExcel = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel: doExport, formatMoney }) => {
     const columns = [
       { field: activeTab.value === 'ar' ? 'ar_no' : 'ap_no', title: '单据号' },
@@ -283,7 +282,7 @@ const exportToExcel = () => {
 const renderPieChart = () => {
   if (!pieChartRef.value) return
   const chart = echarts.init(pieChartRef.value)
-  
+
   chart.setOption({
     title: { text: '账龄分布', left: 'center' },
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },

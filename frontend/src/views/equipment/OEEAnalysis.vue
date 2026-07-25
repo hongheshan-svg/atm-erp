@@ -139,7 +139,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { ElMessage } from 'element-plus'
 import {
 getEquipmentList, getOEESummary, getOEERanking, getOEETrend, getOEEDowntime
@@ -150,7 +150,7 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 
 
 const dateRange = ref<any[]>([])
-const selectedEquipment = ref(null)
+const selectedEquipment = ref<any>(null)
 const equipments = ref<any[]>([])
 const oeeData = ref({
   oee: 0, availability: 0, performance: 0, quality: 0,
@@ -162,19 +162,19 @@ const equipmentRanking = ref<any[]>([])
 const trendData = ref<any[]>([])
 const downtimeData = ref<any[]>([])
 
-const trendChart = ref(null)
-const downtimeChart = ref(null)
-let trendChartInstance = null
-let downtimeChartInstance = null
+const trendChart = ref<any>(null)
+const downtimeChart = ref<any>(null)
+let trendChartInstance: any = null
+let downtimeChartInstance: any = null
 
-const formatDateParam = (d) => {
+const formatDateParam = (d: any) => {
   if (!d) return ''
   const dt = new Date(d)
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
 }
 
 const buildParams = () => {
-  const params = {}
+  const params: Record<string, any> = {}
   if (selectedEquipment.value) params.equipment_id = selectedEquipment.value
   if (dateRange.value && dateRange.value.length === 2) {
     params.start_date = formatDateParam(dateRange.value[0])
@@ -187,7 +187,7 @@ const loadEquipments = async () => {
   try {
     const res = await getEquipmentList({ page_size: 1000 })
     equipments.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('OEEAnalysis getEquipmentList error:', error)
   }
 }
@@ -208,7 +208,7 @@ const loadOEESummary = async () => {
       total_output: d.total_output || 0,
       good_output: d.good_output || 0
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     // If API not available, keep zeros
   }
@@ -218,7 +218,7 @@ const loadRanking = async () => {
   try {
     const res = await getOEERanking(buildParams())
     equipmentRanking.value = res.ranking || res.results || (Array.isArray(res) ? res : [])
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     equipmentRanking.value = []
   }
@@ -228,7 +228,7 @@ const loadTrendData = async () => {
   try {
     const res = await getOEETrend(buildParams())
     trendData.value = res.trend || (Array.isArray(res) ? res : [])
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     trendData.value = []
   }
@@ -238,7 +238,7 @@ const loadDowntimeData = async () => {
   try {
     const res = await getOEEDowntime(buildParams())
     downtimeData.value = res.reasons || (Array.isArray(res) ? res : [])
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     downtimeData.value = []
   }
@@ -289,7 +289,7 @@ const loadData = async () => {
   await loadEquipments()
   try {
     await Promise.all([loadOEESummary(), loadRanking(), loadTrendData(), loadDowntimeData()])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败', error)
     ElMessage.error('加载数据失败')
   }
@@ -297,13 +297,13 @@ const loadData = async () => {
   initCharts()
 }
 
-const getOEEColor = (value) => {
+const getOEEColor = (value: any) => {
   if (value >= 0.85) return '#67C23A'
   if (value >= 0.70) return '#E6A23C'
   return '#F56C6C'
 }
 
-const getFactorColor = (value) => {
+const getFactorColor = (value: any) => {
   if (value >= 0.90) return '#67C23A'
   if (value >= 0.80) return '#E6A23C'
   return '#F56C6C'

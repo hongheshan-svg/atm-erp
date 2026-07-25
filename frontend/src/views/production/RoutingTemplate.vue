@@ -54,7 +54,7 @@
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
             <el-button type="primary" link v-permission="'production:process:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-dropdown trigger="click" @command="cmd => handleCommand(cmd, row)">
+            <el-dropdown trigger="click" @command="(cmd: any) => handleCommand(cmd, row)">
               <el-button type="primary" link>更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -172,13 +172,13 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新建工艺模板')
 const applyDialogVisible = ref(false)
 const submitting = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const categories = ref<any[]>([])
 const items = ref<any[]>([])
 const projects = ref<any[]>([])
-const currentTemplate = ref(null)
+const currentTemplate = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   code: '',
   name: '',
@@ -188,7 +188,7 @@ const form = reactive({
   description: ''
 })
 
-const applyForm = reactive({
+const applyForm = reactive<Record<string, any>>({
   project_id: null
 })
 
@@ -197,15 +197,15 @@ const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { DRAFT: 'info', APPROVED: 'success', OBSOLETE: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: currentPage.value,
       page_size: pageSize.value,
       search: searchText.value || undefined,
@@ -214,7 +214,7 @@ const loadData = async () => {
     const res = await getRoutingTemplates(params)
     tableData.value = res.results || res || []
     total.value = res.count || tableData.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -250,7 +250,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑工艺模板'
   Object.assign(form, {
     id: row.id,
@@ -264,14 +264,14 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/production/routing-template/${row.id}`)
 }
 
 const handleSubmit = async () => {
   if (!formRef.value) return
   await formRef.value.validate()
-  
+
   submitting.value = true
   try {
     if (form.id) {
@@ -284,7 +284,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('保存失败')
   } finally {
@@ -292,7 +292,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleCommand = async (cmd, row) => {
+const handleCommand = async (cmd: any, row: any) => {
   try {
     switch (cmd) {
       case 'approve':
@@ -323,7 +323,7 @@ const handleCommand = async (cmd, row) => {
         }
         break
     }
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       console.error(e)
       ElMessage.error('操作失败')
@@ -336,13 +336,13 @@ const handleApplyToProject = async () => {
     ElMessage.warning('请选择项目')
     return
   }
-  
+
   submitting.value = true
   try {
     await applyRoutingTemplateToProject(currentTemplate.value.id, applyForm)
     ElMessage.success('工艺已应用到项目')
     applyDialogVisible.value = false
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('应用失败')
   } finally {

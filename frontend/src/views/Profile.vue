@@ -6,7 +6,7 @@
           <span>个人中心</span>
         </div>
       </template>
-      
+
       <el-form
         ref="formRef"
         :model="form"
@@ -17,42 +17,42 @@
         <el-form-item label="用户名">
           <el-input v-model="form.username" disabled />
         </el-form-item>
-        
+
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" />
         </el-form-item>
-        
+
         <el-form-item label="姓名" prop="first_name">
           <el-input v-model="form.first_name" placeholder="请输入姓名" />
         </el-form-item>
-        
+
         <el-form-item label="手机号" prop="phone">
           <el-input v-model="form.phone" placeholder="请输入手机号" />
         </el-form-item>
-        
+
         <el-form-item label="部门">
           <el-input :value="form.department_name" disabled />
         </el-form-item>
-        
+
         <el-form-item label="角色">
-          <el-tag 
-            v-for="role in form.roles" 
-            :key="role.id" 
+          <el-tag
+            v-for="role in form.roles"
+            :key="role.id"
             style="margin-right: 8px;"
           >
             {{ role.name }}
           </el-tag>
           <span v-if="!form.roles?.length" style="color: #909399;">暂无角色</span>
         </el-form-item>
-        
+
         <el-form-item label="注册时间">
           <el-input :value="form.date_joined" disabled />
         </el-form-item>
-        
+
         <el-form-item label="上次登录">
           <el-input :value="form.last_login" disabled />
         </el-form-item>
-        
+
         <el-form-item>
           <el-button type="primary" @click="handleSave" :loading="loading">
             保存修改
@@ -68,10 +68,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getUserProfile, updateProfile } from '@/api/auth'
 
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const loading = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   username: '',
   email: '',
   first_name: '',
@@ -92,15 +92,15 @@ const fetchProfile = async () => {
   try {
     const res = await getUserProfile()
     Object.assign(form, res)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取个人信息失败')
   }
 }
 
 const handleSave = async () => {
   if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid) => {
+
+  await formRef.value.validate(async (valid: any) => {
     if (valid) {
       loading.value = true
       try {
@@ -111,7 +111,7 @@ const handleSave = async () => {
         })
         ElMessage.success('保存成功')
         await fetchProfile()
-      } catch (error) {
+      } catch (error: any) {
         ElMessage.error('保存失败')
       } finally {
         loading.value = false
@@ -135,4 +135,3 @@ onMounted(() => {
   font-weight: 600;
 }
 </style>
-

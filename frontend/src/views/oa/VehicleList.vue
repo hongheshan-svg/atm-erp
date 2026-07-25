@@ -10,7 +10,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" class="search-form">
         <el-form-item label="车型">
@@ -33,19 +33,19 @@
           <el-button type="primary" @click="loadData">搜索</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="plate_number" label="车牌号" width="120" />
@@ -71,7 +71,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.pageSize"
@@ -83,7 +83,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 新建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑车辆' : '添加车辆'" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -217,24 +217,24 @@ const saving = ref(false)
 const maintDialogVisible = ref(false)
 const maintRecords = ref<any[]>([])
 const maintLoading = ref(false)
-const currentVehicle = ref(null)
+const currentVehicle = ref<any>(null)
 const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   vehicle_type: '',
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   plate_number: '',
   vehicle_type: 'CAR',
   brand: '',
@@ -258,20 +258,20 @@ const rules = {
   model: [{ required: true, message: '请输入型号', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'AVAILABLE': 'success',
     'IN_USE': 'primary',
     'MAINTENANCE': 'warning',
     'DISABLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -288,7 +288,7 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -316,7 +316,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, row)
   dialogVisible.value = true
@@ -326,7 +326,7 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     if (isEdit.value) {
       await updateVehicle(form.id, form)
       ElMessage.success('更新成功')
@@ -334,10 +334,10 @@ const handleSave = async () => {
       await createVehicle(form)
       ElMessage.success('添加成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) {
       ElMessage.error(JSON.stringify(error.response.data))
     }
@@ -346,14 +346,14 @@ const handleSave = async () => {
   }
 }
 
-const handleMaintenance = async (row) => {
+const handleMaintenance = async (row: any) => {
   currentVehicle.value = row
   maintDialogVisible.value = true
   maintLoading.value = true
   try {
     const res = await getVehicleMaintenanceRecords(row.id)
     maintRecords.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     maintRecords.value = []
   } finally {
@@ -361,13 +361,13 @@ const handleMaintenance = async (row) => {
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除这辆车吗？', '提示', { type: 'warning' })
     await deleteVehicle(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }

@@ -1,191 +1,175 @@
 #!/usr/bin/env python3
-"""
-全自动化测试系统
-整合后端API测试和前端浏览器测试
-"""
+"""Run the complete local CI suite against the Docker deployment."""
+
+import os
 import subprocess
 import sys
-from datetime import datetime
+from collections.abc import Sequence
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
-def bootstrap_database():
-    """初始化测试所需的数据库基础数据"""
-    print("\n" + "=" * 80)
-    print("【0/3】数据库初始化与校验")
-    print("=" * 80)
-
-    try:
-        result = subprocess.run(
-            [
-                'docker', 'compose', 'exec', '-T', 'backend', 'python', 'manage.py',
-                'migrate', '--noinput'
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-            return False
-
-        result = subprocess.run(
-            [
-                'docker', 'compose', 'exec', '-T', 'backend', 'python', 'manage.py',
-                'init_roles', '--force'
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-            return False
-
-        result = subprocess.run(
-            [
-                'docker', 'compose', 'exec', '-T', 'backend', 'python', 'manage.py',
-                'init_industry_roles', '--force'
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-            return False
-
-        result = subprocess.run(
-            [
-                'docker', 'compose', 'exec', '-T', 'backend', 'python', 'manage.py',
-                'init_data'
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-            return False
-
-        return True
-    except Exception as e:
-        print(f"❌ 数据库初始化失败: {e}")
+def run(
+    label: str,
+    command: Sequence[str],
+    *,
+    cwd: str = ROOT,
+    env: dict[str, str] | None = None,
+) -> bool:
+    print(f"\n{'=' * 80}\n{label}\n{'=' * 80}", flush=True)
+    completed = subprocess.run(command, cwd=cwd, env=env, check=False)
+    if completed.returncode:
+        print(f"FAILED ({completed.returncode}): {' '.join(command)}", file=sys.stderr)
         return False
+    return True
 
-def run_backend_tests():
-    """运行后端API测试"""
-    print("\n" + "=" * 80)
-    print("【1/3】后端API权限测试")
-    print("=" * 80)
 
-    try:
-        result = subprocess.run(
-            ['python3', 'test_comprehensive_permissions.py'],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-        return result.returncode == 0
-    except Exception as e:
-        print(f"❌ 后端测试失败: {e}")
-        return False
+def compose_exec(*command: str) -> list[str]:
+    return ["docker", "compose", "exec", "-T", "app", *command]
 
-def run_frontend_tests():
-    """运行前端自动化测试"""
-    print("\n" + "=" * 80)
-    print("【2/3】前端浏览器测试")
-    print("=" * 80)
 
-    try:
-        # 检查是否安装了 playwright
-        check = subprocess.run(
-            ['python3', '-c', 'import playwright'],
-            capture_output=True
-        )
+def main() -> int:
+    secure_env = [
+        "-e",
+        "SECURE_SSL_REDIRECT=True",
+        "-e",
+        "SECURE_HSTS_SECONDS=31536000",
+        "-e",
+        "SECURE_HSTS_INCLUDE_SUBDOMAINS=True",
+        "-e",
+        "SECURE_HSTS_PRELOAD=True",
+        "-e",
+        "SESSION_COOKIE_SECURE=True",
+        "-e",
+        "CSRF_COOKIE_SECURE=True",
+    ]
+    steps = [
+        (
+            "后端 Ruff 检查",
+            ["uvx", "ruff==0.16.0", "check", "backend"],
+            ROOT,
+        ),
+        (
+            "数据库迁移",
+            compose_exec("python", "manage.py", "migrate", "--noinput"),
+            ROOT,
+        ),
+        ("权限树初始化", compose_exec("python", "manage.py", "init_permissions"), ROOT),
+        (
+            "角色初始化",
+            compose_exec("python", "manage.py", "init_roles", "--force"),
+            ROOT,
+        ),
+        (
+            "仪表盘初始化",
+            compose_exec("python", "manage.py", "init_dashboard_widgets"),
+            ROOT,
+        ),
+        (
+            "Django 生产检查",
+            [
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                *secure_env,
+                "app",
+                "python",
+                "-W",
+                "error::DeprecationWarning",
+                "manage.py",
+                "check",
+                "--deploy",
+            ],
+            ROOT,
+        ),
+        (
+            "OpenAPI 校验",
+            compose_exec(
+                "python",
+                "manage.py",
+                "spectacular",
+                "--file",
+                "/tmp/schema.yml",
+                "--validate",
+                "--fail-on-warn",
+            ),
+            ROOT,
+        ),
+        (
+            "迁移漂移检查",
+            compose_exec(
+                "python", "manage.py", "makemigrations", "--check", "--dry-run"
+            ),
+            ROOT,
+        ),
+        (
+            "Django 全量测试",
+            compose_exec(
+                "python",
+                "-W",
+                "error::DeprecationWarning",
+                "manage.py",
+                "test",
+                "--noinput",
+            ),
+            ROOT,
+        ),
+        (
+            "安装后端测试依赖",
+            compose_exec(
+                "pip",
+                "install",
+                "--root-user-action=ignore",
+                "-q",
+                "-r",
+                "requirements-dev.txt",
+            ),
+            ROOT,
+        ),
+        ("后端依赖审计", compose_exec("pip-audit", "-r", "requirements.txt"), ROOT),
+        (
+            "后端集成测试",
+            compose_exec(
+                "pytest",
+                "tests/integration",
+                "-v",
+                "--tb=short",
+                "-W",
+                "error::DeprecationWarning",
+            ),
+            ROOT,
+        ),
+        (
+            "前端依赖安装",
+            ["npm", "ci", "--no-audit", "--no-fund"],
+            os.path.join(ROOT, "frontend"),
+        ),
+        (
+            "前端依赖审计",
+            [
+                "npm",
+                "audit",
+                "--audit-level=high",
+                "--registry=https://registry.npmjs.org",
+            ],
+            os.path.join(ROOT, "frontend"),
+        ),
+        ("前端类型检查", ["npm", "run", "typecheck"], os.path.join(ROOT, "frontend")),
+        ("前端 Lint", ["npm", "run", "lint"], os.path.join(ROOT, "frontend")),
+        ("前端单元测试", ["npm", "run", "test"], os.path.join(ROOT, "frontend")),
+        ("前端生产构建", ["npm", "run", "build"], os.path.join(ROOT, "frontend")),
+        ("浏览器深度巡检", [sys.executable, "test_browser_deep.py"], ROOT),
+        ("Vue 运行时巡检", [sys.executable, "test_vue_runtime.py"], ROOT),
+    ]
 
-        if check.returncode != 0:
-            print("⚠️  Playwright 未安装,跳过前端测试")
-            print("   安装命令: pip install playwright && playwright install chromium")
-            return None
+    for label, command, cwd in steps:
+        if not run(label, command, cwd=cwd):
+            return 1
 
-        result = subprocess.run(
-            ['python3', 'test_frontend_auto.py'],
-            capture_output=True,
-            text=True,
-            timeout=180
-        )
-        print(result.stdout)
-        if result.returncode != 0:
-            print(result.stderr)
-        return result.returncode == 0
-    except Exception as e:
-        print(f"⚠️  前端测试跳过: {e}")
-        return None
+    print("\n全部检查通过。")
+    return 0
 
-def analyze_errors():
-    """分析错误并生成报告"""
-    print("\n" + "=" * 80)
-    print("【错误分析】")
-    print("=" * 80)
-
-    try:
-        result = subprocess.run(
-            ['python3', 'auto_fix_errors.py'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        print(result.stdout)
-    except Exception as e:
-        print(f"⚠️  错误分析跳过: {e}")
-
-def main():
-    print("=" * 80)
-    print(f"全自动化测试系统 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
-
-    # 初始化数据库测试数据
-    database_ok = bootstrap_database()
-    if not database_ok:
-        print("\n" + "=" * 80)
-        print("测试总结")
-        print("=" * 80)
-        print("数据库初始化: ❌ 失败")
-        print("后端API测试: ⏭️ 未执行")
-        print("前端浏览器测试: ⏭️ 未执行")
-        print("=" * 80)
-        return 1
-
-    # 运行后端测试
-    backend_ok = run_backend_tests()
-
-    # 运行前端测试
-    frontend_ok = run_frontend_tests()
-
-    # 分析错误
-    if frontend_ok is not None:
-        analyze_errors()
-
-    # 总结
-    print("\n" + "=" * 80)
-    print("测试总结")
-    print("=" * 80)
-    print(f"数据库初始化: {'✅ 通过' if database_ok else '❌ 失败'}")
-    print(f"后端API测试: {'✅ 通过' if backend_ok else '❌ 失败'}")
-    if frontend_ok is not None:
-        print(f"前端浏览器测试: {'✅ 通过' if frontend_ok else '❌ 失败'}")
-    else:
-        print(f"前端浏览器测试: ⚠️  跳过")
-    print("=" * 80)
-
-    return 0 if database_ok and backend_ok and frontend_ok is not False else 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

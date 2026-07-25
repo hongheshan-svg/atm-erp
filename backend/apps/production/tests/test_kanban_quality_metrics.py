@@ -10,7 +10,7 @@ P1-2 回归测试：scheduling.KanbanView 的质量指标必须来自真实 Qual
 
 from datetime import date, timedelta
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.accounts.models import User
@@ -20,12 +20,9 @@ from apps.production.scheduling import KanbanView
 from apps.projects.models import Project
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class KanbanQualityMetricsTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create(
-            username='kanban_qa', employee_id='KQA1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='kanban_qa', employee_id='KQA1', is_staff=True, is_superuser=True)
         self.customer = Customer.objects.create(code='CUST-KQA', name='看板测试客户')
         self.project = Project.objects.create(
             code='PRJ-KQA',

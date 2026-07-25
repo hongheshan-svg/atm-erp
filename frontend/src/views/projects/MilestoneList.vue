@@ -9,7 +9,7 @@
         </el-button>
       </div>
     </div>
-    
+
     <!-- 筛选条件 -->
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" :model="queryParams">
@@ -37,7 +37,7 @@
         </el-form-item>
       </el-form>
     </el-card>
-    
+
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stats-row">
       <el-col :span="4">
@@ -77,7 +77,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 里程碑列表 -->
     <el-card shadow="never">
       <!-- 批量操作 -->
@@ -128,15 +128,15 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleUpdateProgress(row)" 
+            <el-button type="success" link size="small" @click="handleUpdateProgress(row)"
               v-if="row.status !== 'COMPLETED'">更新进度</el-button>
-            <el-button type="warning" link size="small" @click="handleComplete(row)" 
+            <el-button type="warning" link size="small" @click="handleComplete(row)"
               v-if="row.status !== 'COMPLETED' && row.progress >= 80">完成</el-button>
             <el-button type="primary" link size="small" v-permission="'projects:project:edit'" @click="handleEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         class="pagination"
         v-model:current-page="queryParams.page"
@@ -148,7 +148,7 @@
         @current-change="fetchData"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -203,7 +203,7 @@
           <el-col :span="12">
             <el-form-item label="关联付款">
               <el-switch v-model="form.payment_linked" />
-              <el-input-number v-if="form.payment_linked" v-model="form.payment_percentage" 
+              <el-input-number v-if="form.payment_linked" v-model="form.payment_percentage"
                 :min="0" :max="100" style="width: 100px; margin-left: 10px" /> %
             </el-form-item>
           </el-col>
@@ -220,7 +220,7 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 更新进度对话框 -->
     <el-dialog v-model="progressDialogVisible" title="更新进度" width="400px">
       <el-form label-width="80px">
@@ -236,7 +236,7 @@
         <el-button type="primary" @click="confirmProgress" :loading="progressLoading">确定</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 初始化模板对话框 -->
     <el-dialog v-model="initDialogVisible" title="从模板初始化里程碑" width="400px">
       <el-form label-width="80px">
@@ -289,6 +289,7 @@ import { getProjectList, getMilestoneList, getMilestone, createMilestone, update
 import { usePermissionStore } from '@/stores/permission'
 import { getUsers } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { getPaginationTotal } from '@/utils/pagination'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/milestones/', { onSuccess: () => fetchData() })
 
@@ -306,8 +307,8 @@ const dialogTitle = ref('新增里程碑')
 const progressDialogVisible = ref(false)
 const initDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
-const currentMilestone = ref(null)
+const formRef = ref<any>(null)
+const currentMilestone = ref<any>(null)
 
 const projects = ref<any[]>([])
 const users = ref<any[]>([])
@@ -315,7 +316,7 @@ const milestoneTypes = ref<any[]>([])
 const usersLoaded = ref(false)
 const permissionStore = usePermissionStore()
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   page: 1,
   page_size: 10,
   project: null,
@@ -323,7 +324,7 @@ const queryParams = reactive({
   status: null
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   project: null,
   milestone_type: 'CUSTOM',
   code: '',
@@ -337,12 +338,12 @@ const form = reactive({
   description: ''
 })
 
-const progressForm = reactive({
+const progressForm = reactive<Record<string, any>>({
   progress: 0,
   comment: ''
 })
 
-const initForm = reactive({
+const initForm = reactive<Record<string, any>>({
   project_id: null,
   start_date: new Date().toISOString().split('T')[0],
   template: 'standard'
@@ -372,8 +373,8 @@ const fetchData = async () => {
   try {
     const data = await getMilestoneList(queryParams)
     tableData.value = data.results || data
-    total.value = data.count || data.length
-  } catch (e) {
+    total.value = getPaginationTotal(data)
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -384,7 +385,7 @@ const fetchProjects = async () => {
   try {
     const data = await getProjectList({ page_size: 500 })
     projects.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -396,13 +397,13 @@ const fetchUsers = async () => {
 
   try {
     const data = await getUsers({ page_size: 200 })
-    users.value = (data.results || data).map(u => ({
+    users.value = (data.results || data).map((u: any) => ({
       id: u.id,
       name: u.first_name || u.last_name || u.username
     }))
     usersLoaded.value = true
     return true
-  } catch (e) {
+  } catch (e: any) {
     if (e?.response?.status !== 403) {
       console.error(e)
     }
@@ -425,7 +426,7 @@ const fetchMilestoneTypes = async () => {
   try {
     const data = await getMilestoneTypes()
     milestoneTypes.value = data
-  } catch (e) {
+  } catch (e: any) {
     milestoneTypes.value = [
       { value: 'KICKOFF', label: '项目启动' },
       { value: 'DESIGN', label: '设计评审' },
@@ -448,7 +449,7 @@ const resetQuery = () => {
   fetchData()
 }
 
-const filterByStatus = (status) => {
+const filterByStatus = (status: any) => {
   queryParams.status = status || null
   fetchData()
 }
@@ -473,7 +474,7 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   await ensureUsersLoaded()
   isEdit.value = true
   dialogTitle.value = '编辑里程碑'
@@ -481,11 +482,11 @@ const handleEdit = async (row) => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getMilestone(row.id)
     viewDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
   }
@@ -495,7 +496,7 @@ const handleView = async (row) => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -507,7 +508,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('操作失败')
   } finally {
@@ -515,7 +516,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleUpdateProgress = (row) => {
+const handleUpdateProgress = (row: any) => {
   currentMilestone.value = row
   progressForm.progress = row.progress
   progressForm.comment = ''
@@ -526,22 +527,22 @@ const confirmProgress = async () => {
   progressLoading.value = true
   try {
     await updateMilestoneProgress(currentMilestone.value.id, { progress: progressForm.progress })
-    
+
     if (progressForm.comment) {
       await addMilestoneComment(currentMilestone.value.id, { content: progressForm.comment, comment_type: 'PROGRESS' })
     }
-    
+
     ElMessage.success('进度已更新')
     progressDialogVisible.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('更新失败')
   } finally {
     progressLoading.value = false
   }
 }
 
-const handleComplete = (row) => {
+const handleComplete = (row: any) => {
   ElMessageBox.confirm('确定要完成此里程碑吗？', '提示', { type: 'warning' })
     .then(async () => {
       await completeMilestone(row.id)
@@ -561,7 +562,7 @@ const confirmInit = async () => {
     ElMessage.warning('请选择项目')
     return
   }
-  
+
   initLoading.value = true
   try {
     const data = await initMilestoneTemplate(initForm)
@@ -569,14 +570,14 @@ const confirmInit = async () => {
     initDialogVisible.value = false
     queryParams.project = initForm.project_id
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('初始化失败')
   } finally {
     initLoading.value = false
   }
 }
 
-const getMilestoneTypeTag = (type) => {
+const getMilestoneTypeTag = (type: any) => {
   const tags = {
     KICKOFF: 'primary',
     DESIGN: 'info',
@@ -587,10 +588,10 @@ const getMilestoneTypeTag = (type) => {
     SHIPMENT: 'warning',
     SAT: 'success'
   }
-  return tags[type] || 'info'
+  return (tags as Record<string, any>)[type] || 'info'
 }
 
-const getStatusTag = (status) => {
+const getStatusTag = (status: any) => {
   const tags = {
     PENDING: 'info',
     IN_PROGRESS: 'primary',
@@ -598,10 +599,10 @@ const getStatusTag = (status) => {
     DELAYED: 'danger',
     CANCELLED: ''
   }
-  return tags[status] || ''
+  return (tags as Record<string, any>)[status] || ''
 }
 
-const getProgressColor = (progress, isOverdue) => {
+const getProgressColor = (progress: any, isOverdue: any) => {
   if (isOverdue) return '#f56c6c'
   if (progress >= 80) return '#67c23a'
   if (progress >= 50) return '#409eff'

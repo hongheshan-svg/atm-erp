@@ -25,7 +25,7 @@
         <div v-if="!selectedProject" class="empty-state">
           <el-empty description="请选择一个项目查看甘特图" />
         </div>
-        
+
         <div v-else>
           <!-- Project Info -->
           <div class="project-info" v-if="currentProject">
@@ -62,7 +62,7 @@
                 </template>
               </g-gantt-row>
             </g-gantt-chart>
-            
+
             <el-empty v-else description="该项目暂无任务" />
           </div>
 
@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { GGanttChart, GGanttRow } from 'vue-ganttastic'
 import { getProjectList, getProject, getTaskList } from '@/api/projects/project'
@@ -117,10 +117,10 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const projects = ref<any[]>([])
-const selectedProject = ref(null)
-const currentProject = ref(null)
+const selectedProject = ref<any>(null)
+const currentProject = ref<any>(null)
 const taskList = ref<any[]>([])
-const ganttContainer = ref(null)
+const ganttContainer = ref<any>(null)
 
 const chartStart = computed(() => {
   if (currentProject.value && currentProject.value.start_date) {
@@ -161,7 +161,7 @@ const tasks = computed(() => {
   }))
 })
 
-const getTaskColor = (status) => {
+const getTaskColor = (status: any) => {
   const colors = {
     'PENDING': '#909399',
     'IN_PROGRESS': '#409EFF',
@@ -169,10 +169,10 @@ const getTaskColor = (status) => {
     'ON_HOLD': '#E6A23C',
     'CANCELLED': '#F56C6C'
   }
-  return colors[status] || '#909399'
+  return (colors as Record<string, any>)[status] || '#909399'
 }
 
-const get状态Label = (status) => {
+const get状态Label = (status: any) => {
   const labels = {
     'PENDING': '待开始',
     'IN_PROGRESS': '进行中',
@@ -180,10 +180,10 @@ const get状态Label = (status) => {
     'ON_HOLD': '暂停',
     'CANCELLED': '已取消'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const get状态Type = (status) => {
+const get状态Type = (status: any) => {
   const types = {
     'PENDING': 'info',
     'IN_PROGRESS': 'primary',
@@ -191,10 +191,10 @@ const get状态Type = (status) => {
     'ON_HOLD': 'warning',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getProgress状态 = (percent) => {
+const getProgress状态 = (percent: any) => {
   if (percent >= 100) return 'success'
   if (percent >= 70) return 'primary'
   if (percent >= 30) return 'warning'
@@ -205,7 +205,7 @@ const loadProjects = async () => {
   try {
     const response = await getProjectList({ status: 'ACTIVE' })
     projects.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载项目列表失败')
     console.error(error)
   }
@@ -213,24 +213,24 @@ const loadProjects = async () => {
 
 const loadProjectTasks = async () => {
   if (!selectedProject.value) return
-  
+
   loading.value = true
   try {
     // Load project details
     const projectRes = await getProject(selectedProject.value)
     currentProject.value = projectRes
-    
+
     // Load tasks
     const tasksRes = await getTaskList({ project: selectedProject.value })
     taskList.value = tasksRes.results || tasksRes || tasksRes || []
-    
+
     // Ensure tasks have dates
     taskList.value = taskList.value.map(task => ({
       ...task,
       start_date: task.start_date || currentProject.value.start_date,
       end_date: task.end_date || currentProject.value.end_date
     }))
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载项目任务失败')
     console.error(error)
   } finally {
@@ -316,4 +316,3 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 </style>
-

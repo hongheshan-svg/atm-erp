@@ -1,13 +1,5 @@
 name: CI
 
-# Regression gate the audit flagged as missing. Hard gates (fail the build):
-#   - backend migration-drift check
-#   - backend test suite on real Postgres/Redis
-# Advisory (report-only, do not fail the build) until the repo's pre-existing
-# lint/type/lockfile debt is paid down separately:
-#   - ruff (repo carries legacy import-order debt in untouched files)
-#   - frontend typecheck/lint/test (and a stale package-lock.json that breaks `npm ci`)
-
 on:
   push:
     branches: [main]
@@ -50,12 +42,13 @@ jobs:
       DB_HOST: localhost
       DB_PORT: '5432'
       REDIS_URL: redis://localhost:6379/0
-      # Channels layer + cache read REDIS_HOST (default 'redis'); point at the CI service
-      # so progress-relay / websocket group tests can reach a real channel layer.
       REDIS_HOST: localhost
-      # Empty host triggers settings.py's degraded mode: ELASTICSEARCH_DSL_AUTOSYNC=False,
-      # so model saves don't fire real-time ES index signals (no ES service in CI).
-      ELASTICSEARCH_HOST: ''
+      SECURE_SSL_REDIRECT: 'True'
+      SECURE_HSTS_SECONDS: '31536000'
+      SECURE_HSTS_INCLUDE_SUBDOMAINS: 'True'
+      SECURE_HSTS_PRELOAD: 'True'
+      SESSION_COOKIE_SECURE: 'True'
+      CSRF_COOKIE_SECURE: 'True'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,17 +58,23 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff
-      - name: Migration drift check (hard gate)
+          pip install -r requirements-dev.txt
+      - name: Lint and formatting
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Django deployment checks
+        run: python -W error::DeprecationWarning manage.py check --deploy
+      - name: OpenAPI schema validation
+        run: python -W error::DeprecationWarning manage.py spectacular --file /tmp/schema.yml --validate --fail-on-warn
+      - name: Migration drift check
         run: python manage.py makemigrations --check --dry-run
-      - name: Run tests (hard gate)
-        # Scope to the apps package: tests/integration/ are pytest-based (fixtures,
-        # pytestmark) and are run separately via pytest, not the Django test runner.
-        run: python manage.py test apps --verbosity=2
-      - name: Ruff lint (advisory — repo has legacy debt)
-        continue-on-error: true
-        run: ruff check .
+      - name: Django tests
+        run: python -W error::DeprecationWarning manage.py test --noinput
+      - name: Integration tests
+        run: pytest tests/integration -v --tb=short
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
 
   frontend:
     runs-on: ubuntu-latest
@@ -86,17 +85,47 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      # `npm ci` requires a lock in sync with package.json; the repo's lock is
-      # stale (pre-existing), so use `npm install` here until it's regenerated.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Type check (advisory)
-        continue-on-error: true
+        run: npm ci --no-audit
+      - name: Dependency audit
+        run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+      - name: Type check
         run: npm run typecheck
-      - name: Lint (advisory)
-        continue-on-error: true
+      - name: Lint
         run: npm run lint
-      - name: Unit tests (advisory)
-        continue-on-error: true
+      - name: Unit tests
         run: npm run test
+      - name: Production build
+        run: npm run build
+
+  containers:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Validate Compose variants
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.expose.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.linux-host.yml config --quiet
+      - name: Build application image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build updater image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/updater/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

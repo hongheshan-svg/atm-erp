@@ -345,9 +345,7 @@ class Supplier(BaseModel):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE', verbose_name='状态')
     # 供应商等级（由供应商评价审批通过时回写，权威字段；空表示尚未评级）
-    grade = models.CharField(
-        max_length=10, choices=GRADE_CHOICES, blank=True, default='', verbose_name='供应商等级'
-    )
+    grade = models.CharField(max_length=10, choices=GRADE_CHOICES, blank=True, default='', verbose_name='供应商等级')
     notes = models.TextField(blank=True, verbose_name='备注')
 
     class Meta:

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import type { MenuItem } from '@/types'
 
 const normalizeDataScope = (scope: string): string => {
   const normalized: Record<string, string> = {
@@ -25,7 +26,7 @@ const normalizeDataScope = (scope: string): string => {
 export const usePermissionStore = defineStore('permission', {
   state: () => ({
     permissions: new Set<string>(),
-    menus: [] as string[],
+    menus: [] as MenuItem[],
     dataScopes: {} as Record<string, string>,
     _version: 0
   }),
@@ -36,7 +37,7 @@ export const usePermissionStore = defineStore('permission', {
       this._version++
     },
 
-    setMenus(menus: string[]) {
+    setMenus(menus: MenuItem[]) {
       this.menus = menus
     },
 

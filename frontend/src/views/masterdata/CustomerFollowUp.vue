@@ -8,7 +8,7 @@
         </el-button>
       </div>
     </div>
-    
+
     <!-- 搜索和过滤 -->
     <el-card class="filter-card" shadow="never">
       <el-form :inline="true" :model="queryParams">
@@ -36,7 +36,7 @@
         </el-form-item>
       </el-form>
     </el-card>
-    
+
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stats-row">
       <el-col :span="6">
@@ -64,7 +64,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 数据表格 -->
     <el-card shadow="never">
       <!-- 批量操作 -->
@@ -108,7 +108,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         class="pagination"
         v-model:current-page="queryParams.page"
@@ -120,7 +120,7 @@
         @current-change="fetchData"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -189,7 +189,7 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 查看详情对话框 -->
     <el-dialog v-model="viewDialogVisible" title="跟进详情" width="600px">
       <el-descriptions :column="2" border v-if="currentRecord">
@@ -216,6 +216,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getCustomerList, getCustomerFollowUpList, createCustomerFollowUp, updateCustomerFollowUp, deleteCustomerFollowUp, getFollowTypes, getFollowUpStatistics } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { getPaginationTotal } from '@/utils/pagination'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/customer-followups/', { onSuccess: () => fetchData() })
 
@@ -228,13 +229,13 @@ const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const dialogTitle = ref('新增跟进')
 const isEdit = ref(false)
-const currentRecord = ref(null)
-const formRef = ref(null)
+const currentRecord = ref<any>(null)
+const formRef = ref<any>(null)
 const customers = ref<any[]>([])
 const followTypes = ref<any[]>([])
 const stats = ref<Record<string, any>>({})
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   page: 1,
   page_size: 10,
   customer: null,
@@ -242,7 +243,7 @@ const queryParams = reactive({
   result: null
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   customer: null,
   follow_type: 'PHONE',
   follow_date: null,
@@ -268,8 +269,8 @@ const fetchData = async () => {
   try {
     const data = await getCustomerFollowUpList(queryParams)
     tableData.value = data.results || data
-    total.value = data.count || data.length
-  } catch (e) {
+    total.value = getPaginationTotal(data)
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -280,7 +281,7 @@ const fetchCustomers = async () => {
   try {
     const data = await getCustomerList({ page_size: 1000 })
     customers.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -289,7 +290,7 @@ const fetchFollowTypes = async () => {
   try {
     const data = await getFollowTypes()
     followTypes.value = data
-  } catch (e) {
+  } catch (e: any) {
     followTypes.value = [
       { value: 'VISIT', label: '客户拜访' },
       { value: 'PHONE', label: '电话沟通' },
@@ -305,7 +306,7 @@ const fetchStats = async () => {
   try {
     const data = await getFollowUpStatistics()
     stats.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -335,7 +336,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   dialogTitle.value = '编辑跟进'
   Object.assign(form, row)
@@ -343,7 +344,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   currentRecord.value = row
   viewDialogVisible.value = true
 }
@@ -351,7 +352,7 @@ const handleView = (row) => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -364,7 +365,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('操作失败')
   } finally {
@@ -372,7 +373,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleDelete = (row) => {
+const handleDelete = (row: any) => {
   ElMessageBox.confirm('确定要删除此跟进记录吗？', '提示', {
     type: 'warning'
   }).then(async () => {
@@ -381,13 +382,13 @@ const handleDelete = (row) => {
       ElMessage.success('删除成功')
       fetchData()
       fetchStats()
-    } catch (e) {
+    } catch (e: any) {
       ElMessage.error('删除失败')
     }
   })
 }
 
-const getFollowTypeTag = (type) => {
+const getFollowTypeTag = (type: any) => {
   const tags = {
     VISIT: 'success',
     PHONE: '',
@@ -395,20 +396,20 @@ const getFollowTypeTag = (type) => {
     MEETING: 'warning',
     VIDEO: 'primary'
   }
-  return tags[type] || ''
+  return (tags as Record<string, any>)[type] || ''
 }
 
-const getResultTag = (result) => {
+const getResultTag = (result: any) => {
   const tags = {
     POSITIVE: 'success',
     NEUTRAL: 'info',
     NEGATIVE: 'danger',
     PENDING: 'warning'
   }
-  return tags[result] || ''
+  return (tags as Record<string, any>)[result] || ''
 }
 
-const isOverdue = (date) => {
+const isOverdue = (date: any) => {
   if (!date) return false
   return new Date(date) < new Date(new Date().toISOString().split('T')[0])
 }

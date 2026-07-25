@@ -4,7 +4,7 @@
       <h2>日程管理</h2>
       <el-button type="primary" v-permission="'oa:schedule:create'" @click="handleAdd">新建日程</el-button>
     </div>
-    
+
     <el-row :gutter="16">
       <!-- 日历视图 -->
       <el-col :span="18">
@@ -19,18 +19,18 @@
               <span class="current-month">{{ currentMonthText }}</span>
             </div>
           </template>
-          
+
           <div class="calendar">
             <div class="calendar-week">
               <div class="calendar-day-name" v-for="name in weekDays" :key="name">{{ name }}</div>
             </div>
             <div class="calendar-days">
-              <div 
-                v-for="day in calendarDays" 
-                :key="day.date" 
+              <div
+                v-for="day in calendarDays"
+                :key="day.date"
                 class="calendar-day"
-                :class="{ 
-                  'other-month': !day.currentMonth, 
+                :class="{
+                  'other-month': !day.currentMonth,
                   'today': day.isToday,
                   'has-events': day.events.length > 0
                 }"
@@ -38,8 +38,8 @@
               >
                 <div class="day-number">{{ day.day }}</div>
                 <div class="day-events">
-                  <div 
-                    v-for="event in day.events.slice(0, 3)" 
+                  <div
+                    v-for="event in day.events.slice(0, 3)"
                     :key="event.id"
                     class="event-dot"
                     :style="{ backgroundColor: event.color }"
@@ -52,15 +52,15 @@
           </div>
         </el-card>
       </el-col>
-      
+
       <!-- 侧边栏 -->
       <el-col :span="6">
         <el-card shadow="never" header="今日日程">
           <div v-if="todaySchedules.length === 0" class="empty-tip">今日暂无日程</div>
           <div v-else class="today-list">
-            <div 
-              v-for="item in todaySchedules" 
-              :key="item.id" 
+            <div
+              v-for="item in todaySchedules"
+              :key="item.id"
               class="today-item"
               @click="handleView(item)"
             >
@@ -75,13 +75,13 @@
             </div>
           </div>
         </el-card>
-        
+
         <el-card shadow="never" header="即将到来" style="margin-top: 16px">
           <div v-if="upcomingSchedules.length === 0" class="empty-tip">暂无即将到来的日程</div>
           <div v-else class="upcoming-list">
-            <div 
-              v-for="item in upcomingSchedules" 
-              :key="item.id" 
+            <div
+              v-for="item in upcomingSchedules"
+              :key="item.id"
               class="upcoming-item"
               @click="handleView(item)"
             >
@@ -92,7 +92,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 新建日程对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑日程' : '新建日程'" width="600px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="80px">
@@ -115,20 +115,20 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="开始时间" prop="start_time">
-              <el-date-picker 
-                v-model="formData.start_time" 
+              <el-date-picker
+                v-model="formData.start_time"
                 :type="formData.all_day ? 'date' : 'datetime'"
-                style="width: 100%" 
+                style="width: 100%"
                 value-format="YYYY-MM-DDTHH:mm:ss"
               />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="结束时间" prop="end_time">
-              <el-date-picker 
-                v-model="formData.end_time" 
+              <el-date-picker
+                v-model="formData.end_time"
                 :type="formData.all_day ? 'date' : 'datetime'"
-                style="width: 100%" 
+                style="width: 100%"
                 value-format="YYYY-MM-DDTHH:mm:ss"
               />
             </el-form-item>
@@ -152,14 +152,14 @@
         <el-button type="primary" @click="submitForm" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 日期详情对话框 -->
     <el-dialog v-model="dayDialogVisible" :title="selectedDay?.date" width="500px">
       <div v-if="selectedDay?.events.length === 0" class="empty-tip">当日无日程</div>
       <div v-else>
-        <div 
-          v-for="event in selectedDay?.events" 
-          :key="event.id" 
+        <div
+          v-for="event in selectedDay?.events"
+          :key="event.id"
           class="day-event-item"
           @click="handleView(event)"
         >
@@ -194,10 +194,10 @@ const dialogVisible = ref(false)
 const dayDialogVisible = ref(false)
 const isEdit = ref(false)
 const submitLoading = ref(false)
-const formRef = ref(null)
-const selectedDay = ref(null)
+const formRef = ref<any>(null)
+const selectedDay = ref<any>(null)
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   title: '',
   schedule_type: 'TASK',
   all_day: false,
@@ -224,14 +224,14 @@ const currentMonthText = computed(() => {
 const calendarDays = computed(() => {
   const year = currentDate.value.getFullYear()
   const month = currentDate.value.getMonth()
-  
+
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-  
+
   const days = []
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  
+
   // 上月补齐
   const startDayOfWeek = firstDay.getDay()
   for (let i = startDayOfWeek - 1; i >= 0; i--) {
@@ -244,7 +244,7 @@ const calendarDays = computed(() => {
       events: getEventsForDate(d)
     })
   }
-  
+
   // 本月
   for (let i = 1; i <= lastDay.getDate(); i++) {
     const d = new Date(year, month, i)
@@ -256,7 +256,7 @@ const calendarDays = computed(() => {
       events: getEventsForDate(d)
     })
   }
-  
+
   // 下月补齐
   const remaining = 42 - days.length
   for (let i = 1; i <= remaining; i++) {
@@ -269,11 +269,11 @@ const calendarDays = computed(() => {
       events: getEventsForDate(d)
     })
   }
-  
+
   return days
 })
 
-const getEventsForDate = (date) => {
+const getEventsForDate = (date: any) => {
   const dateStr = date.toISOString().slice(0, 10)
   return events.value.filter(e => {
     const start = e.start.slice(0, 10)
@@ -285,14 +285,14 @@ const getEventsForDate = (date) => {
 const fetchCalendar = async () => {
   const year = currentDate.value.getFullYear()
   const month = currentDate.value.getMonth()
-  
+
   const start = new Date(year, month, 1).toISOString().slice(0, 10)
   const end = new Date(year, month + 2, 0).toISOString().slice(0, 10)
-  
+
   try {
     const data = await getCalendarSchedules({ start, end })
     events.value = data || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -301,7 +301,7 @@ const fetchToday = async () => {
   try {
     const data = await getTodaySchedules()
     todaySchedules.value = data || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -310,12 +310,12 @@ const fetchUpcoming = async () => {
   try {
     const data = await getUpcomingSchedules()
     upcomingSchedules.value = data || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
 
-const changeMonth = (delta) => {
+const changeMonth = (delta: any) => {
   const d = new Date(currentDate.value)
   d.setMonth(d.getMonth() + delta)
   currentDate.value = d
@@ -327,7 +327,7 @@ const goToday = () => {
   fetchCalendar()
 }
 
-const handleDayClick = (day) => {
+const handleDayClick = (day: any) => {
   selectedDay.value = day
   dayDialogVisible.value = true
 }
@@ -349,14 +349,14 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleView = async (item) => {
+const handleView = async (item: any) => {
   try {
     const data = await getCoreSchedule(item.id)
     Object.assign(formData, data)
     isEdit.value = true
     dialogVisible.value = true
     dayDialogVisible.value = false
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
@@ -364,7 +364,7 @@ const handleView = async (item) => {
 const submitForm = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -378,19 +378,19 @@ const submitForm = async () => {
     fetchCalendar()
     fetchToday()
     fetchUpcoming()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const formatTime = (dateStr) => {
+const formatTime = (dateStr: any) => {
   if (!dateStr) return ''
   return dateStr.slice(11, 16)
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return ''
   return dateStr.slice(5, 10).replace('-', '/')
 }

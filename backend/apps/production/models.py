@@ -544,8 +544,8 @@ from .equipment_capability import EquipmentCapability  # noqa: E402, F401
 from .finite_capacity import FiniteCapacityPlan, ScheduledTask  # noqa: E402, F401
 from .kanban_wip import KanbanWIPAlert, KanbanWIPRule  # noqa: E402, F401
 
-# Import scheduling models (WorkCenter, ProductionSchedule, ScheduleTask)
-from .scheduling import WorkCenter, ProductionSchedule, ScheduleTask  # noqa: E402, F401
-
 # Import routing models
-from .routing import RoutingTemplate, RoutingOperation  # noqa: E402, F401
+from .routing import RoutingOperation, RoutingTemplate  # noqa: E402, F401
+
+# Import scheduling models (WorkCenter, ProductionSchedule, ScheduleTask)
+from .scheduling import ProductionSchedule, ScheduleTask, WorkCenter  # noqa: E402, F401

@@ -176,7 +176,6 @@ import {
   getBankStatements,
   getBankNames,
   importBankStatements,
-  matchBankStatement,
   ignoreBankStatement,
   autoMatchAllBankStatements,
   bulkDeleteBankStatements
@@ -193,20 +192,20 @@ const importFormRef = ref()
 const uploadRef = ref()
 const uploadFile = ref<File | null>(null)
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   bank_name: '',
   status: '',
   transaction_type: '',
   search: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const importForm = reactive({
+const importForm = reactive<Record<string, any>>({
   bank_name: '',
   bank_account: ''
 })
@@ -334,7 +333,7 @@ const handleMatch = async (row: any) => {
       ElMessage.warning('未找到匹配的客户/供应商，请到应收/应付页面手动匹配')
     }
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -345,7 +344,7 @@ const handleIgnore = async (row: any) => {
     await ignoreBankStatement(row.id)
     ElMessage.success('已忽略')
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -361,7 +360,7 @@ const handleBatchMatch = async () => {
     await autoMatchAllBankStatements({ ids })
     ElMessage.success('匹配完成')
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -374,7 +373,7 @@ const handleBatchIgnore = async () => {
     }
     ElMessage.success('已忽略')
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -386,7 +385,7 @@ const handleBatchDelete = async () => {
     await bulkDeleteBankStatements({ ids })
     ElMessage.success('已删除')
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败')
   }
 }

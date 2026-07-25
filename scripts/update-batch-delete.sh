@@ -67,10 +67,10 @@ cat <<'EOF'
    <el-table-column label="操作" :width="canDelete ? 180 : 100" fixed="right">
      <template #default="{ row }">
        <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-       <el-button 
+       <el-button
          v-if="canDelete"
-         size="small" 
-         type="danger" 
+         size="small"
+         type="danger"
          @click="deleteRow(row)"
        >
          删除

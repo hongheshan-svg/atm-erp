@@ -39,17 +39,13 @@ class WorkflowOrSignTest(TestCase):
         self.addCleanup(p1.stop)
         self.addCleanup(p2.stop)
 
-        self.submitter = User.objects.create_user(
-            username='os_submitter', password='x', employee_id='os_submitter'
-        )
+        self.submitter = User.objects.create_user(username='os_submitter', password='x', employee_id='os_submitter')
 
         # 或签角色 + 3 名成员
         self.role_os = Role.objects.create(name='或签组', code='orsign_group')
         self.os_users = []
         for i in range(3):
-            u = User.objects.create_user(
-                username=f'os_member_{i}', password='x', employee_id=f'os_member_{i}'
-            )
+            u = User.objects.create_user(username=f'os_member_{i}', password='x', employee_id=f'os_member_{i}')
             u.roles.add(self.role_os)
             self.os_users.append(u)
 
@@ -71,9 +67,7 @@ class WorkflowOrSignTest(TestCase):
     # ---------- (a) 或签：3 任务，第一人通过即推进，其余 SKIPPED ----------
     def test_orsign_creates_task_per_assignee(self):
         wf, step = self._make_orsign_workflow('os_wf_a')
-        instance, err = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 4001, 'PR-OS-A', self.submitter
-        )
+        instance, err = WorkflowService.start_workflow('PURCHASE_REQUEST', 4001, 'PR-OS-A', self.submitter)
         self.assertIsNone(err)
         self.assertIsNotNone(instance)
 
@@ -87,13 +81,9 @@ class WorkflowOrSignTest(TestCase):
 
     def test_orsign_first_approval_advances_and_skips_siblings(self):
         wf, step = self._make_orsign_workflow('os_wf_a2')
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 4002, 'PR-OS-A2', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 4002, 'PR-OS-A2', self.submitter)
 
-        tasks = list(
-            WorkflowTask.objects.filter(instance=instance, step=step).order_by('id')
-        )
+        tasks = list(WorkflowTask.objects.filter(instance=instance, step=step).order_by('id'))
         self.assertEqual(len(tasks), 3)
 
         # 第一人通过 —— 或签满足，唯一步骤 => 实例完成
@@ -109,9 +99,7 @@ class WorkflowOrSignTest(TestCase):
         for t in tasks[1:]:
             t.refresh_from_db()
             self.assertEqual(t.status, 'SKIPPED')
-        self.assertEqual(
-            WorkflowTask.objects.filter(instance=instance, status='PENDING').count(), 0
-        )
+        self.assertEqual(WorkflowTask.objects.filter(instance=instance, status='PENDING').count(), 0)
 
         # 已被 SKIPPED 的兄弟任务再次审批应被拒绝（并发/重复处理护栏）
         ok2, _ = WorkflowService.approve_task(tasks[1], tasks[1].assignee)
@@ -120,13 +108,9 @@ class WorkflowOrSignTest(TestCase):
     # ---------- (b) 单人拒绝不整单拒绝，其余待办保持 PENDING ----------
     def test_orsign_single_rejection_does_not_reject_instance(self):
         wf, step = self._make_orsign_workflow('os_wf_b')
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 4003, 'PR-OS-B', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 4003, 'PR-OS-B', self.submitter)
 
-        tasks = list(
-            WorkflowTask.objects.filter(instance=instance, step=step).order_by('id')
-        )
+        tasks = list(WorkflowTask.objects.filter(instance=instance, step=step).order_by('id'))
         self.assertEqual(len(tasks), 3)
 
         # 第一人拒绝 —— 或签下不应整单拒绝，其余两人仍可审批
@@ -148,9 +132,7 @@ class WorkflowOrSignTest(TestCase):
         )
 
         # 且此时另一人仍可通过并推进整单
-        remaining = WorkflowTask.objects.filter(
-            instance=instance, step=step, status='PENDING'
-        ).order_by('id').first()
+        remaining = WorkflowTask.objects.filter(instance=instance, step=step, status='PENDING').order_by('id').first()
         ok2, msg2 = WorkflowService.approve_task(remaining, remaining.assignee)
         self.assertTrue(ok2, msg2)
         instance.refresh_from_db()
@@ -159,13 +141,9 @@ class WorkflowOrSignTest(TestCase):
     # ---------- (c) 全部拒绝 => 整单拒绝 ----------
     def test_orsign_all_rejections_reject_instance(self):
         wf, step = self._make_orsign_workflow('os_wf_c')
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 4004, 'PR-OS-C', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 4004, 'PR-OS-C', self.submitter)
 
-        tasks = list(
-            WorkflowTask.objects.filter(instance=instance, step=step).order_by('id')
-        )
+        tasks = list(WorkflowTask.objects.filter(instance=instance, step=step).order_by('id'))
         self.assertEqual(len(tasks), 3)
 
         # 前两人拒绝 —— 仍不整单拒绝（还有人可以通过）
@@ -187,9 +165,7 @@ class WorkflowOrSignTest(TestCase):
             WorkflowTask.objects.filter(instance=instance, step=step, status='REJECTED').count(),
             3,
         )
-        self.assertEqual(
-            WorkflowTask.objects.filter(instance=instance, status='PENDING').count(), 0
-        )
+        self.assertEqual(WorkflowTask.objects.filter(instance=instance, status='PENDING').count(), 0)
 
     # ---------- (d) 会签仍需全部通过才推进（回归保护）----------
     def test_countersign_still_requires_all_approvals(self):
@@ -205,13 +181,9 @@ class WorkflowOrSignTest(TestCase):
             approver_role=self.role_os,
             action_type='COUNTERSIGN',
         )
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 4005, 'PR-OS-CS', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 4005, 'PR-OS-CS', self.submitter)
 
-        tasks = list(
-            WorkflowTask.objects.filter(instance=instance, step=step).order_by('id')
-        )
+        tasks = list(WorkflowTask.objects.filter(instance=instance, step=step).order_by('id'))
         self.assertEqual(len(tasks), 3, '会签步骤仍应为每位会签人各建 1 个任务')
 
         # 前两人通过 —— 会签下仍不得推进 / 完成

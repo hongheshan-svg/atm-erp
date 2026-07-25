@@ -112,4 +112,3 @@ class Migration(migrations.Migration):
             index=models.Index(fields=['reminder_status', 'due_date'], name='payment_sch_remind_idx'),
         ),
     ]
-

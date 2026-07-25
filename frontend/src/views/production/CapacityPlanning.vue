@@ -97,7 +97,7 @@
         </el-table-column>
         <el-table-column label="当前负荷" width="180">
           <template #default="{ row }">
-            <el-progress :percentage="row.currentLoad || 0" 
+            <el-progress :percentage="row.currentLoad || 0"
                          :status="row.currentLoad > 100 ? 'exception' : (row.currentLoad > 80 ? 'warning' : '')" />
           </template>
         </el-table-column>
@@ -230,10 +230,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, WarningFilled, CircleCheck } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getProjectList } from '@/api/projects/project'
 import {
 getCapacityDashboard, getResources, createResource as createResourceApi,
@@ -252,10 +252,10 @@ const checking = ref(false)
 const showResourceDialog = ref(false)
 const showAllocationDialog = ref(false)
 
-const loadChartRef = ref(null)
-const typeChartRef = ref(null)
-let loadChart = null
-let typeChart = null
+const loadChartRef = ref<any>(null)
+const typeChartRef = ref<any>(null)
+let loadChart: any = null
+let typeChart: any = null
 
 const dashboard = ref({
   totalResources: 0,
@@ -271,11 +271,11 @@ const projects = ref<any[]>([])
 
 const dateRange = ref<any[]>([])
 
-const resourceFilter = reactive({
+const resourceFilter = reactive<Record<string, any>>({
   type: null
 })
 
-const resourceForm = reactive({
+const resourceForm = reactive<Record<string, any>>({
   code: '',
   name: '',
   resource_type: null,
@@ -290,7 +290,7 @@ const resourceRules = {
   resource_type: [{ required: true, message: '请选择资源类型', trigger: 'change' }]
 }
 
-const allocationForm = reactive({
+const allocationForm = reactive<Record<string, any>>({
   resource: null,
   project: null,
   task_name: '',
@@ -308,42 +308,42 @@ const allocationRules = {
   allocated_hours: [{ required: true, message: '请输入分配工时', trigger: 'blur' }]
 }
 
-const resourceFormRef = ref(null)
-const allocationFormRef = ref(null)
+const resourceFormRef = ref<any>(null)
+const allocationFormRef = ref<any>(null)
 
-const formatMoney = (val) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+const formatMoney = (val: any) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 
-const getAllocationStatusType = (status) => {
+const getAllocationStatusType = (status: any) => {
   const map = { PLANNED: 'info', CONFIRMED: 'warning', IN_PROGRESS: 'primary', COMPLETED: 'success', CANCELLED: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
 const loadDashboard = async () => {
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
     const res = await getCapacityDashboard(params)
     dashboard.value = res.summary || {}
-    
+
     // 渲染图表
     renderLoadChart(res.resource_loads || [])
     renderTypeChart(res.type_distribution || [])
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载产能看板失败', e)
   }
 }
 
-const renderLoadChart = (data) => {
+const renderLoadChart = (data: any) => {
   if (!loadChart) {
     loadChart = echarts.init(loadChartRef.value)
   }
   const option = {
     tooltip: { trigger: 'axis' },
     legend: { data: ['负荷率', '产能'] },
-    xAxis: { type: 'category', data: data.map(d => d.resource_name) },
+    xAxis: { type: 'category', data: data.map((d: any) => d.resource_name) },
     yAxis: [
       { type: 'value', name: '负荷率(%)', max: 150 },
       { type: 'value', name: '产能(小时)' }
@@ -352,23 +352,23 @@ const renderLoadChart = (data) => {
       {
         name: '负荷率',
         type: 'bar',
-        data: data.map(d => d.utilization || 0),
+        data: data.map((d: any) => d.utilization || 0),
         itemStyle: {
-          color: (params) => params.value > 100 ? '#F56C6C' : (params.value > 80 ? '#E6A23C' : '#67C23A')
+          color: (params: any) => params.value > 100 ? '#F56C6C' : (params.value > 80 ? '#E6A23C' : '#67C23A')
         }
       },
       {
         name: '产能',
         type: 'line',
         yAxisIndex: 1,
-        data: data.map(d => d.capacity || 0)
+        data: data.map((d: any) => d.capacity || 0)
       }
     ]
   }
   loadChart.setOption(option)
 }
 
-const renderTypeChart = (data) => {
+const renderTypeChart = (data: any) => {
   if (!typeChart) {
     typeChart = echarts.init(typeChartRef.value)
   }
@@ -377,7 +377,7 @@ const renderTypeChart = (data) => {
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      data: data.map(d => ({ name: d.type_name, value: d.count })),
+      data: data.map((d: any) => ({ name: d.type_name, value: d.count })),
       label: { formatter: '{b}: {c}' }
     }]
   }
@@ -387,11 +387,11 @@ const renderTypeChart = (data) => {
 const loadResources = async () => {
   loading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (resourceFilter.type) params.resource_type = resourceFilter.type
     const res = await getResources(params)
     resources.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载资源列表失败')
   } finally {
     loading.value = false
@@ -403,7 +403,7 @@ const loadAllocations = async () => {
   try {
     const res = await getResourceAllocations()
     allocations.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载分配列表失败')
   } finally {
     allocationLoading.value = false
@@ -414,7 +414,7 @@ const loadResourceTypes = async () => {
   try {
     const res = await getResourceTypes()
     resourceTypes.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载资源类型失败')
   }
 }
@@ -423,7 +423,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载项目列表失败')
   }
 }
@@ -437,7 +437,7 @@ const createResource = async () => {
     showResourceDialog.value = false
     loadResources()
     loadDashboard()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
@@ -459,7 +459,7 @@ const checkAvailability = async () => {
     } else {
       ElMessage.warning(`资源不可用: ${res.reason}`)
     }
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('检查失败')
   } finally {
     checking.value = false
@@ -475,27 +475,27 @@ const createAllocation = async () => {
     showAllocationDialog.value = false
     loadAllocations()
     loadDashboard()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewResourceLoad = async (row) => {
+const viewResourceLoad = async (row: any) => {
   try {
     const res = await getResourceLoad(row.id)
     ElMessage.info(`负荷率: ${res.utilization_rate}%, 已分配: ${res.allocated_hours}小时`)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('获取负荷详情失败')
   }
 }
 
-const viewConflicts = async (row) => {
+const viewConflicts = async (row: any) => {
   try {
     const res = await getResourceConflicts(row.id)
     ElMessage.info(`共 ${res.length} 个冲突`)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('获取冲突信息失败')
   }
 }

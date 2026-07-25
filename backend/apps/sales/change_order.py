@@ -85,13 +85,9 @@ class SalesOrderChange(BaseModel):
         verbose_name='销售订单',
     )
     change_no = models.CharField(max_length=50, unique=True, verbose_name='变更单号')
-    change_type = models.CharField(
-        max_length=20, choices=CHANGE_TYPE_CHOICES, verbose_name='变更类型'
-    )
+    change_type = models.CharField(max_length=20, choices=CHANGE_TYPE_CHOICES, verbose_name='变更类型')
     reason = models.TextField(blank=True, verbose_name='变更原因')
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
     # 结构化变更指令，形如：
     #   PRICE/QTY: {'so_line': <id>, 'unit_price'|'qty': <值>}
     #   ADD:       {'item': <id|null>, 'custom_name', 'custom_spec', 'custom_unit', 'qty', 'unit_price', 'notes'}
@@ -143,9 +139,7 @@ class SalesOrderChange(BaseModel):
 
         # 仅已确认/部分发货订单需要走变更单；草稿可直接编辑
         if order.status not in ('CONFIRMED', 'PARTIAL'):
-            raise ValueError(
-                f'仅已确认/部分发货状态的订单可执行变更，当前状态：{order.get_status_display()}'
-            )
+            raise ValueError(f'仅已确认/部分发货状态的订单可执行变更，当前状态：{order.get_status_display()}')
 
         self.before_data = _snapshot_order(order)
         data = self.change_data or {}
@@ -169,9 +163,7 @@ class SalesOrderChange(BaseModel):
             if new_qty <= 0:
                 raise ValueError('数量必须大于0')
             if new_qty < (line.delivered_qty or Decimal('0')):
-                raise ValueError(
-                    f'变更数量 {new_qty} 不能小于已发货数量 {line.delivered_qty}'
-                )
+                raise ValueError(f'变更数量 {new_qty} 不能小于已发货数量 {line.delivered_qty}')
             line.qty = new_qty
             line.save()
 
@@ -226,9 +218,7 @@ class SalesOrderChange(BaseModel):
             raise ValueError(f'未知变更类型：{ct}')
 
         # 重算订单金额（明细金额可能因增删改变化）
-        total = order.lines.filter(is_deleted=False).aggregate(
-            s=Sum('line_amount')
-        )['s'] or Decimal('0')
+        total = order.lines.filter(is_deleted=False).aggregate(s=Sum('line_amount'))['s'] or Decimal('0')
         order.total_amount = total
         order.tax_amount = total * order.tax_rate / 100
         order.total_with_tax = total + order.tax_amount
@@ -283,15 +273,13 @@ class SalesOrderChangeSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
 
 
-class SalesOrderChangeViewSet(
-    PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
-):
+class SalesOrderChangeViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售订单变更单 ViewSet。
 
     受控修订流程：create(DRAFT) → submit(PENDING) → approve(APPROVED, 作用到订单) / reject。

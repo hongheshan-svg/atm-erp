@@ -46,9 +46,9 @@
       <!-- 批量操作工具栏 -->
       <div class="table-toolbar" v-permission="'sales:quotation:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -105,10 +105,10 @@
               转销售订单
             </el-button>
             <!-- 仅管理员显示删除按钮 -->
-            <el-button 
+            <el-button
               v-if="canDelete"
-              size="small" 
-              type="danger" 
+              size="small"
+              type="danger"
               @click="deleteRow(row)"
               :loading="deleteLoading"
             >
@@ -235,10 +235,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'QUOTATION'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -250,19 +250,19 @@ const detailVisible = ref(false)
 const dialogTitle = ref('')
 const currentQuotation = ref<Record<string, any>>({})
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   quote_no: '',
   customer: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING': 'warning',
@@ -272,10 +272,10 @@ const getStatusType = (status) => {
     'REJECTED': 'danger',
     'EXPIRED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'DRAFT': '草稿',
     'PENDING': '审批中',
@@ -285,10 +285,10 @@ const getStatusLabel = (status) => {
     'REJECTED': '已拒绝',
     'EXPIRED': '已过期'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const formatMoney = (val) => parseFloat(val || 0).toFixed(2)
+const formatMoney = (val: any) => parseFloat(val || 0).toFixed(2)
 
 const loadQuotations = async () => {
   loading.value = true
@@ -312,7 +312,7 @@ const loadQuotations = async () => {
     const response = await getQuotations(params)
     quotations.value = response.results || []
     pagination.total = response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载报价失败:', error)
     ElMessage.error('加载报价失败')
   } finally {
@@ -326,7 +326,7 @@ const loadCustomers = async () => {
       page_size: 100
     })
     customers.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
@@ -343,24 +343,24 @@ const handleCreate = () => {
   router.push('/sales/quotations/create')
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getQuotation(row.id)
     const data = response.data || response
     currentQuotation.value = data
     dialogTitle.value = `报价详情 - ${data.quote_no}`
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载报价详情失败:', error)
     ElMessage.error('加载报价详情失败')
   }
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   router.push(`/sales/quotations/${row.id}/edit`)
 }
 
-const handleSubmitApproval = async (row) => {
+const handleSubmitApproval = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交该报价单进行审批吗？', '提交审批', { type: 'warning' })
     const response = await submitQuotation(row.id)
@@ -371,7 +371,7 @@ const handleSubmitApproval = async (row) => {
       ElMessage.success(data.message || '操作成功')
     }
     loadQuotations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       const msg = error.response?.data?.error || '提交失败'
       ElMessage.error(msg)
@@ -379,7 +379,7 @@ const handleSubmitApproval = async (row) => {
   }
 }
 
-const handleCreateVersion = async (row) => {
+const handleCreateVersion = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要创建新版本吗？', '提示', {
       confirmButtonText: '确定',
@@ -390,7 +390,7 @@ const handleCreateVersion = async (row) => {
     await createQuotationVersion(row.id)
     ElMessage.success('新版本创建成功')
     loadQuotations()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('创建新版本失败:', error)
       ElMessage.error('创建新版本失败')
@@ -398,7 +398,7 @@ const handleCreateVersion = async (row) => {
   }
 }
 
-const handleConvertToOrder = async (row) => {
+const handleConvertToOrder = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要将此报价转为销售订单吗？', '提示', {
       confirmButtonText: '确定',
@@ -410,7 +410,7 @@ const handleConvertToOrder = async (row) => {
     const data = response.data || response
     ElMessage.success('转换成功')
     router.push(`/sales/orders/${data.id}`)
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('转换为订单失败:', error)
       ElMessage.error('转换为订单失败')
@@ -418,12 +418,12 @@ const handleConvertToOrder = async (row) => {
   }
 }
 
-const handlePrint = (row) => {
+const handlePrint = (row: any) => {
   if (!row) {
     ElMessage.warning('请选择要打印的报价单')
     return
   }
-  
+
   // 创建打印内容
   const printContent = `
     <!DOCTYPE html>
@@ -448,7 +448,7 @@ const handlePrint = (row) => {
           body { padding: 0; }
           .no-print { display: none; }
         }
-      
+
 .table-toolbar {
   display: flex;
   justify-content: space-between;
@@ -471,7 +471,7 @@ const handlePrint = (row) => {
         <h1>销售报价单</h1>
         <p>Quotation</p>
       </div>
-      
+
       <table class="info-table">
         <tr><td>报价编号</td><td>${row.quote_no}</td></tr>
         <tr><td>客户名称</td><td>${row.customer_name || '-'}</td></tr>
@@ -480,7 +480,7 @@ const handlePrint = (row) => {
         <tr><td>关联项目</td><td>${row.project_name || '-'}</td></tr>
         <tr><td>状态</td><td>${row.status_display || row.status}</td></tr>
       </table>
-      
+
       <table class="items-table">
         <thead>
           <tr>
@@ -495,7 +495,7 @@ const handlePrint = (row) => {
           </tr>
         </thead>
         <tbody>
-          ${(row.lines || []).map((line, index) => `
+          ${(row.lines || []).map((line: any, index: any) => `
             <tr>
               <td>${index + 1}</td>
               <td>${line.item_sku || '-'}</td>
@@ -509,15 +509,15 @@ const handlePrint = (row) => {
           `).join('')}
         </tbody>
       </table>
-      
+
       <div class="total-section">
         不含税金额：¥${Number(row.total_amount || 0).toFixed(2)}<br>
         增值税（${row.tax_rate || 0}%）：¥${Number(row.tax_amount || 0).toFixed(2)}<br>
         含税总额：¥${Number(row.total_with_tax || 0).toFixed(2)}
       </div>
-      
+
       ${row.notes ? `<div style="margin: 20px 0;"><strong>备注：</strong>${row.notes}</div>` : ''}
-      
+
       <div class="footer">
         <div style="display: flex; justify-content: space-between;">
           <div>
@@ -530,7 +530,7 @@ const handlePrint = (row) => {
           </div>
         </div>
       </div>
-      
+
       <div class="no-print" style="text-align: center; margin-top: 20px;">
         <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px;">打印</button>
         <button onclick="window.close()" style="padding: 10px 30px; font-size: 16px; margin-left: 10px;">关闭</button>
@@ -538,9 +538,13 @@ const handlePrint = (row) => {
     </body>
     </html>
   `
-  
+
   // 打开新窗口打印
   const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    ElMessage.error('无法打开打印窗口，请检查浏览器弹窗设置')
+    return
+  }
   printWindow.document.write(printContent)
   printWindow.document.close()
   printWindow.focus()
@@ -585,4 +589,3 @@ onMounted(() => {
 }
 
 </style>
-

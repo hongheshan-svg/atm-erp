@@ -149,8 +149,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import {
 getEquipmentCapabilities, createEquipmentCapability,
-  updateEquipmentCapability, deleteEquipmentCapability,
-  getCapabilityMatrix
+  updateEquipmentCapability, deleteEquipmentCapability
 } from '@/api/production'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -162,13 +161,13 @@ const submitLoading = ref(false)
 const capabilityList = ref<any[]>([])
 const total = ref(0)
 const dialogVisible = ref(false)
-const editId = ref(null)
-const formRef = ref(null)
+const editId = ref<any>(null)
+const formRef = ref<any>(null)
 const selectedProcess = ref('')
 const selectedGrade = ref('')
 
-const stats = reactive({ totalEquipment: 0, calibrated: 0, processCoverage: 0, avgOEE: 0 })
-const queryParams = reactive({ page: 1, page_size: 20 })
+const stats = reactive<Record<string, any>>({ totalEquipment: 0, calibrated: 0, processCoverage: 0, avgOEE: 0 })
+const queryParams = reactive<Record<string, any>>({ page: 1, page_size: 20 })
 
 const processTypes = [
   { value: 'milling', label: '铣削' }, { value: 'turning', label: '车削' },
@@ -181,7 +180,7 @@ const processTypes = [
   { value: 'surface_treatment', label: '表面处理' }, { value: 'assembly', label: '装配' }
 ]
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   equipment: '', process_type: '', precision_grade: 'standard',
   max_length: null, max_width: null, max_height: null, max_weight: null,
   positioning_accuracy: null, repeat_accuracy: null, efficiency_factor_pct: 85
@@ -192,12 +191,12 @@ const formRules = {
   precision_grade: [{ required: true, message: '请选择精度等级' }]
 }
 
-const gradeType = (g) => ({ standard: 'info', precision: '', high_precision: 'warning', ultra_precision: 'danger' }[g] || 'info')
+const gradeType = (g: any) => (({ standard: 'info', precision: '', high_precision: 'warning', ultra_precision: 'danger' } as Record<string, any>)[g] || 'info')
 
 const loadList = async () => {
   loading.value = true
   try {
-    const params = { ...queryParams }
+    const params: Record<string, any> = { ...queryParams }
     if (selectedProcess.value) params.process_type = selectedProcess.value
     if (selectedGrade.value) params.precision_grade = selectedGrade.value
     const res = await getEquipmentCapabilities(params)
@@ -211,7 +210,7 @@ const loadList = async () => {
 
 const loadMatrix = () => { loadList() }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   editId.value = row.id
   Object.assign(form, { ...row, efficiency_factor_pct: (row.efficiency_factor || 0.85) * 100 })
   dialogVisible.value = true
@@ -221,7 +220,7 @@ const handleSubmit = async () => {
   await formRef.value.validate()
   submitLoading.value = true
   try {
-    const data = { ...form, efficiency_factor: form.efficiency_factor_pct / 100 }
+    const data: Record<string, any> = { ...form, efficiency_factor: form.efficiency_factor_pct / 100 }
     delete data.efficiency_factor_pct
     if (editId.value) {
       await updateEquipmentCapability(editId.value, data)
@@ -237,7 +236,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   await ElMessageBox.confirm('确认删除该能力标定？', '提示')
   await deleteEquipmentCapability(row.id)
   ElMessage.success('删除成功')

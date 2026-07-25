@@ -57,7 +57,7 @@
               </el-input>
             </div>
           </template>
-          
+
           <el-tree
             ref="bomTreeRef"
             :data="bomTree"
@@ -142,17 +142,17 @@
             </el-table-column>
             <el-table-column label="操作" width="100" fixed="right">
               <template #default="{ row }">
-                <el-button 
-                  v-if="!row.bom_item_id && selectedBom" 
-                  type="primary" 
+                <el-button
+                  v-if="!row.bom_item_id && selectedBom"
+                  type="primary"
                   size="small"
                   @click.stop="linkDrawingToBom(row)"
                 >
                   关联
                 </el-button>
-                <el-button 
-                  v-if="row.bom_item_id" 
-                  type="danger" 
+                <el-button
+                  v-if="row.bom_item_id"
+                  type="danger"
                   size="small"
                   @click.stop="unlinkDrawing(row)"
                 >
@@ -226,7 +226,7 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 
 const projects = ref<any[]>([])
-const projectId = ref(null)
+const projectId = ref<any>(null)
 const bomTree = ref<any[]>([])
 const drawings = ref<any[]>([])
 const linking = ref(false)
@@ -235,9 +235,9 @@ const linkResult = ref<Record<string, any>>({})
 
 const bomSearch = ref('')
 const drawingSearch = ref('')
-const selectedBom = ref(null)
-const selectedDrawing = ref(null)
-const bomTreeRef = ref(null)
+const selectedBom = ref<any>(null)
+const selectedDrawing = ref<any>(null)
+const bomTreeRef = ref<any>(null)
 
 const treeProps = {
   children: 'children',
@@ -245,7 +245,7 @@ const treeProps = {
 }
 
 const bomStats = computed(() => {
-  const countNodes = (nodes) => {
+  const countNodes = (nodes: any) => {
     let total = 0, linked = 0
     for (const node of nodes) {
       total++
@@ -258,7 +258,7 @@ const bomStats = computed(() => {
     }
     return { total, linked }
   }
-  
+
   const result = countNodes(bomTree.value)
   return {
     total: result.total,
@@ -270,13 +270,13 @@ const bomStats = computed(() => {
 const filteredDrawings = computed(() => {
   if (!drawingSearch.value) return drawings.value
   const search = drawingSearch.value.toLowerCase()
-  return drawings.value.filter(d => 
+  return drawings.value.filter(d =>
     d.drawing_no.toLowerCase().includes(search) ||
     d.name.toLowerCase().includes(search)
   )
 })
 
-const filterBomNode = (value, data) => {
+const filterBomNode = (value: any, data: any) => {
   if (!value) return true
   const search = value.toLowerCase()
   return (data.item_code || '').toLowerCase().includes(search) ||
@@ -292,7 +292,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load projects failed:', error)
   }
 }
@@ -301,7 +301,7 @@ const loadData = async () => {
   if (!projectId.value) return
   try {
     await Promise.all([loadBomTree(), loadDrawings()])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败', error)
     ElMessage.error('加载数据失败')
   }
@@ -313,7 +313,7 @@ const loadBomTree = async () => {
       params: { project_id: projectId.value }
     })
     bomTree.value = res.tree || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load BOM tree failed:', error)
     bomTree.value = []
   }
@@ -325,7 +325,7 @@ const loadDrawings = async () => {
       params: { project: projectId.value, page_size: 1000 }
     })
     drawings.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load drawings failed:', error)
     drawings.value = []
   }
@@ -340,27 +340,27 @@ const autoLink = async () => {
     linkResult.value = res
     showLinkResult.value = true
     ElMessage.success(`成功关联 ${res.linked || 0} 个图纸`)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('自动关联失败')
   } finally {
     linking.value = false
   }
 }
 
-const handleBomNodeClick = (data) => {
+const handleBomNodeClick = (data: any) => {
   selectedBom.value = data
 }
 
-const handleDrawingClick = (row) => {
+const handleDrawingClick = (row: any) => {
   selectedDrawing.value = row
 }
 
-const linkDrawingToBom = async (drawing) => {
+const linkDrawingToBom = async (drawing: any) => {
   if (!selectedBom.value) {
     ElMessage.warning('请先在左侧选择BOM项')
     return
   }
-  
+
   try {
     await manualLinkDrawing( {
       drawing_id: drawing.id,
@@ -369,12 +369,12 @@ const linkDrawingToBom = async (drawing) => {
     ElMessage.success('关联成功')
     loadData()
     clearSelection()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('关联失败')
   }
 }
 
-const unlinkDrawing = async (drawing) => {
+const unlinkDrawing = async (drawing: any) => {
   await ElMessageBox.confirm('确定要解除该图纸与BOM的关联吗?', '确认')
   try {
     await patchDrawing(drawing.id, {
@@ -383,7 +383,7 @@ const unlinkDrawing = async (drawing) => {
     })
     ElMessage.success('已解除关联')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
@@ -398,7 +398,7 @@ const clearSelection = () => {
   selectedDrawing.value = null
 }
 
-const getCustomPartLabel = (type) => {
+const getCustomPartLabel = (type: any) => {
   const labels = {
     'MACHINED': '机加',
     'SHEET_METAL': '钣金',
@@ -409,10 +409,10 @@ const getCustomPartLabel = (type) => {
     'PLASTIC': '塑料',
     'ELECTRICAL': '电气'
   }
-  return labels[type] || type || '自制'
+  return (labels as Record<string, any>)[type] || type || '自制'
 }
 
-const getPartTypeLabel = (type) => {
+const getPartTypeLabel = (type: any) => {
   const labels = {
     'ASSEMBLY': '装配图',
     'PART': '零件图',
@@ -424,10 +424,10 @@ const getPartTypeLabel = (type) => {
     'PNEUMATIC': '气动图',
     'LAYOUT': '布局图'
   }
-  return labels[type] || type || '其他'
+  return (labels as Record<string, any>)[type] || type || '其他'
 }
 
-const getMatchTypeLabel = (type) => {
+const getMatchTypeLabel = (type: any) => {
   const labels = {
     'EXACT_DRAWING_NO': '图号精确',
     'EXACT_SKU': 'SKU精确',
@@ -436,10 +436,10 @@ const getMatchTypeLabel = (type) => {
     'FUZZY': '模糊匹配',
     'NOT_FOUND': '未匹配'
   }
-  return labels[type] || type
+  return (labels as Record<string, any>)[type] || type
 }
 
-const getMatchTypeColor = (type) => {
+const getMatchTypeColor = (type: any) => {
   if (type?.startsWith('EXACT')) return 'success'
   if (type === 'PARTIAL') return 'warning'
   if (type === 'FUZZY') return 'info'

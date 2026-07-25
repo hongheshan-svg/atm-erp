@@ -32,7 +32,7 @@ class CollectionMilestoneSerializer(serializers.ModelSerializer):
         model = CollectionMilestone
         fields = '__all__'
 
-    def get_remaining_amount(self, obj):
+    def get_remaining_amount(self, obj) -> float:
         return float(obj.planned_amount - obj.collected_amount)
 
 
@@ -122,10 +122,10 @@ class CollectionPlanListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_milestone_count(self, obj):
+    def get_milestone_count(self, obj) -> int:
         return obj.milestones.filter(is_deleted=False).count()
 
-    def get_overdue_count(self, obj):
+    def get_overdue_count(self, obj) -> int:
         from django.utils import timezone
 
         return obj.milestones.filter(

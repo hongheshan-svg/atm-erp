@@ -26,8 +26,7 @@ export const useUserStore = defineStore('user', () => {
 
       profileReady.value = true
       return true
-    } catch (error) {
-      console.error('Login failed:', error)
+    } catch {
       return false
     }
   }

@@ -8,7 +8,7 @@
         <el-switch v-model="autoRefresh" active-text="自动刷新" @change="toggleAutoRefresh" />
       </div>
     </div>
-    
+
     <!-- 生产概况 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -56,7 +56,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-row :gutter="16">
       <!-- 项目进度 -->
       <el-col :span="12">
@@ -69,8 +69,8 @@
                 <div class="project-code">{{ project.code }}</div>
               </div>
               <div class="project-progress">
-                <el-progress 
-                  :percentage="project.progress" 
+                <el-progress
+                  :percentage="project.progress"
                   :stroke-width="10"
                   :color="getProgressColor(project.progress)"
                 />
@@ -79,7 +79,7 @@
           </div>
         </el-card>
       </el-col>
-      
+
       <!-- 工作中心负载 -->
       <el-col :span="12">
         <el-card shadow="never" header="工作中心负载" class="chart-card">
@@ -91,8 +91,8 @@
                 <span class="wc-code">{{ wc.code }}</span>
               </div>
               <div class="wc-load">
-                <el-progress 
-                  :percentage="Math.min(100, wc.load_rate)" 
+                <el-progress
+                  :percentage="Math.min(100, wc.load_rate)"
                   :stroke-width="12"
                   :color="getLoadColor(wc.load_rate)"
                   :format="() => `${wc.load_rate}%`"
@@ -106,7 +106,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-row :gutter="16" style="margin-top: 16px">
       <!-- 今日排程列表 -->
       <el-col :span="16">
@@ -137,7 +137,7 @@
           </el-table>
         </el-card>
       </el-col>
-      
+
       <!-- 质量概况 -->
       <el-col :span="8">
         <el-card shadow="never" header="质量概况" class="quality-card">
@@ -154,7 +154,7 @@
             <div class="quality-value">{{ quality.defects_today || 0 }}</div>
           </div>
         </el-card>
-        
+
         <el-card shadow="never" header="系统时间" style="margin-top: 16px" class="time-card">
           <div class="current-time">{{ currentTime }}</div>
           <div class="current-date">{{ currentDate }}</div>
@@ -180,8 +180,8 @@ const updateTime = ref('')
 const currentTime = ref('')
 const currentDate = ref('')
 
-let refreshTimer = null
-let clockTimer = null
+let refreshTimer: any = null
+let clockTimer: any = null
 
 const production = ref<Record<string, any>>({})
 const projects = ref<any[]>([])
@@ -199,14 +199,14 @@ const refreshData = async () => {
     quality.value = data.quality || {}
     todaySchedules.value = data.today_schedules || []
     updateTime.value = new Date().toLocaleTimeString()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
   }
 }
 
-const toggleAutoRefresh = (val) => {
+const toggleAutoRefresh = (val: any) => {
   if (val) {
     refreshTimer = setInterval(refreshData, 30000)
   } else {
@@ -217,28 +217,28 @@ const toggleAutoRefresh = (val) => {
 const updateClock = () => {
   const now = new Date()
   currentTime.value = now.toLocaleTimeString('zh-CN', { hour12: false })
-  currentDate.value = now.toLocaleDateString('zh-CN', { 
-    year: 'numeric', 
-    month: 'long', 
+  currentDate.value = now.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
     day: 'numeric',
     weekday: 'long'
   })
 }
 
-const getProgressColor = (progress) => {
+const getProgressColor = (progress: any) => {
   if (progress >= 80) return '#67c23a'
   if (progress >= 50) return '#409eff'
   if (progress >= 30) return '#e6a23c'
   return '#f56c6c'
 }
 
-const getLoadColor = (load) => {
+const getLoadColor = (load: any) => {
   if (load >= 90) return '#f56c6c'
   if (load >= 70) return '#e6a23c'
   return '#67c23a'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     CONFIRMED: '',
@@ -247,10 +247,10 @@ const getStatusType = (status) => {
     COMPLETED: 'success',
     CANCELLED: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
-const getStatusText = (status) => {
+const getStatusText = (status: any) => {
   const texts = {
     DRAFT: '草稿',
     CONFIRMED: '已确认',
@@ -259,13 +259,13 @@ const getStatusText = (status) => {
     COMPLETED: '已完成',
     CANCELLED: '已取消'
   }
-  return texts[status] || status
+  return (texts as Record<string, any>)[status] || status
 }
 
 onMounted(() => {
   refreshData()
   updateClock()
-  
+
   if (autoRefresh.value) {
     refreshTimer = setInterval(refreshData, 30000)
   }

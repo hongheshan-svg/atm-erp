@@ -168,16 +168,16 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 const loading = ref(false)
 const auditLogs = ref<any[]>([])
 const detailsVisible = ref(false)
-const currentLog = ref(null)
+const currentLog = ref<any>(null)
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   action: '',
   model_name: '',
   start_date: '',
   end_date: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -193,11 +193,11 @@ const actionLabels = {
   'REJECT': '拒绝'
 }
 
-const getActionLabel = (action) => {
-  return actionLabels[action] || action
+const getActionLabel = (action: any) => {
+  return (actionLabels as Record<string, any>)[action] || action
 }
 
-const getActionType = (action) => {
+const getActionType = (action: any) => {
   const types = {
     'CREATE': 'success',
     'UPDATE': 'info',
@@ -207,10 +207,10 @@ const getActionType = (action) => {
     'APPROVE': 'success',
     'REJECT': 'warning'
   }
-  return types[action] || 'info'
+  return (types as Record<string, any>)[action] || 'info'
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
@@ -218,7 +218,7 @@ const formatDateTime = (dateStr) => {
 const loadAuditLogs = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters
@@ -235,7 +235,7 @@ const loadAuditLogs = async () => {
     const response = await getAuditLogs(params)
     auditLogs.value = response.results || response || []
     pagination.total = response.count || auditLogs.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载审计日志失败')
     console.error(error)
   } finally {
@@ -260,17 +260,17 @@ const refreshData = () => {
   loadAuditLogs()
 }
 
-const viewDetails = (log) => {
+const viewDetails = (log: any) => {
   currentLog.value = log
   detailsVisible.value = true
 }
 
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   loadAuditLogs()
 }
 
-const handleCurrentChange = (page) => {
+const handleCurrentChange = (page: any) => {
   pagination.page = page
   loadAuditLogs()
 }
@@ -316,4 +316,3 @@ onMounted(() => {
   font-size: 12px;
 }
 </style>
-

@@ -69,7 +69,7 @@ def check_project_task_reminders():
     3. Tasks with progress behind schedule
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import ProjectTask
@@ -179,34 +179,33 @@ def check_project_task_reminders():
             message_lines.append('\n【已逾期】')
             for item in data['overdue'][:5]:
                 message_lines.append(
-                    f"- [{item['project_code']}] {item['task_name']} | "
-                    f"逾期{item['days_overdue']}天 | 进度{item['progress']}%"
+                    f'- [{item["project_code"]}] {item["task_name"]} | '
+                    f'逾期{item["days_overdue"]}天 | 进度{item["progress"]}%'
                 )
 
         if data['upcoming']:
             message_lines.append('\n【即将到期】')
             for item in data['upcoming'][:5]:
                 message_lines.append(
-                    f"- [{item['project_code']}] {item['task_name']} | "
-                    f"{item['days_until']}天后到期 | 进度{item['progress']}%"
+                    f'- [{item["project_code"]}] {item["task_name"]} | '
+                    f'{item["days_until"]}天后到期 | 进度{item["progress"]}%'
                 )
 
         if data['behind']:
             message_lines.append('\n【进度落后】')
             for item in data['behind'][:5]:
                 message_lines.append(
-                    f"- [{item['project_code']}] {item['task_name']} | "
-                    f"应完成{item['expected_progress']}% 实际{item['actual_progress']}%"
+                    f'- [{item["project_code"]}] {item["task_name"]} | '
+                    f'应完成{item["expected_progress"]}% 实际{item["actual_progress"]}%'
                 )
 
         message = '\n'.join(message_lines)
 
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=assignee_id,
             title='项目任务进度提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/projects/tasks',
+            message=message,
+            type='WARNING',
         )
 
     # Also notify project managers
@@ -223,12 +222,11 @@ def check_project_task_reminders():
 
     for user_id in pm_recipients:
         if user_id not in assignee_reminders:  # Don't duplicate notifications
-            Notification.objects.create(
+            SystemNotification.objects.create(
                 user_id=user_id,
                 title='项目任务进度汇总',
-                content=summary_message,
-                notification_type='INFO',
-                link='/projects/tasks',
+                message=summary_message,
+                type='INFO',
             )
 
     # 外部推送:个人优先 + 群播兜底
@@ -252,15 +250,15 @@ def check_project_task_reminders():
                 continue
             assignee_map[user] = {
                 'overdue': [
-                    f"[{i['project_code']}] {i['task_name']} | 逾期{i['days_overdue']}天 | 进度{i['progress']}%"
+                    f'[{i["project_code"]}] {i["task_name"]} | 逾期{i["days_overdue"]}天 | 进度{i["progress"]}%'
                     for i in data['overdue']
                 ],
                 'upcoming': [
-                    f"[{i['project_code']}] {i['task_name']} | {i['days_until']}天后到期 | 进度{i['progress']}%"
+                    f'[{i["project_code"]}] {i["task_name"]} | {i["days_until"]}天后到期 | 进度{i["progress"]}%'
                     for i in data['upcoming']
                 ],
                 'behind': [
-                    f"[{i['project_code']}] {i['task_name']} | 应完成{i['expected_progress']}% 实际{i['actual_progress']}%"
+                    f'[{i["project_code"]}] {i["task_name"]} | 应完成{i["expected_progress"]}% 实际{i["actual_progress"]}%'
                     for i in data['behind']
                 ],
             }
@@ -288,7 +286,7 @@ def check_project_deadline_reminders():
     2. Projects ending within the next 7 days
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import Project
@@ -303,7 +301,10 @@ def check_project_deadline_reminders():
 
     # Find projects ending within 7 days
     upcoming_projects = Project.objects.filter(
-        end_date__gte=today, end_date__lte=warning_date, status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING'], is_deleted=False
+        end_date__gte=today,
+        end_date__lte=warning_date,
+        status__in=['IN_PROGRESS', 'ACTIVE', 'PLANNING'],
+        is_deleted=False,
     ).select_related('customer', 'manager')
 
     if not overdue_projects.exists() and not upcoming_projects.exists():
@@ -319,9 +320,7 @@ def check_project_deadline_reminders():
         for project in overdue_projects[:10]:
             days_overdue = (today - project.end_date).days
             manager_name = project.manager.get_full_name() if project.manager else '未指定'
-            message_lines.append(
-                f'- {project.code} | {project.name} | ' f'负责人: {manager_name} | 逾期{days_overdue}天'
-            )
+            message_lines.append(f'- {project.code} | {project.name} | 负责人: {manager_name} | 逾期{days_overdue}天')
             overdue_items.append(
                 {'code': project.code, 'name': project.name, 'manager': manager_name, 'days_overdue': days_overdue}
             )
@@ -331,9 +330,7 @@ def check_project_deadline_reminders():
         for project in upcoming_projects[:10]:
             days_until = (project.end_date - today).days
             manager_name = project.manager.get_full_name() if project.manager else '未指定'
-            message_lines.append(
-                f'- {project.code} | {project.name} | ' f'负责人: {manager_name} | {days_until}天后到期'
-            )
+            message_lines.append(f'- {project.code} | {project.name} | 负责人: {manager_name} | {days_until}天后到期')
             upcoming_items.append(
                 {'code': project.code, 'name': project.name, 'manager': manager_name, 'days_until': days_until}
             )
@@ -354,9 +351,7 @@ def check_project_deadline_reminders():
 
     # Create in-app notifications
     for user_id in all_recipients:
-        Notification.objects.create(
-            user_id=user_id, title='项目截止日期提醒', content=message, notification_type='WARNING', link='/projects'
-        )
+        SystemNotification.objects.create(user_id=user_id, title='项目截止日期提醒', message=message, type='WARNING')
 
     # 外部推送:个人优先 + 群播兜底
     try:
@@ -390,7 +385,7 @@ def check_aftersales_reminders():
     3. High priority unassigned orders
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import AfterSalesOrder
@@ -469,20 +464,20 @@ def check_aftersales_reminders():
         message_lines.append('\n【已逾期】')
         for item in overdue_items[:5]:
             message_lines.append(
-                f"- {item['order_no']} | {item['customer']} | " f"{item['priority']} | 逾期{item['days_overdue']}天"
+                f'- {item["order_no"]} | {item["customer"]} | {item["priority"]} | 逾期{item["days_overdue"]}天'
             )
 
     if upcoming_items:
         message_lines.append('\n【即将到期】')
         for item in upcoming_items[:5]:
             message_lines.append(
-                f"- {item['order_no']} | {item['customer']} | " f"{item['priority']} | {item['days_until']}天后到期"
+                f'- {item["order_no"]} | {item["customer"]} | {item["priority"]} | {item["days_until"]}天后到期'
             )
 
     if unassigned_items:
         message_lines.append('\n【紧急待指派】')
         for item in unassigned_items[:5]:
-            message_lines.append(f"- {item['order_no']} | {item['customer']} | {item['priority']}")
+            message_lines.append(f'- {item["order_no"]} | {item["customer"]} | {item["priority"]}')
 
     message = '\n'.join(message_lines)
 
@@ -497,12 +492,11 @@ def check_aftersales_reminders():
     all_recipients = set(list(recipients) + assignee_ids)
 
     for user_id in all_recipients:
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=user_id,
             title='售后工单提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/projects/aftersales',
+            message=message,
+            type='WARNING',
         )
 
     # 外部推送:个人优先 + 群播兜底

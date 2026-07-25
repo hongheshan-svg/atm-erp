@@ -545,7 +545,7 @@ class SkillCategorySerializer(serializers.ModelSerializer):
         model = SkillCategory
         fields = '__all__'
 
-    def get_skills(self, obj):
+    def get_skills(self, obj) -> list:
         skills = obj.skills.filter(is_deleted=False)
         return SkillSerializer(skills, many=True).data
 
@@ -580,7 +580,7 @@ class TechnicianProfileSerializer(serializers.ModelSerializer):
         model = TechnicianProfile
         fields = '__all__'
 
-    def get_skills(self, obj):
+    def get_skills(self, obj) -> list:
         skills = TechnicianSkill.objects.filter(technician=obj.user, is_deleted=False)
         return TechnicianSkillSerializer(skills, many=True).data
 
@@ -637,7 +637,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         model = ServiceOrder
         fields = '__all__'
 
-    def get_expenses_total(self, obj):
+    def get_expenses_total(self, obj) -> int:
         return obj.expenses.filter(status='APPROVED', is_deleted=False).aggregate(total=Sum('amount'))['total'] or 0
 
 
@@ -670,7 +670,7 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_technician_count(self, obj):
+    def get_technician_count(self, obj) -> int:
         return obj.dispatches.filter(status__in=['CONFIRMED', 'COMPLETED']).count()
 
 

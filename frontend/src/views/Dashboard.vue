@@ -72,7 +72,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 第二行：业务指标 -->
     <el-row :gutter="16" style="margin-top: 16px;">
       <el-col :xs="24" :sm="12" :md="6">
@@ -215,8 +215,8 @@
                 <div class="project-name">{{ project.name }}</div>
                 <div class="project-customer">{{ project.customer_name }}</div>
               </div>
-              <el-progress 
-                :percentage="project.progress || 0" 
+              <el-progress
+                :percentage="project.progress || 0"
                 :color="getProgressColor(project.progress)"
                 :stroke-width="8"
               />
@@ -274,8 +274,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { TrendCharts, Coin, Wallet, CreditCard, Folder, Sell, ShoppingCart, Box, Money, Tickets } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import { TrendCharts, Coin, Folder, Sell, ShoppingCart, Box, Money, Tickets } from '@element-plus/icons-vue'
+import * as echarts from '@/utils/echarts'
 import { getManagementDashboard } from '@/api/analytics'
 
 // 数据
@@ -323,13 +323,13 @@ const topSuppliers = ref<any[]>([])
 const trendData = ref({ months: [], income: [], expense: [] })
 const agingData = ref<any[]>([])
 
-const trendChart = ref(null)
-const agingChart = ref(null)
-let trendChartInstance = null
-let agingChartInstance = null
+const trendChart = ref<any>(null)
+const agingChart = ref<any>(null)
+let trendChartInstance: any = null
+let agingChartInstance: any = null
 
 // 格式化
-const formatCurrency = (value) => {
+const formatCurrency = (value: any) => {
   const num = Number(value) || 0
   if (num >= 10000) {
     return '¥' + (num / 10000).toFixed(1) + '万'
@@ -337,11 +337,11 @@ const formatCurrency = (value) => {
   return '¥' + num.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-const formatNumber = (value) => {
+const formatNumber = (value: any) => {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getProgressColor = (progress) => {
+const getProgressColor = (progress: any) => {
   if (progress >= 80) return '#67c23a'
   if (progress >= 50) return '#409eff'
   if (progress >= 20) return '#e6a23c'
@@ -353,7 +353,7 @@ const loadDashboardData = async () => {
   try {
     const res = await getManagementDashboard()
     const data = res
-    
+
     kpis.value = {
       financial: {
         revenue: data.financial?.revenue || { total: 0, orders: 0 },
@@ -376,7 +376,7 @@ const loadDashboardData = async () => {
       purchase: data.purchase || { pending_orders: 0, monthly_orders: 0 },
       inventory: data.inventory || { value: 0, total_items: 0, low_stock: 0 }
     }
-    
+
     overdueReceivables.value = data.overdue_receivables || []
     upcomingPayables.value = data.upcoming_payables || []
     activeProjects.value = data.active_projects || []
@@ -384,9 +384,9 @@ const loadDashboardData = async () => {
     topSuppliers.value = data.top_suppliers || []
     trendData.value = data.trend_data || { months: [], income: [], expense: [] }
     agingData.value = data.aging_data || []
-    
+
     renderCharts()
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仪表盘数据失败:', error)
   }
 }
@@ -399,11 +399,11 @@ const renderCharts = () => {
 
 const renderTrendChart = () => {
   if (!trendChart.value) return
-  
+
   if (!trendChartInstance) {
     trendChartInstance = echarts.init(trendChart.value)
   }
-  
+
   const option = {
     tooltip: {
       trigger: 'axis',
@@ -426,7 +426,7 @@ const renderTrendChart = () => {
     yAxis: {
       type: 'value',
       axisLabel: {
-        formatter: (val) => val >= 10000 ? (val / 10000) + '万' : val
+        formatter: (val: any) => val >= 10000 ? (val / 10000) + '万' : val
       }
     },
     series: [
@@ -451,26 +451,26 @@ const renderTrendChart = () => {
       }
     ]
   }
-  
+
   trendChartInstance.setOption(option)
 }
 
 const renderAgingChart = () => {
   if (!agingChart.value) return
-  
+
   if (!agingChartInstance) {
     agingChartInstance = echarts.init(agingChart.value)
   }
-  
+
   const defaultData = [
     { name: '0-30天', value: 0 },
     { name: '31-60天', value: 0 },
     { name: '61-90天', value: 0 },
     { name: '90天以上', value: 0 }
   ]
-  
+
   const data = agingData.value.length > 0 ? agingData.value : defaultData
-  
+
   const option = {
     tooltip: {
       trigger: 'item',
@@ -512,7 +512,7 @@ const renderAgingChart = () => {
       }
     ]
   }
-  
+
   agingChartInstance.setOption(option)
 }
 

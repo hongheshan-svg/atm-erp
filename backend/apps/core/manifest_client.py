@@ -1,4 +1,5 @@
 """发布清单拉取与校验。仅允许 HTTPS + 可信主机(防 SSRF)。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,8 +8,10 @@ from urllib.parse import urlparse
 import requests
 
 ALLOWED_HOSTS = {
-    'raw.githubusercontent.com', 'github.com',
-    'objects.githubusercontent.com', 'ghcr.io',
+    'raw.githubusercontent.com',
+    'github.com',
+    'objects.githubusercontent.com',
+    'ghcr.io',
 }
 
 
@@ -41,9 +44,7 @@ def fetch_manifest(url: str, *, timeout: int = 10) -> Manifest:
     try:
         resp = requests.get(url, timeout=timeout, headers={'Accept': 'application/json'}, allow_redirects=False)
         if 300 <= resp.status_code < 400:
-            raise ManifestError(
-                f'unexpected redirect ({resp.status_code}) — possible SSRF, refusing to follow'
-            )
+            raise ManifestError(f'unexpected redirect ({resp.status_code}) — possible SSRF, refusing to follow')
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError) as exc:

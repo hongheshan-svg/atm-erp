@@ -17,9 +17,7 @@ class BatchSerializer(serializers.ModelSerializer):
     is_expired = serializers.BooleanField(read_only=True)
     days_to_expiry = serializers.IntegerField(read_only=True)
     # 初始入库数量（仅创建时写入）：直接设置 qty_on_hand 并生成 IN 流水，补全追溯链。
-    initial_qty = serializers.DecimalField(
-        max_digits=12, decimal_places=3, write_only=True, required=False, default=0
-    )
+    initial_qty = serializers.DecimalField(max_digits=12, decimal_places=3, write_only=True, required=False, default=0)
 
     class Meta:
         model = Batch

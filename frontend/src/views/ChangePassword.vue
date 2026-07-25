@@ -6,7 +6,7 @@
           <span>修改密码</span>
         </div>
       </template>
-      
+
       <el-form
         ref="formRef"
         :model="form"
@@ -22,7 +22,7 @@
             show-password
           />
         </el-form-item>
-        
+
         <el-form-item label="新密码" prop="new_password">
           <el-input
             v-model="form.new_password"
@@ -31,7 +31,7 @@
             show-password
           />
         </el-form-item>
-        
+
         <el-form-item label="确认新密码" prop="confirm_password">
           <el-input
             v-model="form.confirm_password"
@@ -40,7 +40,7 @@
             show-password
           />
         </el-form-item>
-        
+
         <el-form-item>
           <el-button type="primary" @click="handleSubmit" :loading="loading">
             确认修改
@@ -48,9 +48,9 @@
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <el-divider />
-      
+
       <div class="tips">
         <h4>密码要求：</h4>
         <ul>
@@ -65,23 +65,21 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { changePassword } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
-const router = useRouter()
 const userStore = useUserStore()
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const loading = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   old_password: '',
   new_password: '',
   confirm_password: ''
 })
 
-const validateConfirmPassword = (rule, value, callback) => {
+const validateConfirmPassword = (rule: any, value: any, callback: any) => {
   if (value !== form.new_password) {
     callback(new Error('两次输入的密码不一致'))
   } else {
@@ -89,7 +87,7 @@ const validateConfirmPassword = (rule, value, callback) => {
   }
 }
 
-const validateNewPassword = (rule, value, callback) => {
+const validateNewPassword = (rule: any, value: any, callback: any) => {
   if (value === form.old_password) {
     callback(new Error('新密码不能与当前密码相同'))
   } else if (value.length < 6) {
@@ -115,8 +113,8 @@ const rules = {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid) => {
+
+  await formRef.value.validate(async (valid: any) => {
     if (valid) {
       loading.value = true
       try {
@@ -125,7 +123,7 @@ const handleSubmit = async () => {
           new_password: form.new_password,
           new_password_confirm: form.confirm_password
         })
-        
+
         ElMessageBox.alert(
           '密码修改成功，请重新登录',
           '提示',
@@ -137,7 +135,7 @@ const handleSubmit = async () => {
             }
           }
         )
-      } catch (error) {
+      } catch (error: any) {
         if (error.response?.data?.old_password) {
           ElMessage.error('当前密码错误')
         } else {
@@ -184,4 +182,3 @@ const handleReset = () => {
   line-height: 1.8;
 }
 </style>
-

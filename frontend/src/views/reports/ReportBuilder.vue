@@ -96,7 +96,7 @@
             <el-table-column label="状态" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'completed' ? 'success' : (row.status === 'failed' ? 'danger' : 'warning')" size="small">
-                  {{ { pending: '等待', running: '运行', completed: '完成', failed: '失败' }[row.status] }}
+                  {{ executionStatusLabels[row.status] || row.status }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -164,17 +164,23 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 const templates = ref<any[]>([])
 const favorites = ref<any[]>([])
 const executions = ref<any[]>([])
-const selectedTemplate = ref(null)
+const executionStatusLabels: Record<string, string> = {
+  pending: '等待',
+  running: '运行',
+  completed: '完成',
+  failed: '失败',
+}
+const selectedTemplate = ref<any>(null)
 const reportData = ref<any[]>([])
 const reportColumns = ref<any[]>([])
 const executing = ref(false)
 const showTemplateDialog = ref(false)
-const templateFormRef = ref(null)
+const templateFormRef = ref<any>(null)
 const searchTemplate = ref('')
-const chartRef = ref(null)
+const chartRef = ref<any>(null)
 const filterValues = reactive<Record<string, any>>({})
 
-const templateForm = reactive({ name: '', category: '', data_source: '', description: '' })
+const templateForm = reactive<Record<string, any>>({ name: '', category: '', data_source: '', description: '' })
 
 const templateRules = {
   name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
@@ -182,7 +188,7 @@ const templateRules = {
   data_source: [{ required: true, message: '请选择数据源', trigger: 'change' }]
 }
 
-const categoryLabel = (c) => ({ sales: '销售', purchase: '采购', inventory: '库存', production: '生产', finance: '财务', project: '项目', quality: '质量', equipment: '设备', comprehensive: '综合' }[c] || c)
+const categoryLabel = (c: any) => (({ sales: '销售', purchase: '采购', inventory: '库存', production: '生产', finance: '财务', project: '项目', quality: '质量', equipment: '设备', comprehensive: '综合' } as Record<string, any>)[c] || c)
 
 const filteredTemplates = computed(() => {
   if (!searchTemplate.value) return templates.value
@@ -205,7 +211,7 @@ const loadExecutions = async () => {
   executions.value = res.results || res.results || []
 }
 
-const selectTemplate = (tpl) => {
+const selectTemplate = (tpl: any) => {
   selectedTemplate.value = tpl
   reportData.value = []
   reportColumns.value = []

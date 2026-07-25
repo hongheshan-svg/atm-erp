@@ -161,10 +161,10 @@ const loading = ref(false)
 const memberList = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const submitting = ref(false)
 const isEdit = ref(false)
-const currentMemberId = ref(null)
+const currentMemberId = ref<any>(null)
 
 const userOptions = ref<any[]>([])
 
@@ -206,7 +206,7 @@ const loadMemberList = async () => {
     })
     const data = response.data || response
     memberList.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载成员失败:', error)
     ElMessage.error('加载成员失败')
   } finally {
@@ -221,7 +221,7 @@ const loadUsers = async () => {
     })
     const data = response.data || response
     userOptions.value = data.results || data
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户失败:', error)
   }
 }
@@ -233,7 +233,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   currentMemberId.value = row.id
   dialogTitle.value = '编辑成员'
@@ -249,7 +249,7 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除该成员吗？', '提示', {
       confirmButtonText: '确定',
@@ -261,7 +261,7 @@ const handleDelete = async (row) => {
     ElMessage.success('删除成功')
     loadMemberList()
     emit('refresh')
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除成员失败:', error)
       ElMessage.error('删除成员失败')
@@ -272,7 +272,7 @@ const handleDelete = async (row) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
 
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
 
     submitting.value = true
@@ -293,7 +293,7 @@ const handleSubmit = async () => {
       dialogVisible.value = false
       loadMemberList()
       emit('refresh')
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存成员失败:', error)
       ElMessage.error(isEdit.value ? '更新成员失败' : '添加成员失败')
     } finally {

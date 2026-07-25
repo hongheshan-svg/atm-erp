@@ -18,11 +18,11 @@
       <el-form :inline="true">
         <el-form-item label="模板类型">
           <el-select v-model="filters.template_type" placeholder="全部类型" clearable>
-            <el-option 
-              v-for="t in templateTypes" 
-              :key="t.value" 
-              :label="t.label" 
-              :value="t.value" 
+            <el-option
+              v-for="t in templateTypes"
+              :key="t.value"
+              :label="t.label"
+              :value="t.value"
             />
           </el-select>
         </el-form-item>
@@ -72,18 +72,18 @@
             <el-button size="small" text type="primary" @click="previewTemplate(row)">预览</el-button>
             <el-button size="small" text type="primary" @click="editTemplate(row)">编辑</el-button>
             <el-button size="small" text type="success" @click="testSend(row)">测试发送</el-button>
-            <el-button 
-              size="small" 
-              text 
-              :type="row.is_enabled ? 'warning' : 'success'" 
+            <el-button
+              size="small"
+              text
+              :type="row.is_enabled ? 'warning' : 'success'"
               @click="toggleTemplate(row)"
             >
               {{ row.is_enabled ? '禁用' : '启用' }}
             </el-button>
-            <el-button 
-              size="small" 
-              text 
-              type="danger" 
+            <el-button
+              size="small"
+              text
+              type="danger"
               @click="deleteTemplate(row)"
               :disabled="row.is_system"
             >
@@ -104,8 +104,8 @@
     </el-card>
 
     <!-- 编辑对话框 -->
-    <el-dialog 
-      v-model="showDialog" 
+    <el-dialog
+      v-model="showDialog"
       :title="editing ? '编辑邮件模板' : '新增邮件模板'"
       width="900px"
       :close-on-click-modal="false"
@@ -127,11 +127,11 @@
           <el-col :span="12">
             <el-form-item label="模板类型" required>
               <el-select v-model="form.template_type" style="width: 100%">
-                <el-option 
-                  v-for="t in templateTypes" 
-                  :key="t.value" 
-                  :label="t.label" 
-                  :value="t.value" 
+                <el-option
+                  v-for="t in templateTypes"
+                  :key="t.value"
+                  :label="t.label"
+                  :value="t.value"
                 />
               </el-select>
             </el-form-item>
@@ -146,24 +146,24 @@
           <el-input v-model="form.subject" placeholder="支持变量，如：{{ title }}" />
         </el-form-item>
         <el-form-item label="HTML内容" required>
-          <el-input 
-            v-model="form.body_html" 
-            type="textarea" 
-            :rows="15" 
+          <el-input
+            v-model="form.body_html"
+            type="textarea"
+            :rows="15"
             placeholder="HTML格式邮件内容，支持Django模板变量"
           />
         </el-form-item>
         <el-form-item label="纯文本内容">
-          <el-input 
-            v-model="form.body_text" 
-            type="textarea" 
-            :rows="5" 
+          <el-input
+            v-model="form.body_text"
+            type="textarea"
+            :rows="5"
             placeholder="可选，用于不支持HTML的邮件客户端"
           />
         </el-form-item>
         <el-form-item label="可用变量">
-          <el-input 
-            v-model="variablesInput" 
+          <el-input
+            v-model="variablesInput"
             placeholder="变量列表，逗号分隔，如：recipient_name, title, link"
           />
         </el-form-item>
@@ -202,10 +202,10 @@
           <el-input v-model="testForm.email" placeholder="请输入测试邮箱" />
         </el-form-item>
         <el-form-item label="测试数据">
-          <el-input 
-            v-model="testForm.contextJson" 
-            type="textarea" 
-            :rows="8" 
+          <el-input
+            v-model="testForm.contextJson"
+            type="textarea"
+            :rows="8"
             placeholder='JSON格式，如：{"recipient_name": "张三", "title": "测试标题"}'
           />
         </el-form-item>
@@ -236,7 +236,7 @@ const initLoading = ref(false)
 const showDialog = ref(false)
 const showPreview = ref(false)
 const showTestDialog = ref(false)
-const editing = ref(null)
+const editing = ref<any>(null)
 const templateTypes = ref<any[]>([])
 
 const filters = ref({
@@ -251,7 +251,7 @@ const pagination = ref({
   total: 0
 })
 
-const form = ref({
+const form = ref<Record<string, any>>({
   code: '',
   name: '',
   template_type: 'CUSTOM',
@@ -265,8 +265,8 @@ const form = ref({
 
 const variablesInput = computed({
   get: () => form.value.variables?.join(', ') || '',
-  set: (val) => {
-    form.value.variables = val.split(',').map(v => v.trim()).filter(v => v)
+  set: (val: string) => {
+    form.value.variables = val.split(',').map((value: string) => value.trim()).filter((value: string) => value)
   }
 })
 
@@ -281,13 +281,13 @@ const testForm = ref({
   contextJson: '{}'
 })
 
-const testingTemplate = ref(null)
+const testingTemplate = ref<any>(null)
 
 const loadTemplateTypes = async () => {
   try {
     const res = await getEmailTemplateTypes()
     templateTypes.value = res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载模板类型失败:', e)
   }
 }
@@ -295,7 +295,7 @@ const loadTemplateTypes = async () => {
 const loadTemplates = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.value.page,
       page_size: pagination.value.pageSize,
       ...filters.value
@@ -303,14 +303,14 @@ const loadTemplates = async () => {
     const res = await getEmailTemplateList(params)
     templates.value = res.results || res || []
     pagination.value.total = res.count || templates.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载模板失败:', e)
   } finally {
     loading.value = false
   }
 }
 
-const editTemplate = (template) => {
+const editTemplate = (template: any) => {
   editing.value = template
   form.value = { ...template }
   showDialog.value = true
@@ -330,7 +330,7 @@ const saveTemplate = async () => {
     editing.value = null
     resetForm()
     loadTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -351,17 +351,17 @@ const resetForm = () => {
   }
 }
 
-const toggleTemplate = async (template) => {
+const toggleTemplate = async (template: any) => {
   try {
     await toggleEmailTemplate(template.id)
     ElMessage.success('操作成功')
     loadTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const deleteTemplate = async (template) => {
+const deleteTemplate = async (template: any) => {
   if (template.is_system) {
     ElMessage.warning('系统模板不能删除')
     return
@@ -371,12 +371,12 @@ const deleteTemplate = async (template) => {
     await deleteEmailTemplate(template.id)
     ElMessage.success('删除成功')
     loadTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('删除失败')
   }
 }
 
-const previewTemplate = async (template) => {
+const previewTemplate = async (template: any) => {
   try {
     const res = await previewEmailTemplate(template.id, {
       context: {
@@ -390,12 +390,12 @@ const previewTemplate = async (template) => {
     })
     previewData.value = res
     showPreview.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('预览失败')
   }
 }
 
-const testSend = (template) => {
+const testSend = (template: any) => {
   testingTemplate.value = template
   testForm.value = {
     email: '',
@@ -413,15 +413,15 @@ const doTestSend = async () => {
     ElMessage.warning('请输入收件人邮箱')
     return
   }
-  
-  let context = {}
+
+  let context: Record<string, any>
   try {
     context = JSON.parse(testForm.value.contextJson)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('测试数据格式错误，请输入有效的JSON')
     return
   }
-  
+
   sending.value = true
   try {
     const res = await testSendEmailTemplate(testingTemplate.value.id, {
@@ -434,7 +434,7 @@ const doTestSend = async () => {
     } else {
       ElMessage.error(res.message || '发送失败')
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('发送失败')
   } finally {
     sending.value = false
@@ -447,7 +447,7 @@ const initSystemTemplates = async () => {
     const res = await initSystemEmailTemplates()
     ElMessage.success(res.message || '初始化成功')
     loadTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('初始化失败')
   } finally {
     initLoading.value = false
@@ -472,7 +472,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  
+
   h2 {
     margin: 0;
     color: #303133;
@@ -481,7 +481,7 @@ onMounted(() => {
 
 .filter-card {
   margin-bottom: 20px;
-  
+
   :deep(.el-card__body) {
     padding-bottom: 2px;
   }
@@ -489,14 +489,14 @@ onMounted(() => {
 
 .preview-section {
   margin-bottom: 20px;
-  
+
   h4 {
     margin: 0 0 10px 0;
     color: #606266;
     border-left: 3px solid #409eff;
     padding-left: 10px;
   }
-  
+
   p {
     padding: 10px;
     background: #f5f7fa;

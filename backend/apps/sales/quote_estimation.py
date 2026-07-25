@@ -481,7 +481,7 @@ class CostCategorySerializer(serializers.ModelSerializer):
         model = CostCategory
         fields = '__all__'
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list:
         children = obj.children.filter(is_deleted=False)
         return CostCategorySerializer(children, many=True).data
 
@@ -606,6 +606,7 @@ class ProjectCostHistorySerializer(serializers.ModelSerializer):
 
 class CostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """成本类别管理"""
+
     permission_module = 'sales'
     permission_resource = 'cost_category'
 
@@ -621,6 +622,7 @@ class CostCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
 class LaborRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """人工费率管理"""
+
     permission_module = 'sales'
     permission_resource = 'labor_rate'
 
@@ -636,6 +638,7 @@ class LaborRateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
 class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """报价估算管理"""
+
     permission_module = 'sales'
     permission_resource = 'quote_estimation'
 
@@ -778,9 +781,7 @@ class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         estimation.status = 'QUOTED'
         estimation.save()
 
-        return Response(
-            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quote_no}
-        )
+        return Response({'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quote_no})
 
     @action(detail=False, methods=['get'])
     def similar_projects(self, request):
@@ -830,6 +831,7 @@ class QuoteEstimationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
 class EstimationMaterialItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算材料明细"""
+
     permission_module = 'sales'
     permission_resource = 'estimation_material_item'
 
@@ -858,6 +860,7 @@ class EstimationMaterialItemViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
 
 class EstimationLaborItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算人工明细"""
+
     permission_module = 'sales'
     permission_resource = 'estimation_labor_item'
 
@@ -881,6 +884,7 @@ class EstimationLaborItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 class EstimationOutsourceItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """估算外协明细"""
+
     permission_module = 'sales'
     permission_resource = 'estimation_outsource_item'
 
@@ -896,6 +900,7 @@ class EstimationOutsourceItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
 
 class ProjectCostHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """项目成本历史（只读）"""
+
     permission_module = 'sales'
     permission_resource = 'project_cost_history'
 

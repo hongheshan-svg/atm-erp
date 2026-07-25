@@ -140,7 +140,7 @@ class BankStatement(BaseModel):
         ]
 
     def __str__(self):
-        return f"{self.transaction_time.strftime('%Y-%m-%d')} - {self.counterparty_name} - {self.amount}"
+        return f'{self.transaction_time.strftime("%Y-%m-%d")} - {self.counterparty_name} - {self.amount}'
 
     @property
     def amount(self):

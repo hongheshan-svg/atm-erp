@@ -10,9 +10,9 @@
         </div>
       </template>
 
-      <el-alert 
-        type="info" 
-        :closable="false" 
+      <el-alert
+        type="info"
+        :closable="false"
         style="margin-bottom: 20px"
       >
         <template #title>
@@ -52,17 +52,17 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button 
-              type="success" 
-              size="small" 
+            <el-button
+              type="success"
+              size="small"
               @click="restoreBackup(row)"
               :loading="restoring === row.name"
             >
               恢复
             </el-button>
-            <el-button 
-              type="danger" 
-              size="small" 
+            <el-button
+              type="danger"
+              size="small"
               @click="deleteBackup(row)"
             >
               删除
@@ -141,9 +141,9 @@ const keepDays = ref(30)
 const backupName = ref('')
 const showCreateDialog = ref(false)
 const showRestoreDialog = ref(false)
-const selectedBackup = ref(null)
+const selectedBackup = ref<any>(null)
 
-const formatSize = (bytes) => {
+const formatSize = (bytes: any) => {
   if (!bytes) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
@@ -151,7 +151,7 @@ const formatSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
 }
@@ -162,7 +162,7 @@ const fetchBackups = async () => {
     const res = await request({ url: '/core/backups/', method: 'get' })
     backups.value = res?.backups || []
     backupDir.value = res?.backup_dir || ''
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取备份列表失败')
   } finally {
     loading.value = false
@@ -177,7 +177,7 @@ const createBackup = () => {
 const confirmCreate = async () => {
   creating.value = true
   try {
-    const res = await request({
+    await request({
       url: '/core/backups/create/',
       method: 'post',
       data: { name: backupName.value || undefined }
@@ -185,21 +185,21 @@ const confirmCreate = async () => {
     ElMessage.success('备份创建成功')
     showCreateDialog.value = false
     fetchBackups()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('备份创建失败: ' + (error.response?.data?.error || error.message))
   } finally {
     creating.value = false
   }
 }
 
-const restoreBackup = (backup) => {
+const restoreBackup = (backup: any) => {
   selectedBackup.value = backup
   showRestoreDialog.value = true
 }
 
 const confirmRestore = async () => {
   if (!selectedBackup.value) return
-  
+
   restoring.value = selectedBackup.value.name
   try {
     await request({
@@ -209,28 +209,28 @@ const confirmRestore = async () => {
     })
     ElMessage.success('数据恢复成功，请刷新页面')
     showRestoreDialog.value = false
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('恢复失败: ' + (error.response?.data?.error || error.message))
   } finally {
     restoring.value = ''
   }
 }
 
-const deleteBackup = async (backup) => {
+const deleteBackup = async (backup: any) => {
   try {
     await ElMessageBox.confirm(
       `确定要删除备份 "${backup.name}" 吗？此操作不可撤销！`,
       '确认删除',
       { type: 'warning' }
     )
-    
+
     await request({
       url: `/core/backups/${backup.name}/`,
       method: 'delete'
     })
     ElMessage.success('备份已删除')
     fetchBackups()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.response?.data?.error || error.message))
     }
@@ -244,7 +244,7 @@ const cleanupBackups = async () => {
       '确认清理',
       { type: 'warning' }
     )
-    
+
     cleaning.value = true
     const res = await request({
       url: '/core/backups/cleanup/',
@@ -253,7 +253,7 @@ const cleanupBackups = async () => {
     })
     ElMessage.success(res?.message || '清理成功')
     fetchBackups()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('清理失败: ' + (error.response?.data?.error || error.message))
     }

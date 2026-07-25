@@ -30,7 +30,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
     total_member_count = serializers.SerializerMethodField()
 
-    def get_manager_name(self, obj):
+    def get_manager_name(self, obj) -> str:
         if obj.manager:
             # 中文姓名：姓在前，名在后
             if obj.manager.last_name or obj.manager.first_name:
@@ -38,11 +38,11 @@ class DepartmentSerializer(serializers.ModelSerializer):
             return obj.manager.username
         return ''
 
-    def get_member_count(self, obj):
+    def get_member_count(self, obj) -> int:
         """直属成员数（不含下级部门）。"""
         return obj.users.filter(is_deleted=False, is_active=True).count()
 
-    def get_total_member_count(self, obj):
+    def get_total_member_count(self, obj) -> int:
         """全部成员数（含所有下级部门），按部门树递归统计。"""
         from apps.accounts.models import User
 
@@ -117,7 +117,7 @@ class RoleSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def get_user_count(self, obj):
+    def get_user_count(self, obj) -> int:
         return obj.users.filter(is_deleted=False, is_active=True).count()
 
     def to_representation(self, instance):
@@ -226,7 +226,7 @@ class UserSerializer(serializers.ModelSerializer):
     role_name = serializers.CharField(source='role.name', read_only=True)
     display_name = serializers.SerializerMethodField()
 
-    def get_display_name(self, obj):
+    def get_display_name(self, obj) -> str:
         """显示用姓名：中文姓在前名在后，缺省回退 username。"""
         if obj.last_name or obj.first_name:
             return f'{obj.last_name}{obj.first_name}'
@@ -446,11 +446,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'last_login',
         ]
 
-    def get_roles(self, obj):
+    def get_roles(self, obj) -> list[str]:
         """返回用户的所有角色代码"""
         return list(obj.roles.filter(is_active=True).values_list('code', flat=True))
 
-    def get_permissions(self, obj):
+    def get_permissions(self, obj) -> list[str]:
         """返回用户的所有权限代码"""
         from apps.core.permission_service import get_user_permissions
 
@@ -458,7 +458,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return ['*']
         return list(get_user_permissions(obj))
 
-    def get_menus(self, obj):
+    def get_menus(self, obj) -> list:
         """返回用户可访问的菜单树（支持三级分组）"""
         from django.db.models import Q
 
@@ -507,7 +507,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         return build_tree()
 
-    def get_data_scopes(self, obj):
+    def get_data_scopes(self, obj) -> dict[str, str]:
         """返回用户的数据权限范围"""
         from apps.core.permission_service import resolve_data_scope
 

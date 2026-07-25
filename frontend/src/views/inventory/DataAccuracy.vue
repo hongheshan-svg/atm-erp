@@ -65,7 +65,7 @@
           </div>
         </div>
       </template>
-      
+
       <el-tabs v-model="activeTab">
         <!-- 待处理问题 -->
         <el-tab-pane label="待处理问题" name="issues">
@@ -228,7 +228,7 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Document } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { getAccuracyReport, getValidationResults, getReconciliationSessions, getValidationRules, runValidationChecks, createAndRunReconciliation, handleValidationResult, initDefaultValidationRules, updateValidationRule } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -255,36 +255,36 @@ const severityData = ref<any[]>([])
 
 const reconcileDialogVisible = ref(false)
 const handleDialogVisible = ref(false)
-const currentIssue = ref(null)
+const currentIssue = ref<any>(null)
 
-const accuracyChartRef = ref(null)
-const severityChartRef = ref(null)
-let accuracyChart = null
-let severityChart = null
+const accuracyChartRef = ref<any>(null)
+const severityChartRef = ref<any>(null)
+let accuracyChart: any = null
+let severityChart: any = null
 
-const reconcileForm = reactive({
+const reconcileForm = reactive<Record<string, any>>({
   session_type: 'IN_OUT_BALANCE',
   warehouse_id: null,
   start_date: '',
   end_date: ''
 })
 
-const handleForm = reactive({
+const handleForm = reactive<Record<string, any>>({
   status: 'FIXED',
   resolution: ''
 })
 
-const getSeverityType = (severity) => {
+const getSeverityType = (severity: any) => {
   const map = { INFO: 'info', WARNING: 'warning', ERROR: 'danger', CRITICAL: 'danger' }
-  return map[severity] || 'info'
+  return (map as Record<string, any>)[severity] || 'info'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { DRAFT: 'info', IN_PROGRESS: 'warning', COMPLETED: 'success', CANCELLED: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const formatDateTime = (dt) => {
+const formatDateTime = (dt: any) => {
   if (!dt) return '-'
   return new Date(dt).toLocaleString('zh-CN')
 }
@@ -300,10 +300,10 @@ const loadStats = async () => {
       negativeStock: res.current_status?.negative_stock_items || 0,
       itemsWithStock: res.current_status?.total_items_with_stock || 0
     }
-    
+
     await nextTick()
     renderCharts()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -314,7 +314,7 @@ const loadPendingIssues = async () => {
     const res = await getValidationResults({ status: 'PENDING', page: issuePage.value, page_size: 10 })
     pendingIssues.value = res.results || res
     issueTotal.value = res.count || pendingIssues.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -325,7 +325,7 @@ const loadReconciliations = async () => {
   try {
     const res = await getReconciliationSessions({ page_size: 20 })
     reconciliations.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -334,7 +334,7 @@ const loadValidationRules = async () => {
   try {
     const res = await getValidationRules({ page_size: 100 })
     validationRules.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -374,7 +374,7 @@ const renderCharts = () => {
       }]
     })
   }
-  
+
   // 严重程度饼图
   if (severityChartRef.value) {
     if (!severityChart) {
@@ -389,7 +389,7 @@ const renderCharts = () => {
         data: severityData.value.map(s => ({
           name: s.rule__severity || 'INFO',
           value: s.count,
-          itemStyle: { color: colorMap[s.rule__severity] }
+          itemStyle: { color: (colorMap as Record<string, any>)[s.rule__severity] }
         })),
         label: { formatter: '{b}: {c}' }
       }]
@@ -404,7 +404,7 @@ const runValidation = async () => {
     ElMessage.success(`校验完成，发现 ${res.total_issues} 个问题`)
     loadStats()
     loadPendingIssues()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('校验失败')
   } finally {
     validating.value = false
@@ -428,21 +428,21 @@ const createReconciliation = async () => {
     reconcileDialogVisible.value = false
     loadReconciliations()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('对账失败')
   } finally {
     submitting.value = false
   }
 }
 
-const handleIssue = (issue) => {
+const handleIssue = (issue: any) => {
   currentIssue.value = issue
   handleForm.status = 'FIXED'
   handleForm.resolution = ''
   handleDialogVisible.value = true
 }
 
-const ignoreIssue = async (issue) => {
+const ignoreIssue = async (issue: any) => {
   try {
     await handleValidationResult(issue.id, {
       status: 'IGNORED',
@@ -451,7 +451,7 @@ const ignoreIssue = async (issue) => {
     ElMessage.success('已忽略')
     loadPendingIssues()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
@@ -464,14 +464,14 @@ const submitHandle = async () => {
     handleDialogVisible.value = false
     loadPendingIssues()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('处理失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewReconciliation = (session) => {
+const viewReconciliation = (session: any) => {
   router.push(`/inventory/reconciliation/${session.id}`)
 }
 
@@ -480,17 +480,17 @@ const initDefaultRules = async () => {
     const res = await initDefaultValidationRules()
     ElMessage.success(`初始化完成，创建 ${res.created_count} 条规则`)
     loadValidationRules()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('初始化失败')
   }
 }
 
-const toggleRule = async (rule) => {
+const toggleRule = async (rule: any) => {
   try {
     await updateValidationRule(rule.id, {
       is_active: rule.is_active
     })
-  } catch (e) {
+  } catch (e: any) {
     rule.is_active = !rule.is_active
     ElMessage.error('操作失败')
   }

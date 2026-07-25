@@ -9,7 +9,7 @@ from celery import shared_task
 from django.db import models
 from django.utils import timezone
 
-from apps.core.models import Notification
+from apps.core.models import SystemNotification
 
 
 @shared_task
@@ -38,13 +38,11 @@ def check_equipment_maintenance():
             # 发送通知给相关人员
             notify_users = _get_equipment_notify_users(eq)
             for user in notify_users:
-                Notification.objects.create(
+                SystemNotification.objects.create(
                     user=user,
                     title='设备保修即将到期',
                     message=f'设备 [{eq.equipment_no}] {eq.name} 的保修期将于 {days} 天后到期，请及时处理。',
-                    notification_type='WARNING',
-                    related_model='Equipment',
-                    related_id=eq.id,
+                    type='WARNING',
                 )
 
     # 2. 检查维保计划到期
@@ -66,13 +64,11 @@ def check_equipment_maintenance():
 
             # 发送通知
             if schedule.responsible_person:
-                Notification.objects.create(
+                SystemNotification.objects.create(
                     user=schedule.responsible_person,
                     title='设备维保到期提醒',
                     message=f'设备 [{schedule.equipment.equipment_no}] {schedule.equipment.name} 的{schedule.get_maintenance_type_display()}维保将于 {days} 天后到期。',
-                    notification_type='WARNING',
-                    related_model='MaintenanceSchedule',
-                    related_id=schedule.id,
+                    type='WARNING',
                 )
 
     # 3. 检查工装夹具校准到期
@@ -89,13 +85,11 @@ def check_equipment_maintenance():
 
             # 发送通知给负责人
             if fixture.responsible_person:
-                Notification.objects.create(
+                SystemNotification.objects.create(
                     user=fixture.responsible_person,
                     title='工装夹具校准到期提醒',
                     message=f'工装夹具 [{fixture.fixture_no}] {fixture.name} 的校准将于 {days} 天后到期，请安排校准。',
-                    notification_type='WARNING',
-                    related_model='Fixture',
-                    related_id=fixture.id,
+                    type='WARNING',
                 )
 
     # 发送汇总通知给管理员
@@ -130,13 +124,13 @@ def _send_summary_notification(results):
     summary = []
 
     if results['warranty_expiring']:
-        summary.append(f"- {len(results['warranty_expiring'])} 台设备保修即将到期")
+        summary.append(f'- {len(results["warranty_expiring"])} 台设备保修即将到期')
 
     if results['maintenance_due']:
-        summary.append(f"- {len(results['maintenance_due'])} 项维保计划即将到期")
+        summary.append(f'- {len(results["maintenance_due"])} 项维保计划即将到期')
 
     if results['calibration_due']:
-        summary.append(f"- {len(results['calibration_due'])} 个工装夹具需要校准")
+        summary.append(f'- {len(results["calibration_due"])} 个工装夹具需要校准')
 
     if summary:
         message = '设备维保提醒汇总：\n' + '\n'.join(summary)
@@ -145,7 +139,7 @@ def _send_summary_notification(results):
         admins = User.objects.filter(groups__name__in=['admin', 'equipment_manager'], is_active=True)
 
         for admin in admins:
-            Notification.objects.create(user=admin, title='设备维保日报', message=message, notification_type='INFO')
+            SystemNotification.objects.create(user=admin, title='设备维保日报', message=message, type='INFO')
 
 
 @shared_task

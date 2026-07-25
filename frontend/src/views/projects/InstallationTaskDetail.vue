@@ -67,7 +67,7 @@
             <el-table-column label="结果" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.result === 'pass' ? 'success' : (row.result === 'fail' ? 'danger' : 'warning')" size="small">
-                  {{ { pass: '通过', fail: '不合格', conditional: '有条件' }[row.result] || row.result }}
+                  {{ commissioningResultLabels[row.result] || row.result }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -96,7 +96,7 @@
             <el-table-column label="状态" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'resolved' ? 'success' : (row.status === 'open' ? 'danger' : 'warning')" size="small">
-                  {{ { open: '待处理', processing: '处理中', resolved: '已解决', closed: '关闭' }[row.status] }}
+                  {{ issueStatusLabels[row.status] || row.status }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -125,7 +125,7 @@
             <el-table-column label="结果" width="100" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.result === 'accepted' ? 'success' : (row.result === 'rejected' ? 'danger' : 'warning')" size="small">
-                  {{ { accepted: '通过', conditional: '有条件', rejected: '拒绝' }[row.result] }}
+                  {{ acceptanceResultLabels[row.result] || row.result }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -183,7 +183,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import {
@@ -194,6 +194,22 @@ import {
 } from '@/api/projects/enhancement'
 
 const route = useRoute()
+const commissioningResultLabels: Record<string, string> = {
+  pass: '通过',
+  fail: '不合格',
+  conditional: '有条件',
+}
+const issueStatusLabels: Record<string, string> = {
+  open: '待处理',
+  processing: '处理中',
+  resolved: '已解决',
+  closed: '关闭',
+}
+const acceptanceResultLabels: Record<string, string> = {
+  accepted: '通过',
+  conditional: '有条件',
+  rejected: '拒绝',
+}
 const loading = ref(false)
 const task = ref<Record<string, any>>({})
 const siteLogs = ref<any[]>([])
@@ -208,7 +224,7 @@ const showIssueDialog = ref(false)
 const showAccDialog = ref(false)
 const newStatus = ref('')
 
-const logForm = reactive({ log_type: 'daily', log_date: '', content: '', work_hours: 8, workers_count: 1 })
+const logForm = reactive<Record<string, any>>({ log_type: 'daily', log_date: '', content: '', work_hours: 8, workers_count: 1 })
 
 const statusOptions = [
   { value: 'pending', label: '待安排' }, { value: 'dispatched', label: '已派工' },
@@ -217,14 +233,14 @@ const statusOptions = [
   { value: 'acceptance', label: '验收中' }, { value: 'completed', label: '已完成' }
 ]
 
-const statusType = (s) => ({ pending: 'info', dispatched: '', in_transit: 'warning', on_site: 'warning', installing: '', commissioning: '', acceptance: 'warning', completed: 'success' }[s] || 'info')
-const statusLabel = (s) => statusOptions.find(o => o.value === s)?.label || s
-const logTypeTag = (t) => ({ daily: 'info', progress: '', issue: 'danger', milestone: 'success' }[t] || 'info')
-const logTypeLabel = (t) => ({ daily: '日常', progress: '进度', issue: '问题', milestone: '里程碑' }[t] || t)
-const severityType = (s) => ({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' }[s] || 'info')
-const severityLabel = (s) => ({ low: '低', medium: '中', high: '高', critical: '严重' }[s] || s)
+const statusType = (s: any) => (({ pending: 'info', dispatched: '', in_transit: 'warning', on_site: 'warning', installing: '', commissioning: '', acceptance: 'warning', completed: 'success' } as Record<string, any>)[s] || 'info')
+const statusLabel = (s: any) => statusOptions.find(o => o.value === s)?.label || s
+const logTypeTag = (t: any) => (({ daily: 'info', progress: '', issue: 'danger', milestone: 'success' } as Record<string, any>)[t] || 'info')
+const logTypeLabel = (t: any) => (({ daily: '日常', progress: '进度', issue: '问题', milestone: '里程碑' } as Record<string, any>)[t] || t)
+const severityType = (s: any) => (({ low: 'info', medium: 'warning', high: 'danger', critical: 'danger' } as Record<string, any>)[s] || 'info')
+const severityLabel = (s: any) => (({ low: '低', medium: '中', high: '高', critical: '严重' } as Record<string, any>)[s] || s)
 
-const taskId = route.params.id
+const taskId = Number(route.params.id)
 
 const loadTask = async () => {
   loading.value = true
@@ -268,7 +284,7 @@ const submitLog = async () => {
   loadLogs()
 }
 
-const resolveIssue = async (row) => {
+const resolveIssue = async (row: any) => {
   const { value } = await ElMessageBox.prompt('请输入解决方案', '解决问题', { inputType: 'textarea' })
   await resolveSiteIssue(row.id, { resolution: value })
   ElMessage.success('已解决')

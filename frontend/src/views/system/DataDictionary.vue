@@ -24,8 +24,8 @@
           </el-input>
         </div>
         <el-scrollbar height="calc(100vh - 280px)">
-          <div 
-            v-for="type in filteredTypes" 
+          <div
+            v-for="type in filteredTypes"
             :key="type.id"
             class="type-item"
             :class="{ active: selectedType?.id === type.id }"
@@ -60,9 +60,9 @@
                 <el-icon><Edit /></el-icon>
                 编辑
               </el-button>
-              <el-button 
-                size="small" 
-                type="danger" 
+              <el-button
+                size="small"
+                type="danger"
                 @click="deleteType(selectedType)"
                 :disabled="selectedType.is_system"
               >
@@ -90,9 +90,9 @@
             <el-table-column prop="label" label="显示标签" min-width="200" />
             <el-table-column label="颜色" width="100">
               <template #default="{ row }">
-                <el-tag 
-                  v-if="row.color" 
-                  :color="row.color" 
+                <el-tag
+                  v-if="row.color"
+                  :color="row.color"
                   size="small"
                   style="color: white;"
                 >
@@ -133,8 +133,8 @@
     </div>
 
     <!-- 字典类型对话框 -->
-    <el-dialog 
-      v-model="showTypeDialog" 
+    <el-dialog
+      v-model="showTypeDialog"
       :title="editingType ? '编辑字典类型' : '新增字典类型'"
       width="500px"
     >
@@ -159,8 +159,8 @@
     </el-dialog>
 
     <!-- 字典项对话框 -->
-    <el-dialog 
-      v-model="showItemDialog" 
+    <el-dialog
+      v-model="showItemDialog"
       :title="editingItem ? '编辑字典项' : '新增字典项'"
       width="500px"
     >
@@ -204,12 +204,12 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const dictTypes = ref<any[]>([])
 const dictItems = ref<any[]>([])
-const selectedType = ref(null)
+const selectedType = ref<any>(null)
 const typeSearch = ref('')
 const showTypeDialog = ref(false)
 const showItemDialog = ref(false)
-const editingType = ref(null)
-const editingItem = ref(null)
+const editingType = ref<any>(null)
+const editingItem = ref<any>(null)
 const saving = ref(false)
 const initLoading = ref(false)
 
@@ -232,8 +232,8 @@ const itemForm = ref({
 const filteredTypes = computed(() => {
   if (!typeSearch.value) return dictTypes.value
   const search = typeSearch.value.toLowerCase()
-  return dictTypes.value.filter(t => 
-    t.code.toLowerCase().includes(search) || 
+  return dictTypes.value.filter(t =>
+    t.code.toLowerCase().includes(search) ||
     t.name.toLowerCase().includes(search)
   )
 })
@@ -242,24 +242,24 @@ const loadTypes = async () => {
   try {
     const res = await getDictTypeList()
     dictTypes.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载字典类型失败:', e)
   }
 }
 
-const selectType = async (type) => {
+const selectType = async (type: any) => {
   selectedType.value = type
   try {
     const res = await getDictItemList({
       dict_type: type.id
     })
     dictItems.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载字典项失败:', e)
   }
 }
 
-const editType = (type) => {
+const editType = (type: any) => {
   editingType.value = type
   typeForm.value = { ...type }
   showTypeDialog.value = true
@@ -279,14 +279,14 @@ const saveType = async () => {
     editingType.value = null
     typeForm.value = { code: '', name: '', sort_order: 0, description: '' }
     loadTypes()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
   }
 }
 
-const deleteType = async (type) => {
+const deleteType = async (type: any) => {
   if (type.is_system) {
     ElMessage.warning('系统字典类型不能删除')
     return
@@ -298,12 +298,12 @@ const deleteType = async (type) => {
     selectedType.value = null
     dictItems.value = []
     loadTypes()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('删除失败')
   }
 }
 
-const editItem = (item) => {
+const editItem = (item: any) => {
   editingItem.value = item
   itemForm.value = { ...item }
   showItemDialog.value = true
@@ -324,40 +324,40 @@ const saveItem = async () => {
     editingItem.value = null
     itemForm.value = { value: '', label: '', color: '', sort_order: 0, is_default: false, description: '' }
     selectType(selectedType.value)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
   }
 }
 
-const setDefault = async (item) => {
+const setDefault = async (item: any) => {
   try {
     await setDictItemDefault(item.id)
     ElMessage.success('设置成功')
     selectType(selectedType.value)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('设置失败')
   }
 }
 
-const toggleItem = async (item) => {
+const toggleItem = async (item: any) => {
   try {
     await toggleDictItemEnable(item.id)
     ElMessage.success('操作成功')
     selectType(selectedType.value)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const deleteItem = async (item) => {
+const deleteItem = async (item: any) => {
   await ElMessageBox.confirm('确定要删除该字典项吗？', '确认删除', { type: 'warning' })
   try {
     await deleteDictItem(item.id)
     ElMessage.success('删除成功')
     selectType(selectedType.value)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('删除失败')
   }
 }
@@ -368,7 +368,7 @@ const handleInitSystemDicts = async () => {
     const res = await initSystemDicts()
     ElMessage.success(res.message || '初始化成功')
     loadTypes()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('初始化失败')
   } finally {
     initLoading.value = false
@@ -392,7 +392,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  
+
   h2 {
     margin: 0;
     color: #303133;
@@ -410,11 +410,11 @@ onMounted(() => {
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   padding: 16px;
-  
+
   .search-box {
     margin-bottom: 16px;
   }
-  
+
   .type-item {
     padding: 12px 16px;
     border-radius: 6px;
@@ -422,48 +422,48 @@ onMounted(() => {
     margin-bottom: 8px;
     border: 1px solid #ebeef5;
     transition: all 0.3s;
-    
+
     &:hover {
       background: #f5f7fa;
     }
-    
+
     &.active {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       border-color: transparent;
-      
+
       .type-code {
         color: rgba(255, 255, 255, 0.8);
       }
-      
+
       .items-count {
         color: rgba(255, 255, 255, 0.7);
       }
     }
-    
+
     .type-info {
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
-    
+
     .type-code {
       font-size: 12px;
       color: #909399;
       font-family: monospace;
     }
-    
+
     .type-name {
       font-weight: 500;
     }
-    
+
     .type-meta {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-top: 8px;
     }
-    
+
     .items-count {
       font-size: 12px;
       color: #909399;
@@ -477,7 +477,7 @@ onMounted(() => {
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   padding: 20px;
-  
+
   .panel-header {
     display: flex;
     justify-content: space-between;
@@ -485,16 +485,16 @@ onMounted(() => {
     margin-bottom: 20px;
     padding-bottom: 16px;
     border-bottom: 1px solid #ebeef5;
-    
+
     .type-detail {
       display: flex;
       align-items: center;
       gap: 12px;
-      
+
       h3 {
         margin: 0;
       }
-      
+
       .code-badge {
         padding: 4px 12px;
         background: #f0f0f0;

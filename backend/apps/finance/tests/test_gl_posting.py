@@ -17,10 +17,9 @@
 from datetime import date
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class GLAutoPostingTest(TestCase):
     def setUp(self):
         from apps.finance.accounting import FiscalPeriod
@@ -75,9 +74,7 @@ class GLAutoPostingTest(TestCase):
 
         from apps.finance.accounting import AccountBalance, JournalVoucher
 
-        self.assertEqual(
-            JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1
-        )
+        self.assertEqual(JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1)
         v = self._voucher('AR_INVOICE', ar.pk)
         self.assertEqual(v.status, 'POSTED')
         self.assertTrue(v.is_balanced)
@@ -100,14 +97,17 @@ class GLAutoPostingTest(TestCase):
 
         ar = self._make_ar(Decimal('1000.00'))
         pay = Payment.objects.create(
-            payment_type='AR', ar=ar, payment_date='2026-07-15',
-            payment_method='BANK_TRANSFER', amount=Decimal('400.00'),
+            payment_type='AR',
+            ar=ar,
+            payment_date='2026-07-15',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('400.00'),
         )
         v = self._voucher('AR_RECEIPT', pay.pk)
         self.assertEqual(v.status, 'POSTED')
         self.assertTrue(v.is_balanced)
         lines = self._lines_by_code(v)
-        self.assertEqual(lines['1002'].debit_amount, Decimal('400.00'))   # 借 银行存款
+        self.assertEqual(lines['1002'].debit_amount, Decimal('400.00'))  # 借 银行存款
         self.assertEqual(lines['1122'].credit_amount, Decimal('400.00'))  # 贷 应收账款
 
         # AR 台账已收金额照常累加(自动过账不干扰业务字段)
@@ -131,7 +131,7 @@ class GLAutoPostingTest(TestCase):
         from apps.finance.financial_statements import balance_sheet
 
         self._make_ar(Decimal('1000.00'))  # 借 1122 / 贷 6001
-        self._make_ap(Decimal('300.00'))   # 借 6602 / 贷 2202
+        self._make_ap(Decimal('300.00'))  # 借 6602 / 贷 2202
 
         bs = balance_sheet(self.period)
         self.assertTrue(bs['is_balanced'])
@@ -145,7 +145,7 @@ class GLAutoPostingTest(TestCase):
         from apps.finance.financial_statements import income_statement
 
         self._make_ar(Decimal('1000.00'))  # revenue 6001
-        self._make_ap(Decimal('300.00'))   # expense 6602
+        self._make_ap(Decimal('300.00'))  # expense 6602
 
         inc = income_statement(period=self.period)
         self.assertEqual(inc['revenue_total'], Decimal('1000.00'))
@@ -158,8 +158,11 @@ class GLAutoPostingTest(TestCase):
 
         ar = self._make_ar(Decimal('1000.00'))
         Payment.objects.create(
-            payment_type='AR', ar=ar, payment_date='2026-07-15',
-            payment_method='BANK_TRANSFER', amount=Decimal('400.00'),
+            payment_type='AR',
+            ar=ar,
+            payment_date='2026-07-15',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('400.00'),
         )
         cf = cash_flow('2026-07-01', '2026-07-31')
         self.assertEqual(cf['operating_inflow'], Decimal('400.00'))
@@ -173,16 +176,12 @@ class GLAutoPostingTest(TestCase):
         ar = self._make_ar(Decimal('1000.00'))
         # 重复保存(created=False)不应再生成凭证
         ar.save()
-        self.assertEqual(
-            JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1
-        )
+        self.assertEqual(JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1)
         # 直接再调用 post_document 返回已存在凭证,不新建
         existing = self._voucher('AR_INVOICE', ar.pk)
         again = post_document('AR_INVOICE', ar)
         self.assertEqual(again.pk, existing.pk)
-        self.assertEqual(
-            JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1
-        )
+        self.assertEqual(JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1)
 
     def test_tax_amount_source_splits_2221_line(self):
         """来源单据带 tax_amount 时价税分离,拆出 2221 应交税费分录。
@@ -198,13 +197,11 @@ class GLAutoPostingTest(TestCase):
         )
         lines = _build_lines('AR_INVOICE', obj)
         by_code = {ln['account'].code: ln for ln in lines}
-        self.assertEqual(by_code['1122']['debit'], Decimal('113.00'))   # 价税合计
+        self.assertEqual(by_code['1122']['debit'], Decimal('113.00'))  # 价税合计
         self.assertEqual(by_code['6001']['credit'], Decimal('100.00'))  # 不含税收入
-        self.assertEqual(by_code['2221']['credit'], Decimal('13.00'))   # 销项税
+        self.assertEqual(by_code['2221']['credit'], Decimal('13.00'))  # 销项税
         # 借贷平衡:1122 借 == 6001 贷 + 2221 贷
-        self.assertEqual(
-            by_code['1122']['debit'], by_code['6001']['credit'] + by_code['2221']['credit']
-        )
+        self.assertEqual(by_code['1122']['debit'], by_code['6001']['credit'] + by_code['2221']['credit'])
 
     def test_no_matching_period_skips_without_breaking_document(self):
         from apps.finance.accounting import JournalVoucher
@@ -215,6 +212,4 @@ class GLAutoPostingTest(TestCase):
             customer=self.customer, invoice_date='2030-01-01', due_date='2030-02-01', amount_due=Decimal('50.00')
         )
         self.assertTrue(AccountReceivable.objects.filter(pk=ar.pk).exists())
-        self.assertFalse(
-            JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).exists()
-        )
+        self.assertFalse(JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).exists())

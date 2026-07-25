@@ -31,9 +31,7 @@ CORRECT_PASSWORD = 'CorrectPass1!'
 class LoginLockoutTest(TestCase):
     def setUp(self):
         cache.clear()
-        self.user = User.objects.create_user(
-            username='alice', password=CORRECT_PASSWORD, employee_id='alice'
-        )
+        self.user = User.objects.create_user(username='alice', password=CORRECT_PASSWORD, employee_id='alice')
 
     def _attempt(self, password):
         request = factory.post('/api/auth/login/')
@@ -61,22 +59,16 @@ class LoginLockoutTest(TestCase):
             with self.assertRaises(AuthenticationFailed):
                 self._attempt('wrong-password').is_valid()
 
-        self.assertEqual(
-            LoginLog.objects.filter(username='alice', status='FAILED').count(), 5
-        )
+        self.assertEqual(LoginLog.objects.filter(username='alice', status='FAILED').count(), 5)
 
         # 第 6 次即使密码正确也应被锁定拒绝
         with self.assertRaises(AuthenticationFailed) as ctx:
             self._attempt(CORRECT_PASSWORD).is_valid()
         self.assertEqual(ctx.exception.detail.code, 'account_locked')
-        self.assertTrue(
-            LoginLog.objects.filter(username='alice', status='LOCKED').exists()
-        )
+        self.assertTrue(LoginLog.objects.filter(username='alice', status='LOCKED').exists())
 
     def test_successful_login_writes_log(self):
         serializer = self._attempt(CORRECT_PASSWORD)
         self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertIn('access', serializer.validated_data)
-        self.assertTrue(
-            LoginLog.objects.filter(username='alice', status='SUCCESS').exists()
-        )
+        self.assertTrue(LoginLog.objects.filter(username='alice', status='SUCCESS').exists())

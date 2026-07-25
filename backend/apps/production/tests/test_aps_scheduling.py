@@ -13,7 +13,7 @@
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 
 from apps.masterdata.models import Item
@@ -33,7 +33,6 @@ def _next_monday(d):
     return d
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class APSFiniteCapacityScheduleTest(TestCase):
     def setUp(self):
         # 两个日产能均为 8 小时、效率 100% 的工作中心
@@ -81,15 +80,13 @@ class APSFiniteCapacityScheduleTest(TestCase):
         item = self._item_with_routing(
             'TWO-OP',
             [
-                ('粗加工', self.wc1, 1, 2, 0),      # 1 + 3×2 = 7h @ WC1
+                ('粗加工', self.wc1, 1, 2, 0),  # 1 + 3×2 = 7h @ WC1
                 ('精装配', self.wc2, 0.5, 1.5, 0),  # 0.5 + 3×1.5 = 5h @ WC2
             ],
         )
         order = self._order('SCH-DERIVE', item, qty=3, required_date=self.start)
 
-        APSService.auto_schedule(
-            orders=[order], start_date=self.start, return_stats=True, create_tasks=True
-        )
+        APSService.auto_schedule(orders=[order], start_date=self.start, return_stats=True, create_tasks=True)
         order.refresh_from_db()
 
         # 12h 来自工艺路线；quantity×1 只会得到 3
@@ -212,12 +209,22 @@ class FiniteCapacitySchedulerTest(TestCase):
         )
         t0 = self._aware(2026, 7, 6, 8)
         ScheduledTask.objects.create(
-            plan=plan, work_order='WO-2', resource='R1', start_time=t0,
-            end_time=t0 + timedelta(minutes=60), processing_time_minutes=60, sequence=2,
+            plan=plan,
+            work_order='WO-2',
+            resource='R1',
+            start_time=t0,
+            end_time=t0 + timedelta(minutes=60),
+            processing_time_minutes=60,
+            sequence=2,
         )
         ScheduledTask.objects.create(
-            plan=plan, work_order='WO-1', resource='R1', start_time=t0,
-            end_time=t0 + timedelta(minutes=120), processing_time_minutes=120, sequence=1,
+            plan=plan,
+            work_order='WO-1',
+            resource='R1',
+            start_time=t0,
+            end_time=t0 + timedelta(minutes=120),
+            processing_time_minutes=120,
+            sequence=1,
         )
 
         FiniteCapacityScheduler.run_schedule(plan.id)
@@ -251,12 +258,22 @@ class FiniteCapacitySchedulerTest(TestCase):
         late = self._aware(2026, 7, 6, 10)
         # 故意让"晚开始"的任务 sequence 更小，验证排序依据是 start_time 而非 sequence
         ScheduledTask.objects.create(
-            plan=plan, work_order='WO-LATE', resource='R1', start_time=late,
-            end_time=late + timedelta(minutes=60), processing_time_minutes=60, sequence=1,
+            plan=plan,
+            work_order='WO-LATE',
+            resource='R1',
+            start_time=late,
+            end_time=late + timedelta(minutes=60),
+            processing_time_minutes=60,
+            sequence=1,
         )
         ScheduledTask.objects.create(
-            plan=plan, work_order='WO-EARLY', resource='R1', start_time=early,
-            end_time=early + timedelta(minutes=60), processing_time_minutes=60, sequence=2,
+            plan=plan,
+            work_order='WO-EARLY',
+            resource='R1',
+            start_time=early,
+            end_time=early + timedelta(minutes=60),
+            processing_time_minutes=60,
+            sequence=2,
         )
 
         FiniteCapacityScheduler.run_schedule(plan.id)

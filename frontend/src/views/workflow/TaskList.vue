@@ -5,9 +5,9 @@
         <div class="card-header">
           <span>待办审批</span>
           <div class="header-actions">
-            <el-button 
-              v-if="isAdmin && selectedTasks.length > 0" 
-              type="danger" 
+            <el-button
+              v-if="isAdmin && selectedTasks.length > 0"
+              type="danger"
               @click="handleBatchDelete"
               :loading="deleting"
             >
@@ -24,9 +24,9 @@
         </div>
       </template>
 
-      <el-table 
-        :data="tasks" 
-        v-loading="loading" 
+      <el-table
+        :data="tasks"
+        v-loading="loading"
         stripe
         @selection-change="handleSelectionChange"
       >
@@ -65,10 +65,10 @@
             <el-button type="info" size="small" @click="viewDetail(row)">
               详情
             </el-button>
-            <el-button 
-              v-if="isAdmin" 
-              type="danger" 
-              size="small" 
+            <el-button
+              v-if="isAdmin"
+              type="danger"
+              size="small"
               @click="handleDelete(row)"
               plain
             >
@@ -153,8 +153,8 @@ const selectedTasks = ref<any[]>([])
 
 const approveDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
-const currentTask = ref(null)
-const rejectFormRef = ref(null)
+const currentTask = ref<any>(null)
+const rejectFormRef = ref<any>(null)
 
 const approveForm = ref({ comment: '' })
 const rejectForm = ref({ comment: '' })
@@ -163,12 +163,12 @@ const rejectRules = {
   comment: [{ required: true, message: '请输入拒绝原因', trigger: 'blur' }]
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const isOverdue = (deadline) => {
+const isOverdue = (deadline: any) => {
   if (!deadline) return false
   return new Date(deadline) < new Date()
 }
@@ -183,7 +183,7 @@ const loadTasks = async () => {
     // Handle different response formats
     tasks.value = tasksRes.results || tasksRes || tasksRes || []
     pendingCount.value = countRes.count || countRes.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load tasks:', error)
     tasks.value = []
     pendingCount.value = 0
@@ -192,13 +192,13 @@ const loadTasks = async () => {
   }
 }
 
-const handleApprove = (row) => {
+const handleApprove = (row: any) => {
   currentTask.value = row
   approveForm.value.comment = ''
   approveDialogVisible.value = true
 }
 
-const handleReject = (row) => {
+const handleReject = (row: any) => {
   currentTask.value = row
   rejectForm.value.comment = ''
   rejectDialogVisible.value = true
@@ -211,7 +211,7 @@ const confirmApprove = async () => {
     ElMessage.success('审批通过')
     approveDialogVisible.value = false
     loadTasks()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '操作失败')
   } finally {
     submitting.value = false
@@ -226,14 +226,14 @@ const confirmReject = async () => {
     ElMessage.success('已拒绝')
     rejectDialogVisible.value = false
     loadTasks()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '操作失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewDetail = (row) => {
+const viewDetail = (row: any) => {
   // 用业务单据主键(business_id)而非工作流实例主键(instance)跳转；
   // 经 vue-router push 自动带上 /erp/ base。无独立详情页的模块跳列表并带 highlight 查询。
   const businessId = row.business_id
@@ -246,7 +246,7 @@ const viewDetail = (row) => {
     'EXPENSE': { path: '/finance/expenses', query: { highlight: businessId } },
     'SALES_ORDER': { path: `/sales/orders/${businessId}` },
   }
-  const target = targets[row.business_type]
+  const target = (targets as Record<string, any>)[row.business_type]
   if (target) {
     router.push(target)
   } else {
@@ -254,11 +254,11 @@ const viewDetail = (row) => {
   }
 }
 
-const handleSelectionChange = (selection) => {
+const handleSelectionChange = (selection: any) => {
   selectedTasks.value = selection
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此审批任务吗？删除后不可恢复', '确认删除', {
       type: 'warning'
@@ -267,7 +267,7 @@ const handleDelete = async (row) => {
     await deleteWorkflowTask(row.id)
     ElMessage.success('删除成功')
     loadTasks()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '删除失败')
     }
@@ -278,11 +278,11 @@ const handleDelete = async (row) => {
 
 const handleBatchDelete = async () => {
   if (selectedTasks.value.length === 0) return
-  
+
   try {
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedTasks.value.length} 条审批任务吗？删除后不可恢复`, 
-      '批量删除', 
+      `确定要删除选中的 ${selectedTasks.value.length} 条审批任务吗？删除后不可恢复`,
+      '批量删除',
       { type: 'warning' }
     )
     deleting.value = true
@@ -291,7 +291,7 @@ const handleBatchDelete = async () => {
     ElMessage.success(`成功删除 ${ids.length} 条任务`)
     selectedTasks.value = []
     loadTasks()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '批量删除失败')
     }

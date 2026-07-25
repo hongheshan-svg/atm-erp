@@ -23,7 +23,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 统计概览 -->
       <el-row :gutter="20" class="overview-row">
         <el-col :span="6">
@@ -38,10 +38,10 @@
         </el-col>
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card warning">
-            <el-statistic 
-              title="呆滞库存金额" 
-              :value="stats.totalValue" 
-              :precision="2" 
+            <el-statistic
+              title="呆滞库存金额"
+              :value="stats.totalValue"
+              :precision="2"
               prefix="¥"
               :value-style="{ color: '#f56c6c' }"
             />
@@ -49,16 +49,16 @@
         </el-col>
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card">
-            <el-statistic 
-              title="占库存总额比例" 
-              :value="stats.percentage" 
-              :precision="1" 
+            <el-statistic
+              title="占库存总额比例"
+              :value="stats.percentage"
+              :precision="1"
               suffix="%"
             />
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 图表区域 -->
       <el-row :gutter="20" class="chart-row">
         <el-col :span="12">
@@ -74,7 +74,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 数据表格 -->
       <el-table :data="tableData" border stripe v-loading="loading" class="data-table" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" />
@@ -118,7 +118,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -130,7 +130,7 @@
         @size-change="fetchData"
         @current-change="fetchData"
       />
-      
+
       <!-- 批量处理 -->
       <div class="batch-actions" v-if="selectedItems.length > 0">
         <span>已选择 {{ selectedItems.length }} 项</span>
@@ -145,7 +145,7 @@
         </el-button>
       </div>
     </el-card>
-    
+
     <!-- 物料详情对话框 -->
     <el-dialog v-model="detailVisible" title="物料呆滞详情" width="700px">
       <el-descriptions :column="2" border v-if="currentItem">
@@ -162,9 +162,9 @@
           <el-tag :type="getAgingType(currentItem.aging_days)">{{ currentItem.aging_days }}天</el-tag>
         </el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider>历史移动记录</el-divider>
-      
+
       <el-timeline>
         <el-timeline-item
           v-for="move in moveHistory"
@@ -186,54 +186,54 @@ import { getSlowMovingItems } from '@/api/analytics'
 import { getStockValuation, getStockMoveList, createStockAdjustment, createStockTransfer } from '@/api/inventory'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DataAnalysis, Download } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 
 const loading = ref(false)
 const daysThreshold = ref(90)
 const tableData = ref<any[]>([])
 const selectedItems = ref<any[]>([])
-const handleSelectionChange = (rows) => { selectedItems.value = rows }
+const handleSelectionChange = (rows: any) => { selectedItems.value = rows }
 const detailVisible = ref(false)
-const currentItem = ref(null)
+const currentItem = ref<any>(null)
 const moveHistory = ref<any[]>([])
 
-const categoryChartRef = ref(null)
-const ageChartRef = ref(null)
-let categoryChart = null
-let ageChart = null
+const categoryChartRef = ref<any>(null)
+const ageChartRef = ref<any>(null)
+let categoryChart: any = null
+let ageChart: any = null
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   itemCount: 0,
   totalQty: 0,
   totalValue: 0,
   percentage: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getAgingType = (days) => {
+const getAgingType = (days: any) => {
   if (days >= 365) return 'danger'
   if (days >= 180) return 'warning'
   if (days >= 90) return ''
   return 'info'
 }
 
-const getSuggestionType = (days) => {
+const getSuggestionType = (days: any) => {
   if (days >= 365) return 'danger'
   if (days >= 180) return 'warning'
   return 'info'
 }
 
-const getSuggestion = (days) => {
+const getSuggestion = (days: any) => {
   if (days >= 365) return '建议报废'
   if (days >= 180) return '促销清仓'
   if (days >= 90) return '调拨使用'
@@ -250,10 +250,10 @@ const fetchData = async () => {
       })
     tableData.value = res.results || res.results || res || []
     pagination.total = res.count || res.count || 0
-    
+
     calculateStats()
     initCharts()
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取呆滞物料失败:', error)
     tableData.value = []
     ElMessage.error('获取呆滞物料数据失败')
@@ -266,15 +266,15 @@ const calculateStats = async () => {
   stats.itemCount = tableData.value.length
   stats.totalQty = tableData.value.reduce((sum, item) => sum + item.qty, 0)
   stats.totalValue = tableData.value.reduce((sum, item) => sum + item.total_value, 0)
-  
+
   // 计算呆滞库存占总库存的百分比
   try {
     const res = await getStockValuation()
     const totalInventoryValue = res.total_value || 0
-    stats.percentage = totalInventoryValue > 0 
+    stats.percentage = totalInventoryValue > 0
       ? ((stats.totalValue / totalInventoryValue) * 100).toFixed(2)
       : 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取总库存金额失败:', error)
     stats.percentage = 0
   }
@@ -287,25 +287,25 @@ const initCharts = () => {
 
 const initCategoryChart = () => {
   if (!categoryChartRef.value) return
-  
+
   if (categoryChart) {
     categoryChart.dispose()
   }
-  
+
   categoryChart = echarts.init(categoryChartRef.value)
-  
+
   // 按分类汇总
   const categoryMap = {}
   tableData.value.forEach(item => {
     const category = item.category_name || '未分类'
-    if (!categoryMap[category]) {
-      categoryMap[category] = 0
+    if (!(categoryMap as Record<string, any>)[category]) {
+      (categoryMap as Record<string, any>)[category] = 0
     }
-    categoryMap[category] += item.total_value
+    (categoryMap as Record<string, any>)[category] += item.total_value
   })
-  
+
   const data = Object.entries(categoryMap).map(([name, value]) => ({ name, value }))
-  
+
   const option = {
     tooltip: {
       trigger: 'item',
@@ -332,19 +332,19 @@ const initCategoryChart = () => {
       }
     ]
   }
-  
+
   categoryChart.setOption(option)
 }
 
 const initAgeChart = () => {
   if (!ageChartRef.value) return
-  
+
   if (ageChart) {
     ageChart.dispose()
   }
-  
+
   ageChart = echarts.init(ageChartRef.value)
-  
+
   // 按呆滞时间分组
   const ageGroups = {
     '30-60天': 0,
@@ -353,7 +353,7 @@ const initAgeChart = () => {
     '180-365天': 0,
     '超过1年': 0
   }
-  
+
   tableData.value.forEach(item => {
     const days = item.aging_days
     if (days < 60) ageGroups['30-60天'] += item.total_value
@@ -362,12 +362,12 @@ const initAgeChart = () => {
     else if (days < 365) ageGroups['180-365天'] += item.total_value
     else ageGroups['超过1年'] += item.total_value
   })
-  
+
   const option = {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params) => {
+      formatter: (params: any) => {
         return `${params[0].name}<br/>金额: ¥${formatNumber(params[0].value)}`
       }
     },
@@ -379,7 +379,7 @@ const initAgeChart = () => {
       type: 'value',
       name: '金额 (元)',
       axisLabel: {
-        formatter: (value) => {
+        formatter: (value: any) => {
           if (value >= 10000) return (value / 10000).toFixed(0) + '万'
           return value
         }
@@ -390,7 +390,7 @@ const initAgeChart = () => {
         type: 'bar',
         data: Object.values(ageGroups),
         itemStyle: {
-          color: (params) => {
+          color: (params: any) => {
             const colors = ['#67c23a', '#e6a23c', '#f56c6c', '#f56c6c', '#909399']
             return colors[params.dataIndex]
           }
@@ -398,12 +398,12 @@ const initAgeChart = () => {
         label: {
           show: true,
           position: 'top',
-          formatter: (params) => '¥' + formatNumber(params.value)
+          formatter: (params: any) => '¥' + formatNumber(params.value)
         }
       }
     ]
   }
-  
+
   ageChart.setOption(option)
 }
 
@@ -416,7 +416,7 @@ const handleExport = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel, formatMoney }) => {
     const columns = [
       { field: 'item_code', title: '物料编码' },
@@ -434,7 +434,7 @@ const handleExport = () => {
   })
 }
 
-const handleViewDetail = async (row) => {
+const handleViewDetail = async (row: any) => {
   currentItem.value = row
   // 加载真实的移动历史
   try {
@@ -445,14 +445,14 @@ const handleViewDetail = async (row) => {
         ordering: '-move_date'
       })
     const moves = res.results || res.results || res || []
-    moveHistory.value = moves.map(m => ({
+    moveHistory.value = moves.map((m: any) => ({
       id: m.id,
       move_date: m.move_date,
       move_type_label: m.move_type_display || m.move_type,
       qty: m.move_type.startsWith('IN') ? m.qty : -m.qty,
       reference_no: m.move_no
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取移动历史失败:', error)
     moveHistory.value = []
   }
@@ -464,7 +464,7 @@ const handleBatchDisposal = async () => {
     ElMessage.warning('请先选择要报废的物料')
     return
   }
-  
+
   try {
     await ElMessageBox.confirm(
       `确定要对选中的 ${selectedItems.value.length} 种物料进行报废处理吗？报废后将生成库存调整单。`,
@@ -475,11 +475,11 @@ const handleBatchDisposal = async () => {
         cancelButtonText: '取消'
       }
     )
-    
+
     // 为每个选中的物料创建库存调整
     let successCount = 0
     let failCount = 0
-    
+
     for (const row of selectedItems.value) {
       try {
         await createStockAdjustment({
@@ -496,12 +496,12 @@ const handleBatchDisposal = async () => {
           }]
         })
         successCount++
-      } catch (error) {
+      } catch (error: any) {
         console.error(`报废物料 ${row.item_code} 失败:`, error)
         failCount++
       }
     }
-    
+
     if (successCount > 0) {
       ElMessage.success(`成功报废 ${successCount} 种物料${failCount > 0 ? `，${failCount} 种失败` : ''}`)
       fetchData() // 刷新数据
@@ -509,7 +509,7 @@ const handleBatchDisposal = async () => {
     } else {
       ElMessage.error('报废操作失败')
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('报废操作失败')
     }
@@ -521,7 +521,7 @@ const handleBatchTransfer = async () => {
     ElMessage.warning('请先选择要调拨的物料')
     return
   }
-  
+
   try {
     const { value: targetWarehouse } = await ElMessageBox.prompt(
       `选中 ${selectedItems.value.length} 种物料，请输入目标仓库ID`,
@@ -533,10 +533,10 @@ const handleBatchTransfer = async () => {
         inputErrorMessage: '请输入有效的仓库ID'
       }
     )
-    
+
     let successCount = 0
     let failCount = 0
-    
+
     for (const row of selectedItems.value) {
       try {
         await createStockTransfer({
@@ -549,12 +549,12 @@ const handleBatchTransfer = async () => {
           notes: `呆滞物料调拨（呆滞${row.aging_days}天）`
         })
         successCount++
-      } catch (error) {
+      } catch (error: any) {
         console.error(`调拨物料 ${row.item_code} 失败:`, error)
         failCount++
       }
     }
-    
+
     if (successCount > 0) {
       ElMessage.success(`成功调拨 ${successCount} 种物料${failCount > 0 ? `，${failCount} 种失败` : ''}`)
       fetchData()
@@ -562,7 +562,7 @@ const handleBatchTransfer = async () => {
     } else {
       ElMessage.error('调拨操作失败')
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('调拨操作失败')
     }
@@ -574,7 +574,7 @@ const handleBatchPromotion = async () => {
     ElMessage.warning('请先选择要促销的物料')
     return
   }
-  
+
   try {
     const { value: discountPercent } = await ElMessageBox.prompt(
       `选中 ${selectedItems.value.length} 种物料，请输入折扣比例（例如：30表示3折）`,
@@ -586,13 +586,13 @@ const handleBatchPromotion = async () => {
         inputErrorMessage: '请输入1-99之间的数字'
       }
     )
-    
+
     const discount = parseInt(discountPercent) / 100
     if (discount <= 0 || discount >= 1) {
       ElMessage.error('折扣比例必须在1-99之间')
       return
     }
-    
+
     // 为选中的物料应用促销标记（可以在物料主数据中添加促销标记字段）
     // 这里先显示促销信息提示
     const promotionInfo = selectedItems.value.map(row => {
@@ -600,15 +600,15 @@ const handleBatchPromotion = async () => {
       const promotionPrice = (originalPrice * discount).toFixed(2)
       return `${row.item_code} - ${row.item_name}: ¥${originalPrice} → ¥${promotionPrice} (${discountPercent}折)`
     }).join('\n')
-    
+
     await ElMessageBox.alert(
       `以下物料已标记为促销（需在销售模块应用促销价格）：\n\n${promotionInfo}`,
       '促销清仓',
       { type: 'success' }
     )
-    
+
     ElMessage.info('促销信息已生成，请在销售模块中应用促销价格')
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('促销操作失败')
     }
@@ -688,4 +688,3 @@ onUnmounted(() => {
   gap: 10px;
 }
 </style>
-

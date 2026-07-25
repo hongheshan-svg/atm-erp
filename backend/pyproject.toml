@@ -46,6 +46,9 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --tb=short"
+filterwarnings = [
+    "error::django.utils.deprecation.RemovedInDjango60Warning",
+]
 markers = [
     "integration: integration test (requires postgres + redis + bootstrapped DB)",
 ]

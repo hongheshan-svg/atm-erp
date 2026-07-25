@@ -24,6 +24,7 @@ LOG_DIR="/var/log/erp"
 DB_NAME="erp_db"
 DB_USER="erp_user"
 DB_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 16)
 
 # Django配置
 SECRET_KEY=$(openssl rand -base64 50 | tr -dc 'a-zA-Z0-9' | head -c 50)
@@ -68,7 +69,7 @@ get_project_dir() {
 # 安装系统依赖
 install_dependencies() {
     print_step "步骤 1/10: 安装系统依赖"
-    
+
     apt-get update
     apt-get install -y \
         python3 python3-pip python3-venv python3-dev \
@@ -80,22 +81,22 @@ install_dependencies() {
         supervisor \
         build-essential \
         libffi-dev libssl-dev
-    
-    # 安装Node.js 18.x（如果版本太低）
+
+    # Vite 8 requires a current Node.js runtime.
     NODE_VERSION=$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" -lt 18 ]; then
-        print_info "安装 Node.js 18.x..."
-        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" -lt 22 ]; then
+        print_info "安装 Node.js 22.x..."
+        curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
         apt-get install -y nodejs
     fi
-    
+
     print_success "系统依赖安装完成"
 }
 
 # 创建应用用户
 create_app_user() {
     print_step "步骤 2/10: 创建应用用户"
-    
+
     if id "$APP_USER" &>/dev/null; then
         print_info "用户 $APP_USER 已存在"
     else
@@ -107,18 +108,18 @@ create_app_user() {
 # 配置PostgreSQL
 setup_postgresql() {
     print_step "步骤 3/10: 配置 PostgreSQL"
-    
+
     # 启动PostgreSQL
     systemctl start postgresql
     systemctl enable postgresql
-    
+
     # 创建数据库和用户
     sudo -u postgres psql -c "DROP DATABASE IF EXISTS $DB_NAME;" 2>/dev/null || true
     sudo -u postgres psql -c "DROP USER IF EXISTS $DB_USER;" 2>/dev/null || true
     sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
     sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
-    
+
     print_success "PostgreSQL 配置完成"
     print_info "数据库: $DB_NAME"
     print_info "用户: $DB_USER"
@@ -128,51 +129,51 @@ setup_postgresql() {
 # 配置Redis
 setup_redis() {
     print_step "步骤 4/10: 配置 Redis"
-    
+
     systemctl start redis-server
     systemctl enable redis-server
-    
+
     print_success "Redis 配置完成"
 }
 
 # 复制项目文件
 copy_project() {
     print_step "步骤 5/10: 复制项目文件"
-    
+
     # 创建目录
     mkdir -p $APP_DIR
     mkdir -p $LOG_DIR
-    
+
     # 复制文件
     cp -r "$SOURCE_DIR/backend" "$APP_DIR/"
     cp -r "$SOURCE_DIR/frontend" "$APP_DIR/"
     cp -r "$SOURCE_DIR/scripts" "$APP_DIR/"
-    
+
     # 设置脚本执行权限
     chmod +x $APP_DIR/scripts/*.sh 2>/dev/null || true
-    
+
     # 设置权限
     chown -R $APP_USER:$APP_USER $APP_DIR
     chown -R $APP_USER:$APP_USER $LOG_DIR
-    
+
     print_success "项目文件复制完成"
 }
 
 # 配置后端
 setup_backend() {
     print_step "步骤 6/10: 配置 Django 后端"
-    
+
     cd $APP_DIR/backend
-    
+
     # 创建虚拟环境
     python3 -m venv $VENV_DIR
-    
+
     # 激活虚拟环境并安装依赖
     source $VENV_DIR/bin/activate
     pip install --upgrade pip
     pip install -r requirements.txt
     pip install gunicorn psycopg2-binary
-    
+
     # 创建环境配置文件
     cat > $APP_DIR/backend/.env << EOF
 # Database
@@ -193,58 +194,59 @@ CELERY_BROKER_URL=redis://localhost:6379/0
 # 时区
 TZ=Asia/Shanghai
 EOF
-    
+
     # 执行数据库迁移
     python manage.py migrate --noinput
-    
+
     # 创建管理员
-    python manage.py shell << 'PYEOF'
+    ERP_ADMIN_PASSWORD="$ADMIN_PASSWORD" python manage.py shell << 'PYEOF'
+import os
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
-    print('Admin created: admin / admin123')
+    User.objects.create_superuser('admin', 'admin@example.com', os.environ['ERP_ADMIN_PASSWORD'])
+    print('Admin created')
 PYEOF
-    
+
     # 初始化数据
     python manage.py init_workflows 2>/dev/null || true
     python manage.py init_dashboard_widgets 2>/dev/null || true
-    
+
     # 收集静态文件
     python manage.py collectstatic --noinput
-    
+
     deactivate
-    
+
     chown -R $APP_USER:$APP_USER $APP_DIR
-    
+
     print_success "Django 后端配置完成"
 }
 
 # 构建前端
 setup_frontend() {
     print_step "步骤 7/10: 构建 Vue 前端"
-    
+
     cd $APP_DIR/frontend
-    
+
     # 安装依赖
     npm install
-    
+
     # 构建生产版本
     npm run build
-    
+
     # 复制到nginx目录
     mkdir -p /var/www/erp
     cp -r dist/* /var/www/erp/
-    
+
     chown -R www-data:www-data /var/www/erp
-    
+
     print_success "前端构建完成"
 }
 
 # 配置Gunicorn
 setup_gunicorn() {
     print_step "步骤 8/10: 配置 Gunicorn"
-    
+
     # 创建Gunicorn配置
     cat > $APP_DIR/gunicorn.conf.py << EOF
 bind = "127.0.0.1:8000"
@@ -257,7 +259,7 @@ errorlog = "$LOG_DIR/gunicorn-error.log"
 accesslog = "$LOG_DIR/gunicorn-access.log"
 loglevel = "info"
 EOF
-    
+
     # 创建systemd服务
     cat > /etc/systemd/system/erp-backend.service << EOF
 [Unit]
@@ -276,18 +278,18 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     systemctl daemon-reload
     systemctl enable erp-backend
     systemctl start erp-backend
-    
+
     print_success "Gunicorn 配置完成"
 }
 
 # 配置Celery
 setup_celery() {
     print_step "步骤 9/10: 配置 Celery"
-    
+
     # Celery Worker服务
     cat > /etc/systemd/system/erp-celery.service << EOF
 [Unit]
@@ -306,7 +308,7 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     # Celery Beat服务
     cat > /etc/systemd/system/erp-celery-beat.service << EOF
 [Unit]
@@ -325,18 +327,18 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     systemctl daemon-reload
     systemctl enable erp-celery erp-celery-beat
     systemctl start erp-celery erp-celery-beat
-    
+
     print_success "Celery 配置完成"
 }
 
 # 配置Nginx
 setup_nginx() {
     print_step "步骤 10/10: 配置 Nginx"
-    
+
     # 创建Nginx配置
     cat > /etc/nginx/sites-available/erp << 'EOF'
 server {
@@ -383,18 +385,18 @@ server {
     }
 }
 EOF
-    
+
     # 启用站点
     ln -sf /etc/nginx/sites-available/erp /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
-    
+
     # 测试配置
     nginx -t
-    
+
     # 重启Nginx
     systemctl restart nginx
     systemctl enable nginx
-    
+
     print_success "Nginx 配置完成"
 }
 
@@ -426,7 +428,7 @@ ERP系统安装信息
 
 管理员账号:
 - 用户名: admin
-- 密码: admin123
+- 密码: $ADMIN_PASSWORD
 
 访问地址:
 - 前端: http://$SERVER_IP
@@ -444,7 +446,7 @@ ERP系统安装信息
 
 ========================================
 EOF
-    
+
     chmod 600 $APP_DIR/INSTALL_INFO.txt
 }
 
@@ -457,14 +459,14 @@ show_completion() {
     echo "║                                                       ║"
     echo "╚═══════════════════════════════════════════════════════╝"
     echo -e "${NC}"
-    
+
     echo -e "  ${CYAN}访问地址:${NC}"
     echo -e "  ├─ 前端界面: http://$SERVER_IP"
     echo -e "  └─ 后台管理: http://$SERVER_IP/admin"
     echo
-    echo -e "  ${CYAN}默认账号:${NC}"
+    echo -e "  ${CYAN}初始账号:${NC}"
     echo -e "  ├─ 用户名: admin"
-    echo -e "  └─ 密码:   admin123"
+    echo -e "  └─ 密码:   $ADMIN_PASSWORD"
     echo
     echo -e "  ${CYAN}数据库信息:${NC}"
     echo -e "  ├─ 数据库: $DB_NAME"

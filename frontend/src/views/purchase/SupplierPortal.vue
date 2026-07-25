@@ -85,7 +85,7 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="resetPassword(row)">重置密码</el-button>
-            <el-button size="small" :type="row.is_active ? 'warning' : 'success'" 
+            <el-button size="small" :type="row.is_active ? 'warning' : 'success'"
                        @click="toggleActive(row)">
               {{ row.is_active ? '禁用' : '启用' }}
             </el-button>
@@ -208,11 +208,11 @@ const accounts = ref<any[]>([])
 const orderViews = ref<any[]>([])
 const suppliers = ref<any[]>([])
 
-const orderFilter = reactive({
+const orderFilter = reactive<Record<string, any>>({
   status: ''
 })
 
-const accountForm = reactive({
+const accountForm = reactive<Record<string, any>>({
   supplier: null,
   username: '',
   password: '',
@@ -230,18 +230,18 @@ const accountRules = {
   password: [{ required: true, message: '请输入初始密码', trigger: 'blur' }]
 }
 
-const accountFormRef = ref(null)
+const accountFormRef = ref<any>(null)
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return ''
   return new Date(date).toLocaleString('zh-CN')
 }
 
-const formatMoney = (val) => {
+const formatMoney = (val: any) => {
   return Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getProgressStatus = (row) => {
+const getProgressStatus = (row: any) => {
   if (row.progress_percentage >= 100) return 'success'
   if (row.progress_percentage >= 50) return ''
   return 'warning'
@@ -258,7 +258,7 @@ const loadDashboard = async () => {
       qualityIssues: res.quality_issues || 0,
       unreadMessages: res.unread_messages || 0
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载看板数据失败', e)
   }
 }
@@ -268,7 +268,7 @@ const loadAccounts = async () => {
   try {
     const res = await getSupplierAccounts()
     accounts.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载账户列表失败')
   } finally {
     loading.value = false
@@ -278,11 +278,11 @@ const loadAccounts = async () => {
 const loadOrderViews = async () => {
   orderLoading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (orderFilter.status) params.status = orderFilter.status
     const res = await getSupplierOrderViews(params)
     orderViews.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载订单视图失败')
   } finally {
     orderLoading.value = false
@@ -293,7 +293,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 1000 })
     suppliers.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载供应商列表失败')
   }
 }
@@ -306,29 +306,29 @@ const createAccount = async () => {
     ElMessage.success('账户创建成功')
     showCreateDialog.value = false
     loadAccounts()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
   }
 }
 
-const resetPassword = async (row) => {
+const resetPassword = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要重置该账户的密码吗？', '确认')
     const res = await resetSupplierAccountPassword(row.id)
     ElMessage.success(`密码已重置为: ${res.new_password}`)
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('重置失败')
   }
 }
 
-const toggleActive = async (row) => {
+const toggleActive = async (row: any) => {
   try {
     await toggleSupplierAccountActive(row.id)
     ElMessage.success('状态已更新')
     loadAccounts()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }

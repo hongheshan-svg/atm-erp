@@ -1,27 +1,37 @@
 """
 生产管理模块视图
 """
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
+
 from django.utils import timezone
-from django.db import transaction
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+
 from .models import (
-    ProductionProcess, ProductionPlan, ProductionPlanProcess,
-    ProductionLog, DebugRecord, DebugCheckItem,
-    QualityInspection, InspectionItem
+    DebugCheckItem,
+    DebugRecord,
+    InspectionItem,
+    ProductionLog,
+    ProductionPlan,
+    ProductionPlanProcess,
+    ProductionProcess,
+    QualityInspection,
 )
 from .serializers import (
-    ProductionProcessSerializer, ProductionPlanSerializer,
-    ProductionPlanProcessSerializer, ProductionLogSerializer,
-    DebugRecordSerializer, DebugCheckItemSerializer,
-    QualityInspectionSerializer, InspectionItemSerializer
+    DebugCheckItemSerializer,
+    DebugRecordSerializer,
+    InspectionItemSerializer,
+    ProductionLogSerializer,
+    ProductionPlanProcessSerializer,
+    ProductionPlanSerializer,
+    ProductionProcessSerializer,
+    QualityInspectionSerializer,
 )
 
 
@@ -39,35 +49,35 @@ class ProductionProcessViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     search_fields = ['process_no', 'name', 'description']
     ordering_fields = ['sequence', 'created_at']
     ordering = ['project', 'sequence']
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         # 默认只返回未删除的
         if not self.request.query_params.get('include_deleted'):
             queryset = queryset.filter(is_deleted=False)
         return queryset
-    
+
     @action(detail=False, methods=['get'])
     def by_project(self, request):
         """按项目获取工序列表"""
         project_id = request.query_params.get('project_id')
         if not project_id:
             return Response({'error': '请提供项目ID'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         queryset = self.get_queryset().filter(project_id=project_id)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def update_progress(self, request, pk=None):
         """更新工序进度"""
         process = self.get_object()
         actual_hours = request.data.get('actual_hours')
-        
+
         if actual_hours is not None:
             process.actual_hours = actual_hours
             process.save()
-        
+
         serializer = self.get_serializer(process)
         return Response(serializer.data)
 
@@ -86,74 +96,74 @@ class ProductionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     search_fields = ['plan_no', 'title', 'description']
     ordering_fields = ['planned_start', 'created_at']
     ordering = ['-created_at']
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         if not self.request.query_params.get('include_deleted'):
             queryset = queryset.filter(is_deleted=False)
         return queryset
-    
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         """确认生产计划"""
         plan = self.get_object()
         if plan.status != 'DRAFT':
             return Response({'error': '只有草稿状态的计划可以确认'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         plan.status = 'CONFIRMED'
         plan.save()
         serializer = self.get_serializer(plan)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
         """开始生产"""
         plan = self.get_object()
         if plan.status not in ['CONFIRMED', 'DRAFT']:
             return Response({'error': '计划状态不允许开始'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         plan.status = 'IN_PROGRESS'
         plan.actual_start = timezone.now().date()
         plan.save()
         serializer = self.get_serializer(plan)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         """完成生产"""
         plan = self.get_object()
         if plan.status != 'IN_PROGRESS':
             return Response({'error': '只有生产中的计划可以完成'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         plan.status = 'COMPLETED'
         plan.actual_end = timezone.now().date()
         plan.progress_percent = 100
         plan.save()
         serializer = self.get_serializer(plan)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def update_progress(self, request, pk=None):
         """更新生产进度"""
         plan = self.get_object()
         progress_percent = request.data.get('progress_percent')
-        
+
         if progress_percent is not None:
             plan.progress_percent = min(max(int(progress_percent), 0), 100)
             plan.save()
-        
+
         serializer = self.get_serializer(plan)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def add_processes(self, request, pk=None):
         """批量添加计划工序"""
         plan = self.get_object()
         process_ids = request.data.get('process_ids', [])
-        
+
         if not process_ids:
             return Response({'error': '请提供工序ID列表'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         created = []
         for process_id in process_ids:
             try:
@@ -165,18 +175,15 @@ class ProductionPlanViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                         'planned_start': plan.planned_start,
                         'planned_end': plan.planned_end,
                         'planned_hours': process.planned_hours,
-                    }
+                    },
                 )
                 if is_new:
                     created.append(plan_process.id)
             except ProductionProcess.DoesNotExist:
                 pass
-        
+
         serializer = self.get_serializer(plan)
-        return Response({
-            'plan': serializer.data,
-            'created_count': len(created)
-        })
+        return Response({'plan': serializer.data, 'created_count': len(created)})
 
 
 class ProductionPlanProcessViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
@@ -193,64 +200,66 @@ class ProductionPlanProcessViewSet(PermissionMixin, SoftDeleteMixin, UserTrackin
     search_fields = ['process__name']
     ordering_fields = ['planned_start', 'process__sequence']
     ordering = ['plan', 'process__sequence']
-    
+
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
         """开始工序"""
         plan_process = self.get_object()
         if plan_process.status not in ['PENDING']:
             return Response({'error': '工序已开始或已完成'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         plan_process.status = 'IN_PROGRESS'
         plan_process.actual_start = timezone.now()
         plan_process.save()
         serializer = self.get_serializer(plan_process)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         """完成工序"""
         plan_process = self.get_object()
         if plan_process.status != 'IN_PROGRESS':
             return Response({'error': '工序未开始或已完成'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         plan_process.status = 'COMPLETED'
         plan_process.actual_end = timezone.now()
         plan_process.progress_percent = 100
         plan_process.save()
-        
+
         # 更新计划总进度
         self._update_plan_progress(plan_process.plan)
-        
+
         serializer = self.get_serializer(plan_process)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def update_progress(self, request, pk=None):
         """更新工序进度"""
         plan_process = self.get_object()
         progress_percent = request.data.get('progress_percent')
         actual_hours = request.data.get('actual_hours')
-        
+
         if progress_percent is not None:
             plan_process.progress_percent = min(max(int(progress_percent), 0), 100)
         if actual_hours is not None:
             plan_process.actual_hours = actual_hours
-        
+
         plan_process.save()
-        
+
         # 更新计划总进度
         self._update_plan_progress(plan_process.plan)
-        
+
         serializer = self.get_serializer(plan_process)
         return Response(serializer.data)
-    
+
     def _update_plan_progress(self, plan):
         """更新计划总进度"""
         from django.db.models import Avg
+
         avg = plan.plan_processes.aggregate(avg=Avg('progress_percent'))['avg']
         if avg is not None:
             from .models import ProductionPlan
+
             ProductionPlan.objects.filter(pk=plan.pk).update(progress_percent=int(avg))
 
 
@@ -268,13 +277,15 @@ class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
     search_fields = ['work_content', 'issues']
     ordering_fields = ['log_date', 'created_at']
     ordering = ['-log_date', '-created_at']
-    
+
     def perform_create(self, serializer):
         log = serializer.save(operator=self.request.user)
 
         # 使用数据库聚合更新工序工时和进度（避免竞态）
         from django.db.models import Sum
+
         from .models import ProductionPlanProcess
+
         plan_process = log.plan_process
         total = plan_process.logs.aggregate(s=Sum('work_hours'))['s'] or 0
         ProductionPlanProcess.objects.filter(pk=plan_process.pk).update(
@@ -285,6 +296,7 @@ class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         # 报工 -> 人工成本：按 工时 × 工种费率 生成人工成本明细
         # 幂等 + 事务保护（savepoint），成本登记失败不影响报工主流程
         from .labor_cost import post_labor_cost, resolve_work_type
+
         process = getattr(plan_process, 'process', None)
         plan = getattr(plan_process, 'plan', None)
         project = getattr(plan, 'project', None)
@@ -296,6 +308,7 @@ class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
     """
     调试记录管理 ViewSet
     """
+
     permission_module = 'production'
     permission_resource = 'debug_record'
 
@@ -307,37 +320,37 @@ class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
     search_fields = ['record_no', 'title', 'debug_content']
     ordering_fields = ['debug_date', 'created_at']
     ordering = ['-created_at']
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         if not self.request.query_params.get('include_deleted'):
             queryset = queryset.filter(is_deleted=False)
         return queryset
-    
+
     @action(detail=True, methods=['post'])
     def start_debug(self, request, pk=None):
         """开始调试"""
         record = self.get_object()
         if record.status not in ['PENDING']:
             return Response({'error': '调试已开始'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         record.status = 'IN_PROGRESS'
         record.debug_date = timezone.now().date()
         record.debugger = request.user
         record.save()
         serializer = self.get_serializer(record)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def complete_debug(self, request, pk=None):
         """完成调试"""
         record = self.get_object()
         result = request.data.get('result')
         actual_result = request.data.get('actual_result', '')
-        
+
         if not result:
             return Response({'error': '请提供调试结果'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         record.status = 'COMPLETED'
         record.result = result
         record.actual_result = actual_result
@@ -345,16 +358,16 @@ class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
         record.save()
         serializer = self.get_serializer(record)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def add_check_items(self, request, pk=None):
         """批量添加检查项"""
         record = self.get_object()
         items = request.data.get('items', [])
-        
+
         if not items:
             return Response({'error': '请提供检查项列表'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         created = []
         for idx, item in enumerate(items, 1):
             check_item = DebugCheckItem.objects.create(
@@ -365,22 +378,19 @@ class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
                 method=item.get('method', ''),
                 result=item.get('result', 'PENDING'),
                 actual_value=item.get('actual_value', ''),
-                notes=item.get('notes', '')
+                notes=item.get('notes', ''),
             )
             created.append(check_item.id)
-        
+
         serializer = self.get_serializer(record)
-        return Response({
-            'record': serializer.data,
-            'created_count': len(created)
-        })
-    
+        return Response({'record': serializer.data, 'created_count': len(created)})
+
     @action(detail=True, methods=['post'])
     def update_check_items(self, request, pk=None):
         """更新检查项结果"""
         record = self.get_object()
         items = request.data.get('items', [])
-        
+
         for item_data in items:
             item_id = item_data.get('id')
             if item_id:
@@ -392,7 +402,7 @@ class DebugRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
                     item.save()
                 except DebugCheckItem.DoesNotExist:
                     pass
-        
+
         serializer = self.get_serializer(record)
         return Response(serializer.data)
 
@@ -417,6 +427,7 @@ class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     """
     质量检验管理 ViewSet
     """
+
     permission_module = 'production'
     permission_resource = 'quality_inspection'
 
@@ -428,27 +439,27 @@ class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     search_fields = ['inspection_no', 'title', 'conclusion']
     ordering_fields = ['inspection_date', 'created_at']
     ordering = ['-created_at']
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         if not self.request.query_params.get('include_deleted'):
             queryset = queryset.filter(is_deleted=False)
         return queryset
-    
+
     @action(detail=True, methods=['post'])
     def start_inspection(self, request, pk=None):
         """开始检验"""
         inspection = self.get_object()
         if inspection.status != 'PENDING':
             return Response({'error': '检验已开始'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         inspection.status = 'IN_PROGRESS'
         inspection.inspection_date = timezone.now().date()
         inspection.inspector = request.user
         inspection.save()
         serializer = self.get_serializer(inspection)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def complete_inspection(self, request, pk=None):
         """完成检验"""
@@ -456,34 +467,34 @@ class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
         result = request.data.get('result')
         conclusion = request.data.get('conclusion', '')
         treatment = request.data.get('treatment', '')
-        
+
         if not result:
             return Response({'error': '请提供检验结果'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         inspection.status = 'COMPLETED'
         inspection.result = result
         inspection.conclusion = conclusion
         inspection.treatment = treatment
-        
+
         # 计算合格/不合格数量
         pass_count = inspection.items.filter(result='PASS').count()
         fail_count = inspection.items.filter(result='FAIL').count()
         inspection.pass_qty = pass_count
         inspection.fail_qty = fail_count
-        
+
         inspection.save()
         serializer = self.get_serializer(inspection)
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['post'])
     def add_items(self, request, pk=None):
         """批量添加检验项"""
         inspection = self.get_object()
         items = request.data.get('items', [])
-        
+
         if not items:
             return Response({'error': '请提供检验项列表'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         created = []
         for idx, item in enumerate(items, 1):
             insp_item = InspectionItem.objects.create(
@@ -497,22 +508,19 @@ class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                 tolerance_lower=item.get('tolerance_lower', ''),
                 actual_value=item.get('actual_value', ''),
                 result=item.get('result', 'PENDING'),
-                notes=item.get('notes', '')
+                notes=item.get('notes', ''),
             )
             created.append(insp_item.id)
-        
+
         serializer = self.get_serializer(inspection)
-        return Response({
-            'inspection': serializer.data,
-            'created_count': len(created)
-        })
-    
+        return Response({'inspection': serializer.data, 'created_count': len(created)})
+
     @action(detail=True, methods=['post'])
     def update_items(self, request, pk=None):
         """更新检验项结果"""
         inspection = self.get_object()
         items = request.data.get('items', [])
-        
+
         for item_data in items:
             item_id = item_data.get('id')
             if item_id:
@@ -524,7 +532,7 @@ class QualityInspectionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                     item.save()
                 except InspectionItem.DoesNotExist:
                     pass
-        
+
         serializer = self.get_serializer(inspection)
         return Response(serializer.data)
 
@@ -543,4 +551,3 @@ class InspectionItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     search_fields = ['item_name']
     ordering_fields = ['sequence']
     ordering = ['inspection', 'sequence']
-

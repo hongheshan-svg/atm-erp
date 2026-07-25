@@ -1,7 +1,7 @@
 <template>
   <div class="reconciliation-detail">
     <el-page-header @back="goBack" :content="pageTitle" />
-    
+
     <el-card class="detail-card" v-loading="loading">
       <template #header><span>对账信息</span></template>
       <el-descriptions :column="3" border>
@@ -16,7 +16,7 @@
         <el-descriptions-item label="差异金额">¥ {{ formatMoney(session.variance_amount) }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-    
+
     <el-card class="items-card">
       <template #header><span>对账明细</span></template>
       <el-table :data="session.items || []" stripe>
@@ -48,14 +48,14 @@ const loading = ref(false)
 const session = ref<Record<string, any>>({})
 
 const pageTitle = computed(() => session.value.session_no ? `对账详情 - ${session.value.session_no}` : '对账详情')
-const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMoney = (v: any) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
 
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getReconciliationSession(route.params.id)
+    const res = await getReconciliationSession(Number(route.params.id))
     session.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false

@@ -26,15 +26,15 @@ logger = logging.getLogger(__name__)
 # ProductionProcess.process_type -> LaborRateStandard.work_type
 # 生产工序类型与人工费率标准工作类型的映射（找不到对应时回退到默认工种）
 PROCESS_TYPE_TO_WORK_TYPE = {
-    'MACHINING': 'ASSEMBLY_MECHANICAL',   # 机加工 -> 机械装配
-    'WELDING': 'ASSEMBLY_MECHANICAL',     # 焊接   -> 机械装配
-    'ASSEMBLY': 'ASSEMBLY_MECHANICAL',    # 装配   -> 机械装配
-    'WIRING': 'ASSEMBLY_ELECTRICAL',      # 布线   -> 电气安装
-    'PROGRAMMING': 'DEBUGGING',           # 编程调试 -> 调试
-    'TESTING': 'QUALITY_CHECK',           # 测试   -> 质量检验
-    'PAINTING': 'ASSEMBLY_MECHANICAL',    # 喷涂   -> 机械装配
-    'PACKAGING': 'ASSEMBLY_MECHANICAL',   # 包装   -> 机械装配
-    'OTHER': 'ASSEMBLY_MECHANICAL',       # 其他   -> 机械装配
+    'MACHINING': 'ASSEMBLY_MECHANICAL',  # 机加工 -> 机械装配
+    'WELDING': 'ASSEMBLY_MECHANICAL',  # 焊接   -> 机械装配
+    'ASSEMBLY': 'ASSEMBLY_MECHANICAL',  # 装配   -> 机械装配
+    'WIRING': 'ASSEMBLY_ELECTRICAL',  # 布线   -> 电气安装
+    'PROGRAMMING': 'DEBUGGING',  # 编程调试 -> 调试
+    'TESTING': 'QUALITY_CHECK',  # 测试   -> 质量检验
+    'PAINTING': 'ASSEMBLY_MECHANICAL',  # 喷涂   -> 机械装配
+    'PACKAGING': 'ASSEMBLY_MECHANICAL',  # 包装   -> 机械装配
+    'OTHER': 'ASSEMBLY_MECHANICAL',  # 其他   -> 机械装配
 }
 
 # 无法从工序解析工种时使用的默认工种

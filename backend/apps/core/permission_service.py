@@ -3,12 +3,15 @@ Permission service functions for checking user permissions.
 
 Provides caching and wildcard support for permission checks.
 """
-from typing import Set, Tuple, List
-from django.core.cache import cache
+
+from typing import List, Set, Tuple
+
 from django.contrib.auth import get_user_model
-from django.db.models import QuerySet, Q
-from apps.core.permission_models_new import DataScope, Permission
+from django.core.cache import cache
+from django.db.models import Q, QuerySet
+
 from apps.accounts.models import Department
+from apps.core.permission_models_new import DataScope, Permission
 
 User = get_user_model()
 
@@ -106,21 +109,14 @@ def get_user_permissions(user) -> Set[str]:
 
     if user.is_superuser:
         # Superuser gets all active permissions
-        permissions = set(
-            Permission.objects.filter(
-                is_active=True,
-                is_deleted=False
-            ).values_list('code', flat=True)
-        )
+        permissions = set(Permission.objects.filter(is_active=True, is_deleted=False).values_list('code', flat=True))
     else:
         # Get permissions from all user's roles (兼容旧 role FK 和新 roles M2M)
         user_roles = get_active_user_roles(user)
         if user_roles.exists():
             permissions = set(
                 Permission.objects.filter(
-                    role_permissions__role__in=user_roles,
-                    is_active=True,
-                    is_deleted=False
+                    role_permissions__role__in=user_roles, is_active=True, is_deleted=False
                 ).values_list('code', flat=True)
             )
 
@@ -294,10 +290,7 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
         cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
         return result
 
-    scopes = DataScope.objects.filter(
-        role__in=user_roles,
-        module__in=[module, '']
-    )
+    scopes = DataScope.objects.filter(role__in=user_roles, module__in=[module, ''])
 
     if not scopes.exists():
         result = ('self', [])
@@ -337,10 +330,7 @@ def get_department_tree_ids(dept_id: int) -> List[int]:
     dept_ids = [dept_id]
 
     # Get all children recursively
-    children = Department.objects.filter(
-        parent_id=dept_id,
-        is_deleted=False
-    )
+    children = Department.objects.filter(parent_id=dept_id, is_deleted=False)
 
     for child in children:
         # Recursively get child's tree
@@ -531,4 +521,3 @@ def get_hidden_fields(user, module: str, resource: str) -> List[str]:
 
     # Hide every configured field the user's roles were NOT granted
     return [f for f in defined_field_names if f not in granted_field_names]
-

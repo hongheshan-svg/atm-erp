@@ -2,7 +2,7 @@
   <div class="outsource-tracking">
     <el-card>
       <template #header><span>外协加工跟踪</span></template>
-      
+
       <el-row :gutter="20" class="stats-row">
         <el-col :span="6">
           <el-statistic title="进行中" :value="stats.in_progress" />
@@ -17,21 +17,21 @@
           <el-statistic title="延期订单" :value="stats.delayed" />
         </el-col>
       </el-row>
-      
+
       <el-divider />
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="order_no" label="外协单号" width="150" />
@@ -54,7 +54,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -104,10 +104,10 @@ const pageSize = ref(20)
 const total = ref(0)
 const stats = ref({ in_progress: 0, pending_inspection: 0, completed_this_month: 0, delayed: 0 })
 const progressDialogVisible = ref(false)
-const currentRow = ref(null)
-const progressForm = reactive({ completion_rate: 0, progress_type: '', description: '' })
+const currentRow = ref<any>(null)
+const progressForm = reactive<Record<string, any>>({ completion_rate: 0, progress_type: '', description: '' })
 
-const getStatusType = (s) => ({ 'MATERIAL_SENT': 'info', 'PRODUCTION': 'primary', 'QUALITY': 'warning', 'SHIPPING': 'primary', 'RECEIVED': 'success' }[s] || 'info')
+const getStatusType = (s: any) => (({ 'MATERIAL_SENT': 'info', 'PRODUCTION': 'primary', 'QUALITY': 'warning', 'SHIPPING': 'primary', 'RECEIVED': 'success' } as Record<string, any>)[s] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -115,7 +115,7 @@ const loadData = async () => {
     const res = await getOutsourceProgress({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -126,12 +126,12 @@ const loadStats = async () => {
   try {
     const res = await getOutsourceProgressStatistics()
     stats.value = res || stats.value
-  } catch (error) {
+  } catch (error: any) {
     console.error('OutsourceTracking getOutsourceProgressStatistics error:', error)
   }
 }
 
-const handleProgress = (row) => {
+const handleProgress = (row: any) => {
   currentRow.value = row
   progressForm.completion_rate = Number(row.completion_rate) || 0
   progressForm.progress_type = row.progress_type || 'PRODUCTION'
@@ -147,7 +147,7 @@ const saveProgress = async () => {
     progressDialogVisible.value = false
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('更新失败')
   } finally {
     saving.value = false

@@ -168,15 +168,15 @@ def calculate_project_profit(project_id):
     # 1. 获取收入 (ORM查询转DataFrame)
     sales = pd.DataFrame(SalesOrder.objects.filter(project_id=project_id).values())
     total_revenue = sales['amount'].sum() if not sales.empty else 0
-    
+
     # 2. 获取材料成本 (领料单)
     materials = pd.DataFrame(StockMove.objects.filter(project_id=project_id, type='OUT_PROJECT').values())
     material_cost = (materials['qty'] * materials['cost_price']).sum() if not materials.empty else 0
-    
+
     # 3. 获取费用
     expenses = pd.DataFrame(Expense.objects.filter(project_id=project_id).values())
     expense_cost = expenses['amount'].sum() if not expenses.empty else 0
-    
+
     return {
         "revenue": total_revenue,
         "cost": material_cost + expense_cost,
@@ -219,7 +219,6 @@ def calculate_project_profit(project_id):
 
 ---
 
-**文档版本：** v1.0  
-**创建日期：** 2025-11-24  
+**文档版本：** v1.0
+**创建日期：** 2025-11-24
 **状态：** ✅ 已完整实现
-

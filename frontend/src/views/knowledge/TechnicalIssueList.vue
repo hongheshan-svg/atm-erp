@@ -7,7 +7,7 @@
           <el-button type="primary" @click="handleCreate"><el-icon><Plus /></el-icon> 新建问题</el-button>
         </div>
       </template>
-      
+
       <div class="filter-area">
         <el-input v-model="queryParams.search" placeholder="搜索问题" style="width: 240px" clearable @keyup.enter="fetchData">
           <template #prefix><el-icon><Search /></el-icon></template>
@@ -147,18 +147,18 @@ const viewDialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 const projectList = ref<any[]>([])
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const queryParams = reactive({ search: '', severity: '', status: '', page: 1, page_size: 20 })
-const form = reactive({ title: '', project: null, severity: 'MEDIUM', description: '' })
+const queryParams = reactive<Record<string, any>>({ search: '', severity: '', status: '', page: 1, page_size: 20 })
+const form = reactive<Record<string, any>>({ title: '', project: null, severity: 'MEDIUM', description: '' })
 const rules = {
   title: [{ required: true, message: '请输入问题标题', trigger: 'blur' }],
   severity: [{ required: true, message: '请选择严重程度', trigger: 'change' }]
 }
 
-const getSeverityType = (severity) => ({ LOW: 'info', MEDIUM: '', HIGH: 'warning', CRITICAL: 'danger' }[severity] || '')
-const getStatusType = (status) => ({ OPEN: 'info', IN_PROGRESS: 'warning', RESOLVED: 'success', CLOSED: '' }[status] || '')
-const formatDate = (dateStr) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : ''
+const getSeverityType = (severity: any) => (({ LOW: 'info', MEDIUM: '', HIGH: 'warning', CRITICAL: 'danger' } as Record<string, any>)[severity] || '')
+const getStatusType = (status: any) => (({ OPEN: 'info', IN_PROGRESS: 'warning', RESOLVED: 'success', CLOSED: '' } as Record<string, any>)[status] || '')
+const formatDate = (dateStr: any) => dateStr ? new Date(dateStr).toLocaleString('zh-CN') : ''
 
 const fetchData = async () => {
   loading.value = true
@@ -166,7 +166,7 @@ const fetchData = async () => {
     const res = await getTechnicalIssueList(queryParams)
     issues.value = res.results || res || []
     total.value = res.count || issues.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取数据失败')
   } finally {
     loading.value = false
@@ -177,7 +177,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projectList.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('TechnicalIssueList getProjectList error:', error)
   }
 }
@@ -188,12 +188,12 @@ const handleCreate = () => {
   createDialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getTechnicalIssue(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
@@ -208,19 +208,19 @@ const handleSave = async () => {
     ElMessage.success('创建成功')
     createDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false
   }
 }
 
-const handleConvert = async (row) => {
+const handleConvert = async (row: any) => {
   try {
     await convertIssueToKnowledge(row.id)
     ElMessage.success('已转换为知识文章')
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('转换失败')
   }
 }

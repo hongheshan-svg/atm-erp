@@ -12,11 +12,10 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class DeliveryInvoiceChainServiceTest(TestCase):
     """服务层:create_invoice_from_delivery / ensure_ar_and_activate_milestone。"""
 
@@ -135,9 +134,7 @@ class DeliveryInvoiceChainServiceTest(TestCase):
         ar_before = AccountReceivable.objects.filter(so=self.so, is_deleted=False).count()
         self.assertEqual(ar_before, 1)
 
-        milestone = PaymentSchedule.objects.get(
-            sales_order=self.so, milestone_type='ON_DELIVERY', is_deleted=False
-        )
+        milestone = PaymentSchedule.objects.get(sales_order=self.so, milestone_type='ON_DELIVERY', is_deleted=False)
         # 激活前:due_date 来自 delivery_date(纯日期偏移),不是今天
         self.assertEqual(milestone.due_date, self.future_delivery)
 
@@ -145,9 +142,7 @@ class DeliveryInvoiceChainServiceTest(TestCase):
         ar = ensure_ar_and_activate_milestone(invoice, self.user)
 
         # 应收未被重复创建,发票号已回填
-        self.assertEqual(
-            AccountReceivable.objects.filter(so=self.so, is_deleted=False).count(), 1
-        )
+        self.assertEqual(AccountReceivable.objects.filter(so=self.so, is_deleted=False).count(), 1)
         self.assertEqual(ar.invoice_no, invoice.invoice_no)
 
         # '发货款' 节点被事件驱动激活:due_date=今天,并挂接应收
@@ -172,7 +167,6 @@ class DeliveryInvoiceChainServiceTest(TestCase):
         self.assertEqual(ar.so_id, self.so.id)
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class DeliveryCompletionInvoiceApiTest(TestCase):
     """API 层:项目确认完成 → 自动生成开票草稿;create_invoice 手动动作幂等。"""
 
@@ -188,9 +182,7 @@ class DeliveryCompletionInvoiceApiTest(TestCase):
             SalesOrderLine,
         )
 
-        self.user = User.objects.create(
-            username='invapi', employee_id='INVAPI1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='invapi', employee_id='INVAPI1', is_staff=True, is_superuser=True)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
 
@@ -208,17 +200,26 @@ class DeliveryCompletionInvoiceApiTest(TestCase):
             created_by=self.user,
         )
         self.so_line = SalesOrderLine.objects.create(
-            so=self.so, item=self.item, qty=Decimal('3'), unit_price=Decimal('100.00'),
-            delivered_qty=Decimal('3'), created_by=self.user,
+            so=self.so,
+            item=self.item,
+            qty=Decimal('3'),
+            unit_price=Decimal('100.00'),
+            delivered_qty=Decimal('3'),
+            created_by=self.user,
         )
         self.delivery = DeliveryOrder.objects.create(
-            so=self.so, warehouse=self.warehouse,
+            so=self.so,
+            warehouse=self.warehouse,
             delivery_date=timezone.now().date() + timedelta(days=10),
-            status='PROJECT_CONFIRMING', created_by=self.user,
+            status='PROJECT_CONFIRMING',
+            created_by=self.user,
         )
         DeliveryOrderLine.objects.create(
-            delivery=self.delivery, so_line=self.so_line, item=self.item,
-            qty=Decimal('3'), created_by=self.user,
+            delivery=self.delivery,
+            so_line=self.so_line,
+            item=self.item,
+            qty=Decimal('3'),
+            created_by=self.user,
         )
 
     def test_project_confirm_generates_draft_invoice(self):
@@ -243,6 +244,4 @@ class DeliveryCompletionInvoiceApiTest(TestCase):
         self.assertEqual(r1.status_code, 200, r1.data)
         self.assertEqual(r2.status_code, 200, r2.data)
         self.assertEqual(r1.data['invoice_id'], r2.data['invoice_id'])
-        self.assertEqual(
-            Invoice.objects.filter(delivery_order=self.delivery, is_deleted=False).count(), 1
-        )
+        self.assertEqual(Invoice.objects.filter(delivery_order=self.delivery, is_deleted=False).count(), 1)

@@ -12,9 +12,22 @@ class PayableItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayableItem
         fields = [
-            'id', 'source_type', 'source_id', 'source_no', 'category', 'payee_name',
-            'supplier', 'supplier_name', 'amount_due', 'amount_paid', 'remaining',
-            'currency', 'status', 'due_date', 'project', 'created_at',
+            'id',
+            'source_type',
+            'source_id',
+            'source_no',
+            'category',
+            'payee_name',
+            'supplier',
+            'supplier_name',
+            'amount_due',
+            'amount_paid',
+            'remaining',
+            'currency',
+            'status',
+            'due_date',
+            'project',
+            'created_at',
         ]
         read_only_fields = fields
 

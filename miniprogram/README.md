@@ -131,7 +131,7 @@ miniprogram/
 ## 发布上线
 
 1. 在微信开发者工具中点击"上传"
-2. 登录 [微信公众平台](https://mp.weixin.qq.com/) 
+2. 登录 [微信公众平台](https://mp.weixin.qq.com/)
 3. 进入"版本管理"提交审核
 4. 审核通过后发布
 

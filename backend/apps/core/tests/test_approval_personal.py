@@ -16,9 +16,10 @@ def _task(wxid='wx1'):
 class ApprovalPersonalTest(SimpleTestCase):
     def test_approval_notifies_assignee_personally(self):
         t = _task()
-        with patch.object(NotificationService, 'send_to_user') as m_personal, patch.object(
-            NotificationService, 'send_custom_notification'
-        ) as m_group:
+        with (
+            patch.object(NotificationService, 'send_to_user') as m_personal,
+            patch.object(NotificationService, 'send_custom_notification') as m_group,
+        ):
             NotificationService.send_approval_notification(t)
         m_personal.assert_called_once()
         self.assertIs(m_personal.call_args.args[0], t.assignee)
@@ -26,9 +27,10 @@ class ApprovalPersonalTest(SimpleTestCase):
 
     def test_approval_without_wechat_falls_back_group(self):
         t = _task(wxid='')
-        with patch.object(NotificationService, 'send_to_user') as m_personal, patch.object(
-            NotificationService, 'send_custom_notification'
-        ) as m_group:
+        with (
+            patch.object(NotificationService, 'send_to_user') as m_personal,
+            patch.object(NotificationService, 'send_custom_notification') as m_group,
+        ):
             NotificationService.send_approval_notification(t)
         m_personal.assert_not_called()
         m_group.assert_called_once()

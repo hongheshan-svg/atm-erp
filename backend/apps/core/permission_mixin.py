@@ -134,9 +134,7 @@ class PermissionMixin:
         scope_result = resolve_data_scope(self.request.user, self.permission_module)
 
         # Apply scope filter
-        return apply_scope_filter(
-            queryset, self.request.user, scope_result, user_field=self.data_scope_user_field
-        )
+        return apply_scope_filter(queryset, self.request.user, scope_result, user_field=self.data_scope_user_field)
 
     def _has_module_menu_access(self, request):
         """
@@ -153,6 +151,7 @@ class PermissionMixin:
         if not menu_prefixes:
             return False
         from apps.core.permission_service import get_user_permissions
+
         user_perms = get_user_permissions(request.user)
         for prefix in menu_prefixes:
             if any(p == prefix or p.startswith(prefix + ':') for p in user_perms):
@@ -204,9 +203,7 @@ class PermissionMixin:
             request.user, self.permission_module, self.permission_resource, permission_action
         )
         if op_result is False:
-            raise PermissionDenied(
-                f'You do not have permission to {permission_action} {self.permission_resource}'
-            )
+            raise PermissionDenied(f'You do not have permission to {permission_action} {self.permission_resource}')
         if op_result is True:
             return
 

@@ -367,7 +367,7 @@ class RequirementReviewListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_participant_count(self, obj):
+    def get_participant_count(self, obj) -> int:
         return obj.participants.count()
 
 

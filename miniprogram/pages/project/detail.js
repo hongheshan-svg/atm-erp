@@ -57,14 +57,14 @@ Page({
       const laborUsed = budgetSummary.labor?.used || 0
       const expenseUsed = budgetSummary.expense?.used || 0
 
-      const materialPercent = project.budget_material > 0 
-        ? Math.min(100, (materialUsed / project.budget_material) * 100) 
+      const materialPercent = project.budget_material > 0
+        ? Math.min(100, (materialUsed / project.budget_material) * 100)
         : 0
-      const laborPercent = project.budget_labor > 0 
-        ? Math.min(100, (laborUsed / project.budget_labor) * 100) 
+      const laborPercent = project.budget_labor > 0
+        ? Math.min(100, (laborUsed / project.budget_labor) * 100)
         : 0
-      const expensePercent = project.budget_expense > 0 
-        ? Math.min(100, (expenseUsed / project.budget_expense) * 100) 
+      const expensePercent = project.budget_expense > 0
+        ? Math.min(100, (expenseUsed / project.budget_expense) * 100)
         : 0
 
       this.setData({

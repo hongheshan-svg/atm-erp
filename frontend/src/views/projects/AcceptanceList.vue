@@ -9,7 +9,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 统计卡片 -->
       <el-row :gutter="20" class="stats-row">
         <el-col :span="4">
@@ -31,7 +31,7 @@
           <el-statistic title="待评审" :value="stats.pending" />
         </el-col>
       </el-row>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="验收类型">
@@ -62,7 +62,7 @@
           <el-button @click="resetSearch">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 数据表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -110,7 +110,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -123,7 +123,7 @@
         style="margin-top: 20px;"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
       <el-form :model="formData" :rules="formRules" ref="formRef" label-width="120px">
@@ -226,7 +226,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getAcceptanceList, getAcceptance, createAcceptance, updateAcceptance, getAcceptanceStatistics, getAcceptanceReport, applyAcceptanceTemplate, startAcceptance, getActiveAcceptanceTemplates, getEquipmentArchiveList } from '@/api/projects/acceptance'
+import { getAcceptanceList, getAcceptance, createAcceptance, updateAcceptance, getAcceptanceStatistics, downloadAcceptanceReport, applyAcceptanceTemplate, startAcceptance, getActiveAcceptanceTemplates, getEquipmentArchiveList } from '@/api/projects/acceptance'
 import { getProjectList } from '@/api/projects/project'
 import { getCustomerList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -242,13 +242,13 @@ const equipments = ref<any[]>([])
 const templates = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增验收')
-const formRef = ref(null)
-const selectedTemplate = ref(null)
+const formRef = ref<any>(null)
+const selectedTemplate = ref<any>(null)
 const viewDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 const reportLoading = ref(false)
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   total: 0,
   in_progress: 0,
   passed: 0,
@@ -257,19 +257,19 @@ const stats = reactive({
   pending: 0
 })
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   acceptance_type: '',
   project: null,
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   acceptance_no: '',
   name: '',
@@ -291,7 +291,7 @@ const formRules = {
   location: [{ required: true, message: '请输入验收地点', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PLANNED': 'info',
@@ -302,10 +302,10 @@ const getStatusType = (status) => {
     'FAILED': 'danger',
     'CANCELLED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getProgressStatus = (rate) => {
+const getProgressStatus = (rate: any) => {
   if (rate >= 90) return 'success'
   if (rate >= 60) return 'warning'
   return 'exception'
@@ -314,7 +314,7 @@ const getProgressStatus = (rate) => {
 const loadData = async () => {
   try {
     loading.value = true
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -322,7 +322,7 @@ const loadData = async () => {
     const res = await getAcceptanceList(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败:', error)
   } finally {
     loading.value = false
@@ -338,7 +338,7 @@ const loadStats = async () => {
     stats.conditional = res.by_status?.CONDITIONAL?.count || 0
     stats.failed = res.by_status?.FAILED?.count || 0
     stats.pending = res.by_status?.PENDING_REVIEW?.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载统计失败:', error)
   }
 }
@@ -347,7 +347,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -356,7 +356,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
@@ -365,7 +365,7 @@ const loadEquipments = async () => {
   try {
     const res = await getEquipmentArchiveList({ page_size: 1000 })
     equipments.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载设备失败:', error)
   }
 }
@@ -374,7 +374,7 @@ const loadTemplates = async () => {
   try {
     const res = await getActiveAcceptanceTemplates()
     templates.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载模板失败:', error)
   }
 }
@@ -406,32 +406,32 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   Object.assign(formData, row)
   dialogTitle.value = '编辑验收'
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   viewDetail.value = row
   viewDialogVisible.value = true
   loadAcceptanceDetail(row.id)
 }
 
-const loadAcceptanceDetail = async (id) => {
+const loadAcceptanceDetail = async (id: any) => {
   try {
     const res = await getAcceptance(id)
     viewDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleReport = async (row) => {
+const handleReport = async (row: any) => {
   try {
     reportLoading.value = true
-    const res = await getAcceptanceReport(row.id, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([res]))
+    const res = await downloadAcceptanceReport(row.id)
+    const url = window.URL.createObjectURL(res.data)
     const link = document.createElement('a')
     link.href = url
     link.setAttribute('download', `验收报告_${row.acceptance_no}.pdf`)
@@ -440,7 +440,7 @@ const handleReport = async (row) => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
     ElMessage.success('报告已下载')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('生成报告失败')
   } finally {
     reportLoading.value = false
@@ -454,11 +454,11 @@ const applyTemplate = async () => {
     return
   }
   try {
-    const res = await applyAcceptanceTemplate(formData.id, {
+    await applyAcceptanceTemplate(formData.id, {
       template_id: selectedTemplate.value
     })
     ElMessage.success('模板已应用，检查项已生成')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('应用模板失败')
   }
 }
@@ -476,19 +476,19 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存失败:', error)
   }
 }
 
-const handleStart = async (row) => {
+const handleStart = async (row: any) => {
   await ElMessageBox.confirm('确定开始验收？', '提示')
   try {
     await startAcceptance(row.id)
     ElMessage.success('验收已开始')
     loadData()
     loadStats()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }

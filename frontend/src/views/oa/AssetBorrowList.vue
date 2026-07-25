@@ -132,10 +132,10 @@ const returnDialogVisible = ref(false)
 const currentItem = ref<any>(null)
 const formRef = ref()
 
-const searchForm = reactive({ status: '' })
-const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
+const searchForm = reactive<Record<string, any>>({ status: '' })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 10, total: 0 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   asset: null,
   borrower: null,
   borrow_date: '',
@@ -143,7 +143,7 @@ const form = reactive({
   purpose: ''
 })
 
-const returnForm = reactive({ condition: '完好', remarks: '' })
+const returnForm = reactive<Record<string, any>>({ condition: '完好', remarks: '' })
 
 const rules = {
   asset: [{ required: true, message: '请选择资产', trigger: 'change' }],
@@ -167,7 +167,7 @@ const loadAssets = async () => {
   try {
     const res = await getAssets({ page_size: 1000 })
     assets.value = Array.isArray(res) ? res : (res.results || [])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载资产失败', error)
   }
 }
@@ -181,7 +181,7 @@ const loadUsers = async () => {
       name: u.name || `${u.last_name || ''}${u.first_name || ''}` || u.username,
       username: u.username
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户失败', error)
   }
 }
@@ -189,7 +189,7 @@ const loadUsers = async () => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     const res = await getAssetBorrows(params)
     if (Array.isArray(res)) {
       list.value = res
@@ -201,7 +201,7 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -225,7 +225,7 @@ const handleSave = async () => {
     if (borrowId) {
       try {
         await submitAssetBorrow(borrowId)
-      } catch (e) {
+      } catch (e: any) {
         console.error('submitAssetBorrow error:', e)
       }
     }
@@ -244,7 +244,7 @@ const handleSubmit = async (row: any) => {
     await submitAssetBorrow(row.id)
     ElMessage.success('提交成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('提交失败')
   }
 }
@@ -255,7 +255,7 @@ const handleApprove = async (row: any) => {
     await approveAssetBorrow(row.id)
     ElMessage.success('已审批通过')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -266,7 +266,7 @@ const handleReject = async (row: any) => {
     await rejectAssetBorrow(row.id)
     ElMessage.success('已拒绝')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -277,7 +277,7 @@ const handleBorrowOut = async (row: any) => {
     await borrowAsset(row.id)
     ElMessage.success('已借出')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('操作失败')
   }
 }
@@ -295,7 +295,7 @@ const confirmReturn = async () => {
     ElMessage.success('已归还')
     returnDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     saving.value = false
@@ -308,7 +308,7 @@ const handleDelete = async (row: any) => {
     await deleteAssetBorrow(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }

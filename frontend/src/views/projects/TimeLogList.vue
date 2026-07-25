@@ -12,7 +12,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 搜索区域 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="项目">
@@ -41,7 +41,7 @@
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 工时统计 -->
       <el-row :gutter="20" class="stats-row">
         <el-col :span="6">
@@ -65,7 +65,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 批量操作工具栏 -->
       <div class="table-toolbar" v-permission="'projects:project:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
@@ -99,7 +99,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -112,7 +112,7 @@
         @current-change="fetchData"
       />
     </el-card>
-    
+
     <!-- 填报工时对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -155,8 +155,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getProjectList, getTaskList, getTimeLogList, createTimeLog, updateTimeLog } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
@@ -176,27 +176,27 @@ const projects = ref<any[]>([])
 const projectTasks = ref<any[]>([])
 const timeLogs = ref<any[]>([])
 const dialogVisible = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   project: '',
   dateRange: []
 })
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   weekHours: 0,
   monthHours: 0,
   workDays: 0,
   avgHours: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   date: '',
   project: null,
@@ -214,29 +214,29 @@ const rules = {
 
 const dialogTitle = computed(() => form.id ? '编辑工时' : '填报工时')
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'PENDING': 'warning',
     'APPROVED': 'success',
     'REJECTED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'PENDING': '待审核',
     'APPROVED': '已通过',
     'REJECTED': '已驳回'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
 const fetchProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目列表失败:', error)
   }
 }
@@ -244,7 +244,7 @@ const fetchProjects = async () => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
@@ -253,13 +253,13 @@ const fetchData = async () => {
       params.start_date = searchForm.dateRange[0]
       params.end_date = searchForm.dateRange[1]
     }
-    
+
     const res = await getTimeLogList(params)
     timeLogs.value = res.results || res.results || res || []
     pagination.total = res.count || res.count || 0
-    
+
     calculateStats()
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取工时记录失败:', error)
     timeLogs.value = []
     ElMessage.error('获取工时记录失败')
@@ -273,32 +273,32 @@ const calculateStats = () => {
   const weekStart = new Date(now)
   weekStart.setDate(now.getDate() - now.getDay())
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  
+
   stats.weekHours = timeLogs.value
     .filter(log => new Date(log.date) >= weekStart)
     .reduce((sum, log) => sum + log.hours, 0)
-  
+
   stats.monthHours = timeLogs.value
     .filter(log => new Date(log.date) >= monthStart)
     .reduce((sum, log) => sum + log.hours, 0)
-  
+
   const uniqueDays = new Set(timeLogs.value.map(log => log.date))
   stats.workDays = uniqueDays.size
-  
+
   stats.avgHours = stats.workDays > 0 ? stats.monthHours / stats.workDays : 0
 }
 
-const fetchProjectTasks = async (projectId) => {
+const fetchProjectTasks = async (projectId: any) => {
   if (!projectId) {
     projectTasks.value = []
     return
   }
-  
+
   try {
     // 使用查询参数过滤项目任务
     const res = await getTaskList({ project: projectId })
     projectTasks.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     projectTasks.value = [
       { id: 1, name: '需求分析' },
       { id: 2, name: '系统设计' },
@@ -307,7 +307,7 @@ const fetchProjectTasks = async (projectId) => {
   }
 }
 
-const handleProjectChange = (projectId) => {
+const handleProjectChange = (projectId: any) => {
   form.task = null
   fetchProjectTasks(projectId)
 }
@@ -337,7 +337,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   Object.assign(form, row)
   if (row.project) {
     fetchProjectTasks(row.project)
@@ -350,7 +350,7 @@ const handleEdit = (row) => {
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
-    
+
     if (form.id) {
       await updateTimeLog(form.id, form)
       ElMessage.success('更新成功')
@@ -358,10 +358,10 @@ const handleSubmit = async () => {
       await createTimeLog(form)
       ElMessage.success('提交成功')
     }
-    
+
     dialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -410,4 +410,3 @@ onMounted(() => {
   justify-content: flex-end;
 }
 </style>
-

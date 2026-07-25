@@ -85,7 +85,7 @@ export function updateInstallationTask(id: number, data: any) {
   return request({ url: `/projects/installation-tasks/${id}/`, method: 'put', data })
 }
 
-export function dispatchInstallationTask(id: number, data: any) {
+export function dispatchInstallationTask(id: number, data: any = {}) {
   return request({ url: `/projects/installation-tasks/${id}/dispatch/`, method: 'post', data })
 }
 

@@ -517,7 +517,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 import {
   getDebugRecords, getDebugRecord, createDebugRecord, updateDebugRecord,
@@ -546,14 +546,14 @@ const users = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建调试记录')
 const detailVisible = ref(false)
-const currentRecord = ref(null)
+const currentRecord = ref<any>(null)
 const completeDialogVisible = ref(false)
 const checkItemDialogVisible = ref(false)
 const newCheckItems = ref<any[]>([])
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 // 筛选条件
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   project: null,
   debug_type: '',
   status: '',
@@ -561,14 +561,14 @@ const filters = reactive({
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
 // 表单数据
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   project: null,
   title: '',
@@ -582,7 +582,7 @@ const formData = reactive({
 })
 
 // 完成调试表单
-const completeFormData = reactive({
+const completeFormData = reactive<Record<string, any>>({
   result: 'PASS',
   actual_result: '',
   issues_found: '',
@@ -591,7 +591,7 @@ const completeFormData = reactive({
 })
 
 // 检查项表单
-const checkItemFormData = reactive({
+const checkItemFormData = reactive<Record<string, any>>({
   item_name: '',
   standard: '',
   method: ''
@@ -606,7 +606,7 @@ const formRules = {
 }
 
 // 获取样式
-const getDebugTypeTag = (type) => {
+const getDebugTypeTag = (type: any) => {
   const map = {
     'MECHANICAL': 'primary',
     'ELECTRICAL': 'warning',
@@ -621,10 +621,10 @@ const getDebugTypeTag = (type) => {
     'SAT': 'danger',
     'OTHER': 'info'
   }
-  return map[type] || ''
+  return (map as Record<string, any>)[type] || ''
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     'PENDING': 'info',
     'IN_PROGRESS': 'warning',
@@ -632,33 +632,33 @@ const getStatusType = (status) => {
     'COMPLETED': 'success',
     'FAILED': 'danger'
   }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const getResultType = (result) => {
+const getResultType = (result: any) => {
   const map = {
     'PASS': 'success',
     'FAIL': 'danger',
     'CONDITIONAL': 'warning'
   }
-  return map[result] || ''
+  return (map as Record<string, any>)[result] || ''
 }
 
-const getCheckResultType = (result) => {
+const getCheckResultType = (result: any) => {
   const map = {
     'PASS': 'success',
     'FAIL': 'danger',
     'NA': 'info',
     'PENDING': ''
   }
-  return map[result] || ''
+  return (map as Record<string, any>)[result] || ''
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...filters
@@ -666,7 +666,7 @@ const loadData = async () => {
     const res = await getDebugRecords(params)
     recordList.value = res.results || res || []
     pagination.total = res.count || (Array.isArray(recordList.value) ? recordList.value.length : 0)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载调试记录失败:', error)
   } finally {
     loading.value = false
@@ -678,7 +678,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目列表失败:', error)
   }
 }
@@ -688,7 +688,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载用户列表失败:', error)
   }
 }
@@ -710,24 +710,24 @@ const handleReset = () => {
 }
 
 // 分页
-const handleSizeChange = (size) => {
+const handleSizeChange = (size: any) => {
   pagination.pageSize = size
   pagination.page = 1
   loadData()
 }
 
-const handlePageChange = (page) => {
+const handlePageChange = (page: any) => {
   pagination.page = page
   loadData()
 }
 
 // 点击行查看详情
-const handleRowClick = async (row) => {
+const handleRowClick = async (row: any) => {
   try {
     const res = await getDebugRecord(row.id)
     currentRecord.value = res
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载详情失败:', error)
   }
 }
@@ -751,7 +751,7 @@ const handleAdd = () => {
 }
 
 // 编辑
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑调试记录'
   Object.assign(formData, {
     id: row.id,
@@ -772,18 +772,18 @@ const handleEdit = (row) => {
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 开始调试
-const handleStartDebug = async (row) => {
+const handleStartDebug = async (row: any) => {
   try {
     await startDebug(row.id)
     ElMessage.success('调试已开始')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('开始调试失败:', error)
   }
 }
 
 // 完成调试
-const handleCompleteDebug = (row) => {
+const handleCompleteDebug = (row: any) => {
   currentRecord.value = row
   Object.assign(completeFormData, {
     result: 'PASS',
@@ -801,14 +801,14 @@ const handleCompleteConfirm = async () => {
     ElMessage.warning('请选择调试结果')
     return
   }
-  
+
   try {
     saving.value = true
     await completeDebug(currentRecord.value.id, completeFormData)
     ElMessage.success('调试已完成')
     completeDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('完成调试失败:', error)
   } finally {
     saving.value = false
@@ -818,11 +818,11 @@ const handleCompleteConfirm = async () => {
 // 保存
 const handleSave = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
     const data = { ...formData }
     if (data.id) {
       await updateDebugRecord(data.id, data)
@@ -831,10 +831,10 @@ const handleSave = async () => {
       await createDebugRecord(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('保存失败:', error)
     }
@@ -874,7 +874,7 @@ const handleCheckItemsConfirm = async () => {
     ElMessage.warning('请至少添加一个检查项')
     return
   }
-  
+
   try {
     saving.value = true
     await addDebugCheckItems(currentRecord.value.id, {
@@ -882,11 +882,11 @@ const handleCheckItemsConfirm = async () => {
     })
     ElMessage.success('检查项已添加')
     checkItemDialogVisible.value = false
-    
+
     // 刷新详情
     const res = await getDebugRecord(currentRecord.value.id)
     currentRecord.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error('添加检查项失败:', error)
   } finally {
     saving.value = false

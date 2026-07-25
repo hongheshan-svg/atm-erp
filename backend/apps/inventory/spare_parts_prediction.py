@@ -233,9 +233,7 @@ class PurchaseSuggestionView(APIView):
         if not suggestion_id:
             return Response({'error': '请提供采购建议 id'}, status=400)
         if new_status not in valid_status:
-            return Response(
-                {'error': f'非法状态: {new_status}，可选值 {list(valid_status.keys())}'}, status=400
-            )
+            return Response({'error': f'非法状态: {new_status}，可选值 {list(valid_status.keys())}'}, status=400)
         try:
             suggestion = PurchaseSuggestion.objects.get(id=suggestion_id, is_deleted=False)
         except PurchaseSuggestion.DoesNotExist:

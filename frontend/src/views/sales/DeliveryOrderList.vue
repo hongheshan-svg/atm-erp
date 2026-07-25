@@ -48,43 +48,43 @@
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleView(row)">查看</el-button>
-            
+
             <!-- 草稿/已拒绝: 可提交 -->
-            <el-button size="small" type="warning" @click="handleSubmit(row)" 
+            <el-button size="small" type="warning" @click="handleSubmit(row)"
                        v-if="['DRAFT', 'REJECTED'].includes(row.status)">
               提交审批
             </el-button>
-            
+
             <!-- 审批中: 查看审批进度 -->
-            <el-button size="small" type="info" @click="viewWorkflow(row)" 
+            <el-button size="small" type="info" @click="viewWorkflow(row)"
                        v-if="['SUBMITTED', 'PENDING'].includes(row.status)">
               审批进度
             </el-button>
-            
+
             <!-- 已审批/备货中: 确认备货 -->
-            <el-button size="small" type="primary" @click="handleConfirmPrepared(row)" 
+            <el-button size="small" type="primary" @click="handleConfirmPrepared(row)"
                        v-if="['APPROVED', 'PREPARING'].includes(row.status)">
               备货完成
             </el-button>
-            
+
             <!-- 预约物流中: 确认物流 -->
-            <el-button size="small" type="primary" @click="handleConfirmLogistics(row)" 
+            <el-button size="small" type="primary" @click="handleConfirmLogistics(row)"
                        v-if="row.status === 'LOGISTICS_BOOKING'">
               确认物流
             </el-button>
-            
+
             <!-- 待签收: 确认签收 -->
-            <el-button size="small" type="primary" @click="handleConfirmSigned(row)" 
+            <el-button size="small" type="primary" @click="handleConfirmSigned(row)"
                        v-if="row.status === 'CUSTOMER_SIGNING'">
               确认签收
             </el-button>
-            
+
             <!-- 待上传: 上传送货单 -->
-            <el-button size="small" type="primary" @click="handleUploadReceipt(row)" 
+            <el-button size="small" type="primary" @click="handleUploadReceipt(row)"
                        v-if="row.status === 'UPLOADING_RECEIPT'">
               上传送货单
             </el-button>
-            
+
             <!-- 待项目确认: 项目确认 -->
             <el-button size="small" type="success" @click="handleProjectConfirm(row)"
                        v-if="row.status === 'PROJECT_CONFIRMING'">
@@ -98,11 +98,11 @@
             </el-button>
 
             <!-- 草稿/已拒绝: 可删除 -->
-            <el-button 
+            <el-button
               v-if="canDelete && ['DRAFT', 'REJECTED'].includes(row.status)"
-              size="small" 
-              type="danger" 
-              @click="deleteRow(row)" 
+              size="small"
+              type="danger"
+              @click="deleteRow(row)"
               :loading="deleteLoading"
             >
               删除
@@ -244,7 +244,7 @@
           <el-input v-model="signedForm.signed_by" placeholder="请输入签收人姓名" />
         </el-form-item>
         <el-form-item label="签收日期" required>
-          <el-date-picker v-model="signedForm.signed_date" type="date" value-format="YYYY-MM-DD" 
+          <el-date-picker v-model="signedForm.signed_date" type="date" value-format="YYYY-MM-DD"
                           placeholder="选择签收日期" style="width: 100%" />
         </el-form-item>
       </el-form>
@@ -327,10 +327,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'DELIVERY_ORDER'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -347,31 +347,31 @@ const logisticsDialogVisible = ref(false)
 const signedDialogVisible = ref(false)
 const uploadDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
-const currentRowId = ref(null)
-const uploadFile = ref(null)
+const currentRowId = ref<any>(null)
+const uploadFile = ref<any>(null)
 
 // 表单
-const logisticsForm = reactive({
+const logisticsForm = reactive<Record<string, any>>({
   logistics_company: '',
   tracking_number: '',
   logistics_cost: null
 })
 
-const signedForm = reactive({
+const signedForm = reactive<Record<string, any>>({
   signed_by: '',
   signed_date: ''
 })
 
-const rejectForm = reactive({
+const rejectForm = reactive<Record<string, any>>({
   reason: ''
 })
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   delivery_no: '',
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -391,7 +391,7 @@ const statusOptions = [
   { value: 'REJECTED', label: '已拒绝' }
 ]
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'SUBMITTED': 'warning',
@@ -405,10 +405,10 @@ const getStatusType = (status) => {
     'COMPLETED': 'success',
     'REJECTED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const option = statusOptions.find(s => s.value === status)
   return option ? option.label : status
 }
@@ -433,7 +433,7 @@ const loadDeliveryOrders = async () => {
     const response = await getDeliveryOrders(params)
     deliveryOrders.value = response.results || response.data?.results || []
     pagination.total = response.count || response.data?.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载发货单失败:', error)
     ElMessage.error('加载发货单失败')
   } finally {
@@ -448,26 +448,26 @@ const resetSearch = () => {
   loadDeliveryOrders()
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getDeliveryOrder(row.id)
     currentDelivery.value = response.data || response
     activeTab.value = 'basic'
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载发货单详情失败:', error)
     ElMessage.error('加载发货单详情失败')
   }
 }
 
 // 提交发货申请
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交发货申请吗？', '提交确认', { type: 'info' })
     await submitDeliveryOrder(row.id)
     ElMessage.success('已提交发货申请')
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '提交失败')
     }
@@ -475,18 +475,18 @@ const handleSubmit = async (row) => {
 }
 
 // 查看审批进度
-const viewWorkflow = (row) => {
+const viewWorkflow = (row: any) => {
   showWorkflowProgress(row)
 }
 
 // 确认备货完成
-const handleConfirmPrepared = async (row) => {
+const handleConfirmPrepared = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定备货已完成吗？确认后将扣减库存。', '确认备货', { type: 'warning' })
     await confirmDeliveryPrepared(row.id)
     ElMessage.success('备货完成，已扣减库存')
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '操作失败')
     }
@@ -494,7 +494,7 @@ const handleConfirmPrepared = async (row) => {
 }
 
 // 确认物流信息
-const handleConfirmLogistics = (row) => {
+const handleConfirmLogistics = (row: any) => {
   currentRowId.value = row.id
   logisticsForm.logistics_company = row.logistics_company || ''
   logisticsForm.tracking_number = row.tracking_number || ''
@@ -513,7 +513,7 @@ const submitLogistics = async () => {
     ElMessage.success('物流信息已确认')
     logisticsDialogVisible.value = false
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '操作失败')
   } finally {
     submitting.value = false
@@ -521,7 +521,7 @@ const submitLogistics = async () => {
 }
 
 // 确认签收
-const handleConfirmSigned = (row) => {
+const handleConfirmSigned = (row: any) => {
   currentRowId.value = row.id
   signedForm.signed_by = ''
   signedForm.signed_date = ''
@@ -539,7 +539,7 @@ const submitSigned = async () => {
     ElMessage.success('签收信息已确认')
     signedDialogVisible.value = false
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '操作失败')
   } finally {
     submitting.value = false
@@ -547,13 +547,13 @@ const submitSigned = async () => {
 }
 
 // 上传送货单
-const handleUploadReceipt = (row) => {
+const handleUploadReceipt = (row: any) => {
   currentRowId.value = row.id
   uploadFile.value = null
   uploadDialogVisible.value = true
 }
 
-const handleFileChange = (file) => {
+const handleFileChange = (file: any) => {
   uploadFile.value = file.raw
 }
 
@@ -568,7 +568,7 @@ const submitUpload = async () => {
     ElMessage.success('送货单上传成功')
     uploadDialogVisible.value = false
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '上传失败')
   } finally {
     submitting.value = false
@@ -576,13 +576,13 @@ const submitUpload = async () => {
 }
 
 // 项目确认
-const handleProjectConfirm = async (row) => {
+const handleProjectConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定项目已确认完成吗？', '项目确认', { type: 'success' })
     await projectConfirmDelivery(row.id)
     ElMessage.success('发货流程已完成')
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '操作失败')
     }
@@ -590,7 +590,7 @@ const handleProjectConfirm = async (row) => {
 }
 
 // 拒绝
-const handleReject = (row) => {
+const handleReject = (row: any) => {
   currentRowId.value = row.id
   rejectForm.reason = ''
   rejectDialogVisible.value = true
@@ -607,7 +607,7 @@ const submitReject = async () => {
     ElMessage.success('已拒绝')
     rejectDialogVisible.value = false
     loadDeliveryOrders()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '操作失败')
   } finally {
     submitting.value = false
@@ -618,12 +618,12 @@ const submitReject = async () => {
 // handleDelete 已被 useBatchDelete 的 deleteRow 替代
 
 // 打印
-const handlePrint = (row) => {
+const handlePrint = (row: any) => {
   if (!row) {
     ElMessage.warning('请选择要打印的发货单')
     return
   }
-  
+
   const printContent = `
     <!DOCTYPE html>
     <html>
@@ -652,7 +652,7 @@ const handlePrint = (row) => {
         <h1>发货单</h1>
         <p>Delivery Order</p>
       </div>
-      
+
       <div class="info-section">
         <h3>基本信息</h3>
         <table class="info-table">
@@ -677,7 +677,7 @@ const handlePrint = (row) => {
           <tr><td>包装方式</td><td>${row.packaging_type_display || '-'}</td><td>需要保险</td><td>${row.needs_insurance ? '是' : '否'}</td></tr>
         </table>
       </div>
-      
+
       <div class="info-section">
         <h3>产品明细</h3>
         <table class="items-table">
@@ -685,7 +685,7 @@ const handlePrint = (row) => {
             <tr><th>序号</th><th>物料编码</th><th>物料名称</th><th>规格</th><th>单位</th><th class="number">数量</th><th>备注</th></tr>
           </thead>
           <tbody>
-            ${(row.lines || []).map((line, index) => `
+            ${(row.lines || []).map((line: any, index: any) => `
               <tr>
                 <td>${index + 1}</td>
                 <td>${line.item_sku || '-'}</td>
@@ -699,16 +699,16 @@ const handlePrint = (row) => {
           </tbody>
         </table>
       </div>
-      
+
       ${row.notes ? `<div style="margin: 20px 0;"><strong>备注：</strong>${row.notes}</div>` : ''}
-      
+
       <div class="footer">
         <div style="display: flex; justify-content: space-between;">
           <div><p>发货人：____________</p><p>日期：____________</p></div>
           <div><p>收货人：____________</p><p>日期：____________</p></div>
         </div>
       </div>
-      
+
       <div class="no-print" style="text-align: center; margin-top: 20px;">
         <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px;">打印</button>
         <button onclick="window.close()" style="padding: 10px 30px; font-size: 16px; margin-left: 10px;">关闭</button>
@@ -716,8 +716,12 @@ const handlePrint = (row) => {
     </body>
     </html>
   `
-  
+
   const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    ElMessage.error('无法打开打印窗口，请检查浏览器弹窗设置')
+    return
+  }
   printWindow.document.write(printContent)
   printWindow.document.close()
   printWindow.focus()

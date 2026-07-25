@@ -248,7 +248,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
         # owner 可写但非必填；未传时由 ScheduleViewSet.perform_create 默认当前用户
         extra_kwargs = {'owner': {'required': False}}
 
-    def get_participant_names(self, obj):
+    def get_participant_names(self, obj) -> list[str]:
         return [u.get_full_name() for u in obj.participants.all()]
 
 
@@ -356,7 +356,7 @@ class MeetingListSerializer(serializers.ModelSerializer):
             'participant_count',
         ]
 
-    def get_participant_count(self, obj):
+    def get_participant_count(self, obj) -> int:
         return obj.meeting_participants.count()
 
 
@@ -514,9 +514,7 @@ class MeetingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         if exclude_pk is not None:
             conflict_qs = conflict_qs.exclude(pk=exclude_pk)
         if conflict_qs.exists():
-            raise serializers.ValidationError(
-                {'meeting_room': '该会议室在所选时段已被预定，请选择其他时段或会议室'}
-            )
+            raise serializers.ValidationError({'meeting_room': '该会议室在所选时段已被预定，请选择其他时段或会议室'})
 
     def perform_create(self, serializer):
         data = serializer.validated_data

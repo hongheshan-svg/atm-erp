@@ -26,7 +26,7 @@ Page({
 
   switchTab(e) {
     const tab = e.currentTarget.dataset.tab
-    this.setData({ 
+    this.setData({
       currentTab: tab,
       noMore: false
     })
@@ -76,8 +76,8 @@ Page({
       ...item,
       amount_display: app.formatMoney(item.amount),
       submit_time_display: app.formatDateTime(item.submit_time),
-      progress: item.total_steps > 0 
-        ? Math.round((item.current_step - 1) / item.total_steps * 100) 
+      progress: item.total_steps > 0
+        ? Math.round((item.current_step - 1) / item.total_steps * 100)
         : 0
     }))
 
@@ -89,8 +89,8 @@ Page({
 
   goToDetail(e) {
     const { id, type } = e.currentTarget.dataset
-    wx.navigateTo({ 
-      url: `/pages/approval/detail?id=${id}&type=${type}` 
+    wx.navigateTo({
+      url: `/pages/approval/detail?id=${id}&type=${type}`
     })
   },
 

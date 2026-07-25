@@ -139,7 +139,7 @@
         <el-form-item label="项目描述">
           <el-input v-model="quoteForm.description" type="textarea" :rows="3" placeholder="描述项目需求" />
         </el-form-item>
-        
+
         <el-divider>成本估算</el-divider>
         <el-row :gutter="16">
           <el-col :span="8">
@@ -175,7 +175,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-divider>报价金额</el-divider>
         <el-row :gutter="16">
           <el-col :span="8">
@@ -208,7 +208,7 @@
         </el-row>
 
         <el-form-item label="参照项目">
-          <el-select v-model="quoteForm.reference_project" filterable clearable placeholder="选择参照项目" 
+          <el-select v-model="quoteForm.reference_project" filterable clearable placeholder="选择参照项目"
                      style="width: 100%" @change="handleEstimateFromReference">
             <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
@@ -299,7 +299,7 @@
           <el-button type="primary" @click="findSimilar" :loading="searchingSimilar">搜索</el-button>
         </el-form-item>
       </el-form>
-      
+
       <el-table :data="similarProjects" stripe style="margin-top: 16px">
         <el-table-column prop="project_name" label="项目名称" min-width="180" />
         <el-table-column prop="project_type" label="类型" width="100" />
@@ -354,24 +354,24 @@ const quotes = ref<any[]>([])
 const customers = ref<any[]>([])
 const opportunities = ref<any[]>([])
 const projects = ref<any[]>([])
-const currentQuote = ref(null)
+const currentQuote = ref<any>(null)
 const similarProjects = ref<any[]>([])
 
 const similarKeywords = ref<any[]>([])
 const similarIndustry = ref('')
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   customer: null,
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const quoteForm = reactive({
+const quoteForm = reactive<Record<string, any>>({
   customer: null,
   opportunity: null,
   title: '',
@@ -396,19 +396,19 @@ const quoteRules = {
   quote_amount: [{ required: true, message: '请输入报价金额', trigger: 'blur' }]
 }
 
-const quoteFormRef = ref(null)
+const quoteFormRef = ref<any>(null)
 
-const formatMoney = (val) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+const formatMoney = (val: any) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     DRAFT: 'info', SUBMITTED: 'warning', REVIEWING: 'warning',
     APPROVED: 'success', SENT: 'primary', ACCEPTED: 'success', LOST: 'danger', REJECTED: 'danger'
   }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getProfitClass = (margin) => {
+const getProfitClass = (margin: any) => {
   if (margin < 10) return 'profit-low'
   if (margin < 20) return 'profit-medium'
   return 'profit-high'
@@ -417,14 +417,14 @@ const getProfitClass = (margin) => {
 const loadQuotes = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize }
     if (filters.customer) params.customer = filters.customer
     if (filters.status) params.status = filters.status
 
     const res = await getQuoteVersions(params)
     quotes.value = res.results || res
     pagination.total = res.count || quotes.value.length
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载报价列表失败')
   } finally {
     loading.value = false
@@ -435,7 +435,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载客户列表失败')
   }
 }
@@ -444,7 +444,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000, status: 'COMPLETED' })
     projects.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载项目列表失败')
   }
 }
@@ -463,47 +463,46 @@ const createQuote = async () => {
     ElMessage.success('报价创建成功')
     showCreateDialog.value = false
     loadQuotes()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewQuote = async (row) => {
+const viewQuote = async (row: any) => {
   try {
     const res = await getQuoteVersion(row.id)
     currentQuote.value = res
     showDetailDrawer.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载报价详情失败')
   }
 }
 
-const createNewVersion = async (row) => {
+const createNewVersion = async (row: any) => {
   try {
     const res = await createNewQuoteVersion(row.id)
     ElMessage.success(`新版本 V${res.version} 已创建`)
     loadQuotes()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('创建新版本失败')
   }
 }
 
-const predictProfit = async (row) => {
+const predictProfit = async (row: any) => {
   try {
     const res = await getQuoteVersionProfitPrediction(row.id)
-    const riskColors = { LOW: '#67C23A', MEDIUM: '#E6A23C', HIGH: '#F56C6C' }
     ElMessage({
       message: `预期利润: ¥${formatMoney(res.expected_profit)}, 利润率: ${res.profit_margin}%, 风险: ${res.risk_level}`,
       type: res.risk_level === 'LOW' ? 'success' : (res.risk_level === 'HIGH' ? 'error' : 'warning')
     })
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('获取利润预测失败')
   }
 }
 
-const handleEstimateFromReference = async (projectId) => {
+const handleEstimateFromReference = async (projectId: any) => {
   if (!projectId) return
   try {
     const res = await estimateFromReference(currentQuote.value?.id || 0, {
@@ -520,7 +519,7 @@ const handleEstimateFromReference = async (projectId) => {
       quoteForm.estimated_days = res.estimated_days || 30
       ElMessage.success('已从参照项目估算成本')
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('估算失败')
   }
 }
@@ -533,18 +532,18 @@ const findSimilar = async () => {
       industry: similarIndustry.value
     })
     similarProjects.value = res || []
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('搜索失败')
   } finally {
     searchingSimilar.value = false
   }
 }
 
-const useAsReference = (project) => {
+const useAsReference = (project: any) => {
   showSimilarDialog.value = false
   showCreateDialog.value = true
   quoteForm.reference_project = project.project_id
-  estimateFromReference(project.project_id)
+  void handleEstimateFromReference(project.project_id)
 }
 
 onMounted(() => {

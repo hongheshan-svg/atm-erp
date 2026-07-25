@@ -6,7 +6,7 @@
         <el-button type="primary" @click="handleInitLevels">初始化等级</el-button>
       </div>
     </div>
-    
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="信用列表" name="list">
         <el-card shadow="never">
@@ -33,7 +33,7 @@
               </el-form-item>
             </el-form>
           </template>
-          
+
           <el-table :data="creditList" v-loading="loading" border stripe>
             <el-table-column prop="customer_code" label="客户编码" width="120" />
             <el-table-column prop="customer_name" label="客户名称" min-width="180" show-overflow-tooltip />
@@ -78,7 +78,7 @@
               </template>
             </el-table-column>
           </el-table>
-          
+
           <el-pagination
             v-model:current-page="pagination.page"
             v-model:page-size="pagination.size"
@@ -90,7 +90,7 @@
           />
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="信用等级" name="levels">
         <el-card shadow="never">
           <el-table :data="creditLevels" border stripe>
@@ -116,7 +116,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="预警客户" name="warning">
         <el-card shadow="never">
           <el-table :data="warningList" border stripe>
@@ -141,10 +141,10 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="统计分析" name="stats">
         <el-row :gutter="16">
-          <el-col :span="6" v-for="(stat, key) in statistics" :key="key">
+          <el-col :span="6" v-for="stat in statistics" :key="stat.label">
             <el-card shadow="never" class="stat-card">
               <div class="stat-value">{{ stat.value }}</div>
               <div class="stat-label">{{ stat.label }}</div>
@@ -153,7 +153,7 @@
         </el-row>
       </el-tab-pane>
     </el-tabs>
-    
+
     <!-- 额度调整对话框 -->
     <el-dialog v-model="adjustDialogVisible" title="调整信用额度" width="500px">
       <el-form :model="adjustForm" label-width="100px">
@@ -186,7 +186,7 @@
         <el-button type="primary" @click="submitAdjust" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 状态变更对话框 -->
     <el-dialog v-model="statusDialogVisible" title="变更信用状态" width="400px">
       <el-form :model="statusForm" label-width="80px">
@@ -250,13 +250,13 @@ const creditLevels = ref<any[]>([])
 const warningList = ref<any[]>([])
 const statsData = ref<Record<string, any>>({})
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   credit_level: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -264,34 +264,34 @@ const pagination = reactive({
 
 const adjustDialogVisible = ref(false)
 const statusDialogVisible = ref(false)
-const currentCredit = ref(null)
+const currentCredit = ref<any>(null)
 
-const adjustForm = reactive({
+const adjustForm = reactive<Record<string, any>>({
   adjustment_type: 'INCREASE',
   amount: 0,
   expire_date: '',
   reason: ''
 })
 
-const statusForm = reactive({
+const statusForm = reactive<Record<string, any>>({
   status: 'NORMAL',
   reason: ''
 })
 
-const statistics = computed(() => {
-  if (!statsData.value) return {}
-  return {
-    total: { label: '客户总数', value: statsData.value.total_customers || 0 },
-    limit: { label: '总信用额度', value: '¥' + formatNumber(statsData.value.total_credit_limit || 0) },
-    used: { label: '已用额度', value: '¥' + formatNumber(statsData.value.total_used_amount || 0) },
-    rate: { label: '整体使用率', value: (statsData.value.overall_usage_rate || 0) + '%' }
-  }
+const statistics = computed<any[]>(() => {
+  if (!statsData.value) return []
+  return [
+    { label: '客户总数', value: statsData.value.total_customers || 0 },
+    { label: '总信用额度', value: '¥' + formatNumber(statsData.value.total_credit_limit || 0) },
+    { label: '已用额度', value: '¥' + formatNumber(statsData.value.total_used_amount || 0) },
+    { label: '整体使用率', value: (statsData.value.overall_usage_rate || 0) + '%' },
+  ]
 })
 
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       ...queryParams
@@ -299,7 +299,7 @@ const fetchList = async () => {
     const data = await getCustomerCreditList(params)
     creditList.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -310,7 +310,7 @@ const fetchLevels = async () => {
   try {
     const data = await getCreditLevelList()
     creditLevels.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -319,7 +319,7 @@ const fetchWarningList = async () => {
   try {
     const data = await getCreditWarningList({ threshold: 80 })
     warningList.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -328,7 +328,7 @@ const fetchStatistics = async () => {
   try {
     const data = await getCreditStatistics()
     statsData.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -338,12 +338,12 @@ const handleInitLevels = async () => {
     const data = await initCreditLevels()
     ElMessage.success(`初始化完成，新增 ${data.created} 个等级`)
     fetchLevels()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('初始化失败')
   }
 }
 
-const handleAdjust = (row) => {
+const handleAdjust = (row: any) => {
   currentCredit.value = row
   Object.assign(adjustForm, {
     adjustment_type: 'INCREASE',
@@ -354,18 +354,18 @@ const handleAdjust = (row) => {
   adjustDialogVisible.value = true
 }
 
-const handleChangeStatus = (row) => {
+const handleChangeStatus = (row: any) => {
   currentCredit.value = row
   statusForm.status = row.status
   statusForm.reason = ''
   statusDialogVisible.value = true
 }
 
-const handleViewDetail = async (row) => {
+const handleViewDetail = async (row: any) => {
   try {
     const res = await getCustomerCredit(row.id)
     creditDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     creditDetail.value = row
   }
@@ -377,14 +377,14 @@ const submitAdjust = async () => {
     ElMessage.warning('请输入调整金额')
     return
   }
-  
+
   submitLoading.value = true
   try {
     await adjustCredit(currentCredit.value.id, adjustForm)
     ElMessage.success('调整成功')
     adjustDialogVisible.value = false
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('调整失败')
   } finally {
     submitLoading.value = false
@@ -398,32 +398,32 @@ const submitStatus = async () => {
     ElMessage.success('状态变更成功')
     statusDialogVisible.value = false
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('状态变更失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getUsageStatus = (rate) => {
+const getUsageStatus = (rate: any) => {
   if (rate >= 90) return 'exception'
   if (rate >= 70) return 'warning'
   return 'success'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     NORMAL: 'success',
     WARNING: 'warning',
     FROZEN: 'danger',
     BLACKLIST: 'info'
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

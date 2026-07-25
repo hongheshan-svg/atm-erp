@@ -63,9 +63,9 @@
   <!-- 审批操作 (仅待审批时显示) -->
   <view wx:if="{{canApprove}}" class="action-section">
     <view class="comment-input">
-      <textarea 
-        class="textarea" 
-        placeholder="请输入审批意见（拒绝时必填）" 
+      <textarea
+        class="textarea"
+        placeholder="请输入审批意见（拒绝时必填）"
         value="{{comment}}"
         bindinput="onCommentInput"
         maxlength="500"

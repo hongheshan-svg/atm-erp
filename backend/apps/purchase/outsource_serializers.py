@@ -51,10 +51,10 @@ class OutsourceOrderLineSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['process_amount', 'sent_qty', 'received_qty']
 
-    def get_remaining_send_qty(self, obj):
+    def get_remaining_send_qty(self, obj) -> float:
         return float(obj.qty - obj.sent_qty)
 
-    def get_remaining_receive_qty(self, obj):
+    def get_remaining_receive_qty(self, obj) -> float:
         return float(obj.sent_qty - obj.received_qty)
 
 
@@ -104,7 +104,7 @@ class OutsourceOrderSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_lines_count(self, obj):
+    def get_lines_count(self, obj) -> int:
         return obj.lines.filter(is_deleted=False).count()
 
     def create(self, validated_data):

@@ -96,8 +96,8 @@ class KanbanWIPService:
             if s['level'] in ('warning', 'blocked'):
                 alert_type = 'critical' if s['level'] == 'blocked' else 'warning'
                 message = (
-                    f"工序 {s['process_name']} 当前WIP={s['current_wip']}, "
-                    f"上限={s['wip_limit']}, 利用率={s['utilization_pct']}%"
+                    f'工序 {s["process_name"]} 当前WIP={s["current_wip"]}, '
+                    f'上限={s["wip_limit"]}, 利用率={s["utilization_pct"]}%'
                 )
                 alert = KanbanWIPAlert.objects.create(
                     process_name=s['process_name'],

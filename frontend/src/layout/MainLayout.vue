@@ -1,6 +1,18 @@
 <template>
-  <el-container v-if="userStore.profileReady" class="layout-container">
-    <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
+  <el-container
+    v-if="userStore.profileReady"
+    class="layout-container"
+    :class="{ 'is-mobile': isMobile }"
+  >
+    <el-aside
+      v-show="!isMobile || isMobileMenuOpen"
+      :width="isMobile ? '240px' : (isCollapse ? '64px' : '240px')"
+      class="sidebar"
+      :class="{
+        'is-mobile-sidebar': isMobile,
+        'is-mobile-open': isMobile && isMobileMenuOpen
+      }"
+    >
       <div class="logo">
         <div class="logo-icon" @click="$router.push('/')">
           <svg :width="isCollapse ? 24 : 20" :height="isCollapse ? 24 : 20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -30,6 +42,7 @@
         :collapse="isCollapse"
         :collapse-transition="false"
         router
+        @select="closeMobileMenu"
       >
         <DynamicMenu :menus="permissionStore.menus" />
       </el-menu>
@@ -43,21 +56,42 @@
       </div>
     </el-aside>
 
-    <el-container class="main-container">
+    <div
+      v-if="isMobile && isMobileMenuOpen"
+      class="sidebar-backdrop"
+      @click="closeMobileMenu"
+    ></div>
+
+    <el-container
+      class="main-container"
+      :style="{ width: isMobile ? '100%' : undefined }"
+    >
       <el-header class="header" height="56px">
         <div class="header-left">
-          <el-breadcrumb separator="/">
+          <button
+            v-if="isMobile"
+            type="button"
+            class="mobile-menu-trigger"
+            aria-label="打开导航菜单"
+            :aria-expanded="isMobileMenuOpen"
+            @click="toggleMobileMenu"
+          >
+            <el-icon :size="20"><Menu /></el-icon>
+          </button>
+          <el-breadcrumb v-if="!isMobile" separator="/">
             <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="$route.meta.title">{{ $route.meta.title }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
 
         <div class="header-right">
-          <GlobalSearch />
-          <el-tooltip content="切换主题" placement="bottom">
+          <div class="header-search">
+            <GlobalSearch />
+          </div>
+          <el-tooltip v-if="!isMobile" content="切换主题" placement="bottom">
             <el-icon class="header-action" @click="toggleTheme"><Moon v-if="!isDark" /><Sunny v-else /></el-icon>
           </el-tooltip>
-          <el-tooltip content="全屏" placement="bottom">
+          <el-tooltip v-if="!isMobile" content="全屏" placement="bottom">
             <el-icon class="header-action" @click="toggleFullscreen"><FullScreen /></el-icon>
           </el-tooltip>
           <el-dropdown @command="handleCommand" trigger="click">
@@ -100,10 +134,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { Fold, Expand, User, Lock, SwitchButton, FullScreen, ArrowDown, Moon, Sunny } from '@element-plus/icons-vue'
+import { Fold, Expand, Menu, User, Lock, SwitchButton, FullScreen, ArrowDown, Moon, Sunny } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import GlobalSearch from '@/components/GlobalSearch.vue'
 import { useTheme } from '@/utils/theme'
@@ -119,10 +153,36 @@ const userStore = useUserStore()
 const permissionStore = usePermissionStore()
 const { companyName, companyShortName, loadCompanyConfig } = useCompanyConfig()
 
+const MOBILE_BREAKPOINT = 768
 const isCollapse = ref(false)
+const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT)
+const isMobileMenuOpen = ref(false)
 
 const toggleCollapse = () => {
+  if (isMobile.value) {
+    isMobileMenuOpen.value = false
+    return
+  }
   isCollapse.value = !isCollapse.value
+}
+
+const toggleMobileMenu = () => {
+  isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+
+const closeMobileMenu = () => {
+  isMobileMenuOpen.value = false
+}
+
+const updateViewport = () => {
+  const mobile = window.innerWidth < MOBILE_BREAKPOINT
+  if (mobile !== isMobile.value) {
+    isMobile.value = mobile
+    if (mobile) {
+      isCollapse.value = false
+    }
+    closeMobileMenu()
+  }
 }
 
 const toggleFullscreen = () => {
@@ -133,7 +193,7 @@ const toggleFullscreen = () => {
   }
 }
 
-const handleCommand = (command) => {
+const handleCommand = (command: any) => {
   if (command === 'logout') {
     ElMessageBox.confirm('确定要退出登录吗？', '提示', {
       confirmButtonText: '确定',
@@ -150,7 +210,12 @@ const handleCommand = (command) => {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', updateViewport)
   await loadCompanyConfig()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateViewport)
 })
 </script>
 
@@ -158,6 +223,10 @@ onMounted(async () => {
 .layout-container {
   height: 100vh;
   overflow: hidden;
+}
+
+.layout-container.is-mobile {
+  position: relative;
 }
 
 /* ---- Sidebar ---- */
@@ -168,6 +237,21 @@ onMounted(async () => {
   transition: width 0.28s var(--transition);
   border-right: none;
   overflow: hidden;
+}
+
+.sidebar.is-mobile-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 1001;
+  height: 100vh;
+  box-shadow: 8px 0 24px rgba(15, 23, 42, 0.18);
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.38);
 }
 
 .logo {
@@ -390,12 +474,41 @@ onMounted(async () => {
 .header-left {
   display: flex;
   align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.mobile-menu-trigger {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.mobile-menu-trigger:hover {
+  color: var(--primary);
+  background: var(--border-light);
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.header-search {
+  width: 400px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .header-action {
@@ -441,6 +554,7 @@ onMounted(async () => {
 .main-container {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -500,5 +614,30 @@ onMounted(async () => {
 }
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 767px) {
+  .header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .header-right {
+    flex: 1;
+    gap: 4px;
+  }
+
+  .header-search {
+    flex: 1;
+    width: auto;
+  }
+
+  .main-content {
+    padding: 12px;
+  }
+
+  .username {
+    display: none;
+  }
 }
 </style>

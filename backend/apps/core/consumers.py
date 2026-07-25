@@ -178,5 +178,6 @@ class UpgradeProgressConsumer(AsyncJsonWebsocketConsumer):
         if user.is_superuser:
             return True
         from apps.core.permission_service import get_user_permissions
+
         perms = get_user_permissions(user)
         return any(p == 'system:upgrade' or p.startswith('system:upgrade:') for p in perms)

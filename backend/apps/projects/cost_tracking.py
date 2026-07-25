@@ -330,6 +330,7 @@ class CostAlertSerializer(serializers.ModelSerializer):
 
 class ProjectBudgetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目预算管理"""
+
     permission_module = 'projects'
     permission_resource = 'project_budget'
 
@@ -351,6 +352,7 @@ class ProjectBudgetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class ProjectCostRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目成本记录"""
+
     permission_module = 'projects'
     permission_resource = 'project_cost_record'
 
@@ -373,6 +375,7 @@ class ProjectCostRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
 
 class CostAlertViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """成本预警管理"""
+
     permission_module = 'projects'
     permission_resource = 'cost_alert'
 

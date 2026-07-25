@@ -396,7 +396,7 @@ class AssemblySessionSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['session_no']
 
-    def get_progress_rate(self, obj):
+    def get_progress_rate(self, obj) -> float:
         if obj.guide.total_steps > 0:
             return round(obj.completed_steps / obj.guide.total_steps * 100, 1)
         return 0

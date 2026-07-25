@@ -13,7 +13,7 @@
         style="width: 280px"
       />
     </div>
-    
+
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <!-- 销售漏斗 -->
       <el-tab-pane label="销售漏斗" name="funnel">
@@ -49,7 +49,7 @@
           </el-col>
         </el-row>
       </el-tab-pane>
-      
+
       <!-- 客户分析 -->
       <el-tab-pane label="客户分析" name="customer">
         <el-row :gutter="16">
@@ -61,7 +61,7 @@
                   <el-button type="primary" size="small" @click="handleRFMAnalyze">执行分析</el-button>
                 </div>
               </template>
-              
+
               <el-row :gutter="16" class="segment-cards">
                 <el-col :span="4" v-for="seg in customerSegments" :key="seg.customer_segment">
                   <div class="segment-card" :style="{ borderColor: getSegmentColor(seg.customer_segment) }">
@@ -71,20 +71,20 @@
                   </div>
                 </el-col>
               </el-row>
-              
+
               <el-divider />
-              
+
               <!-- 批量操作 -->
-              
+
               <div v-if="selectedRows.length > 0" class="batch-toolbar">
-              
+
                 <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-              
-              
+
+
                 <el-button size="small" @click="batchExport">导出选中</el-button>
-              
+
               </div>
-              
+
               <el-table :data="topCustomers" border stripe max-height="300" @selection-change="handleSelectionChange">
                 <el-table-column type="selection" width="45" />
                 <el-table-column type="index" label="排名" width="60" />
@@ -105,14 +105,14 @@
           </el-col>
         </el-row>
       </el-tab-pane>
-      
+
       <!-- 销售趋势 -->
       <el-tab-pane label="销售趋势" name="trend">
         <el-card shadow="never" header="销售趋势">
           <div ref="trendChartRef" style="height: 400px"></div>
         </el-card>
       </el-tab-pane>
-      
+
       <!-- 销售排名 -->
       <el-tab-pane label="销售排名" name="ranking">
         <el-card shadow="never" header="销售人员排名">
@@ -145,18 +145,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAnalysisFunnel, getAnalysisTrend, getAnalysisRanking, getCustomerRFMSegmentSummary, getTopCustomers, analyzeCustomerRFM } from '@/api/sales'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/sales/')
 
 
 const activeTab = ref('funnel')
-const trendChartRef = ref(null)
-let trendChart = null
+const trendChartRef = ref<any>(null)
+let trendChart: any = null
 
 const dateRange = ref<any[]>([])
 
@@ -172,13 +172,13 @@ const maxAmount = computed(() => {
   return Math.max(...ranking.value.map(r => r.total_amount))
 })
 
-const getPercentage = (amount) => {
+const getPercentage = (amount: any) => {
   return Math.round(amount / maxAmount.value * 100)
 }
 
 const fetchFunnel = async () => {
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
@@ -191,7 +191,7 @@ const fetchFunnel = async () => {
       total_order_amount: data.total_order_amount,
       overall_conversion: data.overall_conversion
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -200,10 +200,10 @@ const fetchCustomerAnalysis = async () => {
   try {
     const segData = await getCustomerRFMSegmentSummary()
     customerSegments.value = segData?.segments || []
-    
+
     const topData = await getTopCustomers()
     topCustomers.value = topData?.customers || topData || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -214,7 +214,7 @@ const handleRFMAnalyze = async () => {
     const data = await analyzeCustomerRFM()
     ElMessage.success(`分析完成，共分析 ${data.analyzed_count} 个客户`)
     fetchCustomerAnalysis()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('分析失败')
   }
 }
@@ -224,7 +224,7 @@ const fetchTrend = async () => {
     const data = await getAnalysisTrend({ period: 'month', months: 12 })
     trendData.value = data.trend || []
     renderTrendChart()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -232,11 +232,11 @@ const fetchTrend = async () => {
 const renderTrendChart = async () => {
   await nextTick()
   if (!trendChartRef.value) return
-  
+
   if (!trendChart) {
     trendChart = echarts.init(trendChartRef.value)
   }
-  
+
   const option = {
     tooltip: {
       trigger: 'axis',
@@ -269,20 +269,20 @@ const renderTrendChart = async () => {
       }
     ]
   }
-  
+
   trendChart.setOption(option)
 }
 
 const fetchRanking = async () => {
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
     const data = await getAnalysisRanking(params)
     ranking.value = data.ranking || []
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -298,22 +298,22 @@ const handleTabChange = () => {
   fetchData()
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0'
   return parseFloat(num).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-const getStageColor = (stage) => {
+const getStageColor = (stage: any) => {
   const colors = {
     LEAD: '#409eff',
     OPPORTUNITY: '#67c23a',
     QUOTATION: '#e6a23c',
     ORDER: '#f56c6c'
   }
-  return colors[stage] || '#909399'
+  return (colors as Record<string, any>)[stage] || '#909399'
 }
 
-const getSegmentColor = (segment) => {
+const getSegmentColor = (segment: any) => {
   const colors = {
     '重要价值客户': '#67c23a',
     '潜力客户': '#409eff',
@@ -322,7 +322,7 @@ const getSegmentColor = (segment) => {
     '沉睡客户': '#f56c6c',
     '流失客户': '#909399'
   }
-  return colors[segment] || '#409eff'
+  return (colors as Record<string, any>)[segment] || '#409eff'
 }
 
 onMounted(() => {
@@ -333,7 +333,7 @@ onMounted(() => {
     start.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10)
   ]
-  
+
   fetchFunnel()
   fetchCustomerAnalysis()
 })

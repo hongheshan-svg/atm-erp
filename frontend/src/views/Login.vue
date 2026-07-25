@@ -87,10 +87,10 @@ const router = useRouter()
 const userStore = useUserStore()
 const { companyName, loadCompanyConfig } = useCompanyConfig()
 
-const loginFormRef = ref(null)
+const loginFormRef = ref<any>(null)
 const loading = ref(false)
 
-const loginForm = reactive({
+const loginForm = reactive<Record<string, any>>({
   username: '',
   password: ''
 })
@@ -111,7 +111,7 @@ const loginRules = {
 const handleLogin = async () => {
   if (!loginFormRef.value) return
 
-  await loginFormRef.value.validate(async (valid) => {
+  await loginFormRef.value.validate(async (valid: any) => {
     if (valid) {
       loading.value = true
       try {
@@ -124,7 +124,7 @@ const handleLogin = async () => {
         } else {
           ElMessage.error('用户名或密码错误')
         }
-      } catch (error) {
+      } catch (error: any) {
         ElMessage.error('登录失败，请稍后再试')
       } finally {
         loading.value = false

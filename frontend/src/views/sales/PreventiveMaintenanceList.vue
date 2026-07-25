@@ -211,7 +211,7 @@ const showDetailDrawer = ref(false)
 const maintenances = ref<any[]>([])
 const contracts = ref<any[]>([])
 const users = ref<any[]>([])
-const currentMaintenance = ref(null)
+const currentMaintenance = ref<any>(null)
 
 const dateRange = ref<any[]>([])
 const statusFilter = ref('')
@@ -223,13 +223,13 @@ const stats = ref({
   completedThisMonth: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const maintenanceForm = reactive({
+const maintenanceForm = reactive<Record<string, any>>({
   service_contract: null,
   name: '',
   frequency: 'MONTHLY',
@@ -246,26 +246,21 @@ const maintenanceRules = {
   scheduled_date: [{ required: true, message: '请选择计划日期', trigger: 'change' }]
 }
 
-const maintenanceFormRef = ref(null)
+const maintenanceFormRef = ref<any>(null)
 
-const formatDate = (date) => {
-  if (!date) return '-'
-  return new Date(date).toLocaleString('zh-CN')
-}
-
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { SCHEDULED: 'info', IN_PROGRESS: 'primary', COMPLETED: 'success', CANCELLED: 'warning', OVERDUE: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getDaysClass = (days) => {
+const getDaysClass = (days: any) => {
   if (days < 0) return 'days-overdue'
   if (days <= 3) return 'days-urgent'
   if (days <= 7) return 'days-soon'
   return ''
 }
 
-const daysUntil = (dateStr) => {
+const daysUntil = (dateStr: any) => {
   if (!dateStr) return 0
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -274,7 +269,7 @@ const daysUntil = (dateStr) => {
   return Math.round((target.getTime() - today.getTime()) / 86400000)
 }
 
-const formatDaysUntil = (days) => {
+const formatDaysUntil = (days: any) => {
   if (days > 0) return days + '天'
   if (days === 0) return '今天'
   return '逾期' + Math.abs(days) + '天'
@@ -283,7 +278,7 @@ const formatDaysUntil = (days) => {
 const loadMaintenances = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize }
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
@@ -293,7 +288,7 @@ const loadMaintenances = async () => {
     const res = await getPreventiveMaintenances(params)
     maintenances.value = res.results || res
     pagination.total = res.count || maintenances.value.length
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载预防维护列表失败')
   } finally {
     loading.value = false
@@ -310,7 +305,7 @@ const loadStats = async () => {
     stats.value.scheduled = scheduledRes.count || 0
     stats.value.dueThisWeek = upcomingRes?.length || 0
     stats.value.overdue = overdueRes?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载统计数据失败')
   }
 }
@@ -319,7 +314,7 @@ const loadContracts = async () => {
   try {
     const res = await getServiceContracts({ status: 'ACTIVE', page_size: 1000 })
     contracts.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载合同列表失败')
   }
 }
@@ -328,7 +323,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载用户列表失败')
   }
 }
@@ -339,41 +334,41 @@ const createMaintenance = async () => {
     submitting.value = true
     const data = { ...maintenanceForm }
     if (data.checklist) {
-      data.checklist = data.checklist.split('\n').filter(s => s.trim())
+      data.checklist = data.checklist.split('\n').filter((s: any) => s.trim())
     }
     await createPreventiveMaintenance(data)
     ElMessage.success('预防维护计划创建成功')
     showCreateDialog.value = false
     loadMaintenances()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewMaintenance = async (row) => {
+const viewMaintenance = async (row: any) => {
   try {
     const res = await getPreventiveMaintenance(row.id)
     currentMaintenance.value = res
     showDetailDrawer.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const startMaintenance = async (row) => {
+const startMaintenance = async (row: any) => {
   try {
     await startPreventiveMaintenance(row.id)
     ElMessage.success('维护已开始')
     loadMaintenances()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const completeMaintenance = async (row) => {
+const completeMaintenance = async (row: any) => {
   ElMessageBox.prompt('请输入检查发现/采取措施', '完成维护').then(async ({ value }) => {
     await completePreventiveMaintenance(row.id, {
       findings: value,

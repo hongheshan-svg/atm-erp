@@ -48,7 +48,7 @@
   <!-- 预算使用情况 -->
   <view class="card">
     <view class="card-title">预算使用</view>
-    
+
     <view class="budget-item">
       <view class="budget-header">
         <text class="budget-name">材料预算</text>

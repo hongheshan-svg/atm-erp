@@ -14,7 +14,7 @@
         <el-divider content-position="left">
           <el-icon><OfficeBuilding /></el-icon> 公司基本信息
         </el-divider>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="公司名称" required>
@@ -27,7 +27,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="税号">
@@ -40,7 +40,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="24">
             <el-form-item label="公司地址">
@@ -48,7 +48,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="公司电话">
@@ -70,7 +70,7 @@
         <el-divider content-position="left">
           <el-icon><Money /></el-icon> 银行信息
         </el-divider>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="开户银行">
@@ -83,14 +83,14 @@
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="注册资本">
-              <el-input-number 
-                v-model="form.registered_capital" 
-                :min="0" 
-                :precision="2" 
+              <el-input-number
+                v-model="form.registered_capital"
+                :min="0"
+                :precision="2"
                 :controls="false"
                 placeholder="注册资本（万元）"
                 style="width: 100%;"
@@ -102,7 +102,7 @@
         <el-divider content-position="left">
           <el-icon><Setting /></el-icon> 系统设置
         </el-divider>
-        
+
         <el-row :gutter="20">
           <el-col :span="8">
             <el-form-item label="默认货币">
@@ -124,9 +124,9 @@
         </el-row>
 
         <el-divider />
-        
-        <el-alert 
-          type="info" 
+
+        <el-alert
+          type="info"
           :closable="false"
           show-icon
         >
@@ -141,7 +141,7 @@
             <li>销方为 <strong>{{ form.company_name || '本公司' }}</strong> → 自动识别为 <el-tag type="primary" size="small">销项发票</el-tag></li>
           </ul>
         </el-alert>
-        
+
         <div class="update-info" v-if="form.updated_at">
           <el-text type="info" size="small">
             最后更新：{{ formatDateTime(form.updated_at) }}
@@ -162,7 +162,7 @@ import { getSystemConfig, saveSystemConfig } from '@/api/system'
 const loading = ref(false)
 const saving = ref(false)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   company_name: '',
   company_short_name: '',
   company_tax_no: '',
@@ -185,7 +185,7 @@ const loadConfig = async () => {
   try {
     const response = await getSystemConfig()
     Object.assign(form, response)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to load system config:', error)
     ElMessage.error('加载系统配置失败')
   } finally {
@@ -198,13 +198,13 @@ const handleSave = async () => {
     ElMessage.warning('请输入公司名称')
     return
   }
-  
+
   saving.value = true
   try {
     await saveSystemConfig(form)
     ElMessage.success('配置保存成功')
     loadConfig() // 重新加载以获取更新时间
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to save system config:', error)
     ElMessage.error('保存配置失败')
   } finally {
@@ -212,7 +212,7 @@ const handleSave = async () => {
   }
 }
 
-const formatDateTime = (dt) => {
+const formatDateTime = (dt: any) => {
   if (!dt) return ''
   return new Date(dt).toLocaleString('zh-CN')
 }
@@ -246,4 +246,3 @@ onMounted(() => {
   text-align: right;
 }
 </style>
-

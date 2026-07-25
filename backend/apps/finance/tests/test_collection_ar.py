@@ -10,10 +10,9 @@
 
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class CollectionRecordWritesBackToArTest(TestCase):
     """确认收款记录 -> 经单一写口回写应收;反确认/删除 -> 反核销。"""
 
@@ -53,8 +52,11 @@ class CollectionRecordWritesBackToArTest(TestCase):
             name='回款计划', customer=cust, sales_order=so, total_amount=Decimal('1000.00')
         )
         milestone = CollectionMilestone.objects.create(
-            plan=plan, milestone_type='ADVANCE', name='预付款',
-            planned_amount=Decimal('500.00'), planned_date='2026-07-01',
+            plan=plan,
+            milestone_type='ADVANCE',
+            name='预付款',
+            planned_amount=Decimal('500.00'),
+            planned_date='2026-07-01',
         )
         return cust, so, ars, plan, milestone
 
@@ -68,8 +70,11 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), payment_method='BANK', confirmed=False,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            payment_method='BANK',
+            confirmed=False,
         )
         # 未确认:不建 Payment,AR 不动
         self.assertIsNone(rec.payment_id)
@@ -106,8 +111,11 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('400.00'), payment_method='CASH', confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('400.00'),
+            payment_method='CASH',
+            confirmed=True,
         )
 
         self.assertEqual(Payment.objects.filter(ar=ar, payment_type='AR').count(), 1)
@@ -127,8 +135,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
         ar.refresh_from_db()
         self.assertEqual(ar.amount_paid, Decimal('300.00'))
@@ -153,8 +163,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
         pay_pk = rec.payment_id
         ar.refresh_from_db()
@@ -176,8 +188,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
         pay_pk = rec.payment_id
         ar.refresh_from_db()
@@ -201,8 +215,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
         first_pay_pk = rec.payment_id
 
@@ -225,8 +241,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         ar = ars[0]
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
         rec.confirmed = False
         rec.save()
@@ -251,8 +269,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         cust, so, ars, plan, milestone = self._setup(with_so=False)
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
 
         # 无 SO:不建 Payment、不崩溃,聚合照常
@@ -270,8 +290,10 @@ class CollectionRecordWritesBackToArTest(TestCase):
         cust, so, ars, plan, milestone = self._setup(ar_count=2)
 
         rec = CollectionRecord.objects.create(
-            milestone=milestone, collection_date='2026-07-05',
-            amount=Decimal('300.00'), confirmed=True,
+            milestone=milestone,
+            collection_date='2026-07-05',
+            amount=Decimal('300.00'),
+            confirmed=True,
         )
 
         self.assertIsNone(rec.payment_id)

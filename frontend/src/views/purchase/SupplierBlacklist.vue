@@ -9,7 +9,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <div class="filter-area">
         <el-input v-model="queryParams.search" placeholder="搜索供应商" style="width: 220px" clearable @keyup.enter="fetchData">
           <template #prefix><el-icon><Search /></el-icon></template>
@@ -53,10 +53,10 @@
         <el-table-column prop="lifted_reason" label="解除原因" width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button 
-              v-if="row.status === 'ACTIVE'" 
-              size="small" 
-              type="success" 
+            <el-button
+              v-if="row.status === 'ACTIVE'"
+              size="small"
+              type="success"
               @click="handleLift(row)"
             >
               解除
@@ -137,7 +137,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { getBlacklistList, createBlacklist, liftBlacklist } from '@/api/purchase/evaluation'
 import { getSupplierList } from '@/api/masterdata'
@@ -152,22 +152,22 @@ const total = ref(0)
 const suppliers = ref<any[]>([])
 const dialogVisible = ref(false)
 const liftDialogVisible = ref(false)
-const currentRecord = ref(null)
+const currentRecord = ref<any>(null)
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: '',
   page: 1,
   page_size: 20
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   supplier: null,
   blacklist_date: new Date().toISOString().split('T')[0],
   reason: ''
 })
 
-const liftForm = reactive({
+const liftForm = reactive<Record<string, any>>({
   reason: ''
 })
 
@@ -187,7 +187,7 @@ const fetchData = async () => {
     const res = await getBlacklistList(queryParams)
     blacklist.value = res.results || res || []
     total.value = res.count || blacklist.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -198,7 +198,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 1000 })
     suppliers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('SupplierBlacklist getSupplierList error:', error)
   }
 }
@@ -216,12 +216,12 @@ const handleCreate = () => {
 const viewDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   viewDetail.value = row
   viewDialogVisible.value = true
 }
 
-const handleLift = (row) => {
+const handleLift = (row: any) => {
   currentRecord.value = row
   liftForm.reason = ''
   liftDialogVisible.value = true
@@ -233,7 +233,7 @@ const handleSave = async () => {
     ElMessage.success('添加成功')
     dialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('添加失败')
   }
 }
@@ -244,7 +244,7 @@ const confirmLift = async () => {
     ElMessage.success('解除成功')
     liftDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('解除失败')
   }
 }

@@ -75,7 +75,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -88,24 +88,24 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 创建合同对话框（从销售订单创建） -->
     <el-dialog v-model="createDialogVisible" title="创建销售合同" width="500px">
       <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="100px">
         <el-form-item label="销售订单" prop="so_id">
-          <el-select 
-            v-model="createForm.so_id" 
-            placeholder="选择销售订单" 
+          <el-select
+            v-model="createForm.so_id"
+            placeholder="选择销售订单"
             filterable
             remote
             :remote-method="searchOrders"
             :loading="searchingOrders"
             style="width: 100%;"
           >
-            <el-option 
-              v-for="so in salesOrders" 
-              :key="so.id" 
-              :label="`${so.order_no} - ${so.customer_name}`" 
+            <el-option
+              v-for="so in salesOrders"
+              :key="so.id"
+              :label="`${so.order_no} - ${so.customer_name}`"
               :value="so.id"
             >
               <div style="display: flex; justify-content: space-between;">
@@ -121,7 +121,7 @@
         <el-button type="primary" v-permission="'sales:contract:create'" @click="handleCreateFromSO" :loading="creating">创建</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 编辑合同对话框 -->
     <el-dialog v-model="editDialogVisible" :title="dialogTitle" width="800px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -133,12 +133,12 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="合同日期" prop="contract_date">
-              <el-date-picker 
-                v-model="form.contract_date" 
-                type="date" 
-                value-format="YYYY-MM-DD" 
-                placeholder="选择日期" 
-                style="width: 100%;" 
+              <el-date-picker
+                v-model="form.contract_date"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 100%;"
               />
             </el-form-item>
           </el-col>
@@ -146,30 +146,30 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="生效日期">
-              <el-date-picker 
-                v-model="form.effective_date" 
-                type="date" 
-                value-format="YYYY-MM-DD" 
-                placeholder="选择日期" 
-                style="width: 100%;" 
+              <el-date-picker
+                v-model="form.effective_date"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 100%;"
               />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="到期日期">
-              <el-date-picker 
-                v-model="form.expiry_date" 
-                type="date" 
-                value-format="YYYY-MM-DD" 
-                placeholder="选择日期" 
-                style="width: 100%;" 
+              <el-date-picker
+                v-model="form.expiry_date"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 100%;"
               />
             </el-form-item>
           </el-col>
         </el-row>
-        
+
         <el-divider content-position="left">合同条款</el-divider>
-        
+
         <el-form-item label="付款条款">
           <el-input v-model="form.payment_terms" type="textarea" :rows="2" placeholder="输入付款条款" />
         </el-form-item>
@@ -191,7 +191,7 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 查看合同详情对话框 -->
     <el-dialog v-model="viewDialogVisible" title="合同详情" width="900px" destroy-on-close>
       <el-descriptions :column="2" border v-if="currentContract">
@@ -216,7 +216,7 @@
         <el-descriptions-item label="甲方签署人">{{ currentContract.buyer_signer || '-' }}</el-descriptions-item>
         <el-descriptions-item label="乙方签署人">{{ currentContract.seller_signer || '-' }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider content-position="left">合同条款</el-divider>
       <el-descriptions :column="1" border v-if="currentContract">
         <el-descriptions-item label="付款条款">{{ currentContract.payment_terms || '-' }}</el-descriptions-item>
@@ -225,7 +225,7 @@
         <el-descriptions-item label="质保条款">{{ currentContract.warranty_terms || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ currentContract.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
-      
+
       <el-divider content-position="left">订单明细</el-divider>
       <el-table :data="currentContract?.so_lines || []" border size="small">
         <el-table-column prop="item_sku" label="物料编码" width="120" />
@@ -240,12 +240,12 @@
           <template #default="{ row }">¥{{ parseFloat(row.line_amount || 0).toFixed(2) }}</template>
         </el-table-column>
       </el-table>
-      
+
       <template #footer>
         <el-button @click="viewDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 签署合同对话框 -->
     <el-dialog v-model="signDialogVisible" title="签署合同" width="500px">
       <el-form :model="signForm" :rules="signRules" ref="signFormRef" label-width="100px">
@@ -292,10 +292,10 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 )
 
 const workflowDialogVisible = ref(false)
-const workflowBusinessId = ref(null)
+const workflowBusinessId = ref<any>(null)
 const workflowBusinessType = 'SALES_CONTRACT'
 
-const showWorkflowProgress = (row) => {
+const showWorkflowProgress = (row: any) => {
   workflowBusinessId.value = row.id
   workflowDialogVisible.value = true
 }
@@ -308,29 +308,29 @@ const searchingOrders = ref(false)
 const contracts = ref<any[]>([])
 const customers = ref<any[]>([])
 const salesOrders = ref<any[]>([])
-const currentContract = ref(null)
+const currentContract = ref<any>(null)
 
 const createDialogVisible = ref(false)
 const editDialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const signDialogVisible = ref(false)
 const dialogTitle = ref('编辑合同')
-const formRef = ref(null)
-const createFormRef = ref(null)
-const signFormRef = ref(null)
+const formRef = ref<any>(null)
+const createFormRef = ref<any>(null)
+const signFormRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   customer: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const createForm = reactive({
+const createForm = reactive<Record<string, any>>({
   so_id: null
 })
 
@@ -338,7 +338,7 @@ const createRules = {
   so_id: [{ required: true, message: '请选择销售订单', trigger: 'change' }]
 }
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   title: '',
   contract_date: '',
@@ -356,7 +356,7 @@ const rules = {
   contract_date: [{ required: true, message: '请选择合同日期', trigger: 'change' }]
 }
 
-const signForm = reactive({
+const signForm = reactive<Record<string, any>>({
   buyer_signer: '',
   seller_signer: ''
 })
@@ -366,46 +366,46 @@ const signRules = {
   seller_signer: [{ required: true, message: '请输入乙方签署人', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
-  const types = { 
-    DRAFT: 'info', 
+const getStatusType = (status: any) => {
+  const types = {
+    DRAFT: 'info',
     PENDING: 'warning',
     APPROVED: 'success',
     REJECTED: 'danger',
     SIGNED: 'success',
-    COMPLETED: '', 
-    CANCELLED: 'danger' 
+    COMPLETED: '',
+    CANCELLED: 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
-  const labels = { 
-    DRAFT: '草稿', 
+const getStatusLabel = (status: any) => {
+  const labels = {
+    DRAFT: '草稿',
     PENDING: '待审批',
     APPROVED: '已审批',
     REJECTED: '已拒绝',
     SIGNED: '已签署',
-    COMPLETED: '已完成', 
-    CANCELLED: '已取消' 
+    COMPLETED: '已完成',
+    CANCELLED: '已取消'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
 const loadContracts = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
     if (searchForm.customer) params.customer = searchForm.customer
     if (searchForm.status) params.status = searchForm.status
-    
+
     const res = await getSalesContracts(params)
     contracts.value = res.results || res.results || res || []
     pagination.total = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载销售合同失败')
   } finally {
     loading.value = false
@@ -416,12 +416,12 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList()
     customers.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
 
-const searchOrders = async (query) => {
+const searchOrders = async (query: any) => {
   if (query) {
     searchingOrders.value = true
     try {
@@ -429,10 +429,10 @@ const searchOrders = async (query) => {
       // 改用标准订单列表搜索，仅过滤已确认及之后的订单（草稿/审批中不签合同）。
       const res = await getSalesOrders({ search: query, page_size: 50 })
       const list = res.results || res || []
-      salesOrders.value = list.filter(o =>
+      salesOrders.value = list.filter((o: any) =>
         ['CONFIRMED', 'PARTIAL', 'COMPLETED'].includes(o.status)
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error('搜索订单失败:', error)
     } finally {
       searchingOrders.value = false
@@ -459,17 +459,17 @@ const handleCreateFromSO = async () => {
   try {
     await createFormRef.value?.validate()
     creating.value = true
-    
+
     const res = await createContractFromSO({ so_id: createForm.so_id })
-    
+
     ElMessage.success('合同创建成功')
     createDialogVisible.value = false
     loadContracts()
-    
+
     // 打开编辑对话框
     const contract = res
     handleEdit(contract)
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '创建合同失败')
     }
@@ -478,23 +478,23 @@ const handleCreateFromSO = async () => {
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getSalesContract(row.id)
     currentContract.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取合同详情失败')
   }
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑合同'
-  
+
   try {
     const res = await getSalesContract(row.id)
     const data = res
-    
+
     Object.assign(form, {
       id: data.id,
       title: data.title || '',
@@ -507,9 +507,9 @@ const handleEdit = async (row) => {
       warranty_terms: data.warranty_terms || '',
       notes: data.notes || ''
     })
-    
+
     editDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取合同详情失败')
   }
 }
@@ -518,7 +518,7 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     await patchSalesContract(form.id, {
       title: form.title,
       contract_date: form.contract_date,
@@ -530,11 +530,11 @@ const handleSave = async () => {
       warranty_terms: form.warranty_terms,
       notes: form.notes
     })
-    
+
     ElMessage.success('合同保存成功')
     editDialogVisible.value = false
     loadContracts()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存合同失败')
     }
@@ -543,7 +543,7 @@ const handleSave = async () => {
   }
 }
 
-const handleSubmitApproval = async (row) => {
+const handleSubmitApproval = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交该合同进行审批吗？', '提交审批', { type: 'warning' })
     const response = await submitSalesContract(row.id)
@@ -554,7 +554,7 @@ const handleSubmitApproval = async (row) => {
       ElMessage.success(data.message || '操作成功')
     }
     loadContracts()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       const msg = error.response?.data?.error || '提交失败'
       ElMessage.error(msg)
@@ -562,7 +562,7 @@ const handleSubmitApproval = async (row) => {
   }
 }
 
-const handleSign = (row) => {
+const handleSign = (row: any) => {
   currentContract.value = row
   signForm.buyer_signer = ''
   signForm.seller_signer = ''
@@ -573,16 +573,16 @@ const handleSignSubmit = async () => {
   try {
     await signFormRef.value?.validate()
     signing.value = true
-    
+
     await signSalesContract(currentContract.value.id, {
       buyer_signer: signForm.buyer_signer,
       seller_signer: signForm.seller_signer
     })
-    
+
     ElMessage.success('合同已签署')
     signDialogVisible.value = false
     loadContracts()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('签署合同失败')
     }
@@ -591,13 +591,17 @@ const handleSignSubmit = async () => {
   }
 }
 
-const handlePrint = async (row) => {
+const handlePrint = async (row: any) => {
   try {
     const res = await printPreviewContract(row.id)
     const data = res
-    
+
     // 创建打印窗口
     const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      ElMessage.error('无法打开打印窗口，请检查浏览器弹窗设置')
+      return
+    }
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -630,7 +634,7 @@ const handlePrint = async (row) => {
           <h1>销 售 合 同</h1>
           <div class="contract-no">合同编号：${data.contract.contract_no}</div>
         </div>
-        
+
         <div class="section">
           <div class="section-title">甲方（买方）</div>
           <div class="row"><span class="label">单位名称：</span><span class="value">${data.customer.name}</span></div>
@@ -638,14 +642,14 @@ const handlePrint = async (row) => {
           <div class="row"><span class="label">联系人：</span><span class="value">${data.customer.contact || ''}</span></div>
           <div class="row"><span class="label">电话：</span><span class="value">${data.customer.phone || ''}</span></div>
         </div>
-        
+
         <div class="section">
           <div class="section-title">乙方（卖方）</div>
           <div class="row"><span class="label">单位名称：</span><span class="value">${data.company.name || ''}</span></div>
           <div class="row"><span class="label">地址：</span><span class="value">${data.company.address || ''}</span></div>
           <div class="row"><span class="label">电话：</span><span class="value">${data.company.phone || ''}</span></div>
         </div>
-        
+
         <div class="section">
           <div class="section-title">产品明细</div>
           <table>
@@ -661,7 +665,7 @@ const handlePrint = async (row) => {
               </tr>
             </thead>
             <tbody>
-              ${data.lines.map((line, idx) => `
+              ${data.lines.map((line: any, idx: any) => `
                 <tr>
                   <td>${idx + 1}</td>
                   <td>${line.item_name}</td>
@@ -687,7 +691,7 @@ const handlePrint = async (row) => {
             </tbody>
           </table>
         </div>
-        
+
         <div class="section">
           <div class="section-title">合同条款</div>
           <p><strong>付款条款：</strong>${data.contract.payment_terms || '-'}</p>
@@ -695,7 +699,7 @@ const handlePrint = async (row) => {
           <p><strong>质量条款：</strong>${data.contract.quality_terms || '-'}</p>
           <p><strong>质保条款：</strong>${data.contract.warranty_terms || '-'}</p>
         </div>
-        
+
         <div class="signature">
           <div class="party">
             <div class="party-title">甲方（盖章）</div>
@@ -715,11 +719,11 @@ const handlePrint = async (row) => {
     `)
     printWindow.document.close()
     printWindow.focus()
-    
+
     setTimeout(() => {
       printWindow.print()
     }, 500)
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取打印数据失败')
   }
 }
@@ -743,4 +747,3 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 </style>
-

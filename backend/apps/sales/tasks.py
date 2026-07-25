@@ -16,7 +16,7 @@ def build_personal_delivery_reminders(overdue_orders, upcoming_orders, today):
     has_unassigned = False
     for order in list(overdue_orders) + list(upcoming_orders):
         if getattr(order, 'created_by', None):
-            d = (today - order.expected_delivery_date).days
+            d = (today - order.delivery_date).days
             tag = f'逾期{d}天' if d > 0 else f'{-d}天后到期'
             lines[order.created_by].append(
                 f'- {order.order_no} | {order.customer.name} | ¥{order.total_amount:,.2f} | {tag}'
@@ -38,7 +38,7 @@ def check_delivery_reminders():
     2. Deliveries due within the next 3 days
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import SalesOrder
@@ -48,14 +48,14 @@ def check_delivery_reminders():
 
     # Find orders with overdue delivery
     overdue_orders = SalesOrder.objects.filter(
-        expected_delivery_date__lt=today, status__in=['CONFIRMED', 'IN_PRODUCTION'], is_deleted=False
+        delivery_date__lt=today, status__in=['CONFIRMED', 'PARTIAL'], is_deleted=False
     ).select_related('customer', 'project', 'created_by')
 
     # Find orders due within 3 days
     upcoming_orders = SalesOrder.objects.filter(
-        expected_delivery_date__gte=today,
-        expected_delivery_date__lte=warning_date,
-        status__in=['CONFIRMED', 'IN_PRODUCTION'],
+        delivery_date__gte=today,
+        delivery_date__lte=warning_date,
+        status__in=['CONFIRMED', 'PARTIAL'],
         is_deleted=False,
     ).select_related('customer', 'project', 'created_by')
 
@@ -70,9 +70,9 @@ def check_delivery_reminders():
     if overdue_orders.exists():
         message_lines.append('\n【已逾期】')
         for order in overdue_orders[:10]:
-            days_overdue = (today - order.expected_delivery_date).days
+            days_overdue = (today - order.delivery_date).days
             message_lines.append(
-                f'- {order.order_no} | {order.customer.name} | ' f'¥{order.total_amount:,.2f} | 逾期{days_overdue}天'
+                f'- {order.order_no} | {order.customer.name} | ¥{order.total_amount:,.2f} | 逾期{days_overdue}天'
             )
             overdue_items.append(
                 {
@@ -86,9 +86,9 @@ def check_delivery_reminders():
     if upcoming_orders.exists():
         message_lines.append('\n【即将到期】')
         for order in upcoming_orders[:10]:
-            days_until = (order.expected_delivery_date - today).days
+            days_until = (order.delivery_date - today).days
             message_lines.append(
-                f'- {order.order_no} | {order.customer.name} | ' f'¥{order.total_amount:,.2f} | {days_until}天后到期'
+                f'- {order.order_no} | {order.customer.name} | ¥{order.total_amount:,.2f} | {days_until}天后到期'
             )
             upcoming_items.append(
                 {
@@ -110,12 +110,11 @@ def check_delivery_reminders():
 
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=user_id,
             title='销售订单交货提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/sales/orders',
+            message=message,
+            type='WARNING',
         )
 
     # 外部推送:个人优先 + 群播兜底

@@ -370,6 +370,7 @@ class CommissioningPlanSerializer(serializers.ModelSerializer):
 
 class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试计划视图集"""
+
     permission_module = 'projects'
     permission_resource = 'commissioning_plan'
 
@@ -392,7 +393,7 @@ class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         today = timezone.now()
-        prefix = f"CP{today.strftime('%Y%m%d')}"
+        prefix = f'CP{today.strftime("%Y%m%d")}'
         count = CommissioningPlan.objects.filter(plan_no__startswith=prefix).count() + 1
         plan_no = f'{prefix}{count:03d}'
 
@@ -488,7 +489,7 @@ class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
 
         # 生成报告编号
         today = timezone.now()
-        prefix = f"CR{today.strftime('%Y%m%d')}"
+        prefix = f'CR{today.strftime("%Y%m%d")}'
         count = CommissioningReport.objects.filter(report_no__startswith=prefix).count() + 1
         report_no = f'{prefix}{count:03d}'
 
@@ -521,6 +522,7 @@ class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试任务视图集"""
+
     permission_module = 'projects'
     permission_resource = 'commissioning_task'
 
@@ -567,6 +569,7 @@ class CommissioningTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试问题视图集"""
+
     permission_module = 'projects'
     permission_resource = 'commissioning_issue'
 
@@ -593,7 +596,7 @@ class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         today = timezone.now()
-        prefix = f"CI{today.strftime('%Y%m%d')}"
+        prefix = f'CI{today.strftime("%Y%m%d")}'
         count = CommissioningIssue.objects.filter(issue_no__startswith=prefix).count() + 1
         issue_no = f'{prefix}{count:03d}'
 
@@ -629,6 +632,7 @@ class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试参数视图集"""
+
     permission_module = 'projects'
     permission_resource = 'commissioning_parameter'
 
@@ -664,6 +668,7 @@ class CommissioningParameterViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class CommissioningReportViewSet(PermissionMixin, viewsets.ModelViewSet):
     """调试报告视图集"""
+
     permission_module = 'projects'
     permission_resource = 'commissioning_report'
 

@@ -35,13 +35,13 @@ def query_debugger(func):
         total_time = sum(float(q['time']) for q in queries)
 
         logger.debug(
-            f'{func.__name__}: {len(queries)} queries in {total_time:.3f}s ' f'(total: {end_time - start_time:.3f}s)'
+            f'{func.__name__}: {len(queries)} queries in {total_time:.3f}s (total: {end_time - start_time:.3f}s)'
         )
 
         # Log slow queries
         for query in queries:
             if float(query['time']) > 0.1:  # More than 100ms
-                logger.warning(f"Slow query ({query['time']}s): {query['sql'][:200]}")
+                logger.warning(f'Slow query ({query["time"]}s): {query["sql"][:200]}')
 
         return result
 

@@ -9,7 +9,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="协议编号">
@@ -35,7 +35,7 @@
           <el-button @click="resetSearch">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 数据表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -80,7 +80,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <!-- 分页 -->
       <el-pagination
         v-model:current-page="pagination.page"
@@ -93,7 +93,7 @@
         style="margin-top: 20px;"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px">
       <el-form :model="formData" :rules="formRules" ref="formRef" label-width="120px" :disabled="isViewMode">
@@ -173,23 +173,23 @@ const customers = ref<any[]>([])
 const templates = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增技术协议')
-const formRef = ref(null)
-const selectedTemplate = ref(null)
+const formRef = ref<any>(null)
+const selectedTemplate = ref<any>(null)
 const isViewMode = ref(false)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   agreement_no: '',
   project: null,
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   agreement_no: '',
   name: '',
@@ -210,7 +210,7 @@ const formRules = {
   content: [{ required: true, message: '请输入协议内容', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'INTERNAL_REVIEW': 'warning',
@@ -221,10 +221,10 @@ const getStatusType = (status) => {
     'CHANGED': 'warning',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return ''
   return new Date(date).toLocaleString('zh-CN')
 }
@@ -232,7 +232,7 @@ const formatDate = (date) => {
 const loadData = async () => {
   try {
     loading.value = true
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -240,7 +240,7 @@ const loadData = async () => {
     const res = await getAgreementList(params)
     tableData.value = res.results || res
     pagination.total = res.count || tableData.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载数据失败:', error)
   } finally {
     loading.value = false
@@ -251,7 +251,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载项目失败:', error)
   }
 }
@@ -260,7 +260,7 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
@@ -269,7 +269,7 @@ const loadTemplates = async () => {
   try {
     const res = await getActiveAgreementTemplates()
     templates.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载模板失败:', error)
   }
 }
@@ -303,7 +303,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   try {
     // 用完整详情序列化器回填，避免列表精简序列化器丢失 content/条款等字段
     const data = await getAgreement(row.id)
@@ -323,12 +323,12 @@ const handleEdit = async (row) => {
     isViewMode.value = false
     dialogTitle.value = '编辑技术协议'
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getAgreement(row.id)
     resetForm()
@@ -347,7 +347,7 @@ const handleView = async (row) => {
     isViewMode.value = true
     dialogTitle.value = '查看技术协议'
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载详情失败')
   }
 }
@@ -363,7 +363,7 @@ const applyTemplate = async () => {
       })
       Object.assign(formData, res)
       ElMessage.success('模板已应用')
-    } catch (error) {
+    } catch (error: any) {
       ElMessage.error('应用模板失败')
     }
   } else if (tpl) {
@@ -387,34 +387,34 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     console.error('保存失败:', error)
   }
 }
 
-const handleSubmitReview = async (row) => {
+const handleSubmitReview = async (row: any) => {
   await ElMessageBox.confirm('确定提交内部评审？', '提示')
   try {
     await submitAgreementReview(row.id)
     ElMessage.success('已提交评审')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleSendToCustomer = async (row) => {
+const handleSendToCustomer = async (row: any) => {
   await ElMessageBox.confirm('确定发送给客户评审？', '提示')
   try {
     await sendAgreementToCustomer(row.id)
     ElMessage.success('已发送客户')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleCustomerConfirm = async (row) => {
+const handleCustomerConfirm = async (row: any) => {
   await ElMessageBox.confirm('确定客户已确认？', '提示')
   try {
     await confirmAgreement(row.id, {
@@ -422,12 +422,12 @@ const handleCustomerConfirm = async (row) => {
     })
     ElMessage.success('客户已确认')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleSign = async (row) => {
+const handleSign = async (row: any) => {
   await ElMessageBox.confirm('确定签署协议？', '提示')
   try {
     await signAgreement(row.id, {
@@ -435,18 +435,18 @@ const handleSign = async (row) => {
     })
     ElMessage.success('已签署')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleMakeEffective = async (row) => {
+const handleMakeEffective = async (row: any) => {
   await ElMessageBox.confirm('确定使协议生效？', '提示')
   try {
     await makeAgreementEffective(row.id)
     ElMessage.success('协议已生效')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   }
 }

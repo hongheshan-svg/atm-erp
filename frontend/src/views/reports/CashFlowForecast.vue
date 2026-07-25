@@ -17,7 +17,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 现金流概览 -->
       <el-row :gutter="20" class="overview-row">
         <el-col :span="6">
@@ -65,13 +65,13 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 现金流趋势图 -->
       <el-card shadow="never" class="chart-card">
         <template #header>现金流趋势预测</template>
         <div ref="trendChartRef" style="height: 350px;"></div>
       </el-card>
-      
+
       <!-- 应收应付明细 -->
       <el-row :gutter="20" class="detail-row">
         <el-col :span="12">
@@ -135,7 +135,7 @@
           </el-card>
         </el-col>
       </el-row>
-      
+
       <!-- 资金缺口预警 -->
       <el-card shadow="never" class="alert-card" v-if="alerts.length > 0">
         <template #header>
@@ -165,17 +165,17 @@ import { getCashFlowForecast, getAnalyticsDashboard } from '@/api/analytics'
 import { getReceivableList, getPayableList } from '@/api/finance'
 import { ElMessage } from 'element-plus'
 import { Download, Wallet, Top, Bottom, TrendCharts, Warning } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/analytics/')
 
 
 const forecastPeriod = ref('30')
-const trendChartRef = ref(null)
-let trendChart = null
+const trendChartRef = ref<any>(null)
+let trendChart: any = null
 
-const overview = reactive({
+const overview = reactive<Record<string, any>>({
   currentBalance: 0,
   expectedInflow: 0,
   expectedOutflow: 0,
@@ -186,26 +186,26 @@ const arList = ref<any[]>([])
 const apList = ref<any[]>([])
 const alerts = ref<any[]>([])
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   if (!num) return '0.00'
   return Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getOverdueType = (dueDate) => {
+const getOverdueType = (dueDate: any) => {
   if (!dueDate) return 'info'
   const today = new Date()
   const due = new Date(dueDate)
-  const diff = (due - today) / (1000 * 60 * 60 * 24)
+  const diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   if (diff < 0) return 'danger'
   if (diff <= 7) return 'warning'
   return 'success'
 }
 
-const getOverdueLabel = (dueDate) => {
+const getOverdueLabel = (dueDate: any) => {
   if (!dueDate) return '未知'
   const today = new Date()
   const due = new Date(dueDate)
-  const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24))
+  const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
   if (diff < 0) return `逾期${Math.abs(diff)}天`
   if (diff === 0) return '今日到期'
   return `${diff}天后`
@@ -216,20 +216,20 @@ const fetchData = async () => {
     // 获取现金流预测汇总数据
     const forecastRes = await getCashFlowForecast()
     const forecastData = forecastRes
-    
+
     // 设置概览数据
     overview.expectedInflow = forecastData.expected_inflows || 0
     overview.expectedOutflow = forecastData.expected_outflows || 0
     overview.netFlow = forecastData.net_cash_flow || 0
-    
+
     // 获取应收账款明细
     const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
     arList.value = arRes.results || arRes.results || arRes || []
-    
+
     // 获取应付账款明细
     const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
     apList.value = apRes.results || apRes.results || apRes || []
-    
+
     // 尝试获取当前现金余额（从财务汇总）
     try {
       const dashboardRes = await getAnalyticsDashboard()
@@ -241,26 +241,26 @@ const fetchData = async () => {
       if (overview.currentBalance <= 0) {
         overview.currentBalance = 100000 // 如果为负数，使用默认值
       }
-    } catch (e) {
+    } catch (e: any) {
       overview.currentBalance = 100000 // 默认值
     }
-    
+
     initTrendChart()
     checkAlerts()
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败:', error)
     // 获取数据失败时尝试单独获取应收应付
     try {
       const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
       arList.value = arRes.results || arRes.results || arRes || []
-      
+
       const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
       apList.value = apRes.results || apRes.results || apRes || []
-      
+
   calculateOverview()
   initTrendChart()
   checkAlerts()
-    } catch (e) {
+    } catch (e: any) {
       console.error('获取应收应付失败:', e)
       arList.value = []
       apList.value = []
@@ -273,7 +273,7 @@ const calculateOverview = () => {
   const days = parseInt(forecastPeriod.value)
   const endDate = new Date()
   endDate.setDate(endDate.getDate() + days)
-  
+
   // 计算预计收款（基于应收账款列表）
   overview.expectedInflow = arList.value
     .filter(ar => {
@@ -281,7 +281,7 @@ const calculateOverview = () => {
       return new Date(ar.due_date) <= endDate
     })
     .reduce((sum, ar) => sum + ((ar.amount_due || 0) - (ar.amount_paid || 0)), 0)
-  
+
   // 计算预计付款（基于应付账款列表）
   overview.expectedOutflow = apList.value
     .filter(ap => {
@@ -289,10 +289,10 @@ const calculateOverview = () => {
       return new Date(ap.due_date) <= endDate
     })
     .reduce((sum, ap) => sum + ((ap.amount_due || 0) - (ap.amount_paid || 0)), 0)
-  
+
   // 净现金流
   overview.netFlow = overview.expectedInflow - overview.expectedOutflow
-  
+
   // 如果没有余额数据，使用应收减应付的方式估算
   if (!overview.currentBalance || overview.currentBalance === 0) {
     // 使用所有待收款减去待付款作为估算
@@ -304,55 +304,55 @@ const calculateOverview = () => {
 
 const initTrendChart = () => {
   if (!trendChartRef.value) return
-  
+
   if (trendChart) {
     trendChart.dispose()
   }
-  
+
   trendChart = echarts.init(trendChartRef.value)
-  
+
   // 生成预测数据
   const days = parseInt(forecastPeriod.value)
   const dates = []
   const balances = []
   const inflows = []
   const outflows = []
-  
+
   let balance = overview.currentBalance
   const today = new Date()
-  
+
   for (let i = 0; i <= days; i++) {
     const date = new Date(today)
     date.setDate(date.getDate() + i)
     const dateStr = date.toISOString().split('T')[0]
     dates.push(dateStr)
-    
+
     // 计算当日收款
     const dayInflow = arList.value
       .filter(ar => ar.due_date === dateStr)
       .reduce((sum, ar) => sum + (ar.amount_due - ar.amount_paid), 0)
-    
+
     // 计算当日付款
     const dayOutflow = apList.value
       .filter(ap => ap.due_date === dateStr)
       .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0)
-    
+
     balance = balance + dayInflow - dayOutflow
-    
+
     inflows.push(dayInflow)
     outflows.push(dayOutflow)
     balances.push(balance)
   }
-  
+
   const option = {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
         type: 'cross'
       },
-      formatter: (params) => {
+      formatter: (params: any) => {
         let result = params[0].axisValue + '<br/>'
-        params.forEach(param => {
+        params.forEach((param: any) => {
           result += `${param.marker} ${param.seriesName}: ¥${formatNumber(param.value)}<br/>`
         })
         return result
@@ -379,7 +379,7 @@ const initTrendChart = () => {
         type: 'value',
         name: '金额 (元)',
         axisLabel: {
-          formatter: (value) => {
+          formatter: (value: any) => {
             if (value >= 10000) return (value / 10000).toFixed(0) + '万'
             return value
           }
@@ -420,13 +420,13 @@ const initTrendChart = () => {
       }
     ]
   }
-  
+
   trendChart.setOption(option)
 }
 
 const checkAlerts = () => {
   alerts.value = []
-  
+
   // 检查资金缺口
   const projectedBalance = overview.currentBalance + overview.netFlow
   if (projectedBalance < 0) {
@@ -436,7 +436,7 @@ const checkAlerts = () => {
       description: `预计${forecastPeriod.value}天后将出现资金缺口 ¥${formatNumber(Math.abs(projectedBalance))}，请及时安排资金调度。`
     })
   }
-  
+
   // 检查逾期应收
   const overdueAR = arList.value.filter(ar => new Date(ar.due_date) < new Date())
   if (overdueAR.length > 0) {
@@ -447,12 +447,12 @@ const checkAlerts = () => {
       description: `有${overdueAR.length}笔应收账款已逾期，逾期金额合计 ¥${formatNumber(overdueAmount)}，请及时催收。`
     })
   }
-  
+
   // 检查即将到期的应付
   const urgentAP = apList.value.filter(ap => {
     const due = new Date(ap.due_date)
     const today = new Date()
-    const diff = (due - today) / (1000 * 60 * 60 * 24)
+    const diff = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
     return diff >= 0 && diff <= 7
   })
   if (urgentAP.length > 0) {
@@ -476,28 +476,28 @@ const handleExport = () => {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
+
   // 生成导出数据
   const days = parseInt(forecastPeriod.value)
-  const exportData = []
+  const exportData: any[] = []
   let balance = overview.currentBalance
   const today = new Date()
-  
+
   for (let i = 0; i <= days; i++) {
     const date = new Date(today)
     date.setDate(date.getDate() + i)
     const dateStr = date.toISOString().split('T')[0]
-    
+
     const dayInflow = arList.value
       .filter(ar => ar.due_date === dateStr)
       .reduce((sum, ar) => sum + (ar.amount_due - ar.amount_paid), 0)
-    
+
     const dayOutflow = apList.value
       .filter(ap => ap.due_date === dateStr)
       .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0)
-    
+
     balance = balance + dayInflow - dayOutflow
-    
+
     if (dayInflow > 0 || dayOutflow > 0) {
       exportData.push({
         date: dateStr,
@@ -508,12 +508,12 @@ const handleExport = () => {
       })
     }
   }
-  
+
   if (!exportData.length) {
     ElMessage.warning('所选时间范围内没有现金流数据')
     return
   }
-  
+
   import('@/utils/export').then(({ exportToExcel: doExport, formatMoney }) => {
     const columns = [
       { field: 'date', title: '日期' },
@@ -631,4 +631,3 @@ onUnmounted(() => {
   margin-top: 20px;
 }
 </style>
-

@@ -23,11 +23,11 @@
             </div>
             <div class="calendar-body">
               <div v-for="(week, wIndex) in calendarDays" :key="wIndex" class="week-row">
-                <div 
-                  v-for="(day, dIndex) in week" 
-                  :key="dIndex" 
+                <div
+                  v-for="(day, dIndex) in week"
+                  :key="dIndex"
                   class="day-cell"
-                  :class="{ 
+                  :class="{
                     'other-month': !day.isCurrentMonth,
                     'today': day.isToday,
                     'selected': day.date === selectedDate
@@ -36,9 +36,9 @@
                 >
                   <div class="day-number">{{ day.day }}</div>
                   <div class="maintenance-items">
-                    <div 
-                      v-for="item in day.maintenances.slice(0, 2)" 
-                      :key="item.id" 
+                    <div
+                      v-for="item in day.maintenances.slice(0, 2)"
+                      :key="item.id"
                       class="maintenance-item"
                       :class="item.type"
                     >
@@ -115,7 +115,7 @@ import { getMaintenanceCalendar } from '@/api/equipment'
 const maintenances = ref<any[]>([])
 const statistics = ref<Record<string, any>>({})
 const currentDate = ref(new Date())
-const selectedDate = ref(null)
+const selectedDate = ref<any>(null)
 const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const currentMonthLabel = computed(() => {
@@ -126,16 +126,16 @@ const currentMonthLabel = computed(() => {
 const calendarDays = computed(() => {
   const year = currentDate.value.getFullYear()
   const month = currentDate.value.getMonth()
-  
+
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-  
+
   const startOffset = firstDay.getDay()
   const totalDays = lastDay.getDate()
-  
+
   const weeks = []
   let currentWeek = []
-  
+
   const prevMonthLast = new Date(year, month, 0).getDate()
   for (let i = startOffset - 1; i >= 0; i--) {
     const day = prevMonthLast - i
@@ -148,7 +148,7 @@ const calendarDays = computed(() => {
       maintenances: getMaintenancesForDate(date)
     })
   }
-  
+
   const today = new Date().toISOString().split('T')[0]
   for (let i = 1; i <= totalDays; i++) {
     const date = new Date(year, month, i).toISOString().split('T')[0]
@@ -159,13 +159,13 @@ const calendarDays = computed(() => {
       isToday: date === today,
       maintenances: getMaintenancesForDate(date)
     })
-    
+
     if (currentWeek.length === 7) {
       weeks.push(currentWeek)
       currentWeek = []
     }
   }
-  
+
   let nextDay = 1
   while (currentWeek.length < 7 && currentWeek.length > 0) {
     const date = new Date(year, month + 1, nextDay).toISOString().split('T')[0]
@@ -180,7 +180,7 @@ const calendarDays = computed(() => {
   if (currentWeek.length > 0) {
     weeks.push(currentWeek)
   }
-  
+
   return weeks
 })
 
@@ -189,7 +189,7 @@ const selectedDayMaintenances = computed(() => {
   return getMaintenancesForDate(date)
 })
 
-const getMaintenancesForDate = (dateStr) => {
+const getMaintenancesForDate = (dateStr: any) => {
   return maintenances.value.filter(m => m.date === dateStr)
 }
 
@@ -197,11 +197,11 @@ const loadData = async () => {
   try {
     const year = currentDate.value.getFullYear()
     const month = currentDate.value.getMonth() + 1
-    
+
     const res = await getMaintenanceCalendar({ year, month })
     maintenances.value = res.events || []
     statistics.value = res.summary || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
   }
 }
@@ -222,32 +222,32 @@ const goToday = () => {
   loadData()
 }
 
-const selectDate = (day) => {
+const selectDate = (day: any) => {
   selectedDate.value = day.date
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   return new Date(dateStr).toLocaleDateString('zh-CN')
 }
 
-const getTypeColor = (type) => {
+const getTypeColor = (type: any) => {
   const map = { ROUTINE: 'info', REPAIR: 'warning', CALIBRATION: 'primary', OVERHAUL: 'danger' }
-  return map[type] || 'info'
+  return (map as Record<string, any>)[type] || 'info'
 }
 
-const getTypeName = (type) => {
+const getTypeName = (type: any) => {
   const map = { ROUTINE: '日常保养', REPAIR: '维修', CALIBRATION: '校准', OVERHAUL: '大修' }
-  return map[type] || type
+  return (map as Record<string, any>)[type] || type
 }
 
-const getStatusColor = (status) => {
+const getStatusColor = (status: any) => {
   const map = { PENDING: 'info', IN_PROGRESS: 'warning', COMPLETED: 'success', OVERDUE: 'danger' }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getStatusName = (status) => {
+const getStatusName = (status: any) => {
   const map = { PENDING: '待执行', IN_PROGRESS: '进行中', COMPLETED: '已完成', OVERDUE: '已逾期' }
-  return map[status] || status
+  return (map as Record<string, any>)[status] || status
 }
 
 onMounted(() => {

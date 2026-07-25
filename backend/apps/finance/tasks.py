@@ -49,7 +49,7 @@ def check_overdue_receivables():
         total_overdue += remaining
 
         message_lines.append(
-            f'- {ar.ar_no} | 客户: {ar.customer.name} | ' f'应收: ¥{remaining:,.2f} | 逾期: {days_overdue}天'
+            f'- {ar.ar_no} | 客户: {ar.customer.name} | 应收: ¥{remaining:,.2f} | 逾期: {days_overdue}天'
         )
         overdue_items.append(
             {'ar_no': ar.ar_no, 'customer': ar.customer.name, 'amount': float(remaining), 'days_overdue': days_overdue}
@@ -110,7 +110,7 @@ def check_overdue_payables():
     Also updates status to OVERDUE if past due date.
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import AccountPayable
@@ -139,7 +139,7 @@ def check_overdue_payables():
         total_overdue += remaining
 
         message_lines.append(
-            f'- {ap.ap_no} | 供应商: {ap.supplier.name} | ' f'应付: ¥{remaining:,.2f} | 逾期: {days_overdue}天'
+            f'- {ap.ap_no} | 供应商: {ap.supplier.name} | 应付: ¥{remaining:,.2f} | 逾期: {days_overdue}天'
         )
         overdue_items.append(
             {'ap_no': ap.ap_no, 'supplier': ap.supplier.name, 'amount': float(remaining), 'days_overdue': days_overdue}
@@ -157,9 +157,7 @@ def check_overdue_payables():
 
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
-            user_id=user_id, title='应付账款逾期提醒', content=message, notification_type='WARNING', link='/finance/ap'
-        )
+        SystemNotification.objects.create(user_id=user_id, title='应付账款逾期提醒', message=message, type='WARNING')
 
     # Send email to admins
     admin_emails = list(
@@ -201,7 +199,7 @@ def check_upcoming_due_dates():
     Runs daily at 9 AM.
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import AccountPayable, AccountReceivable
@@ -234,7 +232,7 @@ def check_upcoming_due_dates():
             remaining = ar.amount_due - ar.amount_paid
             days_to_due = (ar.due_date - today).days
             ar_total += remaining
-            message_lines.append(f'- {ar.ar_no} | {ar.customer.name} | ' f'¥{remaining:,.2f} | {days_to_due}天后到期')
+            message_lines.append(f'- {ar.ar_no} | {ar.customer.name} | ¥{remaining:,.2f} | {days_to_due}天后到期')
             ar_items.append(
                 {'ar_no': ar.ar_no, 'customer': ar.customer.name, 'amount': float(remaining), 'days': days_to_due}
             )
@@ -246,7 +244,7 @@ def check_upcoming_due_dates():
             remaining = ap.amount_due - ap.amount_paid
             days_to_due = (ap.due_date - today).days
             ap_total += remaining
-            message_lines.append(f'- {ap.ap_no} | {ap.supplier.name} | ' f'¥{remaining:,.2f} | {days_to_due}天后到期')
+            message_lines.append(f'- {ap.ap_no} | {ap.supplier.name} | ¥{remaining:,.2f} | {days_to_due}天后到期')
             ap_items.append(
                 {'ap_no': ap.ap_no, 'supplier': ap.supplier.name, 'amount': float(remaining), 'days': days_to_due}
             )
@@ -263,9 +261,7 @@ def check_upcoming_due_dates():
 
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
-            user_id=user_id, title='账款到期预警', content=message, notification_type='INFO', link='/finance/ar'
-        )
+        SystemNotification.objects.create(user_id=user_id, title='账款到期预警', message=message, type='INFO')
 
     # Send to DingTalk/WeChat Work
     try:
@@ -295,7 +291,7 @@ def generate_daily_finance_summary():
     from django.db.models import Count, Q, Sum
 
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import AccountPayable, AccountReceivable, Expense
@@ -345,9 +341,7 @@ def generate_daily_finance_summary():
 
     # Create notifications
     for user_id in admin_users:
-        Notification.objects.create(
-            user_id=user_id, title=f'财务日报 - {today}', content=message, notification_type='INFO'
-        )
+        SystemNotification.objects.create(user_id=user_id, title=f'财务日报 - {today}', message=message, type='INFO')
 
     # Send to DingTalk/WeChat Work
     try:
@@ -383,7 +377,7 @@ def check_payment_schedule_reminders():
     2. Payments due within the reminder window (default 7 days)
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import PaymentSchedule
@@ -459,12 +453,11 @@ def check_payment_schedule_reminders():
 
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=user_id,
             title='付款计划收款提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/finance/payment-schedules',
+            message=message,
+            type='WARNING',
         )
 
     # Mark as reminded
@@ -514,7 +507,7 @@ def check_purchase_payment_schedule_reminders():
     2. Payments due within the reminder window (default 3 days for purchases)
     """
     from apps.accounts.models import User
-    from apps.core.models import Notification
+    from apps.core.models import SystemNotification
     from apps.core.notification_service import NotificationService
 
     from .models import PurchasePaymentSchedule
@@ -590,12 +583,11 @@ def check_purchase_payment_schedule_reminders():
 
     # Create in-app notifications
     for user_id in recipients:
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=user_id,
             title='采购付款计划提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/finance/purchase-payment-schedules',
+            message=message,
+            type='WARNING',
         )
 
     # Mark as reminded

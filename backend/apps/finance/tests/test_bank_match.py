@@ -4,13 +4,13 @@
 导致本应命中的记录退化为「未匹配」甚至被旧逻辑错配。精确匹配阶段应先做括号/空格
 规范化，使「考泰斯（长春）」能命中「考泰斯(长春)」。
 """
-from django.test import TestCase, override_settings
+
+from django.test import TestCase
 
 from apps.finance.bank_statement_models import BankStatement
 from apps.masterdata.models import Customer, Supplier
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class AutoMatchBracketNormalizeTest(TestCase):
     def test_customer_fullwidth_bracket_matches_halfwidth_customer(self):
         # 客户主数据用半角括号

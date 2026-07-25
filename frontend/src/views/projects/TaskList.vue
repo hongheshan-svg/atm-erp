@@ -20,7 +20,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 任务统计 -->
       <el-row :gutter="20" class="stats-row" v-if="selectedProject">
         <el-col :span="4">
@@ -44,7 +44,7 @@
           </el-button>
         </el-col>
       </el-row>
-      
+
       <!-- 任务树表格 -->
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
@@ -112,7 +112,7 @@
         </el-table-column>
       </el-table>
     </el-card>
-    
+
     <!-- 任务编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -193,7 +193,7 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 工时填报对话框 -->
     <el-dialog v-model="timeLogVisible" title="填报工时" width="500px">
       <el-form :model="timeLogForm" label-width="100px">
@@ -239,20 +239,20 @@ const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBat
 
 const loading = ref(false)
 const recalculating = ref(false)
-const selectedProject = ref(null)
+const selectedProject = ref<any>(null)
 const projects = ref<any[]>([])
 const taskTree = ref<any[]>([])
 const projectMembers = ref<any[]>([])
-const projectMembersLoadedFor = ref(null)
+const projectMembersLoadedFor = ref<any>(null)
 const dialogVisible = ref(false)
 const timeLogVisible = ref(false)
-const formRef = ref(null)
-const currentTask = ref(null)
+const formRef = ref<any>(null)
+const currentTask = ref<any>(null)
 const parentTaskName = ref('')
 const allUsersLoaded = ref(false)
 const permissionStore = usePermissionStore()
 
-const stats = reactive({
+const stats = reactive<Record<string, any>>({
   total: 0,
   inProgress: 0,
   completed: 0,
@@ -260,7 +260,7 @@ const stats = reactive({
   totalActualHours: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   code: '',
   name: '',
@@ -275,7 +275,7 @@ const form = reactive({
   description: ''
 })
 
-const timeLogForm = reactive({
+const timeLogForm = reactive<Record<string, any>>({
   date: '',
   hours: 1,
   description: ''
@@ -290,12 +290,12 @@ const rules = {
 }
 
 // 日期限制：任务开始/结束不可选过去日期；工时填报仅限当天
-const disablePastDates = (date) => {
+const disablePastDates = (date: any) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return date.getTime() < today.getTime()
 }
-const disableNotToday = (date) => {
+const disableNotToday = (date: any) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const d = new Date(date)
@@ -307,8 +307,8 @@ const dialogTitle = computed(() => form.id ? '编辑任务' : '新增任务')
 
 // 扁平化任务列表（用于排序判断）
 const flatTasks = computed(() => {
-  const result = []
-  const flatten = (tasks) => {
+  const result: any[] = []
+  const flatten = (tasks: any) => {
     for (const task of tasks) {
       result.push(task)
       if (task.children && task.children.length > 0) {
@@ -327,7 +327,7 @@ const allUsers = ref<any[]>([])
 const assigneeOptions = computed(() => {
   const options = []
   const addedUserIds = new Set()
-  
+
   // 首先添加项目成员
   for (const member of projectMembers.value) {
     // 项目成员数据 (来自 /projects/members/)
@@ -351,7 +351,7 @@ const assigneeOptions = computed(() => {
       }
     }
   }
-  
+
   // 然后从全部用户列表中添加缺失的用户（特别是当前任务的负责人可能不在项目成员中）
   for (const user of allUsers.value) {
     if (!addedUserIds.has(user.id)) {
@@ -363,11 +363,11 @@ const assigneeOptions = computed(() => {
       addedUserIds.add(user.id)
     }
   }
-  
+
   return options
 })
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'TODO': 'info',
     'PENDING': 'info',
@@ -375,10 +375,10 @@ const getStatusType = (status) => {
     'COMPLETED': 'success',
     'CANCELLED': 'danger'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status: any) => {
   const labels = {
     'TODO': '待办',
     'PENDING': '待办',
@@ -386,10 +386,10 @@ const getStatusLabel = (status) => {
     'COMPLETED': '已完成',
     'CANCELLED': '已取消'
   }
-  return labels[status] || status
+  return (labels as Record<string, any>)[status] || status
 }
 
-const getProgressStatus = (progress) => {
+const getProgressStatus = (progress: any) => {
   if (progress >= 100) return 'success'
   if (progress >= 50) return ''
   return 'warning'
@@ -399,7 +399,7 @@ const fetchProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取项目列表失败:', error)
   }
 }
@@ -414,7 +414,7 @@ const fetchTasks = async () => {
     stats.totalActualHours = 0
     return
   }
-  
+
   loading.value = true
   try {
     // 使用查询参数过滤项目任务
@@ -422,7 +422,7 @@ const fetchTasks = async () => {
     const tasks = res.results || res.results || res || []
     taskTree.value = buildTree(tasks)
     calculateStats(tasks)
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取任务列表失败:', error)
     taskTree.value = []
     stats.total = 0
@@ -435,26 +435,26 @@ const fetchTasks = async () => {
   }
 }
 
-const buildTree = (tasks, parentId = null) => {
+const buildTree = (tasks: any, parentId = null) => {
   return tasks
-    .filter(task => {
+    .filter((task: any) => {
       const taskParent = task.parent ?? task.parent_id ?? null
       return taskParent === parentId
     })
-    .map(task => ({
+    .map((task: any) => ({
       ...task,
       children: buildTree(tasks, task.id)
     }))
 }
 
-const calculateStats = (tasks) => {
+const calculateStats = (tasks: any) => {
   stats.total = tasks.length
-  stats.inProgress = tasks.filter(t => t.status === 'IN_PROGRESS').length
-  stats.completed = tasks.filter(t => t.status === 'COMPLETED').length
+  stats.inProgress = tasks.filter((t: any) => t.status === 'IN_PROGRESS').length
+  stats.completed = tasks.filter((t: any) => t.status === 'COMPLETED').length
   // 计划工期汇总（天）
-  stats.totalPlannedDays = tasks.reduce((sum, t) => sum + (parseFloat(t.planned_hours) || 0), 0)
+  stats.totalPlannedDays = tasks.reduce((sum: any, t: any) => sum + (parseFloat(t.planned_hours) || 0), 0)
   // 实际工时汇总（小时）
-  stats.totalActualHours = tasks.reduce((sum, t) => sum + (parseFloat(t.actual_hours) || 0), 0)
+  stats.totalActualHours = tasks.reduce((sum: any, t: any) => sum + (parseFloat(t.actual_hours) || 0), 0)
 }
 
 const fetchProjectMembers = async () => {
@@ -473,7 +473,7 @@ const fetchProjectMembers = async () => {
     projectMembers.value = membersRes.results || membersRes.results || membersRes || []
     projectMembersLoadedFor.value = selectedProject.value
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载项目成员失败:', error)
     }
@@ -498,7 +498,7 @@ const fetchAllUsers = async () => {
     allUsers.value = userRes.results || userRes.results || userRes || []
     allUsersLoaded.value = true
     return true
-  } catch (error) {
+  } catch (error: any) {
     if (error?.response?.status !== 403) {
       console.error('加载用户列表失败:', error)
     }
@@ -540,7 +540,7 @@ const handleAdd = async () => {
   dialogVisible.value = true
 }
 
-const handleAddChild = async (row) => {
+const handleAddChild = async (row: any) => {
   resetForm()
   await ensureAssigneeOptionsLoaded()
   form.parent = row.id
@@ -548,7 +548,7 @@ const handleAddChild = async (row) => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   await ensureAssigneeOptionsLoaded()
   form.id = row.id
   form.code = row.code || ''
@@ -567,7 +567,7 @@ const handleEdit = async (row) => {
   dialogVisible.value = true
 }
 
-const handleDelete = (row) => {
+const handleDelete = (row: any) => {
   ElMessageBox.confirm('确定要删除该任务吗？', '提示', {
     type: 'warning'
   }).then(async () => {
@@ -575,19 +575,19 @@ const handleDelete = (row) => {
       await deleteTask(row.id)
       ElMessage.success('删除成功')
       fetchTasks()
-    } catch (error) {
+    } catch (error: any) {
       ElMessage.error('删除失败')
     }
   }).catch(error => { console.error(error) })
 }
 
 // 上移任务
-const handleMoveUp = async (row, index) => {
+const handleMoveUp = async (row: any, index: any) => {
   if (index === 0) return
-  
+
   const tasks = flatTasks.value
   const prevTask = tasks[index - 1]
-  
+
   try {
     // 使用索引位置作为新的 sort_order（交换位置）
     // 当前任务移到上一个位置，上一个任务移到当前位置
@@ -595,21 +595,21 @@ const handleMoveUp = async (row, index) => {
       patchTask(row.id, { sort_order: index - 1 }),
       patchTask(prevTask.id, { sort_order: index })
     ])
-    
+
     ElMessage.success('排序已更新')
     fetchTasks()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('排序更新失败')
   }
 }
 
 // 下移任务
-const handleMoveDown = async (row, index) => {
+const handleMoveDown = async (row: any, index: any) => {
   const tasks = flatTasks.value
   if (index >= tasks.length - 1) return
-  
+
   const nextTask = tasks[index + 1]
-  
+
   try {
     // 使用索引位置作为新的 sort_order（交换位置）
     // 当前任务移到下一个位置，下一个任务移到当前位置
@@ -617,10 +617,10 @@ const handleMoveDown = async (row, index) => {
       patchTask(row.id, { sort_order: index + 1 }),
       patchTask(nextTask.id, { sort_order: index })
     ])
-    
+
     ElMessage.success('排序已更新')
     fetchTasks()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('排序更新失败')
   }
 }
@@ -628,9 +628,9 @@ const handleMoveDown = async (row, index) => {
 const handleSubmit = async () => {
   try {
     await formRef.value.validate()
-    
+
     // 构建提交数据
-    const data = {
+    const data: Record<string, any> = {
       project: selectedProject.value,
       name: form.name,
       status: form.status,
@@ -639,7 +639,7 @@ const handleSubmit = async () => {
       planned_hours: form.planned_days || 0,
       // 实际工时不在这里提交，由工时填报自动汇总
     }
-    
+
     // 新增时自动生成编号，并设置排序到最后
     if (!form.id) {
       data.code = form.code || generateTaskCode()
@@ -649,7 +649,7 @@ const handleSubmit = async () => {
     } else {
       data.code = form.code
     }
-    
+
     // 可选字段，只有有值时才添加
     if (form.parent) {
       data.parent = form.parent
@@ -666,7 +666,7 @@ const handleSubmit = async () => {
     if (form.description) {
       data.description = form.description
     }
-    
+
     if (form.id) {
       await updateTask(form.id, data)
       ElMessage.success('更新成功')
@@ -674,10 +674,10 @@ const handleSubmit = async () => {
       await createTask(data)
       ElMessage.success('创建成功')
     }
-    
+
     dialogVisible.value = false
     fetchTasks()
-  } catch (error) {
+  } catch (error: any) {
     console.error('操作失败:', error)
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
@@ -685,7 +685,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleLogTime = (row) => {
+const handleLogTime = (row: any) => {
   currentTask.value = row
   timeLogForm.date = new Date().toISOString().split('T')[0]
   timeLogForm.hours = 1
@@ -696,13 +696,13 @@ const handleLogTime = (row) => {
 // 重新计算所有任务的实际工时（从工时填报汇总）
 const handleRecalculateHours = async () => {
   if (!selectedProject.value) return
-  
+
   try {
     recalculating.value = true
     const res = await batchRecalculateHours({ project: selectedProject.value })
     ElMessage.success(res.message || '工时重算完成')
     fetchTasks() // 刷新任务列表
-  } catch (error) {
+  } catch (error: any) {
     console.error('重算工时失败:', error)
     ElMessage.error('重算工时失败')
   } finally {
@@ -716,7 +716,7 @@ const handleSubmitTimeLog = async () => {
     ElMessage.success('工时填报成功')
     timeLogVisible.value = false
     fetchTasks()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('工时填报失败')
   }
 }
@@ -761,4 +761,3 @@ onMounted(() => {
   font-size: 12px;
 }
 </style>
-

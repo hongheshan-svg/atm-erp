@@ -10,7 +10,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" class="search-form">
         <el-form-item label="类型">
@@ -31,21 +31,21 @@
           <el-button @click="resetSearch">重置</el-button>
         </el-form-item>
       </el-form>
-      
+
       <el-empty v-if="!loading && list.length === 0" description="暂无请假记录" />
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="leave_type_display" label="请假类型" width="100" />
@@ -70,7 +70,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.pageSize"
@@ -82,7 +82,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 新建对话框 -->
     <el-dialog v-model="dialogVisible" title="新建请假" width="600px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -109,7 +109,7 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 查看详情对话框 -->
     <el-dialog v-model="viewDialogVisible" title="请假详情" width="600px">
       <el-descriptions :column="2" border>
@@ -146,21 +146,21 @@ const list = ref<any[]>([])
 const leaveTypes = ref<any[]>([])
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
-const currentItem = ref(null)
-const formRef = ref(null)
+const currentItem = ref<any>(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   leave_type: '',
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   leave_type: 'PERSONAL',
   start_date: '',
   end_date: '',
@@ -176,7 +176,7 @@ const rules = {
   reason: [{ required: true, message: '请输入请假原因', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING': 'warning',
@@ -184,7 +184,7 @@ const getStatusType = (status) => {
     'REJECTED': 'danger',
     'CANCELLED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 const loadLeaveTypes = async () => {
@@ -192,7 +192,7 @@ const loadLeaveTypes = async () => {
     const res = await getLeaveTypes()
     // res 已经是 response.data，因为响应拦截器返回的是 response.data
     leaveTypes.value = Array.isArray(res) ? res : (res || res)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载请假类型失败', error)
   }
 }
@@ -200,7 +200,7 @@ const loadLeaveTypes = async () => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -217,7 +217,7 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载请假数据失败:', error)
     ElMessage.error('加载数据失败')
   } finally {
@@ -243,7 +243,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   currentItem.value = row
   viewDialogVisible.value = true
 }
@@ -258,7 +258,7 @@ const handleSave = async () => {
 
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) {
       ElMessage.error(JSON.stringify(error.response.data))
     }
@@ -267,26 +267,26 @@ const handleSave = async () => {
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交这个请假申请吗？', '提示', { type: 'warning' })
     await submitLeaveRequest(row.id)
     ElMessage.success('提交成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败')
     }
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除这个请假申请吗？', '提示', { type: 'warning' })
     await deleteLeaveRequest(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }

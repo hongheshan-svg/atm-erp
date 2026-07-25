@@ -67,6 +67,9 @@ class LoginLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return LoginLog.objects.none()
+
         user = self.request.user
         queryset = LoginLog.objects.all()
 

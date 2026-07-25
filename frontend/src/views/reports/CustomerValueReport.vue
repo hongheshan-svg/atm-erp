@@ -2,7 +2,7 @@
   <div class="customer-value-report">
     <el-card>
       <template #header><span>客户价值分析报表</span></template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="统计年度">
           <el-select v-model="year" @change="loadData" style="width: 140px;">
@@ -13,19 +13,19 @@
           <el-button type="primary" @click="loadData">查询</el-button>
         </el-form-item>
       </el-form>
-      
+
       <div ref="chartRef" style="height: 400px;" class="chart-container"></div>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="customer_name" label="客户名称" min-width="160" />
@@ -58,7 +58,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { getCustomerValueReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
@@ -69,10 +69,10 @@ const tableData = ref<any[]>([])
 const currentYear = new Date().getFullYear()
 const year = ref(currentYear)
 const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i)
-const chartRef = ref(null)
+const chartRef = ref<any>(null)
 
-const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
-const getGradeType = (g) => ({ 'A': 'success', 'B': 'primary', 'C': 'warning', 'D': 'info' }[g] || 'info')
+const formatMoney = (v: any) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const getGradeType = (g: any) => (({ 'A': 'success', 'B': 'primary', 'C': 'warning', 'D': 'info' } as Record<string, any>)[g] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -81,7 +81,7 @@ const loadData = async () => {
     tableData.value = res.customers || []
     await nextTick()
     renderChart()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false

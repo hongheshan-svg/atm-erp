@@ -366,7 +366,7 @@ class WorkCenterSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_equipment_count(self, obj):
+    def get_equipment_count(self, obj) -> int:
         return obj.equipment.count()
 
 
@@ -494,9 +494,7 @@ class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         with transaction.atomic():
             schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
             if schedule.status != 'DRAFT':
-                return Response(
-                    {'error': '只有草稿状态的排程可以确认'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有草稿状态的排程可以确认'}, status=status.HTTP_400_BAD_REQUEST)
             schedule.status = 'CONFIRMED'
             schedule.save()
         return Response(self.get_serializer(schedule).data)
@@ -507,9 +505,7 @@ class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         with transaction.atomic():
             schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
             if schedule.status != 'CONFIRMED':
-                return Response(
-                    {'error': '只有已确认的排程可以下达'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有已确认的排程可以下达'}, status=status.HTTP_400_BAD_REQUEST)
             schedule.status = 'RELEASED'
             schedule.save()
         return Response(self.get_serializer(schedule).data)
@@ -520,9 +516,7 @@ class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         with transaction.atomic():
             schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
             if schedule.status != 'RELEASED':
-                return Response(
-                    {'error': '只有已下达的排程可以开始生产'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有已下达的排程可以开始生产'}, status=status.HTTP_400_BAD_REQUEST)
             schedule.status = 'IN_PROGRESS'
             schedule.actual_start = timezone.now()
             schedule.save()
@@ -534,9 +528,7 @@ class ProductionScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
         with transaction.atomic():
             schedule = ProductionSchedule.objects.select_for_update().get(pk=self.get_object().pk)
             if schedule.status != 'IN_PROGRESS':
-                return Response(
-                    {'error': '只有生产中的排程可以完成'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有生产中的排程可以完成'}, status=status.HTTP_400_BAD_REQUEST)
             schedule.status = 'COMPLETED'
             schedule.actual_end = timezone.now()
             if schedule.actual_start:
@@ -572,9 +564,7 @@ class ScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         with transaction.atomic():
             task = ScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
             if task.status not in ('PENDING', 'PAUSED'):
-                return Response(
-                    {'error': '只有待处理或暂停的任务可以开始'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有待处理或暂停的任务可以开始'}, status=status.HTTP_400_BAD_REQUEST)
             task.status = 'IN_PROGRESS'
             if task.actual_start is None:
                 task.actual_start = timezone.now()
@@ -587,9 +577,7 @@ class ScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         with transaction.atomic():
             task = ScheduleTask.objects.select_for_update().get(pk=self.get_object().pk)
             if task.status != 'IN_PROGRESS':
-                return Response(
-                    {'error': '只有进行中的任务可以完成'}, status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({'error': '只有进行中的任务可以完成'}, status=status.HTTP_400_BAD_REQUEST)
             task.status = 'COMPLETED'
             task.actual_end = timezone.now()
             task.progress = 100

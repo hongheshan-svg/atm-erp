@@ -57,11 +57,11 @@
       <text class="card-title">待办事项</text>
       <text class="card-more" bindtap="goToApproval">查看全部 ></text>
     </view>
-    
+
     <view wx:if="{{pendingTasks.length === 0}}" class="empty">
       <text>暂无待办事项 🎉</text>
     </view>
-    
+
     <view wx:for="{{pendingTasks}}" wx:key="id" class="todo-item" bindtap="goToDetail" data-id="{{item.id}}">
       <view class="todo-header">
         <text class="todo-type tag tag-info">{{item.business_type_display}}</text>

@@ -60,6 +60,22 @@ class AuditLogMiddleware(MiddlewareMixin):
     Middleware to automatically log API changes
     """
 
+    def process_request(self, request):
+        if request.method not in ['POST', 'PUT', 'PATCH']:
+            return None
+
+        content_type = request.content_type or ''
+        if content_type != 'application/json' and not content_type.endswith('+json'):
+            return None
+
+        try:
+            request._audit_body = request.body
+        except Exception as e:
+            request._audit_body = None
+            logger.warning('Audit request body capture error: %s', e)
+
+        return None
+
     def process_response(self, request, response):
         # Only log authenticated requests
         if not request.user.is_authenticated:
@@ -92,8 +108,9 @@ class AuditLogMiddleware(MiddlewareMixin):
             changes = None
             if request.method in ['POST', 'PUT', 'PATCH']:
                 try:
-                    if hasattr(request, 'body'):
-                        changes = mask_sensitive(json.loads(request.body.decode('utf-8')))
+                    body = getattr(request, '_audit_body', None)
+                    if body:
+                        changes = mask_sensitive(json.loads(body.decode('utf-8')))
                 except (ValueError, UnicodeDecodeError):
                     pass
 

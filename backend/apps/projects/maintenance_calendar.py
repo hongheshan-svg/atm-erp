@@ -213,7 +213,9 @@ class EquipmentMaintenanceHistoryView(APIView):
                     'id': s.id,
                     'maintenance_type': s.maintenance_type,
                     'status': s.status,
-                    'planned_date': s.scheduled_date.isoformat() if hasattr(s, 'scheduled_date') and s.scheduled_date else None,
+                    'planned_date': s.scheduled_date.isoformat()
+                    if hasattr(s, 'scheduled_date') and s.scheduled_date
+                    else None,
                     'completed_date': s.completed_date.isoformat()
                     if hasattr(s, 'completed_date') and s.completed_date
                     else None,

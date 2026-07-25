@@ -7,7 +7,7 @@
         <el-button :icon="Refresh" @click="fetchAll">刷新</el-button>
       </div>
     </div>
-    
+
     <el-row :gutter="16">
       <!-- 数据源列表 -->
       <el-col :span="6">
@@ -15,10 +15,10 @@
           <template #header>
             <span>数据源 ({{ dataSources.length }})</span>
           </template>
-          
+
           <div class="source-list" v-loading="loadingSource">
-            <div 
-              v-for="source in dataSources" 
+            <div
+              v-for="source in dataSources"
               :key="source.id"
               class="source-item"
               :class="{ active: currentSource?.id === source.id, [source.status.toLowerCase()]: true }"
@@ -39,20 +39,20 @@
                 </div>
               </div>
             </div>
-            
+
             <el-empty v-if="!dataSources.length" description="暂无数据源" :image-size="60" />
           </div>
         </el-card>
       </el-col>
-      
+
       <!-- 数据点与实时数据 -->
       <el-col :span="18">
         <el-tabs v-model="activeTab" type="border-card">
           <!-- 实时监控 -->
           <el-tab-pane label="实时监控" name="realtime">
             <div class="realtime-grid" v-if="dataPoints.length">
-              <div 
-                v-for="point in dataPoints" 
+              <div
+                v-for="point in dataPoints"
                 :key="point.id"
                 class="data-card"
                 :class="{ alarm: point.alarm_status }"
@@ -77,7 +77,7 @@
             </div>
             <el-empty v-else description="请选择数据源查看数据点" />
           </el-tab-pane>
-          
+
           <!-- 数据点配置 -->
           <el-tab-pane label="数据点配置" name="points">
             <div class="table-toolbar">
@@ -85,19 +85,19 @@
                 新增数据点
               </el-button>
             </div>
-            
+
             <!-- 批量操作 -->
-            
+
             <div v-if="selectedRows.length > 0" class="batch-toolbar">
-            
+
               <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-            
+
               <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-            
+
               <el-button size="small" @click="batchExport">导出选中</el-button>
-            
+
             </div>
-            
+
             <el-table :data="dataPoints" border stripe v-loading="loadingPoints" @selection-change="handleSelectionChange">
               <el-table-column type="selection" width="45" />
               <el-table-column prop="code" label="编码" width="120" />
@@ -127,7 +127,7 @@
               </el-table-column>
             </el-table>
           </el-tab-pane>
-          
+
           <!-- 告警记录 -->
           <el-tab-pane label="告警记录" name="alarms">
             <el-table :data="alarms" border stripe v-loading="loadingAlarms">
@@ -155,13 +155,13 @@
               </el-table-column>
               <el-table-column label="操作" width="150" fixed="right">
                 <template #default="{ row }">
-                  <el-button 
-                    v-if="row.status === 'ACTIVE'" 
-                    link type="primary" size="small" 
+                  <el-button
+                    v-if="row.status === 'ACTIVE'"
+                    link type="primary" size="small"
                     @click="handleAcknowledgeAlarm(row)"
                   >确认</el-button>
-                  <el-button 
-                    v-if="row.status === 'ACKNOWLEDGED'" 
+                  <el-button
+                    v-if="row.status === 'ACKNOWLEDGED'"
                     link type="success" size="small"
                     @click="handleResolveAlarm(row)"
                   >解决</el-button>
@@ -169,16 +169,16 @@
               </el-table-column>
             </el-table>
           </el-tab-pane>
-          
+
           <!-- 历史趋势 -->
           <el-tab-pane label="历史趋势" name="history">
             <div class="history-toolbar">
               <el-select v-model="selectedPointId" placeholder="选择数据点" style="width: 200px">
-                <el-option 
-                  v-for="point in dataPoints" 
-                  :key="point.id" 
-                  :label="point.name" 
-                  :value="point.id" 
+                <el-option
+                  v-for="point in dataPoints"
+                  :key="point.id"
+                  :label="point.name"
+                  :value="point.id"
                 />
               </el-select>
               <el-date-picker
@@ -191,16 +191,16 @@
               />
               <el-button type="primary" @click="fetchHistory">查询</el-button>
             </div>
-            
+
             <div class="chart-container" ref="historyChart"></div>
           </el-tab-pane>
         </el-tabs>
       </el-col>
     </el-row>
-    
+
     <!-- 数据源对话框 -->
-    <el-dialog 
-      v-model="showDataSourceDialog" 
+    <el-dialog
+      v-model="showDataSourceDialog"
       :title="editingSource ? '编辑数据源' : '新增数据源'"
       width="600px"
     >
@@ -232,27 +232,27 @@
           <el-input v-model="sourceForm.password" type="password" show-password />
         </el-form-item>
         <el-form-item label="MQTT主题" v-if="sourceForm.source_type === 'MQTT'">
-          <el-input 
-            v-model="sourceForm.topics" 
-            type="textarea" 
-            :rows="3" 
-            placeholder="每行一个主题，如:&#10;/device/+/data&#10;/sensor/#" 
+          <el-input
+            v-model="sourceForm.topics"
+            type="textarea"
+            :rows="3"
+            placeholder="每行一个主题，如:&#10;/device/+/data&#10;/sensor/#"
           />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="sourceForm.description" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="showDataSourceDialog = false">取消</el-button>
         <el-button type="primary" @click="saveDataSource">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 数据点对话框 -->
-    <el-dialog 
-      v-model="showPointDialog" 
+    <el-dialog
+      v-model="showPointDialog"
       :title="editingPoint ? '编辑数据点' : '新增数据点'"
       width="650px"
     >
@@ -336,7 +336,7 @@
           </el-col>
         </el-row>
       </el-form>
-      
+
       <template #footer>
         <el-button @click="showPointDialog = false">取消</el-button>
         <el-button type="primary" @click="saveDataPoint">保存</el-button>
@@ -350,7 +350,7 @@ import { ref, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Connection, Monitor, DataLine } from '@element-plus/icons-vue'
 import { getDataSourceList, getDataPointList, getDataAlarmList, updateDataSource, createDataSource, updateDataPoint, createDataPoint, deleteDataPoint, patchDataPoint, acknowledgeAlarm, resolveAlarm, getDataPointDetailHistory } from '@/api/mes'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/data-points/', { onSuccess: () => currentSource.value && fetchDataPoints(currentSource.value.id) })
@@ -364,20 +364,20 @@ const activeTab = ref('realtime')
 const dataSources = ref<any[]>([])
 const dataPoints = ref<any[]>([])
 const alarms = ref<any[]>([])
-const currentSource = ref(null)
+const currentSource = ref<any>(null)
 const historyData = ref<any[]>([])
-const selectedPointId = ref(null)
+const selectedPointId = ref<any>(null)
 const historyDateRange = ref<any[]>([])
 
 // 对话框
 const showDataSourceDialog = ref(false)
 const showPointDialog = ref(false)
-const editingSource = ref(null)
-const editingPoint = ref(null)
+const editingSource = ref<any>(null)
+const editingPoint = ref<any>(null)
 
 // 表单
-const sourceFormRef = ref(null)
-const pointFormRef = ref(null)
+const sourceFormRef = ref<any>(null)
+const pointFormRef = ref<any>(null)
 const sourceForm = ref({
   name: '',
   code: '',
@@ -416,39 +416,39 @@ const pointRules = {
 }
 
 // 图表
-const historyChart = ref(null)
-let chartInstance = null
+const historyChart = ref<any>(null)
+let chartInstance: any = null
 
 // 工具方法
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = { ACTIVE: 'success', INACTIVE: 'info', ERROR: 'danger', TESTING: 'warning' }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getCategoryType = (category) => {
-  const types = { 
+const getCategoryType = (category: any) => {
+  const types = {
     PRODUCTION: 'primary', QUALITY: 'success', EQUIPMENT: 'warning',
     ENVIRONMENT: 'info', ENERGY: 'danger'
   }
-  return types[category] || 'info'
+  return (types as Record<string, any>)[category] || 'info'
 }
 
-const getAlarmLevelType = (level) => {
+const getAlarmLevelType = (level: any) => {
   const types = { INFO: 'info', WARNING: 'warning', ALARM: 'danger', CRITICAL: 'danger' }
-  return types[level] || 'info'
+  return (types as Record<string, any>)[level] || 'info'
 }
 
-const getAlarmStatusType = (status) => {
+const getAlarmStatusType = (status: any) => {
   const types = { ACTIVE: 'danger', ACKNOWLEDGED: 'warning', RESOLVED: 'success' }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const formatTime = (time) => {
+const formatTime = (time: any) => {
   if (!time) return '--'
   return new Date(time).toLocaleTimeString('zh-CN')
 }
 
-const formatDateTime = (time) => {
+const formatDateTime = (time: any) => {
   if (!time) return '--'
   return new Date(time).toLocaleString('zh-CN')
 }
@@ -459,19 +459,19 @@ const fetchDataSources = async () => {
   try {
     const data = await getDataSourceList()
     dataSources.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loadingSource.value = false
   }
 }
 
-const fetchDataPoints = async (sourceId) => {
+const fetchDataPoints = async (sourceId: any) => {
   loadingPoints.value = true
   try {
     const data = await getDataPointList({ data_source: sourceId })
     dataPoints.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loadingPoints.value = false
@@ -483,7 +483,7 @@ const fetchAlarms = async () => {
   try {
     const data = await getDataAlarmList()
     alarms.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loadingAlarms.value = false
@@ -498,7 +498,7 @@ const fetchAll = () => {
   fetchAlarms()
 }
 
-const selectSource = (source) => {
+const selectSource = (source: any) => {
   currentSource.value = source
   fetchDataPoints(source.id)
 }
@@ -515,7 +515,7 @@ const saveDataSource = async () => {
     }
     showDataSourceDialog.value = false
     fetchDataSources()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   }
 }
@@ -533,59 +533,59 @@ const saveDataPoint = async () => {
     }
     showPointDialog.value = false
     fetchDataPoints(currentSource.value.id)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('保存失败')
   }
 }
 
-const editPoint = (row) => {
+const editPoint = (row: any) => {
   editingPoint.value = row
   pointForm.value = { ...row }
   showPointDialog.value = true
 }
 
-const deletePoint = async (row) => {
+const deletePoint = async (row: any) => {
   await ElMessageBox.confirm('确定要删除该数据点吗？', '提示', { type: 'warning' })
   try {
     await deleteDataPoint(row.id)
     ElMessage.success('删除成功')
     fetchDataPoints(currentSource.value.id)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('删除失败')
   }
 }
 
-const togglePoint = async (row) => {
+const togglePoint = async (row: any) => {
   try {
     await patchDataPoint(row.id, { is_active: row.is_active })
     ElMessage.success(row.is_active ? '已启用' : '已禁用')
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
     row.is_active = !row.is_active
   }
 }
 
-const handleAcknowledgeAlarm = async (row) => {
+const handleAcknowledgeAlarm = async (row: any) => {
   try {
     await acknowledgeAlarm(row.id)
     ElMessage.success('已确认')
     fetchAlarms()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleResolveAlarm = async (row) => {
+const handleResolveAlarm = async (row: any) => {
   try {
     await resolveAlarm(row.id)
     ElMessage.success('已解决')
     fetchAlarms()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const viewHistory = (row) => {
+const viewHistory = (row: any) => {
   selectedPointId.value = row.id
   activeTab.value = 'history'
   fetchHistory()
@@ -593,18 +593,18 @@ const viewHistory = (row) => {
 
 const fetchHistory = async () => {
   if (!selectedPointId.value) return
-  
+
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (historyDateRange.value?.length) {
       params.start = historyDateRange.value[0].toISOString()
       params.end = historyDateRange.value[1].toISOString()
     }
-    
+
     const data = await getDataPointDetailHistory(selectedPointId.value, params)
     historyData.value = data
     renderHistoryChart()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -612,11 +612,11 @@ const fetchHistory = async () => {
 const renderHistoryChart = () => {
   nextTick(() => {
     if (!historyChart.value) return
-    
+
     if (!chartInstance) {
       chartInstance = echarts.init(historyChart.value)
     }
-    
+
     const option = {
       title: { text: '历史趋势', left: 'center' },
       tooltip: { trigger: 'axis' },
@@ -633,7 +633,7 @@ const renderHistoryChart = () => {
         data: historyData.value.map(d => [d.timestamp, parseFloat(d.value)])
       }]
     }
-    
+
     chartInstance.setOption(option)
   })
 }

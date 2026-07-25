@@ -104,15 +104,15 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="viewSession(row)">查看</el-button>
-            <el-button 
-              v-if="row.status === 'REVIEWING' && row.new_item_count > 0" 
-              size="small" 
+            <el-button
+              v-if="row.status === 'REVIEWING' && row.new_item_count > 0"
+              size="small"
               type="warning"
               @click="createItems(row)"
             >创建物料</el-button>
-            <el-button 
-              v-if="['REVIEWING', 'MATCHED'].includes(row.status)" 
-              size="small" 
+            <el-button
+              v-if="['REVIEWING', 'MATCHED'].includes(row.status)"
+              size="small"
               type="success"
               @click="importBOM(row)"
             >导入BOM</el-button>
@@ -163,10 +163,10 @@
         </el-form-item>
         <el-form-item label="目标项目">
           <el-select v-model="uploadForm.project_id" clearable placeholder="选择项目（可选）" style="width: 100%">
-            <el-option 
-              v-for="p in projects" 
-              :key="p.id" 
-              :label="p.name" 
+            <el-option
+              v-for="p in projects"
+              :key="p.id"
+              :label="p.name"
               :value="p.id"
             />
           </el-select>
@@ -204,8 +204,8 @@
 
         <!-- 操作按钮 -->
         <div class="action-bar">
-          <el-button 
-            v-if="currentSession.new_item_count > 0" 
+          <el-button
+            v-if="currentSession.new_item_count > 0"
             type="warning"
             @click="createItems(currentSession)"
           >
@@ -271,14 +271,14 @@
           </el-table-column>
           <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
-              <el-button 
-                v-if="row.status === 'NEW'" 
-                size="small" 
+              <el-button
+                v-if="row.status === 'NEW'"
+                size="small"
                 @click="showMatchDialog(row)"
               >手动匹配</el-button>
-              <el-button 
-                v-if="row.match_candidates && row.match_candidates.length > 0" 
-                size="small" 
+              <el-button
+                v-if="row.match_candidates && row.match_candidates.length > 0"
+                size="small"
                 type="info"
                 @click="showCandidates(row)"
               >候选</el-button>
@@ -298,10 +298,10 @@
           <strong>{{ matchingItem.part_name }}</strong>
         </el-form-item>
         <el-form-item label="匹配物料">
-          <el-select 
-            v-model="selectedMaterialId" 
-            filterable 
-            remote 
+          <el-select
+            v-model="selectedMaterialId"
+            filterable
+            remote
             :remote-method="searchMaterials"
             placeholder="搜索物料"
             style="width: 100%"
@@ -329,7 +329,7 @@ import { getCreoBOMImportList, getCreoBOMImport, uploadCreoBOM, createCreoBOMIte
 import { getProjectList } from '@/api/projects/project'
 import { getItemList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Plus, Download, DocumentAdd, Connection } from '@element-plus/icons-vue'
+import { Upload, Plus, Download, Connection } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/creo-bom-imports/', { onSuccess: () => loadSessions() })
@@ -342,12 +342,12 @@ const projects = ref<any[]>([])
 const showUploadDialog = ref(false)
 const showDetail = ref(false)
 const showManualMatch = ref(false)
-const currentSession = ref(null)
-const matchingItem = ref(null)
-const selectedMaterialId = ref(null)
+const currentSession = ref<any>(null)
+const matchingItem = ref<any>(null)
+const selectedMaterialId = ref<any>(null)
 const materialSearchResults = ref<any[]>([])
-const uploadRef = ref(null)
-const uploadFile = ref(null)
+const uploadRef = ref<any>(null)
+const uploadFile = ref<any>(null)
 
 const uploadForm = ref({
   file_format: 'CSV',
@@ -372,14 +372,14 @@ const cadSoftwareMap = {
   'GENERIC': { name: '通用', type: 'info' },
 }
 
-const getCadName = (code) => cadSoftwareMap[code]?.name || code
-const getCadType = (code) => cadSoftwareMap[code]?.type || 'info'
+const getCadName = (code: any) => (cadSoftwareMap as Record<string, any>)[code]?.name || code
+const getCadType = (code: any) => (cadSoftwareMap as Record<string, any>)[code]?.type || 'info'
 
 const totalMatched = computed(() => sessions.value.reduce((sum, s) => sum + (s.matched_count || 0), 0))
 const totalCreated = computed(() => sessions.value.reduce((sum, s) => sum + (s.new_item_count || 0), 0))
 const totalImported = computed(() => sessions.value.reduce((sum, s) => sum + (s.imported_count || 0), 0))
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     'COMPLETED': 'success',
     'REVIEWING': 'warning',
@@ -387,10 +387,10 @@ const getStatusType = (status) => {
     'FAILED': 'danger',
     'CANCELLED': 'info'
   }
-  return map[status] || 'default'
+  return (map as Record<string, any>)[status] || 'default'
 }
 
-const getItemStatusType = (status) => {
+const getItemStatusType = (status: any) => {
   const map = {
     'MATCHED': 'success',
     'CREATED': 'success',
@@ -400,10 +400,10 @@ const getItemStatusType = (status) => {
     'ERROR': 'danger',
     'SKIPPED': 'info'
   }
-  return map[status] || 'default'
+  return (map as Record<string, any>)[status] || 'default'
 }
 
-const getPropertyType = (prop) => {
+const getPropertyType = (prop: any) => {
   const map = {
     'STANDARD': 'info',
     'PURCHASED': 'primary',
@@ -411,10 +411,10 @@ const getPropertyType = (prop) => {
     'SELF_MADE': 'success',
     'ASSEMBLY': 'danger'
   }
-  return map[prop] || 'info'
+  return (map as Record<string, any>)[prop] || 'info'
 }
 
-const getPropertyLabel = (prop) => {
+const getPropertyLabel = (prop: any) => {
   const map = {
     'STANDARD': '标准件',
     'PURCHASED': '外购件',
@@ -422,16 +422,16 @@ const getPropertyLabel = (prop) => {
     'SELF_MADE': '自制件',
     'ASSEMBLY': '组件'
   }
-  return map[prop] || prop
+  return (map as Record<string, any>)[prop] || prop
 }
 
-const getMatchScoreClass = (score) => {
+const getMatchScoreClass = (score: any) => {
   if (score >= 0.9) return 'match-high'
   if (score >= 0.7) return 'match-medium'
   return 'match-low'
 }
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return '-'
   return new Date(date).toLocaleString('zh-CN')
 }
@@ -441,7 +441,7 @@ const loadSessions = async () => {
   try {
     const res = await getCreoBOMImportList()
     sessions.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载失败', e)
   } finally {
     loading.value = false
@@ -452,12 +452,12 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList()
     projects.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载项目失败', e)
   }
 }
 
-const handleFileChange = (file) => {
+const handleFileChange = (file: any) => {
   uploadFile.value = file.raw
   if (!uploadForm.value.name) {
     uploadForm.value.name = file.name
@@ -465,8 +465,8 @@ const handleFileChange = (file) => {
   // 根据文件扩展名自动设置格式
   const ext = file.name.split('.').pop().toLowerCase()
   const formatMap = { csv: 'CSV', xml: 'XML', xlsx: 'XLSX', xls: 'XLSX', txt: 'TXT' }
-  if (formatMap[ext]) {
-    uploadForm.value.file_format = formatMap[ext]
+  if ((formatMap as Record<string, any>)[ext]) {
+    uploadForm.value.file_format = (formatMap as Record<string, any>)[ext]
   }
 }
 
@@ -475,7 +475,7 @@ const doUpload = async () => {
     ElMessage.warning('请选择文件')
     return
   }
-  
+
   uploading.value = true
   try {
     const formData = new FormData()
@@ -485,123 +485,123 @@ const doUpload = async () => {
     if (uploadForm.value.name) formData.append('name', uploadForm.value.name)
     if (uploadForm.value.project_id) formData.append('project_id', uploadForm.value.project_id)
     formData.append('options', JSON.stringify(uploadForm.value.options))
-    
+
     const res = await uploadCreoBOM(formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    
+
     ElMessage.success(`解析完成: 总计${res.result.total}行, 匹配${res.result.matched}, 新物料${res.result.new}`)
     showUploadDialog.value = false
     uploadFile.value = null
     uploadForm.value = { file_format: 'CSV', cad_software: 'AUTO', name: '', project_id: null, options: { auto_create: false, match_by_name: true } }
     loadSessions()
-    
+
     // 自动打开详情
     currentSession.value = res.session
     showDetail.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('上传失败: ' + (e.response?.data?.error || e.message))
   } finally {
     uploading.value = false
   }
 }
 
-const viewSession = async (session) => {
+const viewSession = async (session: any) => {
   try {
     const res = await getCreoBOMImport(session.id)
     currentSession.value = res
     showDetail.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const createItems = async (session) => {
+const createItems = async (session: any) => {
   try {
     await ElMessageBox.confirm(
       `确认为 ${session.new_item_count} 个新物料创建物料主数据？`,
       '创建物料'
     )
-    
+
     const res = await createCreoBOMItems(session.id, {
       options: { sku_prefix: 'CREO-' }
     })
-    
+
     ElMessage.success(`成功创建 ${res.result.created} 个物料`)
     loadSessions()
     if (currentSession.value?.id === session.id) {
       currentSession.value = res.session
     }
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error('创建失败: ' + (e.response?.data?.error || e.message))
     }
   }
 }
 
-const importBOM = async (session) => {
+const importBOM = async (session: any) => {
   if (!session.project_id) {
     // 先选择项目
     const { value } = await ElMessageBox.prompt('请输入项目ID', '选择项目', {
       inputPattern: /^\d+$/,
       inputErrorMessage: '请输入有效的项目ID'
     }).catch(() => ({ value: null }))
-    
+
     if (!value) return
     session.project_id = parseInt(value)
   }
-  
+
   try {
     const res = await importCreoBOM(session.id, {
       project_id: session.project_id
     })
-    
+
     ElMessage.success(`成功导入 ${res.result.imported} 条BOM`)
     loadSessions()
     if (currentSession.value?.id === session.id) {
       currentSession.value = res.session
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('导入失败: ' + (e.response?.data?.error || e.message))
   }
 }
 
-const importHierarchicalBOM = async (session) => {
+const importHierarchicalBOM = async (session: any) => {
   if (!session.project_id) {
     // 先选择项目
     const { value } = await ElMessageBox.prompt('请输入项目ID', '选择项目', {
       inputPattern: /^\d+$/,
       inputErrorMessage: '请输入有效的项目ID'
     }).catch(() => ({ value: null }))
-    
+
     if (!value) return
     session.project_id = parseInt(value)
   }
-  
+
   try {
     const res = await importCreoBOMHierarchy(session.id, {
       project_id: session.project_id
     })
-    
+
     ElMessage.success(`成功导入 ${res.result.imported} 条BOM（${res.result.hierarchy_levels || 0}层结构）`)
     loadSessions()
     if (currentSession.value?.id === session.id) {
       currentSession.value = res.session
     }
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('层级导入失败: ' + (e.response?.data?.error || e.message))
   }
 }
 
-const showMatchDialog = (item) => {
+const showMatchDialog = (item: any) => {
   matchingItem.value = item
   selectedMaterialId.value = null
   materialSearchResults.value = []
   showManualMatch.value = true
 }
 
-const showCandidates = (item) => {
-  materialSearchResults.value = item.match_candidates.map(c => ({
+const showCandidates = (item: any) => {
+  materialSearchResults.value = item.match_candidates.map((c: any) => ({
     id: c.id,
     sku: c.sku,
     name: c.name
@@ -611,12 +611,12 @@ const showCandidates = (item) => {
   showManualMatch.value = true
 }
 
-const searchMaterials = async (query) => {
+const searchMaterials = async (query: any) => {
   if (query.length < 2) return
   try {
     const res = await getItemList({ search: query, page_size: 20 })
     materialSearchResults.value = res.results || res || []
-  } catch (e) {
+  } catch (e: any) {
     console.error('搜索物料失败', e)
   }
 }
@@ -626,17 +626,17 @@ const doManualMatch = async () => {
     ElMessage.warning('请选择物料')
     return
   }
-  
+
   try {
     await manualMatchCreoBOM(currentSession.value.id, {
       item_id: matchingItem.value.id,
       matched_material_id: selectedMaterialId.value
     })
-    
+
     ElMessage.success('匹配成功')
     showManualMatch.value = false
     viewSession(currentSession.value)
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('匹配失败: ' + (e.response?.data?.error || e.message))
   }
 }

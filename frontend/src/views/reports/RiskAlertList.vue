@@ -109,24 +109,24 @@ const loading = ref(false)
 const alertList = ref<any[]>([])
 const total = ref(0)
 
-const stats = reactive({ total: 0, critical: 0, high: 0, pending: 0, resolved: 0 })
-const queryParams = reactive({ page: 1, page_size: 20, severity: '', alert_type: '', status: '' })
+const stats = reactive<Record<string, any>>({ total: 0, critical: 0, high: 0, pending: 0, resolved: 0 })
+const queryParams = reactive<Record<string, any>>({ page: 1, page_size: 20, severity: '', alert_type: '', status: '' })
 
-const severityType = (s) => ({ critical: 'danger', high: 'danger', medium: 'warning', low: 'info' }[s] || 'info')
-const severityLabel = (s) => ({ critical: '严重', high: '高', medium: '中', low: '低' }[s] || s)
-const statusType = (s) => ({ open: 'danger', acknowledged: 'warning', resolved: 'success', closed: 'info' }[s] || 'info')
-const statusLabel = (s) => ({ open: '待处理', acknowledged: '已确认', resolved: '已解决', closed: '已关闭' }[s] || s)
-const alertTypeLabel = (t) => ({
+const severityType = (s: any) => (({ critical: 'danger', high: 'danger', medium: 'warning', low: 'info' } as Record<string, any>)[s] || 'info')
+const severityLabel = (s: any) => (({ critical: '严重', high: '高', medium: '中', low: '低' } as Record<string, any>)[s] || s)
+const statusType = (s: any) => (({ open: 'danger', acknowledged: 'warning', resolved: 'success', closed: 'info' } as Record<string, any>)[s] || 'info')
+const statusLabel = (s: any) => (({ open: '待处理', acknowledged: '已确认', resolved: '已解决', closed: '已关闭' } as Record<string, any>)[s] || s)
+const alertTypeLabel = (t: any) => (({
   cost_overrun: '成本超支', schedule_delay: '进度延迟', capacity_shortage: '产能不足',
   inventory_anomaly: '库存异常', quality_risk: '质量风险', supply_chain_risk: '供应链风险'
-}[t] || t)
+} as Record<string, any>)[t] || t)
 
-const rowClassName = ({ row }) => row.severity === 'critical' ? 'danger-row' : (row.severity === 'high' ? 'warning-row' : '')
+const rowClassName = ({ row }: { row: any }) => row.severity === 'critical' ? 'danger-row' : (row.severity === 'high' ? 'warning-row' : '')
 
 const loadList = async () => {
   loading.value = true
   try {
-    const params = { ...queryParams }
+    const params: Record<string, any> = { ...queryParams }
     Object.keys(params).forEach(k => { if (params[k] === '') delete params[k] })
     const res = await getRiskAlerts(params)
     alertList.value = res.results || res.results || []
@@ -139,14 +139,14 @@ const loadList = async () => {
   } finally { loading.value = false }
 }
 
-const acknowledgeAlert = async (row) => {
+const acknowledgeAlert = async (row: any) => {
   await ElMessageBox.confirm('确认该风险预警？', '确认')
   await acknowledgeRiskAlert(row.id)
   ElMessage.success('已确认')
   loadList()
 }
 
-const resolveAlert = async (row) => {
+const resolveAlert = async (row: any) => {
   const { value } = await ElMessageBox.prompt('请输入解决方案', '解决预警', { inputType: 'textarea' })
   await resolveRiskAlert(row.id, { resolution: value })
   ElMessage.success('已解决')

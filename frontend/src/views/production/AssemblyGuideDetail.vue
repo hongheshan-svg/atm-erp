@@ -1,7 +1,7 @@
 <template>
   <div class="assembly-guide-detail">
     <el-page-header @back="goBack" :content="pageTitle" />
-    
+
     <el-card class="detail-card" v-loading="loading">
       <template #header><span>指导信息</span></template>
       <el-descriptions :column="3" border>
@@ -13,7 +13,7 @@
         <el-descriptions-item label="创建人">{{ guide.created_by_name }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-    
+
     <el-card class="steps-card">
       <template #header><span>装配步骤</span></template>
       <el-timeline>
@@ -32,7 +32,7 @@
     <!-- 3D模型查看 -->
     <el-dialog v-model="modelDialogVisible" title="3D模型查看" width="80%" top="5vh">
       <div style="height: 70vh; display: flex; align-items: center; justify-content: center; background: #f5f5f5; border-radius: 8px;">
-        <iframe v-if="guide?.model_url" :src="guide.model_url" style="width: 100%; height: 100%; border: none;" />
+        <iframe v-if="selectedModelUrl" :src="selectedModelUrl" style="width: 100%; height: 100%; border: none;" />
         <el-empty v-else description="暂无3D模型" />
       </div>
     </el-dialog>
@@ -55,9 +55,9 @@ const pageTitle = computed(() => guide.value.name ? `装配指导 - ${guide.valu
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getAssemblyGuide(route.params.id)
+    const res = await getAssemblyGuide(Number(route.params.id))
     guide.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -66,8 +66,10 @@ const loadData = async () => {
 
 const goBack = () => router.push({ name: 'AssemblyGuideList' })
 const modelDialogVisible = ref(false)
-const viewModel = () => {
-  if (guide.value?.model_url) {
+const selectedModelUrl = ref('')
+const viewModel = (step: any) => {
+  selectedModelUrl.value = step.model_url || ''
+  if (selectedModelUrl.value) {
     modelDialogVisible.value = true
   } else {
     ElMessage.warning('该指导未关联3D模型文件')

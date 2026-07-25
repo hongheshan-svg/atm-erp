@@ -17,14 +17,14 @@ mkdir -p "$SSL_DIR"
 if [ "$DOMAIN" = "localhost" ] || [ "$DOMAIN" = "127.0.0.1" ]; then
     echo ""
     echo "Generating self-signed certificate for development..."
-    
+
     # Generate self-signed certificate
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout "$SSL_DIR/privkey.pem" \
         -out "$SSL_DIR/fullchain.pem" \
         -subj "/C=CN/ST=State/L=City/O=Organization/CN=$DOMAIN" \
         -addext "subjectAltName=DNS:$DOMAIN,DNS:www.$DOMAIN,IP:127.0.0.1"
-    
+
     echo ""
     echo "✓ Self-signed certificate generated!"
     echo "  Certificate: $SSL_DIR/fullchain.pem"
@@ -32,7 +32,7 @@ if [ "$DOMAIN" = "localhost" ] || [ "$DOMAIN" = "127.0.0.1" ]; then
     echo ""
     echo "⚠ Note: Self-signed certificates will show browser warnings."
     echo "  For production, use Let's Encrypt (see below)."
-    
+
 else
     echo ""
     echo "For production domain: $DOMAIN"

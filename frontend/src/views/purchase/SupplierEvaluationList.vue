@@ -42,7 +42,7 @@
           </div>
         </div>
       </template>
-      
+
       <!-- 筛选区 -->
       <div class="filter-area">
         <el-input v-model="queryParams.search" placeholder="搜索评价编号/供应商" style="width: 220px" clearable @keyup.enter="fetchData">
@@ -268,7 +268,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, TrendCharts } from '@element-plus/icons-vue'
 import { toFixedSafe } from '@/utils/number'
@@ -295,7 +295,7 @@ const scoreItems = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建评价')
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   status: '',
   grade: '',
@@ -304,7 +304,7 @@ const queryParams = reactive({
   page_size: 20
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   supplier: null,
   template: null,
   period_type: 'QUARTERLY',
@@ -324,22 +324,22 @@ const rules = {
   period_end: [{ required: true, message: '请选择结束日期', trigger: 'change' }]
 }
 
-const getGradeCount = (grade) => {
-  const gradeData = statistics.value.by_grade?.find(g => g.grade === grade)
+const getGradeCount = (grade: any) => {
+  const gradeData = statistics.value.by_grade?.find((g: any) => g.grade === grade)
   return gradeData?.count || 0
 }
 
-const getGradeType = (grade) => {
+const getGradeType = (grade: any) => {
   const map = { A: 'success', B: 'primary', C: 'warning', D: 'danger', E: 'info' }
-  return map[grade] || 'info'
+  return (map as Record<string, any>)[grade] || 'info'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = { DRAFT: 'info', SUBMITTED: 'warning', APPROVED: 'success', REJECTED: 'danger' }
-  return map[status] || ''
+  return (map as Record<string, any>)[status] || ''
 }
 
-const getScoreClass = (score) => {
+const getScoreClass = (score: any) => {
   if (score >= 90) return 'score-excellent'
   if (score >= 80) return 'score-good'
   if (score >= 70) return 'score-fair'
@@ -353,7 +353,7 @@ const fetchData = async () => {
     const res = await getEvaluationList(queryParams)
     evaluations.value = res.results || res || []
     total.value = res.count || evaluations.value.length
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -364,7 +364,7 @@ const fetchStatistics = async () => {
   try {
     const res = await getEvaluationStatistics()
     statistics.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -373,7 +373,7 @@ const fetchRanking = async () => {
   try {
     const res = await getSupplierRanking()
     ranking.value = res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取排名失败', error)
   }
 }
@@ -382,16 +382,16 @@ const fetchTemplates = async () => {
   try {
     const res = await getEvaluationTemplateList({ is_active: true })
     templates.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取模板失败', error)
   }
 }
 
-const loadTemplate = async (templateId) => {
+const loadTemplate = async (templateId: any) => {
   const template = templates.value.find(t => t.id === templateId)
   if (template && template.criteria) {
     criteriaList.value = template.criteria
-    scoreItems.value = template.criteria.map(c => ({
+    scoreItems.value = template.criteria.map((c: any) => ({
       criteria: c.id,
       score: 0,
       comments: ''
@@ -419,35 +419,35 @@ const handleCreate = () => {
 const viewDialogVisible = ref(false)
 const viewDetail = ref<Record<string, any>>({})
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getEvaluation(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交此评价吗？', '确认')
     await submitEvaluation(row.id)
     ElMessage.success('提交成功')
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('提交失败')
   }
 }
 
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要审批通过此评价吗？', '确认')
     await approveEvaluation(row.id, { comments: '' })
     ElMessage.success('审批成功')
     fetchData()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('审批失败')
   }
 }
@@ -463,7 +463,7 @@ const handleSave = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStatistics()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('保存失败')
   }
 }

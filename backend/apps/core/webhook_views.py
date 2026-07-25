@@ -39,10 +39,10 @@ class WebhookEndpointSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {'secret': {'write_only': True}}
 
-    def get_delivery_count(self, obj):
+    def get_delivery_count(self, obj) -> int:
         return obj.deliveries.count()
 
-    def get_success_rate(self, obj):
+    def get_success_rate(self, obj) -> float | None:
         total = obj.deliveries.count()
         if total == 0:
             return None

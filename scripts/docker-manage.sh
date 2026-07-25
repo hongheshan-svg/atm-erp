@@ -62,7 +62,7 @@ COMPOSE_CMD=$(get_compose_cmd)
 setup_env() {
     if [ ! -f .env ]; then
         print_warning ".env file not found. Creating from template..."
-        cp .env.docker .env
+        cp .env.example .env
         print_success "Created .env file. Please edit it with your settings."
         echo -e "${YELLOW}Edit the .env file before running 'start' command.${NC}"
     else
@@ -83,21 +83,17 @@ start() {
     print_header
     check_docker
     setup_env
-    
+
     echo "Starting ERP services..."
     $COMPOSE_CMD up -d
-    
+
     echo ""
     print_success "ERP services started successfully!"
     echo ""
     echo -e "${GREEN}Access the application:${NC}"
-    echo -e "  Frontend:  http://localhost"
+    echo -e "  Frontend:  http://localhost/erp/"
     echo -e "  API:       http://localhost/api/"
-    echo -e "  Admin:     http://localhost/admin/"
-    echo ""
-    echo -e "${YELLOW}Default credentials:${NC}"
-    echo -e "  Username:  admin"
-    echo -e "  Password:  admin123"
+    echo -e "  Admin credentials are stored in .env."
     echo ""
     echo -e "${YELLOW}View logs:${NC} ./scripts/docker-manage.sh logs"
 }
@@ -133,15 +129,15 @@ status() {
     $COMPOSE_CMD ps
 }
 
-# Execute command in backend container
+# Execute command in the unified app container
 exec_backend() {
-    $COMPOSE_CMD exec backend "$@"
+    $COMPOSE_CMD exec app "$@"
 }
 
 # Django management commands
 manage() {
     shift
-    $COMPOSE_CMD exec backend python manage.py "$@"
+    $COMPOSE_CMD exec app python manage.py "$@"
 }
 
 # Create database backup
@@ -200,7 +196,7 @@ show_help() {
     echo ""
     echo "Examples:"
     echo "  ./scripts/docker-manage.sh start"
-    echo "  ./scripts/docker-manage.sh logs backend"
+    echo "  ./scripts/docker-manage.sh logs app"
     echo "  ./scripts/docker-manage.sh manage createsuperuser"
     echo "  ./scripts/docker-manage.sh backup"
 }
@@ -246,4 +242,3 @@ case "${1:-help}" in
         exit 1
         ;;
 esac
-

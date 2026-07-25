@@ -35,8 +35,11 @@ _METHOD_FOR_ACTION = {
 
 def _make_user(username, menu_codes=(), is_superuser=False):
     user = User.objects.create_user(
-        username=username, password='x', employee_id=username,
-        is_superuser=is_superuser, is_staff=is_superuser,
+        username=username,
+        password='x',
+        employee_id=username,
+        is_superuser=is_superuser,
+        is_staff=is_superuser,
     )
     if menu_codes:
         role = Role.objects.create(name=f'{username}_role', code=f'{username}_role')

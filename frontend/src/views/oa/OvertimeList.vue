@@ -104,10 +104,10 @@ const list = ref<any[]>([])
 const dialogVisible = ref(false)
 const formRef = ref()
 
-const searchForm = reactive({ status: '' })
-const pagination = reactive({ page: 1, pageSize: 10, total: 0 })
+const searchForm = reactive<Record<string, any>>({ status: '' })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 10, total: 0 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   overtime_date: '',
   start_time: '',
   end_time: '',
@@ -135,7 +135,7 @@ const getStatusType = (status: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize, ...searchForm }
     const res = await getOvertimeRequests(params)
     if (Array.isArray(res)) {
       list.value = res
@@ -147,7 +147,7 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -168,7 +168,7 @@ const handleSave = async () => {
     if (id) {
       try {
         await submitOvertimeRequest(id)
-      } catch (e) {
+      } catch (e: any) {
         console.error('submit overtime error:', e)
       }
     }
@@ -187,7 +187,7 @@ const handleSubmit = async (row: any) => {
     await submitOvertimeRequest(row.id)
     ElMessage.success('提交成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('提交失败')
   }
 }
@@ -198,7 +198,7 @@ const handleDelete = async (row: any) => {
     await deleteOvertimeRequest(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }

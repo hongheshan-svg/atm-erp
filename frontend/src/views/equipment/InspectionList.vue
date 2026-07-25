@@ -6,7 +6,7 @@
         <el-icon><Plus /></el-icon> 新建点检
       </el-button>
     </div>
-    
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="点检记录" name="records">
         <!-- 统计卡片 -->
@@ -36,7 +36,7 @@
             </el-card>
           </el-col>
         </el-row>
-        
+
         <!-- 筛选 -->
         <el-card shadow="never" class="filter-card">
           <el-form :inline="true" :model="queryParams">
@@ -54,7 +54,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="日期">
-              <el-date-picker v-model="queryParams.inspection_date" type="date" placeholder="选择日期" 
+              <el-date-picker v-model="queryParams.inspection_date" type="date" placeholder="选择日期"
                 value-format="YYYY-MM-DD" style="width: 150px" />
             </el-form-item>
             <el-form-item>
@@ -63,7 +63,7 @@
             </el-form-item>
           </el-form>
         </el-card>
-        
+
         <!-- 点检记录列表 -->
         <el-card shadow="never">
           <!-- 批量操作 -->
@@ -87,13 +87,13 @@
             <el-table-column label="点检进度" width="120">
               <template #default="{ row }">
                 {{ row.checked_items }}/{{ row.total_items }}
-                <el-progress :percentage="row.total_items ? Math.round(row.checked_items / row.total_items * 100) : 0" 
+                <el-progress :percentage="row.total_items ? Math.round(row.checked_items / row.total_items * 100) : 0"
                   :stroke-width="6" style="margin-top: 4px" />
               </template>
             </el-table-column>
             <el-table-column label="正常/异常" width="100" align="center">
               <template #default="{ row }">
-                <span class="text-success">{{ row.normal_items }}</span> / 
+                <span class="text-success">{{ row.normal_items }}</span> /
                 <span class="text-danger">{{ row.abnormal_items }}</span>
               </template>
             </el-table-column>
@@ -105,12 +105,12 @@
             <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleView(row)">查看</el-button>
-                <el-button type="success" link size="small" @click="handleDoInspection(row)" 
+                <el-button type="success" link size="small" @click="handleDoInspection(row)"
                   v-if="['PENDING', 'IN_PROGRESS'].includes(row.status)">点检</el-button>
               </template>
             </el-table-column>
           </el-table>
-          
+
           <el-pagination
             class="pagination"
             v-model:current-page="queryParams.page"
@@ -123,7 +123,7 @@
           />
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="点检模板" name="templates">
         <el-card shadow="never">
           <template #header>
@@ -155,7 +155,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="异常处理" name="abnormal">
         <el-card shadow="never">
           <template #header>
@@ -191,7 +191,7 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
-    
+
     <!-- 新建点检对话框 -->
     <el-dialog v-model="createDialogVisible" title="新建点检记录" width="500px">
       <el-form :model="createForm" label-width="100px">
@@ -206,7 +206,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="点检日期">
-          <el-date-picker v-model="createForm.inspection_date" type="date" style="width: 100%" 
+          <el-date-picker v-model="createForm.inspection_date" type="date" style="width: 100%"
             value-format="YYYY-MM-DD" />
         </el-form-item>
       </el-form>
@@ -215,7 +215,7 @@
         <el-button type="primary" @click="confirmCreate" :loading="createLoading">创建</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 处理异常对话框 -->
     <el-dialog v-model="handleDialogVisible" title="处理异常" width="500px">
       <el-form :model="handleForm" label-width="80px">
@@ -334,6 +334,7 @@ getEquipmentList,
   getUnhandledAbnormal, handleInspectionAbnormal
 } from '@/api/equipment'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { getPaginationTotal } from '@/utils/pagination'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/inspection-records/', { onSuccess: () => fetchData() })
 
@@ -348,13 +349,16 @@ const templates = ref<any[]>([])
 const templateDialogVisible = ref(false)
 const templateIsEdit = ref(false)
 const templateSaving = ref(false)
-const templateForm = reactive({ id: null, code: '', name: '', equipment_type: '', frequency: 'DAILY', items_count: 0, description: '' })
+const templateForm = reactive<Record<string, any>>({ id: null, code: '', name: '', equipment_type: '', frequency: 'DAILY', items_count: 0, description: '' })
 const templateDetail = ref<Record<string, any>>({})
 const inspectionViewVisible = ref(false)
 const inspectionDetail = ref<Record<string, any>>({})
 const doInspectionVisible = ref(false)
-const doInspectionRow = ref(null)
-const inspectionResults = reactive<any[]>([])
+const doInspectionRow = ref<any>(null)
+const inspectionResults = reactive<Record<string, any>>({
+  overall: '',
+  remarks: '',
+})
 const doInspectionSaving = ref(false)
 const templateDetailVisible = ref(false)
 const equipments = ref<any[]>([])
@@ -363,9 +367,9 @@ const todayStats = ref<Record<string, any>>({})
 
 const createDialogVisible = ref(false)
 const handleDialogVisible = ref(false)
-const currentAbnormal = ref(null)
+const currentAbnormal = ref<any>(null)
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   page: 1,
   page_size: 10,
   equipment: null,
@@ -373,13 +377,13 @@ const queryParams = reactive({
   inspection_date: null
 })
 
-const createForm = reactive({
+const createForm = reactive<Record<string, any>>({
   equipment_id: null,
   template_id: null,
   inspection_date: new Date().toISOString().split('T')[0]
 })
 
-const handleForm = reactive({
+const handleForm = reactive<Record<string, any>>({
   notes: ''
 })
 
@@ -388,8 +392,8 @@ const fetchData = async () => {
   try {
     const data = await getInspectionRecordList(queryParams)
     tableData.value = data.results || data
-    total.value = data.count || data.length
-  } catch (e) {
+    total.value = getPaginationTotal(data)
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -400,7 +404,7 @@ const fetchTemplates = async () => {
   try {
     const data = await getInspectionTemplateList({ page_size: 100 })
     templates.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -409,7 +413,7 @@ const fetchEquipments = async () => {
   try {
     const data = await getEquipmentList({ page_size: 500 })
     equipments.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -418,7 +422,7 @@ const fetchStats = async () => {
   try {
     const data = await getInspectionStatistics()
     todayStats.value = data.today || {}
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -427,7 +431,7 @@ const fetchUnhandledAbnormal = async () => {
   try {
     const data = await getUnhandledAbnormal()
     unhandledAbnormal.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -452,7 +456,7 @@ const confirmCreate = async () => {
     ElMessage.warning('请选择设备和模板')
     return
   }
-  
+
   createLoading.value = true
   try {
     await createInspectionFromTemplate(createForm)
@@ -460,25 +464,25 @@ const confirmCreate = async () => {
     createDialogVisible.value = false
     fetchData()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('创建失败')
   } finally {
     createLoading.value = false
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getInspectionRecord(row.id)
     inspectionDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     inspectionDetail.value = row
   }
   inspectionViewVisible.value = true
 }
 
-const handleDoInspection = async (row) => {
+const handleDoInspection = async (row: any) => {
   doInspectionRow.value = row
   doInspectionVisible.value = true
 }
@@ -490,7 +494,7 @@ const submitInspection = async () => {
     ElMessage.success('点检完成')
     doInspectionVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('提交失败')
   } finally {
@@ -504,18 +508,18 @@ const handleAddTemplate = () => {
   templateDialogVisible.value = true
 }
 
-const handleViewTemplate = async (row) => {
+const handleViewTemplate = async (row: any) => {
   try {
     const res = await getInspectionTemplate(row.id)
     templateDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     templateDetail.value = row
   }
   templateDetailVisible.value = true
 }
 
-const handleEditTemplate = (row) => {
+const handleEditTemplate = (row: any) => {
   templateIsEdit.value = true
   Object.assign(templateForm, { id: row.id, code: row.code, name: row.name, equipment_type: row.equipment_type, frequency: row.frequency, description: row.description })
   templateDialogVisible.value = true
@@ -533,7 +537,7 @@ const handleTemplateSave = async () => {
     }
     templateDialogVisible.value = false
     fetchTemplates()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
   } finally {
@@ -541,7 +545,7 @@ const handleTemplateSave = async () => {
   }
 }
 
-const handleCopyTemplate = async (row) => {
+const handleCopyTemplate = async (row: any) => {
   try {
     await copyInspectionTemplate(row.id, {
       code: `${row.code}_copy`,
@@ -549,12 +553,12 @@ const handleCopyTemplate = async (row) => {
     })
     ElMessage.success('模板复制成功')
     fetchTemplates()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('复制失败')
   }
 }
 
-const handleHandleAbnormal = (row) => {
+const handleHandleAbnormal = (row: any) => {
   currentAbnormal.value = row
   handleForm.notes = ''
   handleDialogVisible.value = true
@@ -565,7 +569,7 @@ const confirmHandle = async () => {
     ElMessage.warning('请输入处理说明')
     return
   }
-  
+
   handleLoading.value = true
   try {
     await handleInspectionAbnormal(currentAbnormal.value.id, {
@@ -574,31 +578,31 @@ const confirmHandle = async () => {
     ElMessage.success('异常已处理')
     handleDialogVisible.value = false
     fetchUnhandledAbnormal()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('处理失败')
   } finally {
     handleLoading.value = false
   }
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getStatusTag = (status) => {
+const getStatusTag = (status: any) => {
   const tags = { PENDING: 'warning', IN_PROGRESS: 'primary', COMPLETED: 'success', ABNORMAL: 'danger' }
-  return tags[status] || 'info'
+  return (tags as Record<string, any>)[status] || 'info'
 }
 
-const getAbnormalLevelTag = (level) => {
+const getAbnormalLevelTag = (level: any) => {
   const tags = { LOW: 'info', MEDIUM: 'warning', HIGH: 'danger', CRITICAL: 'danger' }
-  return tags[level] || ''
+  return (tags as Record<string, any>)[level] || ''
 }
 
-const getAbnormalLevelText = (level) => {
+const getAbnormalLevelText = (level: any) => {
   const texts = { LOW: '轻微', MEDIUM: '一般', HIGH: '严重', CRITICAL: '紧急' }
-  return texts[level] || level
+  return (texts as Record<string, any>)[level] || level
 }
 
 onMounted(() => {

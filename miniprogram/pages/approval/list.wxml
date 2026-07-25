@@ -17,7 +17,7 @@
       <text class="empty-icon">📭</text>
       <text>暂无待审批事项</text>
     </view>
-    
+
     <view wx:for="{{pendingList}}" wx:key="id" class="approval-item" bindtap="goToDetail" data-id="{{item.id}}" data-type="task">
       <view class="item-header">
         <text class="item-type tag tag-info">{{item.business_type_display}}</text>
@@ -44,7 +44,7 @@
       <text class="empty-icon">📝</text>
       <text>暂无提交记录</text>
     </view>
-    
+
     <view wx:for="{{submittedList}}" wx:key="id" class="approval-item" bindtap="goToDetail" data-id="{{item.id}}" data-type="instance">
       <view class="item-header">
         <text class="item-type tag tag-info">{{item.business_type_display}}</text>

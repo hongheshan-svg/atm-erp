@@ -173,17 +173,17 @@ const snapshots = ref<any[]>([])
 const costDetails = ref<any[]>([])
 const total = ref(0)
 const detailVisible = ref(false)
-const selectedSnapshot = ref(null)
+const selectedSnapshot = ref<any>(null)
 const showCalculateDialog = ref(false)
 const showCompareDialog = ref(false)
-const pieChartRef = ref(null)
+const pieChartRef = ref<any>(null)
 
-const stats = reactive({ totalSnapshots: 0, avgMaterialCost: 0, avgLaborCost: 0, avgTotalCost: 0 })
-const queryParams = reactive({ page: 1, page_size: 20 })
-const calcForm = reactive({ project_id: '', version_label: '' })
-const compareForm = reactive({ snapshot_id_1: null, snapshot_id_2: null })
+const stats = reactive<Record<string, any>>({ totalSnapshots: 0, avgMaterialCost: 0, avgLaborCost: 0, avgTotalCost: 0 })
+const queryParams = reactive<Record<string, any>>({ page: 1, page_size: 20 })
+const calcForm = reactive<Record<string, any>>({ project_id: '', version_label: '' })
+const compareForm = reactive<Record<string, any>>({ snapshot_id_1: null, snapshot_id_2: null })
 
-const formatMoney = (v) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMoney = (v: any) => v ? Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
 
 const loadList = async () => {
   loading.value = true
@@ -200,13 +200,13 @@ const loadList = async () => {
   } finally { loading.value = false }
 }
 
-const viewDetail = async (row) => {
+const viewDetail = async (row: any) => {
   selectedSnapshot.value = row
   try {
     const res = await getBOMCostDetails({ snapshot: row.id })
     costDetails.value = res.results || res.results || []
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error('BOMCostRollup getBOMCostDetails error:', error)
   }
 }
@@ -227,15 +227,15 @@ const compareCost = async () => {
     return
   }
   try {
-    const res = await compareBOMCost(compareForm)
+    await compareBOMCost(compareForm)
     ElMessage.success('对比结果已生成')
     showCompareDialog.value = false
-  } catch (error) {
+  } catch (error: any) {
     console.error('BOMCostRollup success error:', error)
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   await ElMessageBox.confirm('确认删除？', '提示')
   await deleteBOMCostSnapshot(row.id)
   ElMessage.success('删除成功')

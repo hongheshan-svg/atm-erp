@@ -735,7 +735,7 @@ class ECN(BaseModel):
             from django.utils import timezone
 
             today = timezone.now()
-            prefix = f"ECN{today.strftime('%Y%m%d')}"
+            prefix = f'ECN{today.strftime("%Y%m%d")}'
             last_ecn = ECN.objects.filter(ecn_no__startswith=prefix).order_by('-ecn_no').first()
             if last_ecn:
                 last_num = int(last_ecn.ecn_no[-4:])
@@ -1196,8 +1196,14 @@ class Drawing(BaseModel):
                 pass
             ext = self.file.name.rsplit('.', 1)[-1].upper() if '.' in self.file.name else ''
             ext_map = {
-                'STP': 'STP', 'STEP': 'STEP', 'IGS': 'IGES', 'IGES': 'IGES', 'STL': 'STL',
-                'DWG': 'DWG', 'DXF': 'DXF', 'PDF': 'PDF',
+                'STP': 'STP',
+                'STEP': 'STEP',
+                'IGS': 'IGES',
+                'IGES': 'IGES',
+                'STL': 'STL',
+                'DWG': 'DWG',
+                'DXF': 'DXF',
+                'PDF': 'PDF',
             }
             if ext and (not self.file_type or self.file_type == 'PDF'):
                 self.file_type = ext_map.get(ext, 'OTHER')
@@ -1294,8 +1300,8 @@ from .requirement import Requirement, RequirementCategory, RequirementChange, Re
 # Import requirement review models
 from .requirement_review import RequirementReview  # noqa: E402, F401
 
-# Import work dispatch models (WorkOrder, WorkDispatch, WorkLog)
-from .work_dispatch import WorkDispatch, WorkLog, WorkOrder  # noqa: E402, F401
-
 # Import IPD stage gate models (阶段决策评审基础脚手架)
 from .stage_gate import StageGate  # noqa: E402, F401
+
+# Import work dispatch models (WorkOrder, WorkDispatch, WorkLog)
+from .work_dispatch import WorkDispatch, WorkLog, WorkOrder  # noqa: E402, F401

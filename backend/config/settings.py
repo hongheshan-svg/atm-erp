@@ -36,8 +36,6 @@ INSTALLED_APPS = [
     'django_extensions',
     'django_filters',
     'channels',
-    'django_elasticsearch_dsl',
-    'django_elasticsearch_dsl_drf',
     # Local apps
     'apps.core',
     'apps.core.workflow',
@@ -107,17 +105,6 @@ CHANNEL_LAYERS = {
         },
     },
 }
-
-# Elasticsearch configuration
-_elasticsearch_host = config('ELASTICSEARCH_HOST', default='elasticsearch:9200')
-ELASTICSEARCH_DSL = {
-    'default': {'hosts': _elasticsearch_host or 'localhost:9200'},
-}
-# 未部署 ES(ELASTICSEARCH_HOST 为空)时禁用实时索引信号,避免创建/编辑
-# 客户、供应商、物料、项目等被 ES Document 索引的模型时因连不上 ES 抛
-# TypeError 导致 API 500;全局搜索已降级为数据库查询,不依赖索引。
-if not _elasticsearch_host:
-    ELASTICSEARCH_DSL_AUTOSYNC = False
 
 # Database
 DATABASES = {
@@ -199,7 +186,7 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_SCHEMA_CLASS': 'apps.core.schema.ERPAutoSchema',
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
     'DATE_FORMAT': '%Y-%m-%d',
     # Rate limiting
@@ -211,6 +198,7 @@ REST_FRAMEWORK = {
         'login': LOGIN_THROTTLE_RATE,
     },
 }
+
 
 # JWT Settings
 def _jwt_lifetime(token_name, legacy_name, default):
@@ -268,6 +256,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # API Documentation
 SPECTACULAR_SETTINGS = {
@@ -275,6 +264,7 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Enterprise Resource Planning System - Project Management, PSI & Cost Control',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'POSTPROCESSING_HOOKS': ['apps.core.schema.postprocess_contextual_enums'],
 }
 
 # Logging
@@ -408,6 +398,5 @@ BACKUP_ENCRYPTION_KEY = config('BACKUP_ENCRYPTION_KEY', default='')
 AI_PROVIDER = config('AI_PROVIDER', default='')
 AI_API_KEY = config('AI_API_KEY', default='')
 AI_MODEL = config('AI_MODEL', default='claude-opus-4-8')
-# RAG 检索:优先复用 Elasticsearch 全局搜索(见 apps/core/search_views.py),
-# 未部署 ES 时回落到数据库 icontains 查询;二者均为“真实第一步”,完整向量 RAG 为后续。
+# RAG 检索当前使用数据库 icontains，完整向量 RAG 为后续能力。
 AI_RAG_TOP_K = config('AI_RAG_TOP_K', default=5, cast=int)

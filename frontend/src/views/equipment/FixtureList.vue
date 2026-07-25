@@ -386,38 +386,38 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 const loading = ref(false)
 const calibrateDialogVisible = ref(false)
 const maintainDialogVisible = ref(false)
-const opRow = ref(null)
-const calibrateForm = reactive({ calibration_date: '', calibration_org: '', valid_until: '', result: 'PASS', cost: 0, notes: '' })
-const maintainForm = reactive({ maintenance_date: '', maintenance_type: 'REPAIR', repair_content: '', labor_cost: 0, parts_cost: 0 })
+const opRow = ref<any>(null)
+const calibrateForm = reactive<Record<string, any>>({ calibration_date: '', calibration_org: '', valid_until: '', result: 'PASS', cost: 0, notes: '' })
+const maintainForm = reactive<Record<string, any>>({ maintenance_date: '', maintenance_type: 'REPAIR', repair_content: '', labor_cost: 0, parts_cost: 0 })
 const opSaving = ref(false)
 const submitting = ref(false)
 const dialogVisible = ref(false)
 const categoryDialogVisible = ref(false)
 const detailVisible = ref(false)
 const dialogMode = ref('add')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
 const stats = ref<Record<string, any>>({})
 const tableData = ref<any[]>([])
 const categoryTree = ref<any[]>([])
 const flatCategories = ref<any[]>([])
 const users = ref<any[]>([])
-const currentFixture = ref(null)
+const currentFixture = ref<any>(null)
 
-const filters = reactive({
+const filters = reactive<Record<string, any>>({
   status: '',
   category: [],
   needs_calibration: '',
   search: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   name: '',
   model: '',
   category: null,
@@ -439,7 +439,7 @@ const formRules = {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       status: filters.status,
@@ -452,7 +452,7 @@ const fetchData = async () => {
     const res = await getFixtureList(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || tableData.value.length
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('获取工装列表失败')
   } finally {
     loading.value = false
@@ -463,7 +463,7 @@ const fetchStats = async () => {
   try {
     const res = await getFixtureStatistics()
     stats.value = res || {}
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -472,10 +472,10 @@ const fetchCategories = async () => {
   try {
     const res = await getFixtureCategoryTree()
     categoryTree.value = res || []
-    
+
     const flatRes = await getFixtureCategoryList()
     flatCategories.value = flatRes.results || flatRes || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取分类失败', error)
   }
 }
@@ -485,11 +485,11 @@ const fetchUsers = async () => {
     const res = await getUsers()
     const list = res.results || res || []
     // User 无 name 字段，前端拼姓名(姓+名)作为显示名，否则回退用户名
-    users.value = list.map(u => ({
+    users.value = list.map((u: any) => ({
       ...u,
       name: `${u.last_name || ''}${u.first_name || ''}`.trim() || u.username,
     }))
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取用户失败', error)
   }
 }
@@ -502,7 +502,7 @@ const resetFilters = () => {
   fetchData()
 }
 
-const showDialog = (mode, row = null) => {
+const showDialog = (mode: any, row = null) => {
   dialogMode.value = mode
   if (mode === 'edit' && row) {
     Object.assign(formData, row)
@@ -519,12 +519,12 @@ const showDialog = (mode, row = null) => {
   dialogVisible.value = true
 }
 
-const showDetail = (row) => {
+const showDetail = (row: any) => {
   currentFixture.value = row
   detailVisible.value = true
 }
 
-const handleRowClick = (row) => {
+const handleRowClick = (row: any) => {
   showDetail(row)
 }
 
@@ -537,40 +537,40 @@ const addCategory = async () => {
     inputPattern: /.+/,
     inputErrorMessage: '分类名称不能为空'
   })
-  
+
   try {
     const code = 'CAT' + Date.now().toString().slice(-6)
     await createFixtureCategory({ code, name: value })
     ElMessage.success('新增成功')
     fetchCategories()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('新增失败')
   }
 }
 
-const editCategory = async (row) => {
+const editCategory = async (row: any) => {
   const { value } = await ElMessageBox.prompt('请输入分类名称', '编辑分类', {
     inputValue: row.name,
     inputPattern: /.+/,
     inputErrorMessage: '分类名称不能为空'
   })
-  
+
   try {
     await updateFixtureCategory(row.id, { name: value })
     ElMessage.success('更新成功')
     fetchCategories()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('更新失败')
   }
 }
 
-const deleteCategory = async (row) => {
+const deleteCategory = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定删除该分类？', '警告', { type: 'warning' })
     await deleteFixtureCategory(row.id)
     ElMessage.success('删除成功')
     fetchCategories()
-  } catch (error) {
+  } catch (error: any) {
     console.error('FixtureList fetchCategories error:', error)
   }
 }
@@ -579,7 +579,7 @@ const submitForm = async () => {
   try {
     await formRef.value.validate()
     submitting.value = true
-    
+
     if (dialogMode.value === 'add') {
       await createFixture(formData)
       ElMessage.success('新增成功')
@@ -587,11 +587,11 @@ const submitForm = async () => {
       await updateFixture(formData.id, formData)
       ElMessage.success('更新成功')
     }
-    
+
     dialogVisible.value = false
     fetchData()
     fetchStats()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== false) {
       ElMessage.error('操作失败')
     }
@@ -600,7 +600,7 @@ const submitForm = async () => {
   }
 }
 
-const handleCommand = async (command, row) => {
+const handleCommand = async (command: any, row: any) => {
   switch (command) {
     case 'checkout':
       try {
@@ -610,7 +610,7 @@ const handleCommand = async (command, row) => {
         ElMessage.success('领用成功')
         fetchData()
         fetchStats()
-      } catch (error) {
+      } catch (error: any) {
         ElMessage.error('领用失败')
       }
       break
@@ -622,7 +622,7 @@ const handleCommand = async (command, row) => {
         ElMessage.success('归还成功')
         fetchData()
         fetchStats()
-      } catch (error) {
+      } catch (error: any) {
         ElMessage.error('归还失败')
       }
       break
@@ -659,7 +659,7 @@ const handleCalibrateSave = async () => {
     ElMessage.success('校验记录已保存')
     calibrateDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '保存失败')
   } finally {
     opSaving.value = false
@@ -678,14 +678,14 @@ const handleMaintainSave = async () => {
     ElMessage.success('维护记录已保存')
     maintainDialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '保存失败')
   } finally {
     opSaving.value = false
   }
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     IN_USE: 'success',
     IDLE: 'info',
@@ -693,7 +693,7 @@ const getStatusType = (status) => {
     SCRAPED: 'danger',
     LENT: 'warning'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 onMounted(() => {

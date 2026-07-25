@@ -54,6 +54,7 @@ def _completed_out(item, warehouse, qty, admin_user):
 # Test 1 – inbound move creates / updates a Stock record
 # ---------------------------------------------------------------------------
 
+
 def test_inbound_creates_stock(make_item, make_warehouse, admin_user):
     """A COMPLETED IN_PURCHASE move creates the Stock row with correct qty."""
     item = make_item(standard_cost=Decimal('100.00'))
@@ -69,6 +70,7 @@ def test_inbound_creates_stock(make_item, make_warehouse, admin_user):
 # ---------------------------------------------------------------------------
 # Test 2 – outbound move reduces stock quantity
 # ---------------------------------------------------------------------------
+
 
 def test_outbound_reduces_stock(make_item, make_warehouse, admin_user):
     """A COMPLETED OUT_SALES move reduces qty_on_hand on the Stock row."""
@@ -89,6 +91,7 @@ def test_outbound_reduces_stock(make_item, make_warehouse, admin_user):
 # Test 3 – weighted average cost is recalculated correctly
 # ---------------------------------------------------------------------------
 
+
 def test_weighted_average_cost(make_item, make_warehouse, admin_user):
     """Two inbounds at different prices produce the correct weighted average.
 
@@ -104,6 +107,4 @@ def test_weighted_average_cost(make_item, make_warehouse, admin_user):
 
     stock = Stock.objects.get(warehouse=warehouse, item=item)
     assert stock.qty_on_hand == Decimal('20')
-    assert stock.weighted_avg_cost == Decimal('150.00'), (
-        f"Expected WAC=150.00 but got {stock.weighted_avg_cost}"
-    )
+    assert stock.weighted_avg_cost == Decimal('150.00'), f'Expected WAC=150.00 but got {stock.weighted_avg_cost}'

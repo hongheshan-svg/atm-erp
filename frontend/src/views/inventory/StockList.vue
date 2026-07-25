@@ -106,11 +106,11 @@ const loading = ref(false)
 const historyVisible = ref(false)
 const historyLoading = ref(false)
 const historyList = ref<any[]>([])
-const historyItem = ref(null)
+const historyItem = ref<any>(null)
 const stocks = ref<any[]>([])
 const warehouses = ref<any[]>([])
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   warehouse: null,
   item_name: ''
 })
@@ -118,10 +118,10 @@ const searchForm = reactive({
 const loadStock = async () => {
   loading.value = true
   try {
-    const params = { ...searchForm }
+    const params: Record<string, any> = { ...searchForm }
     const response = await getStocks(params)
     stocks.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载库存失败')
   } finally {
     loading.value = false
@@ -132,7 +132,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList()
     warehouses.value = response.results || response || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -141,14 +141,14 @@ const handleAdjustment = () => {
   router.push('/inventory/adjustment')
 }
 
-const viewHistory = async (row) => {
+const viewHistory = async (row: any) => {
   historyItem.value = row
   historyVisible.value = true
   historyLoading.value = true
   try {
     const res = await getStockMoves({ item: row.item, warehouse: row.warehouse, page_size: 50 })
     historyList.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     historyList.value = []
   } finally {

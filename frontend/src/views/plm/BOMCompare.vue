@@ -29,10 +29,10 @@
             <el-card shadow="never">
               <template #header>原版本（基准）</template>
               <el-select v-model="compareForm.snapshot_id_1" placeholder="选择快照" style="width: 100%;">
-                <el-option 
-                  v-for="s in snapshots" 
-                  :key="s.id" 
-                  :label="`${s.name} (${s.item_count}项)`" 
+                <el-option
+                  v-for="s in snapshots"
+                  :key="s.id"
+                  :label="`${s.name} (${s.item_count}项)`"
                   :value="s.id"
                 />
               </el-select>
@@ -55,16 +55,16 @@
                   <el-radio-button value="current">当前BOM</el-radio-button>
                 </el-radio-group>
               </template>
-              <el-select 
+              <el-select
                 v-if="targetType === 'snapshot'"
-                v-model="compareForm.snapshot_id_2" 
-                placeholder="选择快照" 
+                v-model="compareForm.snapshot_id_2"
+                placeholder="选择快照"
                 style="width: 100%;"
               >
-                <el-option 
-                  v-for="s in snapshots" 
-                  :key="s.id" 
-                  :label="`${s.name} (${s.item_count}项)`" 
+                <el-option
+                  v-for="s in snapshots"
+                  :key="s.id"
+                  :label="`${s.name} (${s.item_count}项)`"
                   :value="s.id"
                   :disabled="s.id === compareForm.snapshot_id_1"
                 />
@@ -83,10 +83,10 @@
           <el-col :span="12">
             <el-form-item label="CAD导入会话">
               <el-select v-model="compareForm.cad_bom_session_id" placeholder="选择导入会话" style="width: 100%;">
-                <el-option 
-                  v-for="s in cadSessions" 
-                  :key="s.id" 
-                  :label="`${s.name} (${s.total_rows}项) - ${s.status_display}`" 
+                <el-option
+                  v-for="s in cadSessions"
+                  :key="s.id"
+                  :label="`${s.name} (${s.total_rows}项) - ${s.status_display}`"
                   :value="s.id"
                 />
               </el-select>
@@ -195,10 +195,10 @@
         <el-table-column label="变更详情" min-width="250">
           <template #default="{ row }">
             <div v-if="row.changes && row.changes.length">
-              <el-tag 
-                v-for="(c, idx) in row.changes" 
-                :key="idx" 
-                size="small" 
+              <el-tag
+                v-for="(c, idx) in row.changes"
+                :key="idx"
+                size="small"
                 type="info"
                 style="margin-right: 5px;"
               >
@@ -253,19 +253,19 @@ const compareMode = ref('snapshot')
 const targetType = ref('current')
 const changeFilter = ref('all')
 
-const compareForm = reactive({
+const compareForm = reactive<Record<string, any>>({
   project_id: null,
   snapshot_id_1: null,
   snapshot_id_2: null,
   cad_bom_session_id: null
 })
 
-const snapshotForm = reactive({
+const snapshotForm = reactive<Record<string, any>>({
   name: '',
   description: ''
 })
 
-const compareResult = ref(null)
+const compareResult = ref<any>(null)
 
 const snapshot1 = computed(() => {
   return snapshots.value.find(s => s.id === compareForm.snapshot_id_1)
@@ -273,20 +273,20 @@ const snapshot1 = computed(() => {
 
 const filteredChanges = computed(() => {
   if (!compareResult.value?.changes) return []
-  
+
   const all = [
     ...(compareResult.value.changes.added || []),
     ...(compareResult.value.changes.removed || []),
     ...(compareResult.value.changes.modified || [])
   ]
-  
+
   if (changeFilter.value === 'all') return all
   return compareResult.value.changes[changeFilter.value] || []
 })
 
-const formatMoney = (val) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+const formatMoney = (val: any) => Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 
-const getChangeTypeColor = (type) => {
+const getChangeTypeColor = (type: any) => {
   const colors = {
     'ADDED': 'success',
     'REMOVED': 'danger',
@@ -295,10 +295,10 @@ const getChangeTypeColor = (type) => {
     'MATERIAL_CHANGED': 'info',
     'PRICE_CHANGED': 'warning'
   }
-  return colors[type] || 'info'
+  return (colors as Record<string, any>)[type] || 'info'
 }
 
-const getChangeTypeLabel = (type) => {
+const getChangeTypeLabel = (type: any) => {
   const labels = {
     'ADDED': '新增',
     'REMOVED': '删除',
@@ -307,10 +307,10 @@ const getChangeTypeLabel = (type) => {
     'MATERIAL_CHANGED': '材质变化',
     'PRICE_CHANGED': '价格变化'
   }
-  return labels[type] || type
+  return (labels as Record<string, any>)[type] || type
 }
 
-const getDiffClass = (diff) => {
+const getDiffClass = (diff: any) => {
   if (diff > 0) return 'diff-positive'
   if (diff < 0) return 'diff-negative'
   return ''
@@ -320,7 +320,7 @@ const loadProjects = async () => {
   try {
     const res = await getProjectList({ page_size: 1000 })
     projects.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load projects failed:', error)
   }
 }
@@ -333,7 +333,7 @@ const loadSnapshots = async () => {
   try {
     const res = await getBOMSnapshotList({ project: compareForm.project_id })
     snapshots.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load snapshots failed:', error)
   }
 
@@ -341,7 +341,7 @@ const loadSnapshots = async () => {
   try {
     const res = await getCreoBOMImportList({ project_id: compareForm.project_id })
     cadSessions.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load CAD sessions failed:', error)
   }
 }
@@ -351,11 +351,11 @@ const runCompare = async () => {
     ElMessage.warning('请选择项目')
     return
   }
-  
+
   comparing.value = true
   try {
-    let params = { project_id: compareForm.project_id }
-    
+    let params: Record<string, any> = { project_id: compareForm.project_id }
+
     if (compareMode.value === 'snapshot') {
       if (targetType.value === 'current') {
         // 与当前BOM对比
@@ -386,9 +386,9 @@ const runCompare = async () => {
       const res = await compareBOM(params)
       compareResult.value = res
     }
-    
+
     ElMessage.success('对比完成')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('对比失败')
     console.error(error)
   } finally {
@@ -407,7 +407,7 @@ const confirmCreateSnapshot = async () => {
     ElMessage.warning('请输入快照名称')
     return
   }
-  
+
   creatingSnapshot.value = true
   try {
     await createBOMSnapshot( {
@@ -418,7 +418,7 @@ const confirmCreateSnapshot = async () => {
     ElMessage.success('快照创建成功')
     snapshotDialogVisible.value = false
     loadSnapshots()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('创建失败')
   } finally {
     creatingSnapshot.value = false
@@ -428,22 +428,22 @@ const confirmCreateSnapshot = async () => {
 const exportExcel = async () => {
   exporting.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       project_id: compareForm.project_id,
       output_format: 'excel'
     }
-    
+
     if (compareMode.value === 'snapshot') {
       params.snapshot_id_1 = compareForm.snapshot_id_1
       params.snapshot_id_2 = compareForm.snapshot_id_2
     } else {
       params.cad_bom_session_id = compareForm.cad_bom_session_id
     }
-    
+
     const res = await exportBOMCompare(params, {
       responseType: 'blob'
     })
-    
+
     const url = window.URL.createObjectURL(new Blob([res]))
     const link = document.createElement('a')
     link.href = url
@@ -451,9 +451,9 @@ const exportExcel = async () => {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    
+
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   } finally {
     exporting.value = false

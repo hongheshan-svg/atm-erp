@@ -132,46 +132,46 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 <!-- ==================== 步骤2: 在搜索表单后添加批量工具栏 ==================== -->
 <template>
   <!-- 搜索表单... -->
-  
+
   <!-- 批量操作工具栏 - 仅管理员可见 -->
   <div class="table-toolbar" v-if="canDelete && selectedRows.length > 0">
     <span>已选择 {{ selectedRows.length }} 项</span>
-    <el-button 
-      type="danger" 
-      size="small" 
+    <el-button
+      type="danger"
+      size="small"
       @click="batchDelete"
       :loading="deleteLoading"
     >
       批量删除
     </el-button>
   </div>
-  
+
   <!-- ==================== 步骤3: 更新el-table ==================== -->
-  <el-table 
+  <el-table
     :data="tableData"
     v-loading="loading"
     @selection-change="handleSelectionChange"  <!-- 添加此行 -->
   >
     <!-- 仅管理员显示选择列 -->
     <el-table-column v-if="canDelete" type="selection" width="55" fixed />
-    
+
     <!-- 其他数据列... -->
-    
+
     <!-- ==================== 步骤4: 更新操作列 ==================== -->
-    <el-table-column 
-      label="操作" 
+    <el-table-column
+      label="操作"
       :width="canDelete ? 180 : 100"  <!-- 根据权限调整宽度 -->
       fixed="right"
     >
       <template #default="{ row }">
         <el-button size="small" @click="handleEdit(row)">编辑</el-button>
         <el-button size="small" @click="handleView(row)">查看</el-button>
-        
+
         <!-- 仅管理员显示删除按钮 -->
-        <el-button 
+        <el-button
           v-if="canDelete"
-          size="small" 
-          type="danger" 
+          size="small"
+          type="danger"
           @click="deleteRow(row)"
           :loading="deleteLoading"
         >
@@ -313,28 +313,28 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 
 ### 问题1：删除按钮不显示
 **原因**: 权限检查未生效
-**解决**: 
+**解决**:
 1. 检查是否导入了`usePermission`
 2. 检查`v-if="canDelete"`是否正确添加
 3. 在控制台检查用户权限：`console.log(useUserStore().userInfo)`
 
 ### 问题2：批量删除失败
 **原因**: API路径错误或后端不支持批量删除
-**解决**: 
+**解决**:
 1. 检查API endpoint是否正确（末尾有斜杠`/`）
 2. 检查后端是否实现了DELETE方法
 3. 查看Network面板的实际请求
 
 ### 问题3：删除后表格未刷新
 **原因**: `onSuccess`回调设置错误
-**解决**: 
+**解决**:
 1. 检查刷新方法名是否正确
 2. 确保方法名没有加引号（应该是函数引用）
 3. 使用箭头函数: `onSuccess: () => fetchData()`
 
 ### 问题4：选中的行未清空
 **原因**: 使用了旧的`selectedItems`变量
-**解决**: 
+**解决**:
 1. 删除旧的`const selectedItems = ref([])`
 2. 使用composable提供的`selectedRows`
 3. 确保所有地方都改为`selectedRows`
@@ -344,11 +344,11 @@ const { selectedRows, loading: deleteLoading, handleSelectionChange, batchDelete
 ## 📞 支持资源
 
 - **详细指南**: `/docs/BATCH_DELETE_GUIDE.md`
-- **示例页面**: 
+- **示例页面**:
   - `frontend/src/views/masterdata/ItemList.vue`
   - `frontend/src/views/system/UserList.vue`
   - `frontend/src/views/masterdata/CustomerList.vue`
-- **Composables**: 
+- **Composables**:
   - `frontend/src/composables/useBatchDelete.js`
   - `frontend/src/composables/usePermission.js`
 

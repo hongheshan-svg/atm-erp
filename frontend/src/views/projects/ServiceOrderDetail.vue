@@ -1,7 +1,7 @@
 <template>
   <div class="service-order-detail">
     <el-page-header @back="goBack" :content="pageTitle" />
-    
+
     <el-card class="detail-card" v-loading="loading">
       <template #header><span>工单信息</span></template>
       <el-descriptions :column="3" border>
@@ -15,7 +15,7 @@
         <el-descriptions-item label="问题描述" :span="3">{{ order.description }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-    
+
     <el-card class="dispatch-card">
       <template #header><span>派工记录</span></template>
       <el-table :data="order.dispatches || []" stripe>
@@ -44,9 +44,9 @@ const pageTitle = computed(() => order.value.order_no ? `服务工单 - ${order.
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getServiceOrder(route.params.id)
+    const res = await getServiceOrder(Number(route.params.id))
     order.value = res
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false

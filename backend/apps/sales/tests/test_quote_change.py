@@ -12,10 +12,9 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class QuotationNewVersionTest(TestCase):
     """报价改版: 非标明细字段保全 + 版本谱系。"""
 
@@ -26,9 +25,7 @@ class QuotationNewVersionTest(TestCase):
         from apps.masterdata.models import Customer
         from apps.sales.models import SalesQuotation, SalesQuotationLine
 
-        self.user = User.objects.create(
-            username='qtver', employee_id='QTVER1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='qtver', employee_id='QTVER1', is_staff=True, is_superuser=True)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
 
@@ -91,7 +88,6 @@ class QuotationNewVersionTest(TestCase):
         self.assertIn(new_quote.id, self.quote.child_versions.values_list('id', flat=True))
 
 
-@override_settings(ELASTICSEARCH_DSL_AUTOSYNC=False)
 class SalesOrderChangeApplyTest(TestCase):
     """销售订单变更单: 审批作用到订单 + guard。
 
@@ -104,9 +100,7 @@ class SalesOrderChangeApplyTest(TestCase):
         from apps.masterdata.models import Customer
         from apps.sales.models import SalesOrder, SalesOrderLine
 
-        self.user = User.objects.create(
-            username='socusr', employee_id='SOC1', is_staff=True, is_superuser=True
-        )
+        self.user = User.objects.create(username='socusr', employee_id='SOC1', is_staff=True, is_superuser=True)
 
         self.customer = Customer.objects.create(code='SOCC1', name='变更单客户')
         self.so = SalesOrder.objects.create(

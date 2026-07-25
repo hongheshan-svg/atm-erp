@@ -70,8 +70,8 @@
       </div>
       <el-table :data="groupedData" stripe v-loading="loading" style="width: 100%" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
-        <el-table-column :prop="groupBy === 'user' ? 'user__username' : 'project__name'" 
-                         :label="groupBy === 'user' ? '用户' : '项目'" 
+        <el-table-column :prop="groupBy === 'user' ? 'user__username' : 'project__name'"
+                         :label="groupBy === 'user' ? '用户' : '项目'"
                          min-width="150" />
         <el-table-column prop="total_hours" label="总工时" width="120" align="right">
           <template #default="{ row }">
@@ -131,7 +131,7 @@ import request from '@/utils/request'
 import { exportTimelogReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { toFixedSafe } from '@/utils/number'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
@@ -145,10 +145,10 @@ const overtimeData = ref<any[]>([])
 const dateRange = ref<any[]>([])
 const groupBy = ref('user')
 
-let trendChartInstance = null
-let pieChartInstance = null
-const trendChart = ref(null)
-const projectPieChart = ref(null)
+let trendChartInstance: any = null
+let pieChartInstance: any = null
+const trendChart = ref<any>(null)
+const projectPieChart = ref<any>(null)
 
 const avgDailyHours = computed(() => {
   if (!statistics.value.daily_trend?.length) return 0
@@ -156,7 +156,7 @@ const avgDailyHours = computed(() => {
   return workDays ? (statistics.value.month_hours / workDays).toFixed(1) : 0
 })
 
-const getPercentage = (hours) => {
+const getPercentage = (hours: any) => {
   const maxHours = Math.max(...groupedData.value.map(d => d.total_hours || 0), 1)
   return Math.round((hours / maxHours) * 100)
 }
@@ -167,7 +167,7 @@ const fetchStatistics = async () => {
     statistics.value = res || {}
     renderTrendChart()
     renderPieChart()
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取统计失败', error)
   }
 }
@@ -175,19 +175,19 @@ const fetchStatistics = async () => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    
-    const endpoint = groupBy.value === 'user' 
-      ? '/reports/timelog/by-user/' 
+
+    const endpoint = groupBy.value === 'user'
+      ? '/reports/timelog/by-user/'
       : '/reports/timelog/by-project/'
-    
+
     const res = await request({ url: endpoint, method: 'get', params })
     groupedData.value = groupBy.value === 'user' ? res?.by_user || [] : res?.by_project || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -196,14 +196,14 @@ const fetchData = async () => {
 
 const fetchOvertime = async () => {
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
     const res = await request({ url: '/reports/timelog/overtime/', method: 'get', params })
     overtimeData.value = res?.overtime_by_user || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取加班数据失败', error)
   }
 }
@@ -214,24 +214,24 @@ const handleGroupChange = () => {
 
 const renderTrendChart = () => {
   if (!trendChart.value) return
-  
+
   if (!trendChartInstance) {
     trendChartInstance = echarts.init(trendChart.value)
   }
-  
+
   const data = statistics.value.daily_trend || []
-  
+
   trendChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: {
       type: 'category',
-      data: data.map(d => (d.log_date ? String(d.log_date).substring(5) : '')),
+      data: data.map((d: any) => (d.log_date ? String(d.log_date).substring(5) : '')),
       axisLabel: { rotate: 45 }
     },
     yAxis: { type: 'value', name: '工时 (h)' },
     series: [{
       type: 'bar',
-      data: data.map(d => d.hours),
+      data: data.map((d: any) => d.hours),
       itemStyle: { color: '#409eff' }
     }]
   })
@@ -239,19 +239,19 @@ const renderTrendChart = () => {
 
 const renderPieChart = () => {
   if (!projectPieChart.value) return
-  
+
   if (!pieChartInstance) {
     pieChartInstance = echarts.init(projectPieChart.value)
   }
-  
+
   const data = (statistics.value.by_project || []).slice(0, 8)
-  
+
   pieChartInstance.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c}h ({d}%)' },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      data: data.map(d => ({
+      data: data.map((d: any) => ({
         name: d.project__name || '未知项目',
         value: d.hours
       })),
@@ -262,7 +262,7 @@ const renderPieChart = () => {
 
 const exportReport = async () => {
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value && dateRange.value.length === 2) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
@@ -277,7 +277,7 @@ const exportReport = async () => {
     link.remove()
     window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }
@@ -286,7 +286,7 @@ onMounted(async () => {
   await fetchStatistics()
   await fetchData()
   await fetchOvertime()
-  
+
   nextTick(() => {
     renderTrendChart()
     renderPieChart()

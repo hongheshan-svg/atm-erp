@@ -28,6 +28,7 @@ from .crm_serializers import (
 
 class LeadSourceViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """线索来源管理"""
+
     permission_module = 'sales'
     permission_resource = 'lead_source'
 
@@ -39,6 +40,7 @@ class LeadSourceViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet)
 
 class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售线索管理"""
+
     permission_module = 'sales'
     permission_resource = 'lead'
 
@@ -95,15 +97,12 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        from apps.masterdata.models import Customer
-
         from apps.core.utils import generate_code
+        from apps.masterdata.models import Customer
 
         # 必须能确定客户：要么新建，要么指定已有客户，否则不允许转化(避免孤儿 CONVERTED)
         if not data.get('create_customer', True) and not data.get('customer_id'):
-            return Response(
-                {'error': '请创建新客户或选择已有客户'}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': '请创建新客户或选择已有客户'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             customer = None
@@ -125,9 +124,7 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 try:
                     customer = Customer.objects.get(id=data['customer_id'])
                 except Customer.DoesNotExist:
-                    return Response(
-                        {'error': '指定的客户不存在'}, status=status.HTTP_400_BAD_REQUEST
-                    )
+                    return Response({'error': '指定的客户不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
             # 创建商机
             if data.get('create_opportunity', True) and customer:
@@ -175,6 +172,7 @@ class LeadViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
 
 class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售商机管理"""
+
     permission_module = 'sales'
     permission_resource = 'opportunity'
 
@@ -343,13 +341,12 @@ class OpportunityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
             updated_by=request.user,
         )
 
-        return Response(
-            {'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quote_no}
-        )
+        return Response({'message': '报价单创建成功', 'quotation_id': quotation.id, 'quotation_no': quotation.quote_no})
 
 
 class OpportunityActivityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """商机活动管理"""
+
     permission_module = 'sales'
     permission_resource = 'opportunity_activity'
 
@@ -360,6 +357,7 @@ class OpportunityActivityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
 class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """销售预测管理"""
+
     permission_module = 'sales'
     permission_resource = 'sales_forecast'
 
@@ -441,6 +439,7 @@ class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 
 class CRMDashboardView(PermissionMixin, viewsets.ViewSet):
     """CRM仪表盘数据"""
+
     permission_module = 'sales'
     permission_resource = 'crm_dashboard'
 
@@ -511,9 +510,7 @@ class CRMDashboardView(PermissionMixin, viewsets.ViewSet):
         limit = int(request.query_params.get('limit', 5))
 
         won = (
-            Opportunity.objects.filter(
-                is_deleted=False, stage='CLOSED_WON', actual_close_date__gte=month_start
-            )
+            Opportunity.objects.filter(is_deleted=False, stage='CLOSED_WON', actual_close_date__gte=month_start)
             .values('owner_id')
             .annotate(amount=Sum('estimated_amount'), count=Count('id'))
             .order_by('-amount')[:limit]

@@ -4,7 +4,7 @@
       <h2>库存成本核算</h2>
       <el-button type="primary" @click="handleGenerateSummary">生成期间汇总</el-button>
     </div>
-    
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="库存估值" name="valuation">
         <!-- 筛选条件 -->
@@ -25,7 +25,7 @@
             </el-form-item>
           </el-form>
         </el-card>
-        
+
         <!-- 汇总卡片 -->
         <el-row :gutter="16" class="stats-row">
           <el-col :span="6">
@@ -53,7 +53,7 @@
             </el-card>
           </el-col>
         </el-row>
-        
+
         <!-- 分仓库统计 -->
         <el-row :gutter="16">
           <el-col :span="12">
@@ -67,7 +67,7 @@
             </el-card>
           </el-col>
         </el-row>
-        
+
         <!-- 明细表格 -->
         <el-card shadow="never" style="margin-top: 16px">
           <template #header>
@@ -112,7 +112,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="成本记录" name="records">
         <el-card shadow="never">
           <template #header>
@@ -167,7 +167,7 @@
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="成本配置" name="config">
         <el-card shadow="never">
           <template #header>
@@ -210,7 +210,7 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
-    
+
     <!-- 生成汇总对话框 -->
     <el-dialog v-model="generateDialogVisible" title="生成期间汇总" width="400px">
       <el-form :model="generateForm" label-width="80px">
@@ -260,34 +260,34 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getInventoryValuation, getCostRecords, getCostConfigs, generatePeriodSummary, setCostConfigDefault, updateCostConfig, createCostConfig } from '@/api/inventory'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/inventory/')
 
 
 const activeTab = ref('valuation')
-const warehouseChart = ref(null)
-const categoryChart = ref(null)
-let warehouseChartInstance = null
-let categoryChartInstance = null
+const warehouseChart = ref<any>(null)
+const categoryChart = ref<any>(null)
+let warehouseChartInstance: any = null
+let categoryChartInstance: any = null
 
 const currentYear = new Date().getFullYear()
 const currentMonth = new Date().getMonth() + 1
 
 const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i)
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   year: currentYear,
   month: currentMonth
 })
 
-const recordQuery = reactive({
+const recordQuery = reactive<Record<string, any>>({
   search: '',
   transaction_type: ''
 })
 
-const generateForm = reactive({
+const generateForm = reactive<Record<string, any>>({
   year: currentYear,
   month: currentMonth
 })
@@ -301,7 +301,7 @@ const generating = ref(false)
 const configDialogVisible = ref(false)
 const configIsEdit = ref(false)
 const configSaving = ref(false)
-const configForm = reactive({ id: null, name: '', method: 'WEIGHTED_AVERAGE', description: '' })
+const configForm = reactive<Record<string, any>>({ id: null, name: '', method: 'WEIGHTED_AVERAGE', description: '' })
 
 const fetchValuation = async () => {
   try {
@@ -309,11 +309,11 @@ const fetchValuation = async () => {
     queryParams
     )
     valuation.value = data
-    
+
     nextTick(() => {
       renderCharts()
     })
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -325,7 +325,7 @@ const fetchRecords = async () => {
       { ...recordQuery, page_size: 100 }
     )
     records.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     recordLoading.value = false
@@ -336,7 +336,7 @@ const fetchConfigs = async () => {
   try {
     const data = await getCostConfigs()
     configs.value = data.results || data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -352,19 +352,19 @@ const confirmGenerate = async () => {
     ElMessage.success(data.message)
     generateDialogVisible.value = false
     fetchValuation()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('生成失败')
   } finally {
     generating.value = false
   }
 }
 
-const handleSetDefault = async (row) => {
+const handleSetDefault = async (row: any) => {
   try {
     await setCostConfigDefault(row.id)
     ElMessage.success('设置成功')
     fetchConfigs()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('设置失败')
   }
 }
@@ -375,7 +375,7 @@ const handleAddConfig = () => {
   configDialogVisible.value = true
 }
 
-const handleEditConfig = (row) => {
+const handleEditConfig = (row: any) => {
   configIsEdit.value = true
   Object.assign(configForm, { id: row.id, name: row.name, method: row.method, description: row.description })
   configDialogVisible.value = true
@@ -393,7 +393,7 @@ const handleConfigSave = async () => {
     }
     configDialogVisible.value = false
     fetchConfigs()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
     else ElMessage.error('操作失败')
   } finally {
@@ -407,12 +407,12 @@ const renderCharts = () => {
     if (!warehouseChartInstance) {
       warehouseChartInstance = echarts.init(warehouseChart.value)
     }
-    
-    const warehouseData = (valuation.value.by_warehouse || []).map(item => ({
+
+    const warehouseData = (valuation.value.by_warehouse || []).map((item: any) => ({
       name: item.warehouse__name || '未分配',
       value: Number(item.total_cost || 0)
     }))
-    
+
     warehouseChartInstance.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: ￥{c} ({d}%)' },
       series: [{
@@ -423,18 +423,18 @@ const renderCharts = () => {
       }]
     })
   }
-  
+
   // 类别分布图
   if (categoryChart.value) {
     if (!categoryChartInstance) {
       categoryChartInstance = echarts.init(categoryChart.value)
     }
-    
-    const categoryData = (valuation.value.by_category || []).map(item => ({
+
+    const categoryData = (valuation.value.by_category || []).map((item: any) => ({
       name: item.item__category__name || '未分类',
       value: Number(item.total_cost || 0)
     }))
-    
+
     categoryChartInstance.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: ￥{c} ({d}%)' },
       series: [{
@@ -447,7 +447,7 @@ const renderCharts = () => {
   }
 }
 
-const formatAmount = (val) => {
+const formatAmount = (val: any) => {
   if (!val) return '0.00'
   return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }

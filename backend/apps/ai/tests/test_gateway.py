@@ -56,10 +56,8 @@ class RagRetrieveTest(SimpleTestCase):
         self.assertEqual(retrieve('   '), [])
 
 
-@override_settings(ELASTICSEARCH_DSL={'default': {'hosts': ''}})
-class RagDbFallbackTest(TestCase):
-    def test_db_fallback_returns_list_without_es(self):
-        # 无 ES 主机 -> 直接走数据库 icontains(空表返回空列表,不抛异常)。
+class RagDatabaseRetrieveTest(TestCase):
+    def test_database_retrieve_returns_list_for_empty_database(self):
         self.assertEqual(retrieve('不存在的关键字'), [])
 
 

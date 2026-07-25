@@ -288,7 +288,7 @@ def scheduled_backup():
     """定时备份任务（每天凌晨2点执行）"""
     try:
         result = BackupService.create_backup()
-        logger.info(f"Scheduled backup completed: {result['file']}")
+        logger.info(f'Scheduled backup completed: {result["file"]}')
 
         # 清理30天前的备份
         BackupService.cleanup_old_backups(keep_days=30)

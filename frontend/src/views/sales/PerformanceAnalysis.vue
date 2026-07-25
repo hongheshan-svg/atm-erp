@@ -11,7 +11,7 @@
         </el-select>
       </div>
     </div>
-    
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="业绩概览" name="overview">
         <!-- 核心指标 -->
@@ -41,7 +41,7 @@
             </el-card>
           </el-col>
         </el-row>
-        
+
         <!-- 图表 -->
         <el-row :gutter="16">
           <el-col :span="12">
@@ -71,7 +71,7 @@
             </el-card>
           </el-col>
         </el-row>
-        
+
         <el-row :gutter="16" style="margin-top: 16px">
           <el-col :span="12">
             <el-card shadow="never" header="客户贡献Top10">
@@ -93,7 +93,7 @@
           </el-col>
         </el-row>
       </el-tab-pane>
-      
+
       <el-tab-pane label="销售目标" name="targets">
         <el-card shadow="never">
           <template #header>
@@ -120,7 +120,7 @@
             </el-table-column>
             <el-table-column label="完成率" width="180">
               <template #default="{ row }">
-                <el-progress :percentage="Math.min(row.order_rate || 0, 100)" 
+                <el-progress :percentage="Math.min(row.order_rate || 0, 100)"
                   :color="getTargetColor(row.order_rate)"
                   :format="() => toFixedSafe(row.order_rate, 1, '0.0') + '%'" />
               </template>
@@ -137,15 +137,15 @@
             </el-table-column>
             <el-table-column label="回款完成率" width="180">
               <template #default="{ row }">
-                <el-progress :percentage="Math.min(row.collection_rate || 0, 100)" 
-                  :color="getTargetColor(row.collection_rate)" 
+                <el-progress :percentage="Math.min(row.collection_rate || 0, 100)"
+                  :color="getTargetColor(row.collection_rate)"
                   :format="() => toFixedSafe(row.collection_rate, 1, '0.0') + '%'" />
               </template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="提成明细" name="commissions">
         <el-card shadow="never">
           <template #header>
@@ -195,21 +195,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getMyPerformance, getTeamRanking, getMonthlyTrend, getCustomerAnalysis, getPipelineAnalysis, getMyTargets, getMyCommissions, refreshTarget } from '@/api/sales'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { toFixedSafe } from '@/utils/number'
 
 const activeTab = ref('overview')
-const trendChart = ref(null)
-const funnelChart = ref(null)
-let trendChartInstance = null
-let funnelChartInstance = null
+const trendChart = ref<any>(null)
+const funnelChart = ref<any>(null)
+let trendChartInstance: any = null
+let funnelChartInstance: any = null
 
 const currentYear = new Date().getFullYear()
 const queryYear = ref(currentYear)
-const queryMonth = ref(null)
+const queryMonth = ref<any>(null)
 
 const yearOptions = Array.from({ length: 3 }, (_, i) => currentYear - i)
 
@@ -217,7 +217,7 @@ const myPerformance = ref<Record<string, any>>({})
 const teamRanking = ref<any[]>([])
 const monthlyTrend = ref<any[]>([])
 const customerAnalysis = ref({ top_customers: [], new_customers_trend: [] })
-const pipelineAnalysis = ref({ stages: [] })
+const pipelineAnalysis = ref<{ stages: any[] }>({ stages: [] })
 const myTargets = ref<any[]>([])
 const myCommissions = ref<any[]>([])
 
@@ -229,24 +229,24 @@ const totalCommission = computed(() => {
 
 const fetchMyPerformance = async () => {
   try {
-    const params = { year: queryYear.value }
+    const params: Record<string, any> = { year: queryYear.value }
     if (queryMonth.value) params.month = queryMonth.value
-    
+
     const data = await getMyPerformance(params)
     myPerformance.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
 
 const fetchTeamRanking = async () => {
   try {
-    const params = { year: queryYear.value, limit: 10 }
+    const params: Record<string, any> = { year: queryYear.value, limit: 10 }
     if (queryMonth.value) params.month = queryMonth.value
-    
+
     const data = await getTeamRanking(params)
     teamRanking.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -256,7 +256,7 @@ const fetchMonthlyTrend = async () => {
     const data = await getMonthlyTrend({ year: queryYear.value })
     monthlyTrend.value = data
     nextTick(() => renderTrendChart())
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -265,7 +265,7 @@ const fetchCustomerAnalysis = async () => {
   try {
     const data = await getCustomerAnalysis({ year: queryYear.value })
     customerAnalysis.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -275,7 +275,7 @@ const fetchPipelineAnalysis = async () => {
     const data = await getPipelineAnalysis({ year: queryYear.value })
     pipelineAnalysis.value = data
     nextTick(() => renderFunnelChart())
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -284,7 +284,7 @@ const fetchMyTargets = async () => {
   try {
     const data = await getMyTargets()
     myTargets.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -293,7 +293,7 @@ const fetchMyCommissions = async () => {
   try {
     const data = await getMyCommissions()
     myCommissions.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -310,7 +310,7 @@ const handleRefreshTargets = async () => {
   for (const target of myTargets.value) {
     try {
       await refreshTarget(target.id)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
     }
   }
@@ -320,24 +320,24 @@ const handleRefreshTargets = async () => {
 
 const renderTrendChart = () => {
   if (!trendChart.value) return
-  
+
   if (!trendChartInstance) {
     trendChartInstance = echarts.init(trendChart.value)
   }
-  
+
   const months = monthlyTrend.value.map(d => {
     const date = new Date(d.month)
     return `${date.getMonth() + 1}月`
   })
   const amounts = monthlyTrend.value.map(d => Number(d.total_amount || 0))
   const counts = monthlyTrend.value.map(d => d.order_count || 0)
-  
+
   trendChartInstance.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['订单额', '订单数'] },
     xAxis: { type: 'category', data: months },
     yAxis: [
-      { type: 'value', name: '金额(万)', axisLabel: { formatter: v => (v / 10000).toFixed(0) } },
+      { type: 'value', name: '金额(万)', axisLabel: { formatter: (v: any) => (v / 10000).toFixed(0) } },
       { type: 'value', name: '数量' }
     ],
     series: [
@@ -360,11 +360,11 @@ const renderTrendChart = () => {
 
 const renderFunnelChart = () => {
   if (!funnelChart.value) return
-  
+
   if (!funnelChartInstance) {
     funnelChartInstance = echarts.init(funnelChart.value)
   }
-  
+
   const statusMap = {
     DRAFT: '草稿',
     PENDING: '待审批',
@@ -373,12 +373,12 @@ const renderFunnelChart = () => {
     WON: '已成交',
     LOST: '已失败'
   }
-  
+
   const funnelData = (pipelineAnalysis.value.stages || []).map(s => ({
-    name: statusMap[s.status] || s.status,
+    name: (statusMap as Record<string, any>)[s.status] || s.status,
     value: s.count
   }))
-  
+
   funnelChartInstance.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c}' },
     series: [{
@@ -391,26 +391,26 @@ const renderFunnelChart = () => {
   })
 }
 
-const formatAmount = (val) => {
+const formatAmount = (val: any) => {
   if (!val) return '0.00'
   return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getTargetColor = (rate) => {
+const getTargetColor = (rate: any) => {
   if (rate >= 100) return '#67c23a'
   if (rate >= 80) return '#409eff'
   if (rate >= 60) return '#e6a23c'
   return '#f56c6c'
 }
 
-const getCommissionStatusTag = (status) => {
+const getCommissionStatusTag = (status: any) => {
   const tags = {
     PENDING: 'warning',
     CONFIRMED: 'primary',
     PAID: 'success',
     CANCELLED: 'info'
   }
-  return tags[status] || ''
+  return (tags as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

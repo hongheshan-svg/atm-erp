@@ -4,7 +4,7 @@
       <h2>系统公告</h2>
       <el-button type="primary" v-permission="'system:config'" @click="handleAdd">发布公告</el-button>
     </div>
-    
+
     <el-card shadow="never">
       <template #header>
         <el-form :inline="true">
@@ -33,19 +33,19 @@
           </el-form-item>
         </el-form>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="announcements" v-loading="loading" border stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column width="50" align="center">
@@ -82,7 +82,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
@@ -93,7 +93,7 @@
         style="margin-top: 16px; justify-content: flex-end"
       />
     </el-card>
-    
+
     <!-- 编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑公告' : '发布公告'" width="700px">
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
@@ -154,7 +154,7 @@
         <el-button type="primary" @click="submitForm('PUBLISH')" :loading="submitLoading">立即发布</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 查看对话框 -->
     <el-dialog v-model="viewDialogVisible" :title="viewAnnouncement?.title" width="600px">
       <div class="announcement-view">
@@ -185,13 +185,13 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const announcements = ref<any[]>([])
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   announcement_type: null,
   status: null
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -200,7 +200,7 @@ const pagination = reactive({
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const viewAnnouncement = ref<any>(null)
 
 // Preserve line breaks, then sanitize before rendering with v-html.
@@ -208,7 +208,7 @@ const sanitizedViewContent = computed(() =>
   sanitizeHtml((viewAnnouncement.value?.content || '').replace(/\n/g, '<br/>'))
 )
 
-const formData = reactive({
+const formData = reactive<Record<string, any>>({
   id: null,
   title: '',
   summary: '',
@@ -229,7 +229,7 @@ const rules = {
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       ...queryParams
@@ -237,7 +237,7 @@ const fetchList = async () => {
     const data = await getAnnouncementList(params)
     announcements.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -261,52 +261,52 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(formData, row)
   dialogVisible.value = true
 }
 
-const handlePublish = async (row) => {
+const handlePublish = async (row: any) => {
   try {
     await publishAnnouncement(row.id)
     ElMessage.success('发布成功')
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('发布失败')
   }
 }
 
-const handleWithdraw = async (row) => {
+const handleWithdraw = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要撤回此公告吗？', '提示', { type: 'warning' })
     await withdrawAnnouncement(row.id)
     ElMessage.success('撤回成功')
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error('撤回失败')
     }
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此公告吗？', '提示', { type: 'warning' })
     await deleteAnnouncement(row.id)
     ElMessage.success('删除成功')
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error('删除失败')
     }
   }
 }
 
-const submitForm = async (action) => {
+const submitForm = async (action: any) => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     let result
@@ -315,35 +315,35 @@ const submitForm = async (action) => {
     } else {
       result = await createAnnouncement(formData)
     }
-    
+
     if (action === 'PUBLISH' && result.status === 'DRAFT') {
       await publishAnnouncement(result.id)
     }
-    
+
     ElMessage.success(action === 'PUBLISH' ? '发布成功' : '保存成功')
     dialogVisible.value = false
     fetchList()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN')
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     DRAFT: 'info',
     PUBLISHED: 'success',
     EXPIRED: 'warning',
     WITHDRAWN: ''
   }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

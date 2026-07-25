@@ -2,7 +2,7 @@
   <div class="project-profitability-report">
     <el-card>
       <template #header><span>项目盈利分析报表</span></template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" @change="loadData" />
@@ -12,19 +12,19 @@
           <el-button @click="handleExport">导出</el-button>
         </el-form-item>
       </el-form>
-      
+
       <div ref="chartRef" style="height: 400px;" class="chart-container"></div>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe show-summary @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="project_no" label="项目编号" width="140" />
@@ -51,7 +51,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { getProjectProfitabilityReport, exportProjectProfitabilityReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
@@ -60,14 +60,14 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 const loading = ref(false)
 const tableData = ref<any[]>([])
 const dateRange = ref<any[]>([])
-const chartRef = ref(null)
+const chartRef = ref<any>(null)
 
-const formatMoney = (v) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
+const formatMoney = (v: any) => v ? parseFloat(v).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) : '0.00'
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {}
+    const params: Record<string, any> = {}
     if (dateRange.value?.length) {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
@@ -76,7 +76,7 @@ const loadData = async () => {
     tableData.value = res.projects || res.projects || []
     await nextTick()
     renderChart()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -116,7 +116,7 @@ const handleExport = async () => {
     link.remove()
     window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('导出失败')
   }
 }

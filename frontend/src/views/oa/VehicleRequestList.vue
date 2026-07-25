@@ -10,7 +10,7 @@
           </el-button>
         </div>
       </template>
-      
+
       <!-- 搜索栏 -->
       <el-form :inline="true" class="search-form">
         <el-form-item label="用途">
@@ -35,19 +35,19 @@
           <el-button type="primary" @click="loadData">搜索</el-button>
         </el-form-item>
       </el-form>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="list" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="request_no" label="申请单号" width="130" />
@@ -76,7 +76,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.pageSize"
@@ -88,7 +88,7 @@
         style="margin-top: 20px; justify-content: flex-end;"
       />
     </el-card>
-    
+
     <!-- 新建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" title="用车申请" width="700px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -96,11 +96,11 @@
           <el-col :span="12">
             <el-form-item label="申请车辆" prop="vehicle">
               <el-select v-model="form.vehicle" placeholder="选择车辆" style="width: 100%;">
-                <el-option 
-                  v-for="v in availableVehicles" 
-                  :key="v.id" 
-                  :label="`${v.plate_number} (${v.brand} ${v.model})`" 
-                  :value="v.id" 
+                <el-option
+                  v-for="v in availableVehicles"
+                  :key="v.id"
+                  :label="`${v.plate_number} (${v.brand} ${v.model})`"
+                  :value="v.id"
                 />
               </el-select>
             </el-form-item>
@@ -154,7 +154,7 @@
         <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 还车对话框 -->
     <el-dialog v-model="returnDialogVisible" title="还车登记" width="500px" destroy-on-close>
       <el-form :model="returnForm" label-width="100px">
@@ -221,21 +221,21 @@ const list = ref<any[]>([])
 const availableVehicles = ref<any[]>([])
 const dialogVisible = ref(false)
 const returnDialogVisible = ref(false)
-const currentItem = ref(null)
-const formRef = ref(null)
+const currentItem = ref<any>(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   purpose: '',
   status: ''
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 10,
   total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   vehicle: null,
   purpose: 'BUSINESS',
   start_time: '',
@@ -246,7 +246,7 @@ const form = reactive({
   purpose_detail: ''
 })
 
-const returnForm = reactive({
+const returnForm = reactive<Record<string, any>>({
   end_mileage: 0,
   fuel_cost: 0,
   toll_cost: 0,
@@ -263,7 +263,7 @@ const rules = {
   purpose_detail: [{ required: true, message: '请输入详细说明', trigger: 'blur' }]
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'PENDING': 'warning',
@@ -273,16 +273,16 @@ const getStatusType = (status) => {
     'RETURNED': '',
     'CANCELLED': 'info'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const formatDateTime = (datetime) => {
+const formatDateTime = (datetime: any) => {
   if (!datetime) return ''
-  return new Date(datetime).toLocaleString('zh-CN', { 
-    month: '2-digit', 
-    day: '2-digit', 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  return new Date(datetime).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
   })
 }
 
@@ -291,7 +291,7 @@ const loadVehicles = async () => {
     const res = await getAvailableVehicles()
     // res 已经是 response.data
     availableVehicles.value = Array.isArray(res) ? res : (res.results || [])
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载车辆失败', error)
   }
 }
@@ -299,7 +299,7 @@ const loadVehicles = async () => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -316,7 +316,7 @@ const loadData = async () => {
       list.value = []
       pagination.total = 0
     }
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -338,11 +338,11 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getVehicleRequest(row.id)
     viewDetail.value = res
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
   }
@@ -353,13 +353,13 @@ const handleSave = async () => {
   try {
     await formRef.value?.validate()
     saving.value = true
-    
+
     await createVehicleRequest(form)
     ElMessage.success('申请已保存')
-    
+
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) {
       ElMessage.error(JSON.stringify(error.response.data))
     }
@@ -368,33 +368,33 @@ const handleSave = async () => {
   }
 }
 
-const handleSubmit = async (row) => {
+const handleSubmit = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要提交这个用车申请吗？', '提示', { type: 'warning' })
     await submitVehicleRequest(row.id)
     ElMessage.success('提交成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('提交失败')
     }
   }
 }
 
-const handlePickup = async (row) => {
+const handlePickup = async (row: any) => {
   try {
     await ElMessageBox.confirm('确认取车？', '提示', { type: 'info' })
     await pickupVehicle(row.id)
     ElMessage.success('取车成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
   }
 }
 
-const handleReturn = (row) => {
+const handleReturn = (row: any) => {
   currentItem.value = row
   Object.assign(returnForm, {
     end_mileage: row.start_mileage || 0,
@@ -412,20 +412,20 @@ const confirmReturn = async () => {
     ElMessage.success('还车成功')
     returnDialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     saving.value = false
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除这个用车申请吗？', '提示', { type: 'warning' })
     await deleteVehicleRequest(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }

@@ -14,28 +14,28 @@
             </el-tag>
           </div>
           <div class="actions">
-            <el-button 
+            <el-button
               v-if="comparison.status === 'IN_PROGRESS'"
               type="primary"
               @click="handleAutoScore"
             >
               自动评分
             </el-button>
-            <el-button 
+            <el-button
               v-if="comparison.status === 'IN_PROGRESS'"
               type="success"
               @click="handleComplete"
             >
               完成比价
             </el-button>
-            <el-button 
+            <el-button
               v-if="comparison.status === 'COMPLETED'"
               type="warning"
               @click="handleApprove"
             >
               审批通过
             </el-button>
-            <el-button 
+            <el-button
               v-if="comparison.status === 'APPROVED'"
               type="primary"
               @click="handleConvertToPO"
@@ -170,9 +170,9 @@
       <el-row :gutter="16">
         <el-col :span="4">
           <div class="weight-item">
-            <el-progress 
-              type="dashboard" 
-              :percentage="Number(comparison.weight_price)" 
+            <el-progress
+              type="dashboard"
+              :percentage="Number(comparison.weight_price)"
               :width="70"
               :stroke-width="6"
               color="#67c23a"
@@ -182,9 +182,9 @@
         </el-col>
         <el-col :span="4">
           <div class="weight-item">
-            <el-progress 
-              type="dashboard" 
-              :percentage="Number(comparison.weight_quality)" 
+            <el-progress
+              type="dashboard"
+              :percentage="Number(comparison.weight_quality)"
               :width="70"
               :stroke-width="6"
               color="#409eff"
@@ -194,9 +194,9 @@
         </el-col>
         <el-col :span="4">
           <div class="weight-item">
-            <el-progress 
-              type="dashboard" 
-              :percentage="Number(comparison.weight_delivery)" 
+            <el-progress
+              type="dashboard"
+              :percentage="Number(comparison.weight_delivery)"
               :width="70"
               :stroke-width="6"
               color="#e6a23c"
@@ -206,9 +206,9 @@
         </el-col>
         <el-col :span="4">
           <div class="weight-item">
-            <el-progress 
-              type="dashboard" 
-              :percentage="Number(comparison.weight_service)" 
+            <el-progress
+              type="dashboard"
+              :percentage="Number(comparison.weight_service)"
               :width="70"
               :stroke-width="6"
               color="#909399"
@@ -218,9 +218,9 @@
         </el-col>
         <el-col :span="4">
           <div class="weight-item">
-            <el-progress 
-              type="dashboard" 
-              :percentage="Number(comparison.weight_technical || 0)" 
+            <el-progress
+              type="dashboard"
+              :percentage="Number(comparison.weight_technical || 0)"
               :width="70"
               :stroke-width="6"
               color="#f56c6c"
@@ -242,11 +242,11 @@
       <template #header>
         <span>供应商报价比较</span>
       </template>
-      
+
       <el-table :data="comparison.scores || []" stripe border>
         <el-table-column prop="ranking" label="排名" width="80" align="center">
           <template #default="{ row }">
-            <el-tag 
+            <el-tag
               :type="row.ranking === 1 ? 'success' : (row.ranking === 2 ? 'warning' : 'info')"
               effect="dark"
             >
@@ -271,8 +271,8 @@
         </el-table-column>
         <el-table-column label="价格分" width="100" align="center">
           <template #default="{ row }">
-            <el-progress 
-              :percentage="Number(row.score_price) || 0" 
+            <el-progress
+              :percentage="Number(row.score_price) || 0"
               :format="() => formatScore(row.score_price)"
               :stroke-width="6"
               :color="getScoreColor(row.score_price)"
@@ -282,15 +282,15 @@
         <el-table-column label="质量分" width="100" align="center">
           <template #default="{ row }">
             <div v-if="comparison.status === 'IN_PROGRESS'" class="editable-score">
-              <el-input-number 
-                v-model="row.score_quality" 
+              <el-input-number
+                v-model="row.score_quality"
                 :min="0" :max="100" :step="5" size="small"
                 @change="updateScore(row, 'score_quality', row.score_quality)"
               />
             </div>
-            <el-progress 
+            <el-progress
               v-else
-              :percentage="Number(row.score_quality) || 0" 
+              :percentage="Number(row.score_quality) || 0"
               :format="() => formatScore(row.score_quality)"
               :stroke-width="6"
               :color="getScoreColor(row.score_quality)"
@@ -299,8 +299,8 @@
         </el-table-column>
         <el-table-column label="交期分" width="100" align="center">
           <template #default="{ row }">
-            <el-progress 
-              :percentage="Number(row.score_delivery) || 0" 
+            <el-progress
+              :percentage="Number(row.score_delivery) || 0"
               :format="() => formatScore(row.score_delivery)"
               :stroke-width="6"
               :color="getScoreColor(row.score_delivery)"
@@ -310,15 +310,15 @@
         <el-table-column label="服务分" width="100" align="center">
           <template #default="{ row }">
             <div v-if="comparison.status === 'IN_PROGRESS'" class="editable-score">
-              <el-input-number 
-                v-model="row.score_service" 
+              <el-input-number
+                v-model="row.score_service"
                 :min="0" :max="100" :step="5" size="small"
                 @change="updateScore(row, 'score_service', row.score_service)"
               />
             </div>
-            <el-progress 
+            <el-progress
               v-else
-              :percentage="Number(row.score_service) || 0" 
+              :percentage="Number(row.score_service) || 0"
               :format="() => formatScore(row.score_service)"
               :stroke-width="6"
               :color="getScoreColor(row.score_service)"
@@ -327,8 +327,8 @@
         </el-table-column>
         <el-table-column label="技术分" width="100" align="center" v-if="Number(comparison.weight_technical) > 0">
           <template #default="{ row }">
-            <el-progress 
-              :percentage="Number(row.score_technical) || 0" 
+            <el-progress
+              :percentage="Number(row.score_technical) || 0"
               :format="() => formatScore(row.score_technical)"
               :stroke-width="6"
               :color="getScoreColor(row.score_technical)"
@@ -337,8 +337,8 @@
         </el-table-column>
         <el-table-column label="可靠性" width="100" align="center">
           <template #default="{ row }">
-            <el-progress 
-              :percentage="Number(row.score_reliability) || 75" 
+            <el-progress
+              :percentage="Number(row.score_reliability) || 75"
               :format="() => formatScore(row.score_reliability || 75)"
               :stroke-width="6"
               :color="getReliabilityColor(row.score_reliability)"
@@ -408,13 +408,13 @@
       <template #header>
         <span>物料明细比较</span>
       </template>
-      
+
       <el-table :data="report.item_comparisons" stripe border>
         <el-table-column prop="item_sku" label="物料编码" width="120" />
         <el-table-column prop="item_name" label="物料名称" min-width="150" />
         <el-table-column prop="required_qty" label="需求数量" width="100" align="right" />
-        <el-table-column 
-          v-for="(supplier, index) in getSupplierNames()" 
+        <el-table-column
+          v-for="(supplier, index) in getSupplierNames()"
           :key="index"
           :label="supplier"
           width="150"
@@ -424,7 +424,7 @@
             <div v-if="getSupplierPrice(row, supplier)">
               <div class="item-price">¥{{ formatNumber(getSupplierPrice(row, supplier).unit_price) }}</div>
               <div v-if="getSupplierPrice(row, supplier).price_change_rate" class="price-change">
-                <el-tag 
+                <el-tag
                   :type="Number(getSupplierPrice(row, supplier).price_change_rate) > 0 ? 'danger' : 'success'"
                   size="small"
                 >
@@ -459,9 +459,9 @@
           <el-slider v-model="weightForm.weight_service" :max="100" show-input />
         </el-form-item>
         <el-form-item>
-          <el-alert 
-            v-if="weightFormTotal !== 100" 
-            type="warning" 
+          <el-alert
+            v-if="weightFormTotal !== 100"
+            type="warning"
             :title="`权重总和为 ${weightFormTotal}%，需要等于 100%`"
             :closable="false"
           />
@@ -496,7 +496,7 @@ const comparison = ref<Record<string, any>>({})
 const report = ref<Record<string, any>>({})
 const showWeightDialog = ref(false)
 
-const weightForm = reactive({
+const weightForm = reactive<Record<string, any>>({
   weight_price: 40,
   weight_quality: 25,
   weight_delivery: 20,
@@ -505,12 +505,12 @@ const weightForm = reactive({
 })
 
 const weightFormTotal = computed(() => {
-  return weightForm.weight_price + weightForm.weight_quality + 
+  return weightForm.weight_price + weightForm.weight_quality +
          weightForm.weight_delivery + weightForm.weight_service + weightForm.weight_technical
 })
 
 // 权重模板标签
-const getWeightTemplateLabel = (template) => {
+const getWeightTemplateLabel = (template: any) => {
   const labels = {
     'STANDARD': '标准权重',
     'QUALITY_FIRST': '质量优先',
@@ -518,20 +518,20 @@ const getWeightTemplateLabel = (template) => {
     'PRICE_FIRST': '价格优先',
     'CUSTOM': '自定义'
   }
-  return labels[template] || template
+  return (labels as Record<string, any>)[template] || template
 }
 
 // 计算权重合计
 const getTotalWeight = () => {
-  return Number(comparison.value.weight_price || 0) + 
-         Number(comparison.value.weight_quality || 0) + 
-         Number(comparison.value.weight_delivery || 0) + 
-         Number(comparison.value.weight_service || 0) + 
+  return Number(comparison.value.weight_price || 0) +
+         Number(comparison.value.weight_quality || 0) +
+         Number(comparison.value.weight_delivery || 0) +
+         Number(comparison.value.weight_service || 0) +
          Number(comparison.value.weight_technical || 0)
 }
 
 // 比价类型颜色
-const getComparisonTypeColor = (type) => {
+const getComparisonTypeColor = (type: any) => {
   const colors = {
     'NORMAL': 'info',
     'SAMPLE': 'primary',
@@ -539,21 +539,21 @@ const getComparisonTypeColor = (type) => {
     'URGENT': 'danger',
     'CHANGE': 'warning'
   }
-  return colors[type] || 'info'
+  return (colors as Record<string, any>)[type] || 'info'
 }
 
 // 风险等级颜色
-const getRiskLevelColor = (level) => {
+const getRiskLevelColor = (level: any) => {
   const colors = {
     'LOW': 'success',
     'MEDIUM': 'warning',
     'HIGH': 'danger'
   }
-  return colors[level] || 'info'
+  return (colors as Record<string, any>)[level] || 'info'
 }
 
 // 可靠性得分颜色
-const getReliabilityColor = (score) => {
+const getReliabilityColor = (score: any) => {
   const s = Number(score || 75)
   if (s >= 85) return '#67c23a'
   if (s >= 70) return '#e6a23c'
@@ -561,49 +561,49 @@ const getReliabilityColor = (score) => {
 }
 
 // 应用权重模板
-const applyWeightTemplate = async (template) => {
+const applyWeightTemplate = async (template: any) => {
   try {
-    await applyComparisonTemplate(route.params.id, {
+    await applyComparisonTemplate(Number(route.params.id), {
       template: template
     })
     ElMessage.success('已应用权重模板')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('应用模板失败')
   }
 }
 
 // 格式化
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   return parseFloat(num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const formatScore = (score) => {
+const formatScore = (score: any) => {
   const num = parseFloat(score)
   return isNaN(num) ? '0.0' : num.toFixed(1)
 }
 
-const formatTotalScore = (score) => {
+const formatTotalScore = (score: any) => {
   const num = parseFloat(score)
   return isNaN(num) ? '0.00' : num.toFixed(2)
 }
 
-const formatPriceChange = (rate) => {
+const formatPriceChange = (rate: any) => {
   const num = parseFloat(rate)
   return isNaN(num) ? '0.0' : num.toFixed(1)
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'IN_PROGRESS': 'warning',
     'COMPLETED': 'success',
     'APPROVED': 'primary'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
-const getScoreColor = (score) => {
+const getScoreColor = (score: any) => {
   if (score >= 80) return '#67c23a'
   if (score >= 60) return '#e6a23c'
   return '#f56c6c'
@@ -612,33 +612,33 @@ const getScoreColor = (score) => {
 // 获取所有供应商名称
 const getSupplierNames = () => {
   if (!report.value.suppliers) return []
-  return report.value.suppliers.map(s => s.supplier_name)
+  return report.value.suppliers.map((s: any) => s.supplier_name)
 }
 
 // 获取物料对应供应商的价格
-const getSupplierPrice = (item, supplierName) => {
+const getSupplierPrice = (item: any, supplierName: any) => {
   if (!item.supplier_prices) return null
-  return item.supplier_prices.find(p => p.supplier_name === supplierName)
+  return item.supplier_prices.find((p: any) => p.supplier_name === supplierName)
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const id = route.params.id
+    const id = Number(route.params.id)
     const [compRes, reportRes] = await Promise.all([
       getComparison(id),
       getComparisonReport(id)
     ])
     comparison.value = compRes
     report.value = reportRes
-    
+
     // 初始化权重表单
     weightForm.weight_price = Number(compRes.weight_price)
     weightForm.weight_quality = Number(compRes.weight_quality)
     weightForm.weight_delivery = Number(compRes.weight_delivery)
     weightForm.weight_service = Number(compRes.weight_service)
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载比价详情失败:', error)
     ElMessage.error('加载数据失败')
   } finally {
@@ -654,27 +654,27 @@ const goBack = () => {
 // 自动评分
 const handleAutoScore = async () => {
   try {
-    await autoScoreComparison(route.params.id)
+    await autoScoreComparison(Number(route.params.id))
     ElMessage.success('自动评分完成')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('评分失败')
   }
 }
 
 // 更新单个评分
-const updateScore = async (row, field, value) => {
+const updateScore = async (row: any, field: any, value: any) => {
   try {
-    const data = {}
+    const data: Record<string, any> = {}
     if (field === 'score_quality') {
       data.score_quality = value
     } else if (field === 'score_service') {
       data.score_service = value
     }
-    
-    await updateComparisonScore(route.params.id, row.id, data)
+
+    await updateComparisonScore(Number(route.params.id), row.id, data)
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('更新评分失败')
   }
 }
@@ -682,11 +682,11 @@ const updateScore = async (row, field, value) => {
 // 保存权重
 const saveWeights = async () => {
   try {
-    await updateComparisonWeights(route.params.id, weightForm)
+    await updateComparisonWeights(Number(route.params.id), weightForm)
     ElMessage.success('权重更新成功')
     showWeightDialog.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error(error.response?.data?.error || '更新失败')
   }
 }
@@ -695,10 +695,10 @@ const saveWeights = async () => {
 const handleComplete = async () => {
   try {
     await ElMessageBox.confirm('确定完成此比价分析？', '确认')
-    await completeComparison(route.params.id)
+    await completeComparison(Number(route.params.id))
     ElMessage.success('比价分析已完成')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -709,10 +709,10 @@ const handleComplete = async () => {
 const handleApprove = async () => {
   try {
     await ElMessageBox.confirm('确定审批通过此比价分析？', '确认审批')
-    await approveComparison(route.params.id)
+    await approveComparison(Number(route.params.id))
     ElMessage.success('审批通过')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -723,10 +723,10 @@ const handleApprove = async () => {
 const handleConvertToPO = async () => {
   try {
     await ElMessageBox.confirm('确定将推荐报价转换为采购订单？', '确认转换')
-    const res = await convertComparisonToPO(route.params.id)
+    const res = await convertComparisonToPO(Number(route.params.id))
     ElMessage.success(`采购订单 ${res.order_no} 创建成功`)
     router.push(`/purchase/orders/${res.id}`)
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '转换失败')
     }
@@ -926,4 +926,3 @@ onMounted(() => {
   margin-bottom: 0;
 }
 </style>
-

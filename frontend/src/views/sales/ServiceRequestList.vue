@@ -267,7 +267,7 @@ const requests = ref<any[]>([])
 const customers = ref<any[]>([])
 const customerContracts = ref<any[]>([])
 const users = ref<any[]>([])
-const currentRequest = ref(null)
+const currentRequest = ref<any>(null)
 
 const searchKeyword = ref('')
 const statusFilter = ref('')
@@ -285,13 +285,13 @@ const stats = ref({
   completedToday: 0
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
 })
 
-const requestForm = reactive({
+const requestForm = reactive<Record<string, any>>({
   customer: null,
   service_contract: null,
   subject: '',
@@ -314,30 +314,30 @@ const requestRules = {
   contact_phone: [{ required: true, message: '请输入联系电话', trigger: 'blur' }]
 }
 
-const requestFormRef = ref(null)
+const requestFormRef = ref<any>(null)
 
-const formatDate = (date) => {
+const formatDate = (date: any) => {
   if (!date) return '-'
   return new Date(date).toLocaleString('zh-CN')
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     NEW: 'info', ACKNOWLEDGED: 'warning', ASSIGNED: 'warning', IN_PROGRESS: 'primary',
     PENDING_PARTS: 'warning', RESOLVED: 'success', CLOSED: 'info'
   }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const map = { CRITICAL: 'danger', HIGH: 'warning', MEDIUM: '', LOW: 'info' }
-  return map[priority] || ''
+  return (map as Record<string, any>)[priority] || ''
 }
 
 const loadRequests = async () => {
   loading.value = true
   try {
-    const params = { page: pagination.page, page_size: pagination.pageSize }
+    const params: Record<string, any> = { page: pagination.page, page_size: pagination.pageSize }
     if (searchKeyword.value) params.search = searchKeyword.value
     if (statusFilter.value) params.status = statusFilter.value
     if (priorityFilter.value) params.priority = priorityFilter.value
@@ -345,7 +345,7 @@ const loadRequests = async () => {
     const res = await getServiceRequests(params)
     requests.value = res.results || res
     pagination.total = res.count || requests.value.length
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载服务请求失败')
   } finally {
     loading.value = false
@@ -362,7 +362,7 @@ const loadStats = async () => {
     stats.value.new = newRes.count || 0
     stats.value.inProgress = inProgressRes.count || 0
     stats.value.waitingParts = waitingRes.count || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载统计数据失败')
   }
 }
@@ -371,12 +371,12 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载客户列表失败')
   }
 }
 
-const loadContractsForCustomer = async (customerId) => {
+const loadContractsForCustomer = async (customerId: any) => {
   if (!customerId) {
     customerContracts.value = []
     return
@@ -384,7 +384,7 @@ const loadContractsForCustomer = async (customerId) => {
   try {
     const res = await getServiceContracts({ customer: customerId, status: 'ACTIVE' })
     customerContracts.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载合同列表失败')
   }
 }
@@ -393,7 +393,7 @@ const loadUsers = async () => {
   try {
     const res = await getUsers({ page_size: 1000 })
     users.value = res.results || res
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载用户列表失败')
   }
 }
@@ -422,24 +422,24 @@ const createRequest = async () => {
     showCreateDialog.value = false
     loadRequests()
     loadStats()
-  } catch (e) {
+  } catch (e: any) {
     if (e !== false) ElMessage.error('创建失败')
   } finally {
     submitting.value = false
   }
 }
 
-const viewRequest = async (row) => {
+const viewRequest = async (row: any) => {
   try {
     const res = await getServiceRequest(row.id)
     currentRequest.value = res
     showDetailDrawer.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载请求详情失败')
   }
 }
 
-const assignRequest = (row) => {
+const assignRequest = (row: any) => {
   assignTarget.value = row
   assignUserId.value = row.assigned_to || null
   showAssignDialog.value = true
@@ -455,12 +455,12 @@ const confirmAssign = async () => {
     ElMessage.success('分配成功')
     showAssignDialog.value = false
     loadRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('分配失败')
   }
 }
 
-const completeRequest = async (row) => {
+const completeRequest = async (row: any) => {
   ElMessageBox.prompt('请输入处理结果', '完成请求').then(async ({ value }) => {
     await completeServiceRequest(row.id, { resolution: value })
     ElMessage.success('请求已完成')
@@ -469,22 +469,22 @@ const completeRequest = async (row) => {
   }).catch(() => {})
 }
 
-const submitRequest = async (row) => {
+const submitRequest = async (row: any) => {
   try {
     await request({ url: `/sales/service-requests/${row.id}/submit/`, method: 'post' })
     ElMessage.success('已提交')
     loadRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('提交失败')
   }
 }
 
-const acknowledgeRequest = async (row) => {
+const acknowledgeRequest = async (row: any) => {
   try {
     await request({ url: `/sales/service-requests/${row.id}/acknowledge/`, method: 'post' })
     ElMessage.success('已确认')
     loadRequests()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('确认失败')
   }
 }

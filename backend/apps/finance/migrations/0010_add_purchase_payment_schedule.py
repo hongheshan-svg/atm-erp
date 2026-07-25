@@ -111,4 +111,3 @@ class Migration(migrations.Migration):
             index=models.Index(fields=['reminder_status', 'due_date'], name='pps_remind_idx'),
         ),
     ]
-

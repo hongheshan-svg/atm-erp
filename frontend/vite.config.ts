@@ -12,8 +12,6 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-    // Enable history API fallback for SPA routing
-    historyApiFallback: true,
     proxy: {
       '/api': {
         target: process.env.VITE_API_BASE_URL || 'http://backend:8000',
@@ -25,7 +23,10 @@ export default defineConfig({
       }
     }
   },
+  build: {
+    // Large feature dependencies are already isolated behind lazy-loaded routes.
+    chunkSizeWarningLimit: 900
+  },
   // Ensure proper base path
   base: '/erp/'
 })
-

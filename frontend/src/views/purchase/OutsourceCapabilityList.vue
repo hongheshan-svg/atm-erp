@@ -7,19 +7,19 @@
           <el-button type="primary" @click="handleCreate">新增能力</el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="supplier_name" label="供应商" width="150" />
@@ -44,7 +44,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -120,9 +120,9 @@ const pageSize = ref(20)
 const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null, supplier: null, process_type: '', process_detail: '',
   daily_capacity: 0, capacity_unit: '件', quality_rating: 0, is_verified: false
 })
@@ -138,7 +138,7 @@ const loadData = async () => {
     const res = await getOutsourceCapabilities({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -149,7 +149,7 @@ const loadSuppliers = async () => {
   try {
     const res = await getSupplierList({ page_size: 1000 })
     suppliers.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('OutsourceCapabilityList getSupplierList error:', error)
   }
 }
@@ -161,7 +161,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, { id: row.id, supplier: row.supplier, process_type: row.process_type, process_detail: row.process_detail, daily_capacity: row.daily_capacity, capacity_unit: row.capacity_unit, quality_rating: row.quality_rating, is_verified: row.is_verified })
   dialogVisible.value = true
@@ -180,20 +180,20 @@ const handleSave = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false
   }
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要删除此记录吗？', '提示', { type: 'warning' })
     await deleteOutsourceCapability(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('删除失败')
   }
 }

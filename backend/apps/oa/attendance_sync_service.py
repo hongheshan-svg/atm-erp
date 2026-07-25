@@ -23,7 +23,7 @@ class AttendanceSyncService:
 
     def __init__(self, device):
         self.device = device
-        self.sync_batch = f"SYNC_{uuid.uuid4().hex[:8]}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
+        self.sync_batch = f'SYNC_{uuid.uuid4().hex[:8]}_{timezone.now().strftime("%Y%m%d%H%M%S")}'
 
     def sync(self, date_from: date = None, date_to: date = None) -> Dict[str, Any]:
         """
@@ -331,11 +331,11 @@ class AttendanceSyncService:
             )
             employee = mapping.employee
         except DeviceUserMapping.DoesNotExist:
-            logger.warning(f"No mapping found for device user: {record['device_user_id']}")
+            logger.warning(f'No mapping found for device user: {record["device_user_id"]}')
 
         # 检查是否重复
         unique_key = hashlib.md5(
-            f"{self.device.id}_{record['device_user_id']}_{record['punch_time'].isoformat()}".encode()
+            f'{self.device.id}_{record["device_user_id"]}_{record["punch_time"].isoformat()}'.encode()
         ).hexdigest()
 
         existing = DeviceAttendanceLog.objects.filter(
@@ -571,7 +571,7 @@ class ZKTECOWebhookHandler:
                             'verify_type': record.get('verify_type', 'FINGERPRINT'),
                             'employee': employee,
                             'device_log_id': record.get('log_id', ''),
-                            'sync_batch': f"PUSH_{device_sn}_{timezone.now().strftime('%Y%m%d%H%M%S')}",
+                            'sync_batch': f'PUSH_{device_sn}_{timezone.now().strftime("%Y%m%d%H%M%S")}',
                             'raw_data': record,
                         },
                     )

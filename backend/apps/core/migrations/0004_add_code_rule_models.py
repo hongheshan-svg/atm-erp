@@ -72,4 +72,3 @@ class Migration(migrations.Migration):
             index=models.Index(fields=['generated_code'], name='code_histor_generat_0a3d4e_idx'),
         ),
     ]
-

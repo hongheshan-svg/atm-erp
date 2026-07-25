@@ -61,7 +61,7 @@
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
             <el-button type="primary" link v-permission="'sales:quotation:edit'" @click="handleEdit(row)" v-if="row.status === 'DRAFT'">编辑</el-button>
-            <el-dropdown trigger="click" @command="cmd => handleCommand(cmd, row)">
+            <el-dropdown trigger="click" @command="(cmd: any) => handleCommand(cmd, row)">
               <el-button type="primary" link>更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -77,7 +77,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
@@ -191,11 +191,11 @@ const statusFilter = ref('')
 const dialogVisible = ref(false)
 const dialogTitle = ref('新建报价估算')
 const submitting = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const customers = ref<any[]>([])
 const opportunities = ref<any[]>([])
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   name: '',
   customer: null,
   opportunity: null,
@@ -212,12 +212,12 @@ const rules = {
   customer: [{ required: true, message: '请选择客户', trigger: 'change' }]
 }
 
-const formatMoney = (val) => {
+const formatMoney = (val: any) => {
   if (!val) return '0.00'
   return parseFloat(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const map = {
     DRAFT: 'info',
     REVIEW: 'warning',
@@ -226,13 +226,13 @@ const getStatusType = (status) => {
     WON: 'success',
     LOST: 'danger'
   }
-  return map[status] || 'info'
+  return (map as Record<string, any>)[status] || 'info'
 }
 
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: currentPage.value,
       page_size: pageSize.value,
       search: searchText.value || undefined,
@@ -241,7 +241,7 @@ const loadData = async () => {
     const res = await getQuoteEstimations(params)
     tableData.value = res.results || res
     total.value = res.count || tableData.value.length
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -275,20 +275,20 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑报价估算'
   Object.assign(form, row)
   dialogVisible.value = true
 }
 
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/sales/quote-estimation/${row.id}`)
 }
 
 const handleSubmit = async () => {
   if (!formRef.value) return
   await formRef.value.validate()
-  
+
   submitting.value = true
   try {
     if (form.id) {
@@ -301,7 +301,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('保存失败')
   } finally {
@@ -309,7 +309,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleCommand = async (cmd, row) => {
+const handleCommand = async (cmd: any, row: any) => {
   try {
     switch (cmd) {
       case 'calculate':
@@ -343,7 +343,7 @@ const handleCommand = async (cmd, row) => {
         router.push(`/sales/quote-estimation/${row.id}?tab=reference`)
         break
     }
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') {
       console.error(e)
       ElMessage.error('操作失败')

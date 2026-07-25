@@ -359,6 +359,7 @@ class QuoteProjectCostRefSerializer(serializers.ModelSerializer):
 
 class QuoteVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价版本管理"""
+
     permission_module = 'sales'
     permission_resource = 'quote_version'
 
@@ -481,6 +482,7 @@ class QuoteVersionViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class QuoteCostItemViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价成本明细管理"""
+
     permission_module = 'sales'
     permission_resource = 'quote_cost_item'
 
@@ -498,6 +500,7 @@ class QuoteCostItemViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class QuoteComparisonViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价对比管理"""
+
     permission_module = 'sales'
     permission_resource = 'quote_comparison'
 
@@ -559,6 +562,7 @@ class QuoteComparisonViewSet(PermissionMixin, viewsets.ModelViewSet):
 
 class QuoteProjectCostRefViewSet(PermissionMixin, viewsets.ModelViewSet):
     """报价参考成本历史管理"""
+
     permission_module = 'sales'
     permission_resource = 'quote_project_cost_ref'
 

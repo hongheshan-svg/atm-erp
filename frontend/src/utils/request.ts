@@ -1,10 +1,17 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { usePermissionStore } from '@/stores/permission'
+import { useUserStore } from '@/stores/user'
 
 interface QueueItem {
   resolve: (token: string) => void
   reject: (error: any) => void
+}
+
+export interface ERPRequestConfig extends AxiosRequestConfig {
+  skipAuthRefresh?: boolean
+  skipErrorMessage?: boolean
 }
 
 const service = axios.create({
@@ -30,10 +37,6 @@ const syncUserProfile = async (accessToken: string): Promise<void> => {
       }
     })
     const profile = response.data?.data || response.data
-    const [{ useUserStore }, { usePermissionStore }] = await Promise.all([
-      import('@/stores/user'),
-      import('@/stores/permission')
-    ])
     const userStore = useUserStore()
     const permissionStore = usePermissionStore()
 
@@ -42,7 +45,7 @@ const syncUserProfile = async (accessToken: string): Promise<void> => {
     permissionStore.setMenus(profile.menus || [])
     permissionStore.setDataScopes(profile.data_scopes || {})
     userStore.profileReady = true
-  } catch (syncError) {
+  } catch (syncError: any) {
     console.warn('Failed to sync user profile after token refresh:', syncError)
   }
 }
@@ -89,7 +92,7 @@ service.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response
 
-      if (status === 401 && !originalRequest._retry) {
+      if (status === 401 && !originalRequest._retry && !originalRequest.skipAuthRefresh) {
         const refreshToken = localStorage.getItem('refresh_token')
 
         if (!refreshToken) {
@@ -125,7 +128,7 @@ service.interceptors.response.use(
 
           originalRequest.headers['Authorization'] = `Bearer ${access}`
           return service.request(originalRequest)
-        } catch (refreshError) {
+        } catch (refreshError: any) {
           processQueue(refreshError, null)
           localStorage.removeItem('access_token')
           localStorage.removeItem('refresh_token')
@@ -135,16 +138,18 @@ service.interceptors.response.use(
         } finally {
           isRefreshing = false
         }
-      } else if (status === 403) {
-        ElMessage.error('没有权限执行此操作')
-      } else if (status === 404) {
-        ElMessage.error('请求的资源不存在')
-      } else if (status === 500) {
-        ElMessage.error('服务器错误，请稍后再试')
-      } else {
-        ElMessage.error(data?.detail || data?.error || '请求失败')
+      } else if (!originalRequest.skipErrorMessage) {
+        if (status === 403) {
+          ElMessage.error('没有权限执行此操作')
+        } else if (status === 404) {
+          ElMessage.error('请求的资源不存在')
+        } else if (status === 500) {
+          ElMessage.error('服务器错误，请稍后再试')
+        } else {
+          ElMessage.error(data?.detail || data?.error || '请求失败')
+        }
       }
-    } else {
+    } else if (!originalRequest?.skipErrorMessage) {
       ElMessage.error('网络错误，请检查您的网络连接')
     }
 
@@ -161,8 +166,8 @@ service.interceptors.response.use(
  * （blob 下载分支返回完整 response，调用点按需指定 T 或访问 .data。）
  */
 export interface RequestClient {
-  <T = any>(config: AxiosRequestConfig): Promise<T>
-  request<T = any>(config: AxiosRequestConfig): Promise<T>
+  <T = any>(config: ERPRequestConfig): Promise<T>
+  request<T = any>(config: ERPRequestConfig): Promise<T>
   get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
   delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
   head<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
@@ -176,7 +181,7 @@ const client = service as unknown as RequestClient
 
 export default client
 
-export function request<T = any>(config: AxiosRequestConfig): Promise<T> {
+export function request<T = any>(config: ERPRequestConfig): Promise<T> {
   return service(config) as unknown as Promise<T>
 }
 

@@ -58,7 +58,7 @@ export function useBatchOperation(apiEndpoint: string, options: BatchOperationOp
       ElMessage.success(`${config.successMessage}（共 ${ids.length} 条）`)
       selectedRows.value = []
       config.onSuccess()
-    } catch (error) {
+    } catch (error: any) {
       if (error !== 'cancel') {
         console.error('批量删除失败:', error)
         ElMessage.error(config.errorMessage)
@@ -78,7 +78,7 @@ export function useBatchOperation(apiEndpoint: string, options: BatchOperationOp
       await request.delete(`${normalizedEndpoint}${row[config.idField]}/`)
       ElMessage.success(config.successMessage)
       config.onSuccess()
-    } catch (error) {
+    } catch (error: any) {
       if (error !== 'cancel') {
         ElMessage.error(config.errorMessage)
         config.onError(error)
@@ -132,7 +132,7 @@ export function useBatchOperation(apiEndpoint: string, options: BatchOperationOp
       ElMessage.success(`已更新 ${ids.length} 条记录`)
       selectedRows.value = []
       config.onSuccess()
-    } catch (error) {
+    } catch (error: any) {
       if (error !== 'cancel') {
         ElMessage.error('批量更新失败')
         config.onError(error)

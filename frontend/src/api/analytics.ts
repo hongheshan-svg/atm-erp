@@ -18,7 +18,7 @@ export function getSlowMovingItems(params?: Record<string, any>) {
 export function getProjectCosts(params?: Record<string, any>) {
   return request({ url: '/analytics/project_costs/', method: 'get', params })
 }
-export function recalculateCosts(data: any) {
+export function recalculateCosts(data: any = {}) {
   return request({ url: '/analytics/recalculate_costs/', method: 'post', data })
 }
 export function getManagementDashboard(params?: Record<string, any>) {

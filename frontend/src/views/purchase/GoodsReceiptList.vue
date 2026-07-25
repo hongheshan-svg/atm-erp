@@ -36,9 +36,9 @@
       <!-- 批量操作工具栏 -->
       <div class="table-toolbar" v-permission="'purchase:goods_receipt:delete'" v-if="canDelete && selectedRows.length > 0">
         <span>已选择 {{ selectedRows.length }} 项</span>
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           @click="batchDelete"
           :loading="deleteLoading"
         >
@@ -47,7 +47,7 @@
       </div>
 
       <el-table :data="receipts" v-loading="loading" border stripe @selection-change="handleSelectionChange">
-        <el-table-column v-permission="'purchase:goods_receipt:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row) => row.status === 'DRAFT'" />
+        <el-table-column v-permission="'purchase:goods_receipt:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row: any) => row.status === 'DRAFT'" />
         <el-table-column prop="receipt_no" label="收货单号" width="150" />
         <el-table-column prop="purchase_order_no" label="采购订单号" width="150" />
         <el-table-column prop="supplier_name" label="供应商" min-width="150" />
@@ -95,19 +95,19 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="采购订单" prop="po">
-              <el-select 
-                v-model="form.po" 
-                placeholder="选择采购订单" 
-                filterable 
+              <el-select
+                v-model="form.po"
+                placeholder="选择采购订单"
+                filterable
                 style="width: 100%;"
                 @change="onPurchaseOrderChange"
                 :disabled="isEdit"
               >
-                <el-option 
-                  v-for="po in confirmedPurchaseOrders" 
-                  :key="po.id" 
-                  :label="`${po.order_no} - ${po.supplier_name}`" 
-                  :value="po.id" 
+                <el-option
+                  v-for="po in confirmedPurchaseOrders"
+                  :key="po.id"
+                  :label="`${po.order_no} - ${po.supplier_name}`"
+                  :value="po.id"
                 />
               </el-select>
             </el-form-item>
@@ -123,12 +123,12 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="收货日期" prop="receipt_date">
-              <el-date-picker 
-                v-model="form.receipt_date" 
-                type="date" 
-                value-format="YYYY-MM-DD" 
-                placeholder="选择日期" 
-                style="width: 100%;" 
+              <el-date-picker
+                v-model="form.receipt_date"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择日期"
+                style="width: 100%;"
               />
             </el-form-item>
           </el-col>
@@ -149,13 +149,13 @@
           <el-table-column prop="received_qty" label="已收数量" width="100" align="right" />
           <el-table-column label="本次收货" width="120">
             <template #default="{ row }">
-              <el-input-number 
-                v-model="row.qty" 
-                :min="0" 
+              <el-input-number
+                v-model="row.qty"
+                :min="0"
                 :max="row.ordered_qty - row.received_qty"
-                :precision="0" 
-                size="small" 
-                style="width: 100%;" 
+                :precision="0"
+                size="small"
+                style="width: 100%;"
               />
             </template>
           </el-table-column>
@@ -248,21 +248,21 @@ const dialogTitle = ref('创建收货单')
 const isEdit = ref(false)
 const detailVisible = ref(false)
 const current = ref<Record<string, any>>({})
-const formRef = ref(null)
+const formRef = ref<any>(null)
 
-const searchForm = reactive({ 
-  receipt_no: '', 
-  purchase_order: null, 
-  status: null 
+const searchForm = reactive<Record<string, any>>({
+  receipt_no: '',
+  purchase_order: null,
+  status: null
 })
 
-const pagination = reactive({ 
-  page: 1, 
-  pageSize: 20, 
-  total: 0 
+const pagination = reactive<Record<string, any>>({
+  page: 1,
+  pageSize: 20,
+  total: 0
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   po: null,
   warehouse: null,
@@ -278,28 +278,28 @@ const rules = {
 }
 
 // 只显示已确认或部分收货的采购订单
-const confirmedPurchaseOrders = computed(() => 
+const confirmedPurchaseOrders = computed(() =>
   purchaseOrders.value.filter(po => po.status === 'CONFIRMED' || po.status === 'PARTIAL')
 )
 
-const getStatusType = (s) => ({ 'DRAFT': 'info', 'CONFIRMED': 'warning', 'COMPLETED': 'success' }[s] || 'info')
-const getStatusLabel = (s) => ({ 'DRAFT': '草稿', 'CONFIRMED': '已确认', 'COMPLETED': '已完成' }[s] || s)
+const getStatusType = (s: any) => (({ 'DRAFT': 'info', 'CONFIRMED': 'warning', 'COMPLETED': 'success' } as Record<string, any>)[s] || 'info')
+const getStatusLabel = (s: any) => (({ 'DRAFT': '草稿', 'CONFIRMED': '已确认', 'COMPLETED': '已完成' } as Record<string, any>)[s] || s)
 
 const loadReceipts = async () => {
   loading.value = true
   try {
-    const params = { 
-      page: pagination.page, 
-      page_size: pagination.pageSize 
+    const params: Record<string, any> = {
+      page: pagination.page,
+      page_size: pagination.pageSize
     }
     if (searchForm.receipt_no) params.search = searchForm.receipt_no
     if (searchForm.purchase_order) params.po = searchForm.purchase_order
     if (searchForm.status) params.status = searchForm.status
-    
+
     const response = await getGoodsReceipts(params)
     receipts.value = response.data?.results || response.results || response.data || []
     pagination.total = response.data?.count || response.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载收货单失败')
   } finally {
     loading.value = false
@@ -310,7 +310,7 @@ const loadPurchaseOrders = async () => {
   try {
     const response = await getPurchaseOrders({ page_size: 1000 })
     purchaseOrders.value = response.data?.results || response.results || response.data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载采购订单失败:', error)
   }
 }
@@ -319,7 +319,7 @@ const loadWarehouses = async () => {
   try {
     const response = await getWarehouseList()
     warehouses.value = response.data?.results || response.results || response.data || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载仓库失败:', error)
   }
 }
@@ -348,7 +348,7 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = async (row) => {
+const handleEdit = async (row: any) => {
   dialogTitle.value = '编辑收货单'
   isEdit.value = true
   try {
@@ -360,7 +360,7 @@ const handleEdit = async (row) => {
       warehouse: data.warehouse,
       receipt_date: data.receipt_date,
       notes: data.notes || '',
-      lines: (data.lines || []).map(line => ({
+      lines: (data.lines || []).map((line: any) => ({
         id: line.id,
         po_line: line.po_line,
         item: line.item,
@@ -373,23 +373,23 @@ const handleEdit = async (row) => {
       }))
     })
     dialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载收货单详情失败')
   }
 }
 
-const onPurchaseOrderChange = async (poId) => {
+const onPurchaseOrderChange = async (poId: any) => {
   if (!poId) {
     form.lines = []
     return
   }
-  
+
   try {
     const response = await getPurchaseOrder(poId)
     const po = response.data || response
-    
+
     // 从采购订单明细生成收货明细
-    form.lines = (po.lines || []).map(line => ({
+    form.lines = (po.lines || []).map((line: any) => ({
       po_line: line.id, // 采购订单明细ID
       item: line.item,
       item_sku: line.item_sku || line.sku,
@@ -399,7 +399,7 @@ const onPurchaseOrderChange = async (poId) => {
       qty: Math.max(0, (parseFloat(line.qty) || 0) - (parseFloat(line.received_qty) || 0)), // 默认填充未收货数量
       quality_status: 'PENDING'
     }))
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载采购订单详情失败')
   }
 }
@@ -407,28 +407,28 @@ const onPurchaseOrderChange = async (poId) => {
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
-    
-    const validLines = form.lines.filter(line => line.qty > 0)
+
+    const validLines = form.lines.filter((line: any) => line.qty > 0)
     if (validLines.length === 0) {
       ElMessage.warning('请至少输入一行有效的收货数量')
       return
     }
-    
+
     saving.value = true
-    
+
     const payload = {
       po: form.po,
       warehouse: form.warehouse,
       receipt_date: form.receipt_date,
       notes: form.notes,
-      lines: validLines.map(line => ({
+      lines: validLines.map((line: any) => ({
         po_line: line.po_line,
         item: line.item,
         qty: line.qty,
         quality_status: line.quality_status
       }))
     }
-    
+
     if (isEdit.value) {
       await updateGoodsReceipt(form.id, payload)
       ElMessage.success('更新收货单成功')
@@ -436,11 +436,11 @@ const handleSave = async () => {
       await createGoodsReceipt(payload)
       ElMessage.success('创建收货单成功')
     }
-    
+
     dialogVisible.value = false
     loadReceipts()
     loadPurchaseOrders() // 刷新采购订单状态
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存收货单失败')
       console.error(error)
@@ -450,24 +450,24 @@ const handleSave = async () => {
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const response = await getGoodsReceipt(row.id)
     current.value = response.data || response
     detailVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载详情失败')
   }
 }
 
-const handleConfirm = async (row) => {
+const handleConfirm = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定要确认收货吗？确认后将生成入库记录。', '提示', { type: 'warning' })
     await confirmGoodsReceipt(row.id)
     ElMessage.success('收货确认成功，已生成入库记录')
     loadReceipts()
     loadPurchaseOrders()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') ElMessage.error('确认收货失败')
   }
 }
@@ -503,14 +503,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.goods-receipt-list { 
-  padding: 20px; 
+.goods-receipt-list {
+  padding: 20px;
 }
 
-.card-header { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .table-toolbar {
@@ -529,7 +529,7 @@ onMounted(async () => {
   color: #606266;
 }
 
-.search-form { 
-  margin-bottom: 20px; 
+.search-form {
+  margin-bottom: 20px;
 }
 </style>

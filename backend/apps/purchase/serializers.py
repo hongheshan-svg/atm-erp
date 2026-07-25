@@ -19,6 +19,7 @@ def _to_decimal(value, default='0'):
     except (InvalidOperation, TypeError, ValueError):
         return Decimal(default)
 
+
 from .models import (
     GoodsReceipt,
     GoodsReceiptLine,
@@ -154,7 +155,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_item_summary(self, obj):
+    def get_item_summary(self, obj) -> dict | None:
         """获取物料摘要信息（用于列表展示）"""
         lines = obj.lines.filter(is_deleted=False).select_related('item')[:1]
         if not lines:
@@ -169,18 +170,18 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'unit_price': float(first_line.estimated_price or 0),
         }
 
-    def get_lines_count(self, obj):
+    def get_lines_count(self, obj) -> int:
         """获取明细行数"""
         return obj.lines.filter(is_deleted=False).count()
 
-    def get_total_qty(self, obj):
+    def get_total_qty(self, obj) -> float:
         """获取总数量"""
         from django.db.models import Sum
 
         result = obj.lines.filter(is_deleted=False).aggregate(total=Sum('qty'))
         return float(result['total'] or 0)
 
-    def get_budget_info(self, obj):
+    def get_budget_info(self, obj) -> dict | None:
         """Get budget validation info for this request."""
         if not obj.project:
             return None
@@ -322,7 +323,7 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['line_amount', 'received_qty', 'bom_item_id', 'bom_planned_qty', 'bom_project_code']
 
-    def get_remaining_qty(self, obj):
+    def get_remaining_qty(self, obj) -> float:
         return float(obj.qty - obj.received_qty)
 
 
@@ -343,12 +344,12 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     lines_count = serializers.SerializerMethodField()
     total_qty = serializers.SerializerMethodField()
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return ''
 
-    def get_item_summary(self, obj):
+    def get_item_summary(self, obj) -> dict | None:
         """获取物料摘要信息（用于列表展示）"""
         lines = obj.lines.filter(is_deleted=False).select_related('item')[:1]
         if not lines:
@@ -363,11 +364,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'unit_price': float(first_line.unit_price or 0),
         }
 
-    def get_lines_count(self, obj):
+    def get_lines_count(self, obj) -> int:
         """获取明细行数"""
         return obj.lines.filter(is_deleted=False).count()
 
-    def get_total_qty(self, obj):
+    def get_total_qty(self, obj) -> float:
         """获取总数量"""
         from django.db.models import Sum
 
@@ -409,7 +410,15 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'lines_count',
             'total_qty',
         ]
-        read_only_fields = ['order_no', 'order_date', 'tax_amount', 'total_with_tax', 'status', 'created_at', 'updated_at']
+        read_only_fields = [
+            'order_no',
+            'order_date',
+            'tax_amount',
+            'total_with_tax',
+            'status',
+            'created_at',
+            'updated_at',
+        ]
 
     def create(self, validated_data):
         """Create PO with lines."""
@@ -489,33 +498,33 @@ class GoodsReceiptLineSerializer(serializers.ModelSerializer):
     ordered_qty = serializers.SerializerMethodField()  # 订单数量
     received_qty = serializers.SerializerMethodField()  # 已收货数量
 
-    def get_item_name(self, obj):
+    def get_item_name(self, obj) -> str:
         if obj.item:
             return obj.item.name
         return ''
 
-    def get_item_sku(self, obj):
+    def get_item_sku(self, obj) -> str:
         if obj.item:
             return obj.item.sku
         return ''
 
-    def get_sku(self, obj):
+    def get_sku(self, obj) -> str:
         if obj.item:
             return obj.item.sku
         return ''
 
-    def get_item_unit(self, obj):
+    def get_item_unit(self, obj) -> str:
         if obj.item:
             return obj.item.get_unit_display()
         return ''
 
-    def get_ordered_qty(self, obj):
+    def get_ordered_qty(self, obj) -> float:
         """获取订单数量"""
         if obj.po_line:
             return float(obj.po_line.qty or 0)
         return 0
 
-    def get_received_qty(self, obj):
+    def get_received_qty(self, obj) -> float:
         """获取已收货数量"""
         if obj.po_line:
             return float(obj.po_line.received_qty or 0)
@@ -553,7 +562,7 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     lines = GoodsReceiptLineSerializer(many=True, read_only=True)
 
-    def get_created_by_name(self, obj):
+    def get_created_by_name(self, obj) -> str:
         """获取创建人姓名"""
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
@@ -597,11 +606,9 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
         if exclude_receipt_id:
             draft_receipts = draft_receipts.exclude(pk=exclude_receipt_id)
         reserved_by_line = {}
-        for draft_line in GoodsReceiptLine.objects.filter(
-            receipt__in=draft_receipts, is_deleted=False
-        ):
-            reserved_by_line[draft_line.po_line_id] = (
-                reserved_by_line.get(draft_line.po_line_id, 0) + float(draft_line.qty or 0)
+        for draft_line in GoodsReceiptLine.objects.filter(receipt__in=draft_receipts, is_deleted=False):
+            reserved_by_line[draft_line.po_line_id] = reserved_by_line.get(draft_line.po_line_id, 0) + float(
+                draft_line.qty or 0
             )
 
         for line_data in lines_data:
@@ -625,9 +632,7 @@ class GoodsReceiptSerializer(serializers.ModelSerializer):
             # 剩余可收 = 订单数量 - 已收 - 同PO其他草稿占用
             remaining = float(po_line.qty) - float(po_line.received_qty) - reserved_by_line.get(po_line_id, 0)
             if qty > remaining:
-                raise serializers.ValidationError(
-                    {'lines': f'物料超收：明细可收数量为 {remaining}，本次收货 {qty}'}
-                )
+                raise serializers.ValidationError({'lines': f'物料超收：明细可收数量为 {remaining}，本次收货 {qty}'})
             # 累计本次提交各行占用，避免同一收货单内重复行超收
             reserved_by_line[po_line_id] = reserved_by_line.get(po_line_id, 0) + qty
 

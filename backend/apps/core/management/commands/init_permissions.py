@@ -13,7 +13,6 @@ from django.core.management.base import BaseCommand
 
 from apps.core.permission_models_new import Permission
 
-
 # 标准 CRUD 操作
 CRUD_ACTIONS = [
     ('view', '查看', 1),
@@ -50,19 +49,26 @@ def ops(parent_code, resource, actions=None):
         actions = CRUD_ACTIONS
     results = []
     action_names = {
-        'view': '查看', 'create': '新增', 'edit': '编辑',
-        'delete': '删除', 'approve': '审批', 'export': '导出',
-        'import': '导入', 'print': '打印',
+        'view': '查看',
+        'create': '新增',
+        'edit': '编辑',
+        'delete': '删除',
+        'approve': '审批',
+        'export': '导出',
+        'import': '导入',
+        'print': '打印',
     }
     for act, label, sort in actions:
-        results.append({
-            'code': f'{parent_code}:{act}',
-            'name': f'{action_names.get(act, act)}',
-            'type': 'operation',
-            'parent_code': parent_code,
-            'resource': resource,
-            'sort_order': sort,
-        })
+        results.append(
+            {
+                'code': f'{parent_code}:{act}',
+                'name': f'{action_names.get(act, act)}',
+                'type': 'operation',
+                'parent_code': parent_code,
+                'resource': resource,
+                'sort_order': sort,
+            }
+        )
     return results
 
 
@@ -119,21 +125,41 @@ OPERATION_RESOURCES = [
 # 敏感字段（成本/价格/信用额度）—— 字段名均取自各模型真实字段。
 # (module, resource, parent_menu_code, [(field_name, label), ...])
 SENSITIVE_FIELDS = [
-    ('masterdata', 'item', 'supply:stock', [
-        ('standard_cost', '标准成本'),
-        ('purchase_price', '采购单价'),
-        ('last_purchase_price', '最近采购价'),
-        ('sale_price', '销售单价'),
-    ]),
-    ('masterdata', 'customer', 'sales:customer', [
-        ('credit_limit', '信用额度'),
-    ]),
-    ('inventory', 'stock', 'supply:stock', [
-        ('weighted_avg_cost', '加权平均成本'),
-    ]),
-    ('inventory', 'stock_move', 'supply:move', [
-        ('unit_cost', '移动单价'),
-    ]),
+    (
+        'masterdata',
+        'item',
+        'supply:stock',
+        [
+            ('standard_cost', '标准成本'),
+            ('purchase_price', '采购单价'),
+            ('last_purchase_price', '最近采购价'),
+            ('sale_price', '销售单价'),
+        ],
+    ),
+    (
+        'masterdata',
+        'customer',
+        'sales:customer',
+        [
+            ('credit_limit', '信用额度'),
+        ],
+    ),
+    (
+        'inventory',
+        'stock',
+        'supply:stock',
+        [
+            ('weighted_avg_cost', '加权平均成本'),
+        ],
+    ),
+    (
+        'inventory',
+        'stock_move',
+        'supply:move',
+        [
+            ('unit_cost', '移动单价'),
+        ],
+    ),
 ]
 
 
@@ -143,27 +169,31 @@ def build_operation_and_field_perms():
     for module, resource, parent_menu, label in OPERATION_RESOURCES:
         prefix = f'{module}:{resource}'
         for act, act_label, sort in CRUD_ACTIONS:
-            perms.append({
-                'code': f'{prefix}:{act}',
-                'name': f'{label}-{act_label}',
-                'type': 'operation',
-                'parent_code': parent_menu,
-                'resource': resource,
-                'sort_order': 100 + sort,
-            })
+            perms.append(
+                {
+                    'code': f'{prefix}:{act}',
+                    'name': f'{label}-{act_label}',
+                    'type': 'operation',
+                    'parent_code': parent_menu,
+                    'resource': resource,
+                    'sort_order': 100 + sort,
+                }
+            )
     for module, resource, parent_menu, fields in SENSITIVE_FIELDS:
         prefix = f'{module}:{resource}'
         for i, (field_name, field_label) in enumerate(fields, start=1):
-            perms.append({
-                # code 用 :field: 段与操作码区分，get_hidden_fields 按 code 前缀 + field_name 匹配
-                'code': f'{prefix}:field:{field_name}',
-                'name': f'{field_label}(可见)',
-                'type': 'field',
-                'parent_code': parent_menu,
-                'resource': resource,
-                'field_name': field_name,
-                'sort_order': 200 + i,
-            })
+            perms.append(
+                {
+                    # code 用 :field: 段与操作码区分，get_hidden_fields 按 code 前缀 + field_name 匹配
+                    'code': f'{prefix}:field:{field_name}',
+                    'name': f'{field_label}(可见)',
+                    'type': 'field',
+                    'parent_code': parent_menu,
+                    'resource': resource,
+                    'field_name': field_name,
+                    'sort_order': 200 + i,
+                }
+            )
     return perms
 
 
@@ -182,9 +212,20 @@ def build_permission_tree():
     tree.append(menu('projects:gantt', '甘特图', 4, route_path='/projects/gantt', parent_code='projects'))
     tree.append(menu('projects:timelog', '工时记录', 5, route_path='/projects/time-logs', parent_code='projects'))
     tree.append(menu('projects:milestone', '里程碑', 6, route_path='/projects/milestones', parent_code='projects'))
-    tree.append(menu('projects:installation', '安装调试', 7, route_path='/projects/installation-tasks', parent_code='projects'))
+    tree.append(
+        menu('projects:installation', '安装调试', 7, route_path='/projects/installation-tasks', parent_code='projects')
+    )
     tree.append(menu('projects:acceptance', '验收管理', 8, route_path='/projects/acceptances', parent_code='projects'))
-    tree.append(menu('projects:service', '售后工单', 9, icon='Headset', route_path='/projects/service-orders', parent_code='projects'))
+    tree.append(
+        menu(
+            'projects:service',
+            '售后工单',
+            9,
+            icon='Headset',
+            route_path='/projects/service-orders',
+            parent_code='projects',
+        )
+    )
     tree.append(menu('projects:cost', '项目成本', 10, route_path='/projects/cost-dashboard', parent_code='projects'))
 
     # ===================== 营销管理 =====================
@@ -221,26 +262,72 @@ def build_permission_tree():
     # ===================== 生产制造 =====================
     tree.append(menu('manufacturing', '生产制造', 50, icon='SetUp', route_path='/manufacturing'))
     tree.append(menu('manufacturing:plan', '生产计划', 1, route_path='/production/plans', parent_code='manufacturing'))
-    tree.append(menu('manufacturing:routing', '工艺路线', 2, route_path='/production/routing-templates', parent_code='manufacturing'))
+    tree.append(
+        menu(
+            'manufacturing:routing',
+            '工艺路线',
+            2,
+            route_path='/production/routing-templates',
+            parent_code='manufacturing',
+        )
+    )
     tree.append(menu('manufacturing:aps', 'APS排程', 3, route_path='/mes/scheduling', parent_code='manufacturing'))
     tree.append(menu('manufacturing:kanban', '生产看板', 4, route_path='/mes/kanban', parent_code='manufacturing'))
-    tree.append(menu('manufacturing:inspection', '质量检验', 5, route_path='/production/inspections', parent_code='manufacturing'))
-    tree.append(menu('manufacturing:equipment', '设备管理', 6, route_path='/equipment/list', parent_code='manufacturing'))
-    tree.append(menu('manufacturing:assembly', '装配指导', 7, route_path='/production/assembly-guides', parent_code='manufacturing'))
-    tree.append(menu('manufacturing:sn', '序列号追溯', 8, route_path='/production/serial-numbers', parent_code='manufacturing'))
-    tree.append(menu('manufacturing:debug', '调试记录', 9, route_path='/production/debug-records', parent_code='manufacturing'))
+    tree.append(
+        menu(
+            'manufacturing:inspection', '质量检验', 5, route_path='/production/inspections', parent_code='manufacturing'
+        )
+    )
+    tree.append(
+        menu('manufacturing:equipment', '设备管理', 6, route_path='/equipment/list', parent_code='manufacturing')
+    )
+    tree.append(
+        menu(
+            'manufacturing:assembly',
+            '装配指导',
+            7,
+            route_path='/production/assembly-guides',
+            parent_code='manufacturing',
+        )
+    )
+    tree.append(
+        menu('manufacturing:sn', '序列号追溯', 8, route_path='/production/serial-numbers', parent_code='manufacturing')
+    )
+    tree.append(
+        menu('manufacturing:debug', '调试记录', 9, route_path='/production/debug-records', parent_code='manufacturing')
+    )
 
     # ===================== 财务管理 =====================
     tree.append(menu('finance', '财务管理', 60, icon='Wallet', route_path='/finance'))
     tree.append(menu('finance:receivable', '应收管理', 1, route_path='/finance/ar', parent_code='finance'))
     tree.append(menu('finance:payable', '应付管理', 2, route_path='/finance/ap', parent_code='finance'))
-    tree.append(menu('finance:bank_statement', '银行流水', 3, route_path='/finance/bank-statements', parent_code='finance'))
+    tree.append(
+        menu('finance:bank_statement', '银行流水', 3, route_path='/finance/bank-statements', parent_code='finance')
+    )
     tree.append(menu('finance:invoice', '发票管理', 4, route_path='/finance/invoices', parent_code='finance'))
     tree.append(menu('finance:expense', '费用管理', 5, route_path='/finance/expenses', parent_code='finance'))
     tree.append(menu('finance:asset', '固定资产', 6, route_path='/finance/assets', parent_code='finance'))
-    tree.append(menu('finance:collection', '收款计划', 7, route_path='/finance/collection-plans', parent_code='finance'))
-    tree.append(menu('finance:reconciliation', '对账管理', 8, route_path='/finance/purchase-reconciliation', parent_code='finance'))
-    tree.append(menu('finance:payment_reconciliation', '付款核销工作台', 9, route_path='/finance/payment-reconciliation', parent_code='finance'))
+    tree.append(
+        menu('finance:collection', '收款计划', 7, route_path='/finance/collection-plans', parent_code='finance')
+    )
+    tree.append(
+        menu(
+            'finance:reconciliation',
+            '对账管理',
+            8,
+            route_path='/finance/purchase-reconciliation',
+            parent_code='finance',
+        )
+    )
+    tree.append(
+        menu(
+            'finance:payment_reconciliation',
+            '付款核销工作台',
+            9,
+            route_path='/finance/payment-reconciliation',
+            parent_code='finance',
+        )
+    )
     tree.extend(ops('finance:payment_reconciliation', 'payable_item'))
 
     # ===================== 办公协同 =====================
@@ -307,14 +394,14 @@ class Command(BaseCommand):
             except Permission.DoesNotExist:
                 self.stdout.write(self.style.WARNING(f'警告: 找不到 {code} 或父节点 {parent_code}'))
 
-        self.stdout.write(self.style.SUCCESS(
-            f'权限树初始化完成: 创建 {created_count} 条，更新 {updated_count} 条，总计 {created_count + updated_count} 条'
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'权限树初始化完成: 创建 {created_count} 条，更新 {updated_count} 条，总计 {created_count + updated_count} 条'
+            )
+        )
 
         granted = self._grant_defaults_to_roles()
-        self.stdout.write(self.style.SUCCESS(
-            f'操作级/字段级权限默认授予完成: 新增角色-权限关联 {granted} 条（幂等）'
-        ))
+        self.stdout.write(self.style.SUCCESS(f'操作级/字段级权限默认授予完成: 新增角色-权限关联 {granted} 条（幂等）'))
 
     def _grant_defaults_to_roles(self):
         """
@@ -356,7 +443,7 @@ class Command(BaseCommand):
         for module, resource, _parent, _fields in SENSITIVE_FIELDS:
             by_resource.setdefault((module, resource), [])
 
-        for (module, resource) in list(by_resource.keys()):
+        for module, resource in list(by_resource.keys()):
             prefix = f'{module}:{resource}:'
             perms = list(
                 Permission.objects.filter(
@@ -371,9 +458,7 @@ class Command(BaseCommand):
         granted_count = 0
         for role in Role.objects.all():
             # 角色当前所持“菜单码”集合（只看 type='menu'，避免用操作/字段码自我扩张）
-            menu_codes = set(
-                role.permissions_new.filter(type='menu').values_list('code', flat=True)
-            )
+            menu_codes = set(role.permissions_new.filter(type='menu').values_list('code', flat=True))
             if not menu_codes:
                 continue
             touched = False

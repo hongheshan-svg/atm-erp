@@ -7,19 +7,19 @@
           <el-button type="primary" v-permission="'sales:order:create'" @click="handleCreate">新建培训计划</el-button>
         </div>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="plan_no" label="计划编号" width="150" />
@@ -39,7 +39,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadData" />
     </el-card>
 
@@ -122,12 +122,12 @@ const total = ref(0)
 const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const isEdit = ref(false)
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const viewDetail = ref<Record<string, any>>({})
 
-const form = reactive({ id: null, name: '', customer: null, start_date: '', end_date: '', location: '', remarks: '' })
+const form = reactive<Record<string, any>>({ id: null, name: '', customer: null, start_date: '', end_date: '', location: '', remarks: '' })
 const rules = { name: [{ required: true, message: '请输入计划名称', trigger: 'blur' }] }
-const getStatusType = (status) => ({ 'DRAFT': 'info', 'PLANNED': 'warning', 'IN_PROGRESS': 'primary', 'COMPLETED': 'success' }[status] || 'info')
+const getStatusType = (status: any) => (({ 'DRAFT': 'info', 'PLANNED': 'warning', 'IN_PROGRESS': 'primary', 'COMPLETED': 'success' } as Record<string, any>)[status] || 'info')
 
 const loadData = async () => {
   loading.value = true
@@ -135,7 +135,7 @@ const loadData = async () => {
     const res = await getTrainingPlans({ page: page.value, page_size: pageSize.value })
     tableData.value = res.results || res.results || []
     total.value = res.count || res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
@@ -146,17 +146,17 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000 })
     customers.value = res.results || res.results || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('TrainingPlanList getCustomerList error:', error)
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const res = await getTrainingPlan(row.id)
     viewDetail.value = res
     viewDialogVisible.value = true
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     viewDetail.value = row
     viewDialogVisible.value = true
@@ -170,7 +170,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   Object.assign(form, { id: row.id, name: row.name, customer: row.customer, start_date: row.start_date, end_date: row.end_date, location: row.location, remarks: row.remarks })
   dialogVisible.value = true
@@ -189,7 +189,7 @@ const handleSave = async () => {
     }
     dialogVisible.value = false
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.data) ElMessage.error(JSON.stringify(error.response.data))
   } finally {
     saving.value = false

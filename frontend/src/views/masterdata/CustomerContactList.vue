@@ -203,13 +203,13 @@ const contacts = ref<any[]>([])
 const customers = ref<any[]>([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增联系人')
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const isEdit = ref(false)
 
-const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
-const searchForm = reactive({ customer: null, search: '', role: null })
+const pagination = reactive<Record<string, any>>({ page: 1, pageSize: 20, total: 0 })
+const searchForm = reactive<Record<string, any>>({ customer: null, search: '', role: null })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   id: null,
   customer: null,
   name: '',
@@ -233,7 +233,7 @@ const formRules = {
   mobile: [{ pattern: /^1\d{10}$/, message: '请输入正确的手机号', trigger: 'blur' }]
 }
 
-const getRoleType = (role) => {
+const getRoleType = (role: any) => {
   const types = {
     DECISION: 'danger',
     TECHNICAL: 'primary',
@@ -243,14 +243,14 @@ const getRoleType = (role) => {
     OPERATOR: '',
     OTHER: 'info'
   }
-  return types[role] || 'info'
+  return (types as Record<string, any>)[role] || 'info'
 }
 
 const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 1000, status: 'ACTIVE' })
     customers.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('Load customers failed:', error)
   }
 }
@@ -258,16 +258,16 @@ const loadCustomers = async () => {
 const loadContacts = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
     }
-    Object.keys(params).forEach(k => { if (params[k] === null || params[k] === '') delete params[k] })
+    Object.keys(params).forEach(k => { if ((params as Record<string, any>)[k] === null || (params as Record<string, any>)[k] === '') delete (params as Record<string, any>)[k] })
     const res = await getCustomerContactList(params)
     contacts.value = res.results || res || []
     pagination.total = res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载联系人失败')
   } finally {
     loading.value = false
@@ -293,27 +293,27 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   dialogTitle.value = '编辑联系人'
   isEdit.value = true
   Object.assign(form, row)
   dialogVisible.value = true
 }
 
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm(`确定要删除联系人 ${row.name} 吗？`, '删除确认', { type: 'warning' })
     await deleteCustomerContact(row.id)
     ElMessage.success('删除成功')
     loadContacts()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败')
     }
   }
 }
 
-const handleFollowUp = (row) => {
+const handleFollowUp = (row: any) => {
   router.push({ path: '/masterdata/customer-followups', query: { customer: row.customer, contact: row.id } })
 }
 
@@ -330,7 +330,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     loadContacts()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('保存失败: ' + (error.response?.data?.error || error.message))
     }

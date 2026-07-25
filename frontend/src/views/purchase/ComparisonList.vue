@@ -5,9 +5,9 @@
         <div class="card-header">
           <span>报价比价分析</span>
           <div class="header-actions">
-            <el-button 
-              v-if="isAdmin && selectedRows.length > 0" 
-              type="danger" 
+            <el-button
+              v-if="isAdmin && selectedRows.length > 0"
+              type="danger"
               @click="handleBatchDelete"
             >
               <el-icon><Delete /></el-icon>
@@ -50,10 +50,10 @@
       </el-form>
 
       <!-- 数据表格 -->
-      <el-table 
-        :data="tableData" 
-        v-loading="loading" 
-        stripe 
+      <el-table
+        :data="tableData"
+        v-loading="loading"
+        stripe
         border
         @selection-change="handleSelectionChange"
       >
@@ -104,30 +104,30 @@
             <el-button type="primary" size="small" link @click="handleView(row)">
               查看
             </el-button>
-            <el-button 
-              v-if="row.status === 'IN_PROGRESS'" 
-              type="success" size="small" link 
+            <el-button
+              v-if="row.status === 'IN_PROGRESS'"
+              type="success" size="small" link
               @click="handleComplete(row)"
             >
               完成
             </el-button>
-            <el-button 
-              v-if="row.status === 'COMPLETED'" 
-              type="warning" size="small" link 
+            <el-button
+              v-if="row.status === 'COMPLETED'"
+              type="warning" size="small" link
               @click="handleApprove(row)"
             >
               审批
             </el-button>
-            <el-button 
-              v-if="row.status === 'APPROVED'" 
-              type="success" size="small" link 
+            <el-button
+              v-if="row.status === 'APPROVED'"
+              type="success" size="small" link
               @click="handleConvertToPO(row)"
             >
               转采购订单
             </el-button>
-            <el-button 
-              v-if="isAdmin" 
-              type="danger" size="small" link 
+            <el-button
+              v-if="isAdmin"
+              type="danger" size="small" link
               @click="handleDelete(row)"
             >
               删除
@@ -227,8 +227,8 @@
             </el-col>
           </el-row>
           <el-form-item v-if="weightTotal !== 100">
-            <el-alert 
-              type="warning" 
+            <el-alert
+              type="warning"
               :title="`权重总和为 ${weightTotal}%，需要等于 100%`"
               :closable="false"
             />
@@ -275,21 +275,21 @@ const loading = ref(false)
 const tableData = ref<any[]>([])
 const createDialogVisible = ref(false)
 const availableRFQs = ref<any[]>([])
-const createFormRef = ref(null)
+const createFormRef = ref<any>(null)
 const selectedRows = ref<any[]>([])
 
 // 检查是否管理员
 const isAdmin = computed(() => userStore.userInfo?.is_superuser || userStore.userInfo?.is_staff)
 
 // 搜索
-const searchForm = reactive({
+const searchForm = reactive<Record<string, any>>({
   rfq_no: '',
   comparison_type: '',
   status: ''
 })
 
 // 分页
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   pageSize: 20,
   total: 0
@@ -304,7 +304,7 @@ const WEIGHT_TEMPLATES = {
 }
 
 // 新建表单
-const createForm = reactive({
+const createForm = reactive<Record<string, any>>({
   rfq_id: null,
   comparison_type: 'NORMAL',
   weight_template: 'STANDARD',
@@ -321,19 +321,19 @@ const createRules = {
 
 // 计算权重总和
 const weightTotal = computed(() => {
-  return createForm.weight_price + createForm.weight_quality + 
+  return createForm.weight_price + createForm.weight_quality +
          createForm.weight_delivery + createForm.weight_service + createForm.weight_technical
 })
 
 // 当前模板权重
 const templateWeights = computed(() => {
-  return WEIGHT_TEMPLATES[createForm.weight_template] || WEIGHT_TEMPLATES['STANDARD']
+  return (WEIGHT_TEMPLATES as Record<string, any>)[createForm.weight_template] || WEIGHT_TEMPLATES['STANDARD']
 })
 
 // 应用权重模板
-const applyTemplate = (template) => {
+const applyTemplate = (template: any) => {
   if (template !== 'CUSTOM') {
-    const weights = WEIGHT_TEMPLATES[template]
+    const weights = (WEIGHT_TEMPLATES as Record<string, any>)[template]
     if (weights) {
       createForm.weight_price = weights.price
       createForm.weight_quality = weights.quality
@@ -345,7 +345,7 @@ const applyTemplate = (template) => {
 }
 
 // 比价类型颜色
-const getComparisonTypeColor = (type) => {
+const getComparisonTypeColor = (type: any) => {
   const colors = {
     'NORMAL': 'info',
     'SAMPLE': 'primary',
@@ -353,44 +353,44 @@ const getComparisonTypeColor = (type) => {
     'URGENT': 'danger',
     'CHANGE': 'warning'
   }
-  return colors[type] || 'info'
+  return (colors as Record<string, any>)[type] || 'info'
 }
 
 // 风险等级颜色
-const getRiskLevelColor = (level) => {
+const getRiskLevelColor = (level: any) => {
   const colors = {
     'LOW': 'success',
     'MEDIUM': 'warning',
     'HIGH': 'danger'
   }
-  return colors[level] || 'info'
+  return (colors as Record<string, any>)[level] || 'info'
 }
 
 // 格式化
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   return parseFloat(num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('zh-CN')
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = {
     'DRAFT': 'info',
     'IN_PROGRESS': 'warning',
     'COMPLETED': 'success',
     'APPROVED': 'primary'
   }
-  return types[status] || 'info'
+  return (types as Record<string, any>)[status] || 'info'
 }
 
 // 加载数据
 const loadData = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.pageSize,
       ...searchForm
@@ -398,7 +398,7 @@ const loadData = async () => {
     const res = await getComparisons(params)
     tableData.value = res.results || res || []
     pagination.total = res.count || 0
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载比价列表失败:', error)
     ElMessage.error('加载数据失败')
   } finally {
@@ -414,7 +414,7 @@ const loadAvailableRFQs = async () => {
     if (availableRFQs.value.length === 0) {
       ElMessage.warning('暂无可用于比价的询价单，需要询价单至少有2个供应商报价')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载询价单失败:', error)
     ElMessage.error('加载可用询价单失败')
   }
@@ -447,14 +447,14 @@ const handleCreate = async () => {
 const submitCreate = async () => {
   try {
     await createFormRef.value.validate()
-    
+
     const res = await createComparisonFromRFQ(createForm)
     ElMessage.success('比价分析创建成功')
     createDialogVisible.value = false
-    
+
     // 跳转到比价详情页
     router.push(`/purchase/comparisons/${res.id}`)
-  } catch (error) {
+  } catch (error: any) {
     console.error('创建比价失败:', error)
     const errorMsg = error.response?.data?.error || error.response?.data?.detail || '创建失败'
     ElMessage.error(errorMsg)
@@ -462,18 +462,18 @@ const submitCreate = async () => {
 }
 
 // 查看详情
-const handleView = (row) => {
+const handleView = (row: any) => {
   router.push(`/purchase/comparisons/${row.id}`)
 }
 
 // 完成比价
-const handleComplete = async (row) => {
+const handleComplete = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定完成此比价分析？', '确认')
     await completeComparison(row.id)
     ElMessage.success('比价分析已完成')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -481,13 +481,13 @@ const handleComplete = async (row) => {
 }
 
 // 审批
-const handleApprove = async (row) => {
+const handleApprove = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定审批通过此比价分析？', '确认审批')
     await approveComparison(row.id)
     ElMessage.success('审批通过')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error('操作失败')
     }
@@ -495,13 +495,13 @@ const handleApprove = async (row) => {
 }
 
 // 转采购订单
-const handleConvertToPO = async (row) => {
+const handleConvertToPO = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定将推荐报价转换为采购订单？', '确认转换')
     const res = await convertComparisonToPO(row.id)
     ElMessage.success(`采购订单 ${res.order_no} 创建成功`)
     router.push(`/purchase/orders/${res.id}`)
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '转换失败')
     }
@@ -509,22 +509,22 @@ const handleConvertToPO = async (row) => {
 }
 
 // 选择变化
-const handleSelectionChange = (rows) => {
+const handleSelectionChange = (rows: any) => {
   selectedRows.value = rows
 }
 
 // 单行删除
-const handleDelete = async (row) => {
+const handleDelete = async (row: any) => {
   try {
     await ElMessageBox.confirm(
-      `确定删除比价单 ${row.comparison_no} 吗？此操作不可恢复。`, 
+      `确定删除比价单 ${row.comparison_no} 吗？此操作不可恢复。`,
       '确认删除',
       { type: 'warning' }
     )
     await batchDeleteComparisons({ ids: [row.id] })
     ElMessage.success('删除成功')
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '删除失败')
     }
@@ -537,10 +537,10 @@ const handleBatchDelete = async () => {
     ElMessage.warning('请先选择要删除的记录')
     return
   }
-  
+
   try {
     await ElMessageBox.confirm(
-      `确定删除选中的 ${selectedRows.value.length} 条比价记录吗？此操作不可恢复。`, 
+      `确定删除选中的 ${selectedRows.value.length} 条比价记录吗？此操作不可恢复。`,
       '确认批量删除',
       { type: 'warning' }
     )
@@ -549,7 +549,7 @@ const handleBatchDelete = async () => {
     ElMessage.success(res.message || '批量删除成功')
     selectedRows.value = []
     loadData()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.error || '批量删除失败')
     }
@@ -623,4 +623,3 @@ onMounted(() => {
   font-weight: 600;
 }
 </style>
-

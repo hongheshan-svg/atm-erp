@@ -22,8 +22,8 @@
 
 from django.core.management.base import BaseCommand
 
+from apps.finance.models import PaymentRequest, SharedExpense
 from apps.finance.payable_adapters import register_payable
-from apps.finance.models import SharedExpense, PaymentRequest
 from apps.finance.tax_management import TaxDeclaration
 from apps.purchase.outsource_models import OutsourceOrder
 
@@ -35,33 +35,25 @@ class Command(BaseCommand):
         count = 0
 
         # 0. 委外加工：已确认(且未取消)的委外单,以 source_type='outsource' 回填
-        outsource_qs = OutsourceOrder.objects.filter(
-            status__in=['CONFIRMED', 'PROCESSING', 'PARTIAL', 'COMPLETED']
-        )
+        outsource_qs = OutsourceOrder.objects.filter(status__in=['CONFIRMED', 'PROCESSING', 'PARTIAL', 'COMPLETED'])
         for order in outsource_qs:
             register_payable(order, 'outsource')
             count += 1
-        self.stdout.write(
-            self.style.SUCCESS(f'  ✓ 回填 {outsource_qs.count()} 条委外加工(已确认)到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'  ✓ 回填 {outsource_qs.count()} 条委外加工(已确认)到台账'))
 
         # 1. 公共费用：已分摊的公共费用(独立于AP，直接回填)
         shared_expense_qs = SharedExpense.objects.filter(status='ALLOCATED')
         for expense in shared_expense_qs:
             register_payable(expense, 'shared_expense')
             count += 1
-        self.stdout.write(
-            self.style.SUCCESS(f'  ✓ 回填 {shared_expense_qs.count()} 条公共费用(ALLOCATED)到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'  ✓ 回填 {shared_expense_qs.count()} 条公共费用(ALLOCATED)到台账'))
 
         # 2. 缴税：已申报未缴款的税务申报(独立于AP，直接回填)
         tax_qs = TaxDeclaration.objects.filter(status='DECLARED')
         for tax in tax_qs:
             register_payable(tax, 'tax')
             count += 1
-        self.stdout.write(
-            self.style.SUCCESS(f'  ✓ 回填 {tax_qs.count()} 条税务申报(DECLARED)到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'  ✓ 回填 {tax_qs.count()} 条税务申报(DECLARED)到台账'))
 
         # 3. 付款申请：仅回填独立申请(ap 为空、status=APPROVED)
         # 关联AP的请求已随AP被 backfill_payables 覆盖，无需重复回填
@@ -73,6 +65,4 @@ class Command(BaseCommand):
             self.style.SUCCESS(f'  ✓ 回填 {payment_request_qs.count()} 条独立付款申请(APPROVED、ap=null)到台账')
         )
 
-        self.stdout.write(
-            self.style.SUCCESS(f'\n✓ 总计回填 {count} 条二期来源应付单据到台账')
-        )
+        self.stdout.write(self.style.SUCCESS(f'\n✓ 总计回填 {count} 条二期来源应付单据到台账'))

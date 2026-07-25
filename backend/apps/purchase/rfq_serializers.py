@@ -120,10 +120,10 @@ class RFQSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['rfq_no', 'request_date', 'attachment_count', 'created_at', 'updated_at']
 
-    def get_supplier_count(self, obj):
+    def get_supplier_count(self, obj) -> int:
         return obj.supplier_rfqs.count()
 
-    def get_line_count(self, obj):
+    def get_line_count(self, obj) -> int:
         return obj.lines.filter(is_deleted=False).count()
 
 
@@ -363,7 +363,7 @@ class QuotationComparisonSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
-    def get_supplier_count(self, obj):
+    def get_supplier_count(self, obj) -> int:
         return obj.scores.count()
 
 
@@ -404,7 +404,7 @@ class QuotationComparisonListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_supplier_count(self, obj):
+    def get_supplier_count(self, obj) -> int:
         return obj.scores.count()
 
 

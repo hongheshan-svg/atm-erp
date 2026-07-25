@@ -4,7 +4,7 @@
       <h2>项目预警</h2>
       <el-button type="primary" @click="handleCheckAll">检查预警</el-button>
     </div>
-    
+
     <!-- 预警统计卡片 -->
     <el-row :gutter="16" class="stat-row">
       <el-col :span="6">
@@ -32,7 +32,7 @@
         </el-card>
       </el-col>
     </el-row>
-    
+
     <el-card shadow="never">
       <template #header>
         <el-form :inline="true">
@@ -67,19 +67,19 @@
           </el-form-item>
         </el-form>
       </template>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="alertList" v-loading="loading" border stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column width="60" align="center">
@@ -116,16 +116,16 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleAcknowledge(row)" 
+            <el-button type="success" link size="small" @click="handleAcknowledge(row)"
               v-if="row.status === 'ACTIVE'">确认</el-button>
-            <el-button type="warning" link size="small" @click="handleResolve(row)" 
+            <el-button type="warning" link size="small" @click="handleResolve(row)"
               v-if="row.status === 'ACTIVE' || row.status === 'ACKNOWLEDGED'">解决</el-button>
-            <el-button type="info" link size="small" @click="handleIgnore(row)" 
+            <el-button type="info" link size="small" @click="handleIgnore(row)"
               v-if="row.status === 'ACTIVE'">忽略</el-button>
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
@@ -136,7 +136,7 @@
         style="margin-top: 16px; justify-content: flex-end"
       />
     </el-card>
-    
+
     <!-- 预警详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="currentAlert?.title" width="600px">
       <el-descriptions v-if="currentAlert" :column="2" border>
@@ -165,7 +165,7 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
-    
+
     <!-- 解决预警对话框 -->
     <el-dialog v-model="resolveDialogVisible" title="解决预警" width="500px">
       <el-form label-width="80px">
@@ -196,14 +196,14 @@ const submitLoading = ref(false)
 const alertList = ref<any[]>([])
 const summaryData = ref<Record<string, any>>({})
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   alert_type: null,
   severity: null,
   status: 'ACTIVE'
 })
 
-const pagination = reactive({
+const pagination = reactive<Record<string, any>>({
   page: 1,
   size: 20,
   total: 0
@@ -211,23 +211,23 @@ const pagination = reactive({
 
 const detailDialogVisible = ref(false)
 const resolveDialogVisible = ref(false)
-const currentAlert = ref(null)
+const currentAlert = ref<any>(null)
 const resolution = ref('')
 
 const summary = computed(() => {
   const byS = summaryData.value.by_severity || []
   return {
     total: summaryData.value.total_active || 0,
-    critical: byS.find(s => s.severity === 'CRITICAL')?.count || 0,
-    warning: byS.find(s => s.severity === 'WARNING')?.count || 0,
-    info: byS.find(s => s.severity === 'INFO')?.count || 0
+    critical: byS.find((s: any) => s.severity === 'CRITICAL')?.count || 0,
+    warning: byS.find((s: any) => s.severity === 'WARNING')?.count || 0,
+    info: byS.find((s: any) => s.severity === 'INFO')?.count || 0
   }
 })
 
 const fetchList = async () => {
   loading.value = true
   try {
-    const params = {
+    const params: Record<string, any> = {
       page: pagination.page,
       page_size: pagination.size,
       ...queryParams
@@ -235,7 +235,7 @@ const fetchList = async () => {
     const data = await getAlertList(params)
     alertList.value = data.results || data
     pagination.total = data.count || (data.results || data)?.length || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -246,7 +246,7 @@ const fetchSummary = async () => {
   try {
     const data = await getAlertSummary()
     summaryData.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -258,33 +258,33 @@ const handleCheckAll = async () => {
     ElMessage.success(`检查完成，新增 ${data.alerts_created} 条预警`)
     fetchList()
     fetchSummary()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('检查失败')
   }
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getAlert(row.id)
     currentAlert.value = data
     detailDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载失败')
   }
 }
 
-const handleAcknowledge = async (row) => {
+const handleAcknowledge = async (row: any) => {
   try {
     await acknowledgeAlert(row.id)
     ElMessage.success('已确认')
     fetchList()
     fetchSummary()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   }
 }
 
-const handleResolve = (row) => {
+const handleResolve = (row: any) => {
   currentAlert.value = row
   resolution.value = ''
   resolveDialogVisible.value = true
@@ -300,14 +300,14 @@ const submitResolve = async () => {
     resolveDialogVisible.value = false
     fetchList()
     fetchSummary()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('操作失败')
   } finally {
     submitLoading.value = false
   }
 }
 
-const handleIgnore = async (row) => {
+const handleIgnore = async (row: any) => {
   try {
     await ElMessageBox.prompt('请输入忽略原因', '忽略预警', {
       inputPlaceholder: '忽略原因'
@@ -317,17 +317,17 @@ const handleIgnore = async (row) => {
       fetchList()
       fetchSummary()
     })
-  } catch (e) {
+  } catch (e: any) {
     console.error('AlertList fetchSummary error:', e)
   }
 }
 
-const formatDateTime = (dateStr) => {
+const formatDateTime = (dateStr: any) => {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-const getTypeLabel = (type) => {
+const getTypeLabel = (type: any) => {
   const labels = {
     PROGRESS: '进度',
     BUDGET: '预算',
@@ -335,27 +335,27 @@ const getTypeLabel = (type) => {
     TASK: '任务',
     RESOURCE: '资源'
   }
-  return labels[type] || type
+  return (labels as Record<string, any>)[type] || type
 }
 
-const getSeverityLabel = (severity) => {
+const getSeverityLabel = (severity: any) => {
   const labels = { INFO: '提示', WARNING: '警告', CRITICAL: '严重' }
-  return labels[severity] || severity
+  return (labels as Record<string, any>)[severity] || severity
 }
 
-const getSeverityType = (severity) => {
+const getSeverityType = (severity: any) => {
   const types = { INFO: 'info', WARNING: 'warning', CRITICAL: 'danger' }
-  return types[severity] || ''
+  return (types as Record<string, any>)[severity] || ''
 }
 
-const getSeverityColor = (severity) => {
+const getSeverityColor = (severity: any) => {
   const colors = { INFO: '#909399', WARNING: '#e6a23c', CRITICAL: '#f56c6c' }
-  return colors[severity] || '#909399'
+  return (colors as Record<string, any>)[severity] || '#909399'
 }
 
-const getStatusType = (status) => {
+const getStatusType = (status: any) => {
   const types = { ACTIVE: 'danger', ACKNOWLEDGED: 'warning', RESOLVED: 'success', IGNORED: 'info' }
-  return types[status] || ''
+  return (types as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

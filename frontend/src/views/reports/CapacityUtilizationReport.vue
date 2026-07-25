@@ -2,7 +2,7 @@
   <div class="capacity-utilization-report">
     <el-card>
       <template #header><span>产能利用率报表</span></template>
-      
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" start-placeholder="开始" end-placeholder="结束" @change="loadData" />
@@ -11,19 +11,19 @@
           <el-button type="primary" @click="loadData">查询</el-button>
         </el-form-item>
       </el-form>
-      
+
       <div ref="chartRef" style="height: 400px;" class="chart-container"></div>
-      
+
       <!-- 批量操作 -->
-      
+
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
-      
+
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-      
+
         <el-button size="small" @click="batchExport">导出选中</el-button>
-      
+
       </div>
-      
+
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="work_center_name" label="工作中心" />
@@ -43,7 +43,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { getCapacityUtilizationReport } from '@/api/reports'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/reports/')
@@ -52,7 +52,7 @@ const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('
 const loading = ref(false)
 const tableData = ref<any[]>([])
 const dateRange = ref<any[]>([])
-const chartRef = ref(null)
+const chartRef = ref<any>(null)
 
 const loadData = async () => {
   loading.value = true
@@ -66,7 +66,7 @@ const loadData = async () => {
     tableData.value = res.work_centers || []
     await nextTick()
     renderChart()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('加载数据失败')
   } finally {
     loading.value = false

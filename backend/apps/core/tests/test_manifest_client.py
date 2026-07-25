@@ -1,15 +1,25 @@
 import json
 from unittest import mock
+
 from django.test import SimpleTestCase
-from apps.core.manifest_client import validate_url, fetch_manifest, ManifestError
+
+from apps.core.manifest_client import ManifestError, fetch_manifest, validate_url
 
 SAMPLE = {
-    "latest_version": "0.3.0", "published_at": "2026-07-01T00:00:00Z",
-    "release_notes_md": "## 0.3.0", "min_upgradable_from": "0.2.0",
-    "docker": {"registry": "ghcr.io", "owner": "hongheshan-svg", "image_tag": "0.3.0",
-               "digests": {"backend": "sha256:a", "frontend": "sha256:b"}},
-    "native": {"tarball_url": "https://github.com/hongheshan-svg/atm-erp-release/releases/download/v0.3.0/erp-0.3.0.tar.gz",
-               "sha256": "deadbeef"},
+    'latest_version': '0.3.0',
+    'published_at': '2026-07-01T00:00:00Z',
+    'release_notes_md': '## 0.3.0',
+    'min_upgradable_from': '0.2.0',
+    'docker': {
+        'registry': 'ghcr.io',
+        'owner': 'hongheshan-svg',
+        'image_tag': '0.3.0',
+        'digests': {'backend': 'sha256:a', 'frontend': 'sha256:b'},
+    },
+    'native': {
+        'tarball_url': 'https://github.com/hongheshan-svg/atm-erp-release/releases/download/v0.3.0/erp-0.3.0.tar.gz',
+        'sha256': 'deadbeef',
+    },
 }
 
 

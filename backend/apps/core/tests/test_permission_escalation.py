@@ -49,8 +49,11 @@ def _make_user(username, menu_codes=(), is_superuser=False):
     """Create a user whose (single) role holds the given menu-level permission codes."""
     # User.employee_id 唯一且默认空串，多用户须各自赋唯一值，否则触发唯一约束冲突
     user = User.objects.create_user(
-        username=username, password='x', employee_id=username,
-        is_superuser=is_superuser, is_staff=is_superuser,
+        username=username,
+        password='x',
+        employee_id=username,
+        is_superuser=is_superuser,
+        is_staff=is_superuser,
     )
     if menu_codes:
         role = Role.objects.create(name=f'{username}_role', code=f'{username}_role')

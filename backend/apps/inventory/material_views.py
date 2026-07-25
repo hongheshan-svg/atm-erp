@@ -33,7 +33,7 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
     permission_resource = 'material_requisition'
     """
     领料单视图集
-    
+
     支持操作：
     - 创建领料单（项目领料/售后领料）
     - 提交领料申请
@@ -286,7 +286,7 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     permission_resource = 'material_return'
     """
     退料单视图集
-    
+
     支持操作：
     - 创建退料单（项目退料/售后退料）
     - 提交退料申请

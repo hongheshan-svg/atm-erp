@@ -214,11 +214,11 @@ class DocumentCategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by']
 
-    def get_children(self, obj):
+    def get_children(self, obj) -> list:
         children = obj.children.filter(is_deleted=False)
         return DocumentCategorySerializer(children, many=True).data
 
-    def get_document_count(self, obj):
+    def get_document_count(self, obj) -> int:
         return obj.documents.filter(is_deleted=False).count()
 
 
@@ -257,7 +257,7 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
             'reviewed_at',
         ]
 
-    def get_file_size_display(self, obj):
+    def get_file_size_display(self, obj) -> str:
         if obj.file_size < 1024:
             return f'{obj.file_size} B'
         elif obj.file_size < 1024 * 1024:
@@ -300,7 +300,7 @@ class ProjectDocumentListSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_file_size_display(self, obj):
+    def get_file_size_display(self, obj) -> str:
         if obj.file_size < 1024:
             return f'{obj.file_size} B'
         elif obj.file_size < 1024 * 1024:
@@ -318,7 +318,7 @@ class DocumentShareSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'share_code', 'download_count']
 
-    def get_share_url(self, obj):
+    def get_share_url(self, obj) -> str:
         return f'/api/projects/documents/share/{obj.share_code}/'
 
 
@@ -329,6 +329,7 @@ class DocumentShareSerializer(serializers.ModelSerializer):
 
 class DocumentCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """文档分类管理"""
+
     permission_module = 'projects'
     permission_resource = 'document_category'
 
@@ -371,6 +372,7 @@ class DocumentCategoryViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
 class ProjectDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """项目文档管理"""
+
     permission_module = 'projects'
     permission_resource = 'project_document'
 
@@ -560,6 +562,7 @@ class ProjectDocumentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
 class DocumentShareViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     """文档分享管理"""
+
     permission_module = 'projects'
     permission_resource = 'document_share'
 

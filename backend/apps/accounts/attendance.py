@@ -559,21 +559,21 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
                 if not employee:
                     error_count += 1
-                    errors.append(f'第{idx+1}行: 找不到员工 {employee_name} ({employee_id})')
+                    errors.append(f'第{idx + 1}行: 找不到员工 {employee_name} ({employee_id})')
                     continue
 
                 # 解析日期
                 date_str = record.get('date', '')
                 if not date_str:
                     error_count += 1
-                    errors.append(f'第{idx+1}行: 日期为空')
+                    errors.append(f'第{idx + 1}行: 日期为空')
                     continue
 
                 try:
                     attendance_date = date.fromisoformat(date_str)
                 except:
                     error_count += 1
-                    errors.append(f'第{idx+1}行: 日期格式错误 {date_str}')
+                    errors.append(f'第{idx + 1}行: 日期格式错误 {date_str}')
                     continue
 
                 # 检查是否已存在
@@ -716,8 +716,8 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
             except Exception as e:
                 error_count += 1
-                errors.append(f'第{idx+1}行: {str(e)}')
-                logger.error(f'Import error at row {idx+1}: {e}')
+                errors.append(f'第{idx + 1}行: {str(e)}')
+                logger.error(f'Import error at row {idx + 1}: {e}')
 
         # 记录导入历史
         from django.core.cache import cache

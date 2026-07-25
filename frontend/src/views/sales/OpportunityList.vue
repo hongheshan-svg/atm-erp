@@ -222,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -246,7 +246,7 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('新建商机')
 const opportunities = ref<any[]>([])
 const customerOptions = ref<any[]>([])
-const statistics = reactive({
+const statistics = reactive<Record<string, any>>({
   total: 0,
   total_amount: 0,
   weighted_amount: 0,
@@ -269,7 +269,7 @@ const { deleteRow } = useBatchDelete(
   }
 )
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   search: '',
   stage: '',
   priority: '',
@@ -280,7 +280,7 @@ const queryParams = reactive({
 // 阶段变更 / 跟进 对话框状态
 const showStageDialog = ref(false)
 const stageTarget = ref<any>(null)
-const stageForm = reactive({
+const stageForm = reactive<Record<string, any>>({
   new_stage: 'QUALIFICATION',
   probability: 20,
   notes: '',
@@ -289,14 +289,14 @@ const stageForm = reactive({
 
 const showActivityDialog = ref(false)
 const activityTarget = ref<any>(null)
-const activityForm = reactive({
+const activityForm = reactive<Record<string, any>>({
   activity_type: 'CALL',
   subject: '',
   content: ''
 })
 
-const formRef = ref(null)
-const formData = reactive({
+const formRef = ref<any>(null)
+const formData = reactive<Record<string, any>>({
   id: null,
   name: '',
   customer: null,
@@ -344,16 +344,16 @@ const kanbanStages = [
 ]
 
 // 方法
-const getStageOpportunities = (stage) => {
+const getStageOpportunities = (stage: any) => {
   return opportunities.value.filter(o => o.stage === stage)
 }
 
-const getPriorityType = (priority) => {
+const getPriorityType = (priority: any) => {
   const map = { LOW: 'info', MEDIUM: '', HIGH: 'warning', CRITICAL: 'danger' }
-  return map[priority] || ''
+  return (map as Record<string, any>)[priority] || ''
 }
 
-const formatNumber = (num) => {
+const formatNumber = (num: any) => {
   return num ? num.toLocaleString() : '0'
 }
 
@@ -366,7 +366,7 @@ const fetchData = async () => {
     ])
     opportunities.value = listRes.results || listRes || []
     Object.assign(statistics, statsRes || {})
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -377,7 +377,7 @@ const fetchCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 500 })
     customerOptions.value = res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取客户列表失败', error)
   }
 }
@@ -407,7 +407,7 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleView = async (opp) => {
+const handleView = async (opp: any) => {
   dialogTitle.value = '编辑商机'
   try {
     // 列表序列化器缺联系人/产品类型/需求等字段，先 GET 详情回填避免跨记录脏写
@@ -428,12 +428,12 @@ const handleView = async (opp) => {
       competitors: detail.competitors ?? ''
     })
     dialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('加载商机详情失败')
   }
 }
 
-const handleChangeStage = (opp) => {
+const handleChangeStage = (opp: any) => {
   stageTarget.value = opp
   stageForm.new_stage = opp.stage
   stageForm.probability = opp.probability
@@ -448,12 +448,12 @@ const confirmChangeStage = async () => {
     ElMessage.success('阶段已更新')
     showStageDialog.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('阶段变更失败')
   }
 }
 
-const handleAddActivity = (opp) => {
+const handleAddActivity = (opp: any) => {
   activityTarget.value = opp
   activityForm.activity_type = 'CALL'
   activityForm.subject = ''
@@ -476,17 +476,17 @@ const confirmAddActivity = async () => {
     ElMessage.success('跟进已记录')
     showActivityDialog.value = false
     fetchData()
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('记录跟进失败')
   }
 }
 
-const handleCreateQuotation = async (opp) => {
+const handleCreateQuotation = async (opp: any) => {
   try {
     await ElMessageBox.confirm(`确定基于商机「${opp.name}」生成报价单吗？`, '生成报价', { type: 'info' })
     const res = await createQuotationFromOpportunity(opp.id)
     ElMessage.success(res?.message || '报价单已生成')
-  } catch (e) {
+  } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('生成报价失败')
   }
 }
@@ -506,7 +506,7 @@ const handleSubmit = async () => {
     }
     dialogVisible.value = false
     fetchData()
-  } catch (error) {
+  } catch (error: any) {
     ElMessage.error('操作失败')
   } finally {
     submitting.value = false
@@ -532,7 +532,7 @@ onMounted(() => {
 
 .stat-card {
   border-radius: 8px;
-  
+
   &.success {
     border-left: 4px solid #67C23A;
   }
@@ -570,7 +570,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  
+
   .stage-name {
     font-weight: 600;
     color: #303133;
@@ -591,7 +591,7 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid #ebeef5;
-  
+
   &:hover {
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     transform: translateY(-2px);
@@ -603,7 +603,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 8px;
-  
+
   .opp-name {
     font-weight: 500;
     color: #303133;
@@ -615,13 +615,13 @@ onMounted(() => {
 
 .card-body {
   margin-bottom: 8px;
-  
+
   .customer {
     color: #606266;
     font-size: 13px;
     margin-bottom: 4px;
   }
-  
+
   .amount {
     color: #E6A23C;
     font-weight: 600;

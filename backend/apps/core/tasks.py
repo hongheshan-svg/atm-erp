@@ -268,7 +268,7 @@ def check_workflow_deadline_reminders():
     2. Approval tasks with deadline within the next 24 hours
     """
 
-    from .models import Notification
+    from .models import SystemNotification
     from .notification_service import NotificationService
     from .workflow.models import WorkflowTask
 
@@ -320,26 +320,23 @@ def check_workflow_deadline_reminders():
             message_lines.append('\n【已超时】')
             for t in tasks_data['overdue'][:5]:
                 message_lines.append(
-                    f"- {t['business_no']} | {t['business_type']} | "
-                    f"¥{t['amount']:,.2f} | 已超时{t['hours']:.0f}小时"
+                    f'- {t["business_no"]} | {t["business_type"]} | ¥{t["amount"]:,.2f} | 已超时{t["hours"]:.0f}小时'
                 )
 
         if tasks_data['upcoming']:
             message_lines.append('\n【即将超时】')
             for t in tasks_data['upcoming'][:5]:
                 message_lines.append(
-                    f"- {t['business_no']} | {t['business_type']} | "
-                    f"¥{t['amount']:,.2f} | {t['hours']:.0f}小时后超时"
+                    f'- {t["business_no"]} | {t["business_type"]} | ¥{t["amount"]:,.2f} | {t["hours"]:.0f}小时后超时'
                 )
 
         message = '\n'.join(message_lines)
 
-        Notification.objects.create(
+        SystemNotification.objects.create(
             user_id=assignee_id,
             title='审批任务截止提醒',
-            content=message,
-            notification_type='WARNING',
-            link='/workflow/tasks',
+            message=message,
+            type='WARNING',
         )
 
     # Send summary to DingTalk/WeChat Work

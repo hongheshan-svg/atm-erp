@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -274,11 +275,12 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
             return Response({'error': '只能对待确认或已确认的对账单标记争议'}, status=status.HTTP_400_BAD_REQUEST)
 
         reconciliation.status = 'DISPUTED'
-        reconciliation.notes = f"争议说明：{request.data.get('reason', '')}\n" + reconciliation.notes
+        reconciliation.notes = f'争议说明：{request.data.get("reason", "")}\n' + reconciliation.notes
         reconciliation.save()
 
         return Response(PurchaseReconciliationSerializer(reconciliation).data)
 
+    @extend_schema(parameters=[OpenApiParameter('line_id', int, OpenApiParameter.PATH)])
     @action(detail=True, methods=['post'], url_path='confirm_receipt/(?P<line_id>[^/.]+)')
     def confirm_receipt(self, request, pk=None, line_id=None):
         """确认收货状态"""
@@ -659,6 +661,7 @@ class SalesReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
 
         return Response(SalesReconciliationSerializer(reconciliation).data)
 
+    @extend_schema(parameters=[OpenApiParameter('line_id', int, OpenApiParameter.PATH)])
     @action(detail=True, methods=['post'], url_path='confirm_delivery/(?P<line_id>[^/.]+)')
     def confirm_delivery(self, request, pk=None, line_id=None):
         """确认发货状态"""

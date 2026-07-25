@@ -65,31 +65,34 @@ def _upload(client, xlsx_bytes: bytes, filename: str = 'test.xlsx'):
 # Test 1 – header on row 2 (auto-detected; row 1 is a title/metadata row)
 # ---------------------------------------------------------------------------
 
+
 def test_import_header_on_row_2(api_client_admin):
     """Header on row 2 is the expected format; data row starts at row 3."""
-    xlsx = _make_xlsx({
-        1: ['银行流水明细'],  # title / metadata row, ignored
-        2: HEADERS,           # header row (auto-detected within first 10 rows)
-        3: [
-            'V001',           # 凭证号
-            '123456789',      # 对方账号
-            '2024-01-15 10:00:00',  # 交易时间
-            '贷',             # 借贷标志
-            '测试客户有限公司',  # 对方单位
-            'BANK001',        # 对方行号
-            '货款',           # 用途
-            '销售货款',        # 摘要
-            '',               # 附言
-            '',               # 回单个性化信息
-            '50000.00',       # 转入金额
-            '0',              # 转出金额
-            '',               # 支付凭证种类
-            '150000.00',      # 余额
-        ],
-    })
+    xlsx = _make_xlsx(
+        {
+            1: ['银行流水明细'],  # title / metadata row, ignored
+            2: HEADERS,  # header row (auto-detected within first 10 rows)
+            3: [
+                'V001',  # 凭证号
+                '123456789',  # 对方账号
+                '2024-01-15 10:00:00',  # 交易时间
+                '贷',  # 借贷标志
+                '测试客户有限公司',  # 对方单位
+                'BANK001',  # 对方行号
+                '货款',  # 用途
+                '销售货款',  # 摘要
+                '',  # 附言
+                '',  # 回单个性化信息
+                '50000.00',  # 转入金额
+                '0',  # 转出金额
+                '',  # 支付凭证种类
+                '150000.00',  # 余额
+            ],
+        }
+    )
 
     resp = _upload(api_client_admin, xlsx)
-    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.data}"
+    assert resp.status_code == 200, f'Expected 200 but got {resp.status_code}: {resp.data}'
     data = resp.data
     assert data['success_count'] >= 1
     assert data['credit_total'] >= 50000.0
@@ -101,19 +104,33 @@ def test_import_header_on_row_2(api_client_admin):
 # header on row 1 is correctly recognised and the following data row imported.
 # ---------------------------------------------------------------------------
 
+
 def test_import_header_on_row_1(api_client_admin):
     """Header on row 1 is auto-detected; the data row on row 2 is imported."""
-    xlsx = _make_xlsx({
-        1: HEADERS,  # header on row 1 (auto-detected)
-        2: [
-            'V001', '123456789', '2024-01-15 10:00:00', '贷',
-            '测试客户有限公司', 'BANK001', '货款', '销售货款',
-            '', '', '50000.00', '0', '', '150000.00',
-        ],
-    })
+    xlsx = _make_xlsx(
+        {
+            1: HEADERS,  # header on row 1 (auto-detected)
+            2: [
+                'V001',
+                '123456789',
+                '2024-01-15 10:00:00',
+                '贷',
+                '测试客户有限公司',
+                'BANK001',
+                '货款',
+                '销售货款',
+                '',
+                '',
+                '50000.00',
+                '0',
+                '',
+                '150000.00',
+            ],
+        }
+    )
 
     resp = _upload(api_client_admin, xlsx)
-    assert resp.status_code == 200, f"Unexpected status: {resp.status_code}: {resp.data}"
+    assert resp.status_code == 200, f'Unexpected status: {resp.status_code}: {resp.data}'
     assert resp.data['success_count'] >= 1
 
 
@@ -125,17 +142,20 @@ def test_import_header_on_row_1(api_client_admin):
 # zero rows). This is the corrected behaviour.
 # ---------------------------------------------------------------------------
 
+
 def test_import_no_matching_header(api_client_admin):
     """Garbage headers are rejected with 400 (no recognisable header row)."""
-    xlsx = _make_xlsx({
-        1: ['Title row'],
-        2: ['Col_A', 'Col_B', 'Col_C', 'Col_D'],
-        3: ['foo', 'bar', 'baz', 'qux'],
-    })
+    xlsx = _make_xlsx(
+        {
+            1: ['Title row'],
+            2: ['Col_A', 'Col_B', 'Col_C', 'Col_D'],
+            3: ['foo', 'bar', 'baz', 'qux'],
+        }
+    )
 
     resp = _upload(api_client_admin, xlsx)
     # Header auto-detection requires >= 3 known columns; none match → 400.
-    assert resp.status_code == 400, f"Unexpected status {resp.status_code}: {resp.data}"
+    assert resp.status_code == 400, f'Unexpected status {resp.status_code}: {resp.data}'
     assert 'error' in resp.data
 
 
@@ -144,6 +164,7 @@ def test_import_no_matching_header(api_client_admin):
 # An empty sheet has no recognisable header, so the view rejects it with 400
 # rather than reporting a successful import of zero rows.
 # ---------------------------------------------------------------------------
+
 
 def test_import_empty_file(api_client_admin):
     """Empty xlsx is rejected with 400 (no recognisable header row)."""
@@ -154,5 +175,5 @@ def test_import_empty_file(api_client_admin):
     xlsx_bytes = buf.getvalue()
 
     resp = _upload(api_client_admin, xlsx_bytes)
-    assert resp.status_code == 400, f"Unexpected status {resp.status_code}: {resp.data}"
+    assert resp.status_code == 400, f'Unexpected status {resp.status_code}: {resp.data}'
     assert 'error' in resp.data

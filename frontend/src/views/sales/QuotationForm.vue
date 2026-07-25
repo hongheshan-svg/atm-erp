@@ -76,7 +76,7 @@
 
         <!-- 报价明细 -->
         <el-divider content-position="left">报价明细（非标定制产品可直接填写）</el-divider>
-        
+
         <div class="lines-toolbar">
           <el-button type="primary" @click="addLine">
             <el-icon><Plus /></el-icon>
@@ -88,18 +88,18 @@
           <el-table-column type="index" label="#" width="50" />
           <el-table-column label="产品名称 *" min-width="180">
             <template #default="{ row }">
-              <el-input 
-                v-model="row.custom_name" 
-                placeholder="输入产品名称" 
+              <el-input
+                v-model="row.custom_name"
+                placeholder="输入产品名称"
                 size="small"
               />
             </template>
           </el-table-column>
           <el-table-column label="规格型号" min-width="150">
             <template #default="{ row }">
-              <el-input 
-                v-model="row.custom_spec" 
-                placeholder="如：φ20×100mm" 
+              <el-input
+                v-model="row.custom_spec"
+                placeholder="如：φ20×100mm"
                 size="small"
               />
             </template>
@@ -201,14 +201,14 @@ import { getCustomerList } from '@/api/masterdata'
 const router = useRouter()
 const route = useRoute()
 
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const loading = ref(false)
 const saving = ref(false)
-const isEdit = computed(() => !!route.params.id)
+const isEdit = computed(() => !!Number(route.params.id))
 
 const customers = ref<any[]>([])
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   customer: null,
   valid_until: '',
   tax_rate: 13,
@@ -225,7 +225,7 @@ const rules = {
 
 // 计算总金额
 const totalAmount = computed(() => {
-  return form.lines.reduce((sum, line) => {
+  return form.lines.reduce((sum: any, line: any) => {
     return sum + (line.qty || 0) * (line.unit_price || 0)
   }, 0).toFixed(2)
 })
@@ -243,7 +243,7 @@ const totalWithTax = computed(() => {
   return (total + tax).toFixed(2)
 })
 
-const calculateLineTotal = (row) => {
+const calculateLineTotal = (row: any) => {
   return ((row.qty || 0) * (row.unit_price || 0)).toFixed(2)
 }
 
@@ -253,7 +253,7 @@ const addLine = () => {
 }
 
 // 删除明细行
-const removeLine = (index) => {
+const removeLine = (index: any) => {
   if (form.lines.length > 1) {
     form.lines.splice(index, 1)
   }
@@ -264,24 +264,24 @@ const loadCustomers = async () => {
   try {
     const res = await getCustomerList({ page_size: 200 })
     customers.value = res.results || res.results || res || []
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载客户失败:', error)
   }
 }
 
 const loadQuotation = async () => {
-  if (!route.params.id) return
-  
+  if (!Number(route.params.id)) return
+
   loading.value = true
   try {
-    const res = await getQuotation(route.params.id)
+    const res = await getQuotation(Number(route.params.id))
     const data = res
-    
+
     form.customer = data.customer
     form.valid_until = data.valid_until
     form.tax_rate = data.tax_rate ?? 13
     form.notes = data.notes || ''
-    form.lines = (data.lines || []).map(line => ({
+    form.lines = (data.lines || []).map((line: any) => ({
       id: line.id,
       item: line.item,
       custom_name: line.custom_name || line.item_name || '',
@@ -291,11 +291,11 @@ const loadQuotation = async () => {
       unit_price: parseFloat(line.unit_price),
       notes: line.notes || ''
     }))
-    
+
     if (form.lines.length === 0) {
       form.lines = [{ custom_name: '', custom_spec: '', custom_unit: '件', qty: 1, unit_price: 0, notes: '' }]
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载报价单失败:', error)
     ElMessage.error('加载报价单失败')
   } finally {
@@ -307,22 +307,22 @@ const loadQuotation = async () => {
 const handleSave = async () => {
   try {
     await formRef.value?.validate()
-    
+
     // 验证：至少有一行填写了产品名称
-    const validLines = form.lines.filter(line => line.custom_name && line.qty > 0)
+    const validLines = form.lines.filter((line: any) => line.custom_name && line.qty > 0)
     if (validLines.length === 0) {
       ElMessage.warning('请至少添加一个产品明细（需填写产品名称）')
       return
     }
-    
+
     saving.value = true
-    
+
     const payload = {
       customer: form.customer,
       valid_until: form.valid_until,
       tax_rate: form.tax_rate,
       notes: form.notes,
-      lines: validLines.map(line => ({
+      lines: validLines.map((line: any) => ({
         item: line.item || null,
         custom_name: line.custom_name,
         custom_spec: line.custom_spec || '',
@@ -332,17 +332,17 @@ const handleSave = async () => {
         notes: line.notes
       }))
     }
-    
+
     if (isEdit.value) {
-      await updateQuotation(route.params.id, payload)
+      await updateQuotation(Number(route.params.id), payload)
       ElMessage.success('报价单更新成功')
     } else {
       await createQuotation(payload)
       ElMessage.success('报价单创建成功')
     }
-    
+
     router.push('/sales/quotations')
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('保存报价单失败:', error)
       ElMessage.error('保存报价单失败')
@@ -356,29 +356,29 @@ const handleSave = async () => {
 const handleSaveAndSend = async () => {
   try {
     await formRef.value?.validate()
-    
+
     // 验证：至少有一行填写了产品名称
-    const validLines = form.lines.filter(line => line.custom_name && line.qty > 0)
+    const validLines = form.lines.filter((line: any) => line.custom_name && line.qty > 0)
     if (validLines.length === 0) {
       ElMessage.warning('请至少添加一个产品明细（需填写产品名称）')
       return
     }
-    
+
     await ElMessageBox.confirm('确定要保存并发送给客户吗？', '确认发送', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'info'
     })
-    
+
     saving.value = true
-    
+
     const payload = {
       customer: form.customer,
       valid_until: form.valid_until,
       tax_rate: form.tax_rate,
       notes: form.notes,
       status: 'SENT', // 直接设置为已发送
-      lines: validLines.map(line => ({
+      lines: validLines.map((line: any) => ({
         item: line.item || null,
         custom_name: line.custom_name,
         custom_spec: line.custom_spec || '',
@@ -388,11 +388,11 @@ const handleSaveAndSend = async () => {
         notes: line.notes
       }))
     }
-    
+
     await createQuotation(payload)
     ElMessage.success('报价单已创建并发送')
     router.push('/sales/quotations')
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
       console.error('操作失败:', error)
       ElMessage.error('操作失败')
@@ -408,7 +408,7 @@ const goBack = () => {
 
 onMounted(async () => {
   await loadCustomers()
-  
+
   if (isEdit.value) {
     await loadQuotation()
   } else {
@@ -488,4 +488,3 @@ onMounted(async () => {
   min-width: 120px;
 }
 </style>
-

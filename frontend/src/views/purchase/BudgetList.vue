@@ -6,7 +6,7 @@
         <el-icon><Plus /></el-icon> 新增预算
       </el-button>
     </div>
-    
+
     <!-- 统计卡片 -->
     <el-row :gutter="16" class="stats-row">
       <el-col :span="6">
@@ -31,12 +31,12 @@
         <el-card shadow="never" class="stat-card">
           <div class="stat-value">{{ stats.usage_rate || 0 }}%</div>
           <div class="stat-label">使用率</div>
-          <el-progress :percentage="stats.usage_rate || 0" :show-text="false" :stroke-width="6" 
+          <el-progress :percentage="stats.usage_rate || 0" :show-text="false" :stroke-width="6"
             :color="getProgressColor(stats.usage_rate)" />
         </el-card>
       </el-col>
     </el-row>
-    
+
     <!-- 过滤条件 -->
     <el-card shadow="never" class="filter-card">
       <el-form :inline="true" :model="queryParams">
@@ -66,7 +66,7 @@
         </el-form-item>
       </el-form>
     </el-card>
-    
+
     <!-- 数据表格 -->
     <el-card shadow="never">
       <!-- 批量操作 -->
@@ -99,7 +99,7 @@
         <el-table-column label="使用率" width="120">
           <template #default="{ row }">
             <el-progress :percentage="row.usage_rate || 0" :stroke-width="10"
-              :color="getProgressColor(row.usage_rate)" :format="(p) => p.toFixed(1) + '%'" />
+              :color="getProgressColor(row.usage_rate)" :format="(p: any) => p.toFixed(1) + '%'" />
           </template>
         </el-table-column>
         <el-table-column prop="status_display" label="状态" width="90">
@@ -117,7 +117,7 @@
           </template>
         </el-table-column>
       </el-table>
-      
+
       <el-pagination
         class="pagination"
         v-model:current-page="queryParams.page"
@@ -129,7 +129,7 @@
         @current-change="fetchData"
       />
     </el-card>
-    
+
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" destroy-on-close>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
@@ -194,7 +194,7 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">保存</el-button>
       </template>
     </el-dialog>
-    
+
     <!-- 查看详情对话框 -->
     <el-dialog v-model="viewDialogVisible" title="预算详情" width="900px">
       <template v-if="currentBudget">
@@ -217,7 +217,7 @@
           </el-descriptions-item>
           <el-descriptions-item label="预警阈值">{{ currentBudget.warning_threshold }}%</el-descriptions-item>
         </el-descriptions>
-        
+
         <el-divider>预算使用记录</el-divider>
         <el-table :data="usageRecords" border stripe max-height="300">
           <el-table-column prop="created_at" label="时间" width="160" />
@@ -247,6 +247,7 @@ getPurchaseBudgets, getPurchaseBudget, createPurchaseBudget, updatePurchaseBudge
   approvePurchaseBudget, activatePurchaseBudget
 } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { getPaginationTotal } from '@/utils/pagination'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/budgets/', { onSuccess: () => fetchData() })
 
@@ -259,9 +260,9 @@ const dialogVisible = ref(false)
 const viewDialogVisible = ref(false)
 const dialogTitle = ref('新增预算')
 const isEdit = ref(false)
-const currentBudget = ref(null)
+const currentBudget = ref<any>(null)
 const usageRecords = ref<any[]>([])
-const formRef = ref(null)
+const formRef = ref<any>(null)
 const stats = ref<Record<string, any>>({})
 
 const budgetTypes = ref([
@@ -276,7 +277,7 @@ const yearOptions = computed(() => {
   return Array.from({ length: 5 }, (_, i) => currentYear - 2 + i)
 })
 
-const queryParams = reactive({
+const queryParams = reactive<Record<string, any>>({
   page: 1,
   page_size: 10,
   year: currentYear,
@@ -284,7 +285,7 @@ const queryParams = reactive({
   status: null
 })
 
-const form = reactive({
+const form = reactive<Record<string, any>>({
   budget_no: '',
   name: '',
   budget_type: 'ANNUAL',
@@ -311,8 +312,8 @@ const fetchData = async () => {
   try {
     const data = await getPurchaseBudgets(queryParams)
     tableData.value = data.results || data
-    total.value = data.count || data.length
-  } catch (e) {
+    total.value = getPaginationTotal(data)
+  } catch (e: any) {
     console.error(e)
   } finally {
     loading.value = false
@@ -321,11 +322,11 @@ const fetchData = async () => {
 
 const fetchStats = async () => {
   try {
-    const data = await getPurchaseBudgetStatistics({ 
-      year: queryParams.year 
+    const data = await getPurchaseBudgetStatistics({
+      year: queryParams.year
     })
     stats.value = data
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
   }
 }
@@ -356,23 +357,23 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = (row: any) => {
   isEdit.value = true
   dialogTitle.value = '编辑预算'
   Object.assign(form, row)
   dialogVisible.value = true
 }
 
-const handleView = async (row) => {
+const handleView = async (row: any) => {
   try {
     const data = await getPurchaseBudget(row.id)
     currentBudget.value = data
-    
+
     const usageRes = await getPurchaseBudgetUsageRecords(row.id)
     usageRecords.value = usageRes
-    
+
     viewDialogVisible.value = true
-  } catch (e) {
+  } catch (e: any) {
     ElMessage.error('获取详情失败')
   }
 }
@@ -380,7 +381,7 @@ const handleView = async (row) => {
 const handleSubmit = async () => {
   const valid = await formRef.value?.validate()
   if (!valid) return
-  
+
   submitLoading.value = true
   try {
     if (isEdit.value) {
@@ -393,7 +394,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     fetchData()
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
     ElMessage.error('操作失败')
   } finally {
@@ -401,7 +402,7 @@ const handleSubmit = async () => {
   }
 }
 
-const handleApprove = (row) => {
+const handleApprove = (row: any) => {
   ElMessageBox.confirm('确定要审批通过此预算吗？', '提示', { type: 'warning' })
     .then(async () => {
       await approvePurchaseBudget(row.id)
@@ -410,7 +411,7 @@ const handleApprove = (row) => {
     })
 }
 
-const handleActivate = (row) => {
+const handleActivate = (row: any) => {
   ElMessageBox.confirm('确定要激活此预算吗？激活后可开始使用。', '提示', { type: 'warning' })
     .then(async () => {
       await activatePurchaseBudget(row.id)
@@ -419,7 +420,7 @@ const handleActivate = (row) => {
     })
 }
 
-const handleDelete = (row) => {
+const handleDelete = (row: any) => {
   ElMessageBox.confirm('确定要删除此预算吗？', '提示', { type: 'warning' })
     .then(async () => {
       await deletePurchaseBudget(row.id)
@@ -429,19 +430,19 @@ const handleDelete = (row) => {
     })
 }
 
-const formatAmount = (val) => {
+const formatAmount = (val: any) => {
   if (!val) return '0.00'
   return Number(val).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
-const getProgressColor = (rate) => {
+const getProgressColor = (rate: any) => {
   if (rate >= 90) return '#f56c6c'
   if (rate >= 80) return '#e6a23c'
   if (rate >= 60) return '#409eff'
   return '#67c23a'
 }
 
-const getStatusTag = (status) => {
+const getStatusTag = (status: any) => {
   const tags = {
     DRAFT: 'info',
     PENDING: 'warning',
@@ -450,7 +451,7 @@ const getStatusTag = (status) => {
     CLOSED: '',
     EXCEEDED: 'danger'
   }
-  return tags[status] || ''
+  return (tags as Record<string, any>)[status] || ''
 }
 
 onMounted(() => {

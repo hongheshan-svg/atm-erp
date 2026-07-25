@@ -97,13 +97,13 @@ backup_database() {
     BACKUP_DIR="$APP_DIR/backups"
     mkdir -p "$BACKUP_DIR"
     BACKUP_FILE="$BACKUP_DIR/db_backup_$(date +%Y%m%d_%H%M%S).sql"
-    
+
     # 从.env读取数据库信息
     source $APP_DIR/backend/.env
-    
+
     echo -e "${CYAN}[i] 备份数据库到: $BACKUP_FILE${NC}"
     sudo -u postgres pg_dump $POSTGRES_DB > "$BACKUP_FILE"
-    
+
     if [ $? -eq 0 ]; then
         gzip "$BACKUP_FILE"
         echo -e "${GREEN}[✓] 备份完成: ${BACKUP_FILE}.gz${NC}"
@@ -115,34 +115,34 @@ backup_database() {
 
 restore_database() {
     BACKUP_DIR="$APP_DIR/backups"
-    
+
     if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A $BACKUP_DIR 2>/dev/null)" ]; then
         echo -e "${YELLOW}[!] 没有找到备份文件${NC}"
         return
     fi
-    
+
     echo -e "${CYAN}可用的备份文件:${NC}"
     ls -la "$BACKUP_DIR"/*.sql* 2>/dev/null
     echo
     read -p "请输入要恢复的备份文件名: " BACKUP_FILE
-    
+
     FULL_PATH="$BACKUP_DIR/$BACKUP_FILE"
-    
+
     if [ -f "$FULL_PATH" ]; then
         echo -e "${YELLOW}[!] 警告: 这将覆盖当前数据库！${NC}"
         read -p "确定要继续吗? (yes/no): " CONFIRM
-        
+
         if [ "$CONFIRM" = "yes" ]; then
             source $APP_DIR/backend/.env
-            
+
             echo -e "${CYAN}[i] 正在恢复数据库...${NC}"
-            
+
             if [[ "$FULL_PATH" == *.gz ]]; then
                 gunzip -c "$FULL_PATH" | sudo -u postgres psql $POSTGRES_DB
             else
                 sudo -u postgres psql $POSTGRES_DB < "$FULL_PATH"
             fi
-            
+
             echo -e "${GREEN}[✓] 数据库恢复完成${NC}"
         else
             echo -e "${CYAN}[i] 已取消${NC}"
@@ -209,7 +209,7 @@ fi
 while true; do
     show_menu
     read -p "请选择操作 [0-12]: " choice
-    
+
     case $choice in
         1) start_services ;;
         2) stop_services ;;
@@ -226,7 +226,7 @@ while true; do
         0) echo "再见！"; exit 0 ;;
         *) echo -e "${RED}无效选择${NC}" ;;
     esac
-    
+
     echo
     read -p "按回车键继续..."
 done

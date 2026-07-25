@@ -1,9 +1,9 @@
 // Service Worker for PWA
 const CACHE_NAME = 'erp-v1.0.35'
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  '/erp/',
+  '/erp/index.html',
+  '/erp/manifest.json'
 ]
 
 // Install event
@@ -37,11 +37,11 @@ self.addEventListener('fetch', (event) => {
       .then((response) => {
         // Clone the response
         const responseToCache = response.clone()
-        
+
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache)
         })
-        
+
         return response
       })
       .catch(() => {
@@ -54,11 +54,11 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   const options = {
     body: event.data ? event.data.text() : 'New notification',
-    icon: '/icon-192x192.png',
-    badge: '/icon-192x192.png',
+    icon: '/erp/icon-192x192.png',
+    badge: '/erp/icon-192x192.png',
     vibrate: [200, 100, 200]
   }
-  
+
   event.waitUntil(
     self.registration.showNotification('ERP System', options)
   )
@@ -67,9 +67,8 @@ self.addEventListener('push', (event) => {
 // Notification click event
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  
+
   event.waitUntil(
-    clients.openWindow('/')
+    clients.openWindow('/erp/')
   )
 })
-

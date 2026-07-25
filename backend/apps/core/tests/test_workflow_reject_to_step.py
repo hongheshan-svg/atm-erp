@@ -25,7 +25,6 @@ from django.test import TestCase
 from apps.accounts.models import Role
 from apps.core.workflow.models import (
     WorkflowDefinition,
-    WorkflowInstance,
     WorkflowStep,
     WorkflowTask,
 )
@@ -44,18 +43,10 @@ class WorkflowRejectToStepTest(TestCase):
         self.addCleanup(p1.stop)
         self.addCleanup(p2.stop)
 
-        self.submitter = User.objects.create_user(
-            username='rts_submitter', password='x', employee_id='rts_submitter'
-        )
-        self.approver1 = User.objects.create_user(
-            username='rts_appr1', password='x', employee_id='rts_appr1'
-        )
-        self.approver2 = User.objects.create_user(
-            username='rts_appr2', password='x', employee_id='rts_appr2'
-        )
-        self.approver3 = User.objects.create_user(
-            username='rts_appr3', password='x', employee_id='rts_appr3'
-        )
+        self.submitter = User.objects.create_user(username='rts_submitter', password='x', employee_id='rts_submitter')
+        self.approver1 = User.objects.create_user(username='rts_appr1', password='x', employee_id='rts_appr1')
+        self.approver2 = User.objects.create_user(username='rts_appr2', password='x', employee_id='rts_appr2')
+        self.approver3 = User.objects.create_user(username='rts_appr3', password='x', employee_id='rts_appr3')
 
     # ---------- helpers ----------
     def _make_three_step_workflow(self, code):
@@ -63,25 +54,35 @@ class WorkflowRejectToStepTest(TestCase):
             name='三级审批', code=code, business_type='PURCHASE_REQUEST', is_active=True
         )
         s1 = WorkflowStep.objects.create(
-            workflow=wf, step_order=1, name='一级', approver_type='USER',
-            approver_user=self.approver1, action_type='APPROVE',
+            workflow=wf,
+            step_order=1,
+            name='一级',
+            approver_type='USER',
+            approver_user=self.approver1,
+            action_type='APPROVE',
         )
         s2 = WorkflowStep.objects.create(
-            workflow=wf, step_order=2, name='二级', approver_type='USER',
-            approver_user=self.approver2, action_type='APPROVE',
+            workflow=wf,
+            step_order=2,
+            name='二级',
+            approver_type='USER',
+            approver_user=self.approver2,
+            action_type='APPROVE',
         )
         s3 = WorkflowStep.objects.create(
-            workflow=wf, step_order=3, name='三级', approver_type='USER',
-            approver_user=self.approver3, action_type='APPROVE',
+            workflow=wf,
+            step_order=3,
+            name='三级',
+            approver_type='USER',
+            approver_user=self.approver3,
+            action_type='APPROVE',
         )
         return wf, (s1, s2, s3)
 
     def _start_and_advance_to_step3(self, code, business_id, business_no):
         """启动三级审批流并逐级通过至第 3 步（第 3 步留一个 PENDING 任务）。"""
         wf, steps = self._make_three_step_workflow(code)
-        instance, err = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', business_id, business_no, self.submitter
-        )
+        instance, err = WorkflowService.start_workflow('PURCHASE_REQUEST', business_id, business_no, self.submitter)
         self.assertIsNone(err)
 
         t1 = WorkflowTask.objects.get(instance=instance, step__step_order=1, status='PENDING')
@@ -114,9 +115,7 @@ class WorkflowRejectToStepTest(TestCase):
         self.assertEqual(t3.comment, '一级填错，退回重填')
 
         # 第 1 步任务被重新创建为 PENDING
-        pending_step1 = WorkflowTask.objects.filter(
-            instance=instance, step__step_order=1, status='PENDING'
-        )
+        pending_step1 = WorkflowTask.objects.filter(instance=instance, step__step_order=1, status='PENDING')
         self.assertEqual(pending_step1.count(), 1, '应为目标步 1 重新创建一个待办任务')
         self.assertEqual(pending_step1.first().assignee, self.approver1)
 
@@ -128,25 +127,19 @@ class WorkflowRejectToStepTest(TestCase):
         self.assertTrue(ok)
 
         # 重新从第 1 步逐级通过 —— 每步都取当前 PENDING 任务
-        new_t1 = WorkflowTask.objects.get(
-            instance=instance, step__step_order=1, status='PENDING'
-        )
+        new_t1 = WorkflowTask.objects.get(instance=instance, step__step_order=1, status='PENDING')
         ok, msg = WorkflowService.approve_task(new_t1, self.approver1)
         self.assertTrue(ok, msg)
         instance.refresh_from_db()
         self.assertEqual(instance.current_step, 2)
 
-        new_t2 = WorkflowTask.objects.get(
-            instance=instance, step__step_order=2, status='PENDING'
-        )
+        new_t2 = WorkflowTask.objects.get(instance=instance, step__step_order=2, status='PENDING')
         ok, msg = WorkflowService.approve_task(new_t2, self.approver2)
         self.assertTrue(ok, msg)
         instance.refresh_from_db()
         self.assertEqual(instance.current_step, 3)
 
-        new_t3 = WorkflowTask.objects.get(
-            instance=instance, step__step_order=3, status='PENDING'
-        )
+        new_t3 = WorkflowTask.objects.get(instance=instance, step__step_order=3, status='PENDING')
         ok, msg = WorkflowService.approve_task(new_t3, self.approver3)
         self.assertTrue(ok, msg)
         instance.refresh_from_db()
@@ -182,17 +175,23 @@ class WorkflowRejectToStepTest(TestCase):
             name='跳步审批', code='rts_gap', business_type='PURCHASE_REQUEST', is_active=True
         )
         WorkflowStep.objects.create(
-            workflow=wf, step_order=1, name='一级', approver_type='USER',
-            approver_user=self.approver1, action_type='APPROVE',
+            workflow=wf,
+            step_order=1,
+            name='一级',
+            approver_type='USER',
+            approver_user=self.approver1,
+            action_type='APPROVE',
         )
         # 故意不建 step_order=2，直接到 step_order=3
         WorkflowStep.objects.create(
-            workflow=wf, step_order=3, name='三级', approver_type='USER',
-            approver_user=self.approver3, action_type='APPROVE',
+            workflow=wf,
+            step_order=3,
+            name='三级',
+            approver_type='USER',
+            approver_user=self.approver3,
+            action_type='APPROVE',
         )
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 5004, 'PR-RTS-GAP', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 5004, 'PR-RTS-GAP', self.submitter)
         t1 = WorkflowTask.objects.get(instance=instance, step__step_order=1, status='PENDING')
         WorkflowService.approve_task(t1, self.approver1)
         # 通过第 1 步后引擎为 step_order=3 建了待办任务（step_order=2 不存在被跳过）。
@@ -213,9 +212,7 @@ class WorkflowRejectToStepTest(TestCase):
         role_cs = Role.objects.create(name='退回会签组', code='rts_cs_group')
         members = []
         for i in range(3):
-            u = User.objects.create_user(
-                username=f'rts_cs_{i}', password='x', employee_id=f'rts_cs_{i}'
-            )
+            u = User.objects.create_user(username=f'rts_cs_{i}', password='x', employee_id=f'rts_cs_{i}')
             u.roles.add(role_cs)
             members.append(u)
 
@@ -223,16 +220,22 @@ class WorkflowRejectToStepTest(TestCase):
             name='会签退回流', code='rts_cs', business_type='PURCHASE_REQUEST', is_active=True
         )
         WorkflowStep.objects.create(
-            workflow=wf, step_order=1, name='一级', approver_type='USER',
-            approver_user=self.approver1, action_type='APPROVE',
+            workflow=wf,
+            step_order=1,
+            name='一级',
+            approver_type='USER',
+            approver_user=self.approver1,
+            action_type='APPROVE',
         )
         WorkflowStep.objects.create(
-            workflow=wf, step_order=2, name='二级会签', approver_type='ROLE',
-            approver_role=role_cs, action_type='COUNTERSIGN',
+            workflow=wf,
+            step_order=2,
+            name='二级会签',
+            approver_type='ROLE',
+            approver_role=role_cs,
+            action_type='COUNTERSIGN',
         )
-        instance, _ = WorkflowService.start_workflow(
-            'PURCHASE_REQUEST', 5005, 'PR-RTS-CS', self.submitter
-        )
+        instance, _ = WorkflowService.start_workflow('PURCHASE_REQUEST', 5005, 'PR-RTS-CS', self.submitter)
         # 通过第 1 步 -> 进入第 2 步会签（3 个 PENDING 任务）
         t1 = WorkflowTask.objects.get(instance=instance, step__step_order=1, status='PENDING')
         WorkflowService.approve_task(t1, self.approver1)
@@ -240,9 +243,7 @@ class WorkflowRejectToStepTest(TestCase):
         self.assertEqual(instance.current_step, 2)
 
         cs_tasks = list(
-            WorkflowTask.objects.filter(
-                instance=instance, step__step_order=2, status='PENDING'
-            ).order_by('id')
+            WorkflowTask.objects.filter(instance=instance, step__step_order=2, status='PENDING').order_by('id')
         )
         self.assertEqual(len(cs_tasks), 3)
 
@@ -261,9 +262,7 @@ class WorkflowRejectToStepTest(TestCase):
         self.assertEqual(instance.status, 'PENDING')
         # 第 1 步重建一个待办
         self.assertEqual(
-            WorkflowTask.objects.filter(
-                instance=instance, step__step_order=1, status='PENDING'
-            ).count(),
+            WorkflowTask.objects.filter(instance=instance, step__step_order=1, status='PENDING').count(),
             1,
         )
 
