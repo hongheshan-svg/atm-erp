@@ -815,9 +815,7 @@ const fetchPendingQuoteCount = async () => {
     return
   }
   try {
-    const res = await getBOMPendingQuoteCount( {
-      params: { project: selectedProject.value }
-    })
+    const res = await getBOMPendingQuoteCount({ project: selectedProject.value })
     pendingQuoteCount.value = res.data?.count || res.count || 0
   } catch (error: any) {
     console.error('获取待询价数量失败:', error)
@@ -1408,9 +1406,7 @@ const handleConfirmImport = async () => {
     formData.append('update_existing', importOptions.updateExisting.toString())
     formData.append('auto_create_items', importOptions.autoCreateItems.toString())
 
-    const response = await importBOMExcel(formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const response = await importBOMExcel(formData, { skipErrorMessage: true })
 
     const data = response.data || response
     importResult.value = data
@@ -1422,19 +1418,21 @@ const handleConfirmImport = async () => {
       ElMessage.warning('导入完成，但存在错误，请查看详情')
     }
   } catch (error: any) {
-    console.error('导入失败:', error)
-    // request.js interceptor 已经解包过，error.response?.data 或直接 error 可能包含信息
     const errData = error.response?.data || error
+    const status = error.response?.status
+    if (!status || status >= 500) {
+      console.error('导入失败:', error)
+    }
     if (errData?.errors?.length) {
-      // 有详细错误列表
       importResult.value = errData
-      // 对话框已经打开，保持显示错误列表
-      // 不额外弹窗，因为 request.js 已经弹过了
     } else if (errData?.error) {
-      // 有错误消息但没有详细列表
       importResult.value = { error: errData.error }
     }
-    // 注意：request.js 的 interceptor 已经弹出了错误提示
+    if (status && status < 500) {
+      ElMessage.warning('导入校验未通过，请查看详情')
+    } else {
+      ElMessage.error('导入失败，请稍后重试')
+    }
   } finally {
     importing.value = false
   }

@@ -822,6 +822,7 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         return response
 
     @action(detail=False, methods=['post'])
+    @transaction.atomic
     def import_excel(self, request):
         """Import BOM items from Excel file."""
         file = request.FILES.get('file')
@@ -944,12 +945,19 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                         else f'物料-{sku}'
                     )
                     spec = str(row[spec_column]).strip() if spec_column and pd.notna(row.get(spec_column)) else ''
-                    unit_val = str(row[unit_column]).strip() if unit_column and pd.notna(row.get(unit_column)) else '个'
-                    item_type_val = (
+                    raw_unit = str(row[unit_column]).strip() if unit_column and pd.notna(row.get(unit_column)) else ''
+                    unit_choices = {str(code): str(code) for code, _label in Item.UNIT_CHOICES}
+                    unit_choices.update({str(label): str(code) for code, label in Item.UNIT_CHOICES})
+                    unit_val = unit_choices.get(raw_unit, 'PCS')
+
+                    raw_item_type = (
                         str(row[item_type_column]).strip()
                         if item_type_column and pd.notna(row.get(item_type_column))
                         else ''
                     )
+                    item_type_choices = {str(code): str(code) for code, _label in Item.ITEM_TYPE_CHOICES}
+                    item_type_choices.update({str(label): str(code) for code, label in Item.ITEM_TYPE_CHOICES})
+                    item_type_val = item_type_choices.get(raw_item_type, 'MATERIAL')
                     brand_val = (
                         str(row[brand_column]).strip() if brand_column and pd.notna(row.get(brand_column)) else ''
                     )
@@ -990,21 +998,9 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             if planned_qty <= 0:
                 error_rows.append({'row': row_num, 'error': '计划数量必须大于0'})
                 continue
-            # 单位必填
-            if not unit_column:
-                error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“单位”列'})
-                continue
-            unit_val = str(row[unit_column]).strip() if pd.notna(row.get(unit_column)) else ''
-            if not unit_val:
-                error_rows.append({'row': row_num, 'error': '单位为空'})
-                continue
-
-            # 需求日期必填
-            if not required_date_column:
-                error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“需求日期”列'})
-                continue
+            # 需求日期可选
             required_date = None
-            if pd.notna(row.get(required_date_column)):
+            if required_date_column and pd.notna(row.get(required_date_column)):
                 try:
                     date_val = row[required_date_column]
                     if isinstance(date_val, str):
@@ -1028,49 +1024,34 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 except (ValueError, TypeError) as e:
                     error_rows.append({'row': row_num, 'error': f'需求日期格式错误: {date_val}'})
                     continue
-            if not required_date:
-                error_rows.append({'row': row_num, 'error': '需求日期为空'})
-                continue
 
-            # 申请人必填但不再强制匹配系统用户
-            if not requester_column:
-                error_rows.append({'row': row_num, 'error': 'Excel文件必须包含“申请人”列'})
-                continue
-            requester_name = str(row[requester_column]).strip() if pd.notna(row.get(requester_column)) else ''
-            if not requester_name:
-                error_rows.append({'row': row_num, 'error': '申请人为空'})
-                continue
-            requester = (
-                User.objects.filter(
-                    Q(username=requester_name)
-                    | Q(first_name__icontains=requester_name)
-                    | Q(last_name__icontains=requester_name)
-                ).first()
-                or None
+            # 申请人可选；填写时尽量匹配系统用户
+            requester = None
+            requester_name = (
+                str(row[requester_column]).strip() if requester_column and pd.notna(row.get(requester_column)) else ''
             )
+            if requester_name:
+                requester = (
+                    User.objects.filter(
+                        Q(username=requester_name)
+                        | Q(first_name__icontains=requester_name)
+                        | Q(last_name__icontains=requester_name)
+                    ).first()
+                    or None
+                )
 
             prechecked_rows.append((row_num, row, sku, item, planned_qty, required_date, requester))
 
         # 若有错误，拒绝全部导入
         if error_rows:
+            transaction.set_rollback(True)
             # 拼接前若干条错误，便于前端直接展示
             preview = '; '.join([f'行{e["row"]}: {e["error"]}' for e in error_rows[:5]])
             return Response(
                 {
                     'error': f'校验失败，未导入任何数据。问题示例：{preview}',
                     'errors': error_rows,
-                    'required_columns': [
-                        '物料编码',
-                        '有图/无图',
-                        '物料类型',
-                        '物料名称',
-                        '规格型号',
-                        '版本/品牌',
-                        '单位',
-                        '数量',
-                        '需求日期',
-                        '申请人',
-                    ],
+                    'required_columns': ['物料编码', '数量'],
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
