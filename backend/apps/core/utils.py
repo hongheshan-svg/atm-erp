@@ -4,9 +4,25 @@ Utility functions for the core app.
 
 import random
 import string
+import threading
+import time
 from datetime import datetime
 
 from apps.core.permission_service import get_department_tree_ids, resolve_data_scope
+
+_code_generation_lock = threading.Lock()
+_last_code_timestamp_ns = 0
+
+
+def _next_code_timestamp_ns():
+    global _last_code_timestamp_ns
+
+    with _code_generation_lock:
+        timestamp_ns = time.time_ns()
+        if timestamp_ns <= _last_code_timestamp_ns:
+            timestamp_ns = _last_code_timestamp_ns + 1
+        _last_code_timestamp_ns = timestamp_ns
+        return timestamp_ns
 
 
 def generate_code(prefix, length=8, rule_type=None):
@@ -46,11 +62,10 @@ def generate_code(prefix, length=8, rule_type=None):
             logger = logging.getLogger(__name__)
             logger.warning(f'使用编码规则失败，回退到默认规则: {e}')
 
-    # 默认规则：前缀 + 日期 + 时间戳后缀 + 随机后缀
+    # 默认规则：前缀 + 日期 + 进程内单调纳秒后缀 + 随机后缀
     date_str = datetime.now().strftime('%Y%m%d')
-    import time
-
-    timestamp_suffix = str(int(time.time() * 1000))[-4:]
+    timestamp_width = max(int(length), 12)
+    timestamp_suffix = f'{_next_code_timestamp_ns() % (10**timestamp_width):0{timestamp_width}d}'
     random_suffix = ''.join(random.choices(string.digits, k=2))
     return f'{prefix}{date_str}{timestamp_suffix}{random_suffix}'
 
