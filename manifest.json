@@ -1,15 +1,15 @@
 {
-  "latest_version": "0.2.5",
-  "published_at": "2026-07-25T15:07:28Z",
-  "release_notes_md": "## 修复\n\n- 公共编号生成改为进程内单调纳秒序列，避免同一毫秒批量创建单据时触发唯一约束冲突。\n- Release Images 工作流升级到 Node.js 24 运行时的官方 Action 主版本，消除 Node.js 20 弃用注记。\n\n## 验证\n\n- GitHub CI：前端、后端、容器三组检查全部通过。\n- 后端：447 项测试通过，2 项跳过，DeprecationWarning 按错误处理。\n- CI 原失败的 OA 维护回填用例独立通过。\n- Ruff 检查、格式检查与工作流 YAML 校验通过。\n\n完整变更见 #24。",
+  "latest_version": "0.3.0",
+  "published_at": "2026-07-26T08:16:35Z",
+  "release_notes_md": "## 权限与审批流\n\n- 权限检查改为缺省拒绝，补齐敏感页面、操作权限、字段权限、上下文角色和数据范围的精确校验。\n- 强化角色权限缓存失效、路由菜单种子同步、供应商门户令牌隔离与密码变更失效机制。\n- 完善审批定义发布约束、参与者可见性、运行记录不可变、事务一致性及并签/或签行为。\n- 业务动作统一接入审批门禁，审批启动失败时关闭业务写入，避免绕过或半完成状态。\n\n## 核心业务与集成\n\n- 审计并加固采购、库存、财务、销售和项目成本的金额与库存核算逻辑。\n- 修复 BOM/图纸 Excel 导入非字符串表头导致的服务端错误。\n- 新增企业微信、钉钉、飞书扫码登录及个人中心自助绑定，并修复 OAuth 登录 CSRF 与账号接管风险。\n- 修复前端 Element Plus 空选项警告，并为浏览器测试增加全局控制台错误门禁。\n\n## 工程质量\n\n- GitHub CI 拆分为后端预检、四组模块测试、集成测试、前端质量、浏览器 E2E、依赖审计、Compose 校验和双镜像构建。\n- 验证通过：575 个后端测试、36 个集成测试、131 个前端测试及 20 个浏览器 E2E。\n- main 合并后 CI 全部通过：https://github.com/hongheshan-svg/atm-erp/actions/runs/30193442651\n\n## 升级\n\n- Release Images 工作流将发布 linux/amd64 与 linux/arm64 镜像，并在构建成功后自动更新 manifest.json。\n- 支持从 0.2.0 及以上版本通过系统内一键升级。",
   "min_upgradable_from": "0.2.0",
   "docker": {
     "registry": "ghcr.io",
     "owner": "hongheshan-svg",
-    "image_tag": "0.2.5",
+    "image_tag": "0.3.0",
     "digests": {
-      "app": "sha256:b06e616ab8868ed98075eea3be3694f886bee42b96557c20a00a551d524c8aba",
-      "updater": "sha256:11ae4c7a5eae4eb55e84d9e85a57ccc3f675c83a7a83fe7a8f6f03cfb44a78e7"
+      "app": "sha256:040a64d16ad5edc2f17ee911bf2783bd478c071ec318ae930bbf54f193882669",
+      "updater": "sha256:7eb958e3f0a1a02e0ea6d4c4956b5fe22308de5d3db8738571f161428120667e"
     }
   },
   "native": null
