@@ -9,6 +9,12 @@ const routes = [
     component: () => import('@/views/Login.vue'),
     meta: { requiresAuth: false }
   },
+  {
+    path: '/login/callback',
+    name: 'LoginCallback',
+    component: () => import('@/views/LoginCallback.vue'),
+    meta: { requiresAuth: false }
+  },
   // 基础资料旧路径兼容重定向
   { path: '/items', redirect: '/masterdata/items' },
   { path: '/customers', redirect: '/masterdata/customers' },
