@@ -273,8 +273,7 @@ def auto_post_ap_invoice(sender, instance, created, **kwargs):
 def auto_post_payment(sender, instance, created, **kwargs):
     """付款记录新建:核销 AR -> 收款凭证(借 1002/贷 1122);核销 AP -> 付款凭证(借 2202/贷 1002)。
 
-    仅挂靠 AR/AP 的付款进入总账;仅核销统一待付款项台账(payable_item,无 ar/ap)的付款不在
-    本引擎的总账过账范围(其会计处理随对应来源单据的应付确认凭证,避免重复入账),跳过。
+    统一待付款项台账中来源为采购应付(AP)的付款也进入总账,因为它代表真实银行支出。
     """
     if not created:
         return
@@ -283,4 +282,6 @@ def auto_post_payment(sender, instance, created, **kwargs):
     if instance.ar_id:
         post_document('AR_RECEIPT', instance)
     elif instance.ap_id:
+        post_document('AP_PAYMENT', instance)
+    elif instance.payable_item_id and instance.payable_item.source_type == 'ap':
         post_document('AP_PAYMENT', instance)

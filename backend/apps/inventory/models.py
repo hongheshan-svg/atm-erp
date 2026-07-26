@@ -2,6 +2,7 @@
 Inventory management models - Stock, StockMove, Adjustment.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -28,7 +29,7 @@ class Stock(BaseModel):
         return self.qty_on_hand - self.qty_reserved
 
     # Weighted average cost
-    weighted_avg_cost = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='加权平均成本')
+    weighted_avg_cost = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='加权平均成本')
 
     class Meta:
         db_table = 'stock'
@@ -56,6 +57,9 @@ class StockMove(BaseModel):
         ('IN_PURCHASE', '采购入库'),
         ('OUT_SALES', '销售出库'),
         ('OUT_PROJECT', '项目领料'),
+        ('OUT_RETURN', '采购退货出库'),
+        ('OUT_OUTSOURCE', '外协发料出库'),
+        ('IN_OUTSOURCE', '外协加工入库'),
         ('TRANSFER', '调拨'),
         ('ADJUSTMENT', '调整'),
     ]
@@ -87,7 +91,7 @@ class StockMove(BaseModel):
         verbose_name='目标仓库',
     )
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='数量')
-    unit_cost = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单位成本')
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=4, verbose_name='单位成本')
     move_type = models.CharField(max_length=20, choices=MOVE_TYPE_CHOICES, verbose_name='移动类型')
     reference_type = models.CharField(max_length=50, blank=True, verbose_name='参考类型')
     reference_id = models.IntegerField(null=True, blank=True, verbose_name='参考ID')
@@ -136,7 +140,26 @@ class StockMove(BaseModel):
         is_new = self.pk is None
         was_completed = False
         if not is_new:
-            was_completed = StockMove.objects.filter(pk=self.pk, status='COMPLETED').exists()
+            original = StockMove.objects.filter(pk=self.pk).first()
+            was_completed = original is not None and original.status == 'COMPLETED'
+            if was_completed:
+                immutable_fields = (
+                    'item_id',
+                    'warehouse_from_id',
+                    'warehouse_to_id',
+                    'qty',
+                    'unit_cost',
+                    'move_type',
+                    'reference_type',
+                    'reference_id',
+                    'project_id',
+                    'move_date',
+                    'status',
+                    'is_deleted',
+                )
+                changed = [field for field in immutable_fields if getattr(self, field) != getattr(original, field)]
+                if changed:
+                    raise ValidationError(f'已完成的库存移动不可修改或删除: {", ".join(changed)}')
 
         # 本行写入与库存更新置于同一事务：否则出库不足时 _update_stock 抛错而本行已提交，
         # 会残留 status=COMPLETED 的假移动记录、库存未扣减、账实不符（审计 high 数据一致性）。
@@ -149,11 +172,11 @@ class StockMove(BaseModel):
 
     def _update_stock(self):
         """Update stock levels based on move type."""
-        if self.move_type == 'IN_PURCHASE':
+        if self.move_type in ['IN_PURCHASE', 'IN_OUTSOURCE']:
             # Incoming stock
             self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
 
-        elif self.move_type in ['OUT_SALES', 'OUT_PROJECT']:
+        elif self.move_type in ['OUT_SALES', 'OUT_PROJECT', 'OUT_RETURN', 'OUT_OUTSOURCE']:
             # Outgoing stock
             self._update_stock_out(self.warehouse_from, self.qty)
 
@@ -215,13 +238,16 @@ class StockMove(BaseModel):
                 # （加权平均时=Stock 加权成本；FIFO 时=领料环节写入的分层实耗成本）。
                 self._record_cost_ledger(warehouse, qty, self.unit_cost, 'OUT')
             except Stock.DoesNotExist:
-                pass
+                raise ValueError(f'库存不足: {self.item} 在 {warehouse} 无库存记录, 需要 {qty}') from None
 
     # move_type + 方向 -> ItemCostRecord.transaction_type（成本账交易类型）
     _COST_TXN_TYPE = {
         ('IN_PURCHASE', 'IN'): 'PURCHASE_IN',
         ('OUT_SALES', 'OUT'): 'SALES_OUT',
         ('OUT_PROJECT', 'OUT'): 'PRODUCTION_OUT',
+        ('OUT_RETURN', 'OUT'): 'RETURN_OUT',
+        ('OUT_OUTSOURCE', 'OUT'): 'PRODUCTION_OUT',
+        ('IN_OUTSOURCE', 'IN'): 'PRODUCTION_IN',
         ('TRANSFER', 'IN'): 'TRANSFER_IN',
         ('TRANSFER', 'OUT'): 'TRANSFER_OUT',
         ('ADJUSTMENT', 'IN'): 'ADJUST_IN',

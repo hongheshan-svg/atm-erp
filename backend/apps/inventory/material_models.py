@@ -126,7 +126,7 @@ class MaterialRequisitionLine(BaseModel):
     )
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='申请数量')
     issued_qty = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已出库数量')
-    unit_cost = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='单位成本')
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='单位成本')
     notes = models.CharField(max_length=200, blank=True, verbose_name='备注')
 
     class Meta:
@@ -273,7 +273,7 @@ class MaterialReturnLine(BaseModel):
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='退料数量')
     received_qty = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已入库数量')
     condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='GOOD', verbose_name='物料状态')
-    unit_cost = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='单位成本')
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=4, default=0, verbose_name='单位成本')
     notes = models.CharField(max_length=200, blank=True, verbose_name='备注')
 
     class Meta:

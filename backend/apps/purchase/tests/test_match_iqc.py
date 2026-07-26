@@ -19,7 +19,8 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.inventory.models import StockMove
-from apps.masterdata.models import Item, Supplier, Warehouse
+from apps.masterdata.models import Customer, Item, Supplier, Warehouse
+from apps.projects.models import Project, ProjectBOM
 from apps.purchase.iqc import IncomingInspection, evaluate_line_inspection
 from apps.purchase.matching import assert_can_pay, three_way_match
 from apps.purchase.models import GoodsReceipt, GoodsReceiptLine, PurchaseOrder, PurchaseOrderLine
@@ -124,6 +125,66 @@ class IQCGateTest(BaseMatchIQCTest):
         self.assertEqual(po_line.received_qty, Decimal('10'))
         po.refresh_from_db()
         self.assertEqual(po.status, 'COMPLETED')
+
+    def test_bom_receipt_syncs_once(self):
+        customer = Customer.objects.create(code='IQC-CUSTOMER', name='收货测试客户')
+        project = Project.objects.create(
+            code='IQC-PROJECT',
+            name='收货测试项目',
+            customer=customer,
+            manager=self.user,
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 12, 31),
+        )
+        bom = ProjectBOM.objects.create(project=project, item=self.item, planned_qty=Decimal('10'))
+        po, po_line = self._make_po()
+        po.project = project
+        po.save()
+        po_line.bom_item = bom
+        po_line.save()
+        po.save()
+        receipt, _ = self._make_receipt(po, po_line)
+
+        resp = self._confirm(receipt)
+        self.assertEqual(resp.status_code, 200, getattr(resp, 'data', resp))
+
+        bom.refresh_from_db()
+        self.assertEqual(bom.received_qty, Decimal('10'))
+        receipt.refresh_from_db()
+        receipt.save()
+        bom.refresh_from_db()
+        self.assertEqual(bom.received_qty, Decimal('10'))
+
+    def test_purchase_return_reverses_stock_and_cannot_exceed_receipt(self):
+        po, po_line = self._make_po()
+        receipt, _ = self._make_receipt(po, po_line)
+        self.assertEqual(self._confirm(receipt).status_code, 200)
+
+        resp = self.client.post(
+            f'/api/purchase/receipts/{receipt.pk}/return_goods/',
+            {'items': [{'item': self.item.id, 'po_line': po_line.id, 'qty': '4'}], 'reason': '质量退货'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200, getattr(resp, 'data', resp))
+
+        stock = self.item.stocks.get(warehouse=self.warehouse)
+        self.assertEqual(stock.qty_on_hand, Decimal('6'))
+        po_line.refresh_from_db()
+        self.assertEqual(po_line.received_qty, Decimal('6'))
+        returned = StockMove.objects.get(
+            reference_type='GoodsReceipt',
+            reference_id=receipt.id,
+            move_type='OUT_RETURN',
+            item=self.item,
+        )
+        self.assertEqual(returned.unit_cost, Decimal('100'))
+
+        over_return = self.client.post(
+            f'/api/purchase/receipts/{receipt.pk}/return_goods/',
+            {'items': [{'item': self.item.id, 'po_line': po_line.id, 'qty': '7'}]},
+            format='json',
+        )
+        self.assertEqual(over_return.status_code, 400)
 
     def test_exempt_item_allows_stock_in_without_inspection(self):
         """免检物料(inspection_type='NONE')无检验单也放行——门禁默认不破坏既有流程。"""
@@ -273,3 +334,38 @@ class AssertCanPayTest(BaseMatchIQCTest):
         # 未收货 -> 任何正数付款都应被拦截
         with self.assertRaises(ValidationError):
             assert_can_pay(po, Decimal('100.00'))
+
+    def test_unified_payable_settlement_enforces_three_way_match(self):
+        from apps.finance.models import AccountPayable, BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import settle
+
+        po, _ = self._make_po(qty=Decimal('10'), unit_price=Decimal('100'))
+        ap = AccountPayable.objects.create(
+            supplier=self.supplier,
+            po=po,
+            invoice_date='2026-07-01',
+            due_date='2026-08-01',
+            amount_due=Decimal('1130.00'),
+        )
+        item = PayableItem.objects.get(source_type='ap', source_id=ap.pk)
+        statement = BankStatement.objects.create(
+            transaction_type='DEBIT',
+            debit_amount=Decimal('1130.00'),
+            counterparty_name=self.supplier.name,
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+
+        with self.assertRaisesMessage(ValueError, '超付拦截'):
+            settle(statement, [{'payable_item_id': item.pk, 'amount': Decimal('1130.00')}], self.user)
+
+
+class PurchaseOrderLineAmountIntegrityTest(BaseMatchIQCTest):
+    def test_confirmed_order_line_amount_cannot_be_patched_directly(self):
+        from apps.purchase.serializers import PurchaseOrderLineSerializer
+
+        _, line = self._make_po()
+        serializer = PurchaseOrderLineSerializer(line, data={'unit_price': '999.00'}, partial=True)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('只有草稿或已拒绝采购订单可以修改明细', str(serializer.errors))

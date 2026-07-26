@@ -261,6 +261,7 @@ class UserSerializer(serializers.ModelSerializer):
             'updated_at',
             'wechat_work_id',
             'dingtalk_id',
+            'feishu_id',
         ]
         read_only_fields = ['last_login', 'date_joined', 'created_at', 'updated_at']
         extra_kwargs = {'password': {'write_only': True}}

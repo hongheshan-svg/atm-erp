@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pandas as pd
 from django.core.cache import cache
-from django.db.models import F, Sum
+from django.db.models import Case, DecimalField, F, Sum, When
 
 logger = logging.getLogger(__name__)
 
@@ -28,26 +28,29 @@ class CostCalculationService:
         """
         from apps.inventory.models import StockMove
 
-        result = StockMove.objects.filter(
+        outbound = StockMove.objects.filter(
             project_id=project_id, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
         ).aggregate(total=Sum(F('qty') * F('unit_cost')))
+        returned = StockMove.objects.filter(
+            project_id=project_id,
+            move_type='ADJUSTMENT',
+            reference_type='MaterialReturn',
+            status='COMPLETED',
+            is_deleted=False,
+        ).aggregate(total=Sum(F('qty') * F('unit_cost')))
 
-        return result['total'] or Decimal('0')
+        return (outbound['total'] or Decimal('0')) - (returned['total'] or Decimal('0'))
 
     @classmethod
     def calculate_project_labor_cost(cls, project_id):
         """
-        Calculate labor cost from project tasks and member hours.
+        Calculate labor cost from approved time logs and project-member rates.
         Returns: Decimal
         """
-        from apps.projects.models import ProjectMember
+        from apps.projects.models import Project
 
-        # Calculate from actual hours × hourly rate
-        result = ProjectMember.objects.filter(project_id=project_id, is_deleted=False).aggregate(
-            total=Sum(F('actual_hours') * F('hourly_rate'))
-        )
-
-        return result['total'] or Decimal('0')
+        project = Project.objects.filter(pk=project_id, is_deleted=False).first()
+        return project.get_actual_labor_cost() if project else Decimal('0')
 
     @classmethod
     def calculate_project_expense_cost(cls, project_id):
@@ -58,27 +61,33 @@ class CostCalculationService:
         from apps.finance.models import Expense
 
         result = Expense.objects.filter(
-            project_id=project_id, status__in=['APPROVED', 'REIMBURSED'], is_deleted=False
-        ).aggregate(total=Sum('amount'))
+            project_id=project_id, status__in=['APPROVED', 'PAID'], is_deleted=False
+        ).aggregate(
+            total=Sum(
+                Case(
+                    When(base_amount__isnull=False, then=F('base_amount')),
+                    default=F('amount'),
+                    output_field=DecimalField(max_digits=18, decimal_places=2),
+                )
+            )
+        )
 
         return result['total'] or Decimal('0')
 
     @classmethod
     def calculate_project_revenue(cls, project_id):
         """
-        Calculate revenue from sales orders linked to project.
-        使用含税金额计算收入。
+        Calculate contract revenue from confirmed sales orders linked to project.
+        Revenue excludes output VAT.
         Returns: Decimal
         """
         from apps.sales.models import SalesOrder
 
-        # 优先使用含税金额，如果没有则回退到不含税金额
         result = SalesOrder.objects.filter(
             project_id=project_id, status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'], is_deleted=False
-        ).aggregate(total_with_tax=Sum('total_with_tax'), total_amount=Sum('total_amount'))
+        ).aggregate(total_amount=Sum('total_amount'))
 
-        # 如果有含税金额就用含税金额，否则用不含税金额
-        return result['total_with_tax'] or result['total_amount'] or Decimal('0')
+        return result['total_amount'] or Decimal('0')
 
     @classmethod
     def calculate_project_profit(cls, project_id):
@@ -248,9 +257,16 @@ class CostCalculationService:
 
         # Expenses
         expenses = (
-            Expense.objects.filter(project_id=project_id, status__in=['APPROVED', 'REIMBURSED'], is_deleted=False)
+            Expense.objects.filter(project_id=project_id, status__in=['APPROVED', 'PAID'], is_deleted=False)
             .select_related('user')
-            .values('expense_no', 'user__username', 'expense_date', 'category', 'amount', 'description')
+            .annotate(
+                project_cost=Case(
+                    When(base_amount__isnull=False, then=F('base_amount')),
+                    default=F('amount'),
+                    output_field=DecimalField(max_digits=18, decimal_places=2),
+                )
+            )
+            .values('expense_no', 'user__username', 'expense_date', 'category', 'amount', 'project_cost', 'description')
         )
 
         df_expenses = pd.DataFrame(list(expenses))
@@ -262,6 +278,7 @@ class CostCalculationService:
                     'expense_date': '日期',
                     'category': '类别',
                     'amount': '金额',
+                    'project_cost': '项目成本（基准币）',
                     'description': '说明',
                 }
             )

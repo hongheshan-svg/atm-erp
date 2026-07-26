@@ -20,6 +20,9 @@ def match_candidates(bank_statement, limit=10):
     - 台账应付日期与流水交易日期相差 ≤7 天 +10
     只保留 score > 0 的候选,最多返回 limit 条。
     """
+    if bank_statement.transaction_type != 'DEBIT':
+        return []
+
     norm = BankStatement._normalize_name
     target = norm(bank_statement.counterparty_name)
     amount = bank_statement.amount or 0
@@ -69,6 +72,12 @@ def settle(bank_statement, allocations, user):
     全部核销完成后按累计核销额是否达到流水金额将 `bank_statement.status`
     置为 `MATCHED`(全额)或 `PARTIAL`(部分)。
     """
+    bank_statement = BankStatement.objects.select_for_update().get(pk=bank_statement.pk)
+    if bank_statement.transaction_type != 'DEBIT':
+        raise ValueError('应付核销只能使用支出（借方）银行流水')
+    if bank_statement.status in {'MATCHED', 'IGNORED'}:
+        raise ValueError('该银行流水已完成处理，不能重复核销')
+
     total = sum((a['amount'] for a in allocations), Decimal('0'))
     already = sum((s.amount for s in bank_statement.payable_settlements.all()), Decimal('0'))
     if total + already > (bank_statement.amount or Decimal('0')):
@@ -87,6 +96,20 @@ def settle(bank_statement, allocations, user):
         amount = a['amount']
         if amount <= 0 or amount > item.remaining:
             raise ValueError(f'核销金额 {amount} 超过待付款项剩余 {item.remaining}')
+
+        source = PAYABLE_SOURCES.get(item.source_type)
+        obj = _load_source_obj(item) if source else None
+        if item.source_type == 'ap' and obj is not None and obj.po_id:
+            from rest_framework.exceptions import ValidationError
+
+            from apps.purchase.matching import assert_can_pay
+
+            try:
+                assert_can_pay(obj.po, (obj.amount_paid or Decimal('0')) + amount)
+            except ValidationError as exc:
+                detail = exc.detail[0] if isinstance(exc.detail, list) else exc.detail
+                raise ValueError(str(detail)) from exc
+
         payment = Payment.objects.create(
             payment_type='PAYABLE',
             payable_item=item,
@@ -107,9 +130,7 @@ def settle(bank_statement, allocations, user):
             updated_by=user,
         )
         item.refresh_from_db()
-        source = PAYABLE_SOURCES.get(item.source_type)
         if source:
-            obj = _load_source_obj(item)
             if obj is not None:
                 source.write_back(obj, item)
         settlements.append(settlement)

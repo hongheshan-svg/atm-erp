@@ -9,6 +9,7 @@ StockMove.save 原先先 super().save() 持久化本行(status=COMPLETED)，再 
 from datetime import date
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.inventory.data_accuracy import InventoryDataValidator
@@ -48,6 +49,79 @@ class StockMoveAtomicTest(TestCase):
         self.assertEqual(StockMove.objects.filter(pk=move.pk).count(), 1)
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.qty_on_hand, Decimal('10'))
+
+    def test_missing_stock_row_rejects_completed_outbound(self):
+        self.stock.delete()
+
+        with self.assertRaises(ValueError):
+            self._make_out('1')
+
+        self.assertFalse(StockMove.objects.filter(item=self.item).exists())
+
+    def test_completed_move_cannot_be_changed_or_soft_deleted(self):
+        move = self._make_out('1')
+        move.qty = Decimal('2')
+
+        with self.assertRaises(ValidationError):
+            move.save()
+
+        move.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            move.soft_delete()
+
+        self.assertTrue(StockMove.objects.filter(pk=move.pk).exists())
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.qty_on_hand, Decimal('4'))
+
+    def test_purchase_return_and_outsource_moves_update_stock(self):
+        StockMove.objects.create(
+            item=self.item,
+            warehouse_from=self.wh,
+            qty=Decimal('1'),
+            unit_cost=Decimal('1'),
+            move_type='OUT_RETURN',
+            move_date=date.today(),
+            status='COMPLETED',
+        )
+        StockMove.objects.create(
+            item=self.item,
+            warehouse_from=self.wh,
+            qty=Decimal('1'),
+            unit_cost=Decimal('1'),
+            move_type='OUT_OUTSOURCE',
+            move_date=date.today(),
+            status='COMPLETED',
+        )
+        StockMove.objects.create(
+            item=self.item,
+            warehouse_to=self.wh,
+            qty=Decimal('2'),
+            unit_cost=Decimal('2'),
+            move_type='IN_OUTSOURCE',
+            move_date=date.today(),
+            status='COMPLETED',
+        )
+
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.qty_on_hand, Decimal('5'))
+
+    def test_weighted_average_cost_preserves_four_decimal_precision(self):
+        self.stock.qty_on_hand = Decimal('0')
+        self.stock.weighted_avg_cost = Decimal('0')
+        self.stock.save(update_fields=['qty_on_hand', 'weighted_avg_cost'])
+        for qty, unit_cost in ((Decimal('1'), Decimal('1')), (Decimal('2'), Decimal('2'))):
+            StockMove.objects.create(
+                item=self.item,
+                warehouse_to=self.wh,
+                qty=qty,
+                unit_cost=unit_cost,
+                move_type='IN_PURCHASE',
+                move_date=date.today(),
+                status='COMPLETED',
+            )
+
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.weighted_avg_cost, Decimal('1.6667'))
 
 
 class InOutBalanceOpeningTest(TestCase):

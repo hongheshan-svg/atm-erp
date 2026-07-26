@@ -240,6 +240,36 @@ class PaymentSerializer(serializers.ModelSerializer):
                     )
                 }
             )
+        if self.instance:
+            immutable = {
+                'payment_type',
+                'ar',
+                'ap',
+                'payment_date',
+                'currency',
+                'amount',
+                'exchange_rate',
+            }
+            changed = immutable.intersection(attrs)
+            if changed:
+                raise serializers.ValidationError(
+                    f'付款确认后不可修改财务字段: {", ".join(sorted(changed))}，请先反核销'
+                )
+            return attrs
+
+        amount = attrs.get('amount')
+        if amount is None or amount <= 0:
+            raise serializers.ValidationError({'amount': '付款金额必须大于 0'})
+
+        if payment_type == 'AR':
+            ar = attrs.get('ar')
+            if ar is None or attrs.get('ap') is not None:
+                raise serializers.ValidationError({'ar': '应收款必须且只能关联一张应收账款'})
+            if amount > ar.amount_remaining:
+                raise serializers.ValidationError({'amount': f'付款金额不能超过应收余额 {ar.amount_remaining}'})
+            currency = attrs.get('currency')
+            if ar.currency_id and currency and ar.currency_id != currency.id:
+                raise serializers.ValidationError({'currency': '付款币种必须与应收账款币种一致'})
         return attrs
 
 

@@ -130,12 +130,21 @@ def _to_decimal(value):
 
 
 def _source_tax(obj):
-    """单据税额:仅当来源模型带 ``tax_amount`` 字段时才拆分销项/进项税。
+    """从应收/应付关联订单按价税比例取得本次单据税额。"""
+    direct_tax = getattr(obj, 'tax_amount', None)
+    if direct_tax is not None:
+        return _to_decimal(direct_tax)
 
-    AR/AP 模型当前没有 tax_amount 字段 -> 返回 0 -> 全额进收入/存货,不产生 2221 分录。
-    未来若在来源单据上补 tax_amount,本引擎自动开始拆税(价税分离),无需改动。
-    """
-    return _to_decimal(getattr(obj, 'tax_amount', None))
+    source = getattr(obj, 'so', None) or getattr(obj, 'po', None)
+    if source is None:
+        return Decimal('0')
+
+    source_tax = _to_decimal(getattr(source, 'tax_amount', None))
+    source_total = _to_decimal(getattr(source, 'total_with_tax', None))
+    amount = _to_decimal(getattr(obj, 'amount_due', None))
+    if source_tax <= 0 or source_total <= 0 or amount <= 0:
+        return Decimal('0')
+    return (amount * source_tax / source_total).quantize(Decimal('0.01'))
 
 
 def _resolve_date(source_type, obj):
@@ -219,6 +228,12 @@ def _build_lines(source_type, obj):
     elif source_type == 'AP_PAYMENT':
         amount = _to_decimal(getattr(obj, 'amount', None))
         ap = getattr(obj, 'ap', None)
+        if ap is None:
+            payable_item = getattr(obj, 'payable_item', None)
+            if payable_item and payable_item.source_type == 'ap':
+                from apps.finance.models import AccountPayable
+
+                ap = AccountPayable.objects.filter(pk=payable_item.source_id).first()
         supplier = getattr(ap, 'supplier', None) if ap else None
         project = getattr(ap, 'project', None) if ap else None
         lines.append(
@@ -253,6 +268,78 @@ def post_document(source_type, obj, user=None):
             getattr(obj, 'pk', None),
         )
         return None
+
+
+def reverse_document(source_type, obj, user=None):
+    """Create and post an idempotent reversing voucher for an auto-posted document.
+
+    A document without an auto-posted voucher needs no reversal. Posted vouchers are
+    never mutated or deleted: the audit trail remains intact and a second voucher swaps
+    every debit/credit line. If no open period can accept the reversal, the caller gets a
+    hard error so a business cancellation cannot leave the general ledger unchanged.
+    """
+    from django.utils import timezone
+
+    from apps.finance.accounting import FiscalPeriod, JournalVoucher, VoucherLine, post_voucher_to_ledger
+
+    if obj.pk is None:
+        return None
+
+    with transaction.atomic():
+        original = (
+            JournalVoucher.objects.select_for_update()
+            .filter(source_type=source_type, source_id=obj.pk, is_deleted=False)
+            .first()
+        )
+        if original is None:
+            return None
+
+        reversal_type = f'REVERSAL_{source_type}'
+        existing = JournalVoucher.objects.filter(source_type=reversal_type, source_id=obj.pk, is_deleted=False).first()
+        if existing:
+            return existing
+
+        if original.status != 'POSTED':
+            original.status = 'CANCELLED'
+            original.save(update_fields=['status', 'updated_at'])
+            return original
+
+        reversal_date = timezone.localdate()
+        period = FiscalPeriod.objects.filter(
+            start_date__lte=reversal_date,
+            end_date__gte=reversal_date,
+            status='OPEN',
+            is_deleted=False,
+        ).first()
+        if period is None:
+            raise ValueError(f'当前日期 {reversal_date} 没有开放会计期间，无法冲销凭证 {original.voucher_no}')
+
+        reversal = JournalVoucher.objects.create(
+            voucher_type=original.voucher_type,
+            fiscal_period=period,
+            voucher_date=reversal_date,
+            status='APPROVED',
+            summary=f'冲销 {original.voucher_no}: {original.summary}',
+            source_type=reversal_type,
+            source_id=obj.pk,
+            created_by=user,
+        )
+        for line in original.lines.filter(is_deleted=False):
+            VoucherLine.objects.create(
+                voucher=reversal,
+                line_no=line.line_no,
+                account=line.account,
+                summary=reversal.summary,
+                debit_amount=line.credit_amount,
+                credit_amount=line.debit_amount,
+                customer=line.customer,
+                supplier=line.supplier,
+                project=line.project,
+                department=line.department,
+                created_by=user,
+            )
+        reversal.refresh_from_db()
+        return post_voucher_to_ledger(reversal, user)
 
 
 def _post_document_inner(source_type, obj, user):
@@ -303,7 +390,7 @@ def _post_document_inner(source_type, obj, user):
         voucher_type=rule['voucher_type'],
         fiscal_period=period,
         voucher_date=voucher_date,
-        status='DRAFT',
+        status='APPROVED' if open_period is not None else 'DRAFT',
         summary=_build_summary(source_type, obj),
         source_type=source_type,
         source_id=source_id,
