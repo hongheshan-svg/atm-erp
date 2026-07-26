@@ -326,6 +326,18 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
     def get_remaining_qty(self, obj) -> float:
         return float(obj.qty - obj.received_qty)
 
+    def validate(self, attrs):
+        po = attrs.get('po') or (self.instance.po if self.instance else None)
+        if po and po.status not in ('DRAFT', 'REJECTED'):
+            raise serializers.ValidationError('只有草稿或已拒绝采购订单可以修改明细')
+        if self.instance and attrs.get('po') and attrs['po'].pk != self.instance.po_id:
+            raise serializers.ValidationError({'po': '采购明细不可转挂到其他采购订单'})
+        if attrs.get('qty', self.instance.qty if self.instance else 0) <= 0:
+            raise serializers.ValidationError({'qty': '数量必须大于 0'})
+        if attrs.get('unit_price', self.instance.unit_price if self.instance else 0) < 0:
+            raise serializers.ValidationError({'unit_price': '单价不能小于 0'})
+        return attrs
+
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     """PurchaseOrder serializer."""
@@ -549,6 +561,19 @@ class GoodsReceiptLineSerializer(serializers.ModelSerializer):
             'notes',
             'is_deleted',
         ]
+
+    def validate(self, attrs):
+        receipt = attrs.get('receipt') or (self.instance.receipt if self.instance else None)
+        po_line = attrs.get('po_line') or (self.instance.po_line if self.instance else None)
+        if receipt and receipt.status != 'DRAFT':
+            raise serializers.ValidationError('只有草稿收货单可以修改明细')
+        if receipt and po_line and receipt.po_id != po_line.po_id:
+            raise serializers.ValidationError({'po_line': '收货明细必须属于收货单关联的采购订单'})
+        if self.instance and attrs.get('receipt') and attrs['receipt'].pk != self.instance.receipt_id:
+            raise serializers.ValidationError({'receipt': '收货明细不可转挂到其他收货单'})
+        if attrs.get('qty', self.instance.qty if self.instance else 0) <= 0:
+            raise serializers.ValidationError({'qty': '收货数量必须大于 0'})
+        return attrs
 
 
 class GoodsReceiptSerializer(serializers.ModelSerializer):

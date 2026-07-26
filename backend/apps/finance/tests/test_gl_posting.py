@@ -115,6 +115,55 @@ class GLAutoPostingTest(TestCase):
         self.assertEqual(ar.amount_paid, Decimal('400.00'))
         self.assertEqual(ar.status, 'PARTIAL')
 
+    def test_ap_unified_ledger_payment_creates_payment_voucher(self):
+        from apps.finance.models import Payment
+        from apps.finance.payable_models import PayableItem
+
+        ap = self._make_ap(Decimal('500.00'))
+        item = PayableItem.objects.get(source_type='ap', source_id=ap.pk)
+        pay = Payment.objects.create(
+            payment_type='PAYABLE',
+            payable_item=item,
+            payment_date='2026-07-15',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('200.00'),
+        )
+
+        voucher = self._voucher('AP_PAYMENT', pay.pk)
+        lines = self._lines_by_code(voucher)
+        self.assertEqual(lines['2202'].debit_amount, Decimal('200.00'))
+        self.assertEqual(lines['1002'].credit_amount, Decimal('200.00'))
+        self.assertEqual(lines['2202'].supplier_id, self.supplier.pk)
+
+    def test_deleted_payment_posts_single_reversing_voucher(self):
+        from apps.finance.accounting import AccountBalance, JournalVoucher
+        from apps.finance.models import Payment
+
+        ar = self._make_ar(Decimal('1000.00'))
+        pay = Payment.objects.create(
+            payment_type='AR',
+            ar=ar,
+            payment_date='2026-07-15',
+            payment_method='BANK_TRANSFER',
+            amount=Decimal('400.00'),
+        )
+
+        pay.soft_delete()
+        pay.soft_delete()
+
+        reversal = self._voucher('REVERSAL_AR_RECEIPT', pay.pk)
+        self.assertEqual(reversal.status, 'POSTED')
+        self.assertEqual(
+            JournalVoucher.objects.filter(source_type='REVERSAL_AR_RECEIPT', source_id=pay.pk).count(),
+            1,
+        )
+        cash = AccountBalance.objects.get(account__code='1002', fiscal_period=self.period)
+        self.assertEqual(cash.period_debit, Decimal('400.00'))
+        self.assertEqual(cash.period_credit, Decimal('400.00'))
+        ar.refresh_from_db()
+        self.assertEqual(ar.amount_paid, Decimal('0.00'))
+        self.assertEqual(ar.status, 'PENDING')
+
     def test_ap_invoice_without_po_uses_expense_account(self):
         ap = self._make_ap(Decimal('500.00'))
         v = self._voucher('AP_INVOICE', ap.pk)
@@ -182,6 +231,44 @@ class GLAutoPostingTest(TestCase):
         again = post_document('AR_INVOICE', ar)
         self.assertEqual(again.pk, existing.pk)
         self.assertEqual(JournalVoucher.objects.filter(source_type='AR_INVOICE', source_id=ar.pk).count(), 1)
+
+    def test_posting_helper_is_idempotent_for_already_posted_voucher(self):
+        from apps.finance.accounting import AccountBalance, post_voucher_to_ledger
+
+        ar = self._make_ar(Decimal('1000.00'))
+        voucher = self._voucher('AR_INVOICE', ar.pk)
+        before = AccountBalance.objects.get(account__code='1122', fiscal_period=self.period).period_debit
+
+        reposted = post_voucher_to_ledger(voucher)
+
+        self.assertEqual(reposted.status, 'POSTED')
+        after = AccountBalance.objects.get(account__code='1122', fiscal_period=self.period).period_debit
+        self.assertEqual(after, before)
+
+    def test_linked_sales_order_tax_is_split_from_receivable(self):
+        from apps.finance.models import AccountReceivable
+        from apps.sales.models import SalesOrder
+
+        so = SalesOrder.objects.create(
+            customer=self.customer,
+            delivery_date='2026-08-10',
+            total_amount=Decimal('100.00'),
+            tax_amount=Decimal('13.00'),
+            total_with_tax=Decimal('113.00'),
+            status='CONFIRMED',
+        )
+        ar = AccountReceivable.objects.create(
+            customer=self.customer,
+            so=so,
+            invoice_date='2026-07-10',
+            due_date='2026-08-10',
+            amount_due=Decimal('113.00'),
+        )
+
+        lines = self._lines_by_code(self._voucher('AR_INVOICE', ar.pk))
+        self.assertEqual(lines['1122'].debit_amount, Decimal('113.00'))
+        self.assertEqual(lines['6001'].credit_amount, Decimal('100.00'))
+        self.assertEqual(lines['2221'].credit_amount, Decimal('13.00'))
 
     def test_tax_amount_source_splits_2221_line(self):
         """来源单据带 tax_amount 时价税分离,拆出 2221 应交税费分录。

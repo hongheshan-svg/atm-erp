@@ -229,6 +229,13 @@ class SalesQuotationLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMi
     filterset_fields = ['quotation', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
+    def perform_destroy(self, instance):
+        if instance.quotation.status not in ('DRAFT', 'REJECTED'):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError('只有草稿或已拒绝报价单可以删除明细')
+        super().perform_destroy(instance)
+
 
 class SalesOrderViewSet(
     PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
@@ -404,6 +411,11 @@ class SalesOrderViewSet(
             return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            so = SalesOrder.objects.select_for_update().get(pk=so.pk)
+            if so.status == 'CONFIRMED':
+                return Response({'error': '销售订单已确认，请勿重复操作'}, status=status.HTTP_400_BAD_REQUEST)
+            if so.status not in ['DRAFT', 'PENDING']:
+                return Response({'error': '只能确认草稿或待审批状态的订单'}, status=status.HTTP_400_BAD_REQUEST)
             so.status = 'CONFIRMED'
             so.save()
 
@@ -436,15 +448,23 @@ class SalesOrderViewSet(
             )
 
         with transaction.atomic():
+            so = SalesOrder.objects.select_for_update().get(pk=so.pk)
+            from apps.finance.models import AccountReceivable, PaymentSchedule
+
+            receivables = list(AccountReceivable.objects.select_for_update().filter(so=so, is_deleted=False))
+            if any(ar.amount_paid > 0 for ar in receivables):
+                return Response({'error': '该订单已有收款记录，请先反核销后再取消'}, status=status.HTTP_400_BAD_REQUEST)
+
             so.status = 'CANCELLED'
             so.save()
 
             # 撤销关联应收账款与未收款付款计划
-            from apps.finance.models import AccountReceivable, PaymentSchedule
+            from apps.finance.posting import reverse_document
 
-            AccountReceivable.objects.filter(so=so, is_deleted=False).exclude(status__in=['PAID', 'CANCELLED']).update(
-                status='CANCELLED'
-            )
+            for ar in receivables:
+                reverse_document('AR_INVOICE', ar, request.user)
+                ar.status = 'CANCELLED'
+                ar.save(update_fields=['status', 'updated_at'])
             PaymentSchedule.objects.filter(sales_order=so, is_deleted=False, status='PENDING').update(
                 status='CANCELLED'
             )
@@ -1288,6 +1308,13 @@ class SalesOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     filterset_fields = ['so', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
 
+    def perform_destroy(self, instance):
+        if instance.so.status not in ('DRAFT', 'REJECTED'):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError('只有草稿或已拒绝销售订单可以删除明细')
+        super().perform_destroy(instance)
+
 
 class DeliveryOrderViewSet(
     PermissionMixin, WorkflowEnforcementMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet
@@ -1656,6 +1683,13 @@ class DeliveryOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     serializer_class = DeliveryOrderLineSerializer
     filterset_fields = ['delivery', 'item', 'is_deleted']
     search_fields = ['item__sku', 'item__name', 'custom_name', 'custom_spec']
+
+    def perform_destroy(self, instance):
+        if instance.delivery.status != 'DRAFT':
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError('只有草稿发货单可以删除明细')
+        super().perform_destroy(instance)
 
 
 class SalesContractViewSet(

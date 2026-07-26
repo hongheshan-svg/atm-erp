@@ -298,6 +298,24 @@ class PeriodCloseCarryForwardTest(TestCase):
         # 未创建下期,不应产生任何新的余额行
         self.assertEqual(AccountBalance.objects.exclude(fiscal_period=p1).count(), 0)
 
+    def test_close_rejects_approved_but_unposted_voucher(self):
+        from apps.finance.accounting import JournalVoucher
+
+        period = self._period(2026, 7)
+        JournalVoucher.objects.create(
+            fiscal_period=period,
+            voucher_date='2026-07-10',
+            status='APPROVED',
+            debit_total=Decimal('100.00'),
+            credit_total=Decimal('100.00'),
+        )
+
+        resp = self.client.post(f'/api/finance/fiscal-periods/{period.pk}/close/', {}, format='json')
+
+        self.assertEqual(resp.status_code, 400)
+        period.refresh_from_db()
+        self.assertEqual(period.status, 'OPEN')
+
 
 class PaymentSoftDeleteReversesArApTest(TestCase):
     """P0 回归守卫:Payment.soft_delete 仍反核销 AR/AP 的已收(付)金额并回退状态。"""
