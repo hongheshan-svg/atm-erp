@@ -5,11 +5,12 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.accounts.models import Role
+from apps.core.permission_models_new import Permission, RolePermission
 from apps.core.workflow.flow_visualization import WorkflowDetailView
 from apps.core.workflow.models import WorkflowDefinition, WorkflowStep, WorkflowTask
 from apps.core.workflow.serializers import WorkflowDefinitionSerializer, WorkflowStepSerializer
 from apps.core.workflow.services import WorkflowService
-from apps.core.workflow.views import WorkflowInstanceViewSet, WorkflowTaskViewSet
+from apps.core.workflow.views import WorkflowDefinitionViewSet, WorkflowInstanceViewSet, WorkflowTaskViewSet
 
 User = get_user_model()
 
@@ -159,6 +160,39 @@ class WorkflowApiSecurityTest(TestCase):
         self.assertEqual(response.status_code, 405)
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, 'PENDING')
+
+
+class WorkflowConfigurationPermissionTest(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = User.objects.create_user(
+            username='workflow_config_user',
+            password='x',
+            employee_id='workflow_config_user',
+        )
+        self.role = Role.objects.create(name='流程权限测试', code='workflow_permission_test')
+        self.user.roles.add(self.role)
+
+    def _list_definitions(self):
+        request = self.factory.get('/definitions/')
+        force_authenticate(request, user=self.user)
+        return WorkflowDefinitionViewSet.as_view({'get': 'list'})(request)
+
+    def test_oa_participant_permission_cannot_read_workflow_configuration(self):
+        permission = Permission.objects.create(code='oa:workflow', name='审批中心', type='menu')
+        RolePermission.objects.create(role=self.role, permission=permission)
+
+        response = self._list_definitions()
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_workflow_config_permission_can_read_workflow_configuration(self):
+        permission = Permission.objects.create(code='workflow:config', name='审批设置', type='menu')
+        RolePermission.objects.create(role=self.role, permission=permission)
+
+        response = self._list_definitions()
+
+        self.assertEqual(response.status_code, 200)
 
 
 class WorkflowDefinitionGovernanceTest(TestCase):

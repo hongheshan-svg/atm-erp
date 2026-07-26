@@ -135,7 +135,7 @@
 
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px">
-      <el-form :model="form" ref="formRef" label-width="150px">
+      <el-form :model="form" :rules="projectFormRules" ref="formRef" label-width="150px">
         <el-form-item label="关联销售订单">
           <el-select
             v-model="form.sales_order"
@@ -203,23 +203,23 @@
         <el-form-item label="项目编号">
           <el-input v-model="form.code" placeholder="留空自动生成" />
         </el-form-item>
-        <el-form-item label="项目名称">
+        <el-form-item label="项目名称" prop="name">
           <el-input v-model="form.name" :placeholder="selectedOrder ? `建议：${selectedOrder.customer_name} - ${selectedOrder.lines?.[0]?.product_name || '定制产品'}` : '请输入项目名称'" />
         </el-form-item>
-        <el-form-item label="客户">
+        <el-form-item label="客户" prop="customer">
           <el-select v-model="form.customer" filterable placeholder="请选择客户">
             <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="项目经理">
+        <el-form-item label="项目经理" prop="manager">
           <el-select v-model="form.manager" filterable placeholder="请选择项目经理">
             <el-option v-for="u in users" :key="u.id" :label="getUserDisplayName(u)" :value="u.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="开始日期">
+        <el-form-item label="开始日期" prop="start_date">
           <el-date-picker v-model="form.start_date" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
-        <el-form-item label="结束日期">
+        <el-form-item label="结束日期" prop="end_date">
           <el-date-picker v-model="form.end_date" type="date" value-format="YYYY-MM-DD" :placeholder="selectedOrder ? `建议：${selectedOrder.delivery_date}` : ''" />
         </el-form-item>
         <el-form-item label="总预算">
@@ -281,6 +281,7 @@ import { usePermissionStore } from '@/stores/permission'
 import { getUsers } from '@/api/auth'
 import { getCustomerList } from '@/api/masterdata'
 import { getOrdersForLinking } from '@/api/sales'
+import { projectFormRules } from '@/utils/businessPricing'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -539,9 +540,8 @@ const handleEdit = async (row: any) => {
 // 删除功能已迁移到 useBatchDelete composable
 
 const handleSubmit = async () => {
-  // 验证必填字段（项目编号可留空自动生成）
-  if (!form.name || !form.customer || !form.manager || !form.start_date || !form.end_date) {
-    ElMessage.warning('请填写所有必填字段（项目名称、客户、项目经理、开始日期、结束日期）')
+  const isValid = await formRef.value?.validate().catch(() => false)
+  if (!isValid) {
     return
   }
 

@@ -6,12 +6,25 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_service import (
+    apply_scope_filter,
+    get_user_menu_permissions,
+    resolve_data_scope,
+)
+
 
 class GlobalSearchViewSet(viewsets.ViewSet):
     """Search the primary business entities without an external search service."""
 
     permission_classes = [IsAuthenticated]
     search_types = {'items', 'customers', 'suppliers', 'projects', 'tasks'}
+    search_policies = {
+        'items': {'menus': ('supply:stock',), 'scope_module': None},
+        'customers': {'menus': ('sales:customer',), 'scope_module': None},
+        'suppliers': {'menus': ('supply:supplier',), 'scope_module': None},
+        'projects': {'menus': ('projects:list',), 'scope_module': 'projects'},
+        'tasks': {'menus': ('projects:task',), 'scope_module': 'projects'},
+    }
 
     @action(detail=False, methods=['get'])
     def search(self, request):
@@ -24,7 +37,14 @@ class GlobalSearchViewSet(viewsets.ViewSet):
         if search_type and search_type not in self.search_types:
             return Response({'error': f'Invalid type: {search_type}'}, status=status.HTTP_400_BAD_REQUEST)
 
-        types_to_search = {search_type} if search_type else self.search_types
+        if search_type and not self._can_search_type(request.user, search_type):
+            return Response({'error': f'Permission denied for type: {search_type}'}, status=status.HTTP_403_FORBIDDEN)
+
+        types_to_search = (
+            {search_type}
+            if search_type
+            else {candidate for candidate in self.search_types if self._can_search_type(request.user, candidate)}
+        )
         return Response(self._database_search(query, types_to_search, limit))
 
     @action(detail=False, methods=['get'])
@@ -35,6 +55,8 @@ class GlobalSearchViewSet(viewsets.ViewSet):
 
         if search_type not in self.search_types:
             return Response({'error': f'Invalid type: {search_type}'}, status=status.HTTP_400_BAD_REQUEST)
+        if not self._can_search_type(request.user, search_type):
+            return Response({'error': f'Permission denied for type: {search_type}'}, status=status.HTTP_403_FORBIDDEN)
         if len(query) < 2:
             return Response({'suggestions': []})
 
@@ -51,6 +73,7 @@ class GlobalSearchViewSet(viewsets.ViewSet):
         results = {}
         for search_type in sorted(search_types):
             queryset = self._database_queryset(query, search_type)
+            queryset = self._apply_search_scope(queryset, search_type)
             hits = [self._format_database_hit(obj, search_type) for obj in queryset[:limit]]
             results[search_type] = {'total': queryset.count(), 'hits': hits}
         return {
@@ -61,6 +84,7 @@ class GlobalSearchViewSet(viewsets.ViewSet):
 
     def _database_suggestions(self, query, search_type, limit):
         queryset = self._database_queryset(query, search_type)
+        queryset = self._apply_search_scope(queryset, search_type)
         return [
             {
                 'id': obj.id,
@@ -70,6 +94,22 @@ class GlobalSearchViewSet(viewsets.ViewSet):
             }
             for obj in queryset[:limit]
         ]
+
+    def _can_search_type(self, user, search_type):
+        if user.is_superuser:
+            return True
+        user_menus = get_user_menu_permissions(user)
+        return any(
+            granted == required or required.startswith(granted + ':')
+            for required in self.search_policies[search_type]['menus']
+            for granted in user_menus
+        )
+
+    def _apply_search_scope(self, queryset, search_type):
+        module = self.search_policies[search_type]['scope_module']
+        if not module:
+            return queryset
+        return apply_scope_filter(queryset, self.request.user, resolve_data_scope(self.request.user, module))
 
     @staticmethod
     def _database_queryset(query, search_type):
@@ -128,8 +168,6 @@ class GlobalSearchViewSet(viewsets.ViewSet):
                 {
                     'code': obj.code,
                     'name': obj.name,
-                    'contact_person': obj.contact_person,
-                    'phone': obj.phone,
                 }
             )
         elif search_type == 'projects':

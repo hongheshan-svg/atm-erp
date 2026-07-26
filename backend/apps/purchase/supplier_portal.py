@@ -7,18 +7,29 @@ import secrets
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth.password_validation import validate_password
+from django.core import signing
+from django.core.exceptions import ValidationError
+from django.core.signing import BadSignature, SignatureExpired
 from django.db import models
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, viewsets
+from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permission_mixin import PermissionMixin
+from apps.core.permission_service import get_user_menu_permissions
 
 User = settings.AUTH_USER_MODEL
+SUPPLIER_PORTAL_TOKEN_SALT = 'purchase.supplier-portal'
 
 
 class SupplierAccount(BaseModel):
@@ -54,7 +65,80 @@ class SupplierAccount(BaseModel):
         return check_password(raw_password, self.password_hash)
 
     def generate_token(self):
-        return secrets.token_urlsafe(32)
+        return signing.dumps(
+            {'account_id': self.pk, 'session': self._token_session_fingerprint()},
+            salt=SUPPLIER_PORTAL_TOKEN_SALT,
+            compress=True,
+        )
+
+    def _token_session_fingerprint(self):
+        return salted_hmac(SUPPLIER_PORTAL_TOKEN_SALT, self.password_hash).hexdigest()
+
+
+class SupplierPortalAuthentication(BaseAuthentication):
+    """Authenticate the signed, password-bound supplier portal session."""
+
+    keyword = 'Supplier'
+
+    def authenticate(self, request):
+        auth = get_authorization_header(request).split()
+        if not auth or auth[0].decode(errors='ignore').lower() != self.keyword.lower():
+            return None
+        if len(auth) != 2:
+            raise AuthenticationFailed('Invalid supplier portal token')
+
+        try:
+            token = auth[1].decode()
+            payload = signing.loads(
+                token,
+                salt=SUPPLIER_PORTAL_TOKEN_SALT,
+                max_age=getattr(settings, 'SUPPLIER_PORTAL_TOKEN_MAX_AGE', 8 * 60 * 60),
+            )
+            account = SupplierAccount.objects.select_related('supplier').get(
+                pk=payload.get('account_id'),
+                is_active=True,
+                is_deleted=False,
+            )
+        except (BadSignature, SignatureExpired, SupplierAccount.DoesNotExist, UnicodeDecodeError, ValueError):
+            raise AuthenticationFailed('Invalid or expired supplier portal token') from None
+
+        if not secrets.compare_digest(payload.get('session', ''), account._token_session_fingerprint()):
+            raise AuthenticationFailed('Invalid or expired supplier portal token')
+
+        # Supplier accounts are not ERP users. Keeping request.user anonymous
+        # prevents accidental assignment to internal User foreign keys.
+        return AnonymousUser(), account
+
+    def authenticate_header(self, request):
+        return self.keyword
+
+
+class IsSupplierPortalAccount(BasePermission):
+    """Require a supplier session bound to the supplier_id in the URL."""
+
+    message = 'Supplier portal access denied'
+
+    def has_permission(self, request, view):
+        account = request.auth
+        if not isinstance(account, SupplierAccount):
+            return False
+        supplier_id = view.kwargs.get('supplier_id')
+        if supplier_id is not None and account.supplier_id != supplier_id:
+            return False
+        capability = getattr(view, 'supplier_capability', None)
+        return not capability or bool(getattr(account, capability, False))
+
+
+class HasSupplierManagementPermission(BasePermission):
+    """Gate internal supplier collaboration dashboards by their exact menu."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        menus = get_user_menu_permissions(request.user)
+        return any(code == 'supply:supplier' or 'supply:supplier'.startswith(code + ':') for code in menus)
 
 
 class SupplierOrderView(BaseModel):
@@ -295,21 +379,30 @@ class SupplierMessageSerializer(serializers.ModelSerializer):
 # ==================== ViewSets ====================
 
 
-class SupplierAccountViewSet(viewsets.ModelViewSet):
+class SupplierAccountViewSet(PermissionMixin, viewsets.ModelViewSet):
     """供应商账户管理（内部管理）"""
 
-    queryset = SupplierAccount.objects.filter(is_deleted=False)
+    queryset = SupplierAccount.objects.filter(is_deleted=False).order_by('id')
     serializer_class = SupplierAccountSerializer
+    permission_module = 'purchase'
+    permission_resource = 'supplier_account'
+    permission_menu_codes = ('supply:supplier',)
     permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['post'])
     def reset_password(self, request, pk=None):
         """重置密码"""
         account = self.get_object()
-        new_password = request.data.get('password', secrets.token_urlsafe(8))
+        new_password = request.data.get('password')
+        if not new_password:
+            return Response({'password': ['This field is required.']}, status=400)
+        try:
+            validate_password(new_password)
+        except ValidationError as exc:
+            return Response({'password': list(exc.messages)}, status=400)
         account.set_password(new_password)
         account.save()
-        return Response({'message': '密码已重置', 'new_password': new_password})
+        return Response({'message': '密码已重置'})
 
     @action(detail=True, methods=['post'])
     def toggle_active(self, request, pk=None):
@@ -320,11 +413,14 @@ class SupplierAccountViewSet(viewsets.ModelViewSet):
         return Response({'is_active': account.is_active})
 
 
-class SupplierOrderViewViewSet(viewsets.ModelViewSet):
+class SupplierOrderViewViewSet(PermissionMixin, viewsets.ModelViewSet):
     """供应商订单视图管理"""
 
     queryset = SupplierOrderView.objects.filter(is_deleted=False)
     serializer_class = SupplierOrderViewSerializer
+    permission_module = 'purchase'
+    permission_resource = 'supplier_order_view'
+    permission_menu_codes = ('supply:supplier',)
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -340,11 +436,14 @@ class SupplierOrderViewViewSet(viewsets.ModelViewSet):
         return qs.select_related('purchase_order', 'supplier')
 
 
-class SupplierQualityRecordViewSet(viewsets.ModelViewSet):
+class SupplierQualityRecordViewSet(PermissionMixin, viewsets.ModelViewSet):
     """供应商质量记录管理"""
 
     queryset = SupplierQualityRecord.objects.filter(is_deleted=False)
     serializer_class = SupplierQualityRecordSerializer
+    permission_module = 'purchase'
+    permission_resource = 'supplier_quality_record'
+    permission_menu_codes = ('supply:supplier',)
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -361,6 +460,7 @@ class SupplierQualityRecordViewSet(viewsets.ModelViewSet):
 class SupplierPortalLoginView(APIView):
     """供应商登录"""
 
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -399,7 +499,9 @@ class SupplierPortalLoginView(APIView):
 class SupplierPortalOrdersView(APIView):
     """供应商订单列表（门户）"""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [SupplierPortalAuthentication]
+    permission_classes = [IsSupplierPortalAccount]
+    supplier_capability = 'can_view_orders'
 
     @extend_schema(operation_id='purchase_supplier_portal_orders_list')
     def get(self, request, supplier_id):
@@ -435,7 +537,9 @@ class SupplierPortalOrdersView(APIView):
 class SupplierPortalOrderDetailView(APIView):
     """供应商订单详情（门户）"""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [SupplierPortalAuthentication]
+    permission_classes = [IsSupplierPortalAccount]
+    supplier_capability = 'can_view_orders'
 
     @extend_schema(operation_id='purchase_supplier_portal_order_detail')
     def get(self, request, supplier_id, order_view_id):
@@ -500,6 +604,8 @@ class SupplierPortalOrderDetailView(APIView):
         action = request.data.get('action')
 
         if action == 'confirm':
+            if not request.auth.can_confirm_orders:
+                return Response({'error': '无权确认订单'}, status=403)
             # 确认订单
             view.confirmed = True
             view.confirmed_at = timezone.now()
@@ -510,6 +616,8 @@ class SupplierPortalOrderDetailView(APIView):
             return Response({'message': '订单已确认'})
 
         elif action == 'reject':
+            if not request.auth.can_confirm_orders:
+                return Response({'error': '无权拒绝订单'}, status=403)
             # 拒绝订单
             view.confirmed = False
             view.rejection_reason = request.data.get('reason', '')
@@ -518,10 +626,21 @@ class SupplierPortalOrderDetailView(APIView):
             return Response({'message': '已拒绝订单'})
 
         elif action == 'update_progress':
+            if not request.auth.can_update_progress:
+                return Response({'error': '无权更新进度'}, status=403)
             # 更新进度
             new_status = request.data.get('status')
             new_percentage = request.data.get('percentage', view.progress_percentage)
             remarks = request.data.get('remarks', '')
+            valid_statuses = {choice[0] for choice in SupplierOrderView.PROGRESS_CHOICES}
+            if new_status not in valid_statuses:
+                return Response({'error': '无效进度状态'}, status=400)
+            try:
+                new_percentage = int(new_percentage)
+            except (TypeError, ValueError):
+                return Response({'error': '进度百分比必须是整数'}, status=400)
+            if not 0 <= new_percentage <= 100:
+                return Response({'error': '进度百分比必须在0到100之间'}, status=400)
 
             view.progress_status = new_status
             view.progress_percentage = new_percentage
@@ -534,8 +653,6 @@ class SupplierPortalOrderDetailView(APIView):
                 progress_status=new_status,
                 progress_percentage=new_percentage,
                 remarks=remarks,
-                created_by=request.user,
-                updated_by=request.user,
             )
 
             return Response({'message': '进度已更新'})
@@ -546,7 +663,9 @@ class SupplierPortalOrderDetailView(APIView):
 class SupplierPortalQualityView(APIView):
     """供应商质量记录（门户）"""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [SupplierPortalAuthentication]
+    permission_classes = [IsSupplierPortalAccount]
+    supplier_capability = 'can_view_quality'
 
     def get(self, request, supplier_id):
         base = SupplierQualityRecord.objects.filter(supplier_id=supplier_id, is_deleted=False)
@@ -588,7 +707,8 @@ class SupplierPortalQualityView(APIView):
 class SupplierPortalMessagesView(APIView):
     """供应商消息（门户）"""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [SupplierPortalAuthentication]
+    permission_classes = [IsSupplierPortalAccount]
 
     def get(self, request, supplier_id):
         base = SupplierMessage.objects.filter(supplier_id=supplier_id, is_deleted=False)
@@ -599,14 +719,23 @@ class SupplierPortalMessagesView(APIView):
 
     def post(self, request, supplier_id):
         """发送消息"""
+        purchase_order_id = request.data.get('order_id')
+        if (
+            purchase_order_id
+            and not SupplierOrderView.objects.filter(
+                supplier_id=supplier_id,
+                purchase_order_id=purchase_order_id,
+                is_deleted=False,
+            ).exists()
+        ):
+            return Response({'error': '订单不存在'}, status=400)
+
         SupplierMessage.objects.create(
             supplier_id=supplier_id,
-            purchase_order_id=request.data.get('order_id'),
+            purchase_order_id=purchase_order_id,
             subject=request.data.get('subject'),
             content=request.data.get('content'),
             from_supplier=True,
-            created_by=request.user,
-            updated_by=request.user,
         )
 
         return Response({'message': '消息已发送'})
@@ -615,7 +744,7 @@ class SupplierPortalMessagesView(APIView):
 class SupplierDashboardView(APIView):
     """供应商协同看板（内部）"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasSupplierManagementPermission]
 
     def get(self, request):
         # 统计数据

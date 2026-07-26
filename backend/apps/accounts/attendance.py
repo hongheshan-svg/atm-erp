@@ -985,28 +985,27 @@ class LeaveRequestViewSet(
         days = (leave.end_date - leave.start_date).days + 1
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='LEAVE_REQUEST',
-                business_id=leave.id,
-                business_no=f'LEAVE-{leave.id}',
-                submitter=request.user,
-                amount=days,  # 使用天数作为金额阈值
+            result = self.start_workflow_or_auto_approve(
+                leave,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='PENDING',
+                amount_override=days,
+                business_no_override=f'LEAVE-{leave.id}',
             )
 
-            if instance:
+            if result['workflow_started']:
                 leave.status = 'PENDING'
                 leave.save()
                 return Response(
                     {
                         **self.get_serializer(leave).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，自动批准
                 leave.status = 'APPROVED'
                 leave.approver = request.user
@@ -1029,19 +1028,17 @@ class LeaveRequestViewSet(
                         **self.get_serializer(leave).data,
                         'workflow_started': False,
                         'auto_approved': True,
-                        'message': error or '未配置审批流程，已自动批准',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=503)
+
         except Exception as e:
-            # 工作流服务异常，自动批准
-            logger.warning(f'工作流服务异常，请假申请 LEAVE-{leave.id} 自动批准: {e}')
-            leave.status = 'APPROVED'
-            leave.approver = request.user
-            leave.approved_at = timezone.now()
-            leave.save()
+            logger.exception('请假申请提交工作流异常 leave_id=%s', leave.id)
             return Response(
-                {**self.get_serializer(leave).data, 'auto_approved': True, 'message': '工作流服务不可用，已自动批准'}
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=503,
             )
 
     @action(detail=True, methods=['post'])
@@ -1194,28 +1191,27 @@ class OvertimeRequestViewSet(
             return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='OVERTIME_REQUEST',
-                business_id=overtime.id,
-                business_no=f'OT-{overtime.id}',
-                submitter=request.user,
-                amount=overtime.hours,  # 使用小时数作为参数
+            result = self.start_workflow_or_auto_approve(
+                overtime,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='PENDING',
+                amount_override=overtime.hours,
+                business_no_override=f'OT-{overtime.id}',
             )
 
-            if instance:
+            if result['workflow_started']:
                 overtime.status = 'PENDING'
                 overtime.save()
                 return Response(
                     {
                         **self.get_serializer(overtime).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，自动批准
                 overtime.status = 'APPROVED'
                 overtime.approver = request.user
@@ -1236,19 +1232,17 @@ class OvertimeRequestViewSet(
                         **self.get_serializer(overtime).data,
                         'workflow_started': False,
                         'auto_approved': True,
-                        'message': error or '未配置审批流程，已自动批准',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=503)
+
         except Exception as e:
-            # 工作流服务异常，自动批准
-            logger.warning(f'工作流服务异常，加班申请 OT-{overtime.id} 自动批准: {e}')
-            overtime.status = 'APPROVED'
-            overtime.approver = request.user
-            overtime.approved_at = timezone.now()
-            overtime.save()
+            logger.exception('加班申请提交工作流异常 overtime_id=%s', overtime.id)
             return Response(
-                {**self.get_serializer(overtime).data, 'auto_approved': True, 'message': '工作流服务不可用，已自动批准'}
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=503,
             )
 
     @action(detail=True, methods=['post'])

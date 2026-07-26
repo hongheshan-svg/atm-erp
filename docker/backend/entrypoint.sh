@@ -22,13 +22,16 @@ if [ "${RUN_BOOTSTRAP:-0}" = "1" ]; then
     echo "Ensuring finance master data..."
     python manage.py init_finance
 
+    echo "Synchronizing permissions with frontend routes..."
+    python manage.py init_permissions
+    python manage.py sync_frontend_menu_permissions
+
     echo "Collecting static files..."
     python manage.py collectstatic --noinput
 
     MARKER="/app/logs/.bootstrapped"
     if [ ! -f "$MARKER" ]; then
         echo "First-time bootstrap: permissions / roles / widgets / workflows..."
-        python manage.py init_permissions
         python manage.py init_roles --force
         python manage.py init_dashboard_widgets
         python manage.py init_workflows 2>/dev/null || echo "init_workflows skipped"

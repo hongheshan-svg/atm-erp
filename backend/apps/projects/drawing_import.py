@@ -22,6 +22,8 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+
 logger = logging.getLogger(__name__)
 
 
@@ -558,9 +560,11 @@ class BatchDrawingImportSerializer(serializers.Serializer):
 
 
 # ViewSet
-class DrawingImportViewSet(viewsets.ViewSet):
+class DrawingImportViewSet(PermissionMixin, viewsets.ViewSet):
     """图纸导入与关联管理"""
 
+    permission_module = 'projects'
+    permission_resource = 'drawing_import'
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser]
 

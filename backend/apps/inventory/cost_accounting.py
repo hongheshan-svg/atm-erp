@@ -8,7 +8,7 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import models
-from django.db.models import Avg, Sum
+from django.db.models import Avg, Q, Sum
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -357,22 +357,69 @@ class CostCalculationService:
     @staticmethod
     def generate_period_summary(year: int, month: int, warehouse_id: int = None):
         """生成期间成本汇总"""
+        from apps.inventory.models import Stock, StockMove
         from apps.masterdata.models import Item
 
-        items = Item.objects.filter(is_deleted=False)
+        period_start = date(year, month, 1)
+        period_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        prev_month = month - 1 if month > 1 else 12
+        prev_year = year if month > 1 else year - 1
+
+        stocks = Stock.objects.filter(is_deleted=False)
+        cost_records = ItemCostRecord.objects.filter(is_deleted=False)
+        previous_summaries = PeriodCostSummary.objects.filter(
+            period_year=prev_year,
+            period_month=prev_month,
+            is_deleted=False,
+        )
+        period_moves = StockMove.objects.filter(
+            status='COMPLETED',
+            move_date__gte=period_start,
+            move_date__lt=period_end,
+            is_deleted=False,
+        )
+
+        if warehouse_id:
+            stocks = stocks.filter(warehouse_id=warehouse_id)
+            cost_records = cost_records.filter(warehouse_id=warehouse_id)
+            previous_summaries = previous_summaries.filter(warehouse_id=warehouse_id)
+            period_moves = period_moves.filter(Q(warehouse_from_id=warehouse_id) | Q(warehouse_to_id=warehouse_id))
+
+        pairs = set(stocks.values_list('item_id', 'warehouse_id'))
+        pairs.update(cost_records.values_list('item_id', 'warehouse_id'))
+        pairs.update(previous_summaries.values_list('item_id', 'warehouse_id'))
+        for item_id, warehouse_from_id, warehouse_to_id in period_moves.values_list(
+            'item_id', 'warehouse_from_id', 'warehouse_to_id'
+        ):
+            if warehouse_from_id and (not warehouse_id or warehouse_from_id == warehouse_id):
+                pairs.add((item_id, warehouse_from_id))
+            if warehouse_to_id and (not warehouse_id or warehouse_to_id == warehouse_id):
+                pairs.add((item_id, warehouse_to_id))
+
+        # Older versions generated one warehouse=NULL aggregate row per item. It cannot
+        # support warehouse valuation and would double-count after per-warehouse generation.
+        if not warehouse_id:
+            PeriodCostSummary.objects.filter(
+                period_year=year,
+                period_month=month,
+                warehouse__isnull=True,
+                is_closed=False,
+            ).delete()
+
+        items = Item.objects.in_bulk(item_id for item_id, _warehouse_id in pairs)
         summaries = []
 
-        for item in items:
-            filters = {'item': item, 'is_deleted': False}
-            if warehouse_id:
-                filters['warehouse_id'] = warehouse_id
+        for item_id, pair_warehouse_id in sorted(pairs):
+            item = items.get(item_id)
+            if item is None or pair_warehouse_id is None:
+                continue
 
             # 获取期初（上月期末）
-            prev_month = month - 1 if month > 1 else 12
-            prev_year = year if month > 1 else year - 1
-
             prev_summary = PeriodCostSummary.objects.filter(
-                item=item, period_year=prev_year, period_month=prev_month, warehouse_id=warehouse_id
+                item_id=item_id,
+                warehouse_id=pair_warehouse_id,
+                period_year=prev_year,
+                period_month=prev_month,
             ).first()
 
             if prev_summary:
@@ -382,27 +429,53 @@ class CostCalculationService:
                 opening_qty = Decimal('0')
                 opening_cost = Decimal('0')
 
-            # 计算本期入库
-            in_records = ItemCostRecord.objects.filter(
-                item=item, transaction_date__year=year, transaction_date__month=month, quantity__gt=0, is_deleted=False
+            pair_records = ItemCostRecord.objects.filter(
+                item_id=item_id,
+                warehouse_id=pair_warehouse_id,
+                transaction_date__gte=period_start,
+                transaction_date__lt=period_end,
+                is_deleted=False,
             )
-            if warehouse_id:
-                in_records = in_records.filter(warehouse_id=warehouse_id)
 
-            in_agg = in_records.aggregate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'))
+            in_agg = pair_records.filter(quantity__gt=0).aggregate(
+                total_qty=Sum('quantity'), total_cost=Sum('total_cost')
+            )
             in_qty = in_agg['total_qty'] or Decimal('0')
             in_cost = in_agg['total_cost'] or Decimal('0')
 
-            # 计算本期出库
-            out_records = ItemCostRecord.objects.filter(
-                item=item, transaction_date__year=year, transaction_date__month=month, quantity__lt=0, is_deleted=False
+            out_agg = pair_records.filter(quantity__lt=0).aggregate(
+                total_qty=Sum('quantity'), total_cost=Sum('total_cost')
             )
-            if warehouse_id:
-                out_records = out_records.filter(warehouse_id=warehouse_id)
-
-            out_agg = out_records.aggregate(total_qty=Sum('quantity'), total_cost=Sum('total_cost'))
             out_qty = abs(out_agg['total_qty'] or Decimal('0'))
             out_cost = abs(out_agg['total_cost'] or Decimal('0'))
+
+            # A cost configuration may be enabled after inventory movements already
+            # completed. Recover only moves that have no matching ledger reference so
+            # period generation remains accurate and idempotent without double-counting.
+            recorded_move_nos = set(pair_records.exclude(reference_no='').values_list('reference_no', flat=True))
+            missing_moves = (
+                period_moves.filter(item_id=item_id)
+                .filter(Q(warehouse_from_id=pair_warehouse_id) | Q(warehouse_to_id=pair_warehouse_id))
+                .exclude(move_no__in=recorded_move_nos)
+            )
+            stock = stocks.filter(item_id=item_id, warehouse_id=pair_warehouse_id).first()
+            fallback_unit_cost = Decimal('0')
+            if opening_qty > 0:
+                fallback_unit_cost = opening_cost / opening_qty
+            elif stock:
+                fallback_unit_cost = stock.weighted_avg_cost
+            elif item.standard_cost:
+                fallback_unit_cost = item.standard_cost
+
+            for move in missing_moves:
+                move_unit_cost = move.unit_cost if move.unit_cost > 0 else fallback_unit_cost
+                move_cost = (move.qty * move_unit_cost).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                if move.warehouse_to_id == pair_warehouse_id:
+                    in_qty += move.qty
+                    in_cost += move_cost
+                if move.warehouse_from_id == pair_warehouse_id:
+                    out_qty += move.qty
+                    out_cost += move_cost
 
             # 计算期末
             closing_qty = opening_qty + in_qty - out_qty
@@ -414,8 +487,8 @@ class CostCalculationService:
             )
 
             summary, created = PeriodCostSummary.objects.update_or_create(
-                item=item,
-                warehouse_id=warehouse_id,
+                item_id=item_id,
+                warehouse_id=pair_warehouse_id,
                 period_year=year,
                 period_month=month,
                 defaults={
@@ -451,7 +524,7 @@ class InventoryCostConfigSerializer(serializers.ModelSerializer):
 
 
 class ItemCostRecordSerializer(serializers.ModelSerializer):
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
@@ -462,7 +535,7 @@ class ItemCostRecordSerializer(serializers.ModelSerializer):
 
 
 class PeriodCostSummarySerializer(serializers.ModelSerializer):
-    item_code = serializers.CharField(source='item.code', read_only=True)
+    item_code = serializers.CharField(source='item.sku', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
 

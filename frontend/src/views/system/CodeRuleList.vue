@@ -21,13 +21,11 @@
       <el-form :inline="true" class="search-form">
         <el-form-item label="规则类型">
           <el-select v-model="searchForm.rule_type" placeholder="全部" clearable style="width: 200px;" @change="fetchRules">
-            <el-option label="全部" :value="null" />
             <el-option v-for="type in ruleTypes" :key="type.value" :label="type.label" :value="type.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.is_active" placeholder="全部" clearable style="width: 120px;" @change="fetchRules">
-            <el-option label="全部" :value="null" />
             <el-option label="启用" :value="true" />
             <el-option label="停用" :value="false" />
           </el-select>

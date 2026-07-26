@@ -14,7 +14,13 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.inventory.batch_models import InventoryLot, LotConsumption
-from apps.inventory.cost_accounting import InventoryCostConfig, ItemCostRecord
+from apps.inventory.cost_accounting import (
+    CostCalculationService,
+    InventoryCostConfig,
+    ItemCostRecord,
+    PeriodCostSummary,
+    PeriodCostSummarySerializer,
+)
 from apps.inventory.cost_methods import FIFOCostingService
 from apps.inventory.models import Stock, StockMove
 from apps.masterdata.models import Item, Warehouse
@@ -79,6 +85,55 @@ class CostLedgerRecordingTest(TestCase):
         )
         self.assertIsNotNone(out_rec)
         self.assertEqual(out_rec.unit_cost, Decimal('8.0000'))  # 结存加权成本,非 0
+
+
+class PeriodCostSummaryGenerationTest(TestCase):
+    def setUp(self):
+        self.wh = Warehouse.objects.create(code='WH_SUM', name='汇总仓')
+        self.item = Item.objects.create(sku='SKU_SUM', name='汇总物料')
+
+    def _inbound(self, qty='4', unit_cost='1234.56'):
+        return StockMove.objects.create(
+            item=self.item,
+            warehouse_to=self.wh,
+            qty=Decimal(qty),
+            unit_cost=Decimal(unit_cost),
+            move_type='IN_PURCHASE',
+            move_date=date.today(),
+            status='COMPLETED',
+        )
+
+    def test_generates_warehouse_summary_from_cost_ledger(self):
+        InventoryCostConfig.objects.create(name='默认', costing_method='WEIGHTED_AVG', is_active=True)
+        self._inbound()
+
+        CostCalculationService.generate_period_summary(date.today().year, date.today().month)
+
+        summary = PeriodCostSummary.objects.get(item=self.item, warehouse=self.wh)
+        self.assertEqual(summary.in_qty, Decimal('4.0000'))
+        self.assertEqual(summary.in_cost, Decimal('4938.24'))
+        self.assertEqual(summary.closing_qty, Decimal('4.0000'))
+        self.assertEqual(summary.closing_cost, Decimal('4938.24'))
+
+    def test_recovers_completed_moves_missing_from_cost_ledger(self):
+        move = self._inbound()
+        self.assertFalse(ItemCostRecord.objects.filter(reference_no=move.move_no).exists())
+
+        CostCalculationService.generate_period_summary(date.today().year, date.today().month)
+
+        summary = PeriodCostSummary.objects.get(item=self.item, warehouse=self.wh)
+        self.assertEqual(summary.in_qty, Decimal('4.0000'))
+        self.assertEqual(summary.in_cost, Decimal('4938.24'))
+
+    def test_summary_serializer_uses_item_sku(self):
+        summary = PeriodCostSummary.objects.create(
+            item=self.item,
+            warehouse=self.wh,
+            period_year=date.today().year,
+            period_month=date.today().month,
+        )
+
+        self.assertEqual(PeriodCostSummarySerializer(summary).data['item_code'], 'SKU_SUM')
 
 
 class FIFOConsumptionTest(TestCase):

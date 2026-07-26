@@ -60,7 +60,7 @@ class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     permission_module = 'system'
     permission_resource = 'workflow_definition'
-    allow_authenticated_read = True
+    permission_menu_codes = ('workflow:config',)
     queryset = WorkflowDefinition.objects.filter(is_deleted=False)
     serializer_class = WorkflowDefinitionSerializer
     filterset_fields = ['business_type', 'is_active']
@@ -93,6 +93,7 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     permission_module = 'system'
     permission_resource = 'workflow_step'
+    permission_menu_codes = ('workflow:config',)
     queryset = WorkflowStep.objects.filter(is_deleted=False)
     serializer_class = WorkflowStepSerializer
     filterset_fields = ['workflow', 'approver_type']
@@ -167,7 +168,7 @@ class WorkflowInstanceViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, view
     search_fields = ['business_no']
 
     def check_permissions(self, request):
-        if getattr(self, 'action', None) == 'withdraw':
+        if getattr(self, 'action', None) in {'my_submitted', 'history', 'progress', 'by_business', 'withdraw'}:
             return viewsets.ModelViewSet.check_permissions(self, request)
         return super().check_permissions(request)
 

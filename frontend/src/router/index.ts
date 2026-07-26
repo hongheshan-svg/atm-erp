@@ -1024,7 +1024,7 @@ const routes = [
         path: 'workflow/config',
         name: 'WorkflowConfig',
         component: () => import('@/views/workflow/WorkflowConfig.vue'),
-        meta: { title: '审批设置', icon: 'Setting', menuId: 'oa:workflow' }
+        meta: { title: '审批设置', icon: 'Setting', menuId: 'workflow:config' }
       },
       // 考勤
       {

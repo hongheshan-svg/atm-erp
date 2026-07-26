@@ -76,18 +76,18 @@ class GetUserPermissionsTest(TestCase):
         self.assertNotIn('sales:order', permissions)
 
     def test_caches_result(self):
-        """Test that permissions are cached"""
+        """Direct role-permission mutations must invalidate cached grants."""
         # First call
         permissions1 = get_user_permissions(self.user)
 
-        # Add new permission to role (should not affect cached result)
+        # Add new permission through the model API.
         RolePermission.objects.create(role=self.role, permission=self.perm3)
 
-        # Second call should return cached result
+        # Security policy changes must be visible immediately.
         permissions2 = get_user_permissions(self.user)
 
-        self.assertEqual(permissions1, permissions2)
-        self.assertNotIn('sales:order', permissions2)
+        self.assertNotEqual(permissions1, permissions2)
+        self.assertIn('sales:order', permissions2)
 
     def test_excludes_inactive_roles(self):
         """Test that inactive roles are excluded"""
@@ -295,6 +295,36 @@ class CacheInvalidationTest(TestCase):
 
         self.assertIsNone(cache.get(cache_key))
 
+    def test_role_permission_delete_immediately_revokes_cached_permission(self):
+        get_user_permissions(self.user)
+
+        role_permission = RolePermission.objects.get(role=self.role, permission=self.perm1)
+        role_permission.delete()
+
+        self.assertNotIn('purchase:order', get_user_permissions(self.user))
+
+    def test_permission_deactivation_immediately_revokes_cached_permission(self):
+        get_user_permissions(self.user)
+
+        self.perm1.is_active = False
+        self.perm1.save(update_fields=['is_active'])
+
+        self.assertNotIn('purchase:order', get_user_permissions(self.user))
+
+    def test_permission_soft_delete_immediately_revokes_cached_permission(self):
+        get_user_permissions(self.user)
+
+        self.perm1.soft_delete()
+
+        self.assertNotIn('purchase:order', get_user_permissions(self.user))
+
+    def test_role_soft_delete_immediately_revokes_cached_permissions(self):
+        get_user_permissions(self.user)
+
+        self.role.soft_delete()
+
+        self.assertEqual(get_user_permissions(self.user), set())
+
 
 class ResolveDataScopeTest(TestCase):
     """Test resolve_data_scope function"""
@@ -337,15 +367,13 @@ class ResolveDataScopeTest(TestCase):
         self.assertEqual(custom_dept_ids, [])
 
     def test_module_override(self):
-        """Test that module-specific scope overrides default scope"""
-        # Create default scope
-        DataScope.objects.create(role=self.role_manager, module='__default__', scope_type='self')
-        # Create module-specific scope
-        DataScope.objects.create(role=self.role_manager, module='projects', scope_type='dept_tree')
+        """A module-specific scope must override that role's global scope."""
+        DataScope.objects.create(role=self.role_manager, module='', scope_type='all')
+        DataScope.objects.create(role=self.role_manager, module='projects', scope_type='self')
 
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
-        self.assertEqual(scope_type, 'dept_tree')
+        self.assertEqual(scope_type, 'self')
         self.assertEqual(custom_dept_ids, [])
 
     def test_multi_role_takes_widest(self):
@@ -376,12 +404,87 @@ class ResolveDataScopeTest(TestCase):
         self.assertIn(self.dept_purchase.id, custom_dept_ids)
         self.assertEqual(len(custom_dept_ids), 2)
 
+    def test_data_scope_update_immediately_invalidates_cache(self):
+        data_scope = DataScope.objects.create(role=self.role_manager, module='projects', scope_type='all')
+        self.assertEqual(resolve_data_scope(self.user, 'projects')[0], 'all')
+
+        data_scope.scope_type = 'self'
+        data_scope.save(update_fields=['scope_type'])
+
+        self.assertEqual(resolve_data_scope(self.user, 'projects')[0], 'self')
+
+    def test_custom_department_change_immediately_invalidates_cache(self):
+        data_scope = DataScope.objects.create(role=self.role_manager, module='projects', scope_type='custom')
+        data_scope.custom_departments.add(self.dept_sales)
+        self.assertEqual(resolve_data_scope(self.user, 'projects')[1], [self.dept_sales.id])
+
+        data_scope.custom_departments.add(self.dept_purchase)
+
+        self.assertCountEqual(
+            resolve_data_scope(self.user, 'projects')[1],
+            [self.dept_sales.id, self.dept_purchase.id],
+        )
+
+    def test_multiple_custom_scope_roles_union_departments(self):
+        second_role = Role.objects.create(name='第二角色', code='second_role', is_active=True)
+        self.user.roles.add(second_role)
+        first_scope = DataScope.objects.create(role=self.role_manager, module='projects', scope_type='custom')
+        first_scope.custom_departments.add(self.dept_sales)
+        second_scope = DataScope.objects.create(role=second_role, module='projects', scope_type='custom')
+        second_scope.custom_departments.add(self.dept_purchase)
+
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        self.assertEqual(scope_type, 'custom')
+        self.assertCountEqual(custom_dept_ids, [self.dept_sales.id, self.dept_purchase.id])
+
+    def test_custom_and_department_tree_roles_union_departments(self):
+        second_role = Role.objects.create(name='部门树角色', code='dept_tree_role', is_active=True)
+        self.user.roles.add(second_role)
+        custom_scope = DataScope.objects.create(role=self.role_manager, module='projects', scope_type='custom')
+        custom_scope.custom_departments.add(self.dept_purchase)
+        DataScope.objects.create(role=second_role, module='projects', scope_type='dept_tree')
+
+        scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
+
+        self.assertEqual(scope_type, 'custom')
+        self.assertCountEqual(
+            custom_dept_ids,
+            [self.dept_purchase.id, self.dept_sales.id, self.dept_sales_team1.id],
+        )
+
     def test_no_scope_defaults_to_self(self):
         """Test that when no scope is configured, defaults to 'self'"""
         scope_type, custom_dept_ids = resolve_data_scope(self.user, 'projects')
 
         self.assertEqual(scope_type, 'self')
         self.assertEqual(custom_dept_ids, [])
+
+
+class OperationDefinitionFailClosedTest(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.role = Role.objects.create(name='菜单角色', code='menu_role')
+        self.menu = Permission.objects.create(code='projects', name='项目', type='menu')
+        RolePermission.objects.create(role=self.role, permission=self.menu)
+        self.user = User.objects.create_user(
+            username='operation-user',
+            employee_id='OP001',
+            password='testpass123',
+            role=self.role,
+        )
+
+    def test_defined_operations_with_zero_role_grants_do_not_fall_back_to_menu(self):
+        Permission.objects.create(
+            code='projects:project:view',
+            name='查看项目',
+            type='operation',
+            resource='project',
+        )
+
+        from apps.core.permission_service import has_operation_permission
+
+        self.assertIs(has_operation_permission(self.user, 'projects', 'project', 'view'), False)
 
 
 class GetDepartmentTreeIdsTest(TestCase):

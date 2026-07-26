@@ -16,8 +16,13 @@
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusType(order.status)">{{ getStatusLabel(order.status) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="订单金额" :span="3">
-          <span style="font-size: 18px; font-weight: 600; color: #67C23A;">¥{{ formatMoney(order.total_amount) }}</span>
+        <el-descriptions-item label="增值税率">{{ order.tax_rate ?? 13 }}%</el-descriptions-item>
+        <el-descriptions-item label="不含税金额">¥{{ formatMoney(order.total_amount) }}</el-descriptions-item>
+        <el-descriptions-item label="税额">¥{{ formatMoney(order.tax_amount) }}</el-descriptions-item>
+        <el-descriptions-item label="含税总额" :span="3">
+          <span style="font-size: 18px; font-weight: 600; color: #67C23A;">
+            ¥{{ formatMoney(getTaxInclusiveTotal(order)) }}
+          </span>
         </el-descriptions-item>
         <el-descriptions-item label="付款条款" :span="3">{{ order.payment_terms || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ order.notes || '-' }}</el-descriptions-item>
@@ -65,7 +70,7 @@
           <el-button type="success" @click="handleConfirm" v-if="['DRAFT', 'APPROVED'].includes(order.status)">确认订单</el-button>
           <el-button type="danger" @click="handleCancel" v-if="['DRAFT', 'CONFIRMED'].includes(order.status)">取消订单</el-button>
         </div>
-        <el-statistic title="订单总金额" :value="parseFloat(order.total_amount || 0)" prefix="¥" :precision="2" />
+        <el-statistic title="含税总额" :value="getTaxInclusiveTotal(order)" prefix="¥" :precision="2" />
       </div>
     </el-card>
 
@@ -78,8 +83,8 @@
         <el-table-column prop="warehouse_name" label="收货仓库" width="150" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'COMPLETED' ? 'success' : 'warning'">
-              {{ row.status === 'COMPLETED' ? '已完成' : '进行中' }}
+            <el-tag :type="getGoodsReceiptStatusType(row.status)">
+              {{ getGoodsReceiptStatusLabel(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -128,6 +133,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Box } from '@element-plus/icons-vue'
 import { getWarehouseList } from '@/api/masterdata'
+import { getTaxInclusiveTotal } from '@/utils/businessPricing'
+import { getGoodsReceiptStatusLabel, getGoodsReceiptStatusType } from '@/utils/purchaseStatus'
 import {
   getPurchaseOrder, confirmPurchaseOrder, cancelPurchaseOrder,
   getGoodsReceipts, createGoodsReceipt

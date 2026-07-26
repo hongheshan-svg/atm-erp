@@ -6,12 +6,22 @@ Ensures configured workflows are respected and provides auto-approve for unconfi
 import logging
 
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 
 from .models import WorkflowInstance
 from .services import WorkflowService
 
 logger = logging.getLogger(__name__)
+_UNSET = object()
+
+
+class WorkflowStartError(APIException):
+    """A configured workflow could not start; callers must fail closed."""
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = '审批流程启动失败'
+    default_code = 'workflow_start_failed'
 
 
 class WorkflowEnforcementMixin:
@@ -60,7 +70,15 @@ class WorkflowEnforcementMixin:
             )
         return None
 
-    def start_workflow_or_auto_approve(self, obj, submitter, approved_status='APPROVED', submitted_status='SUBMITTED'):
+    def start_workflow_or_auto_approve(
+        self,
+        obj,
+        submitter,
+        approved_status='APPROVED',
+        submitted_status='SUBMITTED',
+        amount_override=_UNSET,
+        business_no_override=None,
+    ):
         """
         启动工作流或自动批准
 
@@ -89,13 +107,15 @@ class WorkflowEnforcementMixin:
             }
 
         # 获取金额
-        amount = None
-        if self.workflow_amount_field:
+        amount = amount_override
+        if amount is _UNSET and self.workflow_amount_field:
             amount = getattr(obj, self.workflow_amount_field, None)
+        elif amount is _UNSET:
+            amount = None
 
         # 获取单据编号
-        business_no = str(obj.id)
-        if self.workflow_no_field:
+        business_no = business_no_override or str(obj.id)
+        if business_no_override is None and self.workflow_no_field:
             business_no = getattr(obj, self.workflow_no_field, business_no)
 
         # 尝试启动工作流
@@ -127,14 +147,7 @@ class WorkflowEnforcementMixin:
             }
 
         logger.warning(f'{self.workflow_business_type} {business_no} 工作流启动失败: {error}')
-        return {
-            'workflow_started': False,
-            'auto_approved': False,
-            'new_status': getattr(obj, 'status', submitted_status),
-            'instance': None,
-            'message': error or '审批流程启动失败',
-            'error': error or '审批流程启动失败',
-        }
+        raise WorkflowStartError(error or '审批流程启动失败')
 
 
 def check_workflow_status(business_type, business_id):
@@ -175,4 +188,4 @@ def start_workflow_or_auto_approve(business_type, business_id, business_no, subm
         logger.info(f'{business_type} {business_no} 自动批准（未配置审批流程）')
         return 'APPROVED', False, None
     logger.warning(f'{business_type} {business_no} 工作流启动失败: {error}')
-    return 'ERROR', False, None
+    raise WorkflowStartError(error or '审批流程启动失败')

@@ -161,7 +161,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { getCashFlowForecast, getAnalyticsDashboard } from '@/api/analytics'
+import { getCashFlowForecast } from '@/api/analytics'
 import { getReceivableList, getPayableList } from '@/api/finance'
 import { ElMessage } from 'element-plus'
 import { Download, Wallet, Top, Bottom, TrendCharts, Warning } from '@element-plus/icons-vue'
@@ -185,6 +185,7 @@ const overview = reactive<Record<string, any>>({
 const arList = ref<any[]>([])
 const apList = ref<any[]>([])
 const alerts = ref<any[]>([])
+const projectedExpenses = ref(0)
 
 const formatNumber = (num: any) => {
   if (!num) return '0.00'
@@ -214,36 +215,25 @@ const getOverdueLabel = (dueDate: any) => {
 const fetchData = async () => {
   try {
     // 获取现金流预测汇总数据
-    const forecastRes = await getCashFlowForecast()
+    const forecastRes = await getCashFlowForecast({ days: Number(forecastPeriod.value) })
     const forecastData = forecastRes
 
     // 设置概览数据
+    overview.currentBalance = Number(forecastData.current_balance || 0)
     overview.expectedInflow = forecastData.expected_inflows || 0
     overview.expectedOutflow = forecastData.expected_outflows || 0
     overview.netFlow = forecastData.net_cash_flow || 0
+    projectedExpenses.value = Number(forecastData.breakdown?.expenses || 0)
 
     // 获取应收账款明细
-    const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
-    arList.value = arRes.results || arRes.results || arRes || []
+    const arRes = await getReceivableList({ page_size: 1000 })
+    const receivables = arRes.results || arRes || []
+    arList.value = receivables.filter((item: any) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(item.status))
 
     // 获取应付账款明细
-    const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
-    apList.value = apRes.results || apRes.results || apRes || []
-
-    // 尝试获取当前现金余额（从财务汇总）
-    try {
-      const dashboardRes = await getAnalyticsDashboard()
-      const dashboardData = dashboardRes
-      // 使用应收 - 应付作为近似现金状况
-      const receivables = dashboardData.financial?.receivables || 0
-      const payables = dashboardData.financial?.payables || 0
-      overview.currentBalance = receivables - payables
-      if (overview.currentBalance <= 0) {
-        overview.currentBalance = 100000 // 如果为负数，使用默认值
-      }
-    } catch (e: any) {
-      overview.currentBalance = 100000 // 默认值
-    }
+    const apRes = await getPayableList({ page_size: 1000 })
+    const payables = apRes.results || apRes || []
+    apList.value = payables.filter((item: any) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(item.status))
 
     initTrendChart()
     checkAlerts()
@@ -251,15 +241,17 @@ const fetchData = async () => {
     console.error('获取数据失败:', error)
     // 获取数据失败时尝试单独获取应收应付
     try {
-      const arRes = await getReceivableList({ status: 'PENDING', page_size: 100 })
-      arList.value = arRes.results || arRes.results || arRes || []
+      const arRes = await getReceivableList({ page_size: 1000 })
+      const receivables = arRes.results || arRes || []
+      arList.value = receivables.filter((item: any) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(item.status))
 
-      const apRes = await getPayableList({ status: 'PENDING', page_size: 100 })
-      apList.value = apRes.results || apRes.results || apRes || []
+      const apRes = await getPayableList({ page_size: 1000 })
+      const payables = apRes.results || apRes || []
+      apList.value = payables.filter((item: any) => ['PENDING', 'PARTIAL', 'OVERDUE'].includes(item.status))
 
-  calculateOverview()
-  initTrendChart()
-  checkAlerts()
+      calculateOverview()
+      initTrendChart()
+      checkAlerts()
     } catch (e: any) {
       console.error('获取应收应付失败:', e)
       arList.value = []
@@ -293,13 +285,6 @@ const calculateOverview = () => {
   // 净现金流
   overview.netFlow = overview.expectedInflow - overview.expectedOutflow
 
-  // 如果没有余额数据，使用应收减应付的方式估算
-  if (!overview.currentBalance || overview.currentBalance === 0) {
-    // 使用所有待收款减去待付款作为估算
-    const totalAR = arList.value.reduce((sum, ar) => sum + ((ar.amount_due || 0) - (ar.amount_paid || 0)), 0)
-    const totalAP = apList.value.reduce((sum, ap) => sum + ((ap.amount_due || 0) - (ap.amount_paid || 0)), 0)
-    overview.currentBalance = Math.max(totalAR - totalAP, 0)
-  }
 }
 
 const initTrendChart = () => {
@@ -313,6 +298,7 @@ const initTrendChart = () => {
 
   // 生成预测数据
   const days = parseInt(forecastPeriod.value)
+  const dailyProjectedExpense = days > 0 ? projectedExpenses.value / days : 0
   const dates = []
   const balances = []
   const inflows = []
@@ -335,7 +321,7 @@ const initTrendChart = () => {
     // 计算当日付款
     const dayOutflow = apList.value
       .filter(ap => ap.due_date === dateStr)
-      .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0)
+      .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0) + (i === 0 ? 0 : dailyProjectedExpense)
 
     balance = balance + dayInflow - dayOutflow
 
@@ -465,10 +451,8 @@ const checkAlerts = () => {
   }
 }
 
-const handlePeriodChange = () => {
-  calculateOverview()
-  initTrendChart()
-  checkAlerts()
+const handlePeriodChange = async () => {
+  await fetchData()
 }
 
 const handleExport = () => {
@@ -482,6 +466,7 @@ const handleExport = () => {
   const exportData: any[] = []
   let balance = overview.currentBalance
   const today = new Date()
+  const dailyProjectedExpense = days > 0 ? projectedExpenses.value / days : 0
 
   for (let i = 0; i <= days; i++) {
     const date = new Date(today)
@@ -494,7 +479,7 @@ const handleExport = () => {
 
     const dayOutflow = apList.value
       .filter(ap => ap.due_date === dateStr)
-      .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0)
+      .reduce((sum, ap) => sum + (ap.amount_due - ap.amount_paid), 0) + (i === 0 ? 0 : dailyProjectedExpense)
 
     balance = balance + dayInflow - dayOutflow
 

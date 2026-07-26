@@ -55,7 +55,7 @@
         <el-table-column prop="receipt_date" label="收货日期" width="110" />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
+            <el-tag :type="getGoodsReceiptStatusType(row.status)">{{ getGoodsReceiptStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_by_name" label="创建人" width="100" />
@@ -185,7 +185,7 @@
         <el-descriptions-item label="收货仓库">{{ current.warehouse_name }}</el-descriptions-item>
         <el-descriptions-item label="收货日期">{{ current.receipt_date }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusType(current.status)">{{ getStatusLabel(current.status) }}</el-tag>
+          <el-tag :type="getGoodsReceiptStatusType(current.status)">{{ getGoodsReceiptStatusLabel(current.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ current.notes || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -222,6 +222,7 @@ import {
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getWarehouseList } from '@/api/masterdata'
+import { getGoodsReceiptStatusLabel, getGoodsReceiptStatusType } from '@/utils/purchaseStatus'
 
 const route = useRoute()
 
@@ -281,9 +282,6 @@ const rules = {
 const confirmedPurchaseOrders = computed(() =>
   purchaseOrders.value.filter(po => po.status === 'CONFIRMED' || po.status === 'PARTIAL')
 )
-
-const getStatusType = (s: any) => (({ 'DRAFT': 'info', 'CONFIRMED': 'warning', 'COMPLETED': 'success' } as Record<string, any>)[s] || 'info')
-const getStatusLabel = (s: any) => (({ 'DRAFT': '草稿', 'CONFIRMED': '已确认', 'COMPLETED': '已完成' } as Record<string, any>)[s] || s)
 
 const loadReceipts = async () => {
   loading.value = true

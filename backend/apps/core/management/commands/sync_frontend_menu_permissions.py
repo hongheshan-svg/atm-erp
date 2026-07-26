@@ -214,7 +214,7 @@ MENU_GROUPS = {
     'oa': [
         ('office', '日常办公', ['oa:schedule', 'oa:meeting', 'oa:im', 'oa:announcement']),
         ('attendance', '考勤假期', ['oa:attendance', 'oa:attendance-import', 'oa:leave', 'accounts:attendance']),
-        ('workflow', '审批流程', ['workflow:tasks', 'workflow:my-submissions', 'workflow:config']),
+        ('workflow', '审批流程', ['workflow:tasks', 'workflow:my-submissions']),
         ('admin', '行政管理', ['oa:vehicles', 'oa:vehicle-request', 'oa:assets']),
     ],
     'system': [
@@ -228,6 +228,7 @@ MENU_GROUPS = {
                 'system:dashboard-config',
                 'system:data-dictionary',
                 'system:custom-fields',
+                'workflow:config',
             ],
         ),
         (

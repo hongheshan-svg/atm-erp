@@ -183,23 +183,24 @@ class ExpenseViewSet(
 
         # Try to start workflow
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='EXPENSE',
-                business_id=expense.id,
-                business_no=expense.expense_no,
-                submitter=request.user,
-                amount=expense.amount,
+            result = self.start_workflow_or_auto_approve(
+                expense,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='SUBMITTED',
             )
 
-            if instance:
+            if result['workflow_started']:
                 expense.status = 'SUBMITTED'
                 expense.save()
                 return Response(
-                    {**ExpenseSerializer(expense).data, 'workflow_started': True, 'workflow_id': instance.id}
+                    {
+                        **ExpenseSerializer(expense).data,
+                        'workflow_started': True,
+                        'workflow_id': result['instance'].id,
+                    }
                 )
-            else:
+            elif result['auto_approved']:
                 # No workflow configured, auto-approve
                 expense.status = 'APPROVED'
                 expense.save()
@@ -209,17 +210,17 @@ class ExpenseViewSet(
                         **ExpenseSerializer(expense).data,
                         'workflow_started': False,
                         'auto_approved': True,
-                        'message': error or '未配置审批流程，已自动批准',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         except Exception as e:
-            # Workflow module not available, auto-approve
-            logger.warning(f'工作流服务异常，费用报销 {expense.expense_no} 自动批准: {e}')
-            expense.status = 'APPROVED'
-            expense.save()
+            logger.exception('费用报销提交工作流异常 expense_no=%s', expense.expense_no)
             return Response(
-                {**ExpenseSerializer(expense).data, 'auto_approved': True, 'message': '工作流服务不可用，已自动批准'}
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
     @action(detail=True, methods=['post'])
@@ -1669,10 +1670,10 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
     ViewSet for PaymentSchedule management.
     用于管理和跟踪销售订单的付款计划。
 
-    permission_module = 'finance'
-    permission_resource = 'payment_schedule'
     """
 
+    permission_module = 'finance'
+    permission_resource = 'payment_schedule'
     queryset = PaymentSchedule.objects.filter(is_deleted=False).select_related(
         'sales_order', 'sales_order__customer', 'project', 'account_receivable'
     )
@@ -2121,28 +2122,26 @@ class PaymentRequestViewSet(
         amount = payment_req.amount or 0
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='PAYMENT',
-                business_id=payment_req.id,
-                business_no=payment_req.request_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                payment_req,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 payment_req.status = 'PENDING'
                 payment_req.save()
                 return Response(
                     {
                         **PaymentRequestSerializer(payment_req).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，直接批准
                 payment_req.status = 'APPROVED'
                 payment_req.approved_by = request.user
@@ -2152,22 +2151,17 @@ class PaymentRequestViewSet(
                     {
                         **PaymentRequestSerializer(payment_req).data,
                         'workflow_started': False,
-                        'message': error or '未配置审批流程，付款申请已直接批准',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         except Exception as e:
-            # 审批模块不可用，直接批准
-            payment_req.status = 'APPROVED'
-            payment_req.approved_by = request.user
-            payment_req.approved_at = timezone.now()
-            payment_req.save()
+            logger.exception('付款申请提交工作流异常 request_no=%s', payment_req.request_no)
             return Response(
-                {
-                    **PaymentRequestSerializer(payment_req).data,
-                    'workflow_started': False,
-                    'message': f'付款申请已批准，但工作流服务异常: {e}',
-                }
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
     @action(detail=True, methods=['post'])

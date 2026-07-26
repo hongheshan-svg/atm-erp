@@ -8,7 +8,7 @@ from django.test import TestCase, TransactionTestCase
 
 from apps.accounts.models import Role
 from apps.core.models import SystemNotification
-from apps.core.workflow.mixins import WorkflowEnforcementMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin, WorkflowStartError
 from apps.core.workflow.models import WorkflowDefinition, WorkflowInstance, WorkflowStep, WorkflowTask
 from apps.core.workflow.services import WorkflowService
 
@@ -329,12 +329,8 @@ class WorkflowServiceIntegrityTest(TestCase):
             patch.object(WorkflowService, 'start_workflow', return_value=(None, '该单据已有进行中的审批流程')),
             patch('apps.core.workflow.mixins.logger.warning'),
         ):
-            result = DummyView().start_workflow_or_auto_approve(DummyObject(), self.submitter)
-
-        self.assertFalse(result['workflow_started'])
-        self.assertFalse(result['auto_approved'])
-        self.assertEqual(result['new_status'], 'DRAFT')
-        self.assertIn('已有进行中', result['message'])
+            with self.assertRaisesMessage(WorkflowStartError, '已有进行中'):
+                DummyView().start_workflow_or_auto_approve(DummyObject(), self.submitter)
 
     def test_cancel_workflow_is_idempotent_and_closes_pending_tasks(self):
         self._definition('cancel_workflow')
