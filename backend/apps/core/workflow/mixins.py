@@ -116,8 +116,7 @@ class WorkflowEnforcementMixin:
                 'instance': instance,
                 'message': '已提交审批',
             }
-        else:
-            # 未配置流程，自动批准
+        if WorkflowService.is_missing_workflow_error(error):
             logger.info(f'{self.workflow_business_type} {business_no} 自动批准（未配置审批流程）')
             return {
                 'workflow_started': False,
@@ -126,6 +125,16 @@ class WorkflowEnforcementMixin:
                 'instance': None,
                 'message': '未配置审批流程，已自动批准',
             }
+
+        logger.warning(f'{self.workflow_business_type} {business_no} 工作流启动失败: {error}')
+        return {
+            'workflow_started': False,
+            'auto_approved': False,
+            'new_status': getattr(obj, 'status', submitted_status),
+            'instance': None,
+            'message': error or '审批流程启动失败',
+            'error': error or '审批流程启动失败',
+        }
 
 
 def check_workflow_status(business_type, business_id):
@@ -162,6 +171,8 @@ def start_workflow_or_auto_approve(business_type, business_id, business_no, subm
     if instance:
         logger.info(f'{business_type} {business_no} 已启动工作流审批')
         return 'SUBMITTED', True, instance
-    else:
+    if WorkflowService.is_missing_workflow_error(error):
         logger.info(f'{business_type} {business_no} 自动批准（未配置审批流程）')
         return 'APPROVED', False, None
+    logger.warning(f'{business_type} {business_no} 工作流启动失败: {error}')
+    return 'ERROR', False, None

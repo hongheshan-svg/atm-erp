@@ -5,11 +5,13 @@ Workflow API views.
 from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.core.permission_mixin import PermissionMixin
-from apps.core.permission_service import has_permission
 
+from .access import can_manage_workflows, visible_workflow_instances
 from .models import WorkflowDefinition, WorkflowInstance, WorkflowStep, WorkflowTask
 from .serializers import (
     WorkflowDefinitionSerializer,
@@ -18,13 +20,6 @@ from .serializers import (
     WorkflowTaskSerializer,
 )
 from .services import WorkflowService
-
-
-def is_admin(user):
-    """Check if user can manage workflow configuration."""
-    if user.is_superuser:
-        return True
-    return has_permission(user, 'workflow:config')
 
 
 def _get_step_approver_label(step):
@@ -41,6 +36,25 @@ def _get_step_approver_label(step):
     return labels.get(step.approver_type, '待分配')
 
 
+class ImmutableRuntimeRecordMixin:
+    """Runtime workflow records may only change through explicit state-machine actions."""
+
+    def _immutable_response(self):
+        return Response({'error': '审批运行记录不可直接修改或删除'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def create(self, request, *args, **kwargs):
+        return self._immutable_response()
+
+    def update(self, request, *args, **kwargs):
+        return self._immutable_response()
+
+    def partial_update(self, request, *args, **kwargs):
+        return self._immutable_response()
+
+    def destroy(self, request, *args, **kwargs):
+        return self._immutable_response()
+
+
 class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow definitions."""
 
@@ -52,6 +66,27 @@ class WorkflowDefinitionViewSet(PermissionMixin, viewsets.ModelViewSet):
     filterset_fields = ['business_type', 'is_active']
     search_fields = ['name', 'code']
 
+    @action(detail=True, methods=['post'])
+    def publish(self, request, pk=None):
+        definition = self.get_object()
+        serializer = self.get_serializer(definition, data={'is_active': True}, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(updated_by=request.user)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def unpublish(self, request, pk=None):
+        definition = self.get_object()
+        definition.is_active = False
+        definition.updated_by = request.user
+        definition.save(update_fields=['is_active', 'updated_by', 'updated_at'])
+        return Response(self.get_serializer(definition).data)
+
+    def perform_destroy(self, instance):
+        if instance.instances.filter(is_deleted=False).exists():
+            raise ValidationError('已有审批实例的流程定义不可删除，请停用后保留审计记录')
+        super().perform_destroy(instance)
+
 
 class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow steps."""
@@ -61,6 +96,13 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
     queryset = WorkflowStep.objects.filter(is_deleted=False)
     serializer_class = WorkflowStepSerializer
     filterset_fields = ['workflow', 'approver_type']
+
+    def perform_destroy(self, instance):
+        if instance.workflow.is_active:
+            raise ValidationError('已发布的审批流程不可修改，请先停用流程')
+        if instance.workflow.instances.filter(is_deleted=False).exists():
+            raise ValidationError('已有审批实例的流程步骤不可删除，请创建新流程版本')
+        super().perform_destroy(instance)
 
     @action(detail=False, methods=['post'])
     def reorder(self, request):
@@ -84,6 +126,10 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
 
         if step.workflow_id != target.workflow_id:
             return Response({'error': '只能在同一工作流内调整顺序'}, status=status.HTTP_400_BAD_REQUEST)
+        if step.workflow.is_active:
+            return Response({'error': '已发布的审批流程不可修改，请先停用流程'}, status=status.HTTP_400_BAD_REQUEST)
+        if step.workflow.instances.filter(is_deleted=False).exists():
+            return Response({'error': '已有审批实例的流程步骤不可调整'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             # 临时序号取该工作流现有最大序号 +1，确保不与任何现存（含软删除）记录冲突
@@ -107,16 +153,32 @@ class WorkflowStepViewSet(PermissionMixin, viewsets.ModelViewSet):
         return Response({'message': '顺序已更新'})
 
 
-class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
+class WorkflowInstanceViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow instances."""
 
     permission_module = 'system'
     permission_resource = 'workflow_instance'
     allow_authenticated_read = True
+    skip_data_scope = True
+    permission_classes = [IsAuthenticated]
     queryset = WorkflowInstance.objects.filter(is_deleted=False)
     serializer_class = WorkflowInstanceSerializer
     filterset_fields = ['business_type', 'status', 'submitter']
     search_fields = ['business_no']
+
+    def check_permissions(self, request):
+        if getattr(self, 'action', None) == 'withdraw':
+            return viewsets.ModelViewSet.check_permissions(self, request)
+        return super().check_permissions(request)
+
+    def check_object_permissions(self, request, obj):
+        if request.method in ('GET', 'HEAD', 'OPTIONS') or getattr(self, 'action', None) == 'withdraw':
+            return viewsets.ModelViewSet.check_object_permissions(self, request, obj)
+        return super().check_object_permissions(request, obj)
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related('workflow', 'submitter')
+        return visible_workflow_instances(queryset, self.request.user)
 
     @action(detail=False, methods=['get'])
     def my_submitted(self, request):
@@ -144,7 +206,10 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
         if not business_type or not business_id:
             return Response({'error': '请提供 business_type 和 business_id'}, status=status.HTTP_400_BAD_REQUEST)
 
-        workflows = WorkflowService.get_workflow_history(business_type, int(business_id))
+        workflows = visible_workflow_instances(
+            WorkflowService.get_workflow_history(business_type, int(business_id)),
+            request.user,
+        )
         serializer = self.get_serializer(workflows, many=True)
         return Response(serializer.data)
 
@@ -156,28 +221,59 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
         all_steps = definition.steps.filter(is_deleted=False).order_by('step_order')
         tasks = instance.tasks.filter(is_deleted=False).select_related('step', 'assignee')
 
-        # Build a map of step_id -> task
-        task_map = {t.step_id: t for t in tasks}
+        task_map = {}
+        for task in tasks:
+            task_map.setdefault(task.step_id, []).append(task)
 
         nodes = []
         for step in all_steps:
-            task = task_map.get(step.id)
+            step_tasks = task_map.get(step.id, [])
             node = {
                 'step_order': step.step_order,
                 'step_name': step.name,
                 'approver_type': step.approver_type,
                 'approver_type_display': step.get_approver_type_display(),
             }
-            if task:
+            if step_tasks:
+                pending = [task for task in step_tasks if task.status == 'PENDING']
+                approved = [task for task in step_tasks if task.status == 'APPROVED']
+                rejected = [task for task in step_tasks if task.status == 'REJECTED']
+                returned = [task for task in step_tasks if task.status == 'RETURNED']
+                if pending:
+                    aggregate_status = 'PENDING'
+                elif approved:
+                    aggregate_status = 'APPROVED'
+                elif returned:
+                    aggregate_status = 'RETURNED'
+                elif rejected:
+                    aggregate_status = 'REJECTED'
+                else:
+                    aggregate_status = 'SKIPPED'
+                representative = (pending or approved or returned or rejected or step_tasks)[0]
                 node.update(
                     {
-                        'task_id': task.id,
-                        'status': task.status,
-                        'status_display': task.get_status_display(),
-                        'assignee_name': task.assignee.get_full_name() if task.assignee else '',
-                        'action_time': task.action_time,
-                        'comment': task.comment,
-                        'created_at': task.created_at,
+                        'task_id': representative.id,
+                        'status': aggregate_status,
+                        'status_display': dict(WorkflowTask.STATUS_CHOICES).get(aggregate_status, aggregate_status),
+                        'assignee_name': '、'.join(
+                            task.assignee.get_full_name() or task.assignee.username for task in step_tasks
+                        ),
+                        'action_time': representative.action_time,
+                        'comment': representative.comment,
+                        'created_at': representative.created_at,
+                        'tasks': [
+                            {
+                                'task_id': task.id,
+                                'status': task.status,
+                                'status_display': task.get_status_display(),
+                                'assignee_id': task.assignee_id,
+                                'assignee_name': task.assignee.get_full_name() or task.assignee.username,
+                                'action_time': task.action_time,
+                                'comment': task.comment,
+                                'created_at': task.created_at,
+                            }
+                            for task in step_tasks
+                        ],
                     }
                 )
             else:
@@ -191,6 +287,7 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
                         'action_time': None,
                         'comment': '',
                         'created_at': None,
+                        'tasks': [],
                     }
                 )
             nodes.append(node)
@@ -224,7 +321,14 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
             return Response({'error': '请提供 business_type 和 business_id'}, status=status.HTTP_400_BAD_REQUEST)
 
         instance = (
-            WorkflowInstance.objects.filter(business_type=business_type, business_id=int(business_id), is_deleted=False)
+            visible_workflow_instances(
+                WorkflowInstance.objects.filter(
+                    business_type=business_type,
+                    business_id=int(business_id),
+                    is_deleted=False,
+                ),
+                request.user,
+            )
             .order_by('-submit_time')
             .first()
         )
@@ -237,49 +341,48 @@ class WorkflowInstanceViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['delete'])
     def admin_delete(self, request, pk=None):
-        """Delete a workflow instance (admin only)."""
-        if not is_admin(request.user):
-            return Response({'error': '只有管理员可以删除审批记录'}, status=status.HTTP_403_FORBIDDEN)
-
-        instance = self.get_object()
-        # Soft delete associated tasks
-        instance.tasks.update(is_deleted=True)
-        # Soft delete instance
-        instance.is_deleted = True
-        instance.save()
-
-        return Response({'message': '删除成功'})
+        """Workflow runtime audit records are immutable."""
+        return self._immutable_response()
 
     @action(detail=False, methods=['post'])
     def batch_delete(self, request):
-        """Batch delete workflow instances (admin only)."""
-        if not is_admin(request.user):
-            return Response({'error': '只有管理员可以删除审批记录'}, status=status.HTTP_403_FORBIDDEN)
-
-        ids = request.data.get('ids', [])
-        if not ids:
-            return Response({'error': '请提供要删除的记录ID'}, status=status.HTTP_400_BAD_REQUEST)
-
-        instances = WorkflowInstance.objects.filter(id__in=ids, is_deleted=False)
-        count = instances.count()
-
-        # Soft delete associated tasks
-        WorkflowTask.objects.filter(instance__in=instances).update(is_deleted=True)
-        # Soft delete instances
-        instances.update(is_deleted=True)
-
-        return Response({'message': f'成功删除 {count} 条记录'})
+        """Workflow runtime audit records are immutable."""
+        return self._immutable_response()
 
 
-class WorkflowTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
+class WorkflowTaskViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, viewsets.ModelViewSet):
     """ViewSet for workflow tasks."""
 
     permission_module = 'system'
     permission_resource = 'workflow_task'
     allow_authenticated_read = True
+    skip_data_scope = True
+    permission_classes = [IsAuthenticated]
     queryset = WorkflowTask.objects.filter(is_deleted=False)
     serializer_class = WorkflowTaskSerializer
     filterset_fields = ['instance', 'assignee', 'status']
+
+    def check_permissions(self, request):
+        if getattr(self, 'action', None) in {
+            'my_pending',
+            'pending_count',
+            'approve',
+            'reject',
+            'reject_to_step',
+        }:
+            return viewsets.ModelViewSet.check_permissions(self, request)
+        return super().check_permissions(request)
+
+    def check_object_permissions(self, request, obj):
+        if getattr(self, 'action', None) in {'approve', 'reject', 'reject_to_step'}:
+            return viewsets.ModelViewSet.check_object_permissions(self, request, obj)
+        return super().check_object_permissions(request, obj)
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related('instance', 'instance__workflow', 'step', 'assignee')
+        if can_manage_workflows(self.request.user):
+            return queryset
+        return queryset.filter(assignee=self.request.user)
 
     @action(detail=False, methods=['get'])
     def my_pending(self, request):
@@ -336,28 +439,10 @@ class WorkflowTaskViewSet(PermissionMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['delete'])
     def admin_delete(self, request, pk=None):
-        """Delete a workflow task (admin only)."""
-        if not is_admin(request.user):
-            return Response({'error': '只有管理员可以删除审批任务'}, status=status.HTTP_403_FORBIDDEN)
-
-        task = self.get_object()
-        task.is_deleted = True
-        task.save()
-
-        return Response({'message': '删除成功'})
+        """Workflow runtime audit records are immutable."""
+        return self._immutable_response()
 
     @action(detail=False, methods=['post'])
     def batch_delete(self, request):
-        """Batch delete workflow tasks (admin only)."""
-        if not is_admin(request.user):
-            return Response({'error': '只有管理员可以删除审批任务'}, status=status.HTTP_403_FORBIDDEN)
-
-        ids = request.data.get('ids', [])
-        if not ids:
-            return Response({'error': '请提供要删除的任务ID'}, status=status.HTTP_400_BAD_REQUEST)
-
-        tasks = WorkflowTask.objects.filter(id__in=ids, is_deleted=False)
-        count = tasks.count()
-        tasks.update(is_deleted=True)
-
-        return Response({'message': f'成功删除 {count} 条任务'})
+        """Workflow runtime audit records are immutable."""
+        return self._immutable_response()
