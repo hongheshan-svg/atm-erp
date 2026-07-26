@@ -492,6 +492,14 @@ class Payment(BaseModel):
             item.recalc_status()
             item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
+    def _reverse_ledger(self):
+        from apps.finance.posting import reverse_document
+
+        if self.ar_id:
+            reverse_document('AR_RECEIPT', self, self.updated_by)
+        elif self.ap_id or (self.payable_item_id and self.payable_item and self.payable_item.source_type == 'ap'):
+            reverse_document('AP_PAYMENT', self, self.updated_by)
+
     def soft_delete(self):
         """软删除付款记录时回退目标账款金额并重算状态。
 
@@ -500,6 +508,7 @@ class Payment(BaseModel):
         if self.is_deleted:
             return
         with transaction.atomic():
+            self._reverse_ledger()
             self._reverse_target()
             super().soft_delete()
 
@@ -507,6 +516,7 @@ class Payment(BaseModel):
         """硬删除同样回退目标账款金额;若此前已软删除则金额已回退,不再重复回退。"""
         with transaction.atomic():
             if not self.is_deleted:
+                self._reverse_ledger()
                 self._reverse_target()
             return super().delete(*args, **kwargs)
 
@@ -1124,7 +1134,7 @@ class Invoice(BaseModel):
 
     def save(self, *args, **kwargs):
         # Calculate total_amount if not set
-        if self.amount_before_tax and self.tax_amount:
+        if self.amount_before_tax is not None and self.tax_amount is not None:
             self.total_amount = self.amount_before_tax + self.tax_amount
         super().save(*args, **kwargs)
 

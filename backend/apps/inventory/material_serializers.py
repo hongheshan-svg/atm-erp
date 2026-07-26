@@ -2,7 +2,10 @@
 生产领料/退料序列化器
 """
 
+from decimal import Decimal
+
 from django.db import transaction
+from django.db.models import F, Sum
 from rest_framework import serializers
 
 from .material_models import MaterialRequisition, MaterialRequisitionLine, MaterialReturn, MaterialReturnLine
@@ -16,7 +19,7 @@ class MaterialRequisitionLineSerializer(serializers.ModelSerializer):
     item_spec = serializers.CharField(source='item.specification', read_only=True)
     item_unit = serializers.CharField(source='item.unit', read_only=True)
     pending_qty = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
-    line_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    line_amount = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
 
     class Meta:
         model = MaterialRequisitionLine
@@ -201,7 +204,7 @@ class MaterialReturnLineSerializer(serializers.ModelSerializer):
     item_unit = serializers.CharField(source='item.unit', read_only=True)
     condition_display = serializers.CharField(source='get_condition_display', read_only=True)
     pending_qty = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
-    line_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    line_amount = serializers.DecimalField(max_digits=18, decimal_places=4, read_only=True)
 
     class Meta:
         model = MaterialReturnLine
@@ -288,23 +291,108 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
             )
         return ''
 
+    @staticmethod
+    def _project_return_unit_cost(project_id, item_id, requested_qty, exclude_return_id=None):
+        from apps.inventory.models import StockMove
+
+        outbound = StockMove.objects.filter(
+            project_id=project_id,
+            item_id=item_id,
+            move_type='OUT_PROJECT',
+            status='COMPLETED',
+            is_deleted=False,
+        ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))
+        returned = StockMove.objects.filter(
+            project_id=project_id,
+            item_id=item_id,
+            move_type='ADJUSTMENT',
+            reference_type='MaterialReturn',
+            status='COMPLETED',
+            is_deleted=False,
+        ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))
+
+        pending = MaterialReturnLine.objects.filter(
+            material_return__project_id=project_id,
+            material_return__status__in=['DRAFT', 'PENDING', 'INSPECTING', 'PARTIAL'],
+            item_id=item_id,
+            is_deleted=False,
+        )
+        if exclude_return_id:
+            pending = pending.exclude(material_return_id=exclude_return_id)
+        pending_qty = pending.aggregate(total=Sum(F('qty') - F('received_qty')))['total'] or Decimal('0')
+
+        issued_qty = outbound['total_qty'] or Decimal('0')
+        returned_qty = returned['total_qty'] or Decimal('0')
+        available_qty = issued_qty - returned_qty - pending_qty
+        if requested_qty > available_qty:
+            raise serializers.ValidationError(
+                f'物料 {item_id} 退料数量 {requested_qty} 超过项目净可退数量 {available_qty}'
+            )
+
+        net_qty = issued_qty - returned_qty
+        net_cost = (outbound['total_cost'] or Decimal('0')) - (returned['total_cost'] or Decimal('0'))
+        return net_cost / net_qty if net_qty > 0 else Decimal('0')
+
+    def _prepare_lines(self, attrs, lines_data, exclude_return_id=None):
+        project = attrs.get('project')
+        warehouse = attrs.get('warehouse')
+        return_type = attrs.get('return_type')
+        requested_by_item = {}
+        prepared = []
+
+        for line_data in lines_data:
+            if not line_data.get('item') or line_data.get('qty') in (None, ''):
+                continue
+            item_id = int(line_data['item'])
+            qty = Decimal(str(line_data['qty']))
+            if qty <= 0:
+                raise serializers.ValidationError(f'物料 {item_id} 的退料数量必须大于 0')
+            requested_by_item[item_id] = requested_by_item.get(item_id, Decimal('0')) + qty
+
+            if return_type == 'PROJECT':
+                if project is None:
+                    raise serializers.ValidationError('项目退料必须关联项目')
+                unit_cost = self._project_return_unit_cost(
+                    project.id,
+                    item_id,
+                    requested_by_item[item_id],
+                    exclude_return_id=exclude_return_id,
+                )
+            else:
+                from apps.inventory.models import Stock
+
+                stock = Stock.objects.filter(warehouse=warehouse, item_id=item_id, is_deleted=False).first()
+                unit_cost = stock.weighted_avg_cost if stock else Decimal('0')
+
+            prepared.append(
+                {
+                    'item_id': item_id,
+                    'qty': qty,
+                    'unit_cost': unit_cost,
+                    'condition': line_data.get('condition', 'GOOD'),
+                    'notes': line_data.get('notes', ''),
+                }
+            )
+        return prepared
+
     def create(self, validated_data):
         validated_data['requestor'] = self.context['request'].user
         lines_data = self.initial_data.get('lines', [])
 
         with transaction.atomic():
+            if validated_data.get('project'):
+                from apps.projects.models import Project
+
+                Project.objects.select_for_update().get(pk=validated_data['project'].pk)
+            prepared_lines = self._prepare_lines(validated_data, lines_data)
             material_return = MaterialReturn.objects.create(**validated_data)
 
-            for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
-                    MaterialReturnLine.objects.create(
-                        material_return=material_return,
-                        item_id=line_data['item'],
-                        qty=line_data['qty'],
-                        condition=line_data.get('condition', 'GOOD'),
-                        notes=line_data.get('notes', ''),
-                        created_by=self.context['request'].user,
-                    )
+            for line_data in prepared_lines:
+                MaterialReturnLine.objects.create(
+                    material_return=material_return,
+                    created_by=self.context['request'].user,
+                    **line_data,
+                )
 
             return material_return
 
@@ -316,22 +404,29 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
 
         with transaction.atomic():
+            instance = MaterialReturn.objects.select_for_update().get(pk=instance.pk)
+            prospective = {
+                'project': validated_data.get('project', instance.project),
+                'warehouse': validated_data.get('warehouse', instance.warehouse),
+                'return_type': validated_data.get('return_type', instance.return_type),
+            }
+            if prospective['project']:
+                from apps.projects.models import Project
+
+                Project.objects.select_for_update().get(pk=prospective['project'].pk)
+            prepared_lines = (
+                self._prepare_lines(prospective, lines_data, exclude_return_id=instance.pk)
+                if lines_data is not None
+                else None
+            )
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
 
-            if lines_data is not None:
+            if prepared_lines is not None:
                 instance.lines.filter(is_deleted=False).update(is_deleted=True, deleted_at=timezone.now())
-                for line_data in lines_data:
-                    if line_data.get('item') and line_data.get('qty'):
-                        MaterialReturnLine.objects.create(
-                            material_return=instance,
-                            item_id=line_data['item'],
-                            qty=line_data['qty'],
-                            condition=line_data.get('condition', 'GOOD'),
-                            notes=line_data.get('notes', ''),
-                            created_by=user,
-                        )
+                for line_data in prepared_lines:
+                    MaterialReturnLine.objects.create(material_return=instance, created_by=user, **line_data)
 
         return instance
 

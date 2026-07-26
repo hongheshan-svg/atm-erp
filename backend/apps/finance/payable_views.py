@@ -66,6 +66,7 @@ class PayableReconcileViewSet(PermissionMixin, viewsets.ViewSet):
             settlements = svc.settle(bs, allocations, request.user)
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        bs.refresh_from_db(fields=['status'])
         # 附带本次生成的付款单号(Payment.payment_no),供前端在核销成功提示里展示;
         # settlement.payment 在 svc.settle 内创建时已直接赋值,无需额外查询。
         payment_nos = [s.payment.payment_no for s in settlements if s.payment_id]

@@ -236,6 +236,11 @@ class JournalVoucher(BaseModel):
                 condition=models.Q(is_deleted=False),
                 name='uq_journal_voucher_voucher_no_active',
             ),
+            models.UniqueConstraint(
+                fields=['source_type', 'source_id'],
+                condition=models.Q(is_deleted=False) & ~models.Q(source_type='') & models.Q(source_id__isnull=False),
+                name='uq_journal_voucher_source_active',
+            ),
         ]
 
     def __str__(self):
@@ -373,24 +378,31 @@ def post_voucher_to_ledger(voucher, user=None):
       1. 每条分录的借/贷金额累加到 ``AccountBalance`` 的本期发生额,并按期初重算期末;
       2. 凭证置 ``POSTED`` 并记录过账人/时间。
 
-    非幂等(余额为累加写入):同一张凭证只应过账一次,幂等性由调用方保证
-    (手工路径靠状态机 APPROVED->POSTED;自动路径靠 source_type+source_id 去重)。
+    凭证行加锁后检查状态，重复/并发调用已过账凭证时直接返回，避免重复累加科目余额。
     """
-    for line in voucher.lines.filter(is_deleted=False):
-        balance, _ = AccountBalance.objects.get_or_create(
-            account=line.account, fiscal_period=voucher.fiscal_period, defaults={'created_by': user}
-        )
-        balance.period_debit += line.debit_amount
-        balance.period_credit += line.credit_amount
-        balance.closing_debit = balance.opening_debit + balance.period_debit
-        balance.closing_credit = balance.opening_credit + balance.period_credit
-        balance.save()
+    with transaction.atomic():
+        voucher = JournalVoucher.objects.select_for_update().get(pk=voucher.pk)
+        if voucher.status == 'POSTED':
+            return voucher
+        if voucher.status != 'APPROVED':
+            raise ValueError('只有已审核凭证可以过账')
 
-    voucher.status = 'POSTED'
-    voucher.posted_at = timezone.now()
-    voucher.posted_by = user
-    voucher.save()
-    return voucher
+        for line in voucher.lines.filter(is_deleted=False):
+            balance, _ = AccountBalance.objects.get_or_create(
+                account=line.account, fiscal_period=voucher.fiscal_period, defaults={'created_by': user}
+            )
+            balance = AccountBalance.objects.select_for_update().get(pk=balance.pk)
+            balance.period_debit += line.debit_amount
+            balance.period_credit += line.credit_amount
+            balance.closing_debit = balance.opening_debit + balance.period_debit
+            balance.closing_credit = balance.opening_credit + balance.period_credit
+            balance.save()
+
+        voucher.status = 'POSTED'
+        voucher.posted_at = timezone.now()
+        voucher.posted_by = user
+        voucher.save()
+        return voucher
 
 
 # =====================
@@ -480,6 +492,11 @@ class JournalVoucherSerializer(serializers.ModelSerializer):
     def get_period_name(self, obj) -> str:
         return str(obj.fiscal_period)
 
+    def validate(self, attrs):
+        if self.instance and self.instance.status != 'DRAFT' and attrs:
+            raise serializers.ValidationError('非草稿凭证不可通过通用接口修改，请使用专用审核/过账操作')
+        return attrs
+
 
 class AccountBalanceSerializer(serializers.ModelSerializer):
     account_code = serializers.CharField(source='account.code', read_only=True)
@@ -568,7 +585,7 @@ class FiscalPeriodViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             return Response({'error': '只有开放期间可以关闭'}, status=400)
 
         # 检查是否有未审核凭证
-        pending_vouchers = period.vouchers.filter(status__in=['DRAFT', 'PENDING']).count()
+        pending_vouchers = period.vouchers.exclude(status__in=['POSTED', 'CANCELLED']).count()
         if pending_vouchers > 0:
             return Response({'error': f'有{pending_vouchers}张凭证未审核'}, status=400)
 

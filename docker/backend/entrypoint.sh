@@ -19,6 +19,9 @@ if [ "${RUN_BOOTSTRAP:-0}" = "1" ]; then
     echo "Running database migrations..."
     python manage.py migrate --noinput
 
+    echo "Ensuring finance master data..."
+    python manage.py init_finance
+
     echo "Collecting static files..."
     python manage.py collectstatic --noinput
 

@@ -81,25 +81,57 @@ class Project(BaseModel):
 
         from apps.inventory.models import StockMove
 
-        result = StockMove.objects.filter(project=self, move_type='OUT_PROJECT', status='COMPLETED').aggregate(
-            total=Sum(F('qty') * F('unit_cost'))
-        )
-        return result['total'] or 0
+        outbound = StockMove.objects.filter(
+            project=self, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
+        ).aggregate(total=Sum(F('qty') * F('unit_cost')))
+        returned = StockMove.objects.filter(
+            project=self,
+            move_type='ADJUSTMENT',
+            reference_type='MaterialReturn',
+            status='COMPLETED',
+            is_deleted=False,
+        ).aggregate(total=Sum(F('qty') * F('unit_cost')))
+        return (outbound['total'] or 0) - (returned['total'] or 0)
 
     def get_actual_labor_cost(self):
-        """Get actual labor cost from project tasks."""
-        from django.db.models import F, Sum
+        """Approved time logs are the source of truth for project labor cost."""
+        from decimal import Decimal
 
-        result = ProjectMember.objects.filter(project=self).aggregate(total=Sum(F('actual_hours') * F('hourly_rate')))
-        return result['total'] or 0
+        from django.db.models import Sum
+
+        hours_by_user = (
+            TimeLog.objects.filter(
+                project=self,
+                status='APPROVED',
+                is_deleted=False,
+            )
+            .values('user_id')
+            .annotate(total_hours=Sum('hours'))
+        )
+        rates = dict(ProjectMember.objects.filter(project=self, is_deleted=False).values_list('user_id', 'hourly_rate'))
+        return sum(
+            (
+                (row['total_hours'] or Decimal('0')) * (rates.get(row['user_id']) or Decimal('0'))
+                for row in hours_by_user
+            ),
+            Decimal('0'),
+        )
 
     def get_actual_expense_cost(self):
         """Get actual expense cost."""
-        from django.db.models import Sum
+        from django.db.models import Case, DecimalField, F, Sum, When
 
         from apps.finance.models import Expense
 
-        result = Expense.objects.filter(project=self, status='APPROVED').aggregate(total=Sum('amount'))
+        result = Expense.objects.filter(project=self, status__in=['APPROVED', 'PAID'], is_deleted=False).aggregate(
+            total=Sum(
+                Case(
+                    When(base_amount__isnull=False, then=F('base_amount')),
+                    default=F('amount'),
+                    output_field=DecimalField(max_digits=18, decimal_places=2),
+                )
+            )
+        )
         return result['total'] or 0
 
     def get_total_receivables(self):

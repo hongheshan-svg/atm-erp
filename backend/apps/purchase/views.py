@@ -3,6 +3,7 @@ Views for purchase app.
 """
 
 import logging
+from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
@@ -909,6 +910,7 @@ class PurchaseOrderViewSet(
             else:
                 # 未配置审批流程，直接确认 —— 复用完整确认副作用(创建AP/付款计划/更新BOM)
                 schedules = self._apply_confirm_side_effects(po, request.user, request.data)
+                po.refresh_from_db()
                 return Response(
                     {
                         **PurchaseOrderSerializer(po).data,
@@ -929,6 +931,13 @@ class PurchaseOrderViewSet(
         """确认采购订单的完整副作用：置 CONFIRMED、更新BOM、创建AP与付款计划。返回付款计划列表。"""
         data = data or {}
         with transaction.atomic():
+            po = PurchaseOrder.objects.select_for_update().get(pk=po.pk)
+            if po.status == 'CONFIRMED':
+                return []
+            if po.status not in ['DRAFT', 'APPROVED']:
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError('只能确认草稿或已审批状态的订单')
             po.status = 'CONFIRMED'
             po.save()
 
@@ -997,6 +1006,7 @@ class PurchaseOrderViewSet(
             return workflow_error
 
         schedules = self._apply_confirm_side_effects(po, request.user, request.data)
+        po.refresh_from_db()
 
         response_data = PurchaseOrderSerializer(po).data
         response_data['payment_schedules_count'] = len(schedules)
@@ -1018,6 +1028,13 @@ class PurchaseOrderViewSet(
             )
 
         with transaction.atomic():
+            po = PurchaseOrder.objects.select_for_update().get(pk=po.pk)
+            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+
+            payables = list(AccountPayable.objects.select_for_update().filter(po=po, is_deleted=False))
+            if any(ap.amount_paid > 0 for ap in payables):
+                return Response({'error': '该订单已有付款记录，请先反核销后再取消'}, status=status.HTTP_400_BAD_REQUEST)
+
             po.status = 'CANCELLED'
             po.save()
 
@@ -1032,9 +1049,12 @@ class PurchaseOrderViewSet(
             )
 
             # 撤销关联的应付账款与付款计划（与 withdraw 一致），避免取消后财务仍全额挂账
-            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+            from apps.finance.posting import reverse_document
 
-            AccountPayable.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
+            for ap in payables:
+                reverse_document('AP_INVOICE', ap, request.user)
+                ap.status = 'CANCELLED'
+                ap.save(update_fields=['status', 'updated_at'])
             PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).update(is_deleted=True)
 
             # 回退BOM状态：ORDERED -> CANCELLED
@@ -1057,6 +1077,7 @@ class PurchaseOrderViewSet(
         shipped_items = request.data.get('items', [])
 
         with transaction.atomic():
+            po = PurchaseOrder.objects.select_for_update().get(pk=po.pk)
             from apps.projects.models import ProjectBOM
 
             if shipped_items:
@@ -1111,6 +1132,13 @@ class PurchaseOrderViewSet(
             )
 
         with transaction.atomic():
+            po = PurchaseOrder.objects.select_for_update().get(pk=po.pk)
+            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+
+            payables = list(AccountPayable.objects.select_for_update().filter(po=po, is_deleted=False))
+            if any(ap.amount_paid > 0 for ap in payables):
+                return Response({'error': '该订单已有付款记录，请先反核销后再撤回'}, status=status.HTTP_400_BAD_REQUEST)
+
             # 释放该订单占用的预算（幂等）；无生效预算安全跳过
             from apps.purchase.budget import BudgetService
 
@@ -1122,9 +1150,13 @@ class PurchaseOrderViewSet(
             )
 
             # 删除关联的应付账款
-            from apps.finance.models import AccountPayable, PurchasePaymentSchedule
+            from apps.finance.posting import reverse_document
 
-            AccountPayable.objects.filter(po=po, is_deleted=False).update(is_deleted=True)
+            for ap in payables:
+                reverse_document('AP_INVOICE', ap, request.user)
+                ap.status = 'CANCELLED'
+                ap.save(update_fields=['status', 'updated_at'])
+                ap.soft_delete()
 
             # 删除付款计划
             PurchasePaymentSchedule.objects.filter(purchase_order=po, is_deleted=False).update(is_deleted=True)
@@ -1174,6 +1206,13 @@ class PurchaseOrderLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     permission_resource = 'order_line'
     search_fields = ['item__sku', 'item__name']
 
+    def perform_destroy(self, instance):
+        if instance.po.status not in ('DRAFT', 'REJECTED'):
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError('只有草稿或已拒绝采购订单可以删除明细')
+        super().perform_destroy(instance)
+
 
 class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """
@@ -1214,17 +1253,37 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             from django.conf import settings
 
             from apps.inventory.models import StockMove
-            from apps.projects.models import ProjectBOM
+
+            receipt = GoodsReceipt.objects.select_for_update().select_related('po').get(pk=receipt.pk)
+            if receipt.status != 'DRAFT':
+                return Response({'error': '只能确认草稿状态的收货单'}, status=status.HTTP_400_BAD_REQUEST)
+            po = PurchaseOrder.objects.select_for_update().get(pk=receipt.po_id)
+            if po.status not in ('CONFIRMED', 'PARTIAL'):
+                return Response(
+                    {'error': '只能对已确认或部分收货状态的采购订单确认收货'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            receipt_lines = list(
+                receipt.lines.select_for_update().filter(is_deleted=False).select_related('item', 'po_line')
+            )
+            po_lines = {
+                line.pk: line
+                for line in PurchaseOrderLine.objects.select_for_update().filter(
+                    pk__in=[line.po_line_id for line in receipt_lines]
+                )
+            }
+            for line in receipt_lines:
+                line.po_line = po_lines[line.po_line_id]
 
             costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
-            po = receipt.po
 
             # 服务端二次校验：剩余可收数量（防御绕过 serializer 直接调 confirm 的超收）
-            for line in receipt.lines.filter(is_deleted=False):
+            for line in receipt_lines:
                 if line.quality_status == 'FAILED':
                     continue
-                remaining = float(line.po_line.qty) - float(line.po_line.received_qty)
-                if float(line.qty) > remaining:
+                remaining = line.po_line.qty - line.po_line.received_qty
+                if line.qty > remaining:
                     return Response(
                         {'error': f'物料 {line.item.sku} 超收：剩余可收 {remaining}，本次 {line.qty}'},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -1234,14 +1293,14 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             # 默认 settings.IQC_ENFORCE_INSPECTION=False 不阻断既有流程；FAIL 检验单在下方按行跳过入库。
             from apps.purchase.iqc import evaluate_line_inspection
 
-            for line in receipt.lines.filter(is_deleted=False):
+            for line in receipt_lines:
                 if line.quality_status == 'FAILED':
                     continue
                 decision, reason = evaluate_line_inspection(line)
                 if decision == 'MISSING_BLOCK':
                     return Response({'error': reason}, status=status.HTTP_400_BAD_REQUEST)
 
-            for line in receipt.lines.filter(is_deleted=False):
+            for line in receipt_lines:
                 # 不合格品(FAILED)不入库、不计入已收数量，须走退货/让步流程处理
                 if line.quality_status == 'FAILED':
                     continue
@@ -1280,28 +1339,8 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                 # Update received qty on PO line (F() for concurrency safety)
                 from django.db.models import F as DbF
 
-                from apps.purchase.models import PurchaseOrderLine
-
                 PurchaseOrderLine.objects.filter(pk=line.po_line_id).update(received_qty=DbF('received_qty') + line.qty)
                 line.po_line.refresh_from_db()
-
-                # 更新BOM的收货数量和状态
-                if po.project:
-                    bom_items = ProjectBOM.objects.filter(
-                        project=po.project,
-                        item=line.item,
-                        purchase_order=po,
-                        is_deleted=False,
-                        order_status__in=['ORDERED', 'IN_TRANSIT', 'PARTIAL_RECEIVED'],
-                    )
-                    for bom in bom_items:
-                        bom.received_qty = (bom.received_qty or 0) + line.qty
-                        # 根据收货数量更新状态
-                        if bom.received_qty >= bom.planned_qty:
-                            bom.order_status = 'RECEIVED'
-                        else:
-                            bom.order_status = 'PARTIAL_RECEIVED'
-                        bom.save(update_fields=['received_qty', 'order_status'])
 
             receipt.status = 'CONFIRMED'
             receipt.save()
@@ -1333,7 +1372,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         with transaction.atomic():
             from django.db.models import F as DbF
 
-            from apps.inventory.models import StockMove
+            from apps.inventory.models import Stock, StockMove
             from apps.projects.models import ProjectBOM
 
             po = receipt.po
@@ -1347,7 +1386,7 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             for item_data in return_items:
                 item_id = item_data.get('item')
                 po_line_id = item_data.get('po_line')
-                return_qty = float(item_data.get('qty', 0) or 0)
+                return_qty = Decimal(str(item_data.get('qty', 0) or 0))
 
                 if not item_id or return_qty <= 0:
                     continue
@@ -1364,23 +1403,35 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
                         {'error': f'物料 {item_id} 不在该收货单的收货明细中，无法退货'},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                if return_qty > float(receipt_line.qty):
+                prior_returned = StockMove.objects.filter(
+                    reference_type='GoodsReceipt',
+                    reference_id=receipt.id,
+                    move_type='OUT_RETURN',
+                    item_id=item_id,
+                    status='COMPLETED',
+                    is_deleted=False,
+                ).aggregate(total=Sum('qty'))['total'] or Decimal('0')
+                returnable_qty = receipt_line.qty - prior_returned
+                if return_qty > returnable_qty:
                     return Response(
-                        {'error': f'退货数量超过该收货行收货数量({receipt_line.qty})'},
+                        {'error': f'退货数量超过该收货行剩余可退数量({returnable_qty})'},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 # 退货不得超过 PO 行当前已收数量
-                if return_qty > float(receipt_line.po_line.received_qty):
+                if return_qty > receipt_line.po_line.received_qty:
                     return Response(
                         {'error': f'退货数量超过订单已收数量({receipt_line.po_line.received_qty})'},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
                 # 创建退货库存移动
+                stock = Stock.objects.filter(warehouse=receipt.warehouse, item_id=item_id).first()
+                unit_cost = stock.weighted_avg_cost if stock else receipt_line.po_line.unit_price
                 StockMove.objects.create(
                     item_id=item_id,
                     warehouse_from=receipt.warehouse,
                     qty=return_qty,
+                    unit_cost=unit_cost,
                     move_type='OUT_RETURN',
                     reference_type='GoodsReceipt',
                     reference_id=receipt.id,
@@ -1448,6 +1499,13 @@ class GoodsReceiptLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
     serializer_class = GoodsReceiptLineSerializer
     filterset_fields = ['receipt', 'item', 'quality_status', 'is_deleted']
     search_fields = ['item__sku', 'item__name']
+
+    def perform_destroy(self, instance):
+        if instance.receipt.status != 'DRAFT':
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError('只有草稿收货单可以删除明细')
+        super().perform_destroy(instance)
 
 
 class PurchaseContractViewSet(

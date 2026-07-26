@@ -59,13 +59,21 @@ def sync_bom_on_po_confirm(sender, instance, **kwargs):
             )
 
 
+@receiver(pre_save, sender=GoodsReceipt)
+def remember_receipt_previous_status(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._previous_status = None
+        return
+    instance._previous_status = GoodsReceipt.all_objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+
+
 @receiver(post_save, sender=GoodsReceipt)
 def sync_bom_on_receipt(sender, instance, **kwargs):
     """
     收货单确认时同步更新关联的BOM状态
     """
     # 只处理已确认的收货单
-    if instance.status != 'CONFIRMED':
+    if instance.status != 'CONFIRMED' or getattr(instance, '_previous_status', None) == 'CONFIRMED':
         return
 
     with transaction.atomic():
@@ -77,7 +85,7 @@ def sync_bom_on_receipt(sender, instance, **kwargs):
             bom = po_line.bom_item
 
             # 更新已收货数量
-            bom.received_qty = (bom.received_qty or 0) + line.received_qty
+            bom.received_qty = (bom.received_qty or 0) + line.qty
 
             # 更新实际到货日期
             bom.actual_delivery_date = instance.receipt_date

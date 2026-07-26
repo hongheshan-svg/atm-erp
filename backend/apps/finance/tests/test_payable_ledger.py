@@ -201,6 +201,28 @@ class ContractPaymentAdapterTest(TestCase):
 
 
 class MatchCandidatesTest(TestCase):
+    def test_credit_statement_has_no_payable_candidates(self):
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import match_candidates
+
+        PayableItem.objects.create(
+            source_type='ap',
+            source_id=901,
+            source_no='AP901',
+            category='采购',
+            payee_name='供应商甲',
+            amount_due=Decimal('1000.00'),
+        )
+        bs = BankStatement.objects.create(
+            transaction_type='CREDIT',
+            credit_amount=Decimal('1000.00'),
+            counterparty_name='供应商甲',
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+
+        self.assertEqual(match_candidates(bs), [])
+
     def test_scores_supplier_and_amount(self):
         from apps.finance.models import BankStatement
         from apps.finance.payable_models import PayableItem
@@ -406,6 +428,31 @@ class SettleTest(TestCase):
         bs = self._bs(Decimal('500.00'))
         with self.assertRaises(ValueError):
             settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('300.00')}], u)
+
+    def test_credit_statement_cannot_settle_payable(self):
+        from apps.accounts.models import User
+        from apps.finance.models import BankStatement
+        from apps.finance.payable_models import PayableItem
+        from apps.finance.payable_service import settle
+
+        u = User.objects.create(username='op-credit', employee_id='OP-CREDIT')
+        item = PayableItem.objects.create(
+            source_type='ap',
+            source_id=902,
+            source_no='AP902',
+            category='采购',
+            payee_name='供应商甲',
+            amount_due=Decimal('100.00'),
+        )
+        bs = BankStatement.objects.create(
+            transaction_type='CREDIT',
+            credit_amount=Decimal('100.00'),
+            counterparty_name='供应商甲',
+            transaction_time='2026-07-02 00:00:00+00',
+        )
+
+        with self.assertRaisesMessage(ValueError, '只能使用支出'):
+            settle(bs, [{'payable_item_id': item.pk, 'amount': Decimal('100.00')}], u)
 
 
 class UnsettleTest(TestCase):

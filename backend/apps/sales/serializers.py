@@ -73,6 +73,18 @@ class SalesQuotationLineSerializer(serializers.ModelSerializer):
             return obj.item.specification or ''
         return obj.custom_spec or ''
 
+    def validate(self, attrs):
+        quotation = attrs.get('quotation') or (self.instance.quotation if self.instance else None)
+        if quotation and quotation.status not in ('DRAFT', 'REJECTED'):
+            raise serializers.ValidationError('只有草稿或已拒绝报价单可以修改明细')
+        if self.instance and attrs.get('quotation') and attrs['quotation'].pk != self.instance.quotation_id:
+            raise serializers.ValidationError({'quotation': '报价明细不可转挂到其他报价单'})
+        if attrs.get('qty', self.instance.qty if self.instance else 0) <= 0:
+            raise serializers.ValidationError({'qty': '数量必须大于 0'})
+        if attrs.get('unit_price', self.instance.unit_price if self.instance else 0) < 0:
+            raise serializers.ValidationError({'unit_price': '单价不能小于 0'})
+        return attrs
+
 
 class SalesQuotationSerializer(serializers.ModelSerializer):
     """SalesQuotation serializer."""
@@ -246,6 +258,18 @@ class SalesOrderLineSerializer(serializers.ModelSerializer):
         if obj.item:
             return obj.item.name
         return obj.custom_name or ''
+
+    def validate(self, attrs):
+        so = attrs.get('so') or (self.instance.so if self.instance else None)
+        if so and so.status not in ('DRAFT', 'REJECTED'):
+            raise serializers.ValidationError('只有草稿或已拒绝销售订单可以修改明细')
+        if self.instance and attrs.get('so') and attrs['so'].pk != self.instance.so_id:
+            raise serializers.ValidationError({'so': '订单明细不可转挂到其他销售订单'})
+        if attrs.get('qty', self.instance.qty if self.instance else 0) <= 0:
+            raise serializers.ValidationError({'qty': '数量必须大于 0'})
+        if attrs.get('unit_price', self.instance.unit_price if self.instance else 0) < 0:
+            raise serializers.ValidationError({'unit_price': '单价不能小于 0'})
+        return attrs
 
     def get_item_sku(self, obj) -> str:
         """返回产品编码"""
@@ -501,6 +525,19 @@ class DeliveryOrderLineSerializer(serializers.ModelSerializer):
             'is_deleted',
         ]
 
+    def validate(self, attrs):
+        delivery = attrs.get('delivery') or (self.instance.delivery if self.instance else None)
+        so_line = attrs.get('so_line') or (self.instance.so_line if self.instance else None)
+        if delivery and delivery.status != 'DRAFT':
+            raise serializers.ValidationError('只有草稿发货单可以修改明细')
+        if delivery and so_line and delivery.so_id != so_line.so_id:
+            raise serializers.ValidationError({'so_line': '发货明细必须属于发货单关联的销售订单'})
+        if self.instance and attrs.get('delivery') and attrs['delivery'].pk != self.instance.delivery_id:
+            raise serializers.ValidationError({'delivery': '发货明细不可转挂到其他发货单'})
+        if attrs.get('qty', self.instance.qty if self.instance else 0) <= 0:
+            raise serializers.ValidationError({'qty': '发货数量必须大于 0'})
+        return attrs
+
 
 class DeliveryOrderSerializer(serializers.ModelSerializer):
     """DeliveryOrder serializer."""
@@ -597,6 +634,10 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f'订单明细 {so_line_id} 不存在')
 
             qty = Decimal(str(qty))
+            if qty <= 0:
+                raise serializers.ValidationError(f'订单明细 {so_line_id} 的发货数量必须大于 0')
+            if so_line.so_id != delivery.so_id:
+                raise serializers.ValidationError(f'订单明细 {so_line_id} 不属于当前发货单的销售订单')
             # 其他未完成草稿发货单已占用、但尚未计入 delivered_qty 的数量
             reserved = DeliveryOrderLine.objects.filter(
                 so_line=so_line,
@@ -633,6 +674,8 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """Update delivery order with lines."""
+        if instance.status != 'DRAFT':
+            raise serializers.ValidationError('只有草稿发货单可以修改')
         lines_data = self.initial_data.get('lines', [])
 
         with transaction.atomic():

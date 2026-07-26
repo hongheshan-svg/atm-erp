@@ -2,7 +2,10 @@
 外协加工管理视图
 """
 
+from decimal import Decimal
+
 from django.db import transaction
+from django.db.models import F, Sum
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -202,6 +205,7 @@ class OutsourceMaterialIssueViewSet(
                     item=line.item,
                     warehouse_from=issue.warehouse,
                     qty=line.qty,
+                    unit_cost=Stock.objects.get(warehouse=issue.warehouse, item=line.item).weighted_avg_cost,
                     move_type='OUT_OUTSOURCE',
                     reference_type='OutsourceMaterialIssue',
                     reference_id=issue.id,
@@ -211,8 +215,6 @@ class OutsourceMaterialIssueViewSet(
                 )
 
                 # 更新外协单明细的发料数量（F() 防止并发竞争）
-                from django.db.models import F
-
                 OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(sent_qty=F('sent_qty') + line.qty)
 
             issue.status = 'CONFIRMED'
@@ -327,10 +329,21 @@ class OutsourceReceiptViewSet(
             for line in receipt.lines.filter(is_deleted=False):
                 # 创建库存入库记录（只入合格品）
                 if line.qualified_qty > 0:
+                    material_moves = StockMove.objects.filter(
+                        reference_type='OutsourceMaterialIssue',
+                        reference_id__in=receipt.outsource_order.material_issues.filter(is_deleted=False).values('id'),
+                        item=line.item,
+                        move_type='OUT_OUTSOURCE',
+                        status='COMPLETED',
+                        is_deleted=False,
+                    ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))
+                    issued_qty = material_moves['total_qty'] or Decimal('0')
+                    material_unit_cost = material_moves['total_cost'] / issued_qty if issued_qty else Decimal('0')
                     StockMove.objects.create(
                         item=line.item,
                         warehouse_to=receipt.warehouse,
                         qty=line.qualified_qty,
+                        unit_cost=material_unit_cost + line.outsource_line.unit_price,
                         move_type='IN_OUTSOURCE',
                         reference_type='OutsourceReceipt',
                         reference_id=receipt.id,
@@ -340,8 +353,6 @@ class OutsourceReceiptViewSet(
                     )
 
                 # 更新外协单明细的收货数量（F() 防止并发竞争）
-                from django.db.models import F
-
                 OutsourceOrderLine.objects.filter(pk=line.outsource_line_id).update(
                     received_qty=F('received_qty') + line.qualified_qty
                 )
