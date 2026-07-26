@@ -3,6 +3,7 @@ Analytics and KPI calculation services
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.db.models import Avg, Count, F, Q, Sum
 
@@ -131,15 +132,16 @@ class CashFlowForecastService:
     """Cash flow forecasting service"""
 
     @staticmethod
-    def forecast_next_30_days():
-        """Forecast cash flow for next 30 days"""
+    def forecast_next_30_days(days=30):
+        """Forecast cash flow for the requested horizon using posted cash and open ledgers."""
+        days = max(1, min(int(days), 365))
         today = datetime.now().date()
-        forecast_end = today + timedelta(days=30)
+        forecast_end = today + timedelta(days=days)
 
         # Expected receivables
         expected_inflows = (
             AccountReceivable.objects.filter(
-                due_date__range=[today, forecast_end], status__in=['PENDING', 'PARTIAL']
+                due_date__lte=forecast_end, status__in=['PENDING', 'PARTIAL', 'OVERDUE']
             ).aggregate(total=Sum(F('amount_due') - F('amount_paid')))['total']
             or 0
         )
@@ -147,23 +149,28 @@ class CashFlowForecastService:
         # Expected payables
         expected_outflows = (
             AccountPayable.objects.filter(
-                due_date__range=[today, forecast_end], status__in=['PENDING', 'PARTIAL']
+                due_date__lte=forecast_end, status__in=['PENDING', 'PARTIAL', 'OVERDUE']
             ).aggregate(total=Sum(F('amount_due') - F('amount_paid')))['total']
             or 0
         )
 
-        # Projected expenses
-        avg_monthly_expense = (
+        # Project approved expenses from the trailing 90-day daily run rate.
+        historical_expenses = (
             Expense.objects.filter(expense_date__gte=today - timedelta(days=90), status='APPROVED').aggregate(
-                Avg('amount')
-            )['amount__avg']
+                total=Sum('amount')
+            )['total']
             or 0
         )
+        projected_expenses = Decimal(historical_expenses) / Decimal('90') * Decimal(days)
 
-        projected_expenses = avg_monthly_expense
+        # Posted cash/bank vouchers are the authoritative current cash balance.
+        from apps.finance.financial_statements import cash_flow
+
+        current_balance = cash_flow(today, today)['closing_cash']
 
         return {
             'period': {'start': today.isoformat(), 'end': forecast_end.isoformat()},
+            'current_balance': float(current_balance),
             'expected_inflows': float(expected_inflows),
             'expected_outflows': float(expected_outflows) + float(projected_expenses),
             'net_cash_flow': float(expected_inflows) - float(expected_outflows) - float(projected_expenses),

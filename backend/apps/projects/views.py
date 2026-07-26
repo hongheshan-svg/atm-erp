@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
 from apps.core.permission_service import get_department_tree_ids, resolve_data_scope
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 from apps.masterdata.models import Item
 
 from .models import (
@@ -52,7 +53,13 @@ from .serializers import (
 )
 
 
-class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
+class ProjectViewSet(
+    SoftDeleteMixin,
+    UserTrackingMixin,
+    PermissionMixin,
+    WorkflowEnforcementMixin,
+    viewsets.ModelViewSet,
+):
     """
     ViewSet for Project management.
     """
@@ -60,6 +67,9 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
     permission_module = 'projects'
     permission_resource = 'project'
     allow_authenticated_read = True
+    workflow_business_type = 'PROJECT'
+    workflow_amount_field = 'budget_total'
+    workflow_no_field = 'code'
 
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
@@ -78,28 +88,26 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
         amount = project.budget_total or 0
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='PROJECT',
-                business_id=project.id,
-                business_no=project.code,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                project,
+                request.user,
+                approved_status='IN_PROGRESS',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 project.status = 'PENDING'
                 project.save()
                 return Response(
                     {
                         **ProjectSerializer(project).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，直接激活
                 project.status = 'IN_PROGRESS'
                 project.save()
@@ -107,20 +115,19 @@ class ProjectViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewse
                     {
                         **ProjectSerializer(project).data,
                         'workflow_started': False,
-                        'message': error or '未配置审批流程，项目已直接启动',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         except Exception as e:
-            # 审批模块不可用，直接激活
-            project.status = 'IN_PROGRESS'
-            project.save()
+            import logging
+
+            logging.getLogger(__name__).exception('项目提交工作流异常 project_code=%s', project.code)
             return Response(
-                {
-                    **ProjectSerializer(project).data,
-                    'workflow_started': False,
-                    'message': f'项目已启动，但工作流服务异常: {e}',
-                }
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
     @action(detail=True, methods=['post'])
@@ -2505,13 +2512,22 @@ class TimeLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
         return Response(TimeLogSerializer(time_log).data)
 
 
-class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.ModelViewSet):
+class ECNViewSet(
+    SoftDeleteMixin,
+    UserTrackingMixin,
+    PermissionMixin,
+    WorkflowEnforcementMixin,
+    viewsets.ModelViewSet,
+):
     """
     ViewSet for ECN (Engineering Change Notice) management.
     """
 
     permission_module = 'projects'
     permission_resource = 'ecn'
+    workflow_business_type = 'ECN'
+    workflow_amount_field = 'cost_impact'
+    workflow_no_field = 'ecn_no'
 
     queryset = ECN.objects.all()
     filterset_fields = ['project', 'change_type', 'priority', 'status', 'requested_by', 'is_deleted']
@@ -2534,14 +2550,15 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
         # 计算成本影响金额作为审批阈值判断依据
         amount = abs(ecn.cost_impact) if ecn.cost_impact else 0
 
-        # 尝试启动工作流
-        from apps.core.workflow.services import WorkflowService
-
-        instance, error = WorkflowService.start_workflow(
-            business_type='ECN', business_id=ecn.id, business_no=ecn.ecn_no, submitter=request.user, amount=amount
+        result = self.start_workflow_or_auto_approve(
+            ecn,
+            request.user,
+            approved_status='PENDING',
+            submitted_status='PENDING',
+            amount_override=amount,
         )
 
-        if instance:
+        if result['workflow_started']:
             # 有配置的工作流，使用工作流审批
             ecn.status = 'PENDING'
             ecn.save()
@@ -2558,11 +2575,11 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
             return Response(
                 {
                     **ECNSerializer(ecn, context={'request': request}).data,
-                    'workflow_instance_id': instance.id,
+                    'workflow_instance_id': result['instance'].id,
                     'message': '已提交审批流程',
                 }
             )
-        else:
+        elif result['auto_approved']:
             # 没有配置工作流，使用原有逻辑
             ecn.status = 'PENDING'
             ecn.save()
@@ -2578,6 +2595,8 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
 
             return Response(ECNSerializer(ecn, context={'request': request}).data)
 
+        return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approve ECN."""
@@ -2585,6 +2604,10 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
 
         if ecn.status not in ['PENDING', 'REVIEWING']:
             return Response({'error': '当前状态无法批准'}, status=status.HTTP_400_BAD_REQUEST)
+
+        workflow_error = self.check_workflow_allows_direct_action(ecn, '审批')
+        if workflow_error:
+            return workflow_error
 
         from django.utils import timezone
 
@@ -2611,6 +2634,10 @@ class ECNViewSet(SoftDeleteMixin, UserTrackingMixin, PermissionMixin, viewsets.M
 
         if ecn.status not in ['PENDING', 'REVIEWING']:
             return Response({'error': '当前状态无法拒绝'}, status=status.HTTP_400_BAD_REQUEST)
+
+        workflow_error = self.check_workflow_allows_direct_action(ecn, '拒绝')
+        if workflow_error:
+            return workflow_error
 
         ecn.status = 'REJECTED'
         ecn.save()

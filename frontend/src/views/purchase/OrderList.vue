@@ -300,6 +300,7 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getItemList, getSupplierList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { getPurchaseOrderUnitPrice } from '@/utils/businessPricing'
 
 const router = useRouter()
 
@@ -529,7 +530,7 @@ const onItemChange = (index: any) => {
   const line = form.lines[index]
   const item = items.value.find(i => i.id === line.item)
   if (item) {
-    line.unit_price = parseFloat(item.standard_cost || 0)
+    line.unit_price = getPurchaseOrderUnitPrice(item)
   }
 }
 

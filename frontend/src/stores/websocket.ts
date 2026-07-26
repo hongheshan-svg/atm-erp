@@ -21,12 +21,11 @@ export const useWebSocketStore = defineStore('websocket', () => {
     }
     subscribed.value = true
 
-    wsService.connect('notifications')
-
     wsService.on('connection', handleConnection)
     wsService.on('notification', handleNotification)
     wsService.on('alert', handleAlert)
     wsService.on('error', handleError)
+    wsService.connect('notifications')
   }
 
   function connectDashboard(): DashboardWebSocket {
@@ -85,8 +84,8 @@ export const useWebSocketStore = defineStore('websocket', () => {
     dashboardData.value = data
   }
 
-  function handleError(error: any): void {
-    console.error('WebSocket error:', error)
+  function handleError(): void {
+    connected.value = false
   }
 
   function markAsRead(notificationId: number): void {

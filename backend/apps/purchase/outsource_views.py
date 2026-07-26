@@ -178,6 +178,10 @@ class OutsourceMaterialIssueViewSet(
         if issue.status != 'DRAFT':
             return Response({'error': '只能确认草稿状态的发料单'}, status=status.HTTP_400_BAD_REQUEST)
 
+        workflow_error = self.check_workflow_allows_direct_action(issue, '确认')
+        if workflow_error:
+            return workflow_error
+
         with transaction.atomic():
             # 创建库存出库记录
             from apps.inventory.models import Stock, StockMove
@@ -297,6 +301,10 @@ class OutsourceReceiptViewSet(
         receipt = self.get_object()
         if receipt.status not in ['DRAFT', 'INSPECTING']:
             return Response({'error': '只能确认草稿或质检中的收货单'}, status=status.HTTP_400_BAD_REQUEST)
+
+        workflow_error = self.check_workflow_allows_direct_action(receipt, '确认')
+        if workflow_error:
+            return workflow_error
 
         with transaction.atomic():
             from django.utils import timezone

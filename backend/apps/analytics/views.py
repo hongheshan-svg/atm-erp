@@ -6,15 +6,20 @@ from datetime import datetime, timedelta
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from apps.core.permission_mixin import PermissionMixin
 
 from .services import CashFlowForecastService, DashboardKPIService, InventoryAnalyticsService
 
 
-class AnalyticsViewSet(viewsets.ViewSet):
+class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
     """Analytics and KPI endpoints"""
 
+    permission_module = 'reports'
+    permission_resource = 'analytics'
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
@@ -33,8 +38,15 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def cash_flow_forecast(self, request):
-        """Get 30-day cash flow forecast"""
-        forecast = CashFlowForecastService.forecast_next_30_days()
+        """Get a cash flow forecast for a bounded number of days."""
+        try:
+            days = int(request.query_params.get('days', 30))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({'days': '必须是整数'}) from exc
+        if not 1 <= days <= 365:
+            raise ValidationError({'days': '必须在 1 到 365 之间'})
+
+        forecast = CashFlowForecastService.forecast_next_30_days(days=days)
         return Response(forecast)
 
     @action(detail=False, methods=['get'])

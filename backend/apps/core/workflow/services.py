@@ -5,12 +5,17 @@ Workflow service for managing approval processes.
 import logging
 from datetime import timedelta
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
-from .models import WorkflowDefinition, WorkflowInstance, WorkflowTask
+from .models import WorkflowDefinition, WorkflowEvent, WorkflowInstance, WorkflowTask
 
 logger = logging.getLogger(__name__)
+
+
+class WorkflowConfigurationError(Exception):
+    """Raised when a published workflow cannot safely create its next task."""
 
 
 class WorkflowService:
@@ -23,18 +28,20 @@ class WorkflowService:
         """
         Get the appropriate workflow definition for a business type and amount.
         """
-        workflows = WorkflowDefinition.objects.filter(
-            business_type=business_type, is_active=True, is_deleted=False
-        ).order_by('-amount_threshold')
+        workflows = WorkflowDefinition.objects.filter(business_type=business_type, is_active=True, is_deleted=False)
 
-        if amount is not None:
-            # Find workflow with matching amount threshold
-            for workflow in workflows:
-                if workflow.amount_threshold is None or amount >= workflow.amount_threshold:
-                    return workflow
+        if amount is None:
+            return workflows.filter(amount_threshold__isnull=True).order_by('-id').first()
 
-        # Return first active workflow or None
-        return workflows.first()
+        return (
+            workflows.filter(Q(amount_threshold__isnull=True) | Q(amount_threshold__lte=amount))
+            .order_by(F('amount_threshold').desc(nulls_last=True), '-id')
+            .first()
+        )
+
+    @staticmethod
+    def is_missing_workflow_error(error):
+        return bool(error and error.startswith('未找到适用于 '))
 
     @classmethod
     def start_workflow(cls, business_type, business_id, business_no, submitter, amount=None):
@@ -49,32 +56,51 @@ class WorkflowService:
         if not workflow:
             return None, f'未找到适用于 {business_type} 的审批流程'
 
-        with transaction.atomic():
-            # Check if there's already an active workflow for this business object
-            existing = (
-                WorkflowInstance.objects.select_for_update()
-                .filter(business_type=business_type, business_id=business_id, status='PENDING', is_deleted=False)
-                .first()
-            )
+        if not workflow.steps.filter(is_deleted=False).exists():
+            return None, '审批流程没有审批步骤，无法启动'
 
-            if existing:
-                return None, '该单据已有进行中的审批流程'
+        try:
+            with transaction.atomic():
+                existing = (
+                    WorkflowInstance.objects.select_for_update()
+                    .filter(business_type=business_type, business_id=business_id, status='PENDING', is_deleted=False)
+                    .first()
+                )
 
-            # Create workflow instance
-            instance = WorkflowInstance.objects.create(
-                workflow=workflow,
+                if existing:
+                    return None, '该单据已有进行中的审批流程'
+
+                instance = WorkflowInstance.objects.create(
+                    workflow=workflow,
+                    business_type=business_type,
+                    business_id=business_id,
+                    business_no=business_no,
+                    submitter=submitter,
+                    amount=amount,
+                    status='PENDING',
+                    current_step=1,
+                    created_by=submitter,
+                )
+                cls._create_next_task(instance)
+                cls._record_event(
+                    instance,
+                    'STARTED',
+                    submitter,
+                    from_status='',
+                    to_status=instance.status,
+                    metadata={'business_type': business_type, 'business_id': business_id},
+                )
+        except WorkflowConfigurationError as exc:
+            return None, str(exc)
+        except IntegrityError:
+            if WorkflowInstance.objects.filter(
                 business_type=business_type,
                 business_id=business_id,
-                business_no=business_no,
-                submitter=submitter,
-                amount=amount,
                 status='PENDING',
-                current_step=1,
-                created_by=submitter,
-            )
-
-            # Create first task
-            cls._create_next_task(instance)
+                is_deleted=False,
+            ).exists():
+                return None, '该单据已有进行中的审批流程'
+            raise
 
         return instance, None
 
@@ -89,7 +115,7 @@ class WorkflowService:
         for step in steps:
             if step.step_order >= instance.current_step:
                 # Check if step should be skipped based on amount
-                if step.skip_amount_threshold and instance.amount:
+                if step.skip_amount_threshold is not None and instance.amount is not None:
                     if instance.amount < step.skip_amount_threshold:
                         continue
                 current_step = step
@@ -110,18 +136,7 @@ class WorkflowService:
         assignees = cls._get_step_assignees(current_step, instance)
 
         if not assignees:
-            logger.warning(f'No assignee found for step {current_step.id}')
-            # Skip this step and try next (with depth guard to avoid infinite recursion)
-            instance.current_step = current_step.step_order + 1
-            instance.save()
-            max_steps = instance.workflow.steps.count()
-            if instance.current_step > max_steps:
-                instance.status = 'APPROVED'
-                instance.completed_at = timezone.now()
-                instance.save()
-                cls._on_workflow_complete(instance, 'APPROVED')
-                return None
-            return cls._create_next_task(instance)
+            raise WorkflowConfigurationError(f'步骤“{current_step.name}”无法确定审批人，流程未启动')
 
         # Calculate deadline
         deadline = timezone.now() + timedelta(hours=current_step.timeout_hours)
@@ -139,8 +154,7 @@ class WorkflowService:
                 deadline=deadline,
                 created_by=instance.submitter,
             )
-            # Send notification
-            cls._notify_assignee(task)
+            transaction.on_commit(lambda task=task: cls._notify_assignee(task))
             tasks.append(task)
 
         # Return the first task for backward compatibility with callers.
@@ -212,13 +226,12 @@ class WorkflowService:
             if instance.submitter.department and instance.submitter.department.manager:
                 assignee = instance.submitter.department.manager
 
+        if assignee and (not assignee.is_active or getattr(assignee, 'is_deleted', False)):
+            assignee = None
+
         # Fallback to approver_role if no assignee found
         if not assignee and step.approver_role:
             assignee = User.objects.filter(roles=step.approver_role, is_active=True, is_deleted=False).first()
-
-        # Last resort: use first superuser
-        if not assignee:
-            assignee = User.objects.filter(is_superuser=True, is_active=True).first()
 
         return assignee
 
@@ -345,8 +358,8 @@ class WorkflowService:
         Approve a workflow task.
 
         Args:
-            skip_assignee_check: When True, skip the assignee verification.
-                Used by business ViewSets that have their own permission checks.
+            skip_assignee_check: Deprecated compatibility argument. Assignment
+                remains authoritative for non-superusers.
 
         For a COUNTERSIGN (会签) step the instance advances to the next step
         only once EVERY sibling task of the step is approved; an approval that
@@ -359,66 +372,71 @@ class WorkflowService:
         refresh_from_db re-check serialize concurrent approvals so only the
         first one advances.
         """
-        if task.status != 'PENDING':
-            return False, '该任务已处理'
+        try:
+            with transaction.atomic():
+                instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+                task = WorkflowTask.objects.select_related('step', 'assignee').get(id=task.id)
 
-        if not skip_assignee_check and task.assignee != user and not user.is_superuser:
-            return False, '您没有权限处理此任务'
+                if instance.status != 'PENDING':
+                    return False, '该审批流程已结束'
+                if task.status != 'PENDING':
+                    return False, '该任务已处理'
+                if task.assignee != user and not user.is_superuser:
+                    return False, '您没有权限处理此任务'
 
-        with transaction.atomic():
-            # Lock the instance so concurrent countersign approvals serialize and
-            # the "all approved?" check below cannot race into a double advance
-            # or a stuck step.
-            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+                task.status = 'APPROVED'
+                task.action_time = timezone.now()
+                task.comment = comment
+                task.updated_by = user
+                task.save()
 
-            # Re-read task status under the lock to avoid double-processing.
-            task.refresh_from_db()
-            if task.status != 'PENDING':
-                return False, '该任务已处理'
+                step = task.step
+                if step.action_type == 'COUNTERSIGN':
+                    has_pending_sibling = instance.tasks.filter(
+                        step=step,
+                        status='PENDING',
+                        is_deleted=False,
+                    ).exists()
+                    if has_pending_sibling:
+                        cls._record_event(
+                            instance,
+                            'APPROVED',
+                            user,
+                            task=task,
+                            from_status='PENDING',
+                            to_status='PENDING',
+                            comment=comment,
+                        )
+                        return True, '会签通过，等待其他会签人审批'
+                elif step.action_type == 'OR_SIGN':
+                    instance.tasks.filter(
+                        step=step,
+                        status='PENDING',
+                        is_deleted=False,
+                    ).exclude(id=task.id).update(
+                        status='SKIPPED',
+                        action_time=timezone.now(),
+                    )
 
-            task.status = 'APPROVED'
-            task.action_time = timezone.now()
-            task.comment = comment
-            task.updated_by = user
-            task.save()
-
-            step = task.step
-
-            # COUNTERSIGN (会签): the step is satisfied only when ALL of its
-            # sibling tasks are approved. If any sibling is still pending, hold
-            # the instance on the current step and wait.
-            if step.action_type == 'COUNTERSIGN':
-                has_pending_sibling = instance.tasks.filter(
-                    step=step,
-                    status='PENDING',
-                    is_deleted=False,
-                ).exists()
-                if has_pending_sibling:
-                    return True, '会签通过，等待其他会签人审批'
-
-            # OR_SIGN (或签): the FIRST approval satisfies the step. Auto-close
-            # the sibling PENDING tasks (mark SKIPPED) so they don't linger, then
-            # advance below. The instance-row select_for_update lock and the
-            # refresh_from_db re-check above guarantee only the first approval
-            # reaches here; a concurrent approval on a sibling task will find its
-            # own task already SKIPPED and bail out with "该任务已处理".
-            elif step.action_type == 'OR_SIGN':
-                instance.tasks.filter(
-                    step=step,
-                    status='PENDING',
-                    is_deleted=False,
-                ).exclude(id=task.id).update(
-                    status='SKIPPED',
-                    action_time=timezone.now(),
+                instance.current_step = step.step_order + 1
+                instance.updated_by = user
+                instance.save()
+                cls._create_next_task(instance)
+                cls._record_event(
+                    instance,
+                    'APPROVED',
+                    user,
+                    task=task,
+                    from_status='PENDING',
+                    to_status=instance.status,
+                    comment=comment,
                 )
-
-            # Move to next step (single-approver step, last countersigner, or
-            # the first or-signer).
-            instance.current_step = step.step_order + 1
-            instance.save()
-
-            # Create next task or complete workflow
-            cls._create_next_task(instance)
+                transaction.on_commit(lambda step=step, instance=instance: cls._notify_cc(step, instance, 'APPROVED'))
+        except WorkflowConfigurationError as exc:
+            return False, f'审批流程配置错误：{exc}'
+        except Exception:
+            logger.exception('Workflow approval rolled back because business synchronization failed')
+            return False, '业务状态同步失败，审批操作已回滚'
 
         return True, '审批通过'
 
@@ -428,8 +446,8 @@ class WorkflowService:
         Reject a workflow task.
 
         Args:
-            skip_assignee_check: When True, skip the assignee verification.
-                Used by business ViewSets that have their own permission checks.
+            skip_assignee_check: Deprecated compatibility argument. Assignment
+                remains authoritative for non-superusers.
 
         For a single-approver step, or a COUNTERSIGN (会签) step, a single
         rejection rejects the whole instance: any one countersigner's rejection
@@ -443,62 +461,70 @@ class WorkflowService:
         assignee has rejected — i.e. when the last PENDING sibling is rejected
         and no pending sibling remains.
         """
-        if task.status != 'PENDING':
-            return False, '该任务已处理'
+        try:
+            with transaction.atomic():
+                instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+                task = WorkflowTask.objects.select_related('step', 'assignee').get(id=task.id)
 
-        if not skip_assignee_check and task.assignee != user and not user.is_superuser:
-            return False, '您没有权限处理此任务'
+                if instance.status != 'PENDING':
+                    return False, '该审批流程已结束'
+                if task.status != 'PENDING':
+                    return False, '该任务已处理'
+                if task.assignee != user and not user.is_superuser:
+                    return False, '您没有权限处理此任务'
+                if not task.step.can_reject:
+                    return False, '当前审批步骤不允许拒绝'
 
-        with transaction.atomic():
-            # Lock the instance so a concurrent approval cannot advance the step
-            # while we are rejecting it.
-            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+                task.status = 'REJECTED'
+                task.action_time = timezone.now()
+                task.comment = comment
+                task.updated_by = user
+                task.save()
 
-            # Re-read task status under the lock to avoid double-processing.
-            task.refresh_from_db()
-            if task.status != 'PENDING':
-                return False, '该任务已处理'
+                step = task.step
+                if step.action_type == 'OR_SIGN':
+                    has_pending_sibling = instance.tasks.filter(
+                        step=step,
+                        status='PENDING',
+                        is_deleted=False,
+                    ).exists()
+                    if has_pending_sibling:
+                        cls._record_event(
+                            instance,
+                            'REJECTED',
+                            user,
+                            task=task,
+                            from_status='PENDING',
+                            to_status='PENDING',
+                            comment=comment,
+                        )
+                        return True, '已拒绝，等待其他审批人处理'
 
-            task.status = 'REJECTED'
-            task.action_time = timezone.now()
-            task.comment = comment
-            task.updated_by = user
-            task.save()
-
-            step = task.step
-
-            # OR_SIGN (或签): a single rejection does NOT fail the step while
-            # other approvers can still approve. Leave the sibling PENDING tasks
-            # untouched and keep the instance on the current step. Only when the
-            # LAST pending sibling is rejected (no PENDING sibling remains, i.e.
-            # every assignee rejected) does the step/instance fail — in which
-            # case we fall through to the rejection block below (the SKIPPED
-            # update is then a no-op since no sibling is still pending).
-            if step.action_type == 'OR_SIGN':
-                has_pending_sibling = instance.tasks.filter(
-                    step=step,
+                instance.tasks.filter(
                     status='PENDING',
                     is_deleted=False,
-                ).exists()
-                if has_pending_sibling:
-                    return True, '已拒绝，等待其他审批人处理'
-
-            # Cancel any still-pending sibling tasks (e.g. the other
-            # countersigners of this step) so they don't linger.
-            instance.tasks.filter(
-                status='PENDING',
-                is_deleted=False,
-            ).exclude(id=task.id).update(
-                status='SKIPPED',
-                action_time=timezone.now(),
-            )
-
-            # Reject the entire workflow
-            instance.status = 'REJECTED'
-            instance.completed_at = timezone.now()
-            instance.save()
-
-            cls._on_workflow_complete(instance, 'REJECTED')
+                ).exclude(id=task.id).update(
+                    status='SKIPPED',
+                    action_time=timezone.now(),
+                )
+                instance.status = 'REJECTED'
+                instance.completed_at = timezone.now()
+                instance.updated_by = user
+                instance.save()
+                cls._on_workflow_complete(instance, 'REJECTED')
+                cls._record_event(
+                    instance,
+                    'REJECTED',
+                    user,
+                    task=task,
+                    from_status='PENDING',
+                    to_status='REJECTED',
+                    comment=comment,
+                )
+                transaction.on_commit(lambda step=step, instance=instance: cls._notify_cc(step, instance, 'REJECTED'))
+        except Exception:
+            logger.exception('Workflow rejection rolled back because business synchronization failed')
+            return False, '业务状态同步失败，拒绝操作已回滚'
 
         return True, '已拒绝'
 
@@ -527,18 +553,12 @@ class WorkflowService:
                 non-deleted step of the instance's workflow, ``>= 1`` and
                 strictly earlier than the task's current step (you can only send
                 a document backward, never sideways or forward).
-            skip_assignee_check: when True, skip the assignee verification (for
-                business ViewSets that run their own permission checks).
+            skip_assignee_check: deprecated compatibility argument. Assignment
+                remains authoritative for non-superusers.
 
         Returns:
             tuple: (success: bool, message: str)
         """
-        if task.status != 'PENDING':
-            return False, '该任务已处理'
-
-        if not skip_assignee_check and task.assignee != user and not user.is_superuser:
-            return False, '您没有权限处理此任务'
-
         # Validate the target step number up front (cheap guards before locking).
         try:
             target_step_order = int(target_step_order)
@@ -548,29 +568,33 @@ class WorkflowService:
         if target_step_order < 1:
             return False, '退回目标步骤无效'
 
-        current_order = task.step.step_order
-        if target_step_order >= current_order:
-            # Only backward: cannot return to the current step or a later one.
-            return False, '只能退回到当前步骤之前的步骤'
-
-        # The target must correspond to a real (non-deleted) step of this workflow.
-        target_step = task.instance.workflow.steps.filter(step_order=target_step_order, is_deleted=False).first()
-        if not target_step:
-            return False, '退回目标步骤不存在'
-
         with transaction.atomic():
             # Lock the instance so a concurrent approve/reject cannot advance or
             # fail the step while we rewind it (same discipline as countersign).
             instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+            task = WorkflowTask.objects.select_related('step', 'assignee').get(id=task.id)
 
             # Only an in-progress instance can be returned.
             if instance.status != 'PENDING':
                 return False, '该审批流程已结束，无法退回'
 
-            # Re-read task status under the lock to avoid double-processing.
-            task.refresh_from_db()
             if task.status != 'PENDING':
                 return False, '该任务已处理'
+            if task.assignee != user and not user.is_superuser:
+                return False, '您没有权限处理此任务'
+            if not task.step.can_reject:
+                return False, '当前审批步骤不允许退回'
+
+            current_order = task.step.step_order
+            if target_step_order >= current_order:
+                return False, '只能退回到当前步骤之前的步骤'
+
+            target_step = instance.workflow.steps.filter(
+                step_order=target_step_order,
+                is_deleted=False,
+            ).first()
+            if not target_step:
+                return False, '退回目标步骤不存在'
 
             # Mark the current task RETURNED (not REJECTED — the instance lives on).
             task.status = 'RETURNED'
@@ -594,9 +618,21 @@ class WorkflowService:
             # Rewind to the target step; the instance stays IN PROGRESS
             # (status PENDING, NOT REJECTED) and re-creates that step's task(s).
             instance.current_step = target_step_order
+            instance.updated_by = user
             instance.save()
 
             cls._create_next_task(instance)
+            cls._record_event(
+                instance,
+                'RETURNED',
+                user,
+                task=task,
+                from_status='PENDING',
+                to_status='PENDING',
+                comment=comment,
+                metadata={'target_step_order': target_step_order},
+            )
+            transaction.on_commit(lambda: cls._notify_cc(task.step, instance, 'RETURNED'))
 
         return True, f'已退回至第 {target_step_order} 步'
 
@@ -605,23 +641,74 @@ class WorkflowService:
         """
         Withdraw a workflow instance (by submitter).
         """
-        if instance.status != 'PENDING':
-            return False, '只能撤回进行中的审批'
+        try:
+            with transaction.atomic():
+                instance = WorkflowInstance.objects.select_for_update().select_related('submitter').get(pk=instance.pk)
+                if instance.status != 'PENDING':
+                    return False, '只能撤回进行中的审批'
+                if instance.submitter != user and not user.is_superuser:
+                    return False, '只有提交人可以撤回'
 
-        if instance.submitter != user and not user.is_superuser:
-            return False, '只有提交人可以撤回'
-
-        with transaction.atomic():
-            # Cancel all pending tasks
-            instance.tasks.filter(status='PENDING').update(status='SKIPPED', action_time=timezone.now())
-
-            instance.status = 'WITHDRAWN'
-            instance.completed_at = timezone.now()
-            instance.save()
-
-            cls._on_workflow_complete(instance, 'WITHDRAWN')
+                instance.tasks.filter(status='PENDING', is_deleted=False).update(
+                    status='SKIPPED',
+                    action_time=timezone.now(),
+                )
+                instance.status = 'WITHDRAWN'
+                instance.completed_at = timezone.now()
+                instance.updated_by = user
+                instance.save()
+                cls._on_workflow_complete(instance, 'WITHDRAWN')
+                cls._record_event(
+                    instance,
+                    'WITHDRAWN',
+                    user,
+                    from_status='PENDING',
+                    to_status='WITHDRAWN',
+                )
+        except Exception:
+            logger.exception('Workflow withdrawal rolled back because business synchronization failed')
+            return False, '业务状态同步失败，撤回操作已回滚'
 
         return True, '已撤回'
+
+    @classmethod
+    def cancel_workflow(cls, business_type, business_id, user=None):
+        """Idempotently cancel the pending workflow for a business object."""
+        with transaction.atomic():
+            instance = (
+                WorkflowInstance.objects.select_for_update()
+                .filter(
+                    business_type=business_type,
+                    business_id=business_id,
+                    is_deleted=False,
+                )
+                .order_by('-submit_time', '-id')
+                .first()
+            )
+            if not instance:
+                return True, '该单据没有审批流程'
+            if instance.status == 'CANCELLED':
+                return True, '审批流程已取消'
+            if instance.status != 'PENDING':
+                return False, '只能取消进行中的审批流程'
+
+            instance.tasks.filter(status='PENDING', is_deleted=False).update(
+                status='SKIPPED',
+                action_time=timezone.now(),
+            )
+            instance.status = 'CANCELLED'
+            instance.completed_at = timezone.now()
+            if user is not None:
+                instance.updated_by = user
+            instance.save()
+            cls._record_event(
+                instance,
+                'CANCELLED',
+                user,
+                from_status='PENDING',
+                to_status='CANCELLED',
+            )
+            return True, '审批流程已取消'
 
     @classmethod
     def _on_workflow_complete(cls, instance, result):
@@ -688,8 +775,7 @@ class WorkflowService:
                     order_amount = so.total_with_tax or so.total_amount or 0
                     passed, message = check_customer_credit_for_order(so.customer, order_amount)
                     if not passed:
-                        # 校验未过：订单保持待审批状态、不生成应收账款，记录失败原因
-                        logger.error(f'销售订单 {so.order_no} 审批通过但信用校验未过，未确认订单/未生成应收: {message}')
+                        raise RuntimeError(f'销售订单信用校验未通过：{message}')
                     else:
                         so.status = 'CONFIRMED'  # 审批通过后确认订单
                         so.save()
@@ -699,7 +785,7 @@ class WorkflowService:
 
                             create_sales_order_receivables(so, getattr(instance, 'submitter', None) or so.created_by)
                         except Exception as e:
-                            logger.error(f'销售订单 {so.order_no} 审批通过后创建应收/付款计划失败: {e}')
+                            raise RuntimeError(f'销售订单创建应收/付款计划失败：{e}') from e
                         logger.info(f'Sales order {so.order_no} approved, status changed to CONFIRMED')
                 elif result == 'REJECTED':
                     so.status = 'REJECTED'
@@ -975,11 +1061,11 @@ class WorkflowService:
                     sr.status = 'NEW'
                     sr.save()
 
-            # Notify submitter
-            cls._notify_submitter(instance, result)
+            transaction.on_commit(lambda instance=instance, result=result: cls._notify_submitter(instance, result))
 
         except Exception as e:
-            logger.error(f'Error updating business object: {e}')
+            logger.exception('Error updating business object: %s', e)
+            raise
 
     @classmethod
     def _notify_assignee(cls, task):
@@ -1029,6 +1115,28 @@ class WorkflowService:
             logger.error(f'Error sending notification: {e}')
 
     @classmethod
+    def _notify_cc(cls, step, instance, result):
+        """Notify configured CC users once the surrounding transaction commits."""
+        from apps.accounts.models import User
+        from apps.core.models import SystemNotification
+
+        role_ids = list(step.cc_roles.values_list('id', flat=True))
+        user_ids = list(step.cc_users.values_list('id', flat=True))
+        recipients = User.objects.filter(
+            Q(id__in=user_ids) | Q(roles__id__in=role_ids),
+            is_active=True,
+            is_deleted=False,
+        ).distinct()
+        result_text = {'APPROVED': '通过', 'REJECTED': '拒绝', 'RETURNED': '退回'}.get(result, result)
+        for recipient in recipients:
+            SystemNotification.objects.create(
+                user=recipient,
+                type='INFO',
+                title='审批步骤已完成',
+                message=f'单据 {instance.business_no} 的步骤“{step.name}”已{result_text}。',
+            )
+
+    @classmethod
     def get_pending_tasks(cls, user):
         """
         Get all pending tasks for a user.
@@ -1059,4 +1167,28 @@ class WorkflowService:
             WorkflowInstance.objects.filter(business_type=business_type, business_id=business_id, is_deleted=False)
             .prefetch_related('tasks', 'tasks__assignee', 'tasks__step')
             .order_by('-submit_time')
+        )
+
+    @classmethod
+    def _record_event(
+        cls,
+        instance,
+        event_type,
+        actor,
+        *,
+        task=None,
+        from_status='',
+        to_status='',
+        comment='',
+        metadata=None,
+    ):
+        return WorkflowEvent.objects.create(
+            instance=instance,
+            task=task,
+            actor=actor,
+            event_type=event_type,
+            from_status=from_status,
+            to_status=to_status,
+            comment=comment,
+            metadata=metadata or {},
         )

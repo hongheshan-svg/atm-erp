@@ -123,37 +123,37 @@ class SalesQuotationViewSet(
         amount = quotation.total_amount or 0
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='QUOTATION',
-                business_id=quotation.id,
-                business_no=quotation.quote_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                quotation,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 quotation.status = 'PENDING'
                 quotation.save()
                 return Response(
                     {
                         **SalesQuotationSerializer(quotation).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 quotation.status = 'APPROVED'
                 quotation.save()
                 return Response(
                     {
                         **SalesQuotationSerializer(quotation).data,
                         'workflow_started': False,
-                        'message': error or '未配置审批流程，报价单已直接通过',
+                        'message': result['message'],
                     }
                 )
+
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         except Exception as e:
             # 工作流服务异常不可 fail-open 自动通过：保持原状态，返回 5xx 供重试
@@ -354,30 +354,30 @@ class SalesOrderViewSet(
         amount = so.total_with_tax or so.total_amount or 0
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='SALES_ORDER',
-                business_id=so.id,
-                business_no=so.order_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                so,
+                request.user,
+                approved_status='CONFIRMED',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 so.status = 'PENDING'
                 so.save()
                 return Response(
                     {
                         **SalesOrderSerializer(so).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 仅"未配置审批流程"才直接确认
                 return self._do_confirm(so, request)
+
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         except Exception as e:
             # 工作流服务异常不可 fail-open 自动确认：保持原状态，返回 5xx 供重试
@@ -1370,17 +1370,15 @@ class DeliveryOrderViewSet(
         amount = self._calculate_delivery_amount(delivery)
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='DELIVERY_ORDER',
-                business_id=delivery.id,
-                business_no=delivery.delivery_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                delivery,
+                request.user,
+                approved_status='PREPARING',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 delivery.status = 'PENDING'
                 delivery.rejection_reason = ''  # 清除之前的拒绝原因
                 delivery.save()
@@ -1388,11 +1386,11 @@ class DeliveryOrderViewSet(
                     {
                         **DeliveryOrderSerializer(delivery).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 仅"未配置审批流程"才直接进入备货
                 delivery.status = 'PREPARING'
                 delivery.save()
@@ -1400,9 +1398,11 @@ class DeliveryOrderViewSet(
                     {
                         **DeliveryOrderSerializer(delivery).data,
                         'workflow_started': False,
-                        'message': error or '未配置审批流程，已直接进入备货环节',
+                        'message': result['message'],
                     }
                 )
+
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         except Exception as e:
             # 工作流服务异常不可 fail-open：备货下一步即扣库存，必须保持原状态、返回 5xx 供重试
@@ -1624,6 +1624,10 @@ class DeliveryOrderViewSet(
         if delivery.status in ['DRAFT', 'COMPLETED', 'REJECTED']:
             return Response({'error': '当前状态不能拒绝'}, status=status.HTTP_400_BAD_REQUEST)
 
+        workflow_error = self.check_workflow_allows_direct_action(delivery, '拒绝')
+        if workflow_error:
+            return workflow_error
+
         reason = request.data.get('reason', '')
         # 出库发生在 confirm_prepared（进入 LOGISTICS_BOOKING 前），故这些状态需回滚库存与已发数
         stocked_out_statuses = ['LOGISTICS_BOOKING', 'CUSTOMER_SIGNING', 'UPLOADING_RECEIPT', 'PROJECT_CONFIRMING']
@@ -1782,47 +1786,43 @@ class SalesContractViewSet(
         amount = contract.total_with_tax or contract.total_amount or 0
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='SALES_CONTRACT',
-                business_id=contract.id,
-                business_no=contract.contract_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                contract,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 contract.status = 'PENDING'
                 contract.save()
                 return Response(
                     {
                         **SalesContractSerializer(contract).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 contract.status = 'APPROVED'
                 contract.save()
                 return Response(
                     {
                         **SalesContractSerializer(contract).data,
                         'workflow_started': False,
-                        'message': error or '未配置审批流程，合同已直接生效',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         except Exception as e:
-            contract.status = 'APPROVED'
-            contract.save()
+            logger.exception('销售合同提交工作流异常 contract_no=%s', contract.contract_no)
             return Response(
-                {
-                    **SalesContractSerializer(contract).data,
-                    'workflow_started': False,
-                    'message': f'合同已生效，但工作流服务异常: {e}',
-                }
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
     @action(detail=True, methods=['get'])

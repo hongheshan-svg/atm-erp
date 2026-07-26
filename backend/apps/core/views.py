@@ -342,7 +342,7 @@ class NotificationChannelViewSet(viewsets.ViewSet):
     Supports DingTalk (钉钉) and WeChat Work (企业微信).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsSystemAdmin]
 
     @action(detail=False, methods=['get'])
     def status(self, request):

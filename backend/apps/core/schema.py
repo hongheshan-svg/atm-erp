@@ -58,6 +58,21 @@ class CustomerPortalJWTAuthenticationScheme(OpenApiAuthenticationExtension):
         return {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'}
 
 
+class SupplierPortalAuthenticationScheme(OpenApiAuthenticationExtension):
+    """Expose the signed supplier-portal session as its own auth scheme."""
+
+    target_class = 'apps.purchase.supplier_portal.SupplierPortalAuthentication'
+    name = 'supplierPortalAuth'
+
+    def get_security_definition(self, auto_schema):
+        return {
+            'type': 'apiKey',
+            'in': 'header',
+            'name': 'Authorization',
+            'description': 'Use the `Supplier <signed-token>` authorization scheme.',
+        }
+
+
 def postprocess_contextual_enums(result, generator, **kwargs):
     """Name enums by component, field, and content instead of ambiguous field names.
 

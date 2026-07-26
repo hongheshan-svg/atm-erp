@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permission_service import apply_scope_filter, resolve_data_scope
 
 
 class SalesTarget(BaseModel):
@@ -265,7 +266,7 @@ class SalesPerformanceService:
         }
 
     @staticmethod
-    def calculate_team_ranking(year, month=None, limit=10):
+    def calculate_team_ranking(year, month=None, limit=10, queryset=None):
         """计算团队排名"""
         from apps.sales.models import SalesOrder
 
@@ -273,8 +274,9 @@ class SalesPerformanceService:
         if month:
             date_filters &= Q(order_date__month=month)
 
+        orders = queryset if queryset is not None else SalesOrder.objects.filter(is_deleted=False)
         ranking = (
-            SalesOrder.objects.filter(is_deleted=False, status__in=['CONFIRMED', 'COMPLETED'])
+            orders.filter(status__in=['CONFIRMED', 'COMPLETED'])
             .filter(date_filters)
             .values('created_by', 'created_by__first_name', 'created_by__last_name')
             .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
@@ -520,10 +522,17 @@ class SalesCommissionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         )
 
 
-class SalesPerformanceViewSet(viewsets.ViewSet):
+class SalesPerformanceViewSet(PermissionMixin, viewsets.ViewSet):
     """销售业绩统计"""
 
+    permission_module = 'sales'
+    permission_resource = 'sales_performance'
+    permission_menu_codes = ('sales:performance',)
     permission_classes = [IsAuthenticated]
+
+    def _scoped_queryset(self, queryset):
+        scope = resolve_data_scope(self.request.user, self.permission_module)
+        return apply_scope_filter(queryset, self.request.user, scope)
 
     @action(detail=False, methods=['get'])
     def my_performance(self, request):
@@ -546,7 +555,10 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
         if month:
             month = int(month)
 
-        ranking = SalesPerformanceService.calculate_team_ranking(year, month, limit)
+        from apps.sales.models import SalesOrder
+
+        orders = self._scoped_queryset(SalesOrder.objects.filter(is_deleted=False))
+        ranking = SalesPerformanceService.calculate_team_ranking(year, month, limit, queryset=orders)
         return Response(ranking)
 
     @action(detail=False, methods=['get'])
@@ -559,10 +571,10 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
 
         filters = Q(order_date__year=year, is_deleted=False, status__in=['CONFIRMED', 'COMPLETED'])
         if user_id:
-            filters &= Q(salesperson_id=user_id)
+            filters &= Q(created_by_id=user_id)
 
         monthly = (
-            SalesOrder.objects.filter(filters)
+            self._scoped_queryset(SalesOrder.objects.filter(filters))
             .annotate(month=TruncMonth('order_date'))
             .values('month')
             .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
@@ -581,7 +593,13 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
 
         # 客户贡献排名
         top_customers = (
-            SalesOrder.objects.filter(order_date__year=year, is_deleted=False, status__in=['CONFIRMED', 'COMPLETED'])
+            self._scoped_queryset(
+                SalesOrder.objects.filter(
+                    order_date__year=year,
+                    is_deleted=False,
+                    status__in=['CONFIRMED', 'COMPLETED'],
+                )
+            )
             .values('customer', 'customer__name')
             .annotate(order_count=Count('id'), total_amount=Sum('total_amount'))
             .order_by('-total_amount')[:10]
@@ -589,7 +607,7 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
 
         # 新客户数量
         new_customers_by_month = (
-            Customer.objects.filter(created_at__year=year, is_deleted=False)
+            self._scoped_queryset(Customer.objects.filter(created_at__year=year, is_deleted=False))
             .annotate(month=TruncMonth('created_at'))
             .values('month')
             .annotate(count=Count('id'))
@@ -606,15 +624,12 @@ class SalesPerformanceViewSet(viewsets.ViewSet):
         year = int(request.query_params.get('year', date.today().year))
 
         # 各阶段统计
-        stages = (
-            SalesQuotation.objects.filter(created_at__year=year, is_deleted=False)
-            .values('status')
-            .annotate(count=Count('id'), total_amount=Sum('total_amount'))
-        )
+        quotations = self._scoped_queryset(SalesQuotation.objects.filter(created_at__year=year, is_deleted=False))
+        stages = quotations.values('status').annotate(count=Count('id'), total_amount=Sum('total_amount'))
 
         # 转化率
-        total = SalesQuotation.objects.filter(created_at__year=year, is_deleted=False).count()
-        won = SalesQuotation.objects.filter(created_at__year=year, is_deleted=False, status='WON').count()
+        total = quotations.count()
+        won = quotations.filter(status='WON').count()
 
         return Response(
             {

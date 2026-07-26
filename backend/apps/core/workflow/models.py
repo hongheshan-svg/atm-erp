@@ -64,6 +64,18 @@ class WorkflowDefinition(BaseModel):
         verbose_name = '审批流程定义'
         verbose_name_plural = verbose_name
         ordering = ['business_type', 'amount_threshold']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business_type'],
+                condition=models.Q(is_active=True, is_deleted=False, amount_threshold__isnull=True),
+                name='workflow_unique_active_default',
+            ),
+            models.UniqueConstraint(
+                fields=['business_type', 'amount_threshold'],
+                condition=models.Q(is_active=True, is_deleted=False, amount_threshold__isnull=False),
+                name='workflow_unique_active_threshold',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.name} ({self.get_business_type_display()})'
@@ -203,6 +215,13 @@ class WorkflowInstance(BaseModel):
         verbose_name = '审批实例'
         verbose_name_plural = verbose_name
         ordering = ['-submit_time']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business_type', 'business_id'],
+                condition=models.Q(status='PENDING', is_deleted=False),
+                name='workflow_unique_pending_business',
+            ),
+        ]
         indexes = [
             models.Index(fields=['business_type', 'business_id']),
             models.Index(fields=['status', 'submitter']),
@@ -258,3 +277,58 @@ class WorkflowTask(BaseModel):
 
     def __str__(self):
         return f'{self.instance} - {self.step.name} - {self.assignee}'
+
+
+class WorkflowEvent(models.Model):
+    """Append-only domain audit trail for workflow lifecycle actions."""
+
+    EVENT_TYPE_CHOICES = [
+        ('STARTED', '已发起'),
+        ('APPROVED', '已批准'),
+        ('REJECTED', '已拒绝'),
+        ('RETURNED', '已退回'),
+        ('WITHDRAWN', '已撤回'),
+        ('CANCELLED', '已取消'),
+    ]
+
+    instance = models.ForeignKey(
+        WorkflowInstance,
+        on_delete=models.CASCADE,
+        related_name='events',
+        verbose_name='审批实例',
+    )
+    task = models.ForeignKey(
+        WorkflowTask,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='events',
+        verbose_name='审批任务',
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='workflow_events',
+        verbose_name='操作人',
+    )
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, verbose_name='事件类型')
+    from_status = models.CharField(max_length=20, blank=True, verbose_name='原状态')
+    to_status = models.CharField(max_length=20, blank=True, verbose_name='新状态')
+    comment = models.TextField(blank=True, verbose_name='操作意见')
+    metadata = models.JSONField(default=dict, blank=True, verbose_name='事件数据')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='发生时间')
+
+    class Meta:
+        db_table = 'workflow_event'
+        verbose_name = '审批流事件'
+        verbose_name_plural = verbose_name
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['instance', 'created_at'], name='workflow_ev_instanc_f7291b_idx'),
+            models.Index(fields=['actor', 'event_type'], name='workflow_ev_actor_i_177085_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.instance_id} - {self.event_type} - {self.actor_id}'

@@ -188,29 +188,26 @@ class PurchaseRequestViewSet(
 
         # Try to start workflow
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='PURCHASE_REQUEST',
-                business_id=pr.id,
-                business_no=pr.request_no,
-                submitter=request.user,
-                amount=pr.total_amount,
+            result = self.start_workflow_or_auto_approve(
+                pr,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='SUBMITTED',
             )
 
-            if instance:
+            if result['workflow_started']:
                 pr.status = 'SUBMITTED'
                 pr.save()
                 response_data = {
                     **PurchaseRequestSerializer(pr).data,
                     'workflow_started': True,
-                    'workflow_id': instance.id,
+                    'workflow_id': result['instance'].id,
                 }
                 if budget_warning:
                     response_data['budget_warning'] = budget_warning
                     response_data['over_budget'] = True
                 return Response(response_data)
-            else:
+            elif result['auto_approved']:
                 # No workflow configured, auto-approve
                 pr.status = 'APPROVED'
                 pr.save()
@@ -227,11 +224,16 @@ class PurchaseRequestViewSet(
                     **PurchaseRequestSerializer(pr).data,
                     'workflow_started': False,
                     'auto_approved': True,
-                    'message': error or '未配置审批流程，已自动批准',
+                    'message': result['message'],
                 }
                 if budget_warning:
                     response_data['budget_warning'] = budget_warning
                 return Response(response_data)
+
+            return Response(
+                {'error': result['message']},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         except Exception as e:
             # 工作流服务异常不应自动批准，避免绕过审批；返回错误让用户重试
@@ -886,28 +888,26 @@ class PurchaseOrderViewSet(
         amount = po.total_with_tax or po.total_amount or 0
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='PURCHASE_ORDER',
-                business_id=po.id,
-                business_no=po.order_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                po,
+                request.user,
+                approved_status='CONFIRMED',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 po.status = 'PENDING'
                 po.save()
                 return Response(
                     {
                         **PurchaseOrderSerializer(po).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，直接确认 —— 复用完整确认副作用(创建AP/付款计划/更新BOM)
                 schedules = self._apply_confirm_side_effects(po, request.user, request.data)
                 po.refresh_from_db()
@@ -916,9 +916,14 @@ class PurchaseOrderViewSet(
                         **PurchaseOrderSerializer(po).data,
                         'workflow_started': False,
                         'payment_schedules_count': len(schedules),
-                        'message': error or '未配置审批流程，采购订单已直接确认',
+                        'message': result['message'],
                     }
                 )
+
+            return Response(
+                {'error': result['message']},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         except Exception as e:
             # 审批模块异常不应自动确认，避免跳过 AP 创建导致应付账款永久缺失

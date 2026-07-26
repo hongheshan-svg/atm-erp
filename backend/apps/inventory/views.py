@@ -12,6 +12,7 @@ from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 from .cost_methods import FIFOCostingService
 from .models import Stock, StockAdjustment, StockAdjustmentLine, StockMove
@@ -247,9 +248,18 @@ class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
         return Response(list(moves))
 
 
-class StockAdjustmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class StockAdjustmentViewSet(
+    PermissionMixin,
+    WorkflowEnforcementMixin,
+    SoftDeleteMixin,
+    UserTrackingMixin,
+    viewsets.ModelViewSet,
+):
     permission_module = 'inventory'
     permission_resource = 'stock_adjustment'
+    workflow_business_type = 'STOCK_ADJUSTMENT'
+    workflow_amount_field = None
+    workflow_no_field = 'adjustment_no'
     """
     ViewSet for StockAdjustment management.
 
@@ -279,34 +289,36 @@ class StockAdjustmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         amount = self._calculate_cost_impact(adjustment)
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='STOCK_ADJUSTMENT',
-                business_id=adjustment.id,
-                business_no=adjustment.adjustment_no,
-                submitter=request.user,
-                amount=amount,
+            result = self.start_workflow_or_auto_approve(
+                adjustment,
+                request.user,
+                approved_status='CONFIRMED',
+                submitted_status='PENDING',
+                amount_override=amount,
             )
 
-            if instance:
+            if result['workflow_started']:
                 adjustment.status = 'PENDING'
                 adjustment.save()
                 return Response(
                     {
                         **StockAdjustmentSerializer(adjustment).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，直接确认
                 return self._do_confirm(adjustment, request)
 
+            return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         except Exception as e:
-            # 审批模块不可用，直接确认
-            return self._do_confirm(adjustment, request)
+            return Response(
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
@@ -314,6 +326,10 @@ class StockAdjustmentViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         adjustment = self.get_object()
         if adjustment.status not in ['DRAFT', 'APPROVED']:
             return Response({'error': '只能确认草稿或已审批状态的调整单'}, status=status.HTTP_400_BAD_REQUEST)
+
+        workflow_error = self.check_workflow_allows_direct_action(adjustment, '确认')
+        if workflow_error:
+            return workflow_error
 
         return self._do_confirm(adjustment, request)
 

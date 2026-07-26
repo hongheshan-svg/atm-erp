@@ -4,7 +4,7 @@ Workflow serializers.
 
 from rest_framework import serializers
 
-from .models import WorkflowDefinition, WorkflowInstance, WorkflowStep, WorkflowTask
+from .models import WorkflowDefinition, WorkflowEvent, WorkflowInstance, WorkflowStep, WorkflowTask
 
 
 class WorkflowStepSerializer(serializers.ModelSerializer):
@@ -43,6 +43,42 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
+    def validate(self, attrs):
+        errors = {}
+        workflow = attrs.get('workflow') or getattr(self.instance, 'workflow', None)
+        if workflow and workflow.is_active:
+            errors['workflow'] = '已发布的审批流程不可修改，请先停用流程'
+        elif workflow and workflow.instances.filter(is_deleted=False).exists():
+            errors['workflow'] = '已有审批实例的流程步骤不可修改，请创建新流程版本'
+
+        step_order = attrs.get('step_order', getattr(self.instance, 'step_order', None))
+        if step_order is None or step_order < 1:
+            errors['step_order'] = '步骤顺序必须大于等于 1'
+
+        timeout_hours = attrs.get('timeout_hours', getattr(self.instance, 'timeout_hours', None))
+        if timeout_hours is None or timeout_hours <= 0:
+            errors['timeout_hours'] = '超时时间必须大于 0'
+
+        skip_threshold = attrs.get(
+            'skip_amount_threshold',
+            getattr(self.instance, 'skip_amount_threshold', None),
+        )
+        if skip_threshold is not None and skip_threshold < 0:
+            errors['skip_amount_threshold'] = '跳过金额阈值不能小于 0'
+
+        approver_type = attrs.get('approver_type', getattr(self.instance, 'approver_type', None))
+        approver_user = attrs.get('approver_user', getattr(self.instance, 'approver_user', None))
+        approver_role = attrs.get('approver_role', getattr(self.instance, 'approver_role', None))
+        if approver_type == 'USER' and not approver_user:
+            errors['approver_user'] = '指定用户审批必须配置审批人'
+        if approver_type == 'ROLE' and not approver_role:
+            errors['approver_role'] = '指定角色审批必须配置审批角色'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
+
     def get_cc_users_detail(self, obj) -> list[dict]:
         return [{'id': u.id, 'name': u.get_full_name() or u.username} for u in obj.cc_users.all()]
 
@@ -71,6 +107,52 @@ class WorkflowDefinitionSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+    def validate(self, attrs):
+        errors = {}
+        is_active = attrs.get('is_active', getattr(self.instance, 'is_active', False))
+        if self.instance is None and is_active:
+            attrs['is_active'] = False
+            is_active = False
+        elif is_active and not self.instance.steps.filter(is_deleted=False).exists():
+            errors['is_active'] = '流程至少配置一个有效审批步骤后才能发布'
+
+        if self.instance:
+            route_fields = ('code', 'business_type', 'amount_threshold')
+            changed_routes = [
+                field for field in route_fields if field in attrs and attrs[field] != getattr(self.instance, field)
+            ]
+            if self.instance.is_active and changed_routes:
+                errors.update({field: '已发布流程的路由不可修改，请先停用流程' for field in changed_routes})
+
+            if self.instance.instances.filter(is_deleted=False).exists():
+                historical_fields = ('name', 'code', 'business_type', 'amount_threshold', 'description')
+                changed_history = [
+                    field
+                    for field in historical_fields
+                    if field in attrs and attrs[field] != getattr(self.instance, field)
+                ]
+                errors.update({field: '已有审批实例的流程定义不可修改，请创建新流程版本' for field in changed_history})
+
+        if is_active:
+            business_type = attrs.get('business_type', self.instance.business_type)
+            threshold = attrs.get('amount_threshold', self.instance.amount_threshold)
+            conflicts = WorkflowDefinition.objects.filter(
+                business_type=business_type,
+                is_active=True,
+                is_deleted=False,
+            ).exclude(pk=self.instance.pk)
+            if threshold is None:
+                conflicts = conflicts.filter(amount_threshold__isnull=True)
+            else:
+                conflicts = conflicts.filter(amount_threshold=threshold)
+            if conflicts.exists():
+                errors['is_active'] = '相同业务类型和金额门槛已有已发布流程'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        return attrs
 
 
 class WorkflowTaskSerializer(serializers.ModelSerializer):
@@ -115,6 +197,28 @@ class WorkflowTaskSerializer(serializers.ModelSerializer):
         ]
 
 
+class WorkflowEventSerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source='actor.get_full_name', read_only=True)
+    event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
+
+    class Meta:
+        model = WorkflowEvent
+        fields = [
+            'id',
+            'task',
+            'actor',
+            'actor_name',
+            'event_type',
+            'event_type_display',
+            'from_status',
+            'to_status',
+            'comment',
+            'metadata',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
 class WorkflowInstanceSerializer(serializers.ModelSerializer):
     """Serializer for WorkflowInstance."""
 
@@ -123,6 +227,7 @@ class WorkflowInstanceSerializer(serializers.ModelSerializer):
     business_type_display = serializers.CharField(source='workflow.get_business_type_display', read_only=True)
     submitter_name = serializers.CharField(source='submitter.get_full_name', read_only=True)
     tasks = WorkflowTaskSerializer(many=True, read_only=True)
+    events = WorkflowEventSerializer(many=True, read_only=True)
     total_steps = serializers.SerializerMethodField()
 
     class Meta:
@@ -145,6 +250,7 @@ class WorkflowInstanceSerializer(serializers.ModelSerializer):
             'amount',
             'completed_at',
             'tasks',
+            'events',
             'created_at',
             'updated_at',
         ]

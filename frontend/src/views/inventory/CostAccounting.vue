@@ -237,12 +237,33 @@
         <el-form-item label="配置名称">
           <el-input v-model="configForm.name" />
         </el-form-item>
-        <el-form-item label="计算方法">
-          <el-select v-model="configForm.method" style="width: 100%">
-            <el-option label="加权平均" value="WEIGHTED_AVERAGE" />
+        <el-form-item label="计价方法">
+          <el-select v-model="configForm.costing_method" style="width: 100%">
+            <el-option label="加权平均" value="WEIGHTED_AVG" />
+            <el-option label="移动加权平均" value="MOVING_AVG" />
             <el-option label="先进先出" value="FIFO" />
+            <el-option label="后进先出" value="LIFO" />
             <el-option label="标准成本" value="STANDARD" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="结算周期">
+          <el-select v-model="configForm.period_type" style="width: 100%">
+            <el-option label="月结" value="MONTHLY" />
+            <el-option label="季结" value="QUARTERLY" />
+            <el-option label="年结" value="YEARLY" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="成本要素">
+          <el-checkbox v-model="configForm.include_purchase_price">采购价</el-checkbox>
+          <el-checkbox v-model="configForm.include_freight">运费</el-checkbox>
+          <el-checkbox v-model="configForm.include_tax">税费</el-checkbox>
+          <el-checkbox v-model="configForm.include_handling">装卸费</el-checkbox>
+        </el-form-item>
+        <el-form-item label="默认配置">
+          <el-switch v-model="configForm.is_default" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="configForm.is_active" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="configForm.description" type="textarea" :rows="2" />
@@ -262,6 +283,7 @@ import { ElMessage } from 'element-plus'
 import { getInventoryValuation, getCostRecords, getCostConfigs, generatePeriodSummary, setCostConfigDefault, updateCostConfig, createCostConfig } from '@/api/inventory'
 import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { createInventoryCostConfigForm, toInventoryCostConfigPayload } from '@/utils/inventoryCostConfig'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/inventory/')
 
@@ -301,7 +323,7 @@ const generating = ref(false)
 const configDialogVisible = ref(false)
 const configIsEdit = ref(false)
 const configSaving = ref(false)
-const configForm = reactive<Record<string, any>>({ id: null, name: '', method: 'WEIGHTED_AVERAGE', description: '' })
+const configForm = reactive<Record<string, any>>(createInventoryCostConfigForm())
 
 const fetchValuation = async () => {
   try {
@@ -371,24 +393,25 @@ const handleSetDefault = async (row: any) => {
 
 const handleAddConfig = () => {
   configIsEdit.value = false
-  Object.assign(configForm, { id: null, name: '', method: 'WEIGHTED_AVERAGE', description: '' })
+  Object.assign(configForm, createInventoryCostConfigForm())
   configDialogVisible.value = true
 }
 
 const handleEditConfig = (row: any) => {
   configIsEdit.value = true
-  Object.assign(configForm, { id: row.id, name: row.name, method: row.method, description: row.description })
+  Object.assign(configForm, createInventoryCostConfigForm(), row)
   configDialogVisible.value = true
 }
 
 const handleConfigSave = async () => {
   configSaving.value = true
   try {
+    const payload = toInventoryCostConfigPayload(configForm)
     if (configIsEdit.value) {
-      await updateCostConfig(configForm.id, configForm)
+      await updateCostConfig(configForm.id, payload)
       ElMessage.success('更新成功')
     } else {
-      await createCostConfig(configForm)
+      await createCostConfig(payload)
       ElMessage.success('创建成功')
     }
     configDialogVisible.value = false

@@ -26,7 +26,7 @@
             {{ row.actual_qty || 0 }}
           </template>
         </el-table-column>
-        <el-table-column prop="estimated_cost" label="预估成本" width="120" align="right">
+        <el-table-column prop="estimated_cost" label="预估单价" width="120" align="right">
           <template #default="{ row }">
             ¥{{ toFixedSafe(row.estimated_cost) }}
           </template>
@@ -91,7 +91,7 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="预估成本" prop="estimated_cost">
+        <el-form-item label="预估单价" prop="estimated_cost">
           <el-input-number
             v-model="formData.estimated_cost"
             :min="0"
@@ -123,6 +123,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { toFixedSafe } from '@/utils/number'
+import { getBomEstimatedUnitCost } from '@/utils/businessPricing'
 
 const props = defineProps({
   projectId: {
@@ -197,9 +198,9 @@ const searchItems = async (query: any) => {
 const handleItemChange = (itemId: any) => {
   const selectedItem = itemOptions.value.find(item => item.id === itemId)
   if (selectedItem) {
-    // 自动填充预估成本（使用标准成本）
+    // ProjectBOM.estimated_cost 存储单价，总成本由数量在后端统一计算。
     if (!formData.value.estimated_cost && selectedItem.standard_cost) {
-      formData.value.estimated_cost = selectedItem.standard_cost * (formData.value.planned_qty || 1)
+      formData.value.estimated_cost = getBomEstimatedUnitCost(selectedItem)
     }
   }
 }

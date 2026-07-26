@@ -21,6 +21,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
 from apps.core.utils import generate_code
 
 
@@ -528,12 +529,14 @@ class PurchasableBOMItemSerializer(serializers.Serializer):
 # ==================== ViewSets ====================
 
 
-class BOMIntegrationViewSet(viewsets.ViewSet):
+class BOMIntegrationViewSet(PermissionMixin, viewsets.ViewSet):
     """
     BOM集成API端点
     提供BOM与采购、生产的集成功能
     """
 
+    permission_module = 'projects'
+    permission_resource = 'bom_integration'
     permission_classes = [IsAuthenticated]
 
     @extend_schema(parameters=[OpenApiParameter('project_id', int, OpenApiParameter.PATH)])

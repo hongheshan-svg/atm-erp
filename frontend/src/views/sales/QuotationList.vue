@@ -186,7 +186,7 @@
       </el-table>
 
       <div style="margin-top: 20px; text-align: right;">
-        <el-statistic title="报价总金额" :value="currentQuotation.total_amount || 0" prefix="¥" :precision="2" />
+        <el-statistic title="含税总额" :value="getTaxInclusiveTotal(currentQuotation)" prefix="¥" :precision="2" />
       </div>
 
       <template #footer>
@@ -215,6 +215,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { getQuotations, getQuotation, submitQuotation, createQuotationVersion, convertQuotationToOrder } from '@/api/sales'
 import { getCustomerList } from '@/api/masterdata'
+import { getTaxInclusiveTotal } from '@/utils/businessPricing'
 
 const router = useRouter()
 

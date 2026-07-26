@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { loginAsAdmin } from './helpers'
 
 test.describe('Authentication', () => {
@@ -12,16 +12,22 @@ test.describe('Authentication', () => {
     expect(page.url()).not.toContain('/login')
   })
 
-  test('login with invalid credentials shows error', async ({ page }) => {
-    await page.goto('/erp/login')
+  test.describe('invalid credentials', () => {
+    test.use({
+      allowedConsoleMessages: ['Failed to load resource: the server responded with a status of 401 (Unauthorized)'],
+    })
 
-    await page.fill('input[type="text"], input[placeholder*="用户"]', 'wrong')
-    await page.fill('input[type="password"]', 'wrong')
-    await page.click('.login-btn')
+    test('login shows error', async ({ page }) => {
+      await page.goto('/erp/login')
 
-    const errorMessage = page.locator('.el-message--error')
-    await expect(errorMessage).toHaveCount(1)
-    await expect(errorMessage).toContainText('用户名或密码错误')
+      await page.fill('input[type="text"], input[placeholder*="用户"]', 'wrong')
+      await page.fill('input[type="password"]', 'wrong')
+      await page.click('.login-btn')
+
+      const errorMessage = page.locator('.el-message--error')
+      await expect(errorMessage).toHaveCount(1)
+      await expect(errorMessage).toContainText('用户名或密码错误')
+    })
   })
 
   test('unauthenticated user is redirected to login', async ({ page }) => {

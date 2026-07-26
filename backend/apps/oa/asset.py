@@ -31,6 +31,7 @@ from apps.accounts.models import User
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.workflow.mixins import WorkflowEnforcementMixin
 
 
 class OAAssetCategory(BaseModel):
@@ -590,9 +591,18 @@ class AssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets
         )
 
 
-class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class AssetBorrowViewSet(
+    PermissionMixin,
+    WorkflowEnforcementMixin,
+    SoftDeleteMixin,
+    UserTrackingMixin,
+    viewsets.ModelViewSet,
+):
     permission_module = 'oa'
     permission_resource = 'asset_borrow'
+    workflow_business_type = 'ASSET_BORROW'
+    workflow_amount_field = None
+    workflow_no_field = 'borrow_no'
     """资产借用管理"""
     queryset = AssetBorrow.objects.filter(is_deleted=False)
     serializer_class = AssetBorrowSerializer
@@ -626,47 +636,42 @@ class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
             return Response({'error': '只能提交待审批或已拒绝状态的申请'}, status=400)
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='ASSET_BORROW',
-                business_id=borrow.id,
-                business_no=borrow.borrow_no or f'AB-{borrow.id}',
-                submitter=request.user,
-                amount=None,
+            result = self.start_workflow_or_auto_approve(
+                borrow,
+                request.user,
+                approved_status='PENDING',
+                submitted_status='PENDING',
+                business_no_override=borrow.borrow_no or f'AB-{borrow.id}',
             )
 
-            if instance:
+            if result['workflow_started']:
                 borrow.status = 'PENDING'
                 borrow.save()
                 return Response(
                     {
                         **self.get_serializer(borrow).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 borrow.status = 'PENDING'
                 borrow.save()
                 return Response(
                     {
                         **self.get_serializer(borrow).data,
                         'workflow_started': False,
-                        'message': error or '未配置审批流程，请等待人工审批',
+                        'message': '未配置审批流程，请等待人工审批',
                     }
                 )
 
+            return Response({'error': result['message']}, status=503)
+
         except Exception as e:
-            borrow.status = 'PENDING'
-            borrow.save()
             return Response(
-                {
-                    **self.get_serializer(borrow).data,
-                    'workflow_started': False,
-                    'message': f'已提交，但工作流服务异常: {e}',
-                }
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=503,
             )
 
     @action(detail=True, methods=['post'])
@@ -675,6 +680,10 @@ class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
         borrow = self.get_object()
         if borrow.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+
+        workflow_error = self.check_workflow_allows_direct_action(borrow, '审批')
+        if workflow_error:
+            return workflow_error
 
         borrow.status = 'APPROVED'
         borrow.approver = request.user
@@ -689,6 +698,10 @@ class AssetBorrowViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
         borrow = self.get_object()
         if borrow.status != 'PENDING':
             return Response({'error': '只能审批待审批的申请'}, status=400)
+
+        workflow_error = self.check_workflow_allows_direct_action(borrow, '拒绝')
+        if workflow_error:
+            return workflow_error
 
         borrow.status = 'REJECTED'
         borrow.approver = request.user

@@ -35,15 +35,10 @@ def menu(code, name, sort_order, icon=None, route_path=None, parent_code=None):
     return d
 
 
-# 说明（审计 C2）：以下 ops()/field_perm() 是为“操作级 / 字段级”细粒度权限预留的脚手架，
-# 但 build_permission_tree() 目前【有意】只调用 menu()，从不调用它们——本系统按
-# “菜单级粒度”授权：持有某菜单码即可对该模块下资源做任意 view/create/edit/delete
-# （后端经 PermissionMixin._has_module_menu_access 兜底，前端经 hasPermission 的祖先通配）。
-# 因此数据库中没有 type='operation'/'field' 的权限记录，has_permission('x:y:create')
-# 对非超管恒走菜单兜底、字段脱敏（get_hidden_fields）恒为空。
-# 这两个函数【保留】是为将来若需启用真正的操作/字段级 RBAC 时可直接接入（见 README/审计报告 C2）。
-# 切勿误以为细粒度权限“已生效”——启用前必须在 build_permission_tree 中实际调用它们并重跑
-# init_permissions + init_roles，且需同步评估前端与 13 角色测试套件。
+# 操作级/字段级权限节点由 build_operation_and_field_perms() 统一追加到权限树。
+# 一旦某资源存在 CRUD 操作节点，PermissionMixin 会要求具体操作授权；敏感字段节点
+# 也会由 get_hidden_fields() 执行默认隐藏。init_roles 会通过菜单节点的后代关系为
+# 预置角色授予完整默认权限，管理员随后可在 RBAC 页面按操作或字段收窄。
 def ops(parent_code, resource, actions=None):
     if actions is None:
         actions = CRUD_ACTIONS
@@ -91,10 +86,10 @@ def field_perm(parent_code, resource, field_name, name, sort_order=10):
 # permission_module / permission_resource 完全一致（PermissionMixin 据此判断操作级限制）。
 # parent_menu 仅用于后台 RBAC 权限树的展示归类，不参与鉴权判定。
 #
-# 向后兼容的关键：这些操作权限被“可选启用（opt-in）”地执行——只有当某角色对某 resource
-# 已被授予部分 CRUD 却缺失某个 action 时才拒绝该 action；未被授予任何操作权限的角色回落到
-# 菜单级兜底，保持全 CRUD。为保证开箱即用行为不变，本命令随后会把每个 resource 的“全部
-# CRUD”一并授予“当前已能通过菜单访问该模块”的角色（见 Command._grant_defaults_to_roles）。
+# 向后兼容的关键：操作策略按资源是否存在活跃操作定义启用；启用后缺少具体 action
+# 的角色一律拒绝，删除最后一条角色授权也不会意外恢复菜单级全 CRUD。为保证开箱即用
+# 行为不变，init_roles 会授予所选菜单的全部后代节点，本命令也会为已经存在的角色补齐
+# 其当前菜单可达资源的默认 CRUD/字段权限（见 Command._grant_defaults_to_roles）。
 # ===================================================================
 
 # (module, resource, parent_menu_code) —— 覆盖各模块关键 ViewSet
@@ -348,6 +343,15 @@ def build_permission_tree():
     tree.append(menu('system:dict', '数据字典', 5, route_path='/system/data-dictionary', parent_code='system'))
     tree.append(menu('system:config', '系统配置', 6, route_path='/system/config', parent_code='system'))
     tree.append(menu('system:audit', '审计日志', 7, route_path='/system/audit-log', parent_code='system'))
+    tree.append(
+        menu(
+            'workflow:config',
+            '审批设置',
+            8,
+            route_path='/workflow/config',
+            parent_code='system',
+        )
+    )
     # 注:软件升级不再作为独立菜单/页面，已收进左上角版本徽标(VersionBadge)。
     # 升级权限沿用 hasPermission 的祖先通配:超管('*')或持有 'system' 菜单者即可在徽标里升级/回滚。
 

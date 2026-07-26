@@ -3,6 +3,7 @@ Serializers for accounts app.
 """
 
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Q
 from rest_framework import serializers
 
 from apps.core.permission_models_new import DataScope, Permission
@@ -118,7 +119,7 @@ class RoleSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at']
 
     def get_user_count(self, obj) -> int:
-        return obj.users.filter(is_deleted=False, is_active=True).count()
+        return User.objects.filter(Q(role=obj) | Q(roles=obj), is_deleted=False, is_active=True).distinct().count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -449,7 +450,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_roles(self, obj) -> list[str]:
         """返回用户的所有角色代码"""
-        return list(obj.roles.filter(is_active=True).values_list('code', flat=True))
+        role_filter = Q(users_m2m=obj)
+        if obj.role_id:
+            role_filter |= Q(pk=obj.role_id)
+        return list(
+            Role.objects.filter(role_filter, is_active=True, is_deleted=False).distinct().values_list('code', flat=True)
+        )
 
     def get_permissions(self, obj) -> list[str]:
         """返回用户的所有权限代码"""

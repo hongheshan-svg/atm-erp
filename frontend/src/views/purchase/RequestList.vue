@@ -153,7 +153,6 @@
             style="width: 120px;"
             @change="loadRequests"
           >
-            <el-option label="全部" :value="null" />
             <el-option label="草稿" value="DRAFT" />
             <el-option label="已提交" value="SUBMITTED" />
             <el-option label="已批准" value="APPROVED" />

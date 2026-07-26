@@ -11,15 +11,33 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.core.permission_mixin import PermissionMixin
+from apps.core.permission_service import apply_scope_filter, resolve_data_scope
+
 # 注意：原 MaintenanceScheduleViewSet 死代码已移除——其字段名(next_maintenance_date/
 # cycle_type/actual_date/status='PENDING')与 equipment_models.MaintenanceSchedule 不符，
 # 且 urls 注册的是 equipment_views.MaintenanceScheduleViewSet，此处类从未被引用。
 
 
-class MaintenanceReminderView(viewsets.ViewSet):
+class MaintenanceReminderView(PermissionMixin, viewsets.ViewSet):
     """维保提醒API"""
 
+    permission_module = 'projects'
+    permission_resource = 'maintenance_reminder'
+    permission_menu_codes = ('equipment:maintenance',)
     permission_classes = [IsAuthenticated]
+
+    def _scoped_projects(self):
+        from apps.projects.models import Project
+
+        scope = resolve_data_scope(self.request.user, self.permission_module)
+        return apply_scope_filter(Project.objects.filter(is_deleted=False), self.request.user, scope)
+
+    def _scope_by_project(self, queryset, project_lookup='project'):
+        scope_type, _ = resolve_data_scope(self.request.user, self.permission_module)
+        if scope_type == 'all':
+            return queryset
+        return queryset.filter(**{f'{project_lookup}__in': self._scoped_projects()})
 
     @action(detail=False, methods=['get'])
     def warranty_expiring(self, request):
@@ -30,8 +48,12 @@ class MaintenanceReminderView(viewsets.ViewSet):
         today = timezone.now().date()
         end_date = today + timedelta(days=days)
 
-        expiring = Equipment.objects.filter(
-            warranty_end_date__gte=today, warranty_end_date__lte=end_date, is_deleted=False
+        expiring = self._scope_by_project(
+            Equipment.objects.filter(
+                warranty_end_date__gte=today,
+                warranty_end_date__lte=end_date,
+                is_deleted=False,
+            )
         ).select_related('project')
 
         data = [
@@ -57,7 +79,9 @@ class MaintenanceReminderView(viewsets.ViewSet):
         today = timezone.now().date()
         end_date = today + timedelta(days=days)
 
-        due = Fixture.objects.filter(next_calibration__gte=today, next_calibration__lte=end_date, is_deleted=False)
+        due = self._scope_by_project(
+            Fixture.objects.filter(next_calibration__gte=today, next_calibration__lte=end_date, is_deleted=False)
+        )
 
         data = [
             {
@@ -86,26 +110,33 @@ class MaintenanceReminderView(viewsets.ViewSet):
         # 30天内
         thirty_days = today + timedelta(days=30)
 
+        equipment = self._scope_by_project(Equipment.objects.filter(is_deleted=False))
+        schedules = self._scope_by_project(
+            MaintenanceSchedule.objects.filter(is_deleted=False),
+            project_lookup='equipment__project',
+        )
+        fixtures = self._scope_by_project(Fixture.objects.filter(is_deleted=False))
+
         summary = {
-            'warranty_expiring_7d': Equipment.objects.filter(
+            'warranty_expiring_7d': equipment.filter(
                 warranty_end_date__gte=today, warranty_end_date__lte=seven_days, is_deleted=False
             ).count(),
-            'warranty_expiring_30d': Equipment.objects.filter(
+            'warranty_expiring_30d': equipment.filter(
                 warranty_end_date__gte=today, warranty_end_date__lte=thirty_days, is_deleted=False
             ).count(),
-            'maintenance_due_7d': MaintenanceSchedule.objects.filter(
+            'maintenance_due_7d': schedules.filter(
                 status='PLANNED',
                 scheduled_date__gte=today,
                 scheduled_date__lte=seven_days,
                 is_deleted=False,
             ).count(),
-            'maintenance_overdue': MaintenanceSchedule.objects.filter(
+            'maintenance_overdue': schedules.filter(
                 status__in=['PLANNED', 'OVERDUE'], scheduled_date__lt=today, is_deleted=False
             ).count(),
-            'calibration_due_7d': Fixture.objects.filter(
+            'calibration_due_7d': fixtures.filter(
                 next_calibration__gte=today, next_calibration__lte=seven_days, is_deleted=False
             ).count(),
-            'calibration_due_30d': Fixture.objects.filter(
+            'calibration_due_30d': fixtures.filter(
                 next_calibration__gte=today, next_calibration__lte=thirty_days, is_deleted=False
             ).count(),
         }

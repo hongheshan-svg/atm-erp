@@ -45,7 +45,6 @@ class WebSocketService {
       }
 
       this.ws.onerror = (error: Event) => {
-        console.error('WebSocket error:', error)
         this.emit('error', error)
       }
 
@@ -58,7 +57,6 @@ class WebSocketService {
         this.attemptReconnect(endpoint)
       }
     } catch (error: any) {
-      console.error('Failed to create WebSocket connection:', error)
       this.emit('error', error)
     }
   }

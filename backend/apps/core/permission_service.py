@@ -53,9 +53,8 @@ SCOPE_PRIORITY = {
     'self': 2,
 }
 
-# The CRUD actions that operation-level enforcement understands. Only these are
-# ever restricted by has_operation_permission; any other (custom @action) verb is
-# left to the existing menu-level fallback so bespoke endpoints never regress.
+# Standard CRUD categories. PermissionMixin maps custom actions to one of these
+# categories by HTTP method unless a dedicated custom operation is defined.
 STANDARD_OPERATION_ACTIONS = ('view', 'create', 'edit', 'delete')
 
 
@@ -126,6 +125,49 @@ def get_user_permissions(user) -> Set[str]:
     return permissions
 
 
+def get_user_menu_permissions(user) -> Set[str]:
+    """Return only active menu permission codes granted to the user.
+
+    Operation and field grants must never be interpreted as module-menu access:
+    doing so lets one narrow operation grant unlock unrelated resources through
+    ``PermissionMixin``'s legacy menu fallback.
+    """
+    if user is None or not user.is_authenticated:
+        return set()
+
+    cache_key = f'user_menu_permissions:{user.id}'
+    cached_permissions = cache.get(cache_key)
+    if cached_permissions is not None:
+        return cached_permissions
+
+    if user.is_superuser:
+        permissions = set(
+            Permission.objects.filter(type='menu', is_active=True, is_deleted=False).values_list('code', flat=True)
+        )
+    else:
+        user_roles = get_active_user_roles(user)
+        permissions = set(
+            Permission.objects.filter(
+                role_permissions__role__in=user_roles,
+                type='menu',
+                is_active=True,
+                is_deleted=False,
+            ).values_list('code', flat=True)
+        )
+
+    cache.set(cache_key, permissions, PERMISSION_CACHE_TIMEOUT)
+    return permissions
+
+
+def has_exact_permission(user, permission_code: str) -> bool:
+    """Check a concrete grant without applying parent-menu inheritance."""
+    if user is None or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return permission_code in get_user_permissions(user)
+
+
 def has_permission(user, permission_code: str) -> bool:
     """
     Check if user has a specific permission.
@@ -171,24 +213,20 @@ def has_permission(user, permission_code: str) -> bool:
     return False
 
 
-def get_configured_operations(user, module: str, resource: str) -> Set[str]:
-    """
-    Return the subset of STANDARD_OPERATION_ACTIONS that the user's roles explicitly
-    hold as operation-level permissions for ``{module}:{resource}``.
+def get_defined_operations(module: str, resource: str) -> Set[str]:
+    """Return active operation names defined for a resource.
 
-    Reads only from the cached permission-code set (get_user_permissions), so it adds
-    no database queries beyond the already-cached lookup.
-
-    A non-empty result means operation-level control is *configured* for this
-    (user, resource): the caller should enforce it. An empty result means no
-    operation permissions are seeded/assigned for this resource, which is the
-    historical default and signals "fall back to menu-level access".
+    Contextual codes such as ``edit@owner`` configure the base ``edit`` action,
+    while still requiring object-level context matching before access is granted.
     """
-    if user is None or not user.is_authenticated:
-        return set()
-    perms = get_user_permissions(user)
     prefix = f'{module}:{resource}:'
-    return {action for action in STANDARD_OPERATION_ACTIONS if prefix + action in perms}
+    codes = Permission.objects.filter(
+        type='operation',
+        is_active=True,
+        is_deleted=False,
+        code__startswith=prefix,
+    ).values_list('code', flat=True)
+    return {code[len(prefix) :].split('@', 1)[0] for code in codes}
 
 
 def has_operation_permission(user, module: str, resource: str, action: str):
@@ -201,34 +239,32 @@ def has_operation_permission(user, module: str, resource: str, action: str):
     Returns:
         True  -> the user's roles explicitly hold ``{module}:{resource}:{action}``
                  (operation is allowed).
-        False -> operation-level control IS configured for this resource (the roles
-                 hold at least one CRUD operation permission for it) but NOT this
-                 specific action -> an explicit restriction is in force; the caller
-                 MUST deny even if menu-level access would otherwise allow.
+        False -> operation-level control IS configured for this resource/action but
+                 the user lacks the concrete grant. The caller MUST deny even if
+                 menu-level access would otherwise allow.
         None  -> no operation-level control is configured for this (user, resource),
-                 OR the action is not a standard CRUD verb, OR the user is anonymous.
-                 The caller falls back to the existing menu-level checks. This is the
-                 backward-compatible default: menu-only roles keep full CRUD.
+                 or the user is anonymous. The caller falls back to menu-level checks.
 
     Superusers always return True.
 
-    Enforcement is opt-in *per resource*: it only bites once a role has been given
-    operation permissions for that exact resource and then had a specific action
-    removed. init_permissions seeds these permissions and grants the full CRUD set
-    to every role that already has menu access, so out-of-the-box behavior is
-    unchanged; removing one action from a role is what activates a restriction.
+    Enforcement is configured by active Permission definitions, not by the user's
+    remaining grants. Otherwise removing the final operation grant would turn the
+    restriction off and unexpectedly restore full CRUD via the menu fallback.
     """
     if user is None or not user.is_authenticated:
         return None
     if user.is_superuser:
         return True
-    if action not in STANDARD_OPERATION_ACTIONS:
-        return None
 
-    configured = get_configured_operations(user, module, resource)
+    defined_operations = get_defined_operations(module, resource)
+    if action in STANDARD_OPERATION_ACTIONS:
+        configured = bool(defined_operations & set(STANDARD_OPERATION_ACTIONS))
+    else:
+        configured = action in defined_operations
     if not configured:
         return None
-    return action in configured
+
+    return has_exact_permission(user, f'{module}:{resource}:{action}')
 
 
 def _get_role_user_ids(role) -> set:
@@ -247,6 +283,7 @@ def on_role_permission_change(role):
     user_ids = _get_role_user_ids(role)
     for user_id in user_ids:
         cache.delete(f'user_permissions:{user_id}')
+        cache.delete(f'user_menu_permissions:{user_id}')
         cache.delete_pattern(f'user_data_scope:{user_id}:*')
 
 
@@ -255,7 +292,15 @@ def on_user_role_change(user):
     Invalidate permission and data scope caches when user's role changes.
     """
     cache.delete(f'user_permissions:{user.id}')
+    cache.delete(f'user_menu_permissions:{user.id}')
     cache.delete_pattern(f'user_data_scope:{user.id}:*')
+
+
+def invalidate_all_permission_caches():
+    """Invalidate authorization caches after permission-policy model changes."""
+    cache.delete_pattern('user_permissions:*')
+    cache.delete_pattern('user_menu_permissions:*')
+    cache.delete_pattern('user_data_scope:*')
 
 
 def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
@@ -290,17 +335,65 @@ def resolve_data_scope(user, module: str) -> Tuple[str, List[int]]:
         cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
         return result
 
-    scopes = DataScope.objects.filter(role__in=user_roles, module__in=[module, ''])
+    roles = list(user_roles)
+    scopes = list(
+        DataScope.objects.filter(role__in=roles, module__in=[module, '']).prefetch_related('custom_departments')
+    )
 
-    if not scopes.exists():
+    selected_scopes = []
+    scopes_by_role = {}
+    for scope in scopes:
+        scopes_by_role.setdefault(scope.role_id, {})[scope.module] = scope
+
+    for role in roles:
+        role_scopes = scopes_by_role.get(role.id, {})
+        selected = role_scopes.get(module)
+        if selected is None and module != '':
+            selected = role_scopes.get('')
+        if selected is not None:
+            selected_scopes.append(selected)
+
+    if not selected_scopes:
         result = ('self', [])
         cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
         return result
 
-    best_scope = max(scopes, key=lambda s: SCOPE_PRIORITY.get(s.scope_type, 0))
+    # A module-specific scope overrides the same role's global scope. Across
+    # multiple active roles, preserve the existing union policy by taking the
+    # widest selected scope.
+    scope_types = {scope.scope_type for scope in selected_scopes}
+    if 'all' in scope_types:
+        result = ('all', [])
+        cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
+        return result
+
+    # ``custom`` and ``dept_tree`` deliberately share the same priority. Their
+    # union is representable by the existing ``custom`` tuple contract: combine
+    # explicitly selected departments with the user's department subtree.
+    if {'custom', 'dept_tree'} <= scope_types:
+        custom_dept_ids = {
+            dept_id
+            for scope in selected_scopes
+            if scope.scope_type == 'custom'
+            for dept_id in scope.custom_departments.values_list('id', flat=True)
+        }
+        if user.department_id:
+            custom_dept_ids.update(get_department_tree_ids(user.department_id))
+        result = ('custom', sorted(custom_dept_ids))
+        cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)
+        return result
+
+    best_scope = max(selected_scopes, key=lambda s: SCOPE_PRIORITY.get(s.scope_type, 0))
     custom_dept_ids = []
     if best_scope.scope_type == 'custom':
-        custom_dept_ids = list(best_scope.custom_departments.values_list('id', flat=True))
+        custom_dept_ids = sorted(
+            {
+                dept_id
+                for scope in selected_scopes
+                if scope.scope_type == 'custom'
+                for dept_id in scope.custom_departments.values_list('id', flat=True)
+            }
+        )
 
     result = (best_scope.scope_type, custom_dept_ids)
     cache.set(cache_key, result, PERMISSION_CACHE_TIMEOUT)

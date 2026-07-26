@@ -109,7 +109,7 @@
             取消订单
           </el-button>
         </div>
-        <el-statistic title="订单总金额" :value="parseFloat(order.total_amount || 0)" prefix="¥" :precision="2" />
+        <el-statistic title="含税总额" :value="getTaxInclusiveTotal(order)" prefix="¥" :precision="2" />
       </div>
     </el-card>
 
@@ -261,6 +261,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Van, Edit, Check, Close, RefreshLeft } from '@element-plus/icons-vue'
 import { getOrder, getDeliveryOrders, confirmOrder, returnOrderToDraft, cancelOrder, createDeliveryOrder, submitDeliveryOrder } from '@/api/sales'
 import { getWarehouseList } from '@/api/masterdata'
+import { getTaxInclusiveTotal } from '@/utils/businessPricing'
 
 const route = useRoute()
 const router = useRouter()

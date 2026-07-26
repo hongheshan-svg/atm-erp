@@ -43,6 +43,30 @@ describe('useWebSocketStore', () => {
       expect(wsService.default.connect).toHaveBeenCalledWith('notifications')
       expect(wsService.default.on).toHaveBeenCalledTimes(4)
     })
+
+    it('does not register duplicate listeners on repeated connect', async () => {
+      const wsService = await import('@/utils/websocket')
+      const store = useWebSocketStore()
+
+      store.connect()
+      store.connect()
+
+      expect(wsService.default.connect).toHaveBeenCalledTimes(1)
+      expect(wsService.default.on).toHaveBeenCalledTimes(4)
+    })
+
+    it('marks the store disconnected when the service emits an error', async () => {
+      const wsService = await import('@/utils/websocket')
+      const store = useWebSocketStore()
+      store.connected = true
+      store.connect()
+
+      const errorRegistration = vi.mocked(wsService.default.on).mock.calls.find(([event]) => event === 'error')
+      expect(errorRegistration).toBeDefined()
+      errorRegistration?.[1](new Event('error'))
+
+      expect(store.connected).toBe(false)
+    })
   })
 
   describe('disconnect', () => {

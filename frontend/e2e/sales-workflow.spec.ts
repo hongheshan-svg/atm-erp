@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { loginAsAdmin } from './helpers'
 
 test.describe('Sales Order Workflow', () => {

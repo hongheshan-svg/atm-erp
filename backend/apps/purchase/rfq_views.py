@@ -430,9 +430,11 @@ class RFQLineViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
     permission_resource = 'rfq_line'
 
 
-class RFQSupplierViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RFQSupplierViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """RFQ supplier viewset"""
 
+    permission_module = 'purchase'
+    permission_resource = 'rfq_supplier'
     queryset = RFQSupplier.objects.all()
     serializer_class = RFQSupplierSerializer
     filterset_fields = ['rfq', 'supplier', 'is_responded']
@@ -788,9 +790,11 @@ class ItemPriceHistoryViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 # ==================== 非标自动化增强ViewSet ====================
 
 
-class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class RFQTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """询价模板管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'rfq_template'
     queryset = RFQTemplate.objects.filter(is_deleted=False)
     serializer_class = RFQTemplateSerializer
     permission_classes = [IsAuthenticated]
@@ -856,9 +860,11 @@ class RFQTemplateViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewS
         return Response({'message': '物料添加成功'})
 
 
-class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierCapabilityViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商能力标签管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_capability'
     queryset = SupplierCapability.objects.filter(is_deleted=False)
     serializer_class = SupplierCapabilitySerializer
     permission_classes = [IsAuthenticated]
@@ -888,9 +894,11 @@ class SupplierCapabilityViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.Mod
         return Response(result)
 
 
-class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
+class SupplierCapabilityMappingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):
     """供应商能力关联管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'supplier_capability_mapping'
     queryset = SupplierCapabilityMapping.objects.filter(is_deleted=False)
     serializer_class = SupplierCapabilityMappingSerializer
     permission_classes = [IsAuthenticated]
@@ -916,9 +924,11 @@ class SupplierCapabilityMappingViewSet(SoftDeleteMixin, UserTrackingMixin, views
         return Response(result)
 
 
-class RFQAttachmentViewSet(SoftDeleteMixin, viewsets.ModelViewSet):
+class RFQAttachmentViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
     """询价单附件管理"""
 
+    permission_module = 'purchase'
+    permission_resource = 'rfq_attachment'
     queryset = RFQAttachment.objects.filter(is_deleted=False)
     serializer_class = RFQAttachmentSerializer
     permission_classes = [IsAuthenticated]

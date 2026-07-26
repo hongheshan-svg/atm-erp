@@ -465,9 +465,11 @@ class BOMSnapshotDetailSerializer(BOMSnapshotSerializer):
 
 
 # ViewSet
-class BOMCompareViewSet(viewsets.ViewSet):
+class BOMCompareViewSet(PermissionMixin, viewsets.ViewSet):
     """BOM版本对比"""
 
+    permission_module = 'projects'
+    permission_resource = 'bom_compare'
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'])

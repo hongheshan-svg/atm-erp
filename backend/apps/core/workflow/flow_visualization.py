@@ -10,6 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access import visible_workflow_instances
+
 
 class WorkflowVisualizationView(APIView):
     """
@@ -20,16 +22,16 @@ class WorkflowVisualizationView(APIView):
 
     def get(self, request, workflow_id=None):
         if workflow_id:
-            return self.get_workflow_detail(workflow_id)
+            return self.get_workflow_detail(request.user, workflow_id)
 
-        return self.get_workflow_overview()
+        return self.get_workflow_overview(request.user)
 
-    def get_workflow_detail(self, workflow_id):
+    def get_workflow_detail(self, user, workflow_id):
         """获取单个工作流详情"""
         from apps.core.workflow.models import WorkflowInstance
 
         try:
-            instance = WorkflowInstance.objects.get(id=workflow_id)
+            instance = visible_workflow_instances(WorkflowInstance.objects.all(), user).get(id=workflow_id)
         except WorkflowInstance.DoesNotExist:
             return Response({'error': '工作流不存在'}, status=404)
 
@@ -43,37 +45,42 @@ class WorkflowVisualizationView(APIView):
         # 添加开始节点
         nodes.append({'id': 'start', 'type': 'start', 'label': '开始', 'status': 'completed'})
 
-        prev_node_id = 'start'
-
-        for i, step in enumerate(steps):
-            node_id = f'step_{step.id}'
-
-            # 确定节点状态
-            if step.status == 'APPROVED':
-                status = 'completed'
-            elif step.status == 'REJECTED':
-                status = 'rejected'
-            elif step.status == 'PENDING':
-                status = 'current' if i == 0 or steps[i - 1].status in ['APPROVED'] else 'pending'
+        task_groups = []
+        for task in steps:
+            if not task_groups or task_groups[-1][0].step_id != task.step_id:
+                task_groups.append([task])
             else:
-                status = 'pending'
+                task_groups[-1].append(task)
 
-            nodes.append(
-                {
-                    'id': node_id,
-                    'type': 'approval',
-                    'label': step.step.name or f'审批步骤 {step.step.step_order}',
-                    'status': status,
-                    'approver': step.assignee.username if step.assignee else None,
-                    'approved_at': step.action_time.isoformat() if step.action_time else None,
-                    'comments': step.comment,
-                }
-            )
+        previous_node_ids = ['start']
+        for task_group in task_groups:
+            current_node_ids = []
+            for task in task_group:
+                node_id = f'step_{task.id}'
+                current_node_ids.append(node_id)
+                if task.status == 'APPROVED':
+                    node_status = 'completed'
+                elif task.status == 'REJECTED':
+                    node_status = 'rejected'
+                elif task.status == 'PENDING':
+                    node_status = 'current'
+                else:
+                    node_status = 'pending'
 
-            # 添加边
-            edges.append({'source': prev_node_id, 'target': node_id})
-
-            prev_node_id = node_id
+                nodes.append(
+                    {
+                        'id': node_id,
+                        'type': 'approval',
+                        'label': task.step.name or f'审批步骤 {task.step.step_order}',
+                        'status': node_status,
+                        'approver': task.assignee.username if task.assignee else None,
+                        'approved_at': task.action_time.isoformat() if task.action_time else None,
+                        'comments': task.comment,
+                    }
+                )
+                for previous_node_id in previous_node_ids:
+                    edges.append({'source': previous_node_id, 'target': node_id})
+            previous_node_ids = current_node_ids
 
         # 添加结束节点
         end_status = (
@@ -83,7 +90,8 @@ class WorkflowVisualizationView(APIView):
         )
         nodes.append({'id': 'end', 'type': 'end', 'label': '结束', 'status': end_status})
 
-        edges.append({'source': prev_node_id, 'target': 'end'})
+        for previous_node_id in previous_node_ids:
+            edges.append({'source': previous_node_id, 'target': 'end'})
 
         return Response(
             {
@@ -99,24 +107,26 @@ class WorkflowVisualizationView(APIView):
             }
         )
 
-    def get_workflow_overview(self):
+    def get_workflow_overview(self, user):
         """获取工作流概览统计"""
         from apps.core.workflow.models import WorkflowInstance
 
         today = timezone.now().date()
         this_month_start = today.replace(day=1)
 
+        instances = visible_workflow_instances(WorkflowInstance.objects.all(), user)
+
         # 状态统计
-        status_stats = WorkflowInstance.objects.values('status').annotate(count=Count('id'))
+        status_stats = instances.values('status').annotate(count=Count('id'))
 
         # 类型统计
-        type_stats = WorkflowInstance.objects.values(workflow_type=F('business_type')).annotate(count=Count('id'))
+        type_stats = instances.values(workflow_type=F('business_type')).annotate(count=Count('id'))
 
         # 本月趋势
         from django.db.models.functions import TruncDate
 
         monthly_trend = (
-            WorkflowInstance.objects.filter(created_at__gte=this_month_start)
+            instances.filter(created_at__gte=this_month_start)
             .annotate(date=TruncDate('created_at'))
             .values('date')
             .annotate(count=Count('id'))
@@ -124,9 +134,7 @@ class WorkflowVisualizationView(APIView):
         )
 
         # 平均处理时间
-        completed_instances = WorkflowInstance.objects.filter(
-            status__in=['APPROVED', 'REJECTED'], completed_at__isnull=False
-        )
+        completed_instances = instances.filter(status__in=['APPROVED', 'REJECTED'], completed_at__isnull=False)
 
         avg_processing_time = None
         if completed_instances.exists():
@@ -145,8 +153,8 @@ class WorkflowVisualizationView(APIView):
                 'type_stats': list(type_stats),
                 'monthly_trend': list(monthly_trend),
                 'avg_processing_hours': round(avg_processing_time, 1) if avg_processing_time else None,
-                'pending_count': WorkflowInstance.objects.filter(status='PENDING').count(),
-                'today_count': WorkflowInstance.objects.filter(created_at__date=today).count(),
+                'pending_count': instances.filter(status='PENDING').count(),
+                'today_count': instances.filter(created_at__date=today).count(),
             }
         )
 
@@ -220,7 +228,7 @@ class WorkflowTimelineView(APIView):
         from apps.core.workflow.models import WorkflowInstance
 
         try:
-            instance = WorkflowInstance.objects.get(id=workflow_id)
+            instance = visible_workflow_instances(WorkflowInstance.objects.all(), request.user).get(id=workflow_id)
         except WorkflowInstance.DoesNotExist:
             return Response({'error': '工作流不存在'}, status=404)
 

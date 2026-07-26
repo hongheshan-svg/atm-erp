@@ -421,28 +421,26 @@ class VehicleRequestViewSet(
             return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
 
         try:
-            from apps.core.workflow.services import WorkflowService
-
-            instance, error = WorkflowService.start_workflow(
-                business_type='VEHICLE_REQUEST',
-                business_id=req.id,
-                business_no=req.request_no or f'VR-{req.id}',
-                submitter=request.user,
-                amount=None,
+            result = self.start_workflow_or_auto_approve(
+                req,
+                request.user,
+                approved_status='APPROVED',
+                submitted_status='PENDING',
+                business_no_override=req.request_no or f'VR-{req.id}',
             )
 
-            if instance:
+            if result['workflow_started']:
                 req.status = 'PENDING'
                 req.save()
                 return Response(
                     {
                         **self.get_serializer(req).data,
                         'workflow_started': True,
-                        'workflow_id': instance.id,
+                        'workflow_id': result['instance'].id,
                         'message': '已提交审批，请在审批中心查看审批进度',
                     }
                 )
-            else:
+            elif result['auto_approved']:
                 # 未配置审批流程，自动批准
                 req.status = 'APPROVED'
                 req.approver = request.user
@@ -454,19 +452,17 @@ class VehicleRequestViewSet(
                         **self.get_serializer(req).data,
                         'workflow_started': False,
                         'auto_approved': True,
-                        'message': error or '未配置审批流程，已自动批准',
+                        'message': result['message'],
                     }
                 )
 
+            return Response({'error': result['message']}, status=503)
+
         except Exception as e:
-            # 工作流服务异常，自动批准
-            logger.warning(f'工作流服务异常，用车申请 {req.request_no or req.id} 自动批准: {e}')
-            req.status = 'APPROVED'
-            req.approver = request.user
-            req.approved_at = timezone.now()
-            req.save()
+            logger.exception('用车申请提交工作流异常 request_no=%s', req.request_no or req.id)
             return Response(
-                {**self.get_serializer(req).data, 'auto_approved': True, 'message': '工作流服务不可用，已自动批准'}
+                {'error': f'审批服务暂时不可用，请稍后重试: {e}'},
+                status=503,
             )
 
     @action(detail=True, methods=['post'])

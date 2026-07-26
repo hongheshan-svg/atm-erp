@@ -145,7 +145,11 @@ class RoleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         instance = self.get_object()
 
         # 检查是否有用户关联此角色
-        user_count = instance.users.filter(is_deleted=False, is_active=True).count()
+        user_count = (
+            User.objects.filter(models.Q(role=instance) | models.Q(roles=instance), is_deleted=False, is_active=True)
+            .distinct()
+            .count()
+        )
         if user_count > 0:
             return Response(
                 {'detail': f'无法删除，还有 {user_count} 个用户使用此角色'}, status=status.HTTP_400_BAD_REQUEST

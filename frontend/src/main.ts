@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
@@ -10,6 +10,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
+import { useUserStore } from './stores/user'
 import { useWebSocketStore } from './stores/websocket'
 import permissionDirective from './directives/permission'
 import { initTheme } from './utils/theme'
@@ -37,15 +38,22 @@ app.use(ElementPlus, {
 
 app.mount('#app')
 
-// Enable the global WebSocket connection when the user is authenticated.
-// Reconnect/backoff is handled inside the store/service; a missing or
-// unreachable WS endpoint is logged but never crashes the app.
-try {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    const wsStore = useWebSocketStore()
-    wsStore.connect()
-  }
-} catch (err: any) {
-  console.warn('Global WebSocket connect skipped:', err)
-}
+// The navigation guard refreshes expired access tokens while loading the
+// profile. Connect only after that bootstrap completes, and follow later
+// login/logout state changes without registering duplicate listeners.
+void router.isReady().then(() => {
+  const userStore = useUserStore()
+  const wsStore = useWebSocketStore()
+
+  watch(
+    () => userStore.profileReady,
+    profileReady => {
+      if (profileReady && localStorage.getItem('access_token')) {
+        wsStore.connect()
+      } else {
+        wsStore.disconnect()
+      }
+    },
+    { immediate: true }
+  )
+})
