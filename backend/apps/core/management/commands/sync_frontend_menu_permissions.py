@@ -277,6 +277,10 @@ class Command(BaseCommand):
                     'route_path': meta['route_path'],
                     'sort_order': meta['sort_order'],
                     'is_active': True,
+                    # objects 管理器不过滤软删,update_or_create 会命中软删记录;
+                    # 不复位软删标记的话该节点永远回不到 Permission.active,其子菜单会成为孤儿
+                    'is_deleted': False,
+                    'deleted_at': None,
                 },
             )
             created += int(was_created)
@@ -302,6 +306,8 @@ class Command(BaseCommand):
                         'sort_order': top_perm.sort_order * 10 + idx + 1,
                         'is_active': True,
                         'parent': top_perm,
+                        'is_deleted': False,
+                        'deleted_at': None,
                     },
                 )
                 created += int(was_created)
@@ -332,6 +338,8 @@ class Command(BaseCommand):
                 'sort_order': route['sort_order'],
                 'is_active': True,
                 'parent': parent,
+                'is_deleted': False,
+                'deleted_at': None,
             }
             _, was_created = Permission.objects.update_or_create(code=menu_id, defaults=defaults)
             created += int(was_created)
