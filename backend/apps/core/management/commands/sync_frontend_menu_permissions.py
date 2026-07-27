@@ -11,26 +11,26 @@ TOP_LEVEL_MENUS = {
     'projects': {'name': '项目管理', 'icon': 'Folder', 'route_path': '/projects', 'sort_order': 10},
     'design': {'name': '研发设计', 'icon': 'EditPen', 'route_path': '/plm/requirements', 'sort_order': 15},
     'sales': {'name': '商务销售', 'icon': 'TrendCharts', 'route_path': '/sales/crm-dashboard', 'sort_order': 20},
-    'purchase': {'name': '采购供应', 'icon': 'ShoppingCart', 'route_path': '/purchase/requests', 'sort_order': 30},
-    'production': {'name': '生产制造', 'icon': 'Operation', 'route_path': '/production/processes', 'sort_order': 40},
-    'inventory': {'name': '仓储物料', 'icon': 'Goods', 'route_path': '/inventory/stocks', 'sort_order': 50},
+    # 采购/仓储/基础数据合并为「供应链」,生产相关合并为「生产制造」——
+    # 与前端路由实际使用的 supply: / manufacturing: 前缀保持一致
+    'supply': {'name': '供应链', 'icon': 'Connection', 'route_path': '/supply', 'sort_order': 40},
+    'manufacturing': {'name': '生产制造', 'icon': 'SetUp', 'route_path': '/manufacturing', 'sort_order': 50},
     'finance': {'name': '财务管理', 'icon': 'Money', 'route_path': '/finance/expenses', 'sort_order': 60},
-    'masterdata': {'name': '基础数据', 'icon': 'Box', 'route_path': '/masterdata/items', 'sort_order': 70},
-    'reports': {'name': '经营分析', 'icon': 'PieChart', 'route_path': '/reports/profitability', 'sort_order': 80},
     'oa': {'name': '协同办公', 'icon': 'OfficeBuilding', 'route_path': '/oa/schedule', 'sort_order': 90},
     'system': {'name': '系统设置', 'icon': 'Setting', 'route_path': '/system/users', 'sort_order': 999},
 }
 
-# 将前端细分业务前缀收敛到既有一级菜单
+# 将前端细分业务前缀收敛到既有一级菜单。
+# 这里的 key 同时也是 LEGACY_TOP_LEVEL_CODES,用于停用旧的同名一级菜单;value 必须是现存一级菜单。
 PREFIX_PARENT_OVERRIDES = {
     'aftersales': 'sales',
-    'equipment': 'production',
+    'equipment': 'manufacturing',
     'knowledge': 'design',
     'plm': 'design',
-    'mes': 'production',
+    'mes': 'manufacturing',
     'accounts': 'oa',
     'workflow': 'oa',
-    'analytics': 'reports',
+    'analytics': 'finance',
 }
 
 LEGACY_TOP_LEVEL_CODES = tuple(PREFIX_PARENT_OVERRIDES.keys())
@@ -100,116 +100,13 @@ MENU_GROUPS = {
         ),
         ('reconcile', '销售对账', ['finance:sales-reconciliation']),
     ],
-    'purchase': [
-        (
-            'business',
-            '采购业务',
-            ['purchase:requests', 'purchase:orders', 'purchase:goods-receipts', 'purchase:budgets'],
-        ),
-        ('reconcile', '采购对账', ['finance:purchase-reconciliation']),
-        ('supplier', '供应商管理', ['purchase:comparisons', 'purchase:evaluations', 'purchase:blacklist']),
-        ('collab', '委外协同', ['purchase:outsource', 'purchase:collaboration', 'purchase:portal']),
-    ],
-    'production': [
-        (
-            'process',
-            '工艺管理',
-            [
-                'production:processes',
-                'production:routing',
-                'production:workstations',
-                'production:capacity',
-                'production:resources',
-            ],
-        ),
-        (
-            'execute',
-            '生产执行',
-            [
-                'production:plans',
-                'production:assembly',
-                'production:debug-records',
-                'production:serial-numbers',
-                'production:inspections',
-            ],
-        ),
-        (
-            'equipment',
-            '设备管理',
-            [
-                'equipment:list',
-                'equipment:fixtures',
-                'equipment:inspection',
-                'equipment:archives',
-                'equipment:maintenance',
-                'equipment:oee',
-                'equipment:monitoring',
-            ],
-        ),
-        ('mes', 'MES', ['mes:scheduling', 'mes:kanban', 'mes:andon', 'mes:data-acquisition']),
-    ],
-    'inventory': [
-        (
-            'inout',
-            '出入库',
-            [
-                'inventory:stocks',
-                'inventory:moves',
-                'inventory:requisitions',
-                'inventory:returns',
-                'inventory:transfer',
-            ],
-        ),
-        (
-            'manage',
-            '库存管理',
-            ['inventory:batches', 'inventory:adjustment', 'inventory:alerts', 'inventory:cost-accounting'],
-        ),
-        ('plan', '物料计划', ['inventory:mrp', 'inventory:spare-parts', 'inventory:data-accuracy']),
-    ],
+    # supply(供应链)与 manufacturing(生产制造)刻意不做二级分组,叶子直接挂一级菜单下,
+    # 与现网菜单结构保持一致。原 purchase/production/inventory 的分组定义引用的 menuId
+    # 前缀(purchase:/production:/inventory:/equipment:/mes:)前端路由已不再使用,一并移除。
     'finance': [
         ('cashflow', '费用管理', ['finance:expenses', 'finance:shared-expenses', 'finance:collection']),
         ('reconcile', '对账结算', ['finance:ar', 'finance:ap', 'finance:invoices']),
         ('assets', '资产成本', ['finance:project-costs', 'finance:assets']),
-    ],
-    'masterdata': [
-        ('base', '物料仓库', ['masterdata:items', 'masterdata:warehouses', 'masterdata:locations']),
-        (
-            'partner',
-            '客户供应商',
-            [
-                'masterdata:customers',
-                'masterdata:suppliers',
-                'masterdata:customer-followups',
-                'masterdata:customer-contacts',
-                'masterdata:credit',
-            ],
-        ),
-    ],
-    'reports': [
-        (
-            'finance',
-            '财务报表',
-            [
-                'reports:profitability',
-                'reports:aging',
-                'reports:cash-flow',
-                'reports:cost-analysis',
-                'reports:project-profitability',
-            ],
-        ),
-        (
-            'operation',
-            '运营报表',
-            [
-                'reports:timelog',
-                'reports:slow-moving',
-                'reports:equipment-lifecycle',
-                'reports:capacity-utilization',
-                'reports:customer-value',
-            ],
-        ),
-        ('bi', '综合分析', ['analytics:project', 'analytics:inventory']),
     ],
     'oa': [
         ('office', '日常办公', ['oa:schedule', 'oa:meeting', 'oa:im', 'oa:announcement']),
