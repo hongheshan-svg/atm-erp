@@ -28,6 +28,7 @@ from .serializers import (
     ProfileSelfUpdateSerializer,
     RoleSerializer,
     UserCreateSerializer,
+    UserPickerSerializer,
     UserProfileSerializer,
     UserSerializer,
     UserUpdateSerializer,
@@ -203,6 +204,13 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
             return UserUpdateSerializer
         elif self.action == 'profile':
             return UserProfileSerializer
+        # 非系统管理员的列表/详情只返回选择器所需的最小字段,不暴露
+        # is_superuser/is_staff/role/PII(手机/邮箱/生日/入职)——防特权侦察与信息泄露(审计 batch1 #19)。
+        if self.action in ('list', 'retrieve'):
+            from apps.core.permissions import _is_system_admin
+
+            if not _is_system_admin(self.request.user):
+                return UserPickerSerializer
         return UserSerializer
 
     @action(detail=False, methods=['get'])
@@ -257,9 +265,13 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
         user = self.get_object()
         new_password = request.data.get('new_password')
 
-        # 密码安全验证
-        if not new_password or len(new_password) < 6:
-            return Response({'detail': '新密码至少需要6位字符'}, status=status.HTTP_400_BAD_REQUEST)
+        # 密码安全验证:走统一的 PasswordPolicy(长度/大小写/数字/特殊字符/不含用户名),
+        # 不能只校验长度≥6 —— 管理员重置须与用户自助改密同强度(审计 batch1 #20)。
+        if not new_password:
+            return Response({'detail': '请提供新密码'}, status=status.HTTP_400_BAD_REQUEST)
+        is_valid, pwd_errors = PasswordPolicy.validate_password(new_password, user=user)
+        if not is_valid:
+            return Response({'detail': '；'.join(pwd_errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(new_password)
         user.save()

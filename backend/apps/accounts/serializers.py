@@ -268,6 +268,38 @@ class UserSerializer(serializers.ModelSerializer):
         extra_kwargs = {'password': {'write_only': True}}
 
 
+class UserPickerSerializer(serializers.ModelSerializer):
+    """精简用户序列化器：供非管理员列取用户(选择器/指派下拉)使用。
+
+    仅暴露渲染选择器所需的非敏感字段，隐藏 is_superuser/is_staff/role/phone/email/
+    birth_date/hire_date 等特权标志与 PII —— 完整 UserSerializer 对任意登录用户返回这些
+    会暴露哪些账号是特权账号(便于定向攻击)并泄露员工 PII(审计 batch1 #19)。
+    """
+
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    display_name = serializers.SerializerMethodField()
+
+    def get_display_name(self, obj) -> str:
+        if obj.last_name or obj.first_name:
+            return f'{obj.last_name}{obj.first_name}'
+        return obj.username
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'employee_id',
+            'display_name',
+            'avatar',
+            'department',
+            'department_name',
+            'position',
+            'is_active',
+        ]
+        read_only_fields = fields
+
+
 def _guard_privileged_role_assignment(request, role):
     """非系统管理员不得为用户分配「特权角色」(授予 system 模块权限的角色)。
 
@@ -293,6 +325,28 @@ def _guard_privileged_role_assignment(request, role):
     ).exists()
     if is_privileged:
         raise serializers.ValidationError({'role': '无权分配该角色:仅系统管理员可分配具有系统管理权限的角色'})
+
+
+def _guard_staff_flags(request, attrs):
+    """非系统管理员不得写入 is_staff / is_superuser(垂直提权防护)。
+
+    is_staff 是 Django admin/BackupRestore/SensitiveOperationLog 等 IsAdminUser 门槛的钥匙,
+    is_superuser 更是全权。持 accounts:user(system:user)的 HR 经用户序列化器 PATCH 自身
+    is_staff=True 即可越权到 DB 备份恢复与安全日志(审计 batch1 #6)。仅当操作者本人是系统
+    管理员时才允许设置这两个字段;非管理员若尝试置真则拒绝,置假/不变则放行(便于回收权限)。
+    """
+    from apps.core.permissions import _is_system_admin
+
+    user = getattr(request, 'user', None) if request is not None else None
+    if _is_system_admin(user):
+        return
+    errors = {}
+    for field in ('is_staff', 'is_superuser'):
+        # 仅当请求显式带该字段且置真时拦截;未提供或置假不影响(允许降权)。
+        if field in attrs and attrs.get(field):
+            errors[field] = '无权设置该字段:仅系统管理员可授予 is_staff / is_superuser'
+    if errors:
+        raise serializers.ValidationError(errors)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -333,6 +387,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({'password_confirm': '两次密码不一致'})
         _guard_privileged_role_assignment(self.context.get('request'), attrs.get('role'))
+        _guard_staff_flags(self.context.get('request'), attrs)
         return attrs
 
     def create(self, validated_data):
@@ -371,6 +426,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         _guard_privileged_role_assignment(self.context.get('request'), attrs.get('role'))
+        _guard_staff_flags(self.context.get('request'), attrs)
         return attrs
 
 

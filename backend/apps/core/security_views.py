@@ -115,7 +115,9 @@ class LoginLogViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
         days = int(request.query_params.get('days', 7))
         cutoff = timezone.now() - timedelta(days=days)
 
-        queryset = LoginLog.objects.filter(login_time__gte=cutoff)
+        # 必须从 self.get_queryset() 构建：它对非 is_staff 用户按 user 自过滤。
+        # 直接用 LoginLog.objects 会让任意登录员工读到全站登录遥测（审计 batch1 #15）。
+        queryset = self.get_queryset().filter(login_time__gte=cutoff)
 
         stats = {
             'total': queryset.count(),

@@ -302,7 +302,9 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = LeaveRequest
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at']
+        # status 只能经工作流/审批动作(approve/reject/cancel)变更,不可经标准 PATCH 直接写,
+        # 否则可绕过审批把请假直接置 APPROVED(审计 batch1 #16)。
+        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at', 'status']
 
 
 class OvertimeRequestSerializer(serializers.ModelSerializer):
@@ -314,7 +316,8 @@ class OvertimeRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = OvertimeRequest
         fields = '__all__'
-        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at']
+        # 同 LeaveRequest:status 只能经工作流/审批动作变更,不可经标准 PATCH 绕过审批(审计 batch1 #16)。
+        read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at', 'status']
 
 
 # =====================
@@ -465,15 +468,31 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
         month = request.query_params.get('month', date.today().strftime('%Y-%m'))
         year, m = month.split('-')
 
+        # 可见用户集必须受数据范围约束:从 self.get_queryset()(已按 user_field='user' 过滤)
+        # 取可见的 user_id 集,传入的 user_id 必须落在其中,否则越权读他人考勤(审计 batch1 #7)。
+        scoped_user_ids = set(self.get_queryset().values_list('user_id', flat=True).distinct())
+
         user_id = request.query_params.get('user_id')
         if user_id:
-            users = [user_id]
+            try:
+                requested_id = int(user_id)
+            except (TypeError, ValueError):
+                return Response({'error': 'user_id 格式错误'}, status=400)
+            # 非管理员只能查自己或数据范围内的用户
+            if (
+                not request.user.is_superuser
+                and requested_id != request.user.id
+                and requested_id not in scoped_user_ids
+            ):
+                return Response({'error': '无权查看该用户的考勤汇总'}, status=403)
+            users = [requested_id]
         elif request.user.is_superuser:
             from apps.accounts.models import User
 
-            users = User.objects.filter(is_active=True).values_list('id', flat=True)
+            users = list(User.objects.filter(is_active=True).values_list('id', flat=True))
         else:
-            users = [request.user.id]
+            # 数据范围内的用户(self 范围即仅本人;department 范围为本部门成员)
+            users = sorted(scoped_user_ids | {request.user.id})
 
         summaries = []
         for uid in users:
@@ -888,9 +907,11 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
         except:
             return Response({'error': '月份格式错误'}, status=400)
 
-        # 获取记录
+        # 从 self.get_queryset()(已按 PermissionMixin 数据范围过滤,user_field='user')构建,
+        # 不能用裸 AttendanceRecord.objects —— 否则 data_scope=department 的 HR 可导出全公司考勤(审计 batch1 #7)
         records = (
-            AttendanceRecord.objects.filter(attendance_date__year=year, attendance_date__month=m, is_deleted=False)
+            self.get_queryset()
+            .filter(attendance_date__year=year, attendance_date__month=m)
             .select_related('user')
             .order_by('user__first_name', 'attendance_date')
         )

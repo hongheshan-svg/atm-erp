@@ -196,6 +196,12 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
 
         quotation = SupplierQuotation.objects.get(id=quotation_id)
 
+        # 黑名单准入:被拉黑供应商不得被接受报价(与 PO 直建/比价转单口径一致,审计 batch1 #3)
+        from .evaluation_models import SupplierBlacklist
+
+        if SupplierBlacklist.is_blacklisted(quotation.rfq_supplier.supplier):
+            return Response({'error': '该供应商已列入黑名单，不能接受其报价'}, status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
             quotation.status = 'ACCEPTED'
             quotation.save()
@@ -222,13 +228,23 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
 
         quotation = SupplierQuotation.objects.get(id=quotation_id)
 
+        # 黑名单准入:被拉黑供应商不得转采购订单(审计 batch1 #3)
+        from .evaluation_models import SupplierBlacklist
+
+        supplier = quotation.rfq_supplier.supplier
+        if SupplierBlacklist.is_blacklisted(supplier):
+            return Response({'error': '该供应商已列入黑名单，不能转为采购订单'}, status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
+            # 继承报价税率,避免 total_with_tax 恒 0(审计 batch1 #3)
+            tax_rate = getattr(quotation, 'tax_rate', None)
             po = PurchaseOrder.objects.create(
-                supplier=quotation.rfq_supplier.supplier,
+                supplier=supplier,
                 project=rfq.project,
                 order_date=timezone.now().date(),
                 delivery_date=request.data.get('delivery_date', rfq.response_deadline or timezone.now().date()),
                 payment_terms=quotation.payment_terms,
+                tax_rate=tax_rate if tax_rate is not None else 13,
                 created_by=request.user,
             )
 
@@ -241,11 +257,13 @@ class RFQViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.M
                     created_by=request.user,
                 )
 
-            # Update PO total
+            # Update PO total（含税额,镜像 views.py 标准流程,避免 total_with_tax 恒 0）
             from django.db.models import Sum
 
             total = po.lines.aggregate(Sum('line_amount'))['line_amount__sum'] or 0
             po.total_amount = total
+            po.tax_amount = total * po.tax_rate / 100
+            po.total_with_tax = total + po.tax_amount
             po.save()
 
         from .serializers import PurchaseOrderSerializer

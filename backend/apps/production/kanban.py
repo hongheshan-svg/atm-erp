@@ -18,15 +18,20 @@ from datetime import date, timedelta
 
 from django.db.models import Sum
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.core.permissions import module_menu_permission
+
+# 生产看板/工作中心/趋势/Andon 大屏原先裸 IsAuthenticated 放行任意登录用户(审计 batch1
+# 授权旁路),改为 production 模块菜单门控。
+ProductionMenuAccess = module_menu_permission('production')
 
 
 class ProductionKanbanView(APIView):
     """生产看板API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         """获取生产看板数据"""
@@ -151,7 +156,7 @@ class ProductionKanbanView(APIView):
 class WorkCenterKanbanView(APIView):
     """工作中心看板API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request, work_center_id):
         """获取工作中心看板"""
@@ -230,7 +235,7 @@ class WorkCenterKanbanView(APIView):
 class ProductionTrendView(APIView):
     """生产趋势API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         """获取生产趋势"""
@@ -267,7 +272,7 @@ class ProductionTrendView(APIView):
 class AndonAlertView(APIView):
     """安灯预警API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         """获取安灯预警"""

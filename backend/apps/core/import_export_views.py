@@ -5,18 +5,23 @@
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .import_export_service import ExportService, ImportService, max_length, required
+from .permissions import module_menu_permission
+
+# 主数据(客户/供应商/物料)导入导出含 PII 与商业机密;BOM 导出含保密项目物料清单。
+# 原先裸 IsAuthenticated 放行任意登录用户(审计 batch1 授权旁路),改为模块菜单门控。
+MasterdataMenuAccess = module_menu_permission('masterdata')
+ProjectsMenuAccess = module_menu_permission('projects')
 
 
 class ItemImportView(APIView):
     """物料导入"""
 
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [MasterdataMenuAccess]
 
     def post(self, request):
         file = request.FILES.get('file')
@@ -101,7 +106,7 @@ class ItemImportView(APIView):
 class ItemExportView(APIView):
     """物料导出"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [MasterdataMenuAccess]
 
     def get(self, request):
         from apps.masterdata.models import Item
@@ -141,7 +146,7 @@ class SupplierImportView(APIView):
     """供应商导入"""
 
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [MasterdataMenuAccess]
 
     def post(self, request):
         file = request.FILES.get('file')
@@ -228,7 +233,7 @@ class SupplierImportView(APIView):
 class SupplierExportView(APIView):
     """供应商导出"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [MasterdataMenuAccess]
 
     def get(self, request):
         from apps.masterdata.models import Supplier
@@ -255,7 +260,7 @@ class SupplierExportView(APIView):
 class CustomerExportView(APIView):
     """客户导出"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [MasterdataMenuAccess]
 
     def get(self, request):
         from apps.masterdata.models import Customer
@@ -279,7 +284,7 @@ class CustomerExportView(APIView):
 class BOMExportView(APIView):
     """BOM清单导出"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request):
         from apps.projects.models import ProjectBOM

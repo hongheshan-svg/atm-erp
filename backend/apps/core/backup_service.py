@@ -21,6 +21,22 @@ logger = logging.getLogger(__name__)
 BACKUP_DIR = getattr(settings, 'BACKUP_DIR', '/app/backups')
 
 
+def safe_backup_path(backup_name):
+    """把 backup_name 解析为 BACKUP_DIR 内的绝对路径,拒绝目录穿越/绝对路径(审计 batch1 #17)。
+
+    os.path.join(BACKUP_DIR, name) 在 name 为绝对路径('/tmp/evil.sql')时会丢弃 BACKUP_DIR,
+    在 name 含 '../' 时会逃逸目录 —— 管理员账号被钓/越权后可借此恢复或删除任意 SQL 文件。
+    这里用 realpath 归一后强制校验其位于 BACKUP_DIR 之内,否则抛 ValueError。
+    """
+    if not backup_name or not isinstance(backup_name, str):
+        raise ValueError('备份文件名无效')
+    base = os.path.realpath(BACKUP_DIR)
+    candidate = os.path.realpath(os.path.join(base, backup_name))
+    if candidate != base and not candidate.startswith(base + os.sep):
+        raise ValueError('非法的备份文件名')
+    return candidate
+
+
 class BackupService:
     """数据库备份服务"""
 
@@ -255,7 +271,8 @@ class BackupService:
     @classmethod
     def delete_backup(cls, backup_name):
         """删除备份文件"""
-        backup_file = os.path.join(BACKUP_DIR, backup_name)
+        # 目录穿越/绝对路径防护(审计 batch1 #17)
+        backup_file = safe_backup_path(backup_name)
 
         if not os.path.exists(backup_file):
             raise FileNotFoundError(f'Backup file not found: {backup_name}')
@@ -339,7 +356,11 @@ class BackupRestoreView(APIView):
         if not backup_name:
             return Response({'error': '请指定备份文件名'}, status=400)
 
-        backup_file = os.path.join(BACKUP_DIR, backup_name)
+        # 目录穿越/绝对路径防护(审计 batch1 #17)
+        try:
+            backup_file = safe_backup_path(backup_name)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=400)
 
         try:
             BackupService.restore_backup(backup_file)

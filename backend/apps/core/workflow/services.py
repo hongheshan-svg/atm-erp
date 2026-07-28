@@ -226,6 +226,11 @@ class WorkflowService:
             if instance.submitter.department and instance.submitter.department.manager:
                 assignee = instance.submitter.department.manager
 
+        # 职责分离:当动态解析出的审批人恰是提交人本人(如部门经理自己发起本部门单据),
+        # 上溯到上级部门经理,避免自审自签(审计 batch1 #5)。approve_task 另有强制兜底门。
+        if assignee and assignee.id == instance.submitter_id:
+            assignee = cls._escalate_to_superior(instance.submitter)
+
         if assignee and (not assignee.is_active or getattr(assignee, 'is_deleted', False)):
             assignee = None
 
@@ -233,7 +238,33 @@ class WorkflowService:
         if not assignee and step.approver_role:
             assignee = User.objects.filter(roles=step.approver_role, is_active=True, is_deleted=False).first()
 
+        # 兜底解析出的审批人仍可能==提交人,再上溯一次(职责分离,审计 batch1 #5)。
+        if assignee and assignee.id == instance.submitter_id:
+            assignee = cls._escalate_to_superior(instance.submitter)
+
         return assignee
+
+    @classmethod
+    def _escalate_to_superior(cls, submitter):
+        """沿部门树上溯,返回第一个不是提交人本人的上级部门经理(职责分离)。
+
+        提交人是本部门经理时,其审批应由上级部门经理处理;逐级上溯,找不到(已到顶或无经理)
+        返回 None,由 approve_task 的强制门确保提交人无论如何不能审批自己的单据。
+        """
+        dept = getattr(submitter, 'department', None)
+        seen = set()
+        while dept is not None and dept.id not in seen:
+            seen.add(dept.id)
+            manager = getattr(dept, 'manager', None)
+            if (
+                manager
+                and manager.id != submitter.id
+                and manager.is_active
+                and not getattr(manager, 'is_deleted', False)
+            ):
+                return manager
+            dept = getattr(dept, 'parent', None)
+        return None
 
     @classmethod
     def _get_project_manager(cls, instance):
@@ -383,6 +414,11 @@ class WorkflowService:
                     return False, '该任务已处理'
                 if task.assignee != user and not user.is_superuser:
                     return False, '您没有权限处理此任务'
+                # 职责分离:提交人不得审批自己提交的单据,即使被解析成了审批人
+                # (_get_step_assignee 已对部门经理/上级做 escalate,这里是纵深防御,
+                #  兜住 ROLE/USER 步骤恰好把审批人配成提交人本人的情形)。审计 batch1 #5。
+                if instance.submitter_id == user.id and not user.is_superuser:
+                    return False, '提交人不能审批自己提交的单据(职责分离)'
 
                 task.status = 'APPROVED'
                 task.action_time = timezone.now()

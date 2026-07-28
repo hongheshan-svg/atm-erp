@@ -2383,18 +2383,35 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         if not items:
             return Response({'error': '请提供要更新的物料列表'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 只在 self.get_queryset()(已按软删+数据范围过滤)内更新;父级也必须是同项目内的可见 BOM,
+        # 不能用裸 ProjectBOM.objects.update() —— 否则可跨项目改父级、绕过软删与数据范围(审计 batch1 #12)。
+        scoped = self.get_queryset()
         updated_count = 0
+        errors = []
         for item_data in items:
             bom_id = item_data.get('id')
-            if bom_id:
-                ProjectBOM.objects.filter(id=bom_id).update(
-                    parent_id=item_data.get('parent'),
-                    level=item_data.get('level', 0),
-                    sort_order=item_data.get('sort_order', 0),
-                )
-                updated_count += 1
+            if not bom_id:
+                continue
+            bom = scoped.filter(id=bom_id).first()
+            if bom is None:
+                errors.append(f'BOM {bom_id} 不存在或无权访问')
+                continue
+            parent_id = item_data.get('parent')
+            if parent_id:
+                parent = scoped.filter(id=parent_id).first()
+                if parent is None or parent.project_id != bom.project_id:
+                    errors.append(f'BOM {bom_id} 的父级 {parent_id} 非法(不在同一项目或无权访问)')
+                    continue
+            bom.parent_id = parent_id
+            bom.level = item_data.get('level', 0)
+            bom.sort_order = item_data.get('sort_order', 0)
+            bom.save(update_fields=['parent', 'level', 'sort_order', 'updated_at'])
+            updated_count += 1
 
-        return Response({'message': f'成功更新 {updated_count} 条记录', 'updated_count': updated_count})
+        resp = {'message': f'成功更新 {updated_count} 条记录', 'updated_count': updated_count}
+        if errors:
+            resp['errors'] = errors
+        return Response(resp)
 
 
 class TimeLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.ModelViewSet):

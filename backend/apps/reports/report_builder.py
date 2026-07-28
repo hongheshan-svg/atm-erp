@@ -13,6 +13,7 @@ from rest_framework.response import Response
 
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permission_service import has_permission as user_has_permission
 
 
 class ReportTemplate(BaseModel):
@@ -287,6 +288,11 @@ class ReportExecutionViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = ReportExecution.objects.filter(is_deleted=False)
+        # 报表执行结果(result_data)可能含敏感业务数据,非管理员只能看自己触发的执行,
+        # 不能返回全部用户的执行结果(审计 batch1 #21)。
+        user = self.request.user
+        if not (user.is_superuser or user_has_permission(user, 'system')):
+            qs = qs.filter(created_by=user)
         template_id = self.request.query_params.get('template_id')
         if template_id:
             qs = qs.filter(template_id=template_id)
