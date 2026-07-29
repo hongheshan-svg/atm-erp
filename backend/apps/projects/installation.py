@@ -62,10 +62,11 @@ class InstallationTask(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.task_number:
-            # 必须用 all_objects（含软删除记录）取最大 id，否则软删除导致 id+1 重复
-            last = InstallationTask.all_objects.order_by('-id').first()
-            num = (last.id + 1) if last else 1
-            self.task_number = f'INST-{num:06d}'
+            # 走 CodeRule 统一取号：原先的「取最大 id + 1」没有任何锁，
+            # 并发创建会取到同一个 id 而撞 task_number 的唯一约束。
+            from apps.core.utils import generate_code
+
+            self.task_number = generate_code('INST', rule_type='INSTALLATION_TASK')
         super().save(*args, **kwargs)
 
 

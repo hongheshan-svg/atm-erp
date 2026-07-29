@@ -366,8 +366,11 @@ class ProjectProfitabilityExportView(APIView):
 
         writer = csv.writer(response)
         writer.writerow(['项目编号', '项目名称', '状态', '合同金额', '实际成本', '利润', '利润率'])
-        for p in projects[:5000]:
-            profit_data = CostCalculationService.calculate_project_profit(p.id)
+        # 一次性批量算，替代「每个项目 5~6 条查询」的逐项目循环
+        page = list(projects[:5000])
+        profit_by_project = CostCalculationService.calculate_projects_profit([p.id for p in page])
+        for p in page:
+            profit_data = profit_by_project.get(p.id, {})
             contract = float(profit_data.get('revenue') or 0)
             cost = float(profit_data.get('total_cost') or 0)
             profit = float(profit_data.get('profit') or (contract - cost))

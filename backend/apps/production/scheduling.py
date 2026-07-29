@@ -593,6 +593,11 @@ class ScheduleTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         """更新进度"""
         task = self.get_object()
         progress = request.data.get('progress', 0)
+        # 未 int() 时字符串会让 min/max 抛 TypeError（口径与 aps.py 对齐）
+        try:
+            progress = int(progress)
+        except (TypeError, ValueError):
+            return Response({'error': '进度必须是 0-100 的整数'}, status=status.HTTP_400_BAD_REQUEST)
         task.progress = min(100, max(0, progress))
         task.save()
         return Response(self.get_serializer(task).data)

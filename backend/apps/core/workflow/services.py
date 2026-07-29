@@ -54,6 +54,18 @@ class WorkflowService:
         workflow = cls.get_workflow_for_business(business_type, amount)
 
         if not workflow:
+            # amount 为 None 时只会匹配「无金额阈值」的流程。若该业务类型其实配了按金额
+            # 分级的流程，说明是本次没能确定单据金额，而不是没配审批流——此处必须回一个
+            # 非「未找到适用于 」开头的错误，否则 WorkflowEnforcementMixin 的
+            # is_missing_workflow_error 会判定为未配流程而直接 auto_approved，
+            # 等于金额解析异常的单据静默绕过审批。
+            if (
+                amount is None
+                and WorkflowDefinition.objects.filter(
+                    business_type=business_type, is_active=True, is_deleted=False
+                ).exists()
+            ):
+                return None, f'{business_type} 已配置按金额分级的审批流程，但本次未能确定单据金额，无法放行'
             return None, f'未找到适用于 {business_type} 的审批流程'
 
         if not workflow.steps.filter(is_deleted=False).exists():
@@ -612,71 +624,80 @@ class WorkflowService:
         if target_step_order < 1:
             return False, '退回目标步骤无效'
 
-        with transaction.atomic():
-            # Lock the instance so a concurrent approve/reject cannot advance or
-            # fail the step while we rewind it (same discipline as countersign).
-            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
-            task = WorkflowTask.objects.select_related('step', 'assignee').get(id=task.id)
+        # 与 approve_task / reject_task / withdraw_workflow 一致地兜底异常：
+        # 退回时 _create_next_task 可能抛 WorkflowConfigurationError（目标步没有可解析的
+        # 审批人等），原先直接冒泡到 views 变成 500，这里改为返回可读错误。
+        try:
+            with transaction.atomic():
+                # Lock the instance so a concurrent approve/reject cannot advance or
+                # fail the step while we rewind it (same discipline as countersign).
+                instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+                task = WorkflowTask.objects.select_related('step', 'assignee').get(id=task.id)
 
-            # Only an in-progress instance can be returned.
-            if instance.status != 'PENDING':
-                return False, '该审批流程已结束，无法退回'
+                # Only an in-progress instance can be returned.
+                if instance.status != 'PENDING':
+                    return False, '该审批流程已结束，无法退回'
 
-            if task.status != 'PENDING':
-                return False, '该任务已处理'
-            if task.assignee != user and not user.is_superuser:
-                return False, '您没有权限处理此任务'
-            if not task.step.can_reject:
-                return False, '当前审批步骤不允许退回'
+                if task.status != 'PENDING':
+                    return False, '该任务已处理'
+                if task.assignee != user and not user.is_superuser:
+                    return False, '您没有权限处理此任务'
+                if not task.step.can_reject:
+                    return False, '当前审批步骤不允许退回'
 
-            current_order = task.step.step_order
-            if target_step_order >= current_order:
-                return False, '只能退回到当前步骤之前的步骤'
+                current_order = task.step.step_order
+                if target_step_order >= current_order:
+                    return False, '只能退回到当前步骤之前的步骤'
 
-            target_step = instance.workflow.steps.filter(
-                step_order=target_step_order,
-                is_deleted=False,
-            ).first()
-            if not target_step:
-                return False, '退回目标步骤不存在'
+                target_step = instance.workflow.steps.filter(
+                    step_order=target_step_order,
+                    is_deleted=False,
+                ).first()
+                if not target_step:
+                    return False, '退回目标步骤不存在'
 
-            # Mark the current task RETURNED (not REJECTED — the instance lives on).
-            task.status = 'RETURNED'
-            task.action_time = timezone.now()
-            task.comment = comment
-            task.updated_by = user
-            task.save()
+                # Mark the current task RETURNED (not REJECTED — the instance lives on).
+                task.status = 'RETURNED'
+                task.action_time = timezone.now()
+                task.comment = comment
+                task.updated_by = user
+                task.save()
 
-            # Cancel any still-pending sibling tasks (e.g. the other
-            # countersigners / or-signers of this step) so they don't linger
-            # after the rewind. Only current-step tasks are ever PENDING, so a
-            # broad PENDING filter is safe and mirrors reject_task.
-            instance.tasks.filter(
-                status='PENDING',
-                is_deleted=False,
-            ).exclude(id=task.id).update(
-                status='SKIPPED',
-                action_time=timezone.now(),
-            )
+                # Cancel any still-pending sibling tasks (e.g. the other
+                # countersigners / or-signers of this step) so they don't linger
+                # after the rewind. Only current-step tasks are ever PENDING, so a
+                # broad PENDING filter is safe and mirrors reject_task.
+                instance.tasks.filter(
+                    status='PENDING',
+                    is_deleted=False,
+                ).exclude(id=task.id).update(
+                    status='SKIPPED',
+                    action_time=timezone.now(),
+                )
 
-            # Rewind to the target step; the instance stays IN PROGRESS
-            # (status PENDING, NOT REJECTED) and re-creates that step's task(s).
-            instance.current_step = target_step_order
-            instance.updated_by = user
-            instance.save()
+                # Rewind to the target step; the instance stays IN PROGRESS
+                # (status PENDING, NOT REJECTED) and re-creates that step's task(s).
+                instance.current_step = target_step_order
+                instance.updated_by = user
+                instance.save()
 
-            cls._create_next_task(instance)
-            cls._record_event(
-                instance,
-                'RETURNED',
-                user,
-                task=task,
-                from_status='PENDING',
-                to_status='PENDING',
-                comment=comment,
-                metadata={'target_step_order': target_step_order},
-            )
-            transaction.on_commit(lambda: cls._notify_cc(task.step, instance, 'RETURNED'))
+                cls._create_next_task(instance)
+                cls._record_event(
+                    instance,
+                    'RETURNED',
+                    user,
+                    task=task,
+                    from_status='PENDING',
+                    to_status='PENDING',
+                    comment=comment,
+                    metadata={'target_step_order': target_step_order},
+                )
+                transaction.on_commit(lambda: cls._notify_cc(task.step, instance, 'RETURNED'))
+        except WorkflowConfigurationError as exc:
+            return False, f'审批流程配置错误：{exc}'
+        except Exception:
+            logger.exception('Workflow reject_to_step rolled back')
+            return False, '退回失败，操作已回滚'
 
         return True, f'已退回至第 {target_step_order} 步'
 
@@ -1187,7 +1208,9 @@ class WorkflowService:
         """
         return (
             WorkflowTask.objects.filter(assignee=user, status='PENDING', is_deleted=False)
-            .select_related('instance', 'instance__workflow', 'step')
+            # WorkflowTaskSerializer 还会读 assignee.get_full_name 与
+            # instance.submitter.get_full_name，不预取则每条任务各多两次查询
+            .select_related('instance', 'instance__workflow', 'instance__submitter', 'step', 'assignee')
             .order_by('-created_at')
         )
 

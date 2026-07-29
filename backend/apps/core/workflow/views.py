@@ -3,6 +3,7 @@ Workflow API views.
 """
 
 from django.db import transaction
+from django.db.models import Prefetch
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -178,7 +179,20 @@ class WorkflowInstanceViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, view
         return super().check_object_permissions(request, obj)
 
     def get_queryset(self):
-        queryset = self.queryset.select_related('workflow', 'submitter')
+        # 序列化器内联了 tasks/events 且 total_steps 会按对象数步骤，只 select_related
+        # 会让列表页每条实例再发若干查询（任务、事件、步骤计数），条数一多就超时。
+        queryset = self.queryset.select_related('workflow', 'submitter').prefetch_related(
+            'tasks__step',
+            'tasks__assignee',
+            'tasks__instance__workflow',
+            'tasks__instance__submitter',
+            'events__actor',
+            Prefetch(
+                'workflow__steps',
+                queryset=WorkflowStep.objects.filter(is_deleted=False),
+                to_attr='active_steps',
+            ),
+        )
         return visible_workflow_instances(queryset, self.request.user)
 
     @action(detail=False, methods=['get'])
@@ -240,17 +254,20 @@ class WorkflowInstanceViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, view
                 approved = [task for task in step_tasks if task.status == 'APPROVED']
                 rejected = [task for task in step_tasks if task.status == 'REJECTED']
                 returned = [task for task in step_tasks if task.status == 'RETURNED']
+                # 否决/退回必须优先于通过：会签步里只要有一票 REJECTED，该步就是被否决的，
+                # 原顺序把 approved 排在前面，会让「已有人通过、随后被否决」的步骤显示成
+                # 「已通过」，与实例整体的 REJECTED 状态自相矛盾。
                 if pending:
                     aggregate_status = 'PENDING'
-                elif approved:
-                    aggregate_status = 'APPROVED'
-                elif returned:
-                    aggregate_status = 'RETURNED'
                 elif rejected:
                     aggregate_status = 'REJECTED'
+                elif returned:
+                    aggregate_status = 'RETURNED'
+                elif approved:
+                    aggregate_status = 'APPROVED'
                 else:
                     aggregate_status = 'SKIPPED'
-                representative = (pending or approved or returned or rejected or step_tasks)[0]
+                representative = (pending or rejected or returned or approved or step_tasks)[0]
                 node.update(
                     {
                         'task_id': representative.id,
@@ -380,7 +397,10 @@ class WorkflowTaskViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, viewsets
         return super().check_object_permissions(request, obj)
 
     def get_queryset(self):
-        queryset = self.queryset.select_related('instance', 'instance__workflow', 'step', 'assignee')
+        # 序列化器读 instance.submitter.get_full_name，缺它会让待办列表逐条多查一次用户
+        queryset = self.queryset.select_related(
+            'instance', 'instance__workflow', 'instance__submitter', 'step', 'assignee'
+        )
         if can_manage_workflows(self.request.user):
             return queryset
         return queryset.filter(assignee=self.request.user)

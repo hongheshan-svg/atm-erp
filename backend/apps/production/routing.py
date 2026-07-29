@@ -575,8 +575,13 @@ class RoutingTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         """创建新版本"""
         original = self.get_object()
 
-        # 计算新版本号
-        new_version = f'{float(original.version) + 0.1:.1f}'
+        # 计算新版本号。version 是自由文本 CharField，'1.0.1'/'A' 这类值直接 float()
+        # 会抛 ValueError 变成 500；无法解析时退化为「原版本 + 递增后缀」。
+        try:
+            new_version = f'{float(original.version) + 0.1:.1f}'
+        except (TypeError, ValueError):
+            existing = RoutingTemplate.objects.filter(code__startswith=f'{original.code}_V').count()
+            new_version = f'{original.version}.{existing + 1}'
 
         # 复制模板
         new_routing = RoutingTemplate.objects.create(

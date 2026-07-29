@@ -358,12 +358,14 @@ class ProjectCostSummary(BaseModel):
             + self.indirect_cost
         )
 
-        # 计算毛利
+        # 计算毛利（actual_margin 字段 max_digits=8,decimal_places=4 → 绝对值上限 9999.9999）
         if self.contract_amount > 0:
             self.actual_profit = self.contract_amount - self.total_cost
-            self.actual_margin = Decimal(self.actual_profit / self.contract_amount).quantize(
+            raw_margin = Decimal(self.actual_profit / self.contract_amount).quantize(
                 Decimal('0.0001'), rounding=ROUND_HALF_UP
             )
+            # 合同额很小而成本很大时毛利率会是极大负数，不钳位 save() 会 numeric overflow
+            self.actual_margin = max(Decimal('-9999.9999'), min(raw_margin, Decimal('9999.9999')))
 
         # 计算CPI（cpi 字段 max_digits=5,decimal_places=2 → 最大 999.99）
         if self.estimated_cost > 0 and self.completion_percentage > 0:

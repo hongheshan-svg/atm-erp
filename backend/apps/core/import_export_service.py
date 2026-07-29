@@ -236,6 +236,32 @@ class ImportService:
         created_count = 0
         errors = []
 
+        def _flush(batch):
+            """插入一批。
+
+            整批 bulk_create 放在 savepoint 里：以前只要有一行撞唯一约束，异常就会冲垮
+            外层事务，全部已构造好的数据一起回滚、created 归零，连逐行收集的 errors 也一并
+            丢失。现在整批失败就退回逐行插入，合法行照样入库、问题行按行号报错。
+            """
+            nonlocal created_count
+            if not batch:
+                return
+            try:
+                with transaction.atomic():
+                    model_class.objects.bulk_create(batch)
+                created_count += len(batch)
+                return
+            except Exception:
+                pass
+
+            for obj in batch:
+                try:
+                    with transaction.atomic():
+                        obj.save()
+                    created_count += 1
+                except Exception as exc:
+                    errors.append({'row': getattr(obj, '_import_row', 0), 'error': str(exc)})
+
         try:
             with transaction.atomic():
                 objects_to_create = []
@@ -251,20 +277,19 @@ class ImportService:
                             obj_data['created_by'] = user
 
                         obj = model_class(**obj_data)
+                        # 记住行号，逐行回退插入时才能把错误定位到具体行
+                        obj._import_row = row_data.get('_row', 0)
                         objects_to_create.append(obj)
 
                         if len(objects_to_create) >= batch_size:
-                            model_class.objects.bulk_create(objects_to_create)
-                            created_count += len(objects_to_create)
+                            _flush(objects_to_create)
                             objects_to_create = []
 
                     except Exception as e:
                         errors.append({'row': row_data.get('_row', 0), 'error': str(e)})
 
                 # 创建剩余对象
-                if objects_to_create:
-                    model_class.objects.bulk_create(objects_to_create)
-                    created_count += len(objects_to_create)
+                _flush(objects_to_create)
 
         except Exception as e:
             return {'created': 0, 'errors': [{'error': str(e)}]}

@@ -436,7 +436,12 @@ class AssemblyGuideViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         """创建新版本"""
         original = self.get_object()
 
-        new_version = f'{float(original.version) + 0.1:.1f}'
+        # 同 routing.create_version：version 是自由文本，非数字值 float() 会 500
+        try:
+            new_version = f'{float(original.version) + 0.1:.1f}'
+        except (TypeError, ValueError):
+            existing = AssemblyGuide.objects.filter(guide_code__startswith=f'{original.guide_code}_V').count()
+            new_version = f'{original.version}.{existing + 1}'
 
         new_guide = AssemblyGuide.objects.create(
             guide_code=f'{original.guide_code}_V{new_version}',

@@ -281,6 +281,13 @@ class ProjectTaskViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vi
         actual_hours = request.data.get('actual_hours')
 
         if progress is not None:
+            # progress_percent 是 IntegerField，且模型 validators 在 save() 时不生效：
+            # 直传字符串会在下面的比较里抛 TypeError，传 -5/200 会写进库污染统计。
+            try:
+                progress = int(progress)
+            except (TypeError, ValueError):
+                return Response({'error': '进度必须是 0-100 的整数'}, status=status.HTTP_400_BAD_REQUEST)
+            progress = min(max(progress, 0), 100)
             task.progress_percent = progress
             if progress >= 100:
                 task.status = 'COMPLETED'
