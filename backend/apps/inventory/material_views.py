@@ -178,17 +178,23 @@ class MaterialRequisitionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingM
                     if issued_qty <= 0:
                         continue
 
+                    # 出库数量不得超过该行未出库余量，防止累加超发（审计 batch3 #3）
+                    if Decimal(str(issued_qty)) > line.pending_qty:
+                        raise ValueError(
+                            f'物料 {line.item.sku} 出库数量 {issued_qty} 超过未出库余量 {line.pending_qty}'
+                        )
+
                     # 检查库存
+                    # 注意：这些校验位于 transaction.atomic() 块内。DRF 中 `return Response` 是正常返回而非
+                    # 异常，atomic 会在无异常时 COMMIT——此前已处理行的 issued_qty/StockMove 扣减会被提交，
+                    # 造成部分出库而单据仍停 READY（审计 batch3 #1）。故改为 raise ValueError，交由下方
+                    # `except ValueError` 统一回滚并返回 400。
                     try:
                         stock = Stock.objects.get(warehouse=requisition.warehouse, item=line.item)
                         if stock.qty_available < issued_qty:
-                            return Response(
-                                {'error': f'物料 {line.item.sku} 库存不足'}, status=status.HTTP_400_BAD_REQUEST
-                            )
+                            raise ValueError(f'物料 {line.item.sku} 库存不足')
                     except Stock.DoesNotExist:
-                        return Response(
-                            {'error': f'物料 {line.item.sku} 无库存记录'}, status=status.HTTP_400_BAD_REQUEST
-                        )
+                        raise ValueError(f'物料 {line.item.sku} 无库存记录')
 
                     issued_qty_dec = Decimal(str(issued_qty))
 
@@ -376,59 +382,69 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
         if not lines_data:
             return Response({'error': '请指定入库明细'}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
-            all_received = True
+        try:
+            with transaction.atomic():
+                all_received = True
 
-            for line_data in lines_data:
-                line_id = line_data.get('id')
-                received_qty = line_data.get('received_qty', 0)
-                condition = line_data.get('condition', 'GOOD')
+                for line_data in lines_data:
+                    line_id = line_data.get('id')
+                    received_qty = line_data.get('received_qty', 0)
+                    condition = line_data.get('condition', 'GOOD')
 
-                try:
-                    line = material_return.lines.get(id=line_id)
-                except MaterialReturnLine.DoesNotExist:
-                    continue
+                    try:
+                        line = material_return.lines.get(id=line_id)
+                    except MaterialReturnLine.DoesNotExist:
+                        continue
 
-                if received_qty <= 0:
-                    continue
+                    if received_qty <= 0:
+                        continue
 
-                # 更新物料状态
-                line.condition = condition
-                line.received_qty += received_qty
-                line.save()
+                    # 入库数量不得超过该行未入库余量，防止累加超收（审计 batch3 #3）
+                    if Decimal(str(received_qty)) > line.pending_qty:
+                        raise ValueError(
+                            f'物料 {line.item.sku} 入库数量 {received_qty} 超过未入库余量 {line.pending_qty}'
+                        )
 
-                # 只有良品才入库
-                if condition == 'GOOD':
-                    # 创建库存移动记录
-                    StockMove.objects.create(
-                        item=line.item,
-                        warehouse_to=material_return.warehouse,
-                        qty=received_qty,
-                        unit_cost=line.unit_cost,
-                        move_type='ADJUSTMENT',  # 退料入库
-                        reference_type='MaterialReturn',
-                        reference_id=material_return.id,
-                        project=material_return.project,
-                        move_date=timezone.now(),
-                        status='COMPLETED',
-                        notes=f'退料入库 - {material_return.get_return_reason_display()}',
-                        created_by=request.user,
-                    )
-                    # 库存数量与加权成本由 StockMove.save() -> _update_stock_in 统一更新，此处不再手动累加
+                    # 更新物料状态
+                    line.condition = condition
+                    line.received_qty += received_qty
+                    line.save()
 
-                # 检查是否全部入库
-                if line.received_qty < line.qty:
-                    all_received = False
+                    # 只有良品才入库
+                    if condition == 'GOOD':
+                        # 创建库存移动记录
+                        StockMove.objects.create(
+                            item=line.item,
+                            warehouse_to=material_return.warehouse,
+                            qty=received_qty,
+                            unit_cost=line.unit_cost,
+                            move_type='ADJUSTMENT',  # 退料入库
+                            reference_type='MaterialReturn',
+                            reference_id=material_return.id,
+                            project=material_return.project,
+                            move_date=timezone.now(),
+                            status='COMPLETED',
+                            notes=f'退料入库 - {material_return.get_return_reason_display()}',
+                            created_by=request.user,
+                        )
+                        # 库存数量与加权成本由 StockMove.save() -> _update_stock_in 统一更新，此处不再手动累加
 
-            # 更新退料单状态
-            if all_received and all(l.received_qty >= l.qty for l in material_return.lines.all()):
-                material_return.status = 'COMPLETED'
-            else:
-                material_return.status = 'PARTIAL'
+                    # 检查是否全部入库
+                    if line.received_qty < line.qty:
+                        all_received = False
 
-            material_return.receive_date = timezone.now()
-            material_return.warehouse_operator = request.user
-            material_return.save()
+                # 更新退料单状态
+                if all_received and all(l.received_qty >= l.qty for l in material_return.lines.all()):
+                    material_return.status = 'COMPLETED'
+                else:
+                    material_return.status = 'PARTIAL'
+
+                material_return.receive_date = timezone.now()
+                material_return.warehouse_operator = request.user
+                material_return.save()
+        except ValueError as e:
+            # 入库数量超出余量等校验失败 → 整单回滚并返回 400，不残留部分入库（审计 batch3 #1/#3）
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(MaterialReturnSerializer(material_return).data)
 

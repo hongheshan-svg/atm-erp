@@ -1283,14 +1283,24 @@ class GoodsReceiptViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
             costing_method = getattr(settings, 'INVENTORY_COSTING_METHOD', 'WEIGHTED_AVG')
 
-            # 服务端二次校验：剩余可收数量（防御绕过 serializer 直接调 confirm 的超收）
+            # 服务端二次校验：剩余可收数量（防御绕过 serializer 直接调 confirm 的超收）。
+            # 必须按 po_line 累加本单各行数量后统一判上限——多条 receipt line 挂同一 po_line 时，
+            # 逐行独立比较会各读同一未更新的 received_qty 而全部通过，写库循环再 F() 累加即超收
+            # （审计 batch3 #7）。
+            from collections import defaultdict
+
+            cumulative_by_po_line = defaultdict(Decimal)
             for line in receipt_lines:
                 if line.quality_status == 'FAILED':
                     continue
+                cumulative_by_po_line[line.po_line_id] += line.qty
                 remaining = line.po_line.qty - line.po_line.received_qty
-                if line.qty > remaining:
+                if cumulative_by_po_line[line.po_line_id] > remaining:
                     return Response(
-                        {'error': f'物料 {line.item.sku} 超收：剩余可收 {remaining}，本次 {line.qty}'},
+                        {
+                            'error': f'物料 {line.item.sku} 超收：剩余可收 {remaining}，'
+                            f'本单累计 {cumulative_by_po_line[line.po_line_id]}'
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 

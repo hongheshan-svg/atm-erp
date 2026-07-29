@@ -638,6 +638,8 @@ const loadData = async () => {
     weightForm.weight_quality = Number(compRes.weight_quality)
     weightForm.weight_delivery = Number(compRes.weight_delivery)
     weightForm.weight_service = Number(compRes.weight_service)
+    // 技术权重同样需回填，否则打开权重对话框会把已保存的技术权重清零
+    weightForm.weight_technical = Number(compRes.weight_technical || 0)
   } catch (error: any) {
     console.error('加载比价详情失败:', error)
     ElMessage.error('加载数据失败')

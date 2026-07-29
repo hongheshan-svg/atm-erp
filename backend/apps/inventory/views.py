@@ -182,6 +182,80 @@ class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     search_fields = ['move_no', 'item__sku', 'item__name']
     ordering_fields = ['move_date', 'created_at']
 
+    def get_queryset(self):
+        """支持前端的 warehouse(匹配来源/目标仓任一)与 start_date/end_date 日期范围过滤。
+
+        StockMove 只有 warehouse_from/warehouse_to,没有单一 warehouse 字段;filterset 也无
+        日期过滤。前端库存流水页发来的 warehouse / start_date / end_date 此前被后端静默忽略,
+        用户以为筛选生效却拿到全量数据。此处补齐,与列表页筛选控件保持一致。
+        """
+        from django.db.models import Q
+
+        queryset = super().get_queryset()
+
+        warehouse = self.request.query_params.get('warehouse')
+        if warehouse:
+            queryset = queryset.filter(Q(warehouse_from_id=warehouse) | Q(warehouse_to_id=warehouse))
+
+        start_date = self.request.query_params.get('start_date')
+        if start_date:
+            queryset = queryset.filter(move_date__gte=start_date)
+
+        end_date = self.request.query_params.get('end_date')
+        if end_date:
+            queryset = queryset.filter(move_date__lte=end_date)
+
+        return queryset
+
+    # 按移动方向归类 move_type:qty 恒为正,方向由类型(及调整的仓库字段)决定。
+    IN_MOVE_TYPES = ['IN_PURCHASE', 'IN_OUTSOURCE']
+    OUT_MOVE_TYPES = ['OUT_SALES', 'OUT_PROJECT', 'OUT_RETURN', 'OUT_OUTSOURCE']
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """按当前筛选条件对全量数据聚合入库/出库数量与金额(不受分页限制)。
+
+        前端此前只对当前页 tableData 累加,且用 qty>0 判方向——但 StockMove.qty 恒为正,
+        导致出库恒为 0、且统计只覆盖一页。此处按 move_type 在数据库层聚合全量结果:
+        - 入库:IN_PURCHASE/IN_OUTSOURCE,加上调拨入库(warehouse_to)与盘盈(ADJUSTMENT+warehouse_to)
+        - 出库:OUT_*,加上调拨出库(warehouse_from)与盘亏(ADJUSTMENT+warehouse_from)
+        调拨在两侧各计一次(物料确实流出源仓、流入目标仓)。
+        """
+        from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
+
+        queryset = self.filter_queryset(self.get_queryset())
+
+        value_expr = ExpressionWrapper(
+            F('qty') * F('unit_cost'), output_field=DecimalField(max_digits=24, decimal_places=4)
+        )
+
+        in_filter = (
+            Q(move_type__in=self.IN_MOVE_TYPES)
+            | Q(move_type='TRANSFER', warehouse_to__isnull=False)
+            | Q(move_type='ADJUSTMENT', warehouse_to__isnull=False)
+        )
+        out_filter = (
+            Q(move_type__in=self.OUT_MOVE_TYPES)
+            | Q(move_type='TRANSFER', warehouse_from__isnull=False)
+            | Q(move_type='ADJUSTMENT', warehouse_from__isnull=False)
+        )
+
+        agg = queryset.aggregate(
+            total_in=Sum('qty', filter=in_filter),
+            total_out=Sum('qty', filter=out_filter),
+            total_in_value=Sum(value_expr, filter=in_filter),
+            total_out_value=Sum(value_expr, filter=out_filter),
+        )
+
+        return Response(
+            {
+                'total_in': float(agg['total_in'] or 0),
+                'total_out': float(agg['total_out'] or 0),
+                'total_in_value': float(agg['total_in_value'] or 0),
+                'total_out_value': float(agg['total_out_value'] or 0),
+            }
+        )
+
     @action(detail=False, methods=['post'])
     def transfer(self, request):
         """Create a warehouse transfer with multiple lines."""

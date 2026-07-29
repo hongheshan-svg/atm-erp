@@ -571,8 +571,29 @@ class GoodsReceiptLineSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'po_line': '收货明细必须属于收货单关联的采购订单'})
         if self.instance and attrs.get('receipt') and attrs['receipt'].pk != self.instance.receipt_id:
             raise serializers.ValidationError({'receipt': '收货明细不可转挂到其他收货单'})
-        if attrs.get('qty', self.instance.qty if self.instance else 0) <= 0:
+        qty = attrs.get('qty', self.instance.qty if self.instance else 0)
+        if qty <= 0:
             raise serializers.ValidationError({'qty': '收货数量必须大于 0'})
+        # 剩余可收校验：逐条 POST/PATCH 收货行也须受累计上限约束，否则可绕过整单 create 的
+        # _validate_receipt_lines 累加校验，多行挂同一 po_line 超收（审计 batch3 #7）。
+        # 口径与 _validate_receipt_lines 一致：订单数量 − 已收 − 同 PO 其他草稿收货行占用（不含本行）。
+        if po_line:
+            reserved = 0.0
+            draft_lines = GoodsReceiptLine.objects.filter(
+                po_line=po_line,
+                receipt__status='DRAFT',
+                receipt__is_deleted=False,
+                is_deleted=False,
+            )
+            if self.instance:
+                draft_lines = draft_lines.exclude(pk=self.instance.pk)
+            for dl in draft_lines:
+                reserved += float(dl.qty or 0)
+            remaining = float(po_line.qty) - float(po_line.received_qty) - reserved
+            if float(qty) > remaining:
+                raise serializers.ValidationError(
+                    {'qty': f'物料超收：剩余可收 {remaining}，本次 {qty}'}
+                )
         return attrs
 
 

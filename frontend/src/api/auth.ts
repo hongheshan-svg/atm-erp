@@ -80,6 +80,11 @@ export function updateUser(id: number, data: any) {
   return request({ url: `/auth/users/${id}/`, method: 'put', data })
 }
 
+// 部分更新用户(PATCH),用于只改单个字段(如移出部门 department=null)而不覆盖其余字段
+export function patchUser(id: number, data: any) {
+  return request({ url: `/auth/users/${id}/`, method: 'patch', data })
+}
+
 export function deleteUser(id: number) {
   return request({ url: `/auth/users/${id}/`, method: 'delete' })
 }

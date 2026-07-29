@@ -184,7 +184,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Download } from '@element-plus/icons-vue'
-import { getMoves } from '@/api/inventory'
+import { getMoves, getMoveStats } from '@/api/inventory'
 import { getItemList, getWarehouseList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
 import { useBatchOperation } from '@/composables/useBatchOperation'
@@ -263,28 +263,34 @@ const formatQty = (num: any) => {
   return n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
+// 构建筛选参数(不含分页),列表与统计共用,保证两者口径一致
+const buildFilterParams = (): Record<string, any> => {
+  const params: Record<string, any> = {}
+  if (searchForm.item) params.item = searchForm.item
+  if (searchForm.warehouse) params.warehouse = searchForm.warehouse
+  if (searchForm.move_type) params.move_type = searchForm.move_type
+  if (searchForm.project) params.project = searchForm.project
+  if (searchForm.dateRange && searchForm.dateRange.length === 2) {
+    params.start_date = searchForm.dateRange[0]
+    params.end_date = searchForm.dateRange[1]
+  }
+  return params
+}
+
 const fetchData = async () => {
   loading.value = true
   try {
-    const params: Record<string, any> = {
+    const filterParams = buildFilterParams()
+    const res = await getMoves({
+      ...filterParams,
       page: pagination.page,
       page_size: pagination.pageSize
-    }
-    if (searchForm.item) params.item = searchForm.item
-    if (searchForm.warehouse) params.warehouse = searchForm.warehouse
-    if (searchForm.move_type) params.move_type = searchForm.move_type
-    if (searchForm.project) params.project = searchForm.project
-    if (searchForm.dateRange && searchForm.dateRange.length === 2) {
-      params.start_date = searchForm.dateRange[0]
-      params.end_date = searchForm.dateRange[1]
-    }
+    })
+    tableData.value = res.results || res || []
+    pagination.total = res.count || 0
 
-    const res = await getMoves(params)
-    tableData.value = res.results || res.results || res || []
-    pagination.total = res.count || res.count || 0
-
-    // 计算统计数据
-    calculateStats()
+    // 统计走后端聚合:覆盖全量筛选结果(非仅当前页),且按 move_type 正确判方向
+    fetchStats(filterParams)
   } catch (error: any) {
     console.error('获取库存流水失败:', error)
     ElMessage.error('获取数据失败')
@@ -293,24 +299,16 @@ const fetchData = async () => {
   }
 }
 
-const calculateStats = () => {
-  let totalIn = 0, totalOut = 0, totalInValue = 0, totalOutValue = 0
-  tableData.value.forEach(item => {
-    const qty = parseFloat(item.qty) || 0
-    const unitCost = parseFloat(item.unit_cost) || 0
-    const value = Math.abs(qty * unitCost)
-    if (qty > 0) {
-      totalIn += qty
-      totalInValue += value
-    } else {
-      totalOut += Math.abs(qty)
-      totalOutValue += value
-    }
-  })
-  stats.totalIn = totalIn
-  stats.totalOut = totalOut
-  stats.totalInValue = totalInValue
-  stats.totalOutValue = totalOutValue
+const fetchStats = async (filterParams: Record<string, any>) => {
+  try {
+    const res: any = await getMoveStats(filterParams)
+    stats.totalIn = Number(res.total_in) || 0
+    stats.totalOut = Number(res.total_out) || 0
+    stats.totalInValue = Number(res.total_in_value) || 0
+    stats.totalOutValue = Number(res.total_out_value) || 0
+  } catch (error: any) {
+    console.error('获取库存流水统计失败:', error)
+  }
 }
 
 const fetchItems = async () => {

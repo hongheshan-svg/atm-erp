@@ -10,6 +10,7 @@ Remote Equipment Monitoring and Maintenance
 """
 
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.db import models
 from django.db.models import Count, Max
@@ -578,20 +579,61 @@ class EquipmentDataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet)
     def batch_upload(self, request):
         """批量上传数据"""
         data_list = request.data.get('data', [])
+        if not isinstance(data_list, list) or not data_list:
+            return Response({'error': '请提供非空的 data 数组'}, status=400)
+
+        # 逐条校验必填键、外键存在性与数值合法性，收集错误后统一返回 400，避免裸下标 KeyError
+        # 或非法外键 IntegrityError 直接 500；bulk_create 置于事务内保证整批原子（审计 batch3 #16）。
+        from django.db import transaction
+
+        from apps.projects.models import Equipment
+
+        valid_equipment_ids = set(
+            Equipment.objects.filter(is_deleted=False).values_list('id', flat=True)
+        )
+        valid_data_point_ids = set(
+            EquipmentDataPoint.objects.filter(is_deleted=False).values_list('id', flat=True)
+        )
 
         records = []
-        for item in data_list:
+        errors = []
+        for idx, item in enumerate(data_list):
+            if not isinstance(item, dict):
+                errors.append({'index': idx, 'error': '记录必须为对象'})
+                continue
+            equipment_id = item.get('equipment_id')
+            data_point_id = item.get('data_point_id')
+            ts = item.get('timestamp')
+            value = item.get('value')
+            if equipment_id is None or data_point_id is None or ts is None or value is None:
+                errors.append({'index': idx, 'error': 'equipment_id/data_point_id/timestamp/value 均为必填'})
+                continue
+            if equipment_id not in valid_equipment_ids:
+                errors.append({'index': idx, 'error': f'设备 {equipment_id} 不存在'})
+                continue
+            if data_point_id not in valid_data_point_ids:
+                errors.append({'index': idx, 'error': f'数据点 {data_point_id} 不存在'})
+                continue
+            try:
+                value_dec = Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                errors.append({'index': idx, 'error': f'value 非法: {value}'})
+                continue
             records.append(
                 EquipmentDataRecord(
-                    equipment_id=item['equipment_id'],
-                    data_point_id=item['data_point_id'],
-                    timestamp=item['timestamp'],
-                    value=item['value'],
+                    equipment_id=equipment_id,
+                    data_point_id=data_point_id,
+                    timestamp=ts,
+                    value=value_dec,
                     quality=item.get('quality', 100),
                 )
             )
 
-        EquipmentDataRecord.objects.bulk_create(records)
+        if errors:
+            return Response({'error': '部分记录校验失败', 'details': errors}, status=400)
+
+        with transaction.atomic():
+            EquipmentDataRecord.objects.bulk_create(records)
 
         return Response({'success': True, 'count': len(records)})
 

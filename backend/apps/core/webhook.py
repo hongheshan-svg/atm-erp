@@ -66,6 +66,7 @@ class WebhookDelivery(models.Model):
 
     STATUS_CHOICES = [
         ('PENDING', '待发送'),
+        ('SENDING', '发送中'),
         ('SUCCESS', '成功'),
         ('FAILED', '失败'),
         ('RETRYING', '重试中'),
@@ -148,16 +149,34 @@ class WebhookService:
     def process_pending_deliveries(cls):
         """
         Process pending webhook deliveries.
+
+        并发安全（审计 batch3 #21）：同步 fallback（trigger_event 入队失败时）与 Celery 任务可能同时
+        运行，若无锁抢占会重复投递同一条记录。这里用 select_for_update(skip_locked=True) 在事务内领取
+        一批待投递记录并立即置为 SENDING，其他并发进程会跳过已锁定行，从而保证每条投递只被处理一次。
         """
-        pending = WebhookDelivery.objects.filter(
-            status__in=['PENDING', 'RETRYING'], attempts__lt=models.F('endpoint__max_retries')
-        ).select_related('endpoint')
+        from django.db import transaction
 
-        # Filter by retry time
         now = timezone.now()
-        pending = pending.filter(models.Q(next_retry_at__isnull=True) | models.Q(next_retry_at__lte=now))
 
-        for delivery in pending[:100]:  # Process in batches
+        with transaction.atomic():
+            pending_qs = (
+                WebhookDelivery.objects.select_for_update(skip_locked=True)
+                .filter(
+                    status__in=['PENDING', 'RETRYING'],
+                    attempts__lt=models.F('endpoint__max_retries'),
+                )
+                .filter(models.Q(next_retry_at__isnull=True) | models.Q(next_retry_at__lte=now))
+                .select_related('endpoint')[:100]
+            )
+            claimed = list(pending_qs)
+            claimed_ids = [d.id for d in claimed]
+            if claimed_ids:
+                # 事务内抢占：置 SENDING 后其他并发领取者因行锁 + 状态变化不会再取到这批记录。
+                WebhookDelivery.objects.filter(id__in=claimed_ids).update(status='SENDING')
+
+        # 抢占事务提交后再发起 HTTP 投递，避免长耗时网络请求持有行锁。
+        for delivery in claimed:
+            delivery.status = 'SENDING'
             cls.send_delivery(delivery)
 
     @classmethod

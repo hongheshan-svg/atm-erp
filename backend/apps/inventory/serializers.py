@@ -210,6 +210,11 @@ class StockAdjustmentSerializer(serializers.ModelSerializer):
         """Update adjustment with lines."""
         lines_data = self.initial_data.get('lines', [])
 
+        # 已确认/审批中的调整单已据明细生成库存移动，禁止再改写明细，否则库存移动与账面不符
+        # （审计 batch3 #4）。仅草稿/被驳回单可编辑。
+        if instance.status not in ['DRAFT', 'REJECTED']:
+            raise serializers.ValidationError('只有草稿或被驳回状态的调整单可以修改明细')
+
         with transaction.atomic():
             # Update adjustment fields
             for attr, value in validated_data.items():

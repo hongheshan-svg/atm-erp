@@ -439,13 +439,26 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
     def generate_batch(self, request):
         """批量生成序列号"""
         rule_id = request.data.get('rule_id')
-        quantity = int(request.data.get('quantity', 1))
         item_id = request.data.get('item_id')
         project_id = request.data.get('project_id')
         batch_no = request.data.get('batch_no', '')
 
+        # quantity 必须为正整数：非数字入参会让 int() 抛 ValueError → 500（审计 batch3 #19）。
+        try:
+            quantity = int(request.data.get('quantity', 1))
+        except (TypeError, ValueError):
+            return Response({'error': 'quantity 必须为正整数'}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            return Response({'error': 'quantity 必须为正整数'}, status=status.HTTP_400_BAD_REQUEST)
         if quantity > 100:
             return Response({'error': '单次生成不能超过100个'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # item 为非空 FK(on_delete=PROTECT)，item_id 缺失/非法会让 create() 抛 IntegrityError → 500
+        # （审计 batch3 #19）。进循环前显式校验存在性。
+        from apps.masterdata.models import Item
+
+        if not item_id or not Item.objects.filter(id=item_id, is_deleted=False).exists():
+            return Response({'error': '物料不存在或未指定 item_id'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             rule = SNRule.objects.get(id=rule_id)
