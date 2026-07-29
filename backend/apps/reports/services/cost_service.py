@@ -235,14 +235,19 @@ class CostCalculationService:
         """
         Calculate profitability for projects.
         Args:
-            status: filter by project status (optional)
+            status: filter by project status (optional)。可传单个状态字符串，
+                也可传状态列表——项目「进行中」同时存在 IN_PROGRESS(主用)与 ACTIVE(保留兼容)
+                两个值，调用方需要一次覆盖两者。
         Returns: pandas DataFrame
         """
         from apps.projects.models import Project
 
         queryset = Project.objects.filter(is_deleted=False)
         if status:
-            queryset = queryset.filter(status=status)
+            if isinstance(status, (list, tuple, set)):
+                queryset = queryset.filter(status__in=list(status))
+            else:
+                queryset = queryset.filter(status=status)
 
         active_projects = list(queryset.values('id', 'code', 'name', 'status', 'manager__username'))
 

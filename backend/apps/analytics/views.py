@@ -104,6 +104,8 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
         from django.db.models import Sum
 
         from apps.projects.models import Project
+        from apps.reports.services.cost_service import CostCalculationService
+        from apps.sales.models import SalesOrder
 
         projects = Project.objects.filter(is_deleted=False).select_related('manager')
 
@@ -125,27 +127,38 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
         # Pagination
         page = _parse_bounded_int(request.query_params.get('page'), 'page', 1, 1, 100000)
         page_size = _parse_bounded_int(request.query_params.get('page_size'), 'page_size', 20, 1, 500)
-        total = projects.count()
         start = (page - 1) * page_size
         end = start + page_size
 
+        # 汇总必须覆盖筛选后的全部项目:原先 summary 只对当前页 results 求和,
+        # 顶部「总预算/总收入/总成本/总利润」会随翻页跳变。这里一次取全量 id,
+        # 成本改用按项目分组的批量聚合,顺带消掉明细行里每个项目 4~5 条查询的 N+1。
+        all_ids = list(projects.values_list('id', flat=True))
+        total = len(all_ids)
+
+        cost_map = CostCalculationService.calculate_projects_profit(all_ids)
+        # 本接口的收入口径不按订单状态过滤(与 CostCalculationService 不同),因此单独聚合后覆盖,
+        # 保证汇总与明细行同源同口径。
+        revenue_map = {
+            row['project_id']: float(row['total'] or 0)
+            for row in SalesOrder.objects.filter(project_id__in=all_ids, is_deleted=False)
+            .values('project_id')
+            .annotate(total=Sum('total_amount'))
+        }
+
+        def _cost_of(project_id):
+            costs = cost_map.get(project_id) or {}
+            return (
+                costs.get('material_cost', 0.0),
+                costs.get('labor_cost', 0.0),
+                costs.get('expense_cost', 0.0),
+                costs.get('total_cost', 0.0),
+            )
+
         results = []
         for project in projects[start:end]:
-            material_cost = float(project.get_actual_material_cost() or 0)
-            labor_cost = float(project.get_actual_labor_cost() or 0)
-            expense_cost = float(project.get_actual_expense_cost() or 0)
-            total_cost = material_cost + labor_cost + expense_cost
-
-            # Get revenue from sales orders
-            from apps.sales.models import SalesOrder
-
-            revenue = (
-                SalesOrder.objects.filter(project=project, is_deleted=False).aggregate(total=Sum('total_amount'))[
-                    'total'
-                ]
-                or 0
-            )
-            revenue = float(revenue)
+            material_cost, labor_cost, expense_cost, total_cost = _cost_of(project.id)
+            revenue = revenue_map.get(project.id, 0.0)
 
             profit = revenue - total_cost
             profit_margin = (profit / revenue * 100) if revenue else 0
@@ -173,13 +186,15 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
                 }
             )
 
-        # Calculate summary
+        # Calculate summary(全量口径,不随分页变化)
+        total_revenue = sum(revenue_map.get(pid, 0.0) for pid in all_ids)
+        total_cost_all = sum(_cost_of(pid)[3] for pid in all_ids)
         summary = {
             'totalProjects': total,
-            'totalBudget': sum(r['budget_total'] for r in results),
-            'totalRevenue': sum(r['revenue'] for r in results),
-            'totalCost': sum(r['total_cost'] for r in results),
-            'totalProfit': sum(r['profit'] for r in results),
+            'totalBudget': float(projects.aggregate(total=Sum('budget_total'))['total'] or 0),
+            'totalRevenue': total_revenue,
+            'totalCost': total_cost_all,
+            'totalProfit': total_revenue - total_cost_all,
         }
 
         return Response({'results': results, 'count': total, 'summary': summary})

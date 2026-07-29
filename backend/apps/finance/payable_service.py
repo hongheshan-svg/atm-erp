@@ -1,13 +1,35 @@
 """核销服务:为一条银行流水找出待付款项台账中的候选核销对象,并执行核销记账。"""
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import DecimalField, ExpressionWrapper, F, Q, Value
+from django.db.models.functions import Replace
 from django.utils.dateparse import parse_datetime
 
 from apps.finance.models import BankStatement, Payment
 from apps.finance.payable_adapters import PAYABLE_SOURCES
 from apps.finance.payable_models import PayableItem, PayableSettlement
+
+# SQL 侧复刻 BankStatement._normalize_name 用的替换表。Python 侧是 strip() + 全半角括号归一 +
+# 删空格;这里额外把制表符/换行也删掉,并对比较目标做同样的额外删除,于是
+# SQL 归一化 == 「Python 归一化后再删这几个字符」——预筛结果恒为 Python 打分结果的超集,不会漏候选。
+_SQL_NAME_REPLACEMENTS = (('（', '('), ('）', ')'), ('　', ''), (' ', ''), ('\t', ''), ('\n', ''), ('\r', ''))
+
+
+def _sql_normalized_payee():
+    expr = F('payee_name')
+    for src, dst in _SQL_NAME_REPLACEMENTS:
+        expr = Replace(expr, Value(src), Value(dst))
+    return expr
+
+
+def _drop_sql_only_chars(value):
+    """把 SQL 侧比 Python 侧多删的字符从比较目标里也删掉,使两侧口径对齐。"""
+    for char in ('\t', '\n', '\r'):
+        value = value.replace(char, '')
+    return value
 
 
 def match_candidates(bank_statement, limit=10):
@@ -35,8 +57,29 @@ def match_candidates(bank_statement, limit=10):
     bs_date = transaction_time.date() if transaction_time else None
 
     results = []
-    qs = PayableItem.objects.filter(status__in=[PayableItem.STATUS_PENDING, PayableItem.STATUS_PARTIAL])
-    for item in qs:
+    qs = PayableItem.objects.filter(status__in=[PayableItem.STATUS_PENDING, PayableItem.STATUS_PARTIAL]).annotate(
+        _remaining=ExpressionWrapper(
+            F('amount_due') - F('amount_paid'), output_field=DecimalField(max_digits=15, decimal_places=2)
+        )
+    )
+
+    # 只有可能得分的行才值得拉进 Python 打分:score>0 等价于下面三项加分条件至少命中一项。
+    # 未结台账项会累积到数千条,不预筛就要每次全表实例化并逐条归一化比较,
+    # 核销候选接口的开销随台账规模线性增长。
+    conditions = []
+    if target:
+        qs = qs.annotate(_normalized_payee=_sql_normalized_payee())
+        conditions.append(Q(_normalized_payee=_drop_sql_only_chars(target)))
+    # amount>0 时「金额等于剩余」已被「金额不超剩余」覆盖;amount<=0 时只有相等才得分。
+    conditions.append(Q(_remaining__gte=amount) if amount > 0 else Q(_remaining=amount))
+    if bs_date:
+        conditions.append(Q(due_date__range=(bs_date - timedelta(days=7), bs_date + timedelta(days=7))))
+
+    prefilter = conditions[0]
+    for condition in conditions[1:]:
+        prefilter |= condition
+
+    for item in qs.filter(prefilter):
         score = 0
         reasons = []
         if target and norm(item.payee_name) == target:

@@ -205,7 +205,10 @@ class DashboardDataService:
 
         stats = queryset.aggregate(
             total=Count('id'),
-            active=Count('id', filter=models.Q(status='ACTIVE')),
+            # 'IN_PROGRESS' 才是项目进行中的主状态，'ACTIVE' 是保留兼容值
+            # (projects/models.py STATUS_CHOICES)。只按 'ACTIVE' 统计会让活跃项目数接近 0，
+            # 与 reports/views.py、analytics/views.py 等处的 status__in 口径保持一致。
+            active=Count('id', filter=models.Q(status__in=['IN_PROGRESS', 'ACTIVE'])),
             completed=Count('id', filter=models.Q(status='COMPLETED')),
             total_budget=Sum('budget_total'),
         )
@@ -385,7 +388,8 @@ class DashboardDataService:
         """Get project profitability."""
         from apps.reports.services.cost_service import CostCalculationService
 
-        df = CostCalculationService.calculate_all_projects_profit(status='ACTIVE')
+        # 同 _get_project_stats：进行中的项目主状态是 IN_PROGRESS，只传 'ACTIVE' 会让本 widget 恒空
+        df = CostCalculationService.calculate_all_projects_profit(status=['IN_PROGRESS', 'ACTIVE'])
 
         if df.empty:
             return {'projects': []}
