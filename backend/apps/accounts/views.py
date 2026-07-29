@@ -180,9 +180,34 @@ class UserViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
     ViewSet for User management.
     """
     queryset = User.objects.all()
-    filterset_fields = ['department', 'role', 'is_active', 'is_staff', 'is_deleted']
-    search_fields = ['username', 'employee_id', 'email', 'first_name', 'last_name']
     ordering_fields = ['employee_id', 'created_at', 'last_login']
+
+    # 序列化器已对非管理员裁掉 is_staff/email 等字段（见 get_serializer_class），
+    # 但过滤与搜索仍是旁路：`?is_staff=true` 能直接列出全部特权账号，
+    # `?search=someone@example.com` 能验证某邮箱是否存在，属布尔式侦察。
+    # 因此这两项按请求者身份动态开放。
+    BASE_FILTERSET_FIELDS = ['department', 'role', 'is_active', 'is_deleted']
+    ADMIN_ONLY_FILTERSET_FIELDS = ['is_staff']
+    BASE_SEARCH_FIELDS = ['username', 'employee_id', 'first_name', 'last_name']
+    ADMIN_ONLY_SEARCH_FIELDS = ['email']
+
+    def _requester_is_system_admin(self):
+        from apps.core.permissions import _is_system_admin
+
+        request = getattr(self, 'request', None)
+        return bool(request and _is_system_admin(getattr(request, 'user', None)))
+
+    @property
+    def filterset_fields(self):
+        if self._requester_is_system_admin():
+            return self.BASE_FILTERSET_FIELDS + self.ADMIN_ONLY_FILTERSET_FIELDS
+        return self.BASE_FILTERSET_FIELDS
+
+    @property
+    def search_fields(self):
+        if self._requester_is_system_admin():
+            return self.BASE_SEARCH_FIELDS + self.ADMIN_ONLY_SEARCH_FIELDS
+        return self.BASE_SEARCH_FIELDS
 
     # Actions that operate on the current user's own data — skip module permission check
     SELF_ACTIONS = {'profile', 'update_profile', 'change_password'}

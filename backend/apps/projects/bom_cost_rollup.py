@@ -5,7 +5,7 @@ BOM Multi-level Cost Rollup for Non-standard Automation Industry
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -93,54 +93,73 @@ class BOMCostRollupService:
     def calculate_rollup(project_id, version_label, user):
         from apps.projects.models import ProjectBOM
 
-        snapshot = BOMCostSnapshot.objects.create(
-            project_id=project_id,
-            version_label=version_label,
-            calculated_by=user,
-            created_by=user,
-        )
-        total_material = Decimal('0.00')
-        total_labor = Decimal('0.00')
-        total_overhead = Decimal('0.00')
-        total_outsource = Decimal('0.00')
-
-        bom_items = ProjectBOM.objects.filter(project_id=project_id, is_deleted=False).select_related('item', 'parent')
-
-        for item in bom_items:
-            qty = item.planned_qty or Decimal('0')
-            unit_cost = item.estimated_cost or Decimal('0.00')
-            ext_cost = qty * unit_cost
-            labor = Decimal('0.00')
-            overhead = ext_cost * Decimal('0.10')
-            outsource = Decimal('0.00')
-            sub = ext_cost + labor + overhead + outsource
-
-            BOMCostDetail.objects.create(
-                snapshot=snapshot,
-                material_code=item.item_code or (item.item.sku if item.item else ''),
-                material_name=item.item.name if item.item else '',
-                bom_level=item.level,
-                parent_material_code=item.parent.item_code if item.parent else '',
-                quantity=qty,
-                unit_material_cost=unit_cost,
-                extended_material_cost=ext_cost,
-                labor_cost=labor,
-                overhead_cost=overhead,
-                outsource_cost=outsource,
-                subtotal=sub,
+        # 整个卷积必须在一个事务里：原实现先建 snapshot、再逐行建明细、最后才回写汇总，
+        # 中途失败会留下一张明细不全且汇总为 0 的快照。
+        with transaction.atomic():
+            snapshot = BOMCostSnapshot.objects.create(
+                project_id=project_id,
+                version_label=version_label,
+                calculated_by=user,
                 created_by=user,
             )
-            total_material += ext_cost
-            total_labor += labor
-            total_overhead += overhead
-            total_outsource += outsource
+            total_material = Decimal('0.00')
+            total_labor = Decimal('0.00')
+            total_overhead = Decimal('0.00')
+            total_outsource = Decimal('0.00')
 
-        snapshot.total_material_cost = total_material
-        snapshot.total_labor_cost = total_labor
-        snapshot.total_overhead_cost = total_overhead
-        snapshot.total_outsource_cost = total_outsource
-        snapshot.grand_total = total_material + total_labor + total_overhead + total_outsource
-        snapshot.save()
+            bom_items = list(
+                ProjectBOM.objects.filter(project_id=project_id, is_deleted=False).select_related('item', 'parent')
+            )
+
+            # 有子件的行是结构性父节点，其成本由子件汇总而来；若把父行也计入合计，
+            # 多级 BOM 会父/子重复计价。因此明细仍逐行写出（保留结构），
+            # 但快照合计只累加叶子行。扁平 BOM（无 parent）下全部是叶子，口径不变。
+            parent_ids = {item.parent_id for item in bom_items if item.parent_id}
+
+            for item in bom_items:
+                # 数量口径与 bom_integration.calculate_required_qty 一致：planned_qty 已是绝对数量
+                # （见 inventory/mrp.py 的约定：不能再乘 unit_qty，否则重复计数），
+                # 只按损耗率上浮。
+                scrap_rate = item.scrap_rate or Decimal('0')
+                qty = (item.planned_qty or Decimal('0')) * (1 + scrap_rate / 100)
+                unit_cost = item.estimated_cost or Decimal('0.00')
+                ext_cost = qty * unit_cost
+                labor = Decimal('0.00')
+                overhead = ext_cost * Decimal('0.10')
+                outsource = Decimal('0.00')
+                sub = ext_cost + labor + overhead + outsource
+
+                BOMCostDetail.objects.create(
+                    snapshot=snapshot,
+                    material_code=item.item_code or (item.item.sku if item.item else ''),
+                    material_name=item.item.name if item.item else '',
+                    bom_level=item.level,
+                    parent_material_code=item.parent.item_code if item.parent else '',
+                    quantity=qty,
+                    unit_material_cost=unit_cost,
+                    extended_material_cost=ext_cost,
+                    labor_cost=labor,
+                    overhead_cost=overhead,
+                    outsource_cost=outsource,
+                    subtotal=sub,
+                    created_by=user,
+                )
+
+                if item.id in parent_ids:
+                    continue
+
+                total_material += ext_cost
+                total_labor += labor
+                total_overhead += overhead
+                total_outsource += outsource
+
+            snapshot.total_material_cost = total_material
+            snapshot.total_labor_cost = total_labor
+            snapshot.total_overhead_cost = total_overhead
+            snapshot.total_outsource_cost = total_outsource
+            snapshot.grand_total = total_material + total_labor + total_overhead + total_outsource
+            snapshot.save()
+
         return snapshot
 
 
