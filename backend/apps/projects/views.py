@@ -1911,6 +1911,8 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         Generate purchase request from BOM items.
         PRD requirement: BOM清单推送到采购模块
         """
+        from decimal import Decimal
+
         from apps.purchase.models import PurchaseRequest, PurchaseRequestLine
 
         project_id = request.data.get('project')
