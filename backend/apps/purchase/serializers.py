@@ -591,9 +591,7 @@ class GoodsReceiptLineSerializer(serializers.ModelSerializer):
                 reserved += float(dl.qty or 0)
             remaining = float(po_line.qty) - float(po_line.received_qty) - reserved
             if float(qty) > remaining:
-                raise serializers.ValidationError(
-                    {'qty': f'物料超收：剩余可收 {remaining}，本次 {qty}'}
-                )
+                raise serializers.ValidationError({'qty': f'物料超收：剩余可收 {remaining}，本次 {qty}'})
         return attrs
 
 

@@ -588,12 +588,8 @@ class EquipmentDataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet)
 
         from apps.projects.models import Equipment
 
-        valid_equipment_ids = set(
-            Equipment.objects.filter(is_deleted=False).values_list('id', flat=True)
-        )
-        valid_data_point_ids = set(
-            EquipmentDataPoint.objects.filter(is_deleted=False).values_list('id', flat=True)
-        )
+        valid_equipment_ids = set(Equipment.objects.filter(is_deleted=False).values_list('id', flat=True))
+        valid_data_point_ids = set(EquipmentDataPoint.objects.filter(is_deleted=False).values_list('id', flat=True))
 
         records = []
         errors = []
