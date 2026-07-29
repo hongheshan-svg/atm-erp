@@ -208,7 +208,7 @@ class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
         return queryset
 
     # 按移动方向归类 move_type:qty 恒为正,方向由类型(及调整的仓库字段)决定。
-    IN_MOVE_TYPES = ['IN_PURCHASE', 'IN_OUTSOURCE']
+    IN_MOVE_TYPES = ['IN_PURCHASE', 'IN_OUTSOURCE', 'IN_RETURN']
     OUT_MOVE_TYPES = ['OUT_SALES', 'OUT_PROJECT', 'OUT_RETURN', 'OUT_OUTSOURCE']
 
     @action(detail=False, methods=['get'])
@@ -217,7 +217,8 @@ class StockMoveViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
 
         前端此前只对当前页 tableData 累加,且用 qty>0 判方向——但 StockMove.qty 恒为正,
         导致出库恒为 0、且统计只覆盖一页。此处按 move_type 在数据库层聚合全量结果:
-        - 入库:IN_PURCHASE/IN_OUTSOURCE,加上调拨入库(warehouse_to)与盘盈(ADJUSTMENT+warehouse_to)
+        - 入库:IN_PURCHASE/IN_OUTSOURCE/IN_RETURN,加上调拨入库(warehouse_to)与盘盈(ADJUSTMENT+warehouse_to)
+          (历史退料入库写的是 ADJUSTMENT+warehouse_to,仍由盘盈那一支计入入库,总量不受口径切换影响)
         - 出库:OUT_*,加上调拨出库(warehouse_from)与盘亏(ADJUSTMENT+warehouse_from)
         调拨在两侧各计一次(物料确实流出源仓、流入目标仓)。
         """

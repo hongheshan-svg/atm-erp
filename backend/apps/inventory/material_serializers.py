@@ -303,10 +303,9 @@ class MaterialReturnSerializer(serializers.ModelSerializer):
             is_deleted=False,
         ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))
         returned = StockMove.objects.filter(
+            StockMove.material_return_q(),
             project_id=project_id,
             item_id=item_id,
-            move_type='ADJUSTMENT',
-            reference_type='MaterialReturn',
             status='COMPLETED',
             is_deleted=False,
         ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))

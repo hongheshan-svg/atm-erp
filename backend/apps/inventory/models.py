@@ -60,9 +60,16 @@ class StockMove(BaseModel):
         ('OUT_RETURN', '采购退货出库'),
         ('OUT_OUTSOURCE', '外协发料出库'),
         ('IN_OUTSOURCE', '外协加工入库'),
+        ('IN_RETURN', '项目退料入库'),
         ('TRANSFER', '调拨'),
         ('ADJUSTMENT', '调整'),
     ]
+
+    # 项目退料入库的历史口径:IN_RETURN 启用前,退料入库复用 ADJUSTMENT + reference_type='MaterialReturn'
+    # 写入,存量行不做数据迁移(改历史移动的 move_type 会连带影响成本账已登记的 ADJUST_IN 记录)。
+    # 因此所有「按退料读取」的地方都必须同时认这两种写法(见 material_return_q),
+    # 否则项目材料成本会漏扣历史退料而虚高。
+    MATERIAL_RETURN_REFERENCE_TYPE = 'MaterialReturn'
 
     STATUS_CHOICES = [
         ('DRAFT', '草稿'),
@@ -170,9 +177,19 @@ class StockMove(BaseModel):
             if self.status == 'COMPLETED' and not was_completed:
                 self._update_stock()
 
+    @classmethod
+    def material_return_q(cls):
+        """匹配项目退料入库移动的 Q 对象(新 IN_RETURN 与历史 ADJUSTMENT 两种口径,见上方常量注释)。
+
+        用法:``StockMove.objects.filter(StockMove.material_return_q(), project_id=..., status='COMPLETED')``
+        """
+        from django.db.models import Q
+
+        return Q(move_type='IN_RETURN') | Q(move_type='ADJUSTMENT', reference_type=cls.MATERIAL_RETURN_REFERENCE_TYPE)
+
     def _update_stock(self):
         """Update stock levels based on move type."""
-        if self.move_type in ['IN_PURCHASE', 'IN_OUTSOURCE']:
+        if self.move_type in ['IN_PURCHASE', 'IN_OUTSOURCE', 'IN_RETURN']:
             # Incoming stock
             self._update_stock_in(self.warehouse_to, self.qty, self.unit_cost)
 
@@ -248,6 +265,9 @@ class StockMove(BaseModel):
         ('OUT_RETURN', 'OUT'): 'RETURN_OUT',
         ('OUT_OUTSOURCE', 'OUT'): 'PRODUCTION_OUT',
         ('IN_OUTSOURCE', 'IN'): 'PRODUCTION_IN',
+        # 项目退料入库归到退货入库,而不是此前复用 ADJUSTMENT 时被映射成的 ADJUST_IN(盘盈入库)——
+        # 退料有实物来源单据,计入盘盈会让进销存分类报表的调整项虚高。
+        ('IN_RETURN', 'IN'): 'RETURN_IN',
         ('TRANSFER', 'IN'): 'TRANSFER_IN',
         ('TRANSFER', 'OUT'): 'TRANSFER_OUT',
         ('ADJUSTMENT', 'IN'): 'ADJUST_IN',

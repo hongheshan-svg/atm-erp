@@ -418,8 +418,11 @@ class MaterialReturnViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
                             warehouse_to=material_return.warehouse,
                             qty=received_qty,
                             unit_cost=line.unit_cost,
-                            move_type='ADJUSTMENT',  # 退料入库
-                            reference_type='MaterialReturn',
+                            # 退料入库有专用类型:此前复用 ADJUSTMENT 会让成本账记成盘盈(ADJUST_IN)、
+                            # 进销存分类报表把退料并入调整项。历史行仍是 ADJUSTMENT,
+                            # 读取侧一律用 StockMove.material_return_q() 兼容两种口径。
+                            move_type='IN_RETURN',
+                            reference_type=StockMove.MATERIAL_RETURN_REFERENCE_TYPE,
                             reference_id=material_return.id,
                             project=material_return.project,
                             move_date=timezone.now(),
