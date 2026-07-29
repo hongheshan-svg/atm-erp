@@ -62,7 +62,8 @@ class InstallationTask(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.task_number:
-            last = InstallationTask.objects.order_by('-id').first()
+            # 必须用 all_objects（含软删除记录）取最大 id，否则软删除导致 id+1 重复
+            last = InstallationTask.all_objects.order_by('-id').first()
             num = (last.id + 1) if last else 1
             self.task_number = f'INST-{num:06d}'
         super().save(*args, **kwargs)

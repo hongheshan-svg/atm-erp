@@ -588,12 +588,8 @@ class EquipmentDataRecordViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet)
 
         from apps.projects.models import Equipment
 
-        valid_equipment_ids = set(
-            Equipment.objects.filter(is_deleted=False).values_list('id', flat=True)
-        )
-        valid_data_point_ids = set(
-            EquipmentDataPoint.objects.filter(is_deleted=False).values_list('id', flat=True)
-        )
+        valid_equipment_ids = set(Equipment.objects.filter(is_deleted=False).values_list('id', flat=True))
+        valid_data_point_ids = set(EquipmentDataPoint.objects.filter(is_deleted=False).values_list('id', flat=True))
 
         records = []
         errors = []
@@ -801,7 +797,7 @@ class DiagnosticSessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                 title=f'[诊断] {session.equipment.name} - {session.findings[:50]}',
                 customer=session.equipment.customer,
                 equipment=session.equipment,
-                service_address=session.equipment.location or '',
+                service_address=session.equipment.installation_address or '',
                 contact_name='',
                 contact_phone='',
                 requested_date=date.today() + timedelta(days=3),

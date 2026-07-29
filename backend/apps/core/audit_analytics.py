@@ -102,7 +102,8 @@ class AuditLogSecurityView(APIView):
         week_ago = today - timedelta(days=7)
 
         # 敏感操作（删除、导出等）
-        sensitive_actions = ['delete', 'export', 'bulk_delete', 'restore', 'approve', 'reject']
+        # AuditLogMiddleware 写入的 action 为大写（CREATE/UPDATE/DELETE/EXPORT 等），小写匹配始终为0
+        sensitive_actions = ['DELETE', 'EXPORT', 'BULK_DELETE', 'RESTORE', 'APPROVE', 'REJECT']
         sensitive_logs = AuditLog.objects.filter(action__in=sensitive_actions, timestamp__date__gte=week_ago).count()
 
         # 按敏感操作类型统计

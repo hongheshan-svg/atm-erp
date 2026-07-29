@@ -398,12 +398,14 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
             record.check_in_location = location
 
         # 检查是否迟到
+        # now 是 UTC aware datetime；与 naive local 时间比较需先转换为本地时间再去掉 tzinfo
         config = AttendanceConfig.objects.filter(is_default=True, is_active=True).first()
         if config:
+            now_local = timezone.localtime(now).replace(tzinfo=None)
             work_start = datetime.combine(today, config.work_start_time)
             grace_time = work_start + timedelta(minutes=config.late_grace_minutes)
-            if now.replace(tzinfo=None) > grace_time:
-                late_delta = now.replace(tzinfo=None) - work_start
+            if now_local > grace_time:
+                late_delta = now_local - work_start
                 record.late_minutes = int(late_delta.total_seconds() / 60)
                 record.status = 'LATE'
 
@@ -428,9 +430,10 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
         # 检查是否早退
         config = AttendanceConfig.objects.filter(is_default=True, is_active=True).first()
         if config:
+            now_local = timezone.localtime(now).replace(tzinfo=None)
             work_end = datetime.combine(today, config.work_end_time)
-            if now.replace(tzinfo=None) < work_end:
-                early_delta = work_end - now.replace(tzinfo=None)
+            if now_local < work_end:
+                early_delta = work_end - now_local
                 record.early_minutes = int(early_delta.total_seconds() / 60)
                 if record.status == 'NORMAL':
                     record.status = 'EARLY'
@@ -855,7 +858,8 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
             # 判断迟到
             if record.check_in_time:
-                check_in_local = record.check_in_time.replace(tzinfo=None)
+                # check_in_time 是 UTC aware；转本地时间后去 tzinfo 与 naive local 比较
+                check_in_local = timezone.localtime(record.check_in_time).replace(tzinfo=None)
                 expected_start = datetime.combine(record.attendance_date, work_start)
                 grace_time = expected_start + timedelta(minutes=late_grace)
 
@@ -865,7 +869,7 @@ class AttendanceRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
             # 判断早退
             if record.check_out_time:
-                check_out_local = record.check_out_time.replace(tzinfo=None)
+                check_out_local = timezone.localtime(record.check_out_time).replace(tzinfo=None)
                 expected_end = datetime.combine(record.attendance_date, work_end)
 
                 if check_out_local < expected_end:

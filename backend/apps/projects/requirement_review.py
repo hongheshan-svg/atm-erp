@@ -165,7 +165,7 @@ class RequirementReview(BaseModel):
             return None
 
         total_weight = results.aggregate(total=Sum('check_item__weight'))['total'] or 1
-        weighted_score = sum(r.score * float(r.check_item.weight) for r in results if r.score is not None)
+        weighted_score = sum(float(r.score) * float(r.check_item.weight) for r in results if r.score is not None)
 
         self.total_score = round(Decimal(weighted_score / float(total_weight)), 2)
         return self.total_score

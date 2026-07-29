@@ -361,14 +361,15 @@ class ProjectCostSummary(BaseModel):
                 Decimal('0.0001'), rounding=ROUND_HALF_UP
             )
 
-        # 计算CPI
+        # 计算CPI（cpi 字段 max_digits=5,decimal_places=2 → 最大 999.99）
         if self.estimated_cost > 0 and self.completion_percentage > 0:
             ev = self.estimated_cost * (self.completion_percentage / 100)  # 挣值
-            self.cpi = (
-                Decimal(ev / self.total_cost).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                if self.total_cost > 0
-                else Decimal('1')
-            )
+            if self.total_cost > 0:
+                raw_cpi = Decimal(ev / self.total_cost).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                # 钳位至字段精度范围，防止 DataError
+                self.cpi = max(Decimal('0'), min(raw_cpi, Decimal('999.99')))
+            else:
+                self.cpi = Decimal('1')
 
             # EAC = BAC / CPI
             if self.cpi > 0:
