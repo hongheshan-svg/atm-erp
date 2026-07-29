@@ -288,6 +288,9 @@ class ReportExecutionViewSet(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = ReportExecution.objects.filter(is_deleted=False)
+        # drf-spectacular 生成 schema 时以 AnonymousUser 调用本方法,不能按 created_by 过滤
+        if getattr(self, 'swagger_fake_view', False):
+            return qs.none()
         # 报表执行结果(result_data)可能含敏感业务数据,非管理员只能看自己触发的执行,
         # 不能返回全部用户的执行结果(审计 batch1 #21)。
         user = self.request.user
