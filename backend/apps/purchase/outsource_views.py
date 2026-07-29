@@ -2,6 +2,7 @@
 外协加工管理视图
 """
 
+from collections import defaultdict
 from decimal import Decimal
 
 from django.db import transaction
@@ -189,8 +190,6 @@ class OutsourceMaterialIssueViewSet(
             # 服务端发料校验：发料数 ≤ 外协行剩余(qty-sent_qty) 且 ≤ 仓库可用量。
             # 按 outsource_line 累加本单各行数量后统一判上限——多行挂同一外协行时逐行独立比较会各读
             # 同一未更新的 sent_qty 而全部通过，写库循环再 F() 累加即超发（审计 batch3 #8）。
-            from collections import defaultdict
-
             cumulative_by_ol = defaultdict(float)
             for line in issue.lines.filter(is_deleted=False):
                 ol = line.outsource_line
@@ -326,8 +325,6 @@ class OutsourceReceiptViewSet(
             # 服务端收货校验：本次合格累计后 received_qty 不得超过外协行已发料量与订单量。
             # 按 outsource_line 累加本单各行合格量后统一判上限——多行挂同一外协行时逐行独立比较会各读
             # 同一未更新的 received_qty 而全部通过，写库循环再 F() 累加即超收（审计 batch3 #8）。
-            from collections import defaultdict
-
             cumulative_recv_by_ol = defaultdict(float)
             for line in receipt.lines.filter(is_deleted=False):
                 ol = line.outsource_line
