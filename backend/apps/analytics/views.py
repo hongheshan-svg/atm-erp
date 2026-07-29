@@ -413,13 +413,17 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
 
         # 账龄分析
         aging_data = []
-        aging_ranges = [('0-30天', 0, 30), ('31-60天', 31, 60), ('61-90天', 61, 90), ('90天以上', 91, 9999)]
+        # 桶按逾期天数闭区间划分（与 reports.views.aging_report 口径一致）：
+        # min_days <= days_overdue <= max_days，其中 days_overdue = (today - due_date).days。
+        # 故上界用 due_date__lte=today-min_days（原写 __lt 会让恰好逾期 31/61/91 天的应收
+        # 两个桶都不落入，金额被漏计）。
+        aging_ranges = [('0-30天', 1, 30), ('31-60天', 31, 60), ('61-90天', 61, 90), ('90天以上', 91, 9999)]
 
         for label, min_days, max_days in aging_ranges:
             amount = (
                 AccountReceivable.objects.filter(
                     status__in=['PENDING', 'PARTIAL', 'OVERDUE'],
-                    due_date__lt=today - timedelta(days=min_days),
+                    due_date__lte=today - timedelta(days=min_days),
                     due_date__gte=today - timedelta(days=max_days),
                     is_deleted=False,
                 ).aggregate(total=Sum('amount_due') - Sum('amount_paid'))['total']

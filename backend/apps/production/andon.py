@@ -127,6 +127,11 @@ class AndonCall(BaseModel):
         ('CANCELLED', '已取消'),
     ]
 
+    # 未闭环（仍需处理）的状态：终态只有 RESOLVED / CANCELLED。
+    # ESCALATED 表示升级到更高层级、异常尚未解决，必须计入，
+    # 否则单条呼叫升级后工位灯会错误转绿、待处理列表也会漏掉它。
+    ACTIVE_STATUSES = ['PENDING', 'RESPONDING', 'PROCESSING', 'ESCALATED']
+
     PRIORITY_CHOICES = [
         ('LOW', '低'),
         ('MEDIUM', '中'),
@@ -234,13 +239,13 @@ class AndonCall(BaseModel):
 
         # 更新工位状态
         if self.station:
-            if self.status in ['PENDING', 'RESPONDING', 'PROCESSING']:
+            if self.status in AndonCall.ACTIVE_STATUSES:
                 self.station.current_status = 'RED'
             else:
                 # 检查是否有其他未解决的呼叫
                 has_pending = (
                     AndonCall.objects.filter(
-                        station=self.station, status__in=['PENDING', 'RESPONDING', 'PROCESSING'], is_deleted=False
+                        station=self.station, status__in=AndonCall.ACTIVE_STATUSES, is_deleted=False
                     )
                     .exclude(pk=self.pk)
                     .exists()
@@ -444,7 +449,7 @@ class AndonStationViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         for station in stations:
             # 获取当前未解决的呼叫
             active_call = AndonCall.objects.filter(
-                station=station, status__in=['PENDING', 'RESPONDING', 'PROCESSING'], is_deleted=False
+                station=station, status__in=AndonCall.ACTIVE_STATUSES, is_deleted=False
             ).first()
 
             station_list.append(
@@ -591,11 +596,7 @@ class AndonCallViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     @action(detail=False, methods=['get'])
     def pending(self, request):
         """待处理呼叫"""
-        calls = (
-            self.get_queryset()
-            .filter(status__in=['PENDING', 'RESPONDING', 'PROCESSING'])
-            .order_by('-priority', 'call_time')
-        )
+        calls = self.get_queryset().filter(status__in=AndonCall.ACTIVE_STATUSES).order_by('-priority', 'call_time')
 
         return Response(AndonCallListSerializer(calls, many=True).data)
 

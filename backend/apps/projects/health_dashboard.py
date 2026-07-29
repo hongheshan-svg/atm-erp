@@ -5,11 +5,14 @@ Project Health Dashboard - 综合评分、预警等级、趋势预测
 
 from django.db import models
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
+from apps.core.permissions import module_menu_permission
+
+# 裸 APIView 不经 PermissionMixin，需显式挂模块菜单门控
+ProjectsMenuAccess = module_menu_permission('projects')
 
 
 class ProjectHealthScore(BaseModel):
@@ -89,7 +92,9 @@ class ProjectHealthAlert(BaseModel):
     is_active = models.BooleanField('是否激活', default=True)
     acknowledged = models.BooleanField('已确认', default=False)
     acknowledged_by = models.ForeignKey(
-        'core.User',
+        # AUTH_USER_MODEL 是 accounts.User；'core.User' 不存在，一旦本模块被导入
+        # 会让 Django 系统检查全站报 fields.E300（关系指向未安装的模型）
+        'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -461,7 +466,7 @@ class ProjectHealthService:
 class ProjectHealthDashboardView(APIView):
     """项目健康度看板"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request, project_id=None):
         from apps.projects.models import Project
@@ -580,7 +585,7 @@ class ProjectHealthDashboardView(APIView):
 class ProjectHealthAlertView(APIView):
     """项目健康预警管理"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request):
         """获取预警列表"""
@@ -650,7 +655,7 @@ class ProjectHealthAlertView(APIView):
 class ProjectHealthBatchCalculateView(APIView):
     """批量计算项目健康度"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def post(self, request):
         """批量计算并保存"""

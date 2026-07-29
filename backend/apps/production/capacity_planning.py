@@ -30,6 +30,10 @@ from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import module_menu_permission
+
+# 裸 APIView 不经 PermissionMixin，需显式挂模块菜单门控
+ProductionMenuAccess = module_menu_permission('production')
 
 User = settings.AUTH_USER_MODEL
 
@@ -547,7 +551,7 @@ class ResourceAllocationViewSet(PermissionMixin, viewsets.ModelViewSet):
 class CapacityDashboardView(APIView):
     """产能看板"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         start_date = request.query_params.get('start_date')

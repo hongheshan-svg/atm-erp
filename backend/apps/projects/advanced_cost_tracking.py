@@ -30,6 +30,10 @@ from rest_framework.views import APIView
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import module_menu_permission
+
+# 裸 APIView 不经 PermissionMixin，需显式挂模块菜单门控
+ProjectsMenuAccess = module_menu_permission('projects')
 
 # =============================================================================
 # 标准成本模型
@@ -639,7 +643,7 @@ class CostVarianceAnalysisViewSet(PermissionMixin, SoftDeleteMixin, viewsets.Mod
 class ProjectCostAnalysisDashboardView(APIView):
     """项目成本分析看板（增强版）"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request, project_id):
         from apps.projects.models import Project
@@ -722,7 +726,7 @@ class ProjectCostAnalysisDashboardView(APIView):
 class CostComparisonReportView(APIView):
     """成本对比报表"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request):
         project_ids = request.query_params.getlist('projects')
@@ -786,7 +790,7 @@ class CostComparisonReportView(APIView):
 class CostElementReportView(APIView):
     """成本要素分析报表"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request):
         start_date = request.query_params.get('start_date')

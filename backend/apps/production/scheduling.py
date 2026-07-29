@@ -19,6 +19,10 @@ from rest_framework.views import APIView
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import module_menu_permission
+
+# 裸 APIView 不经 PermissionMixin，需显式挂模块菜单门控
+ProductionMenuAccess = module_menu_permission('production')
 
 
 class WorkCenter(BaseModel):
@@ -195,7 +199,7 @@ class ScheduleTask(BaseModel):
 class KanbanView(APIView):
     """电子看板API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         """获取看板数据"""
@@ -316,7 +320,7 @@ class KanbanView(APIView):
 class GanttView(APIView):
     """甘特图数据API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         """获取甘特图数据"""

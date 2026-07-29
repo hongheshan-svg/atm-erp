@@ -19,6 +19,10 @@ from rest_framework.views import APIView
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import module_menu_permission
+
+# 裸 APIView 不经 PermissionMixin，需显式挂模块菜单门控
+ProjectsMenuAccess = module_menu_permission('projects')
 
 
 class BOMSubstitute(BaseModel):
@@ -496,7 +500,7 @@ class BOMComparisonViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
 class BOMCompareView(APIView):
     """BOM即时对比API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def post(self, request):
         """对比两个项目的BOM"""
