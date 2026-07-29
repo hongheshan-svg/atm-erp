@@ -231,8 +231,14 @@ class PaymentSerializer(serializers.ModelSerializer):
         # 台账内部核销(payable_service.settle)与 record_payment/match 等既有旧路径都经
         # ORM Payment.objects.create() 直连,不经本序列化器,不受此校验影响。
         payment_type = attrs.get('payment_type') or (self.instance.payment_type if self.instance else None)
-        # 扩展拦截: AP/PAYABLE 类型或任何关联 ap 字段的付款均拒绝(AR 付款用 ar 字段,不受影响)
-        if payment_type in {'AP', 'PAYABLE'} or attrs.get('ap') is not None:
+        # 拦截规则:
+        #   1. payment_type='AP' → 始终拒绝（直接关联 AP 模型的付款必须走核销台账）
+        #   2. ap 字段有值 → 始终拒绝（同上）
+        #   3. payment_type='PAYABLE' + 关联的 payable_item.source_type='ap' → 拒绝
+        #      （AP 来源的待付款项同样必须走核销台账；source_type='expense'/'manual' 等报销/手工类不受限）
+        payable_item = attrs.get('payable_item')
+        ap_sourced_payable = payable_item is not None and getattr(payable_item, 'source_type', None) == 'ap'
+        if payment_type == 'AP' or attrs.get('ap') is not None or (payment_type == 'PAYABLE' and ap_sourced_payable):
             raise serializers.ValidationError(
                 {
                     'payment_type': (

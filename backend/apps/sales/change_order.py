@@ -235,8 +235,9 @@ class SalesOrderChange(BaseModel):
             new_total = order.total_with_tax
 
             # 同步未付款 AR:amount_paid=0 说明全额未开始核销,直接覆盖 amount_due 安全
+            # AccountReceivable 的外键字段名为 so（不是 sales_order）
             AccountReceivable.objects.filter(
-                sales_order=order,
+                so=order,
                 is_deleted=False,
                 amount_paid=Decimal('0'),
             ).update(amount_due=new_total)
