@@ -137,6 +137,100 @@ class CostCalculationService:
         return result
 
     @classmethod
+    def calculate_projects_profit(cls, project_ids):
+        """批量计算多个项目的利润。
+
+        逐项目调 calculate_project_profit 会发 5~6 条查询（收入/出库/退料/费用/工时/费率），
+        导出上千个项目时就是上万次查询。这里改成按项目分组的固定几条聚合。
+        返回 {project_id: 与 calculate_project_profit 同结构的 dict}。
+        """
+        from apps.finance.models import Expense
+        from apps.inventory.models import StockMove
+        from apps.projects.models import ProjectMember, TimeLog
+        from apps.sales.models import SalesOrder
+
+        project_ids = list(project_ids)
+        if not project_ids:
+            return {}
+
+        zero = Decimal('0')
+
+        def _sum_by_project(queryset, expression):
+            return {
+                row['project_id']: row['total'] or zero
+                for row in queryset.values('project_id').annotate(total=Sum(expression))
+            }
+
+        revenue_map = _sum_by_project(
+            SalesOrder.objects.filter(
+                project_id__in=project_ids, status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'], is_deleted=False
+            ),
+            'total_amount',
+        )
+        outbound_map = _sum_by_project(
+            StockMove.objects.filter(
+                project_id__in=project_ids, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
+            ),
+            F('qty') * F('unit_cost'),
+        )
+        returned_map = _sum_by_project(
+            StockMove.objects.filter(
+                project_id__in=project_ids,
+                move_type='ADJUSTMENT',
+                reference_type='MaterialReturn',
+                status='COMPLETED',
+                is_deleted=False,
+            ),
+            F('qty') * F('unit_cost'),
+        )
+        expense_map = _sum_by_project(
+            Expense.objects.filter(project_id__in=project_ids, status__in=['APPROVED', 'PAID'], is_deleted=False),
+            Case(
+                When(base_amount__isnull=False, then=F('base_amount')),
+                default=F('amount'),
+                output_field=DecimalField(max_digits=18, decimal_places=2),
+            ),
+        )
+
+        # 人工成本口径与 Project.get_actual_labor_cost 一致：已批准工时 × 该项目成员费率，
+        # 这里用两条查询覆盖全部项目
+        rates = {
+            (row['project_id'], row['user_id']): row['hourly_rate'] or zero
+            for row in ProjectMember.objects.filter(project_id__in=project_ids, is_deleted=False).values(
+                'project_id', 'user_id', 'hourly_rate'
+            )
+        }
+        labor_map = {}
+        for row in (
+            TimeLog.objects.filter(project_id__in=project_ids, status='APPROVED', is_deleted=False)
+            .values('project_id', 'user_id')
+            .annotate(total_hours=Sum('hours'))
+        ):
+            rate = rates.get((row['project_id'], row['user_id']), zero)
+            labor_map[row['project_id']] = labor_map.get(row['project_id'], zero) + (row['total_hours'] or zero) * rate
+
+        results = {}
+        for pid in project_ids:
+            revenue = revenue_map.get(pid, zero)
+            material = outbound_map.get(pid, zero) - returned_map.get(pid, zero)
+            labor = labor_map.get(pid, zero)
+            expense = expense_map.get(pid, zero)
+            total_cost = material + labor + expense
+            profit = revenue - total_cost
+            margin = (profit / revenue * 100) if revenue > 0 else zero
+            results[pid] = {
+                'project_id': pid,
+                'revenue': float(revenue),
+                'material_cost': float(material),
+                'labor_cost': float(labor),
+                'expense_cost': float(expense),
+                'total_cost': float(total_cost),
+                'profit': float(profit),
+                'margin_percent': float(margin),
+            }
+        return results
+
+    @classmethod
     def calculate_all_projects_profit(cls, status=None):
         """
         Calculate profitability for projects.
@@ -150,11 +244,14 @@ class CostCalculationService:
         if status:
             queryset = queryset.filter(status=status)
 
-        active_projects = queryset.values('id', 'code', 'name', 'status', 'manager__username')
+        active_projects = list(queryset.values('id', 'code', 'name', 'status', 'manager__username'))
+
+        # 批量算，避免每个项目 5~6 条查询
+        profit_by_project = cls.calculate_projects_profit([p['id'] for p in active_projects])
 
         results = []
         for project in active_projects:
-            profit_data = cls.calculate_project_profit(project['id'])
+            profit_data = dict(profit_by_project.get(project['id'], {}))
             profit_data.update(
                 {
                     'code': project['code'],

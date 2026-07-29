@@ -256,4 +256,9 @@ class WorkflowInstanceSerializer(serializers.ModelSerializer):
         ]
 
     def get_total_steps(self, obj) -> int:
+        # ViewSet 用 Prefetch(to_attr='active_steps') 预取时直接在内存里数，
+        # 避免列表页每条实例各发一次 count 查询
+        active_steps = getattr(obj.workflow, 'active_steps', None)
+        if active_steps is not None:
+            return len(active_steps)
         return obj.workflow.steps.filter(is_deleted=False).count()

@@ -5,7 +5,7 @@ Equipment OEE (Overall Equipment Effectiveness) Analysis
 """
 
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import models
 from django.db.models import Avg, Count, Sum
@@ -102,23 +102,34 @@ class EquipmentOEERecord(BaseModel):
     def __str__(self):
         return f'{self.equipment.name} - {self.record_date}'
 
+    @staticmethod
+    def _clamp_pct(value):
+        """把百分比钳到 [0, 100]。
+
+        三个率与 OEE 都是百分比，字段为 max_digits=6/decimal_places=2。录入的停机/换型
+        时间之和可能超过计划时间、合格产量可能大于实际产量，不钳制会写入负值或 >100，
+        既不合业务语义，又会污染 summary/ranking 里的 Avg 聚合。
+        """
+        clamped = max(Decimal('0'), min(Decimal(value), Decimal('100')))
+        return clamped.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
     def calculate_oee(self):
         """计算OEE指标"""
         # 可用率 = (计划时间 - 停机时间) / 计划时间
-        operating_time = self.planned_time - self.downtime - self.setup_time
+        operating_time = max(0, self.planned_time - self.downtime - self.setup_time)
         if self.planned_time > 0:
-            self.availability = Decimal(operating_time / self.planned_time * 100)
+            self.availability = self._clamp_pct(Decimal(operating_time) / Decimal(self.planned_time) * 100)
 
         # 性能率 = 实际产量 / 理论产量
         if self.theoretical_output > 0:
-            self.performance = Decimal(self.actual_output / self.theoretical_output * 100)
+            self.performance = self._clamp_pct(Decimal(self.actual_output) / Decimal(self.theoretical_output) * 100)
 
         # 良品率 = 合格产量 / 实际产量
         if self.actual_output > 0:
-            self.quality = Decimal(self.qualified_output / self.actual_output * 100)
+            self.quality = self._clamp_pct(Decimal(self.qualified_output) / Decimal(self.actual_output) * 100)
 
         # OEE = 可用率 × 性能率 × 良品率 / 10000
-        self.oee = self.availability * self.performance * self.quality / 10000
+        self.oee = self._clamp_pct(self.availability * self.performance * self.quality / 10000)
 
         return self.oee
 

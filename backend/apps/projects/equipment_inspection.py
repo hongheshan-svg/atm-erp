@@ -464,8 +464,11 @@ class InspectionRecordViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
 
         template = InspectionTemplate.objects.get(id=template_id)
 
-        # 生成记录编号
-        record_no = f'INS-{date.today().strftime("%Y%m%d")}-{str(timezone.now().timestamp())[-4:]}'
+        # 生成记录编号。原用时间戳末 4 位做后缀，同秒内并发（或时间戳恰好同尾）
+        # 就会撞 record_no 的 unique 约束。
+        from apps.core.utils import generate_code
+
+        record_no = generate_code('INS', rule_type='INSPECTION_RECORD')
 
         record = InspectionRecord.objects.create(
             record_no=record_no,

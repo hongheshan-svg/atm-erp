@@ -418,15 +418,11 @@ class TechnicalDocumentViewSet(PermissionMixin, viewsets.ModelViewSet):
         return qs.select_related('category', 'project', 'author')
 
     def perform_create(self, serializer):
-        # 自动生成编号
-        today = timezone.now()
-        prefix = f'DOC{today.strftime("%Y%m%d")}'
-        last = TechnicalDocument.objects.filter(doc_no__startswith=prefix).order_by('-doc_no').first()
-        if last:
-            seq = int(last.doc_no[-4:]) + 1
-        else:
-            seq = 1
-        doc_no = f'{prefix}{seq:04d}'
+        # 自动生成编号。原「取最大号末 4 位 +1」无锁（并发撞 doc_no 的 unique），
+        # 且 objects 过滤软删除会让号回退撞上已有编号。
+        from apps.core.utils import generate_code
+
+        doc_no = generate_code('DOC', rule_type='TECHNICAL_DOCUMENT')
 
         serializer.save(doc_no=doc_no, author=self.request.user)
 

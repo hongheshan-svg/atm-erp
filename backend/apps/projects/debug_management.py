@@ -79,14 +79,11 @@ class DebugPlan(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.plan_no:
-            today = timezone.now()
-            prefix = f'DBG{today.strftime("%Y%m%d")}'
-            last = DebugPlan.objects.filter(plan_no__startswith=prefix).order_by('-plan_no').first()
-            if last:
-                seq = int(last.plan_no[-4:]) + 1
-            else:
-                seq = 1
-            self.plan_no = f'{prefix}{seq:04d}'
+            # 原「取最大号末 4 位 +1」既无锁（并发撞 unique），又因 objects 过滤软删除
+            # 而在删过记录后号会回退，改走 CodeRule 统一取号。
+            from apps.core.utils import generate_code
+
+            self.plan_no = generate_code('DBG', rule_type='DEBUG_PLAN')
         super().save(*args, **kwargs)
 
 
@@ -226,14 +223,10 @@ class DebugIssue(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.issue_no:
-            today = timezone.now()
-            prefix = f'DBI{today.strftime("%Y%m%d")}'
-            last = DebugIssue.objects.filter(issue_no__startswith=prefix).order_by('-issue_no').first()
-            if last:
-                seq = int(last.issue_no[-4:]) + 1
-            else:
-                seq = 1
-            self.issue_no = f'{prefix}{seq:04d}'
+            # 同 plan_no：末 4 位 +1 无锁且会因软删除回退
+            from apps.core.utils import generate_code
+
+            self.issue_no = generate_code('DBI', rule_type='DEBUG_ISSUE')
         super().save(*args, **kwargs)
 
 

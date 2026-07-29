@@ -1187,7 +1187,9 @@ class WorkflowService:
         """
         return (
             WorkflowTask.objects.filter(assignee=user, status='PENDING', is_deleted=False)
-            .select_related('instance', 'instance__workflow', 'step')
+            # WorkflowTaskSerializer 还会读 assignee.get_full_name 与
+            # instance.submitter.get_full_name，不预取则每条任务各多两次查询
+            .select_related('instance', 'instance__workflow', 'instance__submitter', 'step', 'assignee')
             .order_by('-created_at')
         )
 

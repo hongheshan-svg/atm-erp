@@ -392,10 +392,11 @@ class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
         return qs.select_related('project', 'leader')
 
     def perform_create(self, serializer):
-        today = timezone.now()
-        prefix = f'CP{today.strftime("%Y%m%d")}'
-        count = CommissioningPlan.objects.filter(plan_no__startswith=prefix).count() + 1
-        plan_no = f'{prefix}{count:03d}'
+        # 原用 count()+1 取号：并发创建会拿到同一个号，且 count 走的是过滤了软删除的
+        # 管理器，删过记录后号会回退并撞上已有编号——plan_no 是 unique，冲突直接 500。
+        from apps.core.utils import generate_code
+
+        plan_no = generate_code('CP', rule_type='COMMISSIONING_PLAN')
 
         serializer.save(plan_no=plan_no, created_by=self.request.user, updated_by=self.request.user)
 
@@ -487,11 +488,11 @@ class CommissioningPlanViewSet(PermissionMixin, viewsets.ModelViewSet):
         tasks = plan.tasks.all()
         issues = plan.issues.all()
 
-        # 生成报告编号
+        # 生成报告编号（同 plan_no：count()+1 存在并发与软删回退双重碰撞风险）
+        from apps.core.utils import generate_code
+
         today = timezone.now()
-        prefix = f'CR{today.strftime("%Y%m%d")}'
-        count = CommissioningReport.objects.filter(report_no__startswith=prefix).count() + 1
-        report_no = f'{prefix}{count:03d}'
+        report_no = generate_code('CR', rule_type='COMMISSIONING_REPORT')
 
         # 统计数据
         completed_tasks = tasks.filter(status='COMPLETED')
@@ -595,10 +596,10 @@ class CommissioningIssueViewSet(PermissionMixin, viewsets.ModelViewSet):
         return qs.select_related('plan', 'found_by', 'resolved_by')
 
     def perform_create(self, serializer):
-        today = timezone.now()
-        prefix = f'CI{today.strftime("%Y%m%d")}'
-        count = CommissioningIssue.objects.filter(issue_no__startswith=prefix).count() + 1
-        issue_no = f'{prefix}{count:03d}'
+        # 同 plan_no：count()+1 存在并发与软删回退双重碰撞风险
+        from apps.core.utils import generate_code
+
+        issue_no = generate_code('CI', rule_type='COMMISSIONING_ISSUE')
 
         serializer.save(
             issue_no=issue_no, found_by=self.request.user, created_by=self.request.user, updated_by=self.request.user
