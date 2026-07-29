@@ -25,6 +25,21 @@ from apps.core.permissions import module_menu_permission
 ProjectsMenuAccess = module_menu_permission('projects')
 
 
+def bom_line_key(entry):
+    """BOM 行在对比中的身份标识。
+
+    非标自动化项目允许同一物料出现在多个工位/功能模块上（BOM 里是多行），
+    只用 item_id 作键会把这些行折叠成一条、除最后一条外全部丢失。
+    对历史快照（没有 work_center_id/function_module 字段）会退化成按 item_id 归并，
+    与修复前行为一致，不会报错。
+    """
+    return (
+        entry.get('item_id'),
+        entry.get('work_center_id'),
+        entry.get('function_module') or '',
+    )
+
+
 class BOMSubstitute(BaseModel):
     """BOM替代料"""
 
@@ -166,6 +181,9 @@ class BOMVersion(BaseModel):
                     'parent_id': item.parent_id,
                     'level': item.level,
                     'notes': item.notes or '',
+                    # 非标项目同一物料可挂在多个工位/功能模块上，对比需要靠这两个字段区分行
+                    'work_center_id': item.work_center_id,
+                    'function_module': item.function_module or '',
                 }
             )
 
@@ -216,8 +234,9 @@ class BOMComparison(BaseModel):
 
     def perform_comparison(self):
         """执行BOM对比"""
-        snapshot_a = {item['item_id']: item for item in self.version_a.snapshot_data}
-        snapshot_b = {item['item_id']: item for item in self.version_b.snapshot_data}
+        # 以 (物料, 工位, 功能模块) 为行身份，避免多工位同物料的多行被折叠掉
+        snapshot_a = {bom_line_key(item): item for item in self.version_a.snapshot_data}
+        snapshot_b = {bom_line_key(item): item for item in self.version_b.snapshot_data}
 
         all_items = set(snapshot_a.keys()) | set(snapshot_b.keys())
 
@@ -226,14 +245,11 @@ class BOMComparison(BaseModel):
         changed = []
         unchanged = []
 
-        for item_id in all_items:
-            in_a = item_id in snapshot_a
-            in_b = item_id in snapshot_b
+        for line_key in all_items:
+            a = snapshot_a.get(line_key)
+            b = snapshot_b.get(line_key)
 
-            if in_a and in_b:
-                a = snapshot_a[item_id]
-                b = snapshot_b[item_id]
-
+            if a is not None and b is not None:
                 # 检查是否有变化
                 changes = {}
                 if a['planned_qty'] != b['planned_qty']:
@@ -244,33 +260,45 @@ class BOMComparison(BaseModel):
                 if changes:
                     changed.append(
                         {
-                            'item_id': item_id,
+                            'item_id': a['item_id'],
                             'item_sku': a['item_sku'],
                             'item_name': a['item_name'],
+                            'work_center_id': a.get('work_center_id'),
+                            'function_module': a.get('function_module') or '',
                             'changes': changes,
                             'cost_diff': b['total_cost'] - a['total_cost'],
                         }
                     )
                 else:
-                    unchanged.append({'item_id': item_id, 'item_sku': a['item_sku'], 'item_name': a['item_name']})
-            elif in_a and not in_b:
-                a = snapshot_a[item_id]
+                    unchanged.append(
+                        {
+                            'item_id': a['item_id'],
+                            'item_sku': a['item_sku'],
+                            'item_name': a['item_name'],
+                            'work_center_id': a.get('work_center_id'),
+                            'function_module': a.get('function_module') or '',
+                        }
+                    )
+            elif a is not None:
                 removed.append(
                     {
-                        'item_id': item_id,
+                        'item_id': a['item_id'],
                         'item_sku': a['item_sku'],
                         'item_name': a['item_name'],
+                        'work_center_id': a.get('work_center_id'),
+                        'function_module': a.get('function_module') or '',
                         'qty': a['planned_qty'],
                         'cost': a['total_cost'],
                     }
                 )
             else:
-                b = snapshot_b[item_id]
                 added.append(
                     {
-                        'item_id': item_id,
+                        'item_id': b['item_id'],
                         'item_sku': b['item_sku'],
                         'item_name': b['item_name'],
+                        'work_center_id': b.get('work_center_id'),
+                        'function_module': b.get('function_module') or '',
                         'qty': b['planned_qty'],
                         'cost': b['total_cost'],
                     }
@@ -517,48 +545,51 @@ class BOMCompareView(APIView):
 
         bom_b = ProjectBOM.objects.filter(project_id=project_b_id, is_deleted=False).select_related('item')
 
-        # 转换为字典
-        dict_a = {
-            item.item_id: {
-                'sku': item.item.sku if item.item else '',
-                'name': item.item.name if item.item else '',
-                'qty': float(item.planned_qty),
-                'cost': float(item.estimated_cost or 0),
+        # 转换为字典。键取 (物料, 工位, 功能模块)：非标 BOM 允许同一物料挂多个工位，
+        # 只用 item_id 会让这些行相互覆盖，对比结果凭空少料。
+        def _to_map(queryset):
+            return {
+                bom_line_key(
+                    {
+                        'item_id': item.item_id,
+                        'work_center_id': item.work_center_id,
+                        'function_module': item.function_module,
+                    }
+                ): {
+                    'item_id': item.item_id,
+                    'sku': item.item.sku if item.item else '',
+                    'name': item.item.name if item.item else '',
+                    'qty': float(item.planned_qty),
+                    'cost': float(item.estimated_cost or 0),
+                    'work_center_id': item.work_center_id,
+                    'function_module': item.function_module or '',
+                }
+                for item in queryset
             }
-            for item in bom_a
-        }
 
-        dict_b = {
-            item.item_id: {
-                'sku': item.item.sku if item.item else '',
-                'name': item.item.name if item.item else '',
-                'qty': float(item.planned_qty),
-                'cost': float(item.estimated_cost or 0),
-            }
-            for item in bom_b
-        }
+        dict_a = _to_map(bom_a)
+        dict_b = _to_map(bom_b)
 
         all_items = set(dict_a.keys()) | set(dict_b.keys())
 
         result = {'only_in_a': [], 'only_in_b': [], 'different': [], 'same': []}
 
-        for item_id in all_items:
-            in_a = item_id in dict_a
-            in_b = item_id in dict_b
+        for line_key in all_items:
+            a = dict_a.get(line_key)
+            b = dict_b.get(line_key)
 
-            if in_a and not in_b:
-                result['only_in_a'].append(dict_a[item_id])
-            elif in_b and not in_a:
-                result['only_in_b'].append(dict_b[item_id])
+            if b is None:
+                result['only_in_a'].append(a)
+            elif a is None:
+                result['only_in_b'].append(b)
             else:
-                a = dict_a[item_id]
-                b = dict_b[item_id]
-
                 if a['qty'] != b['qty'] or a['cost'] != b['cost']:
                     result['different'].append(
                         {
                             'sku': a['sku'],
                             'name': a['name'],
+                            'work_center_id': a['work_center_id'],
+                            'function_module': a['function_module'],
                             'qty_a': a['qty'],
                             'qty_b': b['qty'],
                             'cost_a': a['cost'],

@@ -2,6 +2,8 @@
 CRM - 商机/线索管理视图
 """
 
+from decimal import Decimal
+
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
@@ -403,36 +405,76 @@ class SalesForecastViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         year = request.data.get('year', timezone.now().year)
         month = request.data.get('month', timezone.now().month)
 
-        # 获取该月的所有商机
-
+        # 获取该月的全部商机（含已赢/已丢单）：赢单额是达成率的分子，
+        # 原先直接 exclude 掉闭环商机，导致 actual_amount/won_count/lost_count 从不写入，
+        # 汇总接口的达成率恒为 0，且这三个字段的历史旧值也不会被刷新。
         opportunities = Opportunity.objects.filter(
             expected_close_date__year=year, expected_close_date__month=month, is_deleted=False
-        ).exclude(stage__in=['CLOSED_WON', 'CLOSED_LOST'])
+        )
 
         # 按销售人员汇总
         from collections import defaultdict
 
-        owner_data = defaultdict(lambda: {'forecast': 0, 'weighted': 0, 'count': 0})
+        def _empty_bucket():
+            return {
+                'forecast': Decimal('0'),
+                'weighted': Decimal('0'),
+                'count': 0,
+                'actual': Decimal('0'),
+                'won': 0,
+                'lost': 0,
+            }
+
+        owner_data = defaultdict(_empty_bucket)
 
         for opp in opportunities:
-            if opp.owner_id:
-                owner_data[opp.owner_id]['forecast'] += float(opp.estimated_amount)
-                owner_data[opp.owner_id]['weighted'] += float(opp.weighted_amount)
-                owner_data[opp.owner_id]['count'] += 1
+            if not opp.owner_id:
+                continue
+            bucket = owner_data[opp.owner_id]
+            if opp.stage == 'CLOSED_WON':
+                bucket['actual'] += opp.estimated_amount or Decimal('0')
+                bucket['won'] += 1
+            elif opp.stage == 'CLOSED_LOST':
+                bucket['lost'] += 1
+            else:
+                # 仍在推进中的商机才构成预测口径（与原行为一致）
+                bucket['forecast'] += opp.estimated_amount or Decimal('0')
+                bucket['weighted'] += opp.weighted_amount or Decimal('0')
+                bucket['count'] += 1
 
         # 更新或创建预测记录
         for owner_id, data in owner_data.items():
+            forecast = data['forecast']
+            actual = data['actual']
+            rate = (actual / forecast * 100) if forecast > 0 else Decimal('0')
             SalesForecast.objects.update_or_create(
                 year=year,
                 month=month,
                 owner_id=owner_id,
                 defaults={
-                    'forecast_amount': data['forecast'],
+                    'forecast_amount': forecast,
                     'weighted_amount': data['weighted'],
                     'opportunity_count': data['count'],
+                    'actual_amount': actual,
+                    'won_count': data['won'],
+                    'lost_count': data['lost'],
+                    # achievement_rate 为 max_digits=5/decimal_places=2，上限 999.99，须封顶
+                    'achievement_rate': min(rate.quantize(Decimal('0.01')), Decimal('999.99')),
                     'updated_by': request.user,
                 },
             )
+
+        # 本期已无商机的销售员，其派生值必须归零，否则重算后仍留着上一次的旧数据
+        SalesForecast.objects.filter(year=year, month=month).exclude(owner_id__in=list(owner_data.keys())).update(
+            forecast_amount=Decimal('0'),
+            weighted_amount=Decimal('0'),
+            opportunity_count=0,
+            actual_amount=Decimal('0'),
+            won_count=0,
+            lost_count=0,
+            achievement_rate=Decimal('0'),
+            updated_by=request.user,
+        )
 
         return Response({'message': f'{year}年{month}月预测已更新'})
 
