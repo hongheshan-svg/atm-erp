@@ -272,10 +272,24 @@ class StockAdjustmentViewSet(
     ordering_fields = ['adjustment_date', 'created_at']
 
     def _calculate_cost_impact(self, adjustment):
-        """计算库存调整的成本影响"""
-        total = 0
+        """计算库存调整的成本影响(金额),用于按金额分级的审批路由。
+
+        不能读 line.cost_impact —— 它是存储字段、仅在 confirm() 时才赋值,提交审批时恒为 0,
+        会让大额盘亏以 amount=0 命中最低级流程并跳过高额审批步(审计 batch1 #2)。
+        故在此按 confirm() 同样的口径实时计算:|qty_diff| × 当前加权均价(无库存回退标准成本)。
+        """
+        from decimal import Decimal
+
+        total = Decimal('0')
         for line in adjustment.lines.filter(is_deleted=False):
-            total += abs(line.cost_impact or 0)
+            if not line.qty_diff:
+                continue
+            try:
+                stock = Stock.objects.get(warehouse=adjustment.warehouse, item=line.item)
+                unit_cost = stock.weighted_avg_cost or Decimal('0')
+            except Stock.DoesNotExist:
+                unit_cost = getattr(line.item, 'standard_cost', 0) or Decimal('0')
+            total += abs(Decimal(str(line.qty_diff)) * Decimal(str(unit_cost)))
         return total
 
     @action(detail=True, methods=['post'])

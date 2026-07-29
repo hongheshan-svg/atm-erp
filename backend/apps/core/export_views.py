@@ -4,14 +4,14 @@ Export views for all modules.
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .export_service import EXPORT_COLUMNS, ExcelExportService
+from .permissions import module_menu_permission
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('projects')])
 def export_projects(request):
     """Export projects to Excel."""
     from apps.projects.models import Project
@@ -27,7 +27,7 @@ def export_projects(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('sales')])
 def export_sales_orders(request):
     """Export sales orders to Excel."""
     from apps.sales.models import SalesOrder
@@ -47,7 +47,7 @@ def export_sales_orders(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('purchase')])
 def export_purchase_orders(request):
     """Export purchase orders to Excel."""
     from apps.purchase.models import PurchaseOrder
@@ -62,7 +62,7 @@ def export_purchase_orders(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('inventory')])
 def export_stock(request):
     """Export stock to Excel."""
     from apps.inventory.models import Stock
@@ -77,7 +77,7 @@ def export_stock(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('finance')])
 def export_expenses(request):
     """Export expenses to Excel."""
     from apps.finance.models import Expense
@@ -92,7 +92,7 @@ def export_expenses(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('finance')])
 def export_ar(request):
     """Export accounts receivable to Excel."""
     from apps.finance.models import AccountReceivable
@@ -111,7 +111,7 @@ def export_ar(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('finance')])
 def export_ap(request):
     """Export accounts payable to Excel."""
     from apps.finance.models import AccountPayable
@@ -126,7 +126,7 @@ def export_ap(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([module_menu_permission('finance')])
 def export_project_profit_report(request):
     """Export project profitability report."""
     from apps.reports.services.cost_service import CostCalculationService

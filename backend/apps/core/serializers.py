@@ -141,3 +141,22 @@ class SystemConfigSerializer(serializers.ModelSerializer):
             'updated_by_name',
         ]
         read_only_fields = ['id', 'updated_at', 'updated_by']
+
+
+class SystemConfigPublicSerializer(serializers.ModelSerializer):
+    """公开的系统配置序列化器（登录页显示公司信息用）。
+
+    刻意只暴露非敏感的公司标识字段；银行账号/税号/法人/注册资本等敏感工商与
+    财务信息不返回，防止未认证访问者据以伪造发票或实施 BEC 诈骗（审计 batch1）。
+    """
+
+    class Meta:
+        model = SystemConfig
+        fields = [
+            'id',
+            'company_name',
+            'company_short_name',
+            'company_logo',
+            'default_currency',
+        ]
+        read_only_fields = fields

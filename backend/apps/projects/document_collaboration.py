@@ -7,7 +7,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -607,6 +607,11 @@ class DocumentReviewViewSet(PermissionMixin, viewsets.ModelViewSet):
     def submit_review(self, request, pk=None):
         """提交评审意见"""
         review = self.get_object()
+
+        # 只有被指派的评审人本人(或超管)可提交评审意见,否则任意持 projects 菜单者
+        # 都能代他人做评审决定(审计 batch1 #13)。
+        if review.reviewer_id != request.user.id and not request.user.is_superuser:
+            return Response({'error': '只有被指派的评审人可以提交评审意见'}, status=status.HTTP_403_FORBIDDEN)
 
         review.decision = request.data.get('decision')
         review.comments = request.data.get('comments', '')

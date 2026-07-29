@@ -10,15 +10,20 @@ from django.db.models import Q
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import module_menu_permission
+
 from .services.cost_service import CostCalculationService
+
+# 报表数据含全公司财务/利润,须持 reports 模块菜单(reports/analytics/system:report)方可访问,
+# 不能像原先那样裸 IsAuthenticated 放行任意登录用户(审计 batch1 授权旁路)。
+ReportsMenuAccess = module_menu_permission('reports')
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ReportsMenuAccess])
 def project_profitability(request):
     """
     Get profitability analysis for a single project or all projects.
@@ -85,7 +90,7 @@ def project_profitability(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ReportsMenuAccess])
 def project_cost_detail(request):
     """
     Get detailed cost breakdown for a project.
@@ -102,7 +107,7 @@ def project_cost_detail(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ReportsMenuAccess])
 def refresh_project_cache(request):
     """
     Refresh cached calculations for a project.
@@ -121,7 +126,7 @@ def refresh_project_cache(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ReportsMenuAccess])
 def dashboard_summary(request):
     """
     Get dashboard summary with key metrics.
@@ -186,7 +191,7 @@ def dashboard_summary(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ReportsMenuAccess])
 def aging_report(request):
     """
     Get AR/AP aging report.
@@ -292,7 +297,7 @@ class TimelogReportExportView(APIView):
     并支持 start_date/end_date/project/user 过滤。
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.projects.models import TimeLog
@@ -338,7 +343,7 @@ class ProjectProfitabilityExportView(APIView):
     并读取 Project 真实字段(code/name/status)。
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.projects.models import Project

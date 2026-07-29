@@ -14,7 +14,12 @@ from apps.core.permission_mixin import PermissionMixin
 from apps.core.permissions import IsSystemAdmin
 
 from .models import Attachment, AuditLog, SystemConfig, SystemNotification
-from .serializers import AttachmentSerializer, AttachmentUploadSerializer, SystemConfigSerializer
+from .serializers import (
+    AttachmentSerializer,
+    AttachmentUploadSerializer,
+    SystemConfigPublicSerializer,
+    SystemConfigSerializer,
+)
 
 
 class AuditLogSerializer(serializers.ModelSerializer):
@@ -446,9 +451,17 @@ class SystemConfigViewSet(viewsets.ViewSet):
         return super().get_permissions()
 
     def list(self, request):
-        """获取系统配置（公开信息，无需登录）"""
+        """获取系统配置。
+
+        未认证请求(登录页)只返回公开公司信息(名称/简称/logo/官网),
+        不泄露银行账号/税号/法人/注册资本等敏感工商财务字段(审计 batch1);
+        已认证用户返回完整配置。
+        """
         config = SystemConfig.get_config()
-        serializer = SystemConfigSerializer(config)
+        if request.user and request.user.is_authenticated:
+            serializer = SystemConfigSerializer(config)
+        else:
+            serializer = SystemConfigPublicSerializer(config)
         return Response(serializer.data)
 
     def create(self, request):

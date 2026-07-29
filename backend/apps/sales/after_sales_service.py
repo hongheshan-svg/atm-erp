@@ -335,6 +335,15 @@ class CustomerPortalAccount(BaseModel):
 
         return check_password(raw_password, self.password_hash)
 
+    def token_password_fingerprint(self):
+        """基于 password_hash 派生的口令指纹,绑定 JWT 到当前口令。
+
+        改密/重置口令后 password_hash 变化 → 指纹变化 → 旧 token 失效(审计 batch1 #18,
+        与供应商门户 _token_session_fingerprint 一致)。"""
+        from django.utils.crypto import salted_hmac
+
+        return salted_hmac('erp.customer_portal.token', self.password_hash or '').hexdigest()
+
 
 class KnowledgeBaseArticle(BaseModel):
     """知识库文章"""
@@ -919,6 +928,13 @@ class CustomerPortalJWTAuthentication(BaseAuthentication):
         except CustomerPortalAccount.DoesNotExist:
             raise AuthenticationFailed('门户账户不存在或已停用')
 
+        # 口令指纹校验:改密/重置后旧签发的 token 立即失效(审计 batch1 #18)。
+        # 旧 token(无 pw 声明)也一并拒绝,强制重新登录。
+        import secrets
+
+        if not secrets.compare_digest(str(token.get('pw', '')), account.token_password_fingerprint()):
+            raise AuthenticationFailed('门户令牌已失效,请重新登录')
+
         return (PortalPrincipal(account), token)
 
 
@@ -968,6 +984,8 @@ class CustomerPortalLoginView(APIView):
         token['portal_account_id'] = account.id
         token['customer_id'] = account.customer_id
         token['scope'] = 'portal'
+        # 口令指纹:改密/重置后旧 token 失效(审计 batch1 #18)
+        token['pw'] = account.token_password_fingerprint()
 
         return Response(
             {
@@ -1037,12 +1055,21 @@ class CustomerPortalSubmitRequestView(APIView):
 
         request_no = generate_code('SR', rule_type='SERVICE_REQUEST')
 
+        # contract_id 必须属于本门户客户,否则可把服务请求挂到他人合同上(IDOR,审计 batch1 #11)。
+        # ServiceContract 定义于本模块(after_sales_service.py),直接引用无需 import。
+        contract_id = request.data.get('contract_id')
+        if contract_id:
+            if not ServiceContract.objects.filter(
+                id=contract_id, customer_id=request.user.customer_id, is_deleted=False
+            ).exists():
+                return Response({'error': '服务合同不存在或不属于当前客户'}, status=400)
+
         # customer 一律取 token 的 customer_id,不信任请求体/URL(URL 已经过越权校验)。
         # 门户主体不是内部 User,created_by/updated_by 留空(两字段均可空)。
         sr = ServiceRequest.objects.create(
             request_no=request_no,
             customer_id=request.user.customer_id,
-            service_contract_id=request.data.get('contract_id'),
+            service_contract_id=contract_id,
             request_type=request.data.get('request_type'),
             priority=request.data.get('priority', 'MEDIUM'),
             subject=request.data.get('subject'),

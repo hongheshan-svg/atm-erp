@@ -32,6 +32,57 @@ from apps.core.permission_service import has_permission as user_has_permission
 SYSTEM_ADMIN_CODE = 'system'
 
 
+class HasModuleMenuAccess(BasePermission):
+    """Module-menu authorization gate for endpoints that cannot inherit
+    ``PermissionMixin`` — function-based views (``@api_view``) and bare
+    ``APIView`` subclasses (exports, reports, dashboards, kanban).
+
+    Mirrors ``PermissionMixin._has_module_menu_access``: a user is authorized
+    when they hold any menu code mapped to ``module`` via ``MODULE_MENU_MAP``
+    (exact match or ``prefix:`` descendant). Superusers always pass; anonymous
+    users never do. Without this gate such endpoints fall back to a bare
+    ``IsAuthenticated``/``AllowAny`` and leak cross-module data (audit batch 1).
+
+    Bind to a module with the ``module_menu_permission`` factory:
+
+        @permission_classes([module_menu_permission('finance')])
+        def export_ar(request): ...
+
+        class ProductionKanbanView(APIView):
+            permission_classes = [module_menu_permission('production')]
+    """
+
+    module = None
+
+    def has_permission(self, request, view):
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser:
+            return True
+        module = self.module or getattr(view, 'permission_module', None)
+        if not module:
+            return False
+        # Lazy import avoids a circular import (permission_mixin imports this module's siblings).
+        from apps.core.permission_mixin import MODULE_MENU_MAP
+        from apps.core.permission_service import get_user_menu_permissions
+
+        menu_prefixes = MODULE_MENU_MAP.get(module, [])
+        if not menu_prefixes:
+            return False
+        user_perms = get_user_menu_permissions(user)
+        return any(p == prefix or p.startswith(prefix + ':') for prefix in menu_prefixes for p in user_perms)
+
+
+def module_menu_permission(module):
+    """Return a ``HasModuleMenuAccess`` subclass bound to ``module``.
+
+    Produces a distinct DRF permission class per module so it can be dropped
+    into ``permission_classes`` on FBVs/APIViews.
+    """
+    return type(f'HasModuleMenuAccess_{module}', (HasModuleMenuAccess,), {'module': module})
+
+
 def _is_system_admin(user) -> bool:
     """True for Django superusers and holders of the top-level ``system`` grant."""
     return bool(user and user.is_authenticated and (user.is_superuser or user_has_permission(user, SYSTEM_ADMIN_CODE)))

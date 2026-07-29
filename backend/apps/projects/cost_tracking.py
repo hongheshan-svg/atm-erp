@@ -19,6 +19,12 @@ from django.utils import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from apps.core.permissions import module_menu_permission
+
+# 项目成本/利润看板(裸 APIView,不经 PermissionMixin)含营收利润,须持 projects 模块菜单;
+# 原裸 IsAuthenticated 放行任意登录用户跨项目读取(审计 batch1 授权旁路)。
+ProjectsMenuAccess = module_menu_permission('projects')
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -405,7 +411,9 @@ class CostAlertViewSet(PermissionMixin, SoftDeleteMixin, viewsets.ModelViewSet):
 class ProjectCostDashboardView(APIView):
     """项目成本看板API - 非标自动化行业成本分析"""
 
-    permission_classes = [IsAuthenticated]
+    # 裸 APIView 不经 PermissionMixin,原裸 IsAuthenticated 会让任意登录用户跨项目读营收/利润
+    # (审计 batch1 授权旁路);改为 projects 模块菜单门控。
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request, project_id):
         from apps.projects.models import Project
@@ -617,7 +625,7 @@ class ProjectCostDashboardView(APIView):
 class CostOverviewDashboardView(APIView):
     """成本总览看板API"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [module_menu_permission('projects')]
 
     def get(self, request):
         from apps.projects.models import Project
