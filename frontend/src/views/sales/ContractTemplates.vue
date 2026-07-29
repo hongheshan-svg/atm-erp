@@ -263,7 +263,7 @@
 
     <!-- 预览对话框 -->
     <el-dialog v-model="previewDialogVisible" title="合同预览" width="900px" destroy-on-close>
-      <div class="preview-container" v-html="previewContent"></div>
+      <div class="preview-container" v-html="sanitizedPreviewContent"></div>
     </el-dialog>
 
     <!-- 条款编辑 -->
@@ -291,11 +291,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { getContractTemplates, getContractClauses, getGeneratedContracts, getContractTypes, previewContractTemplate, setDefaultContractTemplate, deleteContractTemplate, updateContractTemplate, createContractTemplate, updateContractClause, createContractClause, deleteContractClause, generateContract, getGeneratedContract } from '@/api/sales'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { sanitizeHtml } from '@/utils/sanitize'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/sales/contract-templates/', { onSuccess: () => fetchTemplates() })
 
@@ -323,6 +324,9 @@ const templateDialogTitle = ref('新增模板')
 const generateDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
 const previewContent = ref('')
+// 模板/合同正文含用户填写的字段，直接 v-html 渲染有存储型 XSS 风险；
+// 统一在渲染边界净化，避免遗漏某个赋值点。
+const sanitizedPreviewContent = computed(() => sanitizeHtml(previewContent.value))
 
 const templateFormRef = ref<any>(null)
 const contractFormRef = ref<any>(null)

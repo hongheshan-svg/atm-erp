@@ -174,10 +174,14 @@ class ProjectCostComparisonView(APIView):
             # 计算成本
             from apps.purchase.models import PurchaseOrderLine
 
+            # 口径须与 ProjectCostAnalysisView 一致：只统计已确认/已完成的采购订单，
+            # 否则 DRAFT/CANCELLED 单也被计入，对比表成本虚高
             purchase_cost = (
-                PurchaseOrderLine.objects.filter(po__project_id=pid, po__is_deleted=False).aggregate(
-                    total=Sum(F('qty') * F('unit_price'))
-                )['total']
+                PurchaseOrderLine.objects.filter(
+                    po__project_id=pid,
+                    po__status__in=['CONFIRMED', 'PARTIAL', 'COMPLETED'],
+                    po__is_deleted=False,
+                ).aggregate(total=Sum(F('qty') * F('unit_price')))['total']
                 or 0
             )
 

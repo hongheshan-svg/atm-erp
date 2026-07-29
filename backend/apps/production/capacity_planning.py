@@ -30,6 +30,10 @@ from rest_framework.views import APIView
 
 from apps.core.models import BaseModel
 from apps.core.permission_mixin import PermissionMixin
+from apps.core.permissions import module_menu_permission
+
+# 裸 APIView 不经 PermissionMixin，需显式挂模块菜单门控
+ProductionMenuAccess = module_menu_permission('production')
 
 User = settings.AUTH_USER_MODEL
 
@@ -239,16 +243,39 @@ class CapacityPlan(BaseModel):
 class CapacityPlanningService:
     """产能规划服务"""
 
+    #: 计入负荷的分配状态
+    ACTIVE_ALLOCATION_STATUSES = ['PLANNED', 'CONFIRMED', 'IN_PROGRESS']
+
     @staticmethod
-    def calculate_resource_load(resource, start_date, end_date):
-        """计算资源负荷"""
-        allocations = ResourceAllocation.objects.filter(
-            resource=resource,
-            status__in=['PLANNED', 'CONFIRMED', 'IN_PROGRESS'],
+    def build_allocation_query(resources, start_date, end_date):
+        """按资源批量取出区间内的有效分配。
+
+        供大屏一次性预取使用，避免「每个资源发一条查询」。
+        """
+        return ResourceAllocation.objects.filter(
+            resource__in=resources,
+            status__in=CapacityPlanningService.ACTIVE_ALLOCATION_STATUSES,
             start_date__lte=end_date,
             end_date__gte=start_date,
             is_deleted=False,
-        )
+        ).select_related('project')
+
+    @staticmethod
+    def calculate_resource_load(resource, start_date, end_date, allocations=None):
+        """计算资源负荷
+
+        allocations 允许调用方传入已预取好的分配列表（大屏批量场景）；
+        不传时按单个资源自行查询，保持原有调用方式不变。
+        """
+        if allocations is None:
+            # 下面按天展开时会访问 alloc.project.name，不预取则每条分配都要多查一次项目
+            allocations = ResourceAllocation.objects.filter(
+                resource=resource,
+                status__in=CapacityPlanningService.ACTIVE_ALLOCATION_STATUSES,
+                start_date__lte=end_date,
+                end_date__gte=start_date,
+                is_deleted=False,
+            ).select_related('project')
 
         # 按日期统计
         daily_load = {}
@@ -547,7 +574,7 @@ class ResourceAllocationViewSet(PermissionMixin, viewsets.ModelViewSet):
 class CapacityDashboardView(APIView):
     """产能看板"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         start_date = request.query_params.get('start_date')
@@ -569,13 +596,20 @@ class CapacityDashboardView(APIView):
         if category:
             resources = resources.filter(resource_type__category=category)
 
-        resources = resources.select_related('resource_type')
+        resources = list(resources.select_related('resource_type'))
+
+        # 一次取出全部资源在区间内的分配并按资源分组，替代「每个资源查一次」
+        from collections import defaultdict
+
+        allocations_by_resource = defaultdict(list)
+        for alloc in CapacityPlanningService.build_allocation_query(resources, start_date, end_date):
+            allocations_by_resource[alloc.resource_id].append(alloc)
 
         # 汇总数据
         dashboard_data = {
             'period': {'start': start_date, 'end': end_date},
             'summary': {
-                'total_resources': resources.count(),
+                'total_resources': len(resources),
                 'total_capacity_hours': 0,
                 'total_allocated_hours': 0,
                 'avg_utilization': 0,
@@ -590,7 +624,9 @@ class CapacityDashboardView(APIView):
         overloaded_count = 0
 
         for resource in resources:
-            daily_load = CapacityPlanningService.calculate_resource_load(resource, start_date, end_date)
+            daily_load = CapacityPlanningService.calculate_resource_load(
+                resource, start_date, end_date, allocations=allocations_by_resource.get(resource.id, [])
+            )
 
             resource_capacity = sum(d['available'] for d in daily_load.values())
             resource_allocated = sum(d['allocated'] for d in daily_load.values())

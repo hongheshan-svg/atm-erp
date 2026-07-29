@@ -64,8 +64,11 @@ class ItemImportView(APIView):
             )
 
         # 导入数据
+        # 左键是解析后的列名，右键必须是 Item 的真实字段名：
+        # Item 的唯一编码字段是 sku（没有 code 字段），原先映射成 'code' 会让
+        # Item(**obj_data) 每行抛 TypeError 被逐行吞掉 → created 恒为 0。
         field_mapping = {
-            'code': 'code',
+            'code': 'sku',
             'name': 'name',
             'spec': 'specification',
             'unit': 'unit',
@@ -75,7 +78,15 @@ class ItemImportView(APIView):
 
         import_result = ImportService.import_data(Item, validation['valid'], field_mapping, request.user)
 
-        return Response({'success': True, 'created': import_result['created'], 'errors': import_result['errors']})
+        # 一行都没导进去时不能再报 success，否则前端显示导入成功但库里没有数据
+        succeeded = import_result['created'] > 0 or not import_result['errors']
+        return Response(
+            {
+                'success': succeeded,
+                'created': import_result['created'],
+                'errors': import_result['errors'],
+            }
+        )
 
     def get(self, request):
         """下载导入模板"""

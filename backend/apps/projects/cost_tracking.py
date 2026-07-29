@@ -635,22 +635,27 @@ class CostOverviewDashboardView(APIView):
         end_date = request.query_params.get('end_date')
         department_id = request.query_params.get('department_id')
 
-        # 活跃项目
+        # 活跃项目。budget 是反向 OneToOne，一并 select_related，
+        # 否则下面循环里每个项目都要多查一次预算表。
         active_projects = Project.objects.filter(
             status__in=['IN_PROGRESS', 'DEBUGGING', 'INSTALLATION'], is_deleted=False
-        )
+        ).select_related('budget')
+
+        # 成本按项目一次性分组聚合，替代「每个活跃项目发一条 aggregate」的 N+1
+        period_costs = ProjectCostRecord.objects.filter(project__in=active_projects, is_deleted=False)
+        if start_date:
+            period_costs = period_costs.filter(cost_date__gte=start_date)
+        if end_date:
+            period_costs = period_costs.filter(cost_date__lte=end_date)
+
+        cost_by_project = {
+            row['project']: row['total'] for row in period_costs.values('project').annotate(total=Sum('amount'))
+        }
 
         # 项目成本汇总
         project_summaries = []
         for project in active_projects:
-            cost_records = ProjectCostRecord.objects.filter(project=project, is_deleted=False)
-
-            if start_date:
-                cost_records = cost_records.filter(cost_date__gte=start_date)
-            if end_date:
-                cost_records = cost_records.filter(cost_date__lte=end_date)
-
-            total_cost = cost_records.aggregate(total=Sum('amount'))['total'] or 0
+            total_cost = cost_by_project.get(project.id) or 0
 
             try:
                 budget = project.budget

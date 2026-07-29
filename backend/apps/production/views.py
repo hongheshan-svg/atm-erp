@@ -282,15 +282,18 @@ class ProductionLogViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         log = serializer.save(operator=self.request.user)
 
         # 使用数据库聚合更新工序工时和进度（避免竞态）
-        from django.db.models import Sum
+        from django.db.models import Max, Sum
 
         from .models import ProductionPlanProcess
 
         plan_process = log.plan_process
-        total = plan_process.logs.aggregate(s=Sum('work_hours'))['s'] or 0
+        # 进度取全部报工的最大值，而不是本条日志的值：报工可能乱序提交或事后补录，
+        # 用最后写入的一条覆盖会让工序进度回退（如补录早期 20% 把已到 80% 的工序打回）。
+        agg = plan_process.logs.aggregate(s=Sum('work_hours'), p=Max('progress_percent'))
+        total = agg['s'] or 0
         ProductionPlanProcess.objects.filter(pk=plan_process.pk).update(
             actual_hours=total,
-            progress_percent=log.progress_percent,
+            progress_percent=agg['p'] if agg['p'] is not None else log.progress_percent,
         )
 
         # 报工 -> 人工成本：按 工时 × 工种费率 生成人工成本明细

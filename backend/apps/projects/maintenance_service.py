@@ -48,8 +48,11 @@ def check_equipment_maintenance():
     # 2. 检查维保计划到期
     for days in reminder_days:
         check_date = today + timedelta(days=days)
+        # 字段名须与 MaintenanceSchedule 一致：计划日期是 scheduled_date（无 next_maintenance_date），
+        # 状态枚举是 PLANNED/OVERDUE/COMPLETED/CANCELLED（无 PENDING），
+        # 原写法一旦被调度执行就会抛 FieldError。
         due_schedules = MaintenanceSchedule.objects.filter(
-            next_maintenance_date=check_date, status='PENDING', is_deleted=False
+            scheduled_date=check_date, status__in=['PLANNED', 'OVERDUE'], is_deleted=False
         ).select_related('equipment')
 
         for schedule in due_schedules:
@@ -62,10 +65,11 @@ def check_equipment_maintenance():
                 }
             )
 
-            # 发送通知
-            if schedule.responsible_person:
+            # 发送通知。MaintenanceSchedule.performed_by 是执行人姓名（CharField）而非用户外键，
+            # 不能直接当收件人，沿用与保修提醒相同的设备相关人解析。
+            for user in _get_equipment_notify_users(schedule.equipment):
                 SystemNotification.objects.create(
-                    user=schedule.responsible_person,
+                    user=user,
                     title='设备维保到期提醒',
                     message=f'设备 [{schedule.equipment.equipment_no}] {schedule.equipment.name} 的{schedule.get_maintenance_type_display()}维保将于 {days} 天后到期。',
                     type='WARNING',
@@ -76,17 +80,21 @@ def check_equipment_maintenance():
 
     for days in reminder_days:
         check_date = today + timedelta(days=days)
-        calibration_due = Fixture.objects.filter(next_calibration_date=check_date, is_deleted=False)
+        # 字段名须与 Fixture 一致：下次校验日期是 next_calibration（无 next_calibration_date），
+        # 保管人是 custodian（无 responsible_person）；原写法一旦被调度执行就会抛 FieldError。
+        calibration_due = Fixture.objects.filter(
+            next_calibration=check_date, needs_calibration=True, is_deleted=False
+        ).select_related('custodian')
 
         for fixture in calibration_due:
             results['calibration_due'].append(
                 {'fixture': fixture.name, 'code': fixture.fixture_no, 'days_remaining': days}
             )
 
-            # 发送通知给负责人
-            if fixture.responsible_person:
+            # 发送通知给保管人
+            if fixture.custodian:
                 SystemNotification.objects.create(
-                    user=fixture.responsible_person,
+                    user=fixture.custodian,
                     title='工装夹具校准到期提醒',
                     message=f'工装夹具 [{fixture.fixture_no}] {fixture.name} 的校准将于 {days} 天后到期，请安排校准。',
                     type='WARNING',

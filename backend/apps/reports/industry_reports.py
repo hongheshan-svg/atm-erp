@@ -355,21 +355,40 @@ class CustomerValueReportView(APIView):
 
         customers_data = []
 
-        for customer in Customer.objects.filter(is_deleted=False):
-            # 项目统计
-            projects = Project.objects.filter(customer=customer, created_at__year=year, is_deleted=False)
-            project_count = projects.count()
-            project_amount = projects.aggregate(total=Sum('budget_total'))['total'] or 0
+        # 原实现对每个客户各发 6 条子查询（3 count + 3 aggregate）且不限客户数，
+        # 客户一多就是数千次查询。改为按客户分组的 3 条聚合，再在内存里合并。
+        def _group_by_customer(queryset, amount_field):
+            return {
+                row['customer']: row
+                for row in queryset.filter(customer__isnull=False)
+                .values('customer')
+                .annotate(cnt=Count('id'), amount=Sum(amount_field))
+            }
 
-            # 订单统计
-            orders = SalesOrder.objects.filter(customer=customer, order_date__year=year, is_deleted=False)
-            order_count = orders.count()
-            order_amount = orders.aggregate(total=Sum('total_amount'))['total'] or 0
+        project_stats = _group_by_customer(
+            Project.objects.filter(created_at__year=year, is_deleted=False), 'budget_total'
+        )
+        order_stats = _group_by_customer(
+            SalesOrder.objects.filter(order_date__year=year, is_deleted=False), 'total_amount'
+        )
+        service_stats = _group_by_customer(
+            ServiceOrder.objects.filter(created_at__year=year, is_deleted=False), 'actual_cost'
+        )
 
-            # 服务统计
-            services = ServiceOrder.objects.filter(customer=customer, created_at__year=year, is_deleted=False)
-            service_count = services.count()
-            service_cost = services.aggregate(total=Sum('actual_cost'))['total'] or 0
+        # 只有出现在任一统计里的客户才可能通过下面的过滤条件，无需遍历全部客户
+        related_customer_ids = set(project_stats) | set(order_stats) | set(service_stats)
+
+        for customer in Customer.objects.filter(is_deleted=False, id__in=related_customer_ids):
+            project_row = project_stats.get(customer.id) or {}
+            order_row = order_stats.get(customer.id) or {}
+            service_row = service_stats.get(customer.id) or {}
+
+            project_count = project_row.get('cnt') or 0
+            project_amount = project_row.get('amount') or 0
+            order_count = order_row.get('cnt') or 0
+            order_amount = order_row.get('amount') or 0
+            service_count = service_row.get('cnt') or 0
+            service_cost = service_row.get('amount') or 0
 
             # 总收入
             total_revenue = float(project_amount) + float(order_amount)

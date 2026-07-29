@@ -568,6 +568,26 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
         return Response(SNTraceRecordSerializer(record).data)
 
+    @staticmethod
+    def _active_ancestor_ids(serial_number):
+        """沿有效绑定向上收集全部祖先序列号 id。
+
+        自带 seen 保护，即使库里已存在历史环路数据也不会死循环。
+        """
+        ancestors = set()
+        current_id = serial_number.pk
+        while True:
+            parent_id = (
+                ComponentBinding.objects.filter(child_sn_id=current_id, is_active=True)
+                .values_list('parent_sn_id', flat=True)
+                .first()
+            )
+            if parent_id is None or parent_id in ancestors:
+                break
+            ancestors.add(parent_id)
+            current_id = parent_id
+        return ancestors
+
     @action(detail=True, methods=['post'])
     def bind_component(self, request, pk=None):
         """绑定子组件"""
@@ -583,7 +603,30 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         from django.db import transaction
         from django.utils import timezone
 
+        # 绑定前必须校验，否则追溯树会被污染：自绑会造成自引用节点、
+        # 重复绑定会让同一子件挂在多个父件下、环路会让向上/向下遍历无限递归。
+        if child_sn.pk == parent_sn.pk:
+            return Response({'error': '不能将序列号绑定到自身'}, status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
+            existing = (
+                ComponentBinding.objects.select_for_update()
+                .filter(child_sn=child_sn, is_active=True)
+                .select_related('parent_sn')
+                .first()
+            )
+            if existing:
+                return Response(
+                    {'error': f'该序列号已绑定到父组件 {existing.parent_sn.serial_number}，请先解绑'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if child_sn.pk in self._active_ancestor_ids(parent_sn):
+                return Response(
+                    {'error': '绑定会形成环路：该序列号是当前父组件的上级组件'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             binding = ComponentBinding.objects.create(
                 parent_sn=parent_sn,
                 child_sn=child_sn,
