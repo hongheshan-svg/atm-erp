@@ -306,8 +306,9 @@ const fetchData = async () => {
     tableData.value = data
     pagination.total = res.count || (res.results || res)?.length || 0
 
-    // 计算汇总
-    calculateSummary(data)
+    // 汇总取后端按筛选条件全量算出的 summary。若只对当前页 data 求和，
+    // 顶部统计会随翻页跳变、「项目总数」还永远不超过页大小。
+    applySummary(res.summary, data)
   } catch (error: any) {
     console.error('获取项目成本失败:', error)
     tableData.value = []
@@ -317,11 +318,20 @@ const fetchData = async () => {
   }
 }
 
-const calculateSummary = (data: any) => {
-  summary.totalProjects = data.length
-  summary.totalBudget = data.reduce((sum: any, item: any) => sum + (item.budget_total || 0), 0)
-  summary.totalRevenue = data.reduce((sum: any, item: any) => sum + (item.revenue || 0), 0)
-  summary.totalCost = data.reduce((sum: any, item: any) => sum + (item.total_cost || 0), 0)
+const applySummary = (remote: any, data: any) => {
+  if (remote) {
+    summary.totalProjects = remote.totalProjects || 0
+    summary.totalBudget = remote.totalBudget || 0
+    summary.totalRevenue = remote.totalRevenue || 0
+    summary.totalCost = remote.totalCost || 0
+    summary.totalProfit = remote.totalProfit ?? summary.totalRevenue - summary.totalCost
+    return
+  }
+  // 后端未返回 summary 时退回按当前页求和（仅为兜底，数值只反映本页）
+  summary.totalProjects = pagination.total || data.length
+  summary.totalBudget = data.reduce((sum: number, item: any) => sum + (item.budget_total || 0), 0)
+  summary.totalRevenue = data.reduce((sum: number, item: any) => sum + (item.revenue || 0), 0)
+  summary.totalCost = data.reduce((sum: number, item: any) => sum + (item.total_cost || 0), 0)
   summary.totalProfit = summary.totalRevenue - summary.totalCost
 }
 
