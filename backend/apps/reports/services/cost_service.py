@@ -32,9 +32,8 @@ class CostCalculationService:
             project_id=project_id, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
         ).aggregate(total=Sum(F('qty') * F('unit_cost')))
         returned = StockMove.objects.filter(
+            StockMove.material_return_q(),
             project_id=project_id,
-            move_type='ADJUSTMENT',
-            reference_type='MaterialReturn',
             status='COMPLETED',
             is_deleted=False,
         ).aggregate(total=Sum(F('qty') * F('unit_cost')))
@@ -175,9 +174,8 @@ class CostCalculationService:
         )
         returned_map = _sum_by_project(
             StockMove.objects.filter(
+                StockMove.material_return_q(),
                 project_id__in=project_ids,
-                move_type='ADJUSTMENT',
-                reference_type='MaterialReturn',
                 status='COMPLETED',
                 is_deleted=False,
             ),

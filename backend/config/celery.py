@@ -52,6 +52,13 @@ app.conf.beat_schedule = {
         'task': 'apps.core.tasks.check_workflow_deadline_reminders',
         'schedule': crontab(hour=10, minute=0),
     },
+    # Workflow timeout escalation — 每小时一次。只影响 timeout_action='ESCALATE' 的步骤,
+    # 默认 NONE 的步骤照旧只在 10 点收提醒。按小时跑是为了让改派贴近实际超时时刻,
+    # 空跑的成本只是一条带索引的查询。
+    'process-workflow-timeouts': {
+        'task': 'apps.core.tasks.process_workflow_timeouts',
+        'schedule': crontab(minute=20),
+    },
     # Project deadline reminders at 10:30 AM
     'check-project-deadline-reminders': {
         'task': 'apps.projects.tasks.check_project_deadline_reminders',

@@ -363,4 +363,49 @@ def check_workflow_deadline_reminders():
     return f'Sent workflow deadline reminders: {overdue_tasks.count()} overdue, {upcoming_tasks.count()} upcoming'
 
 
+@shared_task
+def process_workflow_timeouts():
+    """把超时的审批任务改派给上级（仅限步骤配置了 timeout_action='ESCALATE'）。
+
+    与 check_workflow_deadline_reminders 的分工：那个只发提醒、不改状态，适用于绝大多数
+    步骤（timeout_action='NONE'，默认值）；本任务只处理显式选择了自动升级的步骤。
+
+    每条任务独立处理并独立捕获异常：一条改派失败（例如上级账号刚被停用导致的竞态）
+    不应阻断同一批次里其它任务的改派。改派本身由 escalate_timeout_task 在单个事务里
+    完成，条件不满足时它不做任何修改，任务继续留在原审批人名下等人工处理。
+    """
+    from .workflow.models import WorkflowTask
+    from .workflow.services import WorkflowService
+
+    now = timezone.now()
+    candidates = (
+        WorkflowTask.objects.filter(
+            deadline__lt=now,
+            status='PENDING',
+            is_deleted=False,
+            step__timeout_action='ESCALATE',
+            instance__status='PENDING',
+        )
+        .select_related('step', 'assignee', 'instance')
+        .order_by('id')
+    )
+
+    escalated = 0
+    skipped = 0
+    for task in candidates:
+        try:
+            ok, reason = WorkflowService.escalate_timeout_task(task)
+        except Exception:
+            logger.exception('Failed to escalate timed-out workflow task %s', task.id)
+            skipped += 1
+            continue
+        if ok:
+            escalated += 1
+        else:
+            skipped += 1
+            logger.info('Workflow task %s not escalated: %s', task.id, reason)
+
+    return f'Workflow timeouts processed: {escalated} escalated, {skipped} skipped'
+
+
 import io

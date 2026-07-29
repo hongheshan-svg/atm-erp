@@ -98,6 +98,8 @@ class ProjectCostAccountingTest(TestCase):
             move_date=date(2026, 7, 11),
             status='COMPLETED',
         )
+        # 历史口径:IN_RETURN 启用前的退料入库写的是 ADJUSTMENT + reference_type='MaterialReturn'。
+        # 这类存量行不做数据迁移,必须继续被扣减,否则老项目的材料成本会凭空虚高。
         StockMove.objects.create(
             item=item,
             warehouse_to=warehouse,
@@ -112,6 +114,26 @@ class ProjectCostAccountingTest(TestCase):
 
         self.assertEqual(CostCalculationService.calculate_project_material_cost(self.project.id), Decimal('24'))
         self.assertEqual(self.project.get_actual_material_cost(), Decimal('24'))
+
+        # 新口径:IN_RETURN 同样扣减,且与历史行可以共存于同一项目。
+        StockMove.objects.create(
+            item=item,
+            warehouse_to=warehouse,
+            qty=Decimal('1'),
+            unit_cost=Decimal('8'),
+            move_type='IN_RETURN',
+            reference_type='MaterialReturn',
+            project=self.project,
+            move_date=date(2026, 7, 13),
+            status='COMPLETED',
+        )
+
+        self.assertEqual(CostCalculationService.calculate_project_material_cost(self.project.id), Decimal('16'))
+        self.assertEqual(self.project.get_actual_material_cost(), Decimal('16'))
+
+        # 批量口径(calculate_projects_profit)与单项目口径必须同源,否则报表汇总与明细对不上。
+        batch = CostCalculationService.calculate_projects_profit([self.project.id])
+        self.assertEqual(Decimal(str(batch[self.project.id]['material_cost'])), Decimal('16'))
 
     def test_project_return_derives_cost_and_blocks_over_return(self):
         from apps.inventory.material_serializers import MaterialReturnSerializer

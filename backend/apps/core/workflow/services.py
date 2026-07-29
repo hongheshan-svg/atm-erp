@@ -286,6 +286,108 @@ class WorkflowService:
             dept = getattr(dept, 'parent', None)
         return None
 
+    # 同一实例的同一步骤最多连续升级这么多次。防止部门树很深时任务沿着管理链一路上浮、
+    # 每次超时都改派却始终无人处理,最终在最顶层堆出一串 TIMEOUT 历史。
+    MAX_TIMEOUT_ESCALATIONS = 3
+
+    @classmethod
+    def escalate_timeout_task(cls, task):
+        """把一条超时的审批任务改派给原审批人的上级,原任务标记 TIMEOUT。
+
+        返回 ``(escalated: bool, reason: str)``。任何一个前置条件不满足都返回
+        ``(False, 原因)`` 并且**完全不修改任务状态**——宁可让任务继续挂在原审批人名下,
+        也不能置成 TIMEOUT 却没有接手人:approve_task 只处理 PENDING 任务,
+        没有 PENDING 任务的实例就是一张永远推不动的单据。
+
+        改派与置 TIMEOUT 在同一事务内完成,实例行加锁以避开并发审批。
+        """
+        with transaction.atomic():
+            instance = WorkflowInstance.objects.select_for_update().get(id=task.instance_id)
+            task = WorkflowTask.objects.select_related('step', 'assignee').get(id=task.id)
+
+            # 加锁后重新判定:任务可能在扫描与处理之间已被人审批,或整单已结束。
+            if instance.status != 'PENDING':
+                return False, '审批流程已结束'
+            if task.status != 'PENDING':
+                return False, '任务已处理'
+            if not task.deadline or task.deadline > timezone.now():
+                return False, '任务未超时'
+
+            step = task.step
+            if step.timeout_action != 'ESCALATE':
+                return False, '该步骤未配置超时升级'
+
+            escalated_count = instance.tasks.filter(step=step, status='TIMEOUT', is_deleted=False).count()
+            if escalated_count >= cls.MAX_TIMEOUT_ESCALATIONS:
+                return False, f'该步骤已连续升级 {escalated_count} 次，不再自动改派'
+
+            superior = cls._escalate_to_superior(task.assignee)
+            if superior is None:
+                return False, '找不到可改派的上级'
+            # 职责分离:提交人不得审批自己的单据(approve_task 有强制门)。改派给提交人
+            # 等于把单据推进死胡同——新任务谁也批不了。
+            if superior.id == instance.submitter_id:
+                return False, '上级即提交人，改派会违反职责分离'
+            # 会签步骤下同一步骤有多条并行任务,上级可能本来就是其中一条的处理人;
+            # 再建一条会让同一人对同一步骤持有两条待办。
+            if instance.tasks.filter(step=step, status='PENDING', assignee=superior, is_deleted=False).exists():
+                return False, '上级在本步骤已有待处理任务'
+
+            now = timezone.now()
+            task.status = 'TIMEOUT'
+            task.action_time = now
+            task.save(update_fields=['status', 'action_time', 'updated_at'])
+
+            new_task = WorkflowTask.objects.create(
+                instance=instance,
+                step=step,
+                assignee=superior,
+                status='PENDING',
+                deadline=now + timedelta(hours=step.timeout_hours),
+                created_by=instance.submitter,
+            )
+
+            cls._record_event(
+                instance,
+                'TIMEOUT',
+                None,
+                task=task,
+                from_status='PENDING',
+                to_status='TIMEOUT',
+                comment=f'审批超时，已改派给 {superior.get_full_name() or superior.username}',
+                metadata={
+                    'escalated_from': task.assignee_id,
+                    'escalated_to': superior.id,
+                    'new_task_id': new_task.id,
+                    'escalation_round': escalated_count + 1,
+                },
+            )
+
+            transaction.on_commit(lambda: cls._notify_assignee(new_task))
+            transaction.on_commit(lambda: cls._notify_timeout_escalation(task, new_task))
+
+        return True, f'已改派给 {superior.get_full_name() or superior.username}'
+
+    @classmethod
+    def _notify_timeout_escalation(cls, timed_out_task, new_task):
+        """告知原审批人任务已因超时被改派(仅通知,失败不影响已提交的改派)。"""
+        from apps.core.models import SystemNotification
+
+        try:
+            new_assignee = new_task.assignee
+            SystemNotification.objects.create(
+                user=timed_out_task.assignee,
+                type='WARNING',
+                title='审批任务已超时改派',
+                message=(
+                    f'单据 {timed_out_task.instance.business_no or timed_out_task.instance.business_id} '
+                    f'的「{timed_out_task.step.name}」审批已超过处理时限，'
+                    f'系统已改派给 {new_assignee.get_full_name() or new_assignee.username}。'
+                ),
+            )
+        except Exception:
+            logger.exception('Failed to notify original assignee about workflow timeout escalation')
+
     @classmethod
     def _get_project_manager(cls, instance):
         """

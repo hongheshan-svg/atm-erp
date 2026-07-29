@@ -91,9 +91,8 @@ class Project(BaseModel):
             project=self, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
         ).aggregate(total=Sum(F('qty') * F('unit_cost')))
         returned = StockMove.objects.filter(
+            StockMove.material_return_q(),
             project=self,
-            move_type='ADJUSTMENT',
-            reference_type='MaterialReturn',
             status='COMPLETED',
             is_deleted=False,
         ).aggregate(total=Sum(F('qty') * F('unit_cost')))

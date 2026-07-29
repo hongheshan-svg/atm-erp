@@ -216,9 +216,40 @@ class ComponentBinding(BaseModel):
         verbose_name = '组件绑定'
         verbose_name_plural = verbose_name
         ordering = ['-binding_time']
+        constraints = [
+            # 一个子件在任一时刻只能挂在一个父件下。应用层已在 ComponentBindingSerializer
+            # 里校验，但那只在读到已有行时才拦得住;并发的两次绑定都会读到「无绑定」而各自插入。
+            # 条件唯一索引让数据库来保证这个不变量,追溯树因此不会出现一子多父的分叉。
+            # 解绑(is_active=False)与软删的行不参与约束,同一子件可以被反复绑定/解绑。
+            models.UniqueConstraint(
+                fields=['child_sn'],
+                condition=models.Q(is_active=True, is_deleted=False),
+                name='uniq_active_binding_per_child_sn',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.parent_sn.serial_number} -> {self.child_sn.serial_number}'
+
+    @classmethod
+    def active_ancestor_ids(cls, serial_number_id):
+        """沿有效绑定向上收集全部祖先序列号 id。
+
+        自带 seen 保护，即使库里已存在历史环路数据也不会死循环。
+        """
+        ancestors = set()
+        current_id = serial_number_id
+        while True:
+            parent_id = (
+                cls.objects.filter(child_sn_id=current_id, is_active=True)
+                .values_list('parent_sn_id', flat=True)
+                .first()
+            )
+            if parent_id is None or parent_id in ancestors:
+                break
+            ancestors.add(parent_id)
+            current_id = parent_id
+        return ancestors
 
 
 class SNRule(BaseModel):
@@ -320,6 +351,42 @@ class ComponentBindingSerializer(serializers.ModelSerializer):
         model = ComponentBinding
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+
+    def validate(self, attrs):
+        """自绑 / 一子多父 / 环路三项关系校验。
+
+        必须放在序列化器而不是只放在 SerialNumberViewSet.bind_component 里：
+        ComponentBindingViewSet 是标准 ModelViewSet，直接 POST /component-bindings/
+        会完全绕过那个 action，让追溯树被污染的路径重新打开。
+        """
+        parent_sn = attrs.get('parent_sn') or getattr(self.instance, 'parent_sn', None)
+        child_sn = attrs.get('child_sn') or getattr(self.instance, 'child_sn', None)
+        is_active = attrs.get('is_active', getattr(self.instance, 'is_active', True))
+
+        if parent_sn is None or child_sn is None:
+            return attrs
+        # 解绑态的行不进入追溯树，也不占用「一子一父」的名额，无需做关系校验。
+        if not is_active:
+            return attrs
+
+        if parent_sn.pk == child_sn.pk:
+            raise serializers.ValidationError({'child_sn': '不能将序列号绑定到自身'})
+
+        existing = (
+            ComponentBinding.objects.filter(child_sn=child_sn, is_active=True)
+            .exclude(pk=getattr(self.instance, 'pk', None))
+            .select_related('parent_sn')
+            .first()
+        )
+        if existing:
+            raise serializers.ValidationError(
+                {'child_sn': f'该序列号已绑定到父组件 {existing.parent_sn.serial_number}，请先解绑'}
+            )
+
+        if child_sn.pk in ComponentBinding.active_ancestor_ids(parent_sn.pk):
+            raise serializers.ValidationError({'child_sn': '绑定会形成环路：该序列号是当前父组件的上级组件'})
+
+        return attrs
 
 
 class SerialNumberSerializer(serializers.ModelSerializer):
@@ -568,26 +635,6 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
 
         return Response(SNTraceRecordSerializer(record).data)
 
-    @staticmethod
-    def _active_ancestor_ids(serial_number):
-        """沿有效绑定向上收集全部祖先序列号 id。
-
-        自带 seen 保护，即使库里已存在历史环路数据也不会死循环。
-        """
-        ancestors = set()
-        current_id = serial_number.pk
-        while True:
-            parent_id = (
-                ComponentBinding.objects.filter(child_sn_id=current_id, is_active=True)
-                .values_list('parent_sn_id', flat=True)
-                .first()
-            )
-            if parent_id is None or parent_id in ancestors:
-                break
-            ancestors.add(parent_id)
-            current_id = parent_id
-        return ancestors
-
     @action(detail=True, methods=['post'])
     def bind_component(self, request, pk=None):
         """绑定子组件"""
@@ -600,7 +647,7 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         except SerialNumber.DoesNotExist:
             return Response({'error': '子序列号不存在'}, status=status.HTTP_404_NOT_FOUND)
 
-        from django.db import transaction
+        from django.db import IntegrityError, transaction
         from django.utils import timezone
 
         # 绑定前必须校验，否则追溯树会被污染：自绑会造成自引用节点、
@@ -608,44 +655,49 @@ class SerialNumberViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
         if child_sn.pk == parent_sn.pk:
             return Response({'error': '不能将序列号绑定到自身'}, status=status.HTTP_400_BAD_REQUEST)
 
-        with transaction.atomic():
-            existing = (
-                ComponentBinding.objects.select_for_update()
-                .filter(child_sn=child_sn, is_active=True)
-                .select_related('parent_sn')
-                .first()
-            )
-            if existing:
-                return Response(
-                    {'error': f'该序列号已绑定到父组件 {existing.parent_sn.serial_number}，请先解绑'},
-                    status=status.HTTP_400_BAD_REQUEST,
+        try:
+            with transaction.atomic():
+                existing = (
+                    ComponentBinding.objects.select_for_update()
+                    .filter(child_sn=child_sn, is_active=True)
+                    .select_related('parent_sn')
+                    .first()
                 )
+                if existing:
+                    return Response(
+                        {'error': f'该序列号已绑定到父组件 {existing.parent_sn.serial_number}，请先解绑'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            if child_sn.pk in self._active_ancestor_ids(parent_sn):
-                return Response(
-                    {'error': '绑定会形成环路：该序列号是当前父组件的上级组件'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                if child_sn.pk in ComponentBinding.active_ancestor_ids(parent_sn.pk):
+                    return Response(
+                        {'error': '绑定会形成环路：该序列号是当前父组件的上级组件'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            binding = ComponentBinding.objects.create(
-                parent_sn=parent_sn,
-                child_sn=child_sn,
-                binding_time=timezone.now(),
-                position=position,
-                operator=request.user,
-            )
-
-            for sn, desc in [
-                (parent_sn, f'绑定子组件: {child_sn.serial_number}'),
-                (child_sn, f'绑定到父组件: {parent_sn.serial_number}'),
-            ]:
-                SNTraceRecord.objects.create(
-                    serial_number=sn,
-                    operation='OTHER',
-                    operation_time=timezone.now(),
-                    description=desc,
+                binding = ComponentBinding.objects.create(
+                    parent_sn=parent_sn,
+                    child_sn=child_sn,
+                    binding_time=timezone.now(),
+                    position=position,
                     operator=request.user,
                 )
+
+                for sn, desc in [
+                    (parent_sn, f'绑定子组件: {child_sn.serial_number}'),
+                    (child_sn, f'绑定到父组件: {parent_sn.serial_number}'),
+                ]:
+                    SNTraceRecord.objects.create(
+                        serial_number=sn,
+                        operation='OTHER',
+                        operation_time=timezone.now(),
+                        description=desc,
+                        operator=request.user,
+                    )
+        except IntegrityError:
+            # 条件唯一索引兜底：select_for_update 只锁得住已存在的行，两个并发请求
+            # 都读到「无绑定」时靠数据库拦截。给用户 400 而不是 500。
+            return Response({'error': '该序列号已被其它操作绑定，请刷新后重试'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(ComponentBindingSerializer(binding).data)
 
@@ -703,6 +755,22 @@ class ComponentBindingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixi
     serializer_class = ComponentBindingSerializer
     filterset_fields = ['parent_sn', 'child_sn', 'is_active', 'is_deleted']
     ordering_fields = ['binding_time', 'created_at']
+
+    def perform_create(self, serializer):
+        """把唯一约束冲突翻译成 400。
+
+        序列化器已做「一子一父」校验，但校验与写入之间存在竞态窗口，
+        并发的两次绑定会同时通过校验、由条件唯一索引拦下其中一条。
+        """
+        from django.db import IntegrityError, transaction
+
+        try:
+            # 包一层 atomic：IntegrityError 会污染所在事务，套上保存点才能在捕获后
+            # 继续用连接（否则后续中间件的查询会抛 TransactionManagementError）。
+            with transaction.atomic():
+                super().perform_create(serializer)
+        except IntegrityError as exc:
+            raise serializers.ValidationError({'child_sn': '该序列号已被其它操作绑定，请刷新后重试'}) from exc
 
     @action(detail=True, methods=['post'])
     def unbind(self, request, pk=None):

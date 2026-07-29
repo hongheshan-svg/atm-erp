@@ -138,6 +138,21 @@ class WorkflowStep(BaseModel):
     # Timeout settings
     timeout_hours = models.IntegerField(default=24, verbose_name='超时时间(小时)')
 
+    TIMEOUT_ACTION_CHOICES = [
+        ('NONE', '仅提醒'),
+        ('ESCALATE', '超时升级给上级'),
+    ]
+    # 默认 NONE = 沿用历史行为(超时只发提醒、任务仍归原审批人),不改动任何既有流程。
+    # 只有显式配置 ESCALATE 的步骤才会被 process_workflow_timeouts 改派。
+    # 刻意不提供「超时自动通过/自动驳回」:两者都会在无人干预的情况下替业务做出终局决定。
+    timeout_action = models.CharField(
+        max_length=20,
+        choices=TIMEOUT_ACTION_CHOICES,
+        default='NONE',
+        verbose_name='超时处理方式',
+        help_text='ESCALATE：超时后把任务改派给原审批人的上级部门经理，原任务标记为已超时',
+    )
+
     # Can skip if amount is below threshold
     skip_amount_threshold = models.DecimalField(
         max_digits=15,
@@ -244,12 +259,12 @@ class WorkflowTask(BaseModel):
         # 步骤重审时，当前任务标记为 RETURNED，实例保持审批中 (PENDING) 而非整单结束。
         ('RETURNED', '已退回'),
         ('SKIPPED', '已跳过'),
-        # 注意：当前代码库没有任何位置会把任务置为 TIMEOUT。deadline 只由
-        # core.tasks.check_workflow_deadline_reminders 用来发提醒，超时任务仍保持
-        # PENDING、仍可被审批。不要据此以为存在自动超时机制。
-        # 是否引入自动超时（以及超时后是改派上级、自动通过还是驳回）属于业务规则，
-        # 需先明确策略再实现——直接把状态改成 TIMEOUT 会让 approve_task 认定
-        # 「该任务已处理」，反而把单据彻底卡死。
+        # TIMEOUT 是「已被超时改派取代」的终结态，只由 core.tasks.process_workflow_timeouts
+        # 写入，且仅当该任务所属步骤配置了 timeout_action='ESCALATE'。
+        # 关键不变量：置 TIMEOUT 必须与「给上级新建一条 PENDING 任务」在同一事务内完成。
+        # approve_task 只认 status=='PENDING'，单独把任务改成 TIMEOUT 而不补新任务，
+        # 会让实例再没有可审批的任务、单据被永久卡死——所以找不到合格的升级对象时
+        # 一律不动，让任务保持 PENDING 由人工处理。
         ('TIMEOUT', '已超时'),
     ]
 
@@ -295,6 +310,7 @@ class WorkflowEvent(models.Model):
         ('RETURNED', '已退回'),
         ('WITHDRAWN', '已撤回'),
         ('CANCELLED', '已取消'),
+        ('TIMEOUT', '已超时改派'),
     ]
 
     instance = models.ForeignKey(
