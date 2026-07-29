@@ -2202,6 +2202,7 @@ class PaymentRequestViewSet(
                 # 此处将 PayableItem.amount_paid 与 ap.amount_paid 对齐以关闭该路径。
                 try:
                     from apps.finance.payable_models import PayableItem
+
                     pi = PayableItem.objects.select_for_update().get(
                         source_type='ap',
                         source_id=payment_req.ap_id,

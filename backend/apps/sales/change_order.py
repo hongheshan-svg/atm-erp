@@ -231,6 +231,7 @@ class SalesOrderChange(BaseModel):
         # 已部分付款的记录由财务人员按业务协商手动调整(自动修改可能擦除已确认的核销)。
         if ct in ('AMOUNT', 'OTHER') or True:  # 任何变更类型都可能影响订单金额，统一同步
             from apps.finance.models import AccountReceivable, PaymentSchedule
+
             new_total = order.total_with_tax
 
             # 同步未付款 AR:amount_paid=0 说明全额未开始核销,直接覆盖 amount_due 安全
