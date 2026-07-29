@@ -227,9 +227,14 @@ class WorkflowService:
                 assignee = instance.submitter.department.manager
 
         # 职责分离:当动态解析出的审批人恰是提交人本人(如部门经理自己发起本部门单据),
-        # 上溯到上级部门经理,避免自审自签(审计 batch1 #5)。approve_task 另有强制兜底门。
+        # 上溯到上级部门经理,避免自审自签(审计 batch1 #5)。上溯是「尽力路由」:仅当
+        # 找到有效上级时才替换审批人;找不到则保留原审批人,让单据仍能进入审批流,
+        # 由 approve_task 的强制门(提交人非超管不得审批自己的单据)兜底,绝不能因上溯失败
+        # 把审批人置空导致 start_workflow 抛「无法确定审批人」而使提交 500。
         if assignee and assignee.id == instance.submitter_id:
-            assignee = cls._escalate_to_superior(instance.submitter)
+            superior = cls._escalate_to_superior(instance.submitter)
+            if superior is not None:
+                assignee = superior
 
         if assignee and (not assignee.is_active or getattr(assignee, 'is_deleted', False)):
             assignee = None
@@ -238,9 +243,12 @@ class WorkflowService:
         if not assignee and step.approver_role:
             assignee = User.objects.filter(roles=step.approver_role, is_active=True, is_deleted=False).first()
 
-        # 兜底解析出的审批人仍可能==提交人,再上溯一次(职责分离,审计 batch1 #5)。
+        # 兜底解析出的审批人仍可能==提交人,再尽力上溯一次(职责分离,审计 batch1 #5;
+        # 同样非破坏:找不到上级则保留)。
         if assignee and assignee.id == instance.submitter_id:
-            assignee = cls._escalate_to_superior(instance.submitter)
+            superior = cls._escalate_to_superior(instance.submitter)
+            if superior is not None:
+                assignee = superior
 
         return assignee
 
