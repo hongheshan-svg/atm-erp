@@ -929,7 +929,10 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
                         statement.supplier = supplier
                         statement.match_confidence = Decimal(str(confidence))
                         statement.match_type = 'AP'
-                        statement.status = 'MATCHED'
+                        # 付款流水(DEBIT)只做供应商识别与匹配度标记;
+                        # 实际核销(MATCHED)必须经过待付款项台账(payable_service.settle),
+                        # 在「付款核销工作台」由人工确认后完成,此处保持 PENDING 防止绕过台账。
+                        statement.status = 'PENDING'
                         matched = True
                 else:
                     customer, confidence = statement.auto_match_customer()
@@ -1037,76 +1040,17 @@ class BankStatementViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
         return None
 
     def _try_match_purchase_payment_schedule(self, statement):
+        """采购付款计划的自动金额匹配已停用。
+
+        原逻辑直接修改 PurchasePaymentSchedule.amount_paid,绕过待付款项核销台账
+        (PayableItem/PayableSettlement),与台账路径形成双轨记账,
+        导致 PayableItem 余额与实际付款不符,进而允许同一笔款项被重复核销。
+
+        采购付款流水核销须经「付款核销工作台」由人工触发
+        payable_service.settle(),由台账统一管理 amount_paid 与状态流转。
+
+        保留方法签名以兼容 auto_match_all 调用方,无副作用,直接返回 None。
         """
-        尝试将银行流水（付款）匹配到采购付款计划。
-        根据供应商和金额找到最匹配的采购付款计划。
-        """
-        from decimal import Decimal
-
-        from apps.finance.models import PurchasePaymentSchedule
-
-        supplier = statement.supplier
-        amount = statement.debit_amount or Decimal('0')
-
-        if not supplier or amount <= 0:
-            return None
-
-        # 查找该供应商待付款的付款计划
-        # 优先匹配金额完全相等的
-        exact_match = (
-            PurchasePaymentSchedule.objects.filter(
-                purchase_order__supplier=supplier,
-                status__in=['PENDING', 'PARTIAL'],
-                amount_due=amount,
-                is_deleted=False,
-            )
-            .order_by('due_date')
-            .first()
-        )
-
-        if exact_match:
-            exact_match.amount_paid += amount
-            if exact_match.amount_paid >= exact_match.amount_due:
-                exact_match.status = 'PAID'
-                exact_match.actual_paid_date = statement.transaction_time.date()
-                exact_match.reminder_status = 'PAID'
-            else:
-                exact_match.status = 'PARTIAL'
-            exact_match.save()
-            exact_match.bank_statements.add(statement)
-
-            # 更新流水的项目关联
-            if exact_match.project:
-                statement.project = exact_match.project
-                statement.save()
-
-            return exact_match
-
-        # 如果没有完全匹配，查找剩余金额接近的
-        pending_schedules = PurchasePaymentSchedule.objects.filter(
-            purchase_order__supplier=supplier, status__in=['PENDING', 'PARTIAL'], is_deleted=False
-        ).order_by('due_date')
-
-        for schedule in pending_schedules:
-            remaining = schedule.amount_due - schedule.amount_paid
-            # 如果付款金额在剩余金额的10%范围内，认为匹配
-            if abs(remaining - amount) <= remaining * Decimal('0.1'):
-                schedule.amount_paid += amount
-                if schedule.amount_paid >= schedule.amount_due:
-                    schedule.status = 'PAID'
-                    schedule.actual_paid_date = statement.transaction_time.date()
-                    schedule.reminder_status = 'PAID'
-                else:
-                    schedule.status = 'PARTIAL'
-                schedule.save()
-                schedule.bank_statements.add(statement)
-
-                if schedule.project:
-                    statement.project = schedule.project
-                    statement.save()
-
-                return schedule
-
         return None
 
     @action(detail=False, methods=['get'])

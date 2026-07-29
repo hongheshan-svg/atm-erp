@@ -293,13 +293,13 @@ class DashboardDataService:
 
         from apps.finance.models import AccountPayable, AccountReceivable
 
-        ar_stats = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False).aggregate(
-            total=Sum(F('amount_due') - F('amount_paid'))
-        )
+        ar_stats = AccountReceivable.objects.filter(
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'], is_deleted=False
+        ).aggregate(total=Sum(F('amount_due') - F('amount_paid')))
 
-        ap_stats = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False).aggregate(
-            total=Sum(F('amount_due') - F('amount_paid'))
-        )
+        ap_stats = AccountPayable.objects.filter(
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE'], is_deleted=False
+        ).aggregate(total=Sum(F('amount_due') - F('amount_paid')))
 
         return {
             'receivables': float(ar_stats['total'] or 0),
@@ -313,7 +313,7 @@ class DashboardDataService:
         from apps.finance.models import AccountReceivable
 
         today = timezone.now().date()
-        ars = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False)
+        ars = AccountReceivable.objects.filter(status__in=['PENDING', 'PARTIAL', 'OVERDUE'], is_deleted=False)
 
         aging = {
             'current': 0,
@@ -346,7 +346,7 @@ class DashboardDataService:
         from apps.finance.models import AccountPayable
 
         today = timezone.now().date()
-        aps = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL'], is_deleted=False)
+        aps = AccountPayable.objects.filter(status__in=['PENDING', 'PARTIAL', 'OVERDUE'], is_deleted=False)
 
         aging = {
             'current': 0,

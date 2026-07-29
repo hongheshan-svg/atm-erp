@@ -10,6 +10,7 @@ from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -62,6 +63,14 @@ class PurchaseReconciliationViewSet(PermissionMixin, SoftDeleteMixin, UserTracki
         if self.action == 'list':
             return PurchaseReconciliationListSerializer
         return PurchaseReconciliationSerializer
+
+    def perform_destroy(self, instance):
+        """仅草稿(DRAFT)状态的对账单允许删除;已提交/确认/完成的记录禁止删除,需先撤回。"""
+        if instance.status != 'DRAFT':
+            raise ValidationError(
+                {'error': f'只能删除草稿状态的对账单，当前状态为「{instance.status}」，请先撤回再删除。'}
+            )
+        super().perform_destroy(instance)
 
     @action(detail=True, methods=['post'])
     def generate_lines(self, request, pk=None):

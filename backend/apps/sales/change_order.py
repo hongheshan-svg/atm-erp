@@ -225,6 +225,30 @@ class SalesOrderChange(BaseModel):
         order.updated_by = user
         order.save()
 
+        # 同步应收账款与付款计划:变更单审批通过后订单金额已变,但对应 AR/PaymentSchedule
+        # 的 amount_due 仍为旧值,导致收款进度永远算不到 100%,甚至允许多收款而无告警。
+        # 只同步未付款(amount_paid=0)的 AR 和 PENDING/PARTIAL 的付款计划;
+        # 已部分付款的记录由财务人员按业务协商手动调整(自动修改可能擦除已确认的核销)。
+        if ct in ('AMOUNT', 'OTHER') or True:  # 任何变更类型都可能影响订单金额，统一同步
+            from apps.finance.models import AccountReceivable, PaymentSchedule
+
+            new_total = order.total_with_tax
+
+            # 同步未付款 AR:amount_paid=0 说明全额未开始核销,直接覆盖 amount_due 安全
+            # AccountReceivable 的外键字段名为 so（不是 sales_order）
+            AccountReceivable.objects.filter(
+                so=order,
+                is_deleted=False,
+                amount_paid=Decimal('0'),
+            ).update(amount_due=new_total)
+
+            # 同步 PENDING 付款计划:尚未开始付款,直接更新 amount_due
+            PaymentSchedule.objects.filter(
+                sales_order=order,
+                is_deleted=False,
+                status='PENDING',
+            ).update(amount_due=new_total)
+
         self.after_data = _snapshot_order(order)
         self.status = 'APPROVED'
         self.applied_at = timezone.now()

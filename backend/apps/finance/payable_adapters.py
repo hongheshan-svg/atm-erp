@@ -33,11 +33,17 @@ def register_payable(obj, source_type: str) -> PayableItem:
     # to_payable() 只返回单据静态属性(收款方/应付额/日期等)、从不返回 status/amount_paid,
     # update_or_create 的重复调用只刷新静态字段、不会覆盖已由核销/反核销正确维护的核销进度。
     # 若将来往任何 to_payable() 里加 status/amount_paid,会在反核销场景悄悄复位台账,务必避免。
-    item, _ = PayableItem.objects.update_or_create(
+    item, created = PayableItem.objects.update_or_create(
         source_type=source_type,
         source_id=obj.pk,
         defaults=defaults,
     )
+    # 若台账项曾因来源单据撤回而被 cancel_payable 置为 CANCELLED，
+    # 现在来源单据重新审批通过（register_payable 被再次调用），应复位为可核销状态。
+    # 注意: write_back（反核销路径）通过 amount_paid 正确维护状态，此处仅处理 CANCELLED 复位。
+    if not created and item.status == PayableItem.STATUS_CANCELLED:
+        item.status = PayableItem.STATUS_PARTIAL if item.amount_paid > 0 else PayableItem.STATUS_PENDING
+        item.save(update_fields=['status', 'updated_at'])
     return item
 
 

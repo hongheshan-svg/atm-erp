@@ -69,11 +69,11 @@
       <!-- 批量操作 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-        <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+        <el-button v-permission="'finance:purchase_reconciliation:delete'" type="danger" size="small" @click="batchDelete">批量删除</el-button>
         <el-button size="small" @click="batchExport">导出选中</el-button>
       </div>
       <el-table :data="reconciliations" v-loading="loading" stripe border style="margin-top: 16px;" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="45" />
+        <el-table-column type="selection" width="45" :selectable="(row: any) => row.status === 'DRAFT'" />
         <el-table-column prop="reconciliation_no" label="对账单号" width="150" />
         <el-table-column prop="supplier_name" label="供应商" min-width="180" show-overflow-tooltip />
         <el-table-column label="对账期间" width="180">

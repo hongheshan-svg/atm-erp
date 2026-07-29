@@ -379,7 +379,7 @@ const handleExport = () => {
       { field: 'expense_cost', title: '费用成本', formatter: formatMoney },
       { field: 'total_cost', title: '总成本', formatter: formatMoney },
       { field: 'profit', title: '利润', formatter: formatMoney },
-      { field: 'profit_margin', title: '利润率(%)', formatter: (val: any) => (val * 100).toFixed(2) + '%' }
+      { field: 'profit_margin', title: '利润率(%)', formatter: (val: any) => Number(val).toFixed(2) + '%' }
     ]
     exportToExcel(tableData.value, columns, '项目成本核算表')
     ElMessage.success('导出成功')

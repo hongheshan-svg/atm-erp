@@ -173,6 +173,8 @@ def unsettle(settlement, user):
     重算银行流水状态。幂等(已软删的 settlement 再次调用直接返回)。"""
     if settlement.is_deleted:
         return
+    # 与 settle 保持相同锁顺序(BankStatement → PayableItem)，防止死锁与状态漂移
+    bs = BankStatement.objects.select_for_update().get(pk=settlement.bank_statement_id)
     item = PayableItem.objects.select_for_update().get(pk=settlement.payable_item_id)
 
     # 台账已付金额的回退统一由 Payment.soft_delete -> _reverse_target 单次完成,
@@ -190,7 +192,6 @@ def unsettle(settlement, user):
         item.recalc_status()
         item.save(update_fields=['amount_paid', 'status', 'updated_at'])
 
-    bs = settlement.bank_statement
     settlement.soft_delete()
 
     source = PAYABLE_SOURCES.get(item.source_type)
