@@ -385,7 +385,12 @@ class DataPointViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, view
     @action(detail=False, methods=['get'])
     def realtime(self, request):
         """获取实时数据"""
-        point_ids = request.query_params.get('points', '').split(',')
+        # points 缺省或含空段时,split(',') 会产出 ''，直接进 id__in 会触发
+        # ValueError: Field 'id' expected a number but got ''。仅保留纯数字 id。
+        raw = request.query_params.get('points', '')
+        point_ids = [seg for seg in raw.split(',') if seg.strip().isdigit()]
+        if not point_ids:
+            return Response([])
         points = self.get_queryset().filter(id__in=point_ids)
 
         data = []
