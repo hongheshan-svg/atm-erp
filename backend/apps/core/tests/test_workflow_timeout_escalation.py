@@ -75,9 +75,7 @@ class WorkflowTimeoutEscalationTest(TestCase):
 
     def _start(self, code, business_id, timeout_action='ESCALATE', business_type='PURCHASE_REQUEST'):
         _wf, step = self._make_workflow(code, timeout_action=timeout_action, business_type=business_type)
-        instance, err = WorkflowService.start_workflow(
-            business_type, business_id, f'PR-{business_id}', self.submitter
-        )
+        instance, err = WorkflowService.start_workflow(business_type, business_id, f'PR-{business_id}', self.submitter)
         self.assertIsNone(err)
         task = WorkflowTask.objects.get(instance=instance, step=step)
         return instance, step, task
@@ -247,9 +245,7 @@ class WorkflowTimeoutEscalationTest(TestCase):
     # ---------- Celery 任务只挑 ESCALATE 步骤 ----------
     def test_celery_task_only_processes_escalate_steps(self):
         inst_esc, _s1, t1 = self._start('to_wf_h1', 5008, timeout_action='ESCALATE')
-        inst_none, _s2, t2 = self._start(
-            'to_wf_h2', 5009, timeout_action='NONE', business_type='PURCHASE_ORDER'
-        )
+        inst_none, _s2, t2 = self._start('to_wf_h2', 5009, timeout_action='NONE', business_type='PURCHASE_ORDER')
         self._expire(t1)
         self._expire(t2)
 
