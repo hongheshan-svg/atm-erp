@@ -817,13 +817,18 @@ class ServiceOrderViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, v
             return Response({'error': '技术人员不存在'}, status=404)
 
         # 创建派工记录
+        # planned_start/planned_end 不能为 None（字段 NOT NULL）；用 date.today() 兜底
+        from datetime import date as _date
+
+        resolved_start = planned_start or order.planned_start_date or _date.today()
+        resolved_end = planned_end or order.planned_end_date or resolved_start
         dispatch, created = ServiceDispatch.objects.get_or_create(
             service_order=order,
             technician=technician,
             defaults={
                 'role': role,
-                'planned_start': planned_start or order.planned_start_date,
-                'planned_end': planned_end or order.planned_end_date,
+                'planned_start': resolved_start,
+                'planned_end': resolved_end,
                 'created_by': request.user,
             },
         )

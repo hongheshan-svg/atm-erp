@@ -240,7 +240,7 @@ class EquipmentLifecycleReportView(APIView):
                     'equipment_no': equipment.equipment_no,
                     'name': equipment.name,
                     'customer_name': equipment.customer.name if equipment.customer else '',
-                    'install_date': equipment.install_date,
+                    'install_date': equipment.installation_date,
                     'warranty_end': equipment.warranty_end_date,
                 },
                 'service_summary': list(services),

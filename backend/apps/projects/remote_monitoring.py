@@ -801,7 +801,7 @@ class DiagnosticSessionViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
                 title=f'[诊断] {session.equipment.name} - {session.findings[:50]}',
                 customer=session.equipment.customer,
                 equipment=session.equipment,
-                service_address=session.equipment.location or '',
+                service_address=session.equipment.installation_address or '',
                 contact_name='',
                 contact_phone='',
                 requested_date=date.today() + timedelta(days=3),

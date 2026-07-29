@@ -1972,13 +1972,13 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 created_by=request.user,
             )
 
-            total_amount = 0
+            total_amount = Decimal('0')
             for item_data in bom_items:
                 bom = item_data['bom']
                 needed_qty = item_data['needed_qty']
                 # 优先使用询价信息中的价格（未税单价 > 含税单价 > 标准成本）
-                estimated_price = bom.price_without_tax or bom.price_with_tax or bom.item.standard_cost or 0
-                line_amount = needed_qty * float(estimated_price)
+                estimated_price = bom.price_without_tax or bom.price_with_tax or bom.item.standard_cost or Decimal('0')
+                line_amount = needed_qty * estimated_price
 
                 # 获取询价供应商
                 supplier = bom.quote_supplier or bom.supplier
