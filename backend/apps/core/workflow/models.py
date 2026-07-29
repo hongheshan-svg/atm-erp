@@ -244,6 +244,12 @@ class WorkflowTask(BaseModel):
         # 步骤重审时，当前任务标记为 RETURNED，实例保持审批中 (PENDING) 而非整单结束。
         ('RETURNED', '已退回'),
         ('SKIPPED', '已跳过'),
+        # 注意：当前代码库没有任何位置会把任务置为 TIMEOUT。deadline 只由
+        # core.tasks.check_workflow_deadline_reminders 用来发提醒，超时任务仍保持
+        # PENDING、仍可被审批。不要据此以为存在自动超时机制。
+        # 是否引入自动超时（以及超时后是改派上级、自动通过还是驳回）属于业务规则，
+        # 需先明确策略再实现——直接把状态改成 TIMEOUT 会让 approve_task 认定
+        # 「该任务已处理」，反而把单据彻底卡死。
         ('TIMEOUT', '已超时'),
     ]
 

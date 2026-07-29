@@ -306,6 +306,13 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         # 否则可绕过审批把请假直接置 APPROVED(审计 batch1 #16)。
         read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at', 'status']
 
+    def validate(self, attrs):
+        # 申请人决定了审批链、假期余额扣减与数据范围可见性，创建后不允许改指他人，
+        # 否则持编辑权限者可把已有单据挪到别的员工名下。
+        if self.instance is not None and 'user' in attrs and attrs['user'] != self.instance.user:
+            raise serializers.ValidationError({'user': '不能修改申请人'})
+        return attrs
+
 
 class OvertimeRequestSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
@@ -318,6 +325,12 @@ class OvertimeRequestSerializer(serializers.ModelSerializer):
         fields = '__all__'
         # 同 LeaveRequest:status 只能经工作流/审批动作变更,不可经标准 PATCH 绕过审批(审计 batch1 #16)。
         read_only_fields = ['created_by', 'updated_by', 'approver', 'approved_at', 'status']
+
+    def validate(self, attrs):
+        # 同 LeaveRequest：创建后不允许把单据改指他人
+        if self.instance is not None and 'user' in attrs and attrs['user'] != self.instance.user:
+            raise serializers.ValidationError({'user': '不能修改申请人'})
+        return attrs
 
 
 # =====================
@@ -1006,8 +1019,10 @@ class LeaveRequestViewSet(
         if leave.status not in ['DRAFT', 'REJECTED']:
             return Response({'error': '只能提交草稿或已拒绝状态的申请'}, status=400)
 
-        # 计算请假天数用于流程路由
-        days = (leave.end_date - leave.start_date).days + 1
+        # 审批路由必须用单据自身的 days（DecimalField，支持 0.5 天），
+        # 与 balance() 的扣减口径一致；原先按 (end-start).days+1 现算自然日，
+        # 半天假会被算成 1 天、跨周末的假会被放大，导致分级审批走错档位。
+        days = leave.days or Decimal((leave.end_date - leave.start_date).days + 1)
 
         try:
             result = self.start_workflow_or_auto_approve(

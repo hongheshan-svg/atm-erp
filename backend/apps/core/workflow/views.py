@@ -254,17 +254,20 @@ class WorkflowInstanceViewSet(ImmutableRuntimeRecordMixin, PermissionMixin, view
                 approved = [task for task in step_tasks if task.status == 'APPROVED']
                 rejected = [task for task in step_tasks if task.status == 'REJECTED']
                 returned = [task for task in step_tasks if task.status == 'RETURNED']
+                # 否决/退回必须优先于通过：会签步里只要有一票 REJECTED，该步就是被否决的，
+                # 原顺序把 approved 排在前面，会让「已有人通过、随后被否决」的步骤显示成
+                # 「已通过」，与实例整体的 REJECTED 状态自相矛盾。
                 if pending:
                     aggregate_status = 'PENDING'
-                elif approved:
-                    aggregate_status = 'APPROVED'
-                elif returned:
-                    aggregate_status = 'RETURNED'
                 elif rejected:
                     aggregate_status = 'REJECTED'
+                elif returned:
+                    aggregate_status = 'RETURNED'
+                elif approved:
+                    aggregate_status = 'APPROVED'
                 else:
                     aggregate_status = 'SKIPPED'
-                representative = (pending or approved or returned or rejected or step_tasks)[0]
+                representative = (pending or rejected or returned or approved or step_tasks)[0]
                 node.update(
                     {
                         'task_id': representative.id,

@@ -430,7 +430,9 @@ const loadStockItems = async () => {
   try {
     const params: Record<string, any> = { warehouse: form.warehouse }
     if (stockSearch.value) {
-      params.item_name = stockSearch.value
+      // StockViewSet 的 filterset_fields 只有 warehouse/item，item_name 会被静默丢弃、
+      // 搜索形同虚设；模糊搜索要走 SearchFilter 的 search 参数（同 StockList.vue）
+      params.search = stockSearch.value
     }
     const response = await getStocks(params)
     stockItems.value = (response.results || response || []).map((item: any) => ({

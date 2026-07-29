@@ -15,6 +15,29 @@ from apps.core.permission_mixin import PermissionMixin
 from .services import CashFlowForecastService, DashboardKPIService, InventoryAnalyticsService
 
 
+def _parse_iso_datetime(value, field):
+    """把查询参数解析为 datetime，畸形输入返回 400 而不是让 fromisoformat 抛出 500。"""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({field: '日期格式无效，应为 ISO 格式（如 2026-01-31）'}) from exc
+
+
+def _parse_bounded_int(value, field, default, minimum, maximum):
+    """把查询参数解析为受限整数，非法输入返回 400 而不是让 int() 抛出 500。"""
+    if value in (None, ''):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({field: '必须是整数'}) from exc
+    if not minimum <= parsed <= maximum:
+        raise ValidationError({field: f'必须在 {minimum} 到 {maximum} 之间'})
+    return parsed
+
+
 class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
     """Analytics and KPI endpoints"""
 
@@ -28,10 +51,9 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
 
-        if start_date:
-            start_date = datetime.fromisoformat(start_date)
-        if end_date:
-            end_date = datetime.fromisoformat(end_date)
+        # 裸 fromisoformat 对畸形日期会抛 ValueError 变 500，统一转 400
+        start_date = _parse_iso_datetime(start_date, 'start_date')
+        end_date = _parse_iso_datetime(end_date, 'end_date')
 
         kpis = DashboardKPIService.get_all_kpis(start_date, end_date)
         return Response(kpis)
@@ -52,18 +74,18 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def inventory_turnover(self, request):
         """Get inventory turnover analysis"""
-        days = int(request.query_params.get('days', 30))
+        days = _parse_bounded_int(request.query_params.get('days'), 'days', 30, 1, 3650)
         turnover = InventoryAnalyticsService.calculate_turnover_rate(days)
         return Response(turnover)
 
     @action(detail=False, methods=['get'])
     def slow_moving_items(self, request):
         """Get slow-moving inventory items (分页返回 results/count)"""
-        days = int(request.query_params.get('days', 90))
+        days = _parse_bounded_int(request.query_params.get('days'), 'days', 90, 1, 3650)
         items = InventoryAnalyticsService.get_slow_moving_items(days)
 
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
+        page = _parse_bounded_int(request.query_params.get('page'), 'page', 1, 1, 100000)
+        page_size = _parse_bounded_int(request.query_params.get('page_size'), 'page_size', 20, 1, 500)
         total = len(items)
         start = (page - 1) * page_size
         end = start + page_size
@@ -72,7 +94,7 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def slow_moving(self, request):
         """Alias for slow_moving_items - for frontend compatibility"""
-        days = int(request.query_params.get('aging_days', 90))
+        days = _parse_bounded_int(request.query_params.get('aging_days'), 'aging_days', 90, 1, 3650)
         items = InventoryAnalyticsService.get_slow_moving_items(days)
         return Response({'results': items, 'total': len(items)})
 
@@ -101,8 +123,8 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
             projects = projects.filter(manager_id=manager)
 
         # Pagination
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
+        page = _parse_bounded_int(request.query_params.get('page'), 'page', 1, 1, 100000)
+        page_size = _parse_bounded_int(request.query_params.get('page_size'), 'page_size', 20, 1, 500)
         total = projects.count()
         start = (page - 1) * page_size
         end = start + page_size

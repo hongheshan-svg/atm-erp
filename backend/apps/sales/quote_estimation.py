@@ -241,7 +241,10 @@ class QuoteEstimation(BaseModel):
         # 总成本
         self.total_cost = direct_cost + self.management_cost + self.risk_cost
 
-        # 建议报价
+        # 建议报价。目标利润率必须严格小于 100：等于 100 会让分母为 0 抛 DivisionByZero(500)，
+        # 大于 100 会算出负报价。字段本身没有 MaxValueValidator，这里兜底钳制。
+        if self.target_profit_rate >= 100:
+            self.target_profit_rate = Decimal('99.99')
         if self.target_profit_rate > 0:
             self.suggested_price = self.total_cost / (1 - self.target_profit_rate / 100)
         else:

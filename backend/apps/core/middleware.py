@@ -4,10 +4,14 @@ Middleware for audit logging
 
 import json
 import logging
+import re
 
 from django.utils.deprecation import MiddlewareMixin
 
 from .models import AuditLog
+
+#: 路径末段是 UUID 主键时也当作对象 ID（部分资源用 UUID 而非自增 id）
+_UUID_RE = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +118,18 @@ class AuditLogMiddleware(MiddlewareMixin):
                 except (ValueError, UnicodeDecodeError):
                     pass
 
+            # 解析被操作对象的主键：AuditLog 有 object_id 字段且建了
+            # (model_name, object_id) 索引，原先从不写入，等于「谁改了哪一条」查不出来，
+            # 该索引也永远用不上。
+            object_id = self._extract_object_id(request)
+
             # Create audit log
             AuditLog.objects.create(
                 user=request.user,
                 action=action,
                 model_name=model_name,
-                object_repr=model_name,
+                object_id=object_id,
+                object_repr=f'{model_name}#{object_id}' if object_id else model_name,
                 changes=changes,
                 ip_address=ip_address,
                 user_agent=user_agent[:200] if user_agent else None,
@@ -136,6 +146,24 @@ class AuditLogMiddleware(MiddlewareMixin):
         if len(parts) >= 3 and parts[1] == 'api':
             return parts[2]
         return 'unknown'
+
+    def _extract_object_id(self, request):
+        """从 URL 解析被操作对象的主键。
+
+        优先用 DRF 路由已解析出的 kwargs（pk/id），拿不到再退回取路径末段，
+        末段不是标识符（如 /api/sales/orders/ 或 /.../confirm/）时返回 None。
+        """
+        match = getattr(request, 'resolver_match', None)
+        if match:
+            for key in ('pk', 'id'):
+                value = (match.kwargs or {}).get(key)
+                if value not in (None, ''):
+                    return str(value)[:100]
+
+        segments = [seg for seg in request.path.split('/') if seg]
+        if segments and (segments[-1].isdigit() or _UUID_RE.fullmatch(segments[-1])):
+            return segments[-1][:100]
+        return None
 
     def _map_method_to_action(self, method):
         """Map HTTP method to action"""
