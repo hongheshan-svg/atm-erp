@@ -203,10 +203,12 @@ def check_customer_credit_for_order(customer, amount) -> tuple:
         return False, f'客户「{customer.name}」已停用，无法下单'
 
     try:
-        credit = CustomerCredit.objects.get(customer=customer, is_deleted=False)
+        credit = CustomerCredit.objects.select_for_update().get(customer=customer, is_deleted=False)
     except CustomerCredit.DoesNotExist:
         return True, 'OK'
 
+    # 刷新已用额度(避免 TOCTOU:基于过期 used_amount 检查后,下单前余额已被其他订单占用)
+    credit.update_used_amount()
     return credit.check_credit(Decimal(str(amount or 0)))
 
 

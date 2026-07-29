@@ -226,12 +226,13 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only_fields = ['payment_no', 'created_at', 'updated_at']
 
     def validate(self, attrs):
-        # 应付账款(AP)付款已收口到待付款项台账核销(settle);通用付款接口不再允许
-        # 直接登记 payment_type='AP'(会绕过 PayableItem/PayableSettlement,重演双轨记账)。
+        # 应付账款(AP/PAYABLE)付款已收口到待付款项台账核销(settle);通用付款接口不再允许
+        # 直接登记 payment_type='AP'/'PAYABLE' 或关联 ap 字段(会绕过 PayableItem/PayableSettlement,重演双轨记账)。
         # 台账内部核销(payable_service.settle)与 record_payment/match 等既有旧路径都经
         # ORM Payment.objects.create() 直连,不经本序列化器,不受此校验影响。
         payment_type = attrs.get('payment_type') or (self.instance.payment_type if self.instance else None)
-        if payment_type == 'AP':
+        # 扩展拦截: AP/PAYABLE 类型或任何关联 ap 字段的付款均拒绝(AR 付款用 ar 字段,不受影响)
+        if payment_type in {'AP', 'PAYABLE'} or attrs.get('ap') is not None:
             raise serializers.ValidationError(
                 {
                     'payment_type': (

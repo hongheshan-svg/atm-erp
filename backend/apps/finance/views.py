@@ -332,7 +332,7 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     def overdue(self, request):
         """Get overdue receivables."""
         today = timezone.now().date()
-        overdue_ars = self.get_queryset().filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL'])
+        overdue_ars = self.get_queryset().filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL', 'OVERDUE'])
         serializer = self.get_serializer(overdue_ars, many=True)
         return Response(serializer.data)
 
@@ -340,7 +340,8 @@ class AccountReceivableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMix
     def aging(self, request):
         """Get AR aging report."""
         today = timezone.now().date()
-        ars = self.get_queryset().filter(status__in=['PENDING', 'PARTIAL'])
+        # OVERDUE 也属于未清应收(周期任务将过期 PENDING/PARTIAL 置为 OVERDUE 后不应从账龄中消失)
+        ars = self.get_queryset().filter(status__in=['PENDING', 'PARTIAL', 'OVERDUE'])
 
         aging_data = {
             'current': 0,
@@ -399,7 +400,7 @@ class AccountPayableViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin,
     def overdue(self, request):
         """Get overdue payables."""
         today = timezone.now().date()
-        overdue_aps = self.get_queryset().filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL'])
+        overdue_aps = self.get_queryset().filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL', 'OVERDUE'])
         serializer = self.get_serializer(overdue_aps, many=True)
         return Response(serializer.data)
 
@@ -1840,7 +1841,11 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
 
     @action(detail=False, methods=['post'])
     def match_bank_statement(self, request):
-        """Match a bank statement to a payment schedule."""
+        """将银行流水(收款/CREDIT)关联到销售付款计划。
+        行锁防并发双核销；幂等(同一流水重复提交直接返回)；封顶(不超过剩余应收金额)。
+        """
+        from decimal import Decimal
+
         from .bank_statement_models import BankStatement
 
         schedule_id = request.data.get('schedule_id')
@@ -1849,33 +1854,51 @@ class PaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin
         if not schedule_id or not bank_statement_id:
             return Response({'error': '请提供付款计划ID和银行流水ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            schedule = PaymentSchedule.objects.get(id=schedule_id)
-            bank_statement = BankStatement.objects.get(id=bank_statement_id)
-        except (PaymentSchedule.DoesNotExist, BankStatement.DoesNotExist):
-            return Response({'error': '记录不存在'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            try:
+                # select_for_update 加行锁，防止并发请求对同一计划/流水重复核销
+                schedule = PaymentSchedule.objects.select_for_update().get(id=schedule_id)
+                bank_statement = BankStatement.objects.select_for_update().get(id=bank_statement_id)
+            except (PaymentSchedule.DoesNotExist, BankStatement.DoesNotExist):
+                return Response({'error': '记录不存在'}, status=status.HTTP_404_NOT_FOUND)
 
-        # 更新付款进度
-        amount = bank_statement.credit_amount
-        schedule.amount_paid += amount
+            # 幂等性检查：同一流水已关联该付款计划，直接返回（防重复提交/网络重试）
+            if schedule.bank_statements.filter(id=bank_statement_id).exists():
+                return Response(
+                    {
+                        'success': True,
+                        'schedule': PaymentScheduleSerializer(schedule).data,
+                        'message': '已核销（幂等）',
+                    }
+                )
 
-        if schedule.amount_paid >= schedule.amount_due:
-            schedule.status = 'PAID'
-            schedule.actual_paid_date = bank_statement.transaction_time.date()
-            schedule.reminder_status = 'COLLECTED'
-        elif schedule.amount_paid > 0:
-            schedule.status = 'PARTIAL'
+            # 封顶：本次核销金额不超过剩余应收，防止超额核销
+            amount = bank_statement.credit_amount or Decimal('0')
+            remaining = schedule.amount_due - schedule.amount_paid
+            if remaining <= Decimal('0'):
+                return Response({'error': '该付款计划已全额核销'}, status=status.HTTP_409_CONFLICT)
+            amount = min(amount, remaining)
 
-        schedule.save()
+            # 更新付款进度
+            schedule.amount_paid += amount
 
-        # 关联银行流水到付款计划
-        schedule.bank_statements.add(bank_statement)
+            if schedule.amount_paid >= schedule.amount_due:
+                schedule.status = 'PAID'
+                schedule.actual_paid_date = bank_statement.transaction_time.date()
+                schedule.reminder_status = 'COLLECTED'
+            elif schedule.amount_paid > 0:
+                schedule.status = 'PARTIAL'
 
-        # 更新银行流水状态
-        bank_statement.status = 'MATCHED'
-        bank_statement.match_type = 'AR'
-        bank_statement.project = schedule.project
-        bank_statement.save()
+            schedule.save()
+
+            # 关联银行流水到付款计划
+            schedule.bank_statements.add(bank_statement)
+
+            # 更新银行流水状态
+            bank_statement.status = 'MATCHED'
+            bank_statement.match_type = 'AR'
+            bank_statement.project = schedule.project
+            bank_statement.save()
 
         return Response(
             {
@@ -2041,49 +2064,24 @@ class PurchasePaymentScheduleViewSet(PermissionMixin, SoftDeleteMixin, UserTrack
 
     @action(detail=False, methods=['post'])
     def match_bank_statement(self, request):
-        """Match a bank statement to a purchase payment schedule."""
-        from .bank_statement_models import BankStatement
+        """已停用:采购付款计划银行流水匹配统一经待付款项核销台账(PayableItem/PayableSettlement)完成。
 
-        schedule_id = request.data.get('schedule_id')
-        bank_statement_id = request.data.get('bank_statement_id')
-
-        if not schedule_id or not bank_statement_id:
-            return Response({'error': '请提供付款计划ID和银行流水ID'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            schedule = PurchasePaymentSchedule.objects.get(id=schedule_id)
-            bank_statement = BankStatement.objects.get(id=bank_statement_id)
-        except (PurchasePaymentSchedule.DoesNotExist, BankStatement.DoesNotExist):
-            return Response({'error': '记录不存在'}, status=status.HTTP_404_NOT_FOUND)
-
-        # 更新付款进度
-        amount = bank_statement.debit_amount
-        schedule.amount_paid += amount
-
-        if schedule.amount_paid >= schedule.amount_due:
-            schedule.status = 'PAID'
-            schedule.actual_paid_date = bank_statement.transaction_time.date()
-            schedule.reminder_status = 'PAID'
-        elif schedule.amount_paid > 0:
-            schedule.status = 'PARTIAL'
-
-        schedule.save()
-
-        # 关联银行流水到付款计划
-        schedule.bank_statements.add(bank_statement)
-
-        # 更新银行流水状态
-        bank_statement.status = 'MATCHED'
-        bank_statement.match_type = 'AP'
-        bank_statement.project = schedule.project
-        bank_statement.save()
-
+        采购付款应通过「付款核销工作台」(POST /api/finance/payable-reconcile/settle/)完成核销，
+        直接修改 PurchasePaymentSchedule.amount_paid 会绕过待付款项台账,造成台账与计划不一致。
+        与 AccountPayableViewSet.record_payment 采用相同的停用策略(返回 409)。
+        """
+        # 采购付款计划的银行流水匹配已停用:
+        # 采购付款(AP)统一由「付款核销工作台」经待付款项台账(PayableItem/PayableSettlement)完成核销。
+        # 直接修改 PurchasePaymentSchedule.amount_paid 会绕过台账形成双轨记账。
         return Response(
             {
-                'success': True,
-                'schedule': PurchasePaymentScheduleSerializer(schedule).data,
-                'message': f'成功匹配付款 ¥{amount}，当前进度 {schedule.payment_progress}%',
-            }
+                'error': (
+                    '采购付款计划的银行流水匹配已停用: '
+                    '请在「付款核销工作台」核销对应银行流水，'
+                    '通过 POST /api/finance/payable-reconcile/settle/ 完成采购付款核销。'
+                )
+            },
+            status=status.HTTP_409_CONFLICT,
         )
 
 
@@ -2192,12 +2190,28 @@ class PaymentRequestViewSet(
 
             # 更新应付账款:上面 Payment.objects.create(payment_type='AP', ap=...) 已经过
             # Payment.save() 原子 F() 递增了 ap.amount_paid 一次;这里不再重复递增
-            # (历史 bug:曾在此处对同一笔付款再手动 F() 一次,导致 amount_paid 被双记,
-            # 见 apps.finance.tests.test_payable_ledger.PaymentRequestPayNoDoubleCountTest),
+            # (历史 bug:曾在此处对同一笔付款再手动 F() 一次,导致 amount_paid 被双记),
             # 只需刷新后让 AccountPayable.save() 按最新 amount_paid 重算 status。
             if payment_req.ap:
                 payment_req.ap.refresh_from_db(fields=['amount_paid'])
                 payment_req.ap.save(update_fields=['status'])
+
+                # 同步待付款项台账:PaymentRequest.pay() 直接创建 Payment(payment_type='AP'),
+                # Payment.save() 更新了 ap.amount_paid 但未感知 PayableItem 台账,导致后续
+                # 台账核销(settle)因 PayableItem.amount_paid 未更新而误判仍有余额可核销(双付款漏洞)。
+                # 此处将 PayableItem.amount_paid 与 ap.amount_paid 对齐以关闭该路径。
+                try:
+                    from apps.finance.payable_models import PayableItem
+                    pi = PayableItem.objects.select_for_update().get(
+                        source_type='ap',
+                        source_id=payment_req.ap_id,
+                        is_deleted=False,
+                    )
+                    pi.amount_paid = payment_req.ap.amount_paid
+                    pi.recalc_status()
+                    pi.save(update_fields=['amount_paid', 'status', 'updated_at'])
+                except Exception:  # noqa: BLE001 — 台账不存在或模型路径变更时不阻塞付款主流程
+                    pass
 
         return Response(
             {

@@ -159,8 +159,8 @@ class FixedAsset(BaseModel):
 
             self.asset_no = generate_code('FA')
 
-        # 计算净值
-        self.net_value = self.original_value - self.accumulated_depreciation
+        # 计算净值(加地板保护:净值不低于残值,防止折旧超额导致净值跑负)
+        self.net_value = max(self.residual_value, self.original_value - self.accumulated_depreciation)
 
         # 计算月折旧额
         if self.useful_life_months > 0 and self.original_value > 0:
@@ -170,15 +170,23 @@ class FixedAsset(BaseModel):
         super().save(*args, **kwargs)
 
     def calculate_depreciation(self, year, month):
-        """计算指定月份的折旧额"""
+        """计算指定月份的折旧额(封顶:不超过剩余可折旧额)"""
+        # 剩余可折旧额 = 原值 - 残值 - 累计折旧；为0或负时停止折旧
+        remaining = self.original_value - self.residual_value - self.accumulated_depreciation
+        if remaining <= Decimal('0'):
+            return Decimal('0')
+
         if self.depreciation_method == 'STRAIGHT':
-            return self.monthly_depreciation
+            calc = self.monthly_depreciation
         elif self.depreciation_method == 'DECLINING':
-            # 余额递减法: 净值 × 2/使用年限
+            # 余额递减法: 净值 × 2/使用年限，但不低于残值
             rate = Decimal('2') / Decimal(self.useful_life_months / 12)
-            return self.net_value * rate / Decimal('12')
+            calc = max(self.residual_value, self.net_value) * rate / Decimal('12')
         else:
-            return self.monthly_depreciation
+            calc = self.monthly_depreciation
+
+        # 封顶:本期折旧不超过剩余可折旧额
+        return min(calc, remaining)
 
 
 class AssetDepreciation(BaseModel):
@@ -503,6 +511,9 @@ class FixedAssetViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
 
                 if not exists:
                     depreciation_amount = asset.calculate_depreciation(year, month)
+                    # 跳过已折旧完毕的资产(calculate_depreciation 已返回0)
+                    if depreciation_amount <= Decimal('0'):
+                        continue
 
                     AssetDepreciation.objects.create(
                         asset=asset,
