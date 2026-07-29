@@ -186,13 +186,22 @@ class OutsourceMaterialIssueViewSet(
             # 创建库存出库记录
             from apps.inventory.models import Stock, StockMove
 
-            # 服务端发料校验：发料数 ≤ 外协行剩余(qty-sent_qty) 且 ≤ 仓库可用量
+            # 服务端发料校验：发料数 ≤ 外协行剩余(qty-sent_qty) 且 ≤ 仓库可用量。
+            # 按 outsource_line 累加本单各行数量后统一判上限——多行挂同一外协行时逐行独立比较会各读
+            # 同一未更新的 sent_qty 而全部通过，写库循环再 F() 累加即超发（审计 batch3 #8）。
+            from collections import defaultdict
+
+            cumulative_by_ol = defaultdict(float)
             for line in issue.lines.filter(is_deleted=False):
                 ol = line.outsource_line
+                cumulative_by_ol[line.outsource_line_id] += float(line.qty)
                 remaining = float(ol.qty) - float(ol.sent_qty)
-                if float(line.qty) > remaining:
+                if cumulative_by_ol[line.outsource_line_id] > remaining:
                     return Response(
-                        {'error': f'物料 {line.item.sku} 超发：外协行剩余可发 {remaining}，本次 {line.qty}'},
+                        {
+                            'error': f'物料 {line.item.sku} 超发：外协行剩余可发 {remaining}，'
+                            f'本单累计 {cumulative_by_ol[line.outsource_line_id]}'
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 stock = Stock.objects.filter(warehouse=issue.warehouse, item=line.item).first()
@@ -314,22 +323,29 @@ class OutsourceReceiptViewSet(
             total_qty = 0
             qualified_qty = 0
 
-            # 服务端收货校验：本次合格累计后 received_qty 不得超过外协行已发料量与订单量
+            # 服务端收货校验：本次合格累计后 received_qty 不得超过外协行已发料量与订单量。
+            # 按 outsource_line 累加本单各行合格量后统一判上限——多行挂同一外协行时逐行独立比较会各读
+            # 同一未更新的 received_qty 而全部通过，写库循环再 F() 累加即超收（审计 batch3 #8）。
+            from collections import defaultdict
+
+            cumulative_recv_by_ol = defaultdict(float)
             for line in receipt.lines.filter(is_deleted=False):
                 ol = line.outsource_line
+                cumulative_recv_by_ol[line.outsource_line_id] += float(line.qualified_qty)
+                accumulated = float(ol.received_qty) + cumulative_recv_by_ol[line.outsource_line_id]
                 # 不得超过订单量
-                if float(ol.received_qty) + float(line.qualified_qty) > float(ol.qty):
+                if accumulated > float(ol.qty):
                     return Response(
                         {
-                            'error': f'物料 {line.item.sku} 超收：订单量 {ol.qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'
+                            'error': f'物料 {line.item.sku} 超收：订单量 {ol.qty}，已收 {ol.received_qty}，本单累计合格 {cumulative_recv_by_ol[line.outsource_line_id]}'
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 # 不得超过已发料量（收货合格累计 ≤ 已发）
-                if float(ol.received_qty) + float(line.qualified_qty) > float(ol.sent_qty):
+                if accumulated > float(ol.sent_qty):
                     return Response(
                         {
-                            'error': f'物料 {line.item.sku} 收货超过已发料量：已发 {ol.sent_qty}，已收 {ol.received_qty}，本次合格 {line.qualified_qty}'
+                            'error': f'物料 {line.item.sku} 收货超过已发料量：已发 {ol.sent_qty}，已收 {ol.received_qty}，本单累计合格 {cumulative_recv_by_ol[line.outsource_line_id]}'
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
@@ -337,16 +353,30 @@ class OutsourceReceiptViewSet(
             for line in receipt.lines.filter(is_deleted=False):
                 # 创建库存入库记录（只入合格品）
                 if line.qualified_qty > 0:
-                    material_moves = StockMove.objects.filter(
-                        reference_type='OutsourceMaterialIssue',
-                        reference_id__in=receipt.outsource_order.material_issues.filter(is_deleted=False).values('id'),
-                        item=line.item,
-                        move_type='OUT_OUTSOURCE',
-                        status='COMPLETED',
+                    ol = line.outsource_line
+                    # 料成本按本外协行实际发出的原料归集，而非按成品物料回溯：外协发出原料与收回
+                    # 成品物料编码通常不同，原 item=line.item 过滤必然命中空 → 料成本恒 0、系统性
+                    # 低估外协入库成本（审计 batch3 #11）。改按 outsource_line 关联的发料行汇总料
+                    # 成本，除以计划加工数量得单位料成本，再叠加加工费。
+                    material_cost_total = Decimal('0')
+                    for issue_line in OutsourceMaterialIssueLine.objects.filter(
+                        outsource_line=ol,
                         is_deleted=False,
-                    ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))
-                    issued_qty = material_moves['total_qty'] or Decimal('0')
-                    material_unit_cost = material_moves['total_cost'] / issued_qty if issued_qty else Decimal('0')
+                        issue__is_deleted=False,
+                        issue__status='CONFIRMED',
+                    ):
+                        mv = StockMove.objects.filter(
+                            reference_type='OutsourceMaterialIssue',
+                            reference_id=issue_line.issue_id,
+                            item=issue_line.item,
+                            move_type='OUT_OUTSOURCE',
+                            status='COMPLETED',
+                            is_deleted=False,
+                        ).aggregate(total_qty=Sum('qty'), total_cost=Sum(F('qty') * F('unit_cost')))
+                        mv_qty = mv['total_qty'] or Decimal('0')
+                        mv_unit = (mv['total_cost'] / mv_qty) if mv_qty else Decimal('0')
+                        material_cost_total += mv_unit * issue_line.qty
+                    material_unit_cost = (material_cost_total / ol.qty) if ol.qty else Decimal('0')
                     StockMove.objects.create(
                         item=line.item,
                         warehouse_to=receipt.warehouse,

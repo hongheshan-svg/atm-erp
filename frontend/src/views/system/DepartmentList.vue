@@ -166,7 +166,7 @@
             <!-- 批量操作 -->
             <div v-if="selectedRows.length > 0" class="batch-toolbar">
               <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-              <el-button type="danger" size="small" @click="batchDelete">批量删除</el-button>
+              <el-button type="danger" size="small" @click="batchRemoveFromDept">批量移出部门</el-button>
               <el-button size="small" @click="batchExport">导出选中</el-button>
             </div>
             <el-table :data="deptMembers" v-loading="membersLoading" stripe size="small" @selection-change="handleSelectionChange">
@@ -263,10 +263,37 @@ import {
   Plus, Refresh, Search, OfficeBuilding, Folder, Edit, Delete,
   User, UserFilled, Avatar, InfoFilled, ArrowRight, Expand, Fold
 } from '@element-plus/icons-vue'
-import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment } from '@/api/auth'
+import { getDepartments, getUsers, createDepartment, updateDepartment, deleteDepartment, patchUser } from '@/api/auth'
 import { useBatchOperation } from '@/composables/useBatchOperation'
 
-const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/users/', { onSuccess: () => selectedDept.value && loadDeptMembers(selectedDept.value.id) })
+// 成员表格仅复用批量导出与选择逻辑;删除语义单独实现为「移出部门」,
+// 不能用 useBatchOperation 的 batchDelete —— 那会 DELETE /auth/users/{id}/ 软删用户账号,
+// 而非把成员移出部门(部门成员批量删除应只解除归属,保留账号)。
+const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/auth/users/', { onSuccess: () => selectedDept.value && loadDeptMembers(selectedDept.value.id) })
+
+// 批量移出部门:将选中成员的 department 置空(PATCH),保留其用户账号
+const batchRemoveFromDept = async () => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请至少选择一名成员')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定将选中的 ${selectedRows.value.length} 名成员移出该部门吗？(仅解除部门归属，不会删除用户账号)`,
+      '移出部门确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+    const ids = selectedRows.value.map((row: any) => row.id)
+    await Promise.all(ids.map((id: number) => patchUser(id, { department: null })))
+    ElMessage.success(`已移出 ${ids.length} 名成员`)
+    selectedRows.value = []
+    if (selectedDept.value) loadDeptMembers(selectedDept.value.id)
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('移出部门失败')
+    }
+  }
+}
 
 
 // 状态

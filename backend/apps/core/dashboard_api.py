@@ -14,9 +14,19 @@ from datetime import timedelta
 
 from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from .permissions import module_menu_permission
+
+# 各看板按所属业务模块菜单授权，替换裸 IsAuthenticated：
+# 此前任意登录用户都能拉取全公司财务/销售/生产经营数据。
+# 管理层看板跨模块汇总经营指标，归属「报表」模块。
+ExecutiveMenuAccess = module_menu_permission('reports')
+ProjectsMenuAccess = module_menu_permission('projects')
+SalesMenuAccess = module_menu_permission('sales')
+ProductionMenuAccess = module_menu_permission('production')
+FinanceMenuAccess = module_menu_permission('finance')
 
 
 class ExecutiveDashboardView(APIView):
@@ -24,7 +34,7 @@ class ExecutiveDashboardView(APIView):
     管理层仪表盘 - 全局视图
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ExecutiveMenuAccess]
 
     def get(self, request):
         today = timezone.now().date()
@@ -188,7 +198,7 @@ class ProjectManagerDashboardView(APIView):
     项目经理看板
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectsMenuAccess]
 
     def get(self, request):
         user = request.user
@@ -241,7 +251,7 @@ class SalesDashboardView(APIView):
     销售看板
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [SalesMenuAccess]
 
     def get(self, request):
         user = request.user
@@ -313,7 +323,7 @@ class ProductionDashboardView(APIView):
     生产看板
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProductionMenuAccess]
 
     def get(self, request):
         today = timezone.now().date()
@@ -386,7 +396,7 @@ class FinanceDashboardView(APIView):
     财务看板
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [FinanceMenuAccess]
 
     def get(self, request):
         today = timezone.now().date()

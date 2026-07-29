@@ -1351,10 +1351,31 @@ class DeliveryOrderViewSet(
     workflow_amount_field = None  # 使用自定义计算方法
     workflow_no_field = 'delivery_no'
 
+    def get_queryset(self):
+        """预注解发货单总金额，消除 total_amount property 的 N+1 查询。"""
+        from django.db.models import DecimalField, ExpressionWrapper, F, Q, Sum
+
+        return (
+            super()
+            .get_queryset()
+            .annotate(
+                _annotated_total=Sum(
+                    ExpressionWrapper(
+                        F('lines__qty') * F('lines__so_line__unit_price'),
+                        output_field=DecimalField(max_digits=15, decimal_places=2),
+                    ),
+                    filter=Q(lines__is_deleted=False),
+                )
+            )
+        )
+
     def _calculate_delivery_amount(self, delivery):
-        """计算发货单总金额"""
+        """计算发货单总金额；优先使用 get_queryset() 预注解的聚合值"""
+        annotated = getattr(delivery, '_annotated_total', None)
+        if annotated is not None:
+            return annotated
         total = 0
-        for line in delivery.lines.filter(is_deleted=False):
+        for line in delivery.lines.filter(is_deleted=False).select_related('so_line'):
             total += line.qty * line.so_line.unit_price
         return total
 
@@ -1455,24 +1476,37 @@ class DeliveryOrderViewSet(
     def confirm_prepared(self, request, pk=None):
         """仓库确认备货完成"""
         delivery = self.get_object()
-        # 允许从 APPROVED 或 PREPARING 状态确认备货
-        if delivery.status not in ['APPROVED', 'PREPARING']:
-            return Response({'error': '当前状态不能确认备货'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 创建出库记录并更新状态（同一事务保证一致性）
-        with transaction.atomic():
-            from django.db.models import F
-            from django.utils import timezone
+        from django.db.models import F
+        from django.utils import timezone
 
-            from apps.inventory.models import StockMove
+        from apps.inventory.models import StockMove
+        from apps.sales.models import DeliveryOrder, SalesOrderLine
 
-            for line in delivery.lines.filter(is_deleted=False):
-                if line.item:
+        try:
+            with transaction.atomic():
+                # 进入事务后对发货单加行锁并重新校验状态，防止双击/并发重复出库、重复累加
+                # delivered_qty（审计 batch3 #12，参考 _do_confirm 的正确写法）。
+                delivery = DeliveryOrder.objects.select_for_update().get(pk=delivery.pk)
+                if delivery.status not in ['APPROVED', 'PREPARING']:
+                    return Response({'error': '当前状态不能确认备货'}, status=status.HTTP_400_BAD_REQUEST)
+
+                for line in delivery.lines.filter(is_deleted=False):
+                    if not line.item:
+                        continue
+                    # 对销售订单行加锁并校验累计发货不超订单数量（审计 batch3 #13）
+                    so_line = SalesOrderLine.objects.select_for_update().get(pk=line.so_line_id)
+                    if so_line.delivered_qty + line.qty > so_line.qty:
+                        raise ValueError(
+                            f'物料 {line.item.sku} 累计发货 {so_line.delivered_qty + line.qty} '
+                            f'超过订单数量 {so_line.qty}'
+                        )
                     StockMove.objects.create(
                         item=line.item,
                         warehouse_from=delivery.warehouse,
                         qty=line.qty,
-                        unit_cost=line.so_line.unit_price,
+                        unit_cost=so_line.unit_price,
                         move_type='OUT_SALES',
                         reference_type='DeliveryOrder',
                         reference_id=delivery.id,
@@ -1481,15 +1515,16 @@ class DeliveryOrderViewSet(
                         status='COMPLETED',
                         created_by=request.user,
                     )
+                    # 锁内更新销售订单发货数量
+                    so_line.delivered_qty = F('delivered_qty') + line.qty
+                    so_line.save(update_fields=['delivered_qty'])
 
-                # 更新销售订单发货数量（使用 F() 防止并发竞争）
-                from apps.sales.models import SalesOrderLine
+                delivery.status = 'LOGISTICS_BOOKING'
+                delivery.save()
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-                SalesOrderLine.objects.filter(pk=line.so_line_id).update(delivered_qty=F('delivered_qty') + line.qty)
-
-            delivery.status = 'LOGISTICS_BOOKING'
-            delivery.save()
-
+        delivery.refresh_from_db()
         return Response({**DeliveryOrderSerializer(delivery).data, 'message': '备货完成，请采购预约物流'})
 
     # 采购确认物流

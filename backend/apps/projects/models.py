@@ -44,6 +44,7 @@ class Project(BaseModel):
     )
     start_date = models.DateField(verbose_name='开始日期')
     end_date = models.DateField(verbose_name='结束日期')
+    actual_end_date = models.DateField(null=True, blank=True, verbose_name='实际完成日期')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT', verbose_name='状态')
     progress = models.DecimalField(
         max_digits=5, decimal_places=2, default=0, verbose_name='项目整体进度', help_text='项目整体进度%'
@@ -73,6 +74,11 @@ class Project(BaseModel):
             from apps.core.utils import generate_code
 
             self.code = generate_code('PRJ', rule_type='PROJECT')
+        # 首次置为 COMPLETED 时自动记录实际完成日期
+        if self.status == 'COMPLETED' and not self.actual_end_date:
+            import datetime
+
+            self.actual_end_date = datetime.date.today()
         super().save(*args, **kwargs)
 
     def get_actual_material_cost(self):

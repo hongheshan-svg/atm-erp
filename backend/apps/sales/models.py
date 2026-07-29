@@ -403,9 +403,13 @@ class DeliveryOrder(BaseModel):
 
     @property
     def total_amount(self):
-        """计算发货单总金额"""
+        """计算发货单总金额；ViewSet.get_queryset() 预注解 _annotated_total 可避免 N+1"""
+        annotated = getattr(self, '_annotated_total', None)
+        if annotated is not None:
+            return annotated
+        # 回退路径（非 ViewSet 场景）：select_related 减少单次查询轮次
         total = 0
-        for line in self.lines.filter(is_deleted=False):
+        for line in self.lines.filter(is_deleted=False).select_related('so_line'):
             total += line.qty * line.so_line.unit_price
         return total
 

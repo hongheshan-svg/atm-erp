@@ -118,7 +118,11 @@ const searchForm = reactive<Record<string, any>>({
 const loadStock = async () => {
   loading.value = true
   try {
-    const params: Record<string, any> = { ...searchForm }
+    const params: Record<string, any> = {}
+    if (searchForm.warehouse) params.warehouse = searchForm.warehouse
+    // 后端 StockViewSet 用 SearchFilter(search_fields=item__sku/item__name),
+    // 物料搜索须走 search 参数;此前发 item_name 后端不识别,搜索被静默丢弃。
+    if (searchForm.item_name) params.search = searchForm.item_name
     const response = await getStocks(params)
     stocks.value = response.results || response || []
   } catch (error: any) {

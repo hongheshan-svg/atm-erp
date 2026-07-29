@@ -195,12 +195,24 @@ class StockAlertService:
         return Item.objects.none()
 
     @staticmethod
-    def _check_low_stock(rule):
-        """检查低库存"""
+    def _stock_qty_map(items):
+        """一次性聚合各物料在库总量，返回 {item_id: 总量}，避免逐物料 aggregate 的 N+1（审计 batch3 #5）。"""
         from apps.inventory.models import Stock
 
+        item_ids = [item.id for item in items]
+        rows = (
+            Stock.objects.filter(item_id__in=item_ids, is_deleted=False)
+            .values('item_id')
+            .annotate(total=Sum('qty_on_hand'))
+        )
+        return {row['item_id']: (row['total'] or Decimal('0')) for row in rows}
+
+    @staticmethod
+    def _check_low_stock(rule):
+        """检查低库存"""
         alerts = []
-        items = StockAlertService._get_items_for_rule(rule)
+        items = list(StockAlertService._get_items_for_rule(rule))
+        qty_map = StockAlertService._stock_qty_map(items)
 
         for item in items:
             # 获取安全库存阈值
@@ -210,9 +222,7 @@ class StockAlertService:
                 continue
 
             # 获取当前库存
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
-                'total'
-            ] or Decimal('0')
+            current_qty = qty_map.get(item.id, Decimal('0'))
 
             if current_qty < threshold:
                 # 创建预警
@@ -234,10 +244,9 @@ class StockAlertService:
     @staticmethod
     def _check_overstock(rule):
         """检查库存积压"""
-        from apps.inventory.models import Stock
-
         alerts = []
-        items = StockAlertService._get_items_for_rule(rule)
+        items = list(StockAlertService._get_items_for_rule(rule))
+        qty_map = StockAlertService._stock_qty_map(items)
         threshold_factor = rule.threshold_percentage or Decimal('200')  # 默认超过安全库存200%
 
         for item in items:
@@ -246,9 +255,7 @@ class StockAlertService:
 
             max_stock = item.safety_stock * threshold_factor / 100
 
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
-                'total'
-            ] or Decimal('0')
+            current_qty = qty_map.get(item.id, Decimal('0'))
 
             if current_qty > max_stock:
                 alert = StockAlertService._create_alert(
@@ -269,10 +276,9 @@ class StockAlertService:
     @staticmethod
     def _check_reorder(rule):
         """检查补货点"""
-        from apps.inventory.models import Stock
-
         alerts = []
-        items = StockAlertService._get_items_for_rule(rule)
+        items = list(StockAlertService._get_items_for_rule(rule))
+        qty_map = StockAlertService._stock_qty_map(items)
 
         for item in items:
             # 补货点 = 安全库存 + 日均消耗 * 提前期
@@ -281,9 +287,7 @@ class StockAlertService:
             if not reorder_point or reorder_point <= 0:
                 continue
 
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
-                'total'
-            ] or Decimal('0')
+            current_qty = qty_map.get(item.id, Decimal('0'))
 
             if current_qty <= reorder_point:
                 alert = StockAlertService._create_alert(
@@ -304,27 +308,36 @@ class StockAlertService:
     @staticmethod
     def _check_slow_moving(rule):
         """检查呆滞物料"""
-        from apps.inventory.models import Stock, StockMove
+        from apps.inventory.models import StockMove
 
         alerts = []
-        items = StockAlertService._get_items_for_rule(rule)
+        items = list(StockAlertService._get_items_for_rule(rule))
+        qty_map = StockAlertService._stock_qty_map(items)
         days = rule.threshold_days or 90  # 默认90天无出库
 
         cutoff_date = date.today() - timedelta(days=days)
 
+        # 一次性取出「截止日后有出库」的物料集合，避免逐物料 exists() 的 N+1（审计 batch3 #5）。
+        # 出库消耗为销售出库/项目领料；'OUT' 非法枚举值，原先恒匹配不到导致所有在库物料被误报呆滞（审计 high）。
+        item_ids = [item.id for item in items]
+        recently_out_ids = set(
+            StockMove.objects.filter(
+                item_id__in=item_ids,
+                move_type__in=['OUT_SALES', 'OUT_PROJECT'],
+                created_at__gte=cutoff_date,
+                is_deleted=False,
+            )
+            .values_list('item_id', flat=True)
+            .distinct()
+        )
+
         for item in items:
-            current_qty = Stock.objects.filter(item=item, is_deleted=False).aggregate(total=Sum('qty_on_hand'))[
-                'total'
-            ] or Decimal('0')
+            current_qty = qty_map.get(item.id, Decimal('0'))
 
             if current_qty <= 0:
                 continue
 
-            # 检查最近出库记录（出库消耗为销售出库/项目领料；'OUT' 非法枚举值，原先恒匹配不到导致
-            # 所有在库物料被误报呆滞 —— 审计 high）
-            last_out = StockMove.objects.filter(
-                item=item, move_type__in=['OUT_SALES', 'OUT_PROJECT'], created_at__gte=cutoff_date, is_deleted=False
-            ).exists()
+            last_out = item.id in recently_out_ids
 
             if not last_out:
                 alert = StockAlertService._create_alert(

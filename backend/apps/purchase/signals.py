@@ -82,6 +82,11 @@ def sync_bom_on_receipt(sender, instance, **kwargs):
             if not po_line or not po_line.bom_item:
                 continue
 
+            # 不合格品(FAILED)在 confirm 中不入库、不计入 po_line.received_qty，此处也不得计入 BOM
+            # 已收，否则 BOM 已收量虚高、与实际入库/采购收货口径不一致（审计 batch3 #10）。
+            if line.quality_status == 'FAILED':
+                continue
+
             bom = po_line.bom_item
 
             # 更新已收货数量
@@ -90,10 +95,11 @@ def sync_bom_on_receipt(sender, instance, **kwargs):
             # 更新实际到货日期
             bom.actual_delivery_date = instance.receipt_date
 
-            # 更新实际成本(如果有)
+            # 更新实际成本(如果有)。total_cost 按累计已收量计算，反映实际到货成本，
+            # 不能用 actual_qty（计划/订单量）否则部分收货时高估（审计 batch3 #10）。
             if line.po_line and line.po_line.unit_price:
                 bom.actual_cost = line.po_line.unit_price
-                bom.total_cost = bom.actual_cost * bom.actual_qty
+                bom.total_cost = bom.actual_cost * (bom.received_qty or 0)
 
             # 更新下单状态
             if bom.received_qty >= bom.planned_qty:

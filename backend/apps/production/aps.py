@@ -14,7 +14,7 @@ Project Operation Scheduling
 """
 
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.db import models, transaction
 from django.db.models import Sum
@@ -650,38 +650,39 @@ def post_completion_stock_moves(order, completed_qty, materials, user):
     其既有 StockMove 公共接口（save() 在 status=COMPLETED 时原子更新库存余额）。
     """
     # 延迟导入避免与 inventory 形成模块级循环依赖
-    from apps.inventory.models import StockMove
+    from apps.inventory.models import Stock, StockMove
 
-    moves = []
     today = timezone.now().date()
 
-    # 完工入库
+    # 完工入库移动先构建、延后确定单价：产成品成本 = 本次归集的领料成本分摊，无料成本时
+    # 退回 item.standard_cost，避免恒 0 单价并入库存稀释加权平均成本（审计 batch3 #17）。
+    completion_move = None
     if order.item and completed_qty and completed_qty > 0:
         target_warehouse = order.item.default_warehouse
         if target_warehouse is None:
             raise serializers.ValidationError(
                 {'warehouse': '产品未配置默认仓库，无法生成完工入库，请先为物料设置默认仓库'}
             )
-        moves.append(
-            StockMove(
-                item=order.item,
-                warehouse_to=target_warehouse,
-                qty=completed_qty,
-                unit_cost=Decimal('0'),
-                # inventory 现有 move_type 无 IN_PRODUCTION；ADJUSTMENT + warehouse_to
-                # 在 inventory 侧路由为入库且方向由仓库字段决定，用 reference 区分来源
-                move_type='ADJUSTMENT',
-                reference_type='ScheduleOrder',
-                reference_id=order.id,
-                project=order.project,
-                move_date=today,
-                status='COMPLETED',
-                notes=f'生产完工入库 {order.order_no}',
-                created_by=user,
-            )
+        completion_move = StockMove(
+            item=order.item,
+            warehouse_to=target_warehouse,
+            qty=completed_qty,
+            unit_cost=Decimal('0'),  # 领料归集后回填，见下方
+            # inventory 现有 move_type 无 IN_PRODUCTION；ADJUSTMENT + warehouse_to
+            # 在 inventory 侧路由为入库且方向由仓库字段决定，用 reference 区分来源
+            move_type='ADJUSTMENT',
+            reference_type='ScheduleOrder',
+            reference_id=order.id,
+            project=order.project,
+            move_date=today,
+            status='COMPLETED',
+            notes=f'生产完工入库 {order.order_no}',
+            created_by=user,
         )
 
     # 领料出库
+    material_moves = []
+    total_material_cost = Decimal('0')
     for line in materials or []:
         item_id = line.get('item_id')
         qty_raw = line.get('qty')
@@ -713,7 +714,16 @@ def post_completion_stock_moves(order, completed_qty, materials, user):
         if src_warehouse is None:
             raise serializers.ValidationError({'materials': f'物料 {mat_item} 未指定领料仓库且无默认仓库'})
 
-        moves.append(
+        # 归集料成本用于完工入库单价：按源仓当前加权平均成本 × 领料数量累计。加权平均成本在
+        # 出库时不变，故此处读取即为本次消耗单价（审计 batch3 #17）。
+        avg_cost = (
+            Stock.objects.filter(warehouse=src_warehouse, item=mat_item)
+            .values_list('weighted_avg_cost', flat=True)
+            .first()
+        ) or Decimal('0')
+        total_material_cost += avg_cost * qty
+
+        material_moves.append(
             StockMove(
                 item=mat_item,
                 warehouse_from=src_warehouse,
@@ -730,11 +740,26 @@ def post_completion_stock_moves(order, completed_qty, materials, user):
             )
         )
 
-    # 逐条保存（StockMove.save 内含库存原子更新与库存不足校验）
-    for mv in moves:
-        mv.save()
+    # 回填完工入库单价：优先按归集料成本分摊，无料成本则退回标准成本，杜绝恒 0 稀释加权平均。
+    if completion_move is not None:
+        if total_material_cost > 0:
+            completion_move.unit_cost = (total_material_cost / Decimal(str(completed_qty))).quantize(
+                Decimal('0.0001'), rounding=ROUND_HALF_UP
+            )
+        else:
+            completion_move.unit_cost = order.item.standard_cost or Decimal('0')
 
-    return moves
+    # 逐条保存（StockMove.save 内含库存原子更新与库存不足校验）。先领料出库消耗库存，
+    # 再完工入库，保证成本归集与库存扣减顺序一致。
+    saved = []
+    for mv in material_moves:
+        mv.save()
+        saved.append(mv)
+    if completion_move is not None:
+        completion_move.save()
+        saved.append(completion_move)
+
+    return saved
 
 
 # =====================

@@ -58,6 +58,10 @@ export function getInventoryValuation(params?: Record<string, any>) {
 export function getMoves(params?: Record<string, any>) {
   return request({ url: '/inventory/moves/', method: 'get', params })
 }
+// 按当前筛选条件对全量数据聚合入库/出库数量与金额(后端聚合,不受分页限制)
+export function getMoveStats(params?: Record<string, any>) {
+  return request({ url: '/inventory/moves/stats/', method: 'get', params })
+}
 export function createTransfer(data: any) {
   return request({ url: '/inventory/moves/transfer/', method: 'post', data })
 }

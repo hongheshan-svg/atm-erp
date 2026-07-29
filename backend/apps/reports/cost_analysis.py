@@ -7,17 +7,21 @@ from decimal import Decimal
 
 from django.db.models import F, Sum
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.permissions import module_menu_permission
 from apps.projects.models import Project, TimeLog
+
+# 报表类接口按「报表」菜单模块授权（reports 映射含 reports/analytics/system:report），
+# 替换裸 IsAuthenticated，避免任意登录用户读取全公司成本数据。
+ReportsMenuAccess = module_menu_permission('reports')
 
 
 class ProjectCostAnalysisView(APIView):
     """项目成本分析"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         project_id = request.query_params.get('project')
@@ -76,8 +80,13 @@ class ProjectCostAnalysisView(APIView):
             project_id=project_id, move_type='OUT_PROJECT', status='COMPLETED', is_deleted=False
         ).aggregate(total=Sum(F('qty') * F('unit_cost')))['total'] or Decimal('0')
 
-        # 总成本
-        total_cost = purchase_cost + outsource_cost + labor_cost + material_cost
+        # 总成本（实际发生成本 = 外协 + 人工 + 物料消耗）
+        # 采购单金额(purchase_cost)仅作采购口径展示，不计入总成本：
+        # 采购件入库(IN_PURCHASE)后领用到项目会产生 OUT_PROJECT 出库，已计入 material_cost，
+        # 若再叠加采购单金额则同一批物料被重复计算。此处与权威口径
+        # cost_service.calculate_project_profit / Project.get_actual_material_cost 保持一致
+        # （项目物料成本以 OUT_PROJECT 领用为准）。
+        total_cost = outsource_cost + labor_cost + material_cost
 
         # 合同金额：优先使用关联销售订单金额，否则使用项目预算
         contract_amount = Decimal('0')
@@ -93,9 +102,8 @@ class ProjectCostAnalysisView(APIView):
         gross_profit = contract_amount - total_cost
         gross_margin = (gross_profit / contract_amount * 100) if contract_amount > 0 else 0
 
-        # 成本构成
+        # 成本构成（与 total_cost 口径一致，不含采购下单金额）
         cost_breakdown = [
-            {'name': '采购成本', 'value': float(purchase_cost), 'percentage': 0},
             {'name': '外协成本', 'value': float(outsource_cost), 'percentage': 0},
             {'name': '人工成本', 'value': float(labor_cost), 'percentage': 0},
             {'name': '物料成本', 'value': float(material_cost), 'percentage': 0},
@@ -145,7 +153,7 @@ class ProjectCostAnalysisView(APIView):
 class ProjectCostComparisonView(APIView):
     """多项目成本对比"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         project_ids = request.query_params.getlist('projects')
@@ -218,7 +226,7 @@ class ProjectCostComparisonView(APIView):
 class CostTrendView(APIView):
     """成本趋势分析"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         months = int(request.query_params.get('months', 12))

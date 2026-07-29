@@ -638,12 +638,14 @@ class DeliveryOrderSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f'订单明细 {so_line_id} 的发货数量必须大于 0')
             if so_line.so_id != delivery.so_id:
                 raise serializers.ValidationError(f'订单明细 {so_line_id} 不属于当前发货单的销售订单')
-            # 其他未完成草稿发货单已占用、但尚未计入 delivered_qty 的数量
+            # 其他已占用、但尚未计入 delivered_qty 的在途发货单数量。发货单 submit 后转
+            # PENDING/APPROVED/PREPARING，其 qty 要到 confirm_prepared 才累加进 delivered_qty，
+            # 这段在途量必须纳入占用统计，否则可对同一订单行再建满额单绕过上限（审计 batch3 #13）。
             reserved = DeliveryOrderLine.objects.filter(
                 so_line=so_line,
                 is_deleted=False,
                 delivery__is_deleted=False,
-                delivery__status='DRAFT',
+                delivery__status__in=['DRAFT', 'PENDING', 'APPROVED', 'PREPARING'],
             ).exclude(delivery_id=delivery.id).aggregate(s=Sum('qty'))['s'] or Decimal('0')
             allowed = (so_line.qty or Decimal('0')) - (so_line.delivered_qty or Decimal('0')) - reserved
             if qty > allowed:

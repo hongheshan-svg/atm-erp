@@ -13,9 +13,14 @@ from datetime import date, timedelta
 
 from django.db.models import Avg, Count, F, Q, Sum
 from django.db.models.functions import TruncMonth
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.core.permissions import module_menu_permission
+
+# 行业报表按「报表」菜单模块授权（reports 映射含 reports/analytics/system:report），
+# 替换裸 IsAuthenticated，避免任意登录用户读取全公司毛利/客户价值等经营数据。
+ReportsMenuAccess = module_menu_permission('reports')
 
 # =============================================================================
 # 报表API
@@ -25,7 +30,7 @@ from rest_framework.views import APIView
 class ProjectProfitabilityReportView(APIView):
     """项目毛利分析报表"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.projects.cost_tracking import ProjectBudget, ProjectCostRecord
@@ -135,7 +140,7 @@ class ProjectProfitabilityReportView(APIView):
 class EquipmentLifecycleReportView(APIView):
     """设备全生命周期分析"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.inventory.spare_parts import SparePartConsumption
@@ -249,7 +254,7 @@ class EquipmentLifecycleReportView(APIView):
 class CapacityUtilizationReportView(APIView):
     """产能利用率分析"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.production.aps import ScheduleOrder
@@ -337,7 +342,7 @@ class CapacityUtilizationReportView(APIView):
 class CustomerValueReportView(APIView):
     """客户价值分析"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.masterdata.models import Customer
@@ -426,7 +431,7 @@ class CustomerValueReportView(APIView):
 class ProjectDeliveryReportView(APIView):
     """项目交付分析"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.projects.models import Project
@@ -505,7 +510,7 @@ class ProjectDeliveryReportView(APIView):
 class OutsourceAnalysisReportView(APIView):
     """外协分析报表"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReportsMenuAccess]
 
     def get(self, request):
         from apps.purchase.outsource_tracking import OutsourceCapability, OutsourceInspection, OutsourceOrder
