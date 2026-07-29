@@ -5,7 +5,6 @@
 
 from datetime import datetime
 
-from django.db import transaction
 from django.db.models import Max
 
 
@@ -75,8 +74,10 @@ class ItemCodeGenerator:
     @classmethod
     def _get_next_sequence(cls, prefix):
         """
-        获取指定前缀的下一个流水号
-        使用数据库事务锁确保并发安全
+        获取指定前缀的下一个未被占用的流水号。
+
+        注意：取号本身不预占编码，跨请求并发仍可能取到同一号，
+        由调用方在插入撞唯一约束时重新取号（见 ItemViewSet.import_excel）。
 
         Args:
             prefix: 编码前缀（一级代码+二级代码+年份），如 '1125'
@@ -86,30 +87,36 @@ class ItemCodeGenerator:
         """
         from apps.masterdata.models import Item
 
-        with transaction.atomic():
-            # 查询该前缀下的最大流水号
-            # 使用 select_for_update 锁定记录，确保并发安全
-            max_code = (
-                Item.objects.filter(sku__startswith=prefix, is_deleted=False)
-                .select_for_update()
-                .aggregate(max_code=Max('sku'))['max_code']
-            )
+        # 必须用 all_objects：Item.sku 是全表唯一约束，软删除的行仍占着编码，
+        # 原先按 is_deleted=False 取最大值会把已软删除的号重新发出去，插入必撞唯一约束。
+        #
+        # 原实现的 `.select_for_update().aggregate(Max(...))` 起不到并发保护：
+        # 行锁只能锁住已存在的行，锁不住「即将插入的下一号」；且取号事务在调用方
+        # 真正 create 之前就已提交、锁早已释放。因此这里改为「跳过已被占用的号」，
+        # 并要求调用方在 create 撞 IntegrityError 时重新取号（见 ItemViewSet.import_excel）。
+        max_code = Item.all_objects.filter(sku__startswith=prefix).aggregate(max_code=Max('sku'))['max_code']
 
-            if max_code and len(max_code) >= len(prefix) + 6:
-                # 提取流水号部分
-                try:
-                    current_seq = int(max_code[len(prefix) : len(prefix) + 6])
-                    next_seq = current_seq + 1
-                except (ValueError, IndexError):
-                    next_seq = 1
-            else:
+        if max_code and len(max_code) >= len(prefix) + 6:
+            # 提取流水号部分
+            try:
+                current_seq = int(max_code[len(prefix) : len(prefix) + 6])
+                next_seq = current_seq + 1
+            except (ValueError, IndexError):
                 next_seq = 1
+        else:
+            next_seq = 1
 
-            # 检查是否超过最大值
-            if next_seq > 999999:
-                raise ValueError(f'编码前缀 {prefix} 的流水号已达到最大值 999999')
+        # 历史数据里可能存在编码格式不规整的行，导致 Max 取到的并非真正最大号，
+        # 逐个跳过已占用的流水号，避免直接发出一个必然冲突的编码。
+        taken = set(Item.all_objects.filter(sku__startswith=prefix).values_list('sku', flat=True))
+        while next_seq <= 999999 and f'{prefix}{next_seq:06d}' in taken:
+            next_seq += 1
 
-            return next_seq
+        # 检查是否超过最大值
+        if next_seq > 999999:
+            raise ValueError(f'编码前缀 {prefix} 的流水号已达到最大值 999999')
+
+        return next_seq
 
     @classmethod
     def parse_code(cls, code):

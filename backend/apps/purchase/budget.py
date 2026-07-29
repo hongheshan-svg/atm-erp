@@ -400,29 +400,26 @@ class BudgetService:
 
     @staticmethod
     def release_budget(budget_id: int, reference_no: str, reference_id: int = None, user=None):
-        """释放某引用占用的预算（预留和/或消费一并释放），幂等：已释放则不重复。
+        """释放某引用占用的预算（预留和/或消费一并释放），幂等：无活跃占用则不重复释放。
 
         用于订单取消/撤回时回退占用。返回 True 表示本次有实际释放，None 表示无占用或已释放。
         """
         with transaction.atomic():
             budget = PurchaseBudget.objects.select_for_update().get(id=budget_id)
 
-            # 幂等：该引用已有 RELEASE 记录则视为已释放
-            if BudgetUsageRecord.objects.filter(
-                budget=budget,
-                usage_type='RELEASE',
-                reference_no=reference_no,
-                reference_id=reference_id,
-                is_deleted=False,
-            ).exists():
-                return None
-
-            occupations = BudgetUsageRecord.objects.filter(
-                budget=budget,
-                reference_no=reference_no,
-                reference_id=reference_id,
-                is_deleted=False,
-            ).exclude(usage_type='RELEASE')
+            # 幂等判据用「是否还有未释放的占用记录」，不能用「是否存在 RELEASE 记录」：
+            # RELEASE 记录是永久审计痕迹，用它做判据会让『确认→撤回→再确认』的
+            # 第二次撤回直接短路返回，占用再也释放不掉。
+            occupations = list(
+                BudgetUsageRecord.objects.select_for_update()
+                .filter(
+                    budget=budget,
+                    reference_no=reference_no,
+                    reference_id=reference_id,
+                    is_deleted=False,
+                )
+                .exclude(usage_type='RELEASE')
+            )
 
             reserved_total = sum((r.amount for r in occupations if r.is_reserved), Decimal('0'))
             used_total = sum((r.amount for r in occupations if not r.is_reserved), Decimal('0'))
@@ -436,6 +433,17 @@ class BudgetService:
                 budget.used_amount = F('used_amount') - used_total
             budget.save()
             budget.refresh_from_db()
+
+            # 行级用量同样要回退：consume_budget 会给 BudgetLine.used_amount 加数，
+            # 这里不减就变成只增不减，行级预算控制随撤回次数逐步失真。
+            line_deltas = {}
+            for record in occupations:
+                if record.budget_line_id and not record.is_reserved:
+                    line_deltas[record.budget_line_id] = (
+                        line_deltas.get(record.budget_line_id, Decimal('0')) + record.amount
+                    )
+            for line_id, delta in line_deltas.items():
+                BudgetLine.objects.filter(id=line_id).update(used_amount=F('used_amount') - delta)
 
             # 释放后若不再超支则从 EXCEEDED 恢复为 ACTIVE
             if budget.status == 'EXCEEDED' and not budget.is_exceeded:
@@ -452,6 +460,11 @@ class BudgetService:
                 description='释放预算占用',
                 created_by=user,
             )
+
+            # 占用记录标记为已释放，否则再次确认时 consume_budget 的幂等短路会命中
+            # 这些残留记录直接 return，used_amount 永久少计一笔。
+            for record in occupations:
+                record.soft_delete()
 
         return True
 

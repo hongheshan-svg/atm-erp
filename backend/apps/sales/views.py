@@ -180,6 +180,16 @@ class SalesQuotationViewSet(
             return Response({'error': '请指定交货日期'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            # 上面的状态校验在事务外且无行锁，挡不住并发：双击或客户端重试会让两个请求
+            # 都读到 APPROVED、各自建出一张销售订单。这里取行锁后在事务内复核状态，
+            # 后到的请求会看到已被前一个事务置为 ACCEPTED 而被拒绝。
+            quotation = SalesQuotation.objects.select_for_update().get(pk=quotation.pk)
+            if quotation.status not in ['APPROVED', 'SENT']:
+                return Response(
+                    {'error': '报价单状态已变更（可能已转换过），无法重复转换为订单'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             so = SalesOrder.objects.create(
                 customer=quotation.customer,
                 project=quotation.project,

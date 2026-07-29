@@ -5,6 +5,7 @@ Views for masterdata app.
 from io import BytesIO
 
 import pandas as pd
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -225,6 +226,8 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
 
                 # 获取物料编码（可以为空）
                 sku = ''
+                # 非 None 表示本行编码是自动生成的，插入冲突时可据此重新取号
+                auto_code_args = None
                 if sku_col and pd.notna(row.get(sku_col)):
                     sku = str(row[sku_col]).strip()
 
@@ -344,7 +347,9 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                                 continue
 
                             # 使用编码生成器生成编码
-                            sku = ItemCodeGenerator.generate_code(level1_code, level2_code)
+                            # 记下取号参数，插入撞唯一约束时可据此重新取号
+                            auto_code_args = (level1_code, level2_code)
+                            sku = ItemCodeGenerator.generate_code(*auto_code_args)
 
                     # 检查文件内重复（按编码）
                     if sku in processed_skus:
@@ -422,8 +427,7 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                     unit = unit_map.get(unit_val, 'PCS')
 
                     # 创建新物料（不更新已有物料）
-                    item = Item.objects.create(
-                        sku=sku,
+                    item_fields = dict(
                         name=name,
                         specification=specification,
                         brand=parsed_brand,
@@ -446,6 +450,20 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                         created_by=request.user,
                         updated_by=request.user,
                     )
+
+                    # 自动分配的 SKU 并未在生成时被预占，并发导入/取号可能与其它请求
+                    # 撞上唯一约束；这种情况下重新取号重试，而不是整行报错丢失。
+                    item = None
+                    for attempt in range(3):
+                        try:
+                            with transaction.atomic():
+                                item = Item.objects.create(sku=sku, **item_fields)
+                            break
+                        except IntegrityError:
+                            if auto_code_args is None or attempt == 2:
+                                raise
+                            sku = ItemCodeGenerator.generate_code(*auto_code_args)
+                            processed_skus.add(sku)
                     created_count += 1
 
                 except Exception as e:

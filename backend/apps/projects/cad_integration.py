@@ -621,19 +621,14 @@ class CreoIntegrationService:
 
     @staticmethod
     def validate_creo_file(file_path):
-        """验证Creo文件格式"""
-        import os
+        """验证Creo文件格式（支持带版本号的文件名，如 part.prt.5 / assembly.asm.12）"""
+        import re
 
-        ext = os.path.splitext(file_path)[1].lower()
-
-        all_extensions = []
-        for ext_list in CAD_FILE_EXTENSIONS['CREO'].values():
-            all_extensions.extend(ext_list)
-
-        # Creo文件可能带版本号，如 .prt.5, .asm.12
-        base_ext = ext.split('.')[0] if '.' in ext else ext
-
-        return ext in all_extensions or base_ext in ['.prt', '.asm', '.drw', '.mfg']
+        # 原实现对 'part.prt.5' 用 splitext 只能切出 '.5'，再 `ext.split('.')[0]`
+        # 得到的是空串（ext 本身以点开头），两个判断恒为假；而 CAD_FILE_EXTENSIONS
+        # 里的 '.prt.*' 是字面量、不做通配匹配。结果是带版本号的 Creo 文件一律被判非法。
+        # 改为直接用正则匹配「主扩展名 + 可选版本号」。
+        return bool(re.search(r'\.(prt|asm|drw|mfg)(\.\d+)?$', file_path.lower()))
 
     @staticmethod
     def extract_version_from_filename(filename):
