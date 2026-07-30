@@ -33,14 +33,25 @@ DB_PASSWORD='erp_password'
 TEST_DB_NAME="test_${DB_NAME}"
 TEST_SECRET_KEY='precheck-only-secret-not-for-production'
 
-# CI 的 checkout 里没有 backend/.env 与仓库根 .env(被 .gitignore 忽略),本地机器上常有。
+# CI 的 checkout 里没有 backend/.env 与仓库根 .env(被 .gitignore 忽略,也不是标准 onboarding
+# 产物——仓库里没有 backend/.env.example,干净 clone 通常没有这两个文件),本地机器上可能有。
 # backend/config/settings.py 用 python-decouple 的 config() 读取约 50 个键,本脚本只用 -e
 # 显式注入并覆盖了 11 个(DJANGO_SETTINGS_MODULE/SECRET_KEY/DEBUG/DB_*/REDIS_*,os.environ
 # 优先于 .env,安全)。其余键(PASSWORD_MIN_LENGTH/MAX_LOGIN_ATTEMPTS/INVENTORY_COSTING_METHOD
 # 等测试可能断言的配置)不屏蔽的话,本地会取 .env 里的值、CI 取代码默认值——同一次改动
-# 本地绿、CI 红,而且因机器而异(.env 是否存在、内容是否相同)。挂载 /dev/null 让容器内
-# 读到空文件,等价于 CI 的"文件不存在";宿主机上该文件本就不存在时,这个挂载同样安全。
-ENV_ISOLATION_MOUNTS=(-v /dev/null:/repo/backend/.env:ro -v /dev/null:/repo/.env:ro)
+# 本地绿、CI 红,而且因机器而异(.env 是否存在、内容是否相同)。
+#
+# 只在宿主机上该文件确实存在时才挂载 /dev/null 屏蔽它:父挂载 -v "$REPO_ROOT:/repo:ro"
+# 是只读的,docker 要在挂载点位置创建一个文件才能盖上 /dev/null,只读文件系统上创建不了
+# ——文件不存在时这个挂载会让 docker run 直接 exit 125(已实测复现,不是"安全的空操作")。
+# 文件不存在时,容器内本来就读不到它,已经和 CI 一致,不需要额外处理。
+ENV_ISOLATION_MOUNTS=()
+if [[ -e "$REPO_ROOT/backend/.env" ]]; then
+  ENV_ISOLATION_MOUNTS+=(-v /dev/null:/repo/backend/.env:ro)
+fi
+if [[ -e "$REPO_ROOT/.env" ]]; then
+  ENV_ISOLATION_MOUNTS+=(-v /dev/null:/repo/.env:ro)
+fi
 
 MODE='auto'
 CUR_MODE_FLAG=''

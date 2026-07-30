@@ -187,7 +187,7 @@ pytest / pytest-django 的版本从 `requirements-dev.txt` 解析(与 ruff 版�
 
    代价是,当既有迁移文件被**改写或删除**时,本地测试库会与迁移状态不一致(新增迁移无妨,`--keepdb` 仍会正常 apply)。为此提供 `--fresh-db` 强制重建,并在文档中写明触发条件。
 
-2. **容器内屏蔽 `backend/.env` 与仓库根 `.env`**(`docker run` 加 `-v /dev/null:/repo/backend/.env:ro -v /dev/null:/repo/.env:ro`)。这两个文件在本机常存在,但被 `.gitignore` 排除,CI 的 checkout 里没有。`backend/config/settings.py` 用 `python-decouple` 的 `config()` 读取约 50 个键,脚本只用 `-e` 显式注入并覆盖了其中 11 个(`DJANGO_SETTINGS_MODULE`/`SECRET_KEY`/`DEBUG`/`DB_*`/`REDIS_*`,`os.environ` 优先于 `.env`,安全)。其余键(`PASSWORD_MIN_LENGTH`/`MAX_LOGIN_ATTEMPTS`/`LOCKOUT_DURATION_MINUTES`/`INVENTORY_COSTING_METHOD` 等测试可能断言的配置)如果不屏蔽,本地会取 `.env` 里的值、CI 取代码默认值——同一次改动本地绿、CI 红,而且因机器而异(`.env` 是否存在、内容是否相同不受版本控制约束)。挂载 `/dev/null` 让容器内读到空文件,等价于 CI 的"文件不存在";宿主机上该文件本就不存在时,这个挂载同样安全(不会报错,只是空操作)。
+2. **容器内屏蔽 `backend/.env` 与仓库根 `.env`**(存在时才加 `-v /dev/null:/repo/backend/.env:ro` / `-v /dev/null:/repo/.env:ro`,两个文件各自独立判断)。这两个文件不是标准 onboarding 产物(仓库里没有 `backend/.env.example`),在本机可能存在,但被 `.gitignore` 排除,CI 的 checkout 里没有。`backend/config/settings.py` 用 `python-decouple` 的 `config()` 读取约 50 个键,脚本只用 `-e` 显式注入并覆盖了其中 11 个(`DJANGO_SETTINGS_MODULE`/`SECRET_KEY`/`DEBUG`/`DB_*`/`REDIS_*`,`os.environ` 优先于 `.env`,安全)。其余键(`PASSWORD_MIN_LENGTH`/`MAX_LOGIN_ATTEMPTS`/`LOCKOUT_DURATION_MINUTES`/`INVENTORY_COSTING_METHOD` 等测试可能断言的配置)如果不屏蔽,本地会取 `.env` 里的值、CI 取代码默认值——同一次改动本地绿、CI 红,而且因机器而异(`.env` 是否存在、内容是否相同不受版本控制约束)。挂载 `/dev/null` 让容器内读到空文件,等价于 CI 的"文件不存在"。**这个挂载必须以宿主机侧文件是否存在为前提**:父挂载 `-v "$REPO_ROOT:/repo:ro"` 是只读的,docker 需要在挂载点位置创建一个文件才能盖上 `/dev/null`,文件不存在时只读文件系统上创建不了,`docker run` 会直接 `exit 125`(不是安全的空操作,已实测复现)。文件本就不存在时,容器内本来就读不到它,已经和 CI 一致,不需要额外处理。
 
 其余两点不构成执行差异,但需要知晓:
 
