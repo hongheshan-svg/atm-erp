@@ -119,10 +119,18 @@ load_groups(){
     raw="$ERP_TEST_GROUPS"
   else
     need_docker
+    # resolve_base_image 失败时会 exit 1;必须先落到一个独立的赋值语句里(分两行写,
+    # 不能 local base="$(resolve_base_image)" 那样合并——合并写法的返回值是 local 自身
+    # 的 0,set -e 不会触发,失败会被静默吞掉)。不要把它内联进下面的 docker run 参数列表,
+    # 否则它跑在更深一层的 command substitution 子 shell 里,失败只会终止那层子 shell、
+    # 产出空字符串,被当成空镜像名传给 docker run,导致报错来自 docker 而不是这里,
+    # 退出码也变成 docker 的而不是承诺的 1。
+    local base
+    base="$(resolve_base_image)"
     raw="$(docker run --rm --entrypoint python \
       -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
       -e PYTHONDONTWRITEBYTECODE=1 \
-      "$(resolve_base_image)" -c '
+      "$base" -c '
 import sys
 sys.path.insert(0, "/repo/scripts/ci")
 import backend_test_matrix as m
