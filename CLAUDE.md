@@ -110,18 +110,40 @@ docker compose logs -f app
 docker compose up -d --build app
 ```
 
-### Pre-commit Hooks
+### 本地 CI 预检（推荐，无需装 Python 包）
+
+本机与 `erp-app` 容器都**没有** ruff（它只在 `requirements-dev.txt`，生产镜像不装 dev 依赖），
+因此改完后端代码务必先跑预检，否则格式/F821 之类问题只会在 CI 里暴露：
 
 ```bash
-# 安装 pre-commit（首次）
-pip install pre-commit
-pre-commit install
+bash scripts/precheck.sh          # 检查（等价于 CI 的 Backend / preflight → Lint and formatting）
+bash scripts/precheck.sh --fix    # 自动修复可修项
+```
 
-# 手动运行所有 hooks
+脚本通过官方镜像 `ghcr.io/astral-sh/ruff:<版本>` 运行，版本从 `requirements-dev.txt` 动态读取，
+检查范围 `backend/` + `scripts/ci/` 与 CI 逐字一致。
+
+启用提交前门禁（每个 clone 首次执行一次，`core.hooksPath` 不随仓库同步）：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit` 拦两件事：直接提交 main、暂存的 `backend/`+`scripts/ci/` Python 未过 ruff。
+非 Python 改动会跳过预检（不启动 Docker）。绕过用 `git commit --no-verify`。
+
+### Pre-commit Hooks（可选，覆盖更全但需装包）
+
+```bash
+pip install pre-commit && pre-commit install
 pre-commit run --all-files
 ```
 
 Hooks 内容：Ruff (lint+format) on `backend/`、ESLint on `frontend/src/`、禁止直接提交到 main 分支、trailing-whitespace/end-of-file-fixer/check-yaml/check-added-large-files(500KB)。
+
+**两条路径互斥**：`core.hooksPath` 指向 `.githooks` 后，pre-commit 装到 `.git/hooks/` 的钩子不再被调用。
+要改用 pre-commit 框架，先 `git config --unset core.hooksPath`。注意其 ruff hook 的 `files: ^backend/`
+不覆盖 `scripts/ci/`，而 CI 会检查该目录。
 
 ### Integration Tests (pytest)
 

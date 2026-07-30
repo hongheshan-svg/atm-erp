@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# ATM-ERP 提交前门禁（随仓库版本化，通过 git config core.hooksPath .githooks 启用）
+#
+# 拦两件事，都是历史上 CI 反复变红的直接原因：
+#   1. 直接提交到 main
+#   2. backend/ 或 scripts/ci/ 下的 Python 改动没过 ruff（CI 的 preflight 第一步就跑它，
+#      1 分半内就会把整条流水线判红）
+#
+# 绕过: git commit --no-verify
+# 自动修: bash scripts/precheck.sh --fix
+#
+# 注：本 hook 与 .pre-commit-config.yaml 是两条互斥的路径 —— core.hooksPath 一旦指向
+# .githooks，pre-commit 框架装到 .git/hooks/ 的钩子就不再被调用。若要改用 pre-commit
+# 框架（覆盖更全，含 eslint），先 git config --unset core.hooksPath 再 pre-commit install。
+set -euo pipefail
+
+c_err(){ printf '\033[0;31m[\xe2\x9c\x97]\033[0m %s\n' "$1" >&2; }
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$branch" == "main" ]]; then
+  c_err "禁止直接提交到 main，请切到 feature 分支。"
+  exit 1
+fi
+
+# 只有改到 CI lint 范围内的 Python 文件时才跑预检，避免纯前端/文档提交也等 Docker
+mapfile -t staged_py < <(
+  git diff --cached --name-only --diff-filter=ACMR \
+    | grep -E '^(backend/|scripts/ci/).*\.py$' || true
+)
+
+if [[ ${#staged_py[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+if ! bash "$REPO_ROOT/scripts/precheck.sh"; then
+  c_err "ruff 预检未通过，提交已中止（CI 的 Backend / preflight 会以同样方式失败）。"
+  c_err "自动修复: bash scripts/precheck.sh --fix"
+  exit 1
+fi
