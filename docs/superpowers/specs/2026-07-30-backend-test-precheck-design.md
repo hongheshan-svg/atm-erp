@@ -181,9 +181,13 @@ pytest / pytest-django 的版本从 `requirements-dev.txt` 解析(与 ruff 版�
 
 ## 7. 与 CI 的已知差异
 
-只有一处刻意的差异:**预检使用 `--keepdb`,CI 每次新建库**。
+两处刻意的差异:
 
-代价是,当既有迁移文件被**改写或删除**时,本地测试库会与迁移状态不一致(新增迁移无妨,`--keepdb` 仍会正常 apply)。为此提供 `--fresh-db` 强制重建,并在文档中写明触发条件。
+1. **预检使用 `--keepdb`,CI 每次新建库**。
+
+   代价是,当既有迁移文件被**改写或删除**时,本地测试库会与迁移状态不一致(新增迁移无妨,`--keepdb` 仍会正常 apply)。为此提供 `--fresh-db` 强制重建,并在文档中写明触发条件。
+
+2. **容器内屏蔽 `backend/.env` 与仓库根 `.env`**(`docker run` 加 `-v /dev/null:/repo/backend/.env:ro -v /dev/null:/repo/.env:ro`)。这两个文件在本机常存在,但被 `.gitignore` 排除,CI 的 checkout 里没有。`backend/config/settings.py` 用 `python-decouple` 的 `config()` 读取约 50 个键,脚本只用 `-e` 显式注入并覆盖了其中 11 个(`DJANGO_SETTINGS_MODULE`/`SECRET_KEY`/`DEBUG`/`DB_*`/`REDIS_*`,`os.environ` 优先于 `.env`,安全)。其余键(`PASSWORD_MIN_LENGTH`/`MAX_LOGIN_ATTEMPTS`/`LOCKOUT_DURATION_MINUTES`/`INVENTORY_COSTING_METHOD` 等测试可能断言的配置)如果不屏蔽,本地会取 `.env` 里的值、CI 取代码默认值——同一次改动本地绿、CI 红,而且因机器而异(`.env` 是否存在、内容是否相同不受版本控制约束)。挂载 `/dev/null` 让容器内读到空文件,等价于 CI 的"文件不存在";宿主机上该文件本就不存在时,这个挂载同样安全(不会报错,只是空操作)。
 
 其余两点不构成执行差异,但需要知晓:
 

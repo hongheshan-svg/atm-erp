@@ -62,7 +62,15 @@ while read -r _local_ref local_sha _remote_ref remote_sha || [[ -n "${_local_ref
     continue
   fi
   c_info "$_local_ref: 基线 $base"
-  git diff --name-only "$base" "$local_sha" >> "$changed" 2>/dev/null || true
+  # 上面只校验了 $base,没校验 $local_sha——理论上 git 不该让你 push 一个本地对象库里
+  # 没有的 commit,但不额外验证它,直接让下面这条 git diff 兜底: base 或 local_sha
+  # 任一不可达,git diff 都会 fatal 且非零退出,被 `if !` 捕获后报错并 exit 1,而不是像
+  # 原来的 `2>/dev/null || true` 那样把报错文本和退出码一起吞掉、让这条 ref 对 $changed
+  # 零贡献(唯一 ref 时会导致 `[[ ! -s "$changed" ]]` 命中、静默 exit 0——门禁形同虚设)。
+  if ! git diff --name-only "$base" "$local_sha" >> "$changed"; then
+    c_err "无法计算 $_local_ref 的改动(git diff 失败,见上方报错)。修复后重试,或 git push --no-verify 跳过。"
+    exit 1
+  fi
 done
 
 if [[ ! -s "$changed" ]]; then

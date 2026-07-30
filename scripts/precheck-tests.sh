@@ -13,6 +13,7 @@ set -euo pipefail
 
 c_info(){ printf '\033[0;36m[i]\033[0m %s\n' "$1"; }
 c_ok(){   printf '\033[0;32m[\xe2\x9c\x93]\033[0m %s\n' "$1"; }
+c_warn(){ printf '\033[0;33m[!]\033[0m %s\n' "$1" >&2; }
 c_err(){  printf '\033[0;31m[\xe2\x9c\x97]\033[0m %s\n' "$1" >&2; }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -32,7 +33,17 @@ DB_PASSWORD='erp_password'
 TEST_DB_NAME="test_${DB_NAME}"
 TEST_SECRET_KEY='precheck-only-secret-not-for-production'
 
+# CI 的 checkout 里没有 backend/.env 与仓库根 .env(被 .gitignore 忽略),本地机器上常有。
+# backend/config/settings.py 用 python-decouple 的 config() 读取约 50 个键,本脚本只用 -e
+# 显式注入并覆盖了 11 个(DJANGO_SETTINGS_MODULE/SECRET_KEY/DEBUG/DB_*/REDIS_*,os.environ
+# 优先于 .env,安全)。其余键(PASSWORD_MIN_LENGTH/MAX_LOGIN_ATTEMPTS/INVENTORY_COSTING_METHOD
+# 等测试可能断言的配置)不屏蔽的话,本地会取 .env 里的值、CI 取代码默认值——同一次改动
+# 本地绿、CI 红,而且因机器而异(.env 是否存在、内容是否相同)。挂载 /dev/null 让容器内
+# 读到空文件,等价于 CI 的"文件不存在";宿主机上该文件本就不存在时,这个挂载同样安全。
+ENV_ISOLATION_MOUNTS=(-v /dev/null:/repo/backend/.env:ro -v /dev/null:/repo/.env:ro)
+
 MODE='auto'
+CUR_MODE_FLAG=''
 FROM_FILES=''
 FRESH_DB=0
 
@@ -60,10 +71,23 @@ ATM-ERP 后端测试本地预检
 EOF
 }
 
+# --all/--plan-only/--up/--down/--clean/--list-groups 互斥:同一次调用只能选一个模式,
+# 后写覆盖先写会让 `--plan-only --all` 这类组合默默按最后一个参数执行(其中一个方向
+# 会真的跑一次全量测试)。用互斥检测报错,而不是猜用户想要哪种。
+# --fresh-db / --from-files 不经过这里——它们是修饰符,可以和任意模式叠加。
+set_mode(){
+  if [[ "$MODE" != 'auto' ]]; then
+    c_err "模式开关互斥: 已指定 $CUR_MODE_FLAG,不能再加 $2(--fresh-db/--from-files 是修饰符,不受此限制)"
+    exit 2
+  fi
+  MODE="$1"
+  CUR_MODE_FLAG="$2"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --all)         MODE='all'; shift ;;
-    --plan-only)   MODE='plan'; shift ;;
+    --all)         set_mode 'all' '--all'; shift ;;
+    --plan-only)   set_mode 'plan' '--plan-only'; shift ;;
     --from-files)
       if [[ $# -lt 2 ]]; then
         c_err "--from-files 需要一个参数(文件路径)"
@@ -72,10 +96,10 @@ while [[ $# -gt 0 ]]; do
       fi
       FROM_FILES="$2"; shift 2 ;;
     --fresh-db)    FRESH_DB=1; shift ;;
-    --up)          MODE='up'; shift ;;
-    --down)        MODE='down'; shift ;;
-    --clean)       MODE='clean'; shift ;;
-    --list-groups) MODE='list-groups'; shift ;;
+    --up)          set_mode 'up' '--up'; shift ;;
+    --down)        set_mode 'down' '--down'; shift ;;
+    --clean)       set_mode 'clean' '--clean'; shift ;;
+    --list-groups) set_mode 'list-groups' '--list-groups'; shift ;;
     --help)        usage; exit 0 ;;
     *)             c_err "未知参数: $1"; usage >&2; exit 2 ;;
   esac
@@ -129,6 +153,7 @@ load_groups(){
     base="$(resolve_base_image)"
     raw="$(docker run --rm --entrypoint python \
       -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
+      "${ENV_ISOLATION_MOUNTS[@]}" \
       -e PYTHONDONTWRITEBYTECODE=1 \
       "$base" -c '
 import sys
@@ -310,7 +335,18 @@ if [[ "$MODE" == 'plan' || "$MODE" == 'auto' || "$MODE" == 'all' ]]; then
   if [[ "$MODE" == 'all' ]]; then
     WANT_FULL=1; WANT_INTEGRATION=1; WANT_MODULES=()
   else
-    classify_changes < <(collect_changed_files)
+    # 不用 `classify_changes < <(collect_changed_files)`:进程替换(`< <(...)`)不传播
+    # 子进程的退出码。collect_changed_files 内部三条分支(cat "$FROM_FILES" / git diff
+    # 基线1 / git diff 基线2)任意一条失败,classify_changes 读到的只是空输入,产出
+    # WANT_FULL=0/WANT_INTEGRATION=0/WANT_MODULES=() ——和"确实没有改动"完全同一个结果,
+    # 命中下面的零命中分支,打印绿色"跳过测试预检"退出 0。"算不出该测什么"绝不能等价于
+    # "不用测",所以改成落临时文件、显式检查 collect_changed_files 自身的退出码。
+    changed_list="$(mktemp)"; trap 'rm -f "$changed_list"' EXIT
+    if ! collect_changed_files > "$changed_list"; then
+      c_err "无法获取改动文件列表(基线不可用?)。可用 --from-files 显式指定,或 git push --no-verify 跳过。"
+      exit 1
+    fi
+    classify_changes < "$changed_list"
   fi
 
   # 无任何命中时立即退出,不加载分组定义(那会启动容器)。
@@ -326,6 +362,16 @@ if [[ "$MODE" == 'plan' || "$MODE" == 'auto' || "$MODE" == 'all' ]]; then
 
   load_groups
   select_groups
+
+  # 改动映射到了模块(WANT_MODULES 非空),但没有一个 CI 分组声明覆盖它——多半是新 app
+  # 尚未加进 scripts/ci/backend_test_matrix.py 的 GROUPS。这是合法的中间状态(新 app 会先
+  # 落地再补分组),不应该让预检报错,但必须让人知道"这部分改动本地实际上没有被测试覆盖",
+  # 而不是静默并入 integration-only 结果、最后照样打印"测试预检通过"。
+  if [[ ${#WANT_MODULES[@]} -gt 0 && ${#SELECTED_GROUPS[@]} -eq 0 ]]; then
+    for m in "${WANT_MODULES[@]}"; do
+      c_warn "模块 $m 不属于任何 CI 分组(可能需要更新 scripts/ci/backend_test_matrix.py),其测试未在本地执行"
+    done
+  fi
 
   if [[ "$MODE" == 'plan' ]]; then
     print_plan
@@ -357,6 +403,7 @@ LOG_DIR="$(mktemp -d -t erp-precheck-XXXXXX)"
 docker_test_run(){
   docker run --rm --network "$NET" \
     -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
+    "${ENV_ISOLATION_MOUNTS[@]}" \
     -e PYTHONDONTWRITEBYTECODE=1 \
     -e DJANGO_SETTINGS_MODULE=config.settings \
     -e SECRET_KEY="$TEST_SECRET_KEY" \
@@ -448,7 +495,7 @@ run_integration(){
 BASE_IMAGE="$(resolve_base_image)"
 RUNNER_IMAGE="$(resolve_runner_image "$BASE_IMAGE")"
 ensure_stack
-[[ $FRESH_DB -eq 1 ]] && drop_test_db
+if [[ $FRESH_DB -eq 1 ]]; then drop_test_db; fi
 if ! test_db_exists; then
   c_info "首次运行:正在创建测试库并执行全量迁移,约需 7 分钟。之后会复用,不再重复。"
 fi
