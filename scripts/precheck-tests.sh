@@ -375,7 +375,7 @@ run_django_group(){
     local -a tlist
     IFS=',' read -r -a tlist <<< "$targets"
     c_info "分组${idx}: ${name}"
-    if docker_test_run --entrypoint python "$BASE_IMAGE" \
+    if docker_test_run --entrypoint python "$RUNNER_IMAGE" \
         -W error::DeprecationWarning manage.py test --noinput --keepdb "${tlist[@]}" \
         > "$LOG_DIR/group-$idx.log" 2>&1; then
       c_ok "分组${idx} 通过  $(grep -E '^Ran ' "$LOG_DIR/group-$idx.log" | tail -1)"
@@ -391,7 +391,59 @@ run_django_group(){
   return 1
 }
 
+# 薄镜像 tag 里同时编码了 pytest 版本与基础镜像版本 ——
+# 任何一方变化都会 miss 并触发重建,不需要人记得刷新。
+# 相比每次容器内 pip install(约 6 秒),薄镜像还能离线运行。
+resolve_runner_image(){
+  local pytest_ver django_ver base base_tag tag
+  pytest_ver="$(sed -n 's/^pytest==\([0-9][^[:space:]]*\).*/\1/p' \
+    "$REPO_ROOT/backend/requirements-dev.txt" | head -1)"
+  django_ver="$(sed -n 's/^pytest-django==\([0-9][^[:space:]]*\).*/\1/p' \
+    "$REPO_ROOT/backend/requirements-dev.txt" | head -1)"
+  if [[ -z "$pytest_ver" || -z "$django_ver" ]]; then
+    c_err "无法从 backend/requirements-dev.txt 解析 pytest / pytest-django 版本"
+    exit 1
+  fi
+  base="$1"
+  base_tag="${base##*:}"
+  tag="erp-test-runner:${pytest_ver}-${base_tag}"
+  if ! docker image inspect "$tag" >/dev/null 2>&1; then
+    # 本函数的返回值走 stdout(调用方用 RUNNER_IMAGE="$(resolve_runner_image ...)" 捕获),
+    # c_info 默认写 stdout——不重定向到 stderr 的话,这条提示会和 tag 一起被吞进变量,
+    # 拼成多行字符串传给 docker run,报 "invalid reference format"(已手工复现)。
+    c_info "构建测试镜像 $tag(生产镜像 + pytest,仅首次)" >&2
+    # -t 必须给:没有它 docker build 只产出一个匿名(<none>:<none>)镜像,既不会被下面的
+    # image inspect 缓存命中(每次都重建),docker run 时也找不到本地同名镜像,转而向
+    # Docker Hub 拉取 "erp-test-runner" 这个不存在的公共仓库,报 403/未知镜像(已手工复现)。
+    docker build -q -t "$tag" \
+      --build-arg "BASE_IMAGE=$base" \
+      --build-arg "PYTEST_SPEC=pytest==$pytest_ver pytest-django==$django_ver" \
+      -f "$REPO_ROOT/docker/test-runner.Dockerfile" \
+      "$REPO_ROOT" >/dev/null
+  fi
+  printf '%s\n' "$tag"
+}
+
+# 对应 CI 的: pytest tests/integration -v --tb=short -W error::DeprecationWarning
+#   --reuse-db        等价于 Django 的 --keepdb,复用测试库
+#   -p no:cacheprovider  仓库是只读挂载,写不了 .pytest_cache,不禁用会有一条干扰性 warning
+run_integration(){
+  c_info 'integration (pytest)'
+  if docker_test_run --entrypoint pytest "$RUNNER_IMAGE" \
+      tests/integration -q --tb=short -W error::DeprecationWarning \
+      --reuse-db -p no:cacheprovider \
+      > "$LOG_DIR/integration.log" 2>&1; then
+    c_ok "integration 通过  $(grep -E '[0-9]+ passed' "$LOG_DIR/integration.log" | tail -1)"
+    return 0
+  fi
+  c_err 'integration 失败'
+  grep -E '^(FAILED|ERROR)' "$LOG_DIR/integration.log" | head -20 >&2 || true
+  c_err "完整日志: $LOG_DIR/integration.log"
+  return 1
+}
+
 BASE_IMAGE="$(resolve_base_image)"
+RUNNER_IMAGE="$(resolve_runner_image "$BASE_IMAGE")"
 ensure_stack
 [[ $FRESH_DB -eq 1 ]] && drop_test_db
 if ! test_db_exists; then
@@ -402,6 +454,10 @@ failed=0
 for idx in "${SELECTED_GROUPS[@]+"${SELECTED_GROUPS[@]}"}"; do
   run_django_group "$idx" || failed=1
 done
+
+if [[ $WANT_INTEGRATION -eq 1 ]]; then
+  run_integration || failed=1
+fi
 
 if [[ $failed -eq 1 ]]; then
   c_err "测试预检未通过。修复后重试,确需跳过用 git push --no-verify。"
