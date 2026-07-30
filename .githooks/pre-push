@@ -13,6 +13,7 @@
 set -euo pipefail
 
 c_info(){ printf '\033[0;36m[i]\033[0m %s\n' "$1"; }
+c_warn(){ printf '\033[0;33m[!]\033[0m %s\n' "$1" >&2; }
 c_err(){  printf '\033[0;31m[\xe2\x9c\x97]\033[0m %s\n' "$1" >&2; }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -41,10 +42,26 @@ while read -r _local_ref local_sha _remote_ref remote_sha || [[ -n "${_local_ref
     base="$remote_sha"
   fi
 
+  # remote_sha 非空不等于本地对象库里真的有这个 commit——常见于 rebase 后 force-push
+  # (远端旧 tip 已经不在本地历史里)或浅克隆。这种情况下 `git diff "$base" ...` 会
+  # fatal: bad object、exit 128。以前这里直接 `git diff ... 2>/dev/null || true`,把报错
+  # 文本和退出码一起吞掉,这条 ref 对 $changed 零贡献——如果这是本次 push 唯一的 ref,
+  # 会让 `[[ ! -s "$changed" ]]` 命中、静默 exit 0 放行,等于没跑测试却报绿,门禁形同虚设
+  # (已用 `git diff --name-only ffff...ff HEAD` 手工复现 fatal: bad object)。
+  # 这里先校验对象是否存在,不存在就打警告并回落到 origin/main(与新分支首推同一套基线),
+  # 而不是静默吞掉。
+  if [[ -n "$base" ]] && ! git cat-file -e "$base" 2>/dev/null; then
+    c_warn "基线 $base 在本地对象库中不存在(rebase 后 force-push 或浅克隆常见),回落到 origin/main"
+    base="$(git rev-parse --verify --quiet origin/main || git rev-parse --verify --quiet main || true)"
+  fi
+
   if [[ -z "$base" ]]; then
-    # 没有可用基线(例如全新仓库,origin/main 也不存在),放行交给 CI
+    # 回落之后仍然没有可用基线(例如全新仓库,origin/main 也不存在),放行交给 CI——
+    # 但必须可见,不能是无声的 exit 0。
+    c_warn "无法为 $_local_ref 确定改动基线,本地跳过预检,交由 CI 兜底"
     continue
   fi
+  c_info "$_local_ref: 基线 $base"
   git diff --name-only "$base" "$local_sha" >> "$changed" 2>/dev/null || true
 done
 
