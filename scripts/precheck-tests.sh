@@ -396,10 +396,13 @@ run_django_group(){
 # 相比每次容器内 pip install(约 6 秒),薄镜像还能离线运行。
 resolve_runner_image(){
   local pytest_ver django_ver base base_tag tag
+  # requirements-dev.txt 不可读时(稀疏检出等),pipefail 会让 sed|head 的非零退出码直接
+  # 传给 set -e,在下面已写好的判空报错之前就杀掉脚本/子 shell——同类风险
+  # resolve_base_image() 已用 || true 处理过,这里照做,把报错交给下面的 if 分支。
   pytest_ver="$(sed -n 's/^pytest==\([0-9][^[:space:]]*\).*/\1/p' \
-    "$REPO_ROOT/backend/requirements-dev.txt" | head -1)"
+    "$REPO_ROOT/backend/requirements-dev.txt" | head -1)" || true
   django_ver="$(sed -n 's/^pytest-django==\([0-9][^[:space:]]*\).*/\1/p' \
-    "$REPO_ROOT/backend/requirements-dev.txt" | head -1)"
+    "$REPO_ROOT/backend/requirements-dev.txt" | head -1)" || true
   if [[ -z "$pytest_ver" || -z "$django_ver" ]]; then
     c_err "无法从 backend/requirements-dev.txt 解析 pytest / pytest-django 版本"
     exit 1
