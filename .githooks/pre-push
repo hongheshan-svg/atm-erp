@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ATM-ERP 推送前门禁(随仓库版本化,通过 git config core.hooksPath .githooks 启用)
+#
+# 跑与本次改动相关的 CI 后端测试分组。存在的理由和 pre-commit 一样:
+# 最近 40 次 CI run 里有 4 次挂在真实测试失败(分组①②④ 与 integration 都挂过),
+# 而本地没有任何等价的执行路径,只能推上去才发现。
+#
+# 分组按改动自动挑选: 改单个业务 app 约 30 秒,改 apps/core 或 config 则全量约 6 分半。
+# 与后端无关的改动(docs/、nginx/ 等)秒级放行,完全不启动 Docker。
+#
+# 绕过: git push --no-verify
+# 预热(首次建库约 7 分钟,建议先手动跑一次): bash scripts/precheck-tests.sh --up
+set -euo pipefail
+
+c_info(){ printf '\033[0;36m[i]\033[0m %s\n' "$1"; }
+c_err(){  printf '\033[0;31m[\xe2\x9c\x97]\033[0m %s\n' "$1" >&2; }
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+ZERO='^0*$'
+
+changed="$(mktemp)"
+trap 'rm -f "$changed"' EXIT
+
+# git 通过 stdin 传入每个待推送 ref: <local_ref> <local_sha> <remote_ref> <remote_sha>
+# 注意: 这里不能写 `IFS= read`——IFS 置空会关掉字段分隔,导致一整行都被塞进 _local_ref、
+# 其余三个变量全部为空(已手工复现)。这条 stdin 需要按空白切成 4 个字段,必须用默认 IFS。
+#
+# `|| [[ -n "${_local_ref:-}" ]]`: 与 scripts/precheck-tests.sh 里 classify_changes 的坑
+# 同源——read 读到不带末尾换行符的最后一行时,内容进了变量但 read 自身返回非零,裸
+# `while read` 会把这次判假当成 EOF、漏掉最后一条待推送 ref。这个坑本项目已经踩过一次
+# 并修过(见 5f61959),这里同样处理。`${_local_ref:-}` 是为了在 stdin 完全为空(理论上
+# 不会发生,但 set -u 下第一次 read 就失败时变量从未被赋值)时不触发 unbound variable。
+while read -r _local_ref local_sha _remote_ref remote_sha || [[ -n "${_local_ref:-}" ]]; do
+  # local_sha 全 0 = 删除远程分支,没有代码变更可查
+  [[ "$local_sha" =~ $ZERO ]] && continue
+
+  if [[ "$remote_sha" =~ $ZERO ]]; then
+    # remote_sha 全 0 = 该分支在远端尚不存在(新分支首推),以 main 为基线
+    base="$(git rev-parse --verify --quiet origin/main || git rev-parse --verify --quiet main || true)"
+  else
+    base="$remote_sha"
+  fi
+
+  if [[ -z "$base" ]]; then
+    # 没有可用基线(例如全新仓库,origin/main 也不存在),放行交给 CI
+    continue
+  fi
+  git diff --name-only "$base" "$local_sha" >> "$changed" 2>/dev/null || true
+done
+
+if [[ ! -s "$changed" ]]; then
+  exit 0
+fi
+
+sort -u "$changed" -o "$changed"
+
+if ! bash "$REPO_ROOT/scripts/precheck-tests.sh" --from-files "$changed"; then
+  c_err '推送已中止。确需跳过预检用: git push --no-verify'
+  exit 1
+fi
