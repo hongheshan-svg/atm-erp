@@ -157,5 +157,107 @@ if [[ "$MODE" == 'list-groups' ]]; then
   exit 0
 fi
 
+# ── 改动分类(纯 bash,零外部依赖)──
+# 采用白名单语义: 只有明确列出的路径才触发测试,未列出的一律放行。
+# 这样新增目录默认不会拖慢 push,代价由 CI 全量兜底。
+classify_changes(){
+  WANT_FULL=0
+  WANT_INTEGRATION=0
+  WANT_MODULES=()
+  local f app
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in
+      # apps/core 提供全站 BaseModel/权限 Mixin/审计/工作流,config 是 settings 与根 urls,
+      # 两者影响所有模块。全量只比单跑分组① 多约 40 秒(分组①本身就是耗时大头),值得。
+      backend/apps/core/*|backend/config/*|backend/manage.py|backend/requirements*.txt|backend/pyproject.toml)
+        WANT_FULL=1; WANT_INTEGRATION=1 ;;
+      backend/apps/*/*)
+        app="${f#backend/apps/}"; app="${app%%/*}"
+        WANT_MODULES+=("apps.$app"); WANT_INTEGRATION=1 ;;
+      backend/tests/*)
+        WANT_INTEGRATION=1 ;;
+      # 分组① 的 test_menu_sync_toplevel / test_permission_bootstrap 直接读这个文件核对菜单权限。
+      # 改前端路由却忘了同步菜单权限,是本项目真实踩过的坑。
+      # 这里用 apps.core 代表该分组,而不是硬编码序号 1 —— CI 调整分组顺序时仍然正确。
+      frontend/src/router/index.ts)
+        WANT_MODULES+=('apps.core') ;;
+      *) ;;
+    esac
+  done
+}
+
+# 把 WANT_MODULES / WANT_FULL 解析成升序去重的分组序号,写入全局 SELECTED_GROUPS
+select_groups(){
+  SELECTED_GROUPS=()
+  local line idx modules m want
+  for line in "${GROUPS_RAW[@]}"; do
+    IFS='|' read -r idx _ modules _ <<< "$line"
+    want=0
+    if [[ $WANT_FULL -eq 1 ]]; then
+      want=1
+    else
+      for m in "${WANT_MODULES[@]+"${WANT_MODULES[@]}"}"; do
+        # 逗号包裹后做子串匹配,避免 apps.core 误命中 apps.core_extra 之类前缀
+        case ",$modules," in *",$m,"*) want=1; break ;; esac
+      done
+    fi
+    # 用 if 而非 `[[ ]] && cmd`: 当循环处理到 GROUPS_RAW 最后一个元素且 want=0 时,
+    # 裸的 `test && cmd` 列表其自身退出码就是 test 的失败状态(1)。这是 for 循环里的
+    # 最后一条语句,于是 select_groups 这个函数调用(裸语句,没包在 if/&&里)的退出码
+    # 也变成 1,在 set -e 下把整个脚本静默杀死、且不打印任何报错——已用手工复现确认。
+    if [[ $want -eq 1 ]]; then
+      SELECTED_GROUPS+=("$idx")
+    fi
+  done
+}
+
+# 取本次要检查的改动文件列表
+collect_changed_files(){
+  if [[ -n "$FROM_FILES" ]]; then
+    cat "$FROM_FILES"
+  elif [[ -n "${ERP_TEST_DIFF_BASE:-}" ]]; then
+    git diff --name-only "$ERP_TEST_DIFF_BASE" HEAD
+  else
+    git diff --name-only origin/main HEAD
+  fi
+}
+
+print_plan(){
+  if [[ ${#SELECTED_GROUPS[@]} -eq 0 ]]; then
+    echo 'groups: none'
+  else
+    echo "groups: ${SELECTED_GROUPS[*]}"
+  fi
+  if [[ $WANT_INTEGRATION -eq 1 ]]; then echo 'integration: yes'; else echo 'integration: no'; fi
+}
+
+if [[ "$MODE" == 'plan' || "$MODE" == 'auto' || "$MODE" == 'all' ]]; then
+  if [[ "$MODE" == 'all' ]]; then
+    WANT_FULL=1; WANT_INTEGRATION=1; WANT_MODULES=()
+  else
+    classify_changes < <(collect_changed_files)
+  fi
+
+  # 无任何命中时立即退出,不加载分组定义(那会启动容器)。
+  # docs/ 之类的改动因此完全零开销 —— 这是 pre-push 不惹人烦的关键。
+  if [[ $WANT_FULL -eq 0 && $WANT_INTEGRATION -eq 0 && ${#WANT_MODULES[@]} -eq 0 ]]; then
+    if [[ "$MODE" == 'plan' ]]; then
+      echo 'groups: none'; echo 'integration: no'
+    else
+      c_ok '本次改动不涉及后端代码,跳过测试预检'
+    fi
+    exit 0
+  fi
+
+  load_groups
+  select_groups
+
+  if [[ "$MODE" == 'plan' ]]; then
+    print_plan
+    exit 0
+  fi
+fi
+
 c_err "尚未实现: $MODE"
 exit 1
