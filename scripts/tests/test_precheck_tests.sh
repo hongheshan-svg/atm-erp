@@ -33,6 +33,25 @@ expect_plan(){
   fi
 }
 
+# expect_plan_no_trailing_newline <用例名> <期望的两行输出> <单个改动文件>
+# 与 expect_plan 的唯一差异: 用 printf '%s' (不追加换行) 写测试输入文件,
+# 用来钉住 --from-files 读到不带末尾换行符的最后一行时不能漏判这个边界。
+# 不复用/不改动 expect_plan 本身,避免影响已有 11 条用例的输入构造方式。
+expect_plan_no_trailing_newline(){
+  local name="$1" expected="$2" file_content="$3"
+  local f="$TMP/changed_no_nl.txt"
+  printf '%s' "$file_content" > "$f"
+  local actual
+  actual="$(bash "$SCRIPT" --plan-only --from-files "$f" 2>&1)"
+  if [[ "$actual" == "$expected" ]]; then
+    printf '  ok   %s\n' "$name"; PASS=$((PASS+1))
+  else
+    printf '  FAIL %s\n       期望: %s\n       实际: %s\n' \
+      "$name" "$(printf '%s' "$expected" | tr '\n' '/')" "$(printf '%s' "$actual" | tr '\n' '/')"
+    FAIL=$((FAIL+1))
+  fi
+}
+
 echo "改动映射测试:"
 
 expect_plan '单个业务 app 只触发所属分组' \
@@ -89,6 +108,11 @@ expect_plan '混合改动合并去重' \
   'groups: 1 4
 integration: yes' \
   'backend/apps/finance/models.py' 'frontend/src/router/index.ts' 'docs/x.md'
+
+expect_plan_no_trailing_newline '文件末行无换行符时仍被分类(不被静默漏判)' \
+  'groups: 4
+integration: yes' \
+  'backend/apps/finance/models.py'
 
 echo
 if [[ $FAIL -eq 0 ]]; then

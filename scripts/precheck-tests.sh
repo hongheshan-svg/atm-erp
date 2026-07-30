@@ -165,7 +165,10 @@ classify_changes(){
   WANT_INTEGRATION=0
   WANT_MODULES=()
   local f app
-  while IFS= read -r f; do
+  # `|| [[ -n "$f" ]]`: read 读到不带末尾换行符的最后一行时,内容进了 $f 但 read 自身返回
+  # 非零,裸 `while read` 会把这次判假当成 EOF、直接漏掉这一行。--from-files 场景下,调用方
+  # 用 "$(git diff --name-only ...)" 写临时文件时命令替换会去掉尾随换行,这个坑真实存在。
+  while IFS= read -r f || [[ -n "$f" ]]; do
     [[ -z "$f" ]] && continue
     case "$f" in
       # apps/core 提供全站 BaseModel/权限 Mixin/审计/工作流,config 是 settings 与根 urls,
