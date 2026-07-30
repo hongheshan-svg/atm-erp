@@ -235,6 +235,77 @@ print_plan(){
   if [[ $WANT_INTEGRATION -eq 1 ]]; then echo 'integration: yes'; else echo 'integration: no'; fi
 }
 
+# ── 测试栈生命周期 ──
+# 全部资源前缀 erp-testenv-,不属于任何 compose project,不会被 docker compose down 误伤;
+# 不映射宿主机端口,与生产的 erp-postgres/erp-redis 无任何交集。
+container_state(){
+  # running / exists / absent
+  if docker ps --format '{{.Names}}' | grep -qx "$1"; then echo running
+  elif docker ps -a --format '{{.Names}}' | grep -qx "$1"; then echo exists
+  else echo absent; fi
+}
+
+ensure_stack(){
+  need_docker
+  docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
+  # 数据卷独立于容器: 那约 7 分钟建好的测试库因此能在容器被删后存活
+  docker volume inspect "$PG_VOLUME" >/dev/null 2>&1 || docker volume create "$PG_VOLUME" >/dev/null
+
+  case "$(container_state "$PG_NAME")" in
+    running) ;;
+    exists)  docker start "$PG_NAME" >/dev/null ;;
+    absent)
+      c_info "创建测试数据库容器 $PG_NAME ($PG_IMAGE)"
+      docker run -d --name "$PG_NAME" --network "$NET" \
+        -e POSTGRES_DB="$DB_NAME" -e POSTGRES_USER="$DB_USER" -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+        -v "$PG_VOLUME:/var/lib/postgresql/data" \
+        "$PG_IMAGE" >/dev/null ;;
+  esac
+
+  case "$(container_state "$REDIS_NAME")" in
+    running) ;;
+    exists)  docker start "$REDIS_NAME" >/dev/null ;;
+    absent)
+      c_info "创建测试缓存容器 $REDIS_NAME ($REDIS_IMAGE)"
+      docker run -d --name "$REDIS_NAME" --network "$NET" "$REDIS_IMAGE" >/dev/null ;;
+  esac
+
+  local i
+  for i in $(seq 1 60); do
+    if docker exec "$PG_NAME" pg_isready -U "$DB_USER" >/dev/null 2>&1; then return 0; fi
+    sleep 1
+  done
+  c_err "测试数据库 60 秒内未就绪,可用 docker logs $PG_NAME 排查"
+  exit 1
+}
+
+psql_maint(){ docker exec "$PG_NAME" psql -U "$DB_USER" -d postgres -tAc "$1"; }
+
+test_db_exists(){
+  [[ "$(psql_maint "SELECT 1 FROM pg_database WHERE datname='$TEST_DB_NAME'" 2>/dev/null || true)" == '1' ]]
+}
+
+drop_test_db(){
+  # FORCE 断开残留连接(PG 13+)。没有它,上一次异常中断留下的连接会让 DROP 卡住。
+  psql_maint "DROP DATABASE IF EXISTS $TEST_DB_NAME WITH (FORCE)" >/dev/null
+  c_ok "已删除测试库 $TEST_DB_NAME"
+}
+
+stack_down(){
+  need_docker
+  docker rm -f "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
+  docker network rm "$NET" >/dev/null 2>&1 || true
+  c_ok "测试栈容器已删除(数据卷 $PG_VOLUME 保留,测试库仍在)"
+}
+
+stack_clean(){
+  stack_down
+  docker volume rm "$PG_VOLUME" >/dev/null 2>&1 || true
+  c_ok "数据卷已删除,下次运行会重新建库(约 7 分钟)"
+}
+
+# up/down/clean 分派统一放在脚本末尾(晚于函数定义)—— bash 顺序解释,分派块调用的函数必须已定义。
+
 if [[ "$MODE" == 'plan' || "$MODE" == 'auto' || "$MODE" == 'all' ]]; then
   if [[ "$MODE" == 'all' ]]; then
     WANT_FULL=1; WANT_INTEGRATION=1; WANT_MODULES=()
@@ -260,6 +331,23 @@ if [[ "$MODE" == 'plan' || "$MODE" == 'auto' || "$MODE" == 'all' ]]; then
     print_plan
     exit 0
   fi
+fi
+
+if [[ "$MODE" == 'up' ]]; then
+  ensure_stack
+  if [[ $FRESH_DB -eq 1 ]]; then drop_test_db; fi
+  if test_db_exists; then
+    c_ok "测试栈就绪,测试库 $TEST_DB_NAME 已存在"
+  else
+    c_info "测试库尚未创建,首次运行测试时会自动创建(约需 7 分钟,执行全量迁移)"
+  fi
+  exit 0
+elif [[ "$MODE" == 'down' ]]; then
+  stack_down
+  exit 0
+elif [[ "$MODE" == 'clean' ]]; then
+  stack_clean
+  exit 0
 fi
 
 c_err "尚未实现: $MODE"
