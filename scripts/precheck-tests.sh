@@ -350,5 +350,62 @@ elif [[ "$MODE" == 'clean' ]]; then
   exit 0
 fi
 
-c_err "尚未实现: $MODE"
-exit 1
+LOG_DIR="$(mktemp -d -t erp-precheck-XXXXXX)"
+
+# 与 CI 的差异只有 --keepdb 一处(CI 每次新建库)。
+# 代价: 改写/删除既有迁移文件后本地库会陈旧,用 --fresh-db 重建。新增迁移无妨,keepdb 仍会 apply。
+docker_test_run(){
+  docker run --rm --network "$NET" \
+    -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
+    -e PYTHONDONTWRITEBYTECODE=1 \
+    -e DJANGO_SETTINGS_MODULE=config.settings \
+    -e SECRET_KEY="$TEST_SECRET_KEY" \
+    -e DEBUG=False \
+    -e DB_HOST="$PG_NAME" -e DB_NAME="$DB_NAME" -e DB_USER="$DB_USER" \
+    -e DB_PASSWORD="$DB_PASSWORD" -e DB_PORT=5432 \
+    -e REDIS_URL="redis://$REDIS_NAME:6379/0" -e REDIS_HOST="$REDIS_NAME" \
+    "$@"
+}
+
+run_django_group(){
+  local want_idx="$1" line idx name targets
+  for line in "${GROUPS_RAW[@]}"; do
+    IFS='|' read -r idx name _ targets <<< "$line"
+    [[ "$idx" == "$want_idx" ]] || continue
+    local -a tlist
+    IFS=',' read -r -a tlist <<< "$targets"
+    c_info "分组${idx}: ${name}"
+    if docker_test_run --entrypoint python "$BASE_IMAGE" \
+        -W error::DeprecationWarning manage.py test --noinput --keepdb "${tlist[@]}" \
+        > "$LOG_DIR/group-$idx.log" 2>&1; then
+      c_ok "分组${idx} 通过  $(grep -E '^Ran ' "$LOG_DIR/group-$idx.log" | tail -1)"
+      return 0
+    else
+      c_err "分组${idx} 失败"
+      grep -E '^(FAIL|ERROR):' "$LOG_DIR/group-$idx.log" | head -20 >&2 || true
+      c_err "完整日志: $LOG_DIR/group-$idx.log"
+      return 1
+    fi
+    done
+  c_err "分组序号 $want_idx 不存在"
+  return 1
+}
+
+BASE_IMAGE="$(resolve_base_image)"
+ensure_stack
+[[ $FRESH_DB -eq 1 ]] && drop_test_db
+if ! test_db_exists; then
+  c_info "首次运行:正在创建测试库并执行全量迁移,约需 7 分钟。之后会复用,不再重复。"
+fi
+
+failed=0
+for idx in "${SELECTED_GROUPS[@]+"${SELECTED_GROUPS[@]}"}"; do
+  run_django_group "$idx" || failed=1
+done
+
+if [[ $failed -eq 1 ]]; then
+  c_err "测试预检未通过。修复后重试,确需跳过用 git push --no-verify。"
+  exit 1
+fi
+c_ok "测试预检通过"
+exit 0
