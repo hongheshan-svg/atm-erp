@@ -64,7 +64,13 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --all)         MODE='all'; shift ;;
     --plan-only)   MODE='plan'; shift ;;
-    --from-files)  FROM_FILES="${2:-}"; shift 2 ;;
+    --from-files)
+      if [[ $# -lt 2 ]]; then
+        c_err "--from-files 需要一个参数(文件路径)"
+        usage >&2
+        exit 2
+      fi
+      FROM_FILES="$2"; shift 2 ;;
     --fresh-db)    FRESH_DB=1; shift ;;
     --up)          MODE='up'; shift ;;
     --down)        MODE='down'; shift ;;
@@ -92,8 +98,11 @@ resolve_base_image(){
   img="$(docker inspect erp-app --format '{{.Config.Image}}' 2>/dev/null || true)"
   if [[ -n "$img" ]]; then printf '%s\n' "$img"; return 0; fi
   local tag
+  # manifest.json 缺失(浅克隆/稀疏检出)时 sed 非零退出,pipefail 会让这行赋值
+  # 直接终止脚本(在下面的 if 判空之前),让「无法确定基础镜像」的友好报错永远打印不出来。
+  # 用 || true 兜底,把判空交给下面已经写好的 if。
   tag="$(sed -n 's/.*"image_tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-    "$REPO_ROOT/manifest.json" | head -1)"
+    "$REPO_ROOT/manifest.json" | head -1)" || true
   if [[ -z "$tag" ]]; then
     c_err "无法确定基础镜像:erp-app 未运行且 manifest.json 里读不到 image_tag。可用 ERP_TEST_BASE_IMAGE 指定。"
     exit 1
