@@ -164,7 +164,7 @@ load_groups(){
     base="$(resolve_base_image)"
     raw="$(docker run --rm --entrypoint python \
       -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
-      "${ENV_ISOLATION_MOUNTS[@]}" \
+      "${ENV_ISOLATION_MOUNTS[@]+"${ENV_ISOLATION_MOUNTS[@]}"}" \
       -e PYTHONDONTWRITEBYTECODE=1 \
       "$base" -c '
 import sys
@@ -414,7 +414,7 @@ LOG_DIR="$(mktemp -d -t erp-precheck-XXXXXX)"
 docker_test_run(){
   docker run --rm --network "$NET" \
     -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
-    "${ENV_ISOLATION_MOUNTS[@]}" \
+    "${ENV_ISOLATION_MOUNTS[@]+"${ENV_ISOLATION_MOUNTS[@]}"}" \
     -e PYTHONDONTWRITEBYTECODE=1 \
     -e DJANGO_SETTINGS_MODULE=config.settings \
     -e SECRET_KEY="$TEST_SECRET_KEY" \
