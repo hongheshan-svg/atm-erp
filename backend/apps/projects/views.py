@@ -3617,6 +3617,7 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
         created_count = 0
         updated_count = 0
+        revived_count = 0
         error_rows = []
 
         for idx, row in df.iterrows():
@@ -3641,16 +3642,21 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
             version = 'A0'
             if version_col and pd.notna(row.get(version_col)):
                 version = str(row[version_col]).strip()
+            # 新建时不传 revision，走模型默认值；查重与插入必须用同一个值，否则查不到真正的冲突行
+            revision = Drawing._meta.get_field('revision').default
 
             # 关联物料
             item = None
+            deleted_item_sku = ''
             if item_col and pd.notna(row.get(item_col)):
                 item_sku = str(row[item_col]).strip()
                 if item_sku:
-                    try:
-                        item = Item.objects.get(sku=item_sku)
-                    except Item.DoesNotExist:
-                        pass  # 物料不存在不报错，只是不关联
+                    # 默认管理器看不见软删行：原来的 objects.get() 把「物料已被删除」和
+                    # 「物料不存在」一起吞掉，图纸静默地关联不上。物料不存在维持原来
+                    # 不报错的约定；被删除的要说出来，用户能去主数据里恢复它。
+                    item = Item.objects.filter(sku=item_sku).first()
+                    if item is None and Item.all_objects.filter(sku=item_sku).exists():
+                        deleted_item_sku = item_sku
 
             # 路径
             public_share_path = ''
@@ -3673,6 +3679,7 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
             ).first()
 
             try:
+                row_written = False
                 if existing:
                     if update_existing:
                         existing.name = name
@@ -3684,30 +3691,80 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
                         existing.updated_by = request.user
                         existing.save()
                         updated_count += 1
+                        row_written = True
                 else:
-                    Drawing.objects.create(
-                        project=project,
-                        drawing_no=drawing_no,
-                        name=name,
-                        version=version,
-                        file_type=file_type,
-                        item=item,
-                        public_share_path=public_share_path,
-                        change_description=change_description,
-                        notes=notes,
-                        status='DRAFT',
-                        designer=request.user,
-                        created_by=request.user,
+                    # project_drawing 的唯一键是 (drawing_no, version, revision)，跟上面按
+                    # 「项目+图纸号+文件类型」的查重口径不一致，且不区分软删：直接 create 会
+                    # 撞唯一约束，这一行只能变成一句 duplicate key 报文。先按真实唯一键查一次。
+                    conflict = Drawing.all_objects.filter(
+                        drawing_no=drawing_no, version=version, revision=revision
+                    ).first()
+                    if conflict is not None and conflict.is_deleted and conflict.project_id == project.id:
+                        # 本项目里被软删的同一张图：复活并按本行更新，新建这条注定撞约束
+                        conflict.is_deleted = False
+                        conflict.deleted_at = None
+                        conflict.name = name
+                        conflict.file_type = file_type
+                        conflict.item = item
+                        conflict.public_share_path = public_share_path
+                        conflict.change_description = change_description
+                        conflict.notes = notes
+                        conflict.updated_by = request.user
+                        conflict.save()
+                        revived_count += 1
+                        row_written = True
+                    elif conflict is not None:
+                        if conflict.is_deleted:
+                            owner = '已被删除'
+                        elif conflict.project_id:
+                            owner = f'属于项目 {conflict.project.code}'
+                        else:
+                            owner = '未关联项目'
+                        error_rows.append(
+                            {
+                                'row': row_num,
+                                'error': f'图纸号 {drawing_no} 版本 {version}.{revision} 已被占用（{owner}），'
+                                f'请修改版本号或先恢复该图纸',
+                            }
+                        )
+                    else:
+                        Drawing.objects.create(
+                            project=project,
+                            drawing_no=drawing_no,
+                            name=name,
+                            version=version,
+                            revision=revision,
+                            file_type=file_type,
+                            item=item,
+                            public_share_path=public_share_path,
+                            change_description=change_description,
+                            notes=notes,
+                            status='DRAFT',
+                            designer=request.user,
+                            created_by=request.user,
+                        )
+                        created_count += 1
+                        row_written = True
+
+                # 图纸真正落库了才提示物料没关联上；整行没写进去时这句话会误导
+                if row_written and deleted_item_sku:
+                    error_rows.append(
+                        {'row': row_num, 'error': f'物料 {deleted_item_sku} 已被删除，图纸已导入但未关联物料'}
                     )
-                    created_count += 1
             except Exception as e:
                 error_rows.append({'row': row_num, 'error': str(e)})
 
+        message = f'导入完成：新增{created_count}条，更新{updated_count}条'
+        if revived_count:
+            # 复活是把删掉的图纸放回列表，必须让导入者看见
+            message += f'，恢复已删除{revived_count}条'
+
         return Response(
             {
-                'message': f'导入完成：新增{created_count}条，更新{updated_count}条',
+                'message': message,
                 'created': created_count,
                 'updated': updated_count,
+                'revived': revived_count,
                 'errors': error_rows,
             }
         )

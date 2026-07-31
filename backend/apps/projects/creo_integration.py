@@ -720,7 +720,7 @@ class ItemCreationService:
         options = options or {}
         prefix = options.get('sku_prefix', 'CREO-')
         cat_id = options.get('default_category_id')
-        created, errors = 0, []
+        created, revived, errors = 0, 0, []
 
         for item in items:
             if item.get('status') != 'NEW':
@@ -728,9 +728,30 @@ class ItemCreationService:
             try:
                 with transaction.atomic():
                     sku = item.get('part_number') or f'{prefix}{datetime.now().strftime("%Y%m%d%H%M%S")}'
-                    if Item.objects.filter(sku=sku, is_deleted=False).exists():
+                    # 唯一索引 item_sku_key 不区分软删，而默认管理器看不见软删行：
+                    # 只按 is_deleted=False 查会把「编码被软删物料占用」误判成「不存在」，
+                    # 随后的 create 必撞唯一约束，这一行只能变成一句 duplicate key 报文。
+                    sku_owner = Item.all_objects.filter(sku=sku).first()
+                    if sku_owner is not None and not sku_owner.is_deleted:
                         item.update({'error_message': f'SKU已存在: {sku}', 'status': 'ERROR'})
                         errors.append(f'SKU已存在: {sku}')
+                        continue
+                    if sku_owner is not None:
+                        # 编码被软删物料占着，新建注定撞约束：复活它并按 BOM 行补全信息
+                        sku_owner.is_deleted = False
+                        sku_owner.deleted_at = None
+                        sku_owner.is_active = True
+                        sku_owner.name = item.get('part_name') or sku_owner.name
+                        sku_owner.specification = item.get('material') or sku_owner.specification
+                        sku_owner.unit = item.get('unit') or sku_owner.unit
+                        sku_owner.item_property = item.get('suggested_item_property') or sku_owner.item_property
+                        if cat_id:
+                            sku_owner.category_id = cat_id
+                        sku_owner.save()
+                        item.update(
+                            {'created_item_id': sku_owner.id, 'matched_item_id': sku_owner.id, 'status': 'CREATED'}
+                        )
+                        revived += 1
                         continue
                     new = Item.objects.create(
                         sku=sku,
@@ -746,7 +767,7 @@ class ItemCreationService:
             except Exception as e:
                 item.update({'error_message': str(e), 'status': 'ERROR'})
                 errors.append(str(e))
-        return {'created': created, 'errors': errors}
+        return {'created': created, 'revived': revived, 'errors': errors}
 
 
 class CreoBOMImportService:

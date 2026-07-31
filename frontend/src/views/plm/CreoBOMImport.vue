@@ -527,7 +527,11 @@ const createItems = async (session: any) => {
       options: { sku_prefix: 'CREO-' }
     })
 
-    ElMessage.success(`成功创建 ${res.result.created} 个物料`)
+    ElMessage.success(
+      res.result.revived
+        ? `成功创建 ${res.result.created} 个物料，恢复已删除 ${res.result.revived} 个`
+        : `成功创建 ${res.result.created} 个物料`
+    )
     loadSessions()
     if (currentSession.value?.id === session.id) {
       currentSession.value = res.session

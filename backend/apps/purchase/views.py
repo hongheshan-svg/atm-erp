@@ -537,10 +537,12 @@ class PurchaseRequestViewSet(
                 continue
 
             # 查找物料
-            try:
-                item = Item.objects.get(sku=sku, is_deleted=False)
-            except Item.DoesNotExist:
-                error_rows.append({'row': row_num, 'sku': sku, 'error': f'物料 {sku} 不存在'})
+            # 默认管理器看不见软删行：软删物料原来被一律报成「不存在」，用户照着去新建
+            # 又会撞上 item_sku_key 唯一约束。两种情况分开说，被删的直接指路去恢复。
+            item = Item.objects.filter(sku=sku).first()
+            if item is None:
+                reason = '已被删除，请先在物料主数据中恢复' if Item.all_objects.filter(sku=sku).exists() else '不存在'
+                error_rows.append({'row': row_num, 'sku': sku, 'error': f'物料 {sku} {reason}'})
                 continue
 
             # 获取数量
