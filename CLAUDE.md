@@ -132,6 +132,46 @@ git config core.hooksPath .githooks
 `.githooks/pre-commit` 拦两件事：直接提交 main、暂存的 `backend/`+`scripts/ci/` Python 未过 ruff。
 非 Python 改动会跳过预检（不启动 Docker）。绕过用 `git commit --no-verify`。
 
+### 本地测试预检（pre-push，按改动自动选分组）
+
+lint 只覆盖 CI 失败的一半。另一半是真实的测试失败（分组①②④ 与 integration 都挂过），
+由 `scripts/precheck-tests.sh` 在 `git push` 前拦下：
+
+```bash
+bash scripts/precheck-tests.sh              # 按 origin/main..HEAD 的改动自动选分组
+bash scripts/precheck-tests.sh --all        # 全部 4 组 + integration（约 6 分半）
+bash scripts/precheck-tests.sh --plan-only  # 只看会跑哪些，不执行
+bash scripts/precheck-tests.sh --up         # 预热：拉起测试栈（首次建库约 7 分钟）
+bash scripts/precheck-tests.sh --fresh-db   # 改写/删除既有迁移文件后重建测试库
+bash scripts/precheck-tests.sh --down       # 删容器留数据卷
+bash scripts/precheck-tests.sh --clean      # 连数据卷一起删
+bash scripts/precheck-tests.sh --list-groups  # 打印从 CI 配置导出的分组定义
+```
+
+改动映射：改单个业务 app → 该 app 所属分组 + integration（约 30 秒）；改
+`backend/apps/core/`、`backend/config/`、`requirements*.txt` → **全部 4 组**（它们是全站
+基类与配置）；改 `frontend/src/router/index.ts` → 分组①（菜单同步测试直接读这个文件）；
+其余改动零开销放行，不启动 Docker。
+
+**测试栈与生产库完全隔离**：独立的 `erp-testenv-pg` / `erp-testenv-redis` 容器与
+`erp-testenv-pgdata` 数据卷，不映射宿主机端口，与 `erp-postgres` / `erp-redis` 无交集。
+镜像用 `postgres:15` / `redis:7`（非 alpine），与 CI 逐字一致。
+
+与 CI 的差异：本地用 `--keepdb` 复用测试库（**改写或删除既有迁移文件后需跑一次
+`--fresh-db`**，新增迁移无妨，`--keepdb` 会正常 apply）；容器内会屏蔽 `backend/.env` 与
+仓库根 `.env`（CI checkout 里没有这两个文件），保证配置来源与 CI 一致。
+
+**这个门禁不覆盖什么**：CI 的 `Backend / preflight`（`makemigrations --check`、
+`spectacular --validate`、`check --deploy`）未覆盖，它挂了整条流水线都不会启动；
+`--plan-only` 在有后端命中时仍会起一个容器导出分组定义，并非零开销（真正零开销的
+只有零命中路径）；pre-push 对已推送分支只按本次新增 commit 的改动增量选组，早先
+commit 引入的问题不会被复查（CI 仍会全量兜底）。
+
+映射规则本身有回归测试：`bash scripts/tests/test_precheck_tests.sh`（纯 bash，秒级，不需要 Docker）。
+
+启用同样靠 `git config core.hooksPath .githooks`（与 pre-commit 是同一个开关，配一次即可）。
+绕过用 `git push --no-verify`。
+
 ### Pre-commit Hooks（可选，覆盖更全但需装包）
 
 ```bash
