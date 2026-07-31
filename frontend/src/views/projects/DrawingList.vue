@@ -259,6 +259,9 @@
           <el-descriptions-item label="更新图纸">
             <el-tag type="primary">{{ importResult.updated || 0 }} 条</el-tag>
           </el-descriptions-item>
+          <el-descriptions-item v-if="importResult.revived" label="恢复图纸">
+            <el-tag type="warning">{{ importResult.revived }} 条</el-tag>
+          </el-descriptions-item>
         </el-descriptions>
 
         <div v-if="importResult.errors && importResult.errors.length > 0" class="error-list" style="margin-top: 10px;">
@@ -722,7 +725,7 @@ const handleConfirmImport = async () => {
     const data = response.data || response
     importResult.value = data
 
-    if (data.created > 0 || data.updated > 0) {
+    if (data.created > 0 || data.updated > 0 || data.revived > 0) {
       ElMessage.success(data.message || `导入成功：新增${data.created}条，更新${data.updated}条`)
       loadDrawings()
     } else if (data.errors && data.errors.length > 0) {

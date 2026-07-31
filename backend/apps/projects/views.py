@@ -892,6 +892,12 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                         return col
             return None
 
+        def cell_text(row, column):
+            """取某列单元格的文本；列不存在或单元格为空时返回 ''。"""
+            if not column or not pd.notna(row.get(column)):
+                return ''
+            return str(row[column]).strip()
+
         # 原有字段
         price_column = find_column(df, ['预估单价', '单价'])
         notes_column = find_column(df, ['备注'])
@@ -935,6 +941,7 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         updated_count = 0
         skip_count = 0
         items_created_count = 0  # 自动创建的物料数量
+        items_revived_count = 0  # 复活的软删物料数量
         error_rows = []
 
         # 先校验所有关键字段，若有任一行缺失/无效则拒绝全部导入
@@ -952,61 +959,76 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 skip_count += 1
                 continue
             processed_skus.add(sku)
-            try:
-                item = Item.objects.get(sku=sku)
-            except Item.DoesNotExist:
-                if auto_create_items:
-                    # 自动创建物料
-                    item_name = (
-                        str(row[item_name_column]).strip()
-                        if item_name_column and pd.notna(row.get(item_name_column))
-                        else f'物料-{sku}'
-                    )
-                    spec = str(row[spec_column]).strip() if spec_column and pd.notna(row.get(spec_column)) else ''
-                    raw_unit = str(row[unit_column]).strip() if unit_column and pd.notna(row.get(unit_column)) else ''
-                    unit_choices = {str(code): str(code) for code, _label in Item.UNIT_CHOICES}
-                    unit_choices.update({str(label): str(code) for code, label in Item.UNIT_CHOICES})
-                    unit_val = unit_choices.get(raw_unit, 'PCS')
+            # 唯一索引 item_sku_key 不区分软删，而默认管理器看不见软删行：
+            # objects.get() 会把「SKU 被软删物料占用」误判成「不存在」，随后的
+            # objects.create() 必然撞唯一约束，IntegrityError 让整批导入 500（生产已复现）。
+            # 改用 all_objects 查，软删的复活后复用——与客户/供应商导入同一套做法。
+            item = Item.all_objects.filter(sku=sku).first()
+            if item is None or item.is_deleted:
+                if not auto_create_items:
+                    reason = '已被删除，需先在物料主数据中恢复' if item is not None else '不存在于物料主数据'
+                    error_rows.append({'row': row_num, 'error': f'物料编码 {sku} {reason}'})
+                    continue
 
-                    raw_item_type = (
-                        str(row[item_type_column]).strip()
-                        if item_type_column and pd.notna(row.get(item_type_column))
-                        else ''
-                    )
-                    item_type_choices = {str(code): str(code) for code, _label in Item.ITEM_TYPE_CHOICES}
-                    item_type_choices.update({str(label): str(code) for code, label in Item.ITEM_TYPE_CHOICES})
-                    item_type_val = item_type_choices.get(raw_item_type, 'MATERIAL')
-                    brand_val = (
-                        str(row[brand_column]).strip() if brand_column and pd.notna(row.get(brand_column)) else ''
-                    )
+                unit_choices = {str(code): str(code) for code, _label in Item.UNIT_CHOICES}
+                unit_choices.update({str(label): str(code) for code, label in Item.UNIT_CHOICES})
+                item_type_choices = {str(code): str(code) for code, _label in Item.ITEM_TYPE_CHOICES}
+                item_type_choices.update({str(label): str(code) for code, label in Item.ITEM_TYPE_CHOICES})
 
-                    # 推断物料属性
-                    item_property = 'PURCHASED'  # 默认外购
-                    if item_property_column and pd.notna(row.get(item_property_column)):
-                        prop_val = str(row[item_property_column]).strip()
-                        if '自制' in prop_val:
-                            item_property = 'SELF_MADE'
-                        elif '外协' in prop_val:
-                            item_property = 'OUTSOURCED'
-                        elif '标准' in prop_val:
-                            item_property = 'STANDARD'
+                # 只收集 Excel 真正填了的字段：复活既有物料时，不能拿 f'物料-{sku}'、'PCS'
+                # 这类占位默认值覆盖掉主数据里原有的真实值。
+                supplied = {}
+                name_val = cell_text(row, item_name_column)
+                if name_val:
+                    supplied['name'] = name_val
+                spec_val = cell_text(row, spec_column)
+                if spec_val:
+                    supplied['specification'] = spec_val
+                unit_raw = cell_text(row, unit_column)
+                if unit_raw:
+                    supplied['unit'] = unit_choices.get(unit_raw, 'PCS')
+                item_type_raw = cell_text(row, item_type_column)
+                if item_type_raw:
+                    supplied['item_type'] = item_type_choices.get(item_type_raw, 'MATERIAL')
+                brand_val = cell_text(row, brand_column)
+                if brand_val:
+                    supplied['manufacturer'] = brand_val
+                property_raw = cell_text(row, item_property_column)
+                if property_raw:
+                    # 推断物料属性，认不出来的写法按默认的外购处理
+                    item_property = 'PURCHASED'
+                    if '自制' in property_raw:
+                        item_property = 'SELF_MADE'
+                    elif '外协' in property_raw:
+                        item_property = 'OUTSOURCED'
+                    elif '标准' in property_raw:
+                        item_property = 'STANDARD'
+                    supplied['item_property'] = item_property
 
+                if item is None:
                     item = Item.objects.create(
                         sku=sku,
-                        name=item_name,
-                        specification=spec,
-                        unit=unit_val,
-                        item_type=item_type_val,
-                        item_property=item_property,
-                        manufacturer=brand_val,
+                        name=supplied.get('name') or f'物料-{sku}',
+                        specification=supplied.get('specification', ''),
+                        unit=supplied.get('unit', 'PCS'),
+                        item_type=supplied.get('item_type', 'MATERIAL'),
+                        item_property=supplied.get('item_property', 'PURCHASED'),
+                        manufacturer=supplied.get('manufacturer', ''),
                         is_active=True,
                         created_by=request.user,
                         updated_by=request.user,
                     )
                     items_created_count += 1
                 else:
-                    error_rows.append({'row': row_num, 'error': f'物料编码 {sku} 不存在于物料主数据'})
-                    continue
+                    # 占着唯一约束的就是这条软删记录，复活它而不是新建
+                    item.is_deleted = False
+                    item.deleted_at = None
+                    item.is_active = True
+                    for field, value in supplied.items():
+                        setattr(item, field, value)
+                    item.updated_by = request.user
+                    item.save()
+                    items_revived_count += 1
             # 数量校验（保持原逻辑）
             try:
                 planned_qty = float(row[qty_column]) if pd.notna(row[qty_column]) else 0
@@ -1331,6 +1353,9 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             msg_parts.append(f'跳过重复 {skip_count} 条')
         if items_created_count > 0:
             msg_parts.append(f'自动创建物料 {items_created_count} 个')
+        if items_revived_count > 0:
+            # 复活是对主数据的写操作，必须让导入者看见，不能静默发生
+            msg_parts.append(f'恢复已删除物料 {items_revived_count} 个')
 
         return Response(
             {
@@ -1339,6 +1364,7 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 'updated': updated_count,
                 'skip_count': skip_count,
                 'items_created': items_created_count,
+                'items_revived': items_revived_count,
                 'errors': error_rows,
             }
         )
@@ -3591,6 +3617,7 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
 
         created_count = 0
         updated_count = 0
+        revived_count = 0
         error_rows = []
 
         for idx, row in df.iterrows():
@@ -3615,16 +3642,21 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
             version = 'A0'
             if version_col and pd.notna(row.get(version_col)):
                 version = str(row[version_col]).strip()
+            # 新建时不传 revision，走模型默认值；查重与插入必须用同一个值，否则查不到真正的冲突行
+            revision = Drawing._meta.get_field('revision').default
 
             # 关联物料
             item = None
+            deleted_item_sku = ''
             if item_col and pd.notna(row.get(item_col)):
                 item_sku = str(row[item_col]).strip()
                 if item_sku:
-                    try:
-                        item = Item.objects.get(sku=item_sku)
-                    except Item.DoesNotExist:
-                        pass  # 物料不存在不报错，只是不关联
+                    # 默认管理器看不见软删行：原来的 objects.get() 把「物料已被删除」和
+                    # 「物料不存在」一起吞掉，图纸静默地关联不上。物料不存在维持原来
+                    # 不报错的约定；被删除的要说出来，用户能去主数据里恢复它。
+                    item = Item.objects.filter(sku=item_sku).first()
+                    if item is None and Item.all_objects.filter(sku=item_sku).exists():
+                        deleted_item_sku = item_sku
 
             # 路径
             public_share_path = ''
@@ -3647,6 +3679,7 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
             ).first()
 
             try:
+                row_written = False
                 if existing:
                     if update_existing:
                         existing.name = name
@@ -3658,30 +3691,80 @@ class DrawingViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewse
                         existing.updated_by = request.user
                         existing.save()
                         updated_count += 1
+                        row_written = True
                 else:
-                    Drawing.objects.create(
-                        project=project,
-                        drawing_no=drawing_no,
-                        name=name,
-                        version=version,
-                        file_type=file_type,
-                        item=item,
-                        public_share_path=public_share_path,
-                        change_description=change_description,
-                        notes=notes,
-                        status='DRAFT',
-                        designer=request.user,
-                        created_by=request.user,
+                    # project_drawing 的唯一键是 (drawing_no, version, revision)，跟上面按
+                    # 「项目+图纸号+文件类型」的查重口径不一致，且不区分软删：直接 create 会
+                    # 撞唯一约束，这一行只能变成一句 duplicate key 报文。先按真实唯一键查一次。
+                    conflict = Drawing.all_objects.filter(
+                        drawing_no=drawing_no, version=version, revision=revision
+                    ).first()
+                    if conflict is not None and conflict.is_deleted and conflict.project_id == project.id:
+                        # 本项目里被软删的同一张图：复活并按本行更新，新建这条注定撞约束
+                        conflict.is_deleted = False
+                        conflict.deleted_at = None
+                        conflict.name = name
+                        conflict.file_type = file_type
+                        conflict.item = item
+                        conflict.public_share_path = public_share_path
+                        conflict.change_description = change_description
+                        conflict.notes = notes
+                        conflict.updated_by = request.user
+                        conflict.save()
+                        revived_count += 1
+                        row_written = True
+                    elif conflict is not None:
+                        if conflict.is_deleted:
+                            owner = '已被删除'
+                        elif conflict.project_id:
+                            owner = f'属于项目 {conflict.project.code}'
+                        else:
+                            owner = '未关联项目'
+                        error_rows.append(
+                            {
+                                'row': row_num,
+                                'error': f'图纸号 {drawing_no} 版本 {version}.{revision} 已被占用（{owner}），'
+                                f'请修改版本号或先恢复该图纸',
+                            }
+                        )
+                    else:
+                        Drawing.objects.create(
+                            project=project,
+                            drawing_no=drawing_no,
+                            name=name,
+                            version=version,
+                            revision=revision,
+                            file_type=file_type,
+                            item=item,
+                            public_share_path=public_share_path,
+                            change_description=change_description,
+                            notes=notes,
+                            status='DRAFT',
+                            designer=request.user,
+                            created_by=request.user,
+                        )
+                        created_count += 1
+                        row_written = True
+
+                # 图纸真正落库了才提示物料没关联上；整行没写进去时这句话会误导
+                if row_written and deleted_item_sku:
+                    error_rows.append(
+                        {'row': row_num, 'error': f'物料 {deleted_item_sku} 已被删除，图纸已导入但未关联物料'}
                     )
-                    created_count += 1
             except Exception as e:
                 error_rows.append({'row': row_num, 'error': str(e)})
 
+        message = f'导入完成：新增{created_count}条，更新{updated_count}条'
+        if revived_count:
+            # 复活是把删掉的图纸放回列表，必须让导入者看见
+            message += f'，恢复已删除{revived_count}条'
+
         return Response(
             {
-                'message': f'导入完成：新增{created_count}条，更新{updated_count}条',
+                'message': message,
                 'created': created_count,
                 'updated': updated_count,
+                'revived': revived_count,
                 'errors': error_rows,
             }
         )

@@ -64,6 +64,63 @@ class ProjectBOMImportTest(TestCase):
         self.assertIsNone(bom.required_date)
         self.assertIsNone(bom.requester)
 
+    def test_import_revives_soft_deleted_item_instead_of_500(self):
+        """SKU 被软删物料占用时，自动建料必须复活它而不是撞唯一约束 500。
+
+        Item.sku 上的唯一索引不区分软删，而默认管理器看不见软删行 ——
+        `objects.get()` 抛 DoesNotExist 后走进自动创建分支，
+        `objects.create()` 必然 IntegrityError，整批导入 500（生产已复现）。
+        """
+        item = Item.objects.create(sku='BOM-REVIVE-001', name='原始物料名', unit='PCS')
+        item.soft_delete()
+
+        response = self.import_rows(
+            [{'物料编码*': 'BOM-REVIVE-001', '数量*': 3}],
+            auto_create_items=True,
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['items_revived'], 1)
+        self.assertEqual(response.data['items_created'], 0)
+
+        item.refresh_from_db()
+        self.assertFalse(item.is_deleted)
+        self.assertIsNone(item.deleted_at)
+        # Excel 没给物料名称列，不能被 f'物料-{sku}' 占位名覆盖掉原有名字
+        self.assertEqual(item.name, '原始物料名')
+        bom = ProjectBOM.objects.get(project=self.project, item=item)
+        self.assertEqual(bom.planned_qty, 3)
+
+    def test_import_reports_soft_deleted_item_as_deleted_when_not_auto_creating(self):
+        """不勾选自动建料时，软删物料要报"已被删除"，而不是误报"不存在"。"""
+        item = Item.objects.create(sku='BOM-DELETED-001', name='已删除物料', unit='PCS')
+        item.soft_delete()
+
+        response = self.import_rows([{'物料编码*': 'BOM-DELETED-001', '数量*': 1}])
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(len(response.data['errors']), 1)
+        self.assertIn('已被删除', response.data['errors'][0]['error'])
+        # 软删行默认管理器查不到，用 all_objects 断言它没被顺手复活
+        self.assertTrue(Item.all_objects.get(pk=item.pk).is_deleted)
+
+    def test_failed_auto_create_import_keeps_revived_item_deleted(self):
+        """整批失败时，预校验阶段复活的物料要跟着回滚，不能留下"半复活"状态。"""
+        item = Item.objects.create(sku='BOM-REVIVE-ROLLBACK', name='待复活物料', unit='PCS')
+        item.soft_delete()
+
+        response = self.import_rows(
+            [
+                {'物料编码*': 'BOM-REVIVE-ROLLBACK', '数量*': 1},
+                {'物料编码*': 'BOM-REVIVE-ROLLBACK-2', '数量*': 0},
+            ],
+            auto_create_items=True,
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertTrue(Item.all_objects.get(pk=item.pk).is_deleted)
+        self.assertFalse(ProjectBOM.objects.filter(project=self.project).exists())
+
     def test_failed_auto_create_import_rolls_back_created_items(self):
         response = self.import_rows(
             [

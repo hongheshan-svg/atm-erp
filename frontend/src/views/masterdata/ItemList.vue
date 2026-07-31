@@ -647,6 +647,10 @@ const handleImport = () => {
       if (data.matched_count > 0) {
         successMsg += `，匹配已有 ${data.matched_count} 条`
       }
+      if (data.revived_count > 0) {
+        // 复活软删物料是对主数据的写操作，必须显示出来
+        successMsg += `，恢复已删除 ${data.revived_count} 条`
+      }
       if (data.skip_exist_count > 0) {
         successMsg += `，跳过已存在 ${data.skip_exist_count} 条`
       }

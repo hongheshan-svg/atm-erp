@@ -182,6 +182,7 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
 
             created_count = 0
             matched_count = 0  # 匹配到已有物料的计数
+            revived_count = 0  # 编码被软删物料占用、复活后重用的计数
             skip_exist_count = 0  # 系统中已存在的跳过计数
             skip_dup_count = 0  # 文件内重复的跳过计数
             error_rows = []
@@ -366,9 +367,18 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                         processed_spec_brand.add(spec_brand_key)
 
                     # 检查系统中是否已存在该物料编码 - 如果存在则跳过
-                    if Item.objects.filter(sku=sku, is_deleted=False).exists():
-                        skip_exist_count += 1
-                        continue
+                    # 唯一索引 item_sku_key 不区分软删，而默认管理器看不见软删行：
+                    # 只按 is_deleted=False 查会把「编码被软删物料占用」误判成「不存在」，
+                    # 随后的 create 必撞唯一约束，这一行只能变成一句 duplicate key 报文。
+                    sku_owner = Item.all_objects.filter(sku=sku).first()
+                    if sku_owner is not None:
+                        if not sku_owner.is_deleted:
+                            skip_exist_count += 1
+                            continue
+                        if auto_code_args is not None:
+                            # 自动取号撞上软删物料是取号冲突（生成器已避开占用号，只剩并发这一种）：
+                            # 交给下面的重新取号重试，不能把别人删掉的物料改写成这一行的数据
+                            sku_owner = None
 
                     # Parse status
                     status_val = get_val(status_col, '启用')
@@ -451,29 +461,55 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                         updated_by=request.user,
                     )
 
-                    # 自动分配的 SKU 并未在生成时被预占，并发导入/取号可能与其它请求
-                    # 撞上唯一约束；这种情况下重新取号重试，而不是整行报错丢失。
-                    item = None
-                    for attempt in range(3):
-                        try:
-                            with transaction.atomic():
-                                item = Item.objects.create(sku=sku, **item_fields)
-                            break
-                        except IntegrityError:
-                            if auto_code_args is None or attempt == 2:
-                                raise
-                            sku = ItemCodeGenerator.generate_code(*auto_code_args)
-                            processed_skus.add(sku)
-                    created_count += 1
+                    if sku_owner is not None:
+                        # 编码被软删物料占着，唯一约束不会让新行插进来：复活它并按本行更新，
+                        # 否则这一行永远导不进系统，只会拿到一句 duplicate key 报文。
+                        with transaction.atomic():
+                            sku_owner.is_deleted = False
+                            sku_owner.deleted_at = None
+                            for field, value in item_fields.items():
+                                # 只覆盖本行真正填了的字段：Excel 没给的列不能把主数据里
+                                # 原有内容清空；created_by 保留原始创建人不动
+                                if field == 'created_by' or not value:
+                                    continue
+                                setattr(sku_owner, field, value)
+                            # is_active 是布尔值，False 会被上面的空值规则跳过，单独赋一次
+                            sku_owner.is_active = is_active
+                            sku_owner.save()
+                        revived_count += 1
+                    else:
+                        # 自动分配的 SKU 并未在生成时被预占，并发导入/取号可能与其它请求
+                        # 撞上唯一约束；这种情况下重新取号重试，而不是整行报错丢失。
+                        item = None
+                        for attempt in range(3):
+                            try:
+                                with transaction.atomic():
+                                    item = Item.objects.create(sku=sku, **item_fields)
+                                break
+                            except IntegrityError:
+                                if auto_code_args is None or attempt == 2:
+                                    raise
+                                sku = ItemCodeGenerator.generate_code(*auto_code_args)
+                                processed_skus.add(sku)
+                        created_count += 1
 
                 except Exception as e:
                     error_rows.append({'row': row_num, 'error': str(e)})
 
+            message = (
+                f'导入完成：新增 {created_count} 条，匹配已有 {matched_count} 条，'
+                f'跳过已存在 {skip_exist_count} 条，跳过重复 {skip_dup_count} 条'
+            )
+            if revived_count:
+                # 复活是对主数据的写操作，必须让导入者看见，不能静默发生
+                message += f'，恢复已删除 {revived_count} 条'
+
             return Response(
                 {
-                    'message': f'导入完成：新增 {created_count} 条，匹配已有 {matched_count} 条，跳过已存在 {skip_exist_count} 条，跳过重复 {skip_dup_count} 条',
+                    'message': message,
                     'created': created_count,
                     'matched_count': matched_count,
+                    'revived_count': revived_count,
                     'skip_exist_count': skip_exist_count,
                     'skip_dup_count': skip_dup_count,
                     'errors': error_rows,
