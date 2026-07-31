@@ -45,6 +45,15 @@ done
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
+# core.hooksPath 不随仓库同步：能手工跑预检、却没开门禁的人正是最该被提醒的一类。
+# 只提示，不代劳——改别人的 git 配置不该是预检脚本的副作用。
+# 仅在 stderr 是终端时输出：这条提示只对人有意义，混进被捕获的输出里只会干扰断言。
+if [[ -t 2 ]] && \
+   [[ "$(git -C "$REPO_ROOT" config core.hooksPath 2>/dev/null || true)" != '.githooks' ]]; then
+  printf '\033[0;33m[!]\033[0m %s\n' \
+    '尚未开启 git 门禁，预检不会自动触发。开启: bash scripts/setup-hooks.sh' >&2
+fi
+
 # 与 CI 使用同一版本：CI 装的是 requirements-dev.txt 里钉住的 ruff
 RUFF_VERSION="$(sed -n 's/^ruff==\([0-9][^[:space:]]*\).*/\1/p' \
   "$REPO_ROOT/backend/requirements-dev.txt" | head -1)"
