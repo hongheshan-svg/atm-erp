@@ -123,11 +123,15 @@ bash scripts/precheck.sh --fix    # 自动修复可修项
 脚本通过官方镜像 `ghcr.io/astral-sh/ruff:<版本>` 运行，版本从 `requirements-dev.txt` 动态读取，
 检查范围 `backend/` + `scripts/ci/` 与 CI 逐字一致。
 
-启用提交前门禁（每个 clone 首次执行一次，`core.hooksPath` 不随仓库同步）：
+启用提交前门禁（每个 clone 首次执行一次，`core.hooksPath` 存在 `.git/config` 里，不随仓库同步）：
 
 ```bash
-git config core.hooksPath .githooks
+bash scripts/setup-hooks.sh          # 设置 core.hooksPath=.githooks，同时检查可执行位与框架冲突
+bash scripts/setup-hooks.sh --check  # 只看当前是否已开启
 ```
+
+没开时，两个 precheck 脚本手工运行会打一行黄字提醒——钩子文件躺在仓库里但 git 从不调用它，
+本身没有任何提示，这是唯一的可发现性来源。
 
 `.githooks/pre-commit` 拦两件事：直接提交 main、暂存的 `backend/`+`scripts/ci/` Python 未过 ruff。
 非 Python 改动会跳过预检（不启动 Docker）。绕过用 `git commit --no-verify`。
@@ -168,8 +172,10 @@ bash scripts/precheck-tests.sh --list-groups  # 打印从 CI 配置导出的分�
 commit 引入的问题不会被复查（CI 仍会全量兜底）。
 
 映射规则本身有回归测试：`bash scripts/tests/test_precheck_tests.sh`（纯 bash，秒级，不需要 Docker）。
+`scripts/setup-hooks.sh` 同样有：`bash scripts/tests/test_setup_hooks.sh`（跑在一次性临时仓库里，
+不碰本机真实 git 配置）。
 
-启用同样靠 `git config core.hooksPath .githooks`（与 pre-commit 是同一个开关，配一次即可）。
+启用同样靠 `bash scripts/setup-hooks.sh`（与 pre-commit 是同一个开关，配一次即可）。
 绕过用 `git push --no-verify`。
 
 ### Pre-commit Hooks（可选，覆盖更全但需装包）

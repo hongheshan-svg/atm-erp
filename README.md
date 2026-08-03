@@ -337,6 +337,31 @@ python manage.py createsuperuser          # admin superuser
 python manage.py collectstatic --noinput  # collect static files (production)
 ```
 
+## Local Git Hooks (contributors)
+
+Run this **once per clone**:
+
+```bash
+bash scripts/setup-hooks.sh
+```
+
+It points `core.hooksPath` at the repo's `.githooks/`, enabling two gates that
+catch the failures CI catches, before you push:
+
+| Hook | What it blocks |
+|------|----------------|
+| `pre-commit` | Direct commits to `main`; staged `backend/` + `scripts/ci/` changes that fail Ruff lint/format |
+| `pre-push` | Backend test groups affected by your changes, run on an isolated test stack |
+
+`core.hooksPath` lives in `.git/config` and is **not** synced with the repo, so
+cloning is not enough — without this command the hooks sit in the tree and git
+never calls them, silently. Check the current state with
+`bash scripts/setup-hooks.sh --check`.
+
+Both gates are skippable when you need to: `git commit --no-verify`,
+`git push --no-verify`. If you prefer the `pre-commit` framework instead, see
+the note in [CLAUDE.md](CLAUDE.md) — the two mechanisms are mutually exclusive.
+
 ## Default Ports
 
 | Service | In-container | Host mapping | Note |

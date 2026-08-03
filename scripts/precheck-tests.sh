@@ -18,6 +18,15 @@ c_err(){  printf '\033[0;31m[\xe2\x9c\x97]\033[0m %s\n' "$1" >&2; }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
+# core.hooksPath 不随仓库同步：能手工跑预检、却没开门禁的人正是最该被提醒的一类。
+# 只提示，不代劳——改别人的 git 配置不该是预检脚本的副作用。
+# 仅在 stderr 是终端时输出：这条提示只对人有意义，而且未开门禁时它会污染
+# scripts/tests/test_precheck_tests.sh 捕获的输出，让 12 条映射用例全部假失败（已实测）。
+if [[ -t 2 ]] && \
+   [[ "$(git -C "$REPO_ROOT" config core.hooksPath 2>/dev/null || true)" != '.githooks' ]]; then
+  c_warn '尚未开启 git 门禁，预检不会自动触发。开启: bash scripts/setup-hooks.sh'
+fi
+
 NET='erp-testenv-net'
 PG_NAME='erp-testenv-pg'
 REDIS_NAME='erp-testenv-redis'
