@@ -1135,7 +1135,9 @@ const generatePurchaseRequest = (itemsToOrder: any) => {
         item_name: item.item_name,
         // 需求口径与后端 generate_purchase_request 一致：planned_qty - actual_qty
         qty: Math.max(1, (item.planned_qty || 0) - (item.actual_qty || 0)),
-        estimated_price: item.estimated_cost || 0
+        // 优先使用询价后写入的含税/未税单价，回退到初始估价
+        price_with_tax: item.price_with_tax || 0,
+        estimated_price: item.price_without_tax || item.estimated_cost || 0
       }))
     }
     sessionStorage.setItem('bom_to_pr', JSON.stringify(prData))

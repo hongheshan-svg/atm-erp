@@ -1398,14 +1398,15 @@ const handleBomData = async () => {
           project: data.project,
           required_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 默认7天后
           tax_rate: 13,
-          // BOM 带过来的 estimated_price 是未税口径，故按未税模式预填
+          // 询价BOM带过来的价格：优先使用询价含税单价(price_with_tax)，按含税口径预填
           price_input_mode: 'INCLUSIVE',
           notes: `根据项目 ${data.projectName} 的BOM清单生成`,
           lines: data.lines.map((line: any) => ({
             item: line.item,
             qty: line.qty,
             estimated_price: line.estimated_price || 0,
-            price_with_tax: toInclusive(line.estimated_price || 0, 13)
+            // 优先用 BOM 询价含税价，未询价时按未税价正向推算
+            price_with_tax: line.price_with_tax || toInclusive(line.estimated_price || 0, 13)
           }))
         })
         dialogVisible.value = true
