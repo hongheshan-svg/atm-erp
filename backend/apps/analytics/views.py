@@ -268,21 +268,27 @@ class AnalyticsViewSet(PermissionMixin, viewsets.ViewSet):
             status__in=['PENDING', 'PARTIAL', 'OVERDUE'], due_date__lt=today, is_deleted=False
         ).count()
 
-        # 总应收账款和总应付账款（累计）
-        ar_total = AccountReceivable.objects.filter(is_deleted=False).aggregate(
-            due=Sum('amount_due'), paid=Sum('amount_paid')
+        # 总应收账款和总应付账款（累计，排除已取消）
+        ar_total = (
+            AccountReceivable.objects.filter(is_deleted=False)
+            .exclude(status='CANCELLED')
+            .aggregate(due=Sum('amount_due'), paid=Sum('amount_paid'))
         )
-        total_receivables = float(ar_total['due'] or 0)  # 总应收
+        total_receivables = float(ar_total['due'] or 0)  # 历史累计应收（不含取消）
         total_received = float(ar_total['paid'] or 0)  # 已收款
-        outstanding_receivables = total_receivables - total_received  # 待收款
+        # 待收净额：用精确过滤查询（仅 PENDING/PARTIAL/OVERDUE）而非全量差值，排除 CANCELLED 干扰
+        outstanding_receivables = float(receivables['total'] or 0)
         collection_rate = round(total_received / total_receivables * 100, 1) if total_receivables > 0 else 0
 
-        ap_total = AccountPayable.objects.filter(is_deleted=False).aggregate(
-            due=Sum('amount_due'), paid=Sum('amount_paid')
+        ap_total = (
+            AccountPayable.objects.filter(is_deleted=False)
+            .exclude(status='CANCELLED')
+            .aggregate(due=Sum('amount_due'), paid=Sum('amount_paid'))
         )
-        total_payables = float(ap_total['due'] or 0)  # 总应付
+        total_payables = float(ap_total['due'] or 0)  # 历史累计应付（不含取消）
         total_paid = float(ap_total['paid'] or 0)  # 已付款
-        outstanding_payables = total_payables - total_paid  # 待付款
+        # 待付净额：用精确过滤查询（仅 PENDING/PARTIAL/OVERDUE）
+        outstanding_payables = float(payables['total'] or 0)
         payment_rate = round(total_paid / total_payables * 100, 1) if total_payables > 0 else 0
 
         # 项目数据
