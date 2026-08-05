@@ -511,8 +511,8 @@ class PurchaseRequestViewSet(
                 if excel_project_code:
                     excel_project_codes.add(excel_project_code)
 
-                    # 检查项目号是否匹配
-                    if excel_project_code != selected_project.code and excel_project_code != selected_project.name:
+                    # 检查项目号是否匹配（以项目编号为准，不比较名称）
+                    if excel_project_code != selected_project.code:
                         project_mismatch_rows.append(
                             {
                                 'row': row_num,
@@ -602,9 +602,8 @@ class PurchaseRequestViewSet(
             if not project and project_column:
                 project_code = str(row[project_column]).strip() if pd.notna(row.get(project_column)) else ''
                 if project_code:
-                    project = Project.objects.filter(
-                        Q(code=project_code) | Q(name__icontains=project_code), is_deleted=False
-                    ).first()
+                    # 以项目编号精确匹配，不按名称模糊搜索
+                    project = Project.objects.filter(code=project_code, is_deleted=False).first()
 
             # 获取备注
             notes = str(row[notes_column]).strip() if notes_column and pd.notna(row.get(notes_column)) else ''
