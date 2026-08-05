@@ -117,7 +117,7 @@
           <el-col :span="12">
             <el-form-item v-if="form.return_type === 'PROJECT'" label="选择项目" prop="project">
               <el-select v-model="form.project" placeholder="选择项目" filterable style="width: 100%;">
-                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+                <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
               </el-select>
             </el-form-item>
             <el-form-item v-else label="售后工单" prop="aftersales_order">

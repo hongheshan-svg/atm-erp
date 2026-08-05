@@ -6,7 +6,7 @@
       <el-form :inline="true" class="filter-form">
         <el-form-item label="选择项目">
           <el-select v-model="selectedProjects" multiple placeholder="选择多个项目进行对比" style="width: 400px">
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item>

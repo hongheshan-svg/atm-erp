@@ -98,7 +98,7 @@
           <el-col :span="8">
             <el-form-item label="关联项目">
               <el-select v-model="form.project" placeholder="选择项目" filterable clearable style="width: 100%;">
-                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+                <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
               </el-select>
             </el-form-item>
           </el-col>

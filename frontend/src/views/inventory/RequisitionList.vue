@@ -33,7 +33,7 @@
         </el-form-item>
         <el-form-item label="项目">
           <el-select v-model="searchForm.project" placeholder="选择项目" clearable filterable style="width: 180px;">
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -127,7 +127,7 @@
           <el-col :span="12">
             <el-form-item v-if="form.requisition_type === 'PROJECT'" label="选择项目" prop="project">
               <el-select v-model="form.project" placeholder="选择项目" filterable style="width: 100%;" @change="loadProjectItems">
-                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+                <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
               </el-select>
             </el-form-item>
             <el-form-item v-else label="售后工单" prop="aftersales_order">

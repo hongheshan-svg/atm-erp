@@ -156,7 +156,7 @@
           <el-col :span="12">
             <el-form-item label="关联项目">
               <el-select v-model="formData.project" filterable clearable placeholder="选择项目" style="width: 100%">
-                <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
+                <el-option v-for="p in projectOptions" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
               </el-select>
             </el-form-item>
           </el-col>

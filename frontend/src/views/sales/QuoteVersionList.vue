@@ -210,7 +210,7 @@
         <el-form-item label="参照项目">
           <el-select v-model="quoteForm.reference_project" filterable clearable placeholder="选择参照项目"
                      style="width: 100%" @change="handleEstimateFromReference">
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
       </el-form>

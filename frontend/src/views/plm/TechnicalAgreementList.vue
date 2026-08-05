@@ -17,7 +17,7 @@
         </el-form-item>
         <el-form-item label="项目">
           <el-select v-model="searchForm.project" placeholder="选择项目" clearable>
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -116,7 +116,7 @@
           <el-col :span="12">
             <el-form-item label="关联项目" prop="project">
               <el-select v-model="formData.project" placeholder="选择项目" style="width: 100%;">
-                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+                <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
               </el-select>
             </el-form-item>
           </el-col>

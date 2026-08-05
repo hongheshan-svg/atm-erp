@@ -142,7 +142,7 @@
             style="width: 250px;"
             @change="loadRequests"
           >
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -302,7 +302,7 @@
           <el-col :span="6">
             <el-form-item label="关联项目" prop="project">
               <el-select v-model="form.project" placeholder="选择项目" filterable clearable style="width: 100%;" @change="onProjectChange">
-                <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+                <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
               </el-select>
             </el-form-item>
           </el-col>

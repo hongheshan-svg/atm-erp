@@ -6,7 +6,7 @@
           <span>图纸管理</span>
           <div class="header-actions">
             <el-select v-model="selectedProject" placeholder="选择项目" clearable filterable style="width: 250px; margin-right: 10px;" @change="loadDrawings">
-              <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+              <el-option v-for="project in projects" :key="project.id" :label="`${project.code} - ${project.name}`" :value="project.id" />
             </el-select>
             <el-button type="primary" v-permission="'projects:project:create'" @click="handleAdd" :disabled="!selectedProject">
               <el-icon><Plus /></el-icon>

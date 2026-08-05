@@ -195,7 +195,7 @@
         </el-form-item>
         <el-form-item label="项目" prop="project">
           <el-select v-model="allocationForm.project" filterable style="width: 100%">
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="任务描述">

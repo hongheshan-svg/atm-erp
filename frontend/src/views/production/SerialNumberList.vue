@@ -61,7 +61,7 @@
         </el-form-item>
         <el-form-item label="项目">
           <el-select v-model="searchForm.project" placeholder="选择项目" clearable filterable>
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -144,7 +144,7 @@
         </el-form-item>
         <el-form-item label="项目">
           <el-select v-model="generateForm.project_id" placeholder="选择项目（可选）" style="width: 100%;" clearable filterable>
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="批次号">

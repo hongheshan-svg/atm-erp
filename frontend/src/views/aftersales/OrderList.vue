@@ -54,7 +54,7 @@
         </el-form-item>
         <el-form-item label="项目">
           <el-select v-model="searchParams.project" placeholder="选择项目" clearable filterable style="width: 180px">
-            <el-option v-for="p in projects" :key="p.id" :label="p.name" :value="p.id" />
+            <el-option v-for="p in projects" :key="p.id" :label="`${p.code} - ${p.name}`" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
