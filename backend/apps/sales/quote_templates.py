@@ -193,7 +193,7 @@ class QuoteGenerationService:
             {'key': 'spec', 'label': '规格型号', 'width': 25},
             {'key': 'unit', 'label': '单位', 'width': 10},
             {'key': 'quantity', 'label': '数量', 'width': 12},
-            {'key': 'unit_price', 'label': '单价', 'width': 15},
+            {'key': 'unit_price', 'label': '单价(不含税)', 'width': 15},
             {'key': 'amount', 'label': '金额', 'width': 18},
             {'key': 'remark', 'label': '备注', 'width': 20},
         ]
@@ -384,7 +384,7 @@ class QuoteGenerationService:
                     <th>规格型号</th>
                     <th style="width:60px;">单位</th>
                     <th style="width:80px;" class="num">数量</th>
-                    <th style="width:100px;" class="num">单价</th>
+                    <th style="width:100px;" class="num">单价(不含税)</th>
                     <th style="width:120px;" class="num">金额</th>
                     <th>备注</th>
                 </tr>
@@ -642,7 +642,7 @@ class QuoteTemplateViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, 
             'valid_until': '2025-02-28',
             'contact_person': '张先生',
             'contact_phone': '13800138000',
-            'remarks': '以上价格均含税（增值税13%）',
+            'remarks': '以上价格均不含税（如需含税价，请加计增值税13%）',
             'items': [
                 {
                     'name': '装配工位',

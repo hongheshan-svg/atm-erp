@@ -166,9 +166,9 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
             version_brand_col = find_column(df, ['版本/品牌'])
             unit_col = find_column(df, ['单位', 'unit'])
             item_type_col = find_column(df, ['物料属性', 'item_type'])  # 原材料/产成品/半成品/服务
-            purchase_col = find_column(df, ['采购单价', '采购价', 'purchase'])
-            sale_col = find_column(df, ['销售单价', '销售价', 'sale'])
-            cost_col = find_column(df, ['标准成本', 'standard_cost'])
+            purchase_col = find_column(df, ['采购单价(含税)', '采购单价', '采购价', 'purchase'])
+            sale_col = find_column(df, ['销售单价(含税)', '销售单价', '销售价', 'sale'])
+            cost_col = find_column(df, ['标准成本(含税)', '标准成本', 'standard_cost'])
             tax_col = find_column(df, ['税率', 'tax'])
             mfr_col = find_column(df, ['生产厂家', '厂家', 'manufacturer'])
             origin_col = find_column(df, ['产地', 'origin'])
@@ -437,8 +437,9 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                     unit = unit_map.get(unit_val, 'PCS')
 
                     # 创建新物料（不更新已有物料）
-                    # 三价列无「未税/含税」前缀，按含税口径解读（供应商/客户报价均含税）；
-                    # 用行内税率反算未税后写入，保持与下游 MRP/成本核算的未税入账语义一致。
+                    # 三价列列名已带「(含税)」后缀，旧名（无后缀）向后兼容；
+                    # 统一按含税口径解读，用行内税率反算未税后写入，
+                    # 保持与下游 MRP/成本核算的未税入账语义一致。
                     from apps.core.price_parsing import resolve_import_prices
 
                     _item_tax_rate = get_int(tax_col, 13)
@@ -591,9 +592,9 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 ('版本/品牌', 12, 'optional'),
                 ('单位', 8, 'optional'),
                 ('物料属性', 10, 'optional'),
-                ('采购单价', 10, 'optional'),
-                ('销售单价', 10, 'optional'),
-                ('标准成本', 10, 'optional'),
+                ('采购单价(含税)', 10, 'optional'),
+                ('销售单价(含税)', 10, 'optional'),
+                ('标准成本(含税)', 10, 'optional'),
                 ('税率(%)', 8, 'optional'),
                 ('生产厂家', 15, 'optional'),
                 ('产地', 10, 'optional'),
@@ -633,9 +634,13 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 worksheet.write(row_idx, 5, version_brand, data_format)
                 worksheet.write(row_idx, 6, item.get_unit_display(), data_format)
                 worksheet.write(row_idx, 7, item.get_item_type_display(), data_format)
-                worksheet.write(row_idx, 8, float(item.purchase_price), money_format)
-                worksheet.write(row_idx, 9, float(item.sale_price), money_format)
-                worksheet.write(row_idx, 10, float(item.standard_cost), money_format)
+                worksheet.write(
+                    row_idx, 8, round(float(item.purchase_price) * (1 + item.tax_rate / 100), 2), money_format
+                )
+                worksheet.write(row_idx, 9, round(float(item.sale_price) * (1 + item.tax_rate / 100), 2), money_format)
+                worksheet.write(
+                    row_idx, 10, round(float(item.standard_cost) * (1 + item.tax_rate / 100), 2), money_format
+                )
                 worksheet.write(row_idx, 11, item.tax_rate, data_format)
                 worksheet.write(row_idx, 12, item.manufacturer or '', data_format)
                 worksheet.write(row_idx, 13, item.origin_country or '', data_format)
@@ -719,9 +724,9 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 ('版本/品牌', 12, 'optional'),  # 用于智能匹配已有物料
                 ('单位', 8, 'optional'),
                 ('物料属性', 10, 'optional'),  # 原材料/产成品/半成品/服务
-                ('采购单价', 10, 'optional'),
-                ('销售单价', 10, 'optional'),
-                ('标准成本', 10, 'optional'),
+                ('采购单价(含税)', 10, 'optional'),
+                ('销售单价(含税)', 10, 'optional'),
+                ('标准成本(含税)', 10, 'optional'),
                 ('税率(%)', 8, 'optional'),
                 ('生产厂家', 15, 'optional'),
                 ('产地', 10, 'optional'),
@@ -828,7 +833,10 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 ('  • 物料编码：可不填，系统自动匹配或生成', None),
                 ('  • 物料属性：原材料/产成品/半成品/服务，默认原材料', None),
                 ('  • 单位：个/套/千克/米/平方米/立方米/箱/包/小时（或PCS/SET/KG等英文），默认个', None),
-                ('  • 采购单价/销售单价/标准成本：数字，默认0', None),
+                (
+                    '  • 采购单价(含税)/销售单价(含税)/标准成本(含税)：请填含税价格（含增值税），系统自动按税率换算未税后存储，默认0',
+                    None,
+                ),
                 ('  • 税率(%)：增值税率，默认13', None),
                 ('  • 生产厂家/产地：文本', None),
                 ('  • 安全库存/采购周期(天)：数字，默认0', None),

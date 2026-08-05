@@ -597,7 +597,7 @@ class SalesOrderViewSet(
 
         # 创建明细表
         ws2 = wb.create_sheet(title='订单明细')
-        detail_headers = ['行号', '产品名称*', '规格型号', '单位', '数量*', '单价*', '备注']
+        detail_headers = ['行号', '产品名称*', '规格型号', '单位', '数量*', '单价*(不含税)', '备注']
 
         for col, header in enumerate(detail_headers, 1):
             cell = ws2.cell(row=1, column=col, value=header)
@@ -757,7 +757,7 @@ class SalesOrderViewSet(
             '规格型号',
             '单位',
             '数量',
-            '单价',
+            '单价(不含税)',
             '行金额',
             '已发货',
             '备注',
@@ -1058,7 +1058,16 @@ class SalesOrderViewSet(
                 # 检查主sheet是否有明细列（产品名称、数量、单价）
                 if not detail_sheet and len(order_map) > 0:
                     # 检查主sheet是否包含明细列
-                    main_detail_cols = {'产品名称', '产品名称*', '数量', '数量*', '单价', '单价*'}
+                    main_detail_cols = {
+                        '产品名称',
+                        '产品名称*',
+                        '数量',
+                        '数量*',
+                        '单价',
+                        '单价*',
+                        '单价*(不含税)',
+                        '单价(不含税)',
+                    }
                     has_detail_cols = any(h in main_detail_cols for h in headers)
 
                     if has_detail_cols:
@@ -1072,6 +1081,8 @@ class SalesOrderViewSet(
                             '数量*': 'qty',
                             '单价': 'unit_price',
                             '单价*': 'unit_price',
+                            '单价*(不含税)': 'unit_price',
+                            '单价(不含税)': 'unit_price',
                         }
 
                         main_detail_header_to_field = {}
@@ -1161,6 +1172,8 @@ class SalesOrderViewSet(
                         '数量*': 'qty',
                         '单价': 'unit_price',
                         '单价*': 'unit_price',
+                        '单价*(不含税)': 'unit_price',
+                        '单价(不含税)': 'unit_price',
                         '备注': 'notes',
                     }
 

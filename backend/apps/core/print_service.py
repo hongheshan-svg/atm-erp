@@ -76,7 +76,7 @@ class PrintTemplate:
                 <th>物料名称</th>
                 <th>规格型号</th>
                 <th>数量</th>
-                <th>单价</th>
+                <th>单价(不含税)</th>
                 <th>金额</th>
             </tr>
         </thead>
@@ -176,7 +176,7 @@ class PrintTemplate:
                 <th>产品名称</th>
                 <th>规格型号</th>
                 <th>数量</th>
-                <th>单价</th>
+                <th>单价(不含税)</th>
                 <th>金额</th>
             </tr>
         </thead>

@@ -774,7 +774,7 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 ('  • 计划数量*：正数，表示该物料在项目中的计划使用数量', None),
                 ('', None),
                 ('黄色表头 = 价格字段（可选填）', bold_format),
-                ('  • 预估单价：物料的预估采购单价，不填则使用物料的标准成本', None),
+                ('  • 预估单价：物料的预估采购单价（未税），不填则使用物料的标准成本', None),
                 ('', None),
                 ('蓝色表头 = 选填字段（可以为空）', bold_format),
                 ('  • 版本/品牌：物料的版本号或品牌信息', None),
