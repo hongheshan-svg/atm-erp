@@ -37,12 +37,12 @@
               {{ kpis.financial.overdue_receivables }} 笔逾期
             </span>
           </div>
-          <div class="kpi-value">{{ formatCurrency(kpis.financial.total_receivables) }}</div>
-          <div class="kpi-label">总应收账款</div>
+          <div class="kpi-value">{{ formatCurrency(kpis.financial.receivables) }}</div>
+          <div class="kpi-label">待收账款</div>
           <div class="kpi-footer">
-            <span>已收 {{ formatCurrency(kpis.financial.total_received) }}</span>
+            <span>累计应收 {{ formatCurrency(kpis.financial.total_receivables) }}</span>
             <span class="footer-divider">|</span>
-            <span class="footer-highlight">待收 {{ formatCurrency(kpis.financial.receivables) }}</span>
+            <span>已收 {{ formatCurrency(kpis.financial.total_received) }}</span>
           </div>
           <div class="kpi-progress">
             <el-progress :percentage="kpis.financial.collection_rate" :stroke-width="4" :show-text="false" color="#2ecc71" />
