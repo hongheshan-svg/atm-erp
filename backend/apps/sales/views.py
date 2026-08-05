@@ -888,12 +888,11 @@ class SalesOrderViewSet(
             customer_cache = {c.name: c for c in Customer.objects.filter(is_deleted=False)}
             item_cache = {i.sku: i for i in Item.objects.filter(is_deleted=False)}
 
-            # 项目缓存（按名称和编码）
+            # 项目缓存（按编码）
             from apps.projects.models import Project
 
             project_cache = {}
             for p in Project.objects.filter(is_deleted=False):
-                project_cache[p.name] = p
                 if p.code:
                     project_cache[p.code] = p
 
@@ -916,7 +915,7 @@ class SalesOrderViewSet(
                 '客户订单号': 'customer_order_no',
                 '客户名称': 'customer_name',
                 '客户名称*': 'customer_name',
-                '关联项目': 'project_name',
+                '关联项目': 'project_code',
                 '订单日期': 'order_date',
                 '交货日期': 'delivery_date',
                 '交货日期*': 'delivery_date',
@@ -997,9 +996,9 @@ class SalesOrderViewSet(
                         customer_order_no = str(data.get('customer_order_no', '')).strip()
                         payment_terms_detail = str(data.get('payment_terms_detail', '')).strip()
 
-                        # 关联项目
-                        project_name = str(data.get('project_name', '')).strip()
-                        project = project_cache.get(project_name) if project_name else None
+                        # 关联项目（按编号）
+                        project_code = str(data.get('project_code', '')).strip()
+                        project = project_cache.get(project_code) if project_code else None
 
                         # 检查是否已存在（只在有订单号时检查）
                         existing = SalesOrder.objects.filter(order_no=order_no).first() if order_no else None
