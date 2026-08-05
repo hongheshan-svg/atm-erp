@@ -1452,10 +1452,10 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 ('版本/品牌', 15, 'readonly'),
                 ('单位', 8, 'readonly'),
                 ('数量', 10, 'readonly'),
-                ('历史单价(参考)', 14, 'ref'),
+                ('历史含税单价(参考)', 14, 'ref'),
                 ('历史供应商(参考)', 18, 'ref'),
                 ('供应商', 18, 'input'),
-                ('单价', 12, 'input'),
+                ('含税单价', 12, 'input'),
                 ('付款方式', 12, 'input'),
                 ('账期', 12, 'input'),
                 ('备注', 20, 'input'),
@@ -1492,7 +1492,8 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 history_price = ''
                 history_supplier = ''
                 if last_po_line:
-                    history_price = float(last_po_line.unit_price)
+                    # 导出含税口径：优先取 price_with_tax，回退到 unit_price（旧数据）
+                    history_price = float(last_po_line.price_with_tax or last_po_line.unit_price or 0)
                     history_supplier = last_po_line.po.supplier.name if last_po_line.po.supplier else ''
 
                 # 有图/无图显示
