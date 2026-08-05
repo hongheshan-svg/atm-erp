@@ -756,7 +756,7 @@ const form = reactive<Record<string, any>>({
   supplier: null,
   required_date: '',
   tax_rate: 13,
-  price_input_mode: 'EXCLUSIVE',
+  price_input_mode: 'INCLUSIVE',
   notes: '',
   lines: []
 })
@@ -1058,7 +1058,7 @@ const handleAdd = () => {
     supplier: null,
     required_date: '',
     tax_rate: 13,
-    price_input_mode: 'EXCLUSIVE',
+    price_input_mode: 'INCLUSIVE',
     notes: '',
     lines: [makeEmptyLine()]
   })
@@ -1399,7 +1399,7 @@ const handleBomData = async () => {
           required_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 默认7天后
           tax_rate: 13,
           // BOM 带过来的 estimated_price 是未税口径，故按未税模式预填
-          price_input_mode: 'EXCLUSIVE',
+          price_input_mode: 'INCLUSIVE',
           notes: `根据项目 ${data.projectName} 的BOM清单生成`,
           lines: data.lines.map((line: any) => ({
             item: line.item,

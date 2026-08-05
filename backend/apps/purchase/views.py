@@ -27,8 +27,6 @@ from .models import (
     PurchaseOrderLine,
     PurchaseRequest,
     PurchaseRequestLine,
-    price_exclusive_from_inclusive,
-    price_inclusive_from_exclusive,
 )
 from .serializers import (
     GoodsReceiptLineSerializer,
@@ -474,15 +472,15 @@ class PurchaseRequestViewSet(
         qty_column = find_column(df, ['数量'])
         supplier_column = find_column(df, ['供应商'])
         # find_column 是子串匹配，「含税单价」同样含「单价」。必须先认更具体的列名，
-        # 再退回裸「单价」（兼容旧模板，按未税处理）。
+        # 再退回裸「单价」。裸「单价」按含税解读（供应商报价均含税）。
         price_with_tax_column = find_column(df, ['含税单价', '含税价'])
         price_without_tax_column = find_column(df, ['未税单价', '未税价', '不含税单价'])
         tax_rate_column = find_column(df, ['税率'])
-        if not price_without_tax_column:
+        if not price_with_tax_column:
             legacy_price_column = find_column(df, ['单价'])
-            # 旧模板只有一个「单价」列；若它就是含税列则不要重复当未税用
-            if legacy_price_column and legacy_price_column != price_with_tax_column:
-                price_without_tax_column = legacy_price_column
+            # 裸「单价」列折叠进含税侧；若它已被「未税单价」认领则跳过
+            if legacy_price_column and legacy_price_column != price_without_tax_column:
+                price_with_tax_column = legacy_price_column
         payment_method_column = find_column(df, ['付款方式'])
         payment_terms_column = find_column(df, ['账期'])
         project_column = find_column(df, ['项目号', '项目'])
@@ -588,19 +586,16 @@ class PurchaseRequestViewSet(
             if not supplier_name:
                 supplier_name = '未指定供应商'
 
-            # 获取单价：未税优先；只给含税价时按本行税率(缺省取申请单默认税率)反算未税。
-            # estimated_price 始终是未税入账基准，不能把含税价直接塞进去。
+            # 获取单价：未税优先；只给含税价（或裸「单价」列，已折叠进含税侧）时
+            # 按本行税率反算未税。estimated_price 始终是未税入账基准。
+            from apps.core.price_parsing import resolve_import_prices
+
             row_tax_rate = _cell_float(row, tax_rate_column, default=default_tax_rate)
-            price = _cell_float(row, price_without_tax_column, default=None)
-            price_with_tax = _cell_float(row, price_with_tax_column, default=None)
-            if price is None and price_with_tax is not None:
-                price = float(price_exclusive_from_inclusive(price_with_tax, row_tax_rate))
-            elif price is not None and price_with_tax is None:
-                price_with_tax = float(price_inclusive_from_exclusive(price, row_tax_rate))
-            if price is None:
-                price = 0
-            if price_with_tax is None:
-                price_with_tax = 0
+            price, price_with_tax = resolve_import_prices(
+                raw_exclusive=_cell_float(row, price_without_tax_column),
+                raw_inclusive=_cell_float(row, price_with_tax_column),
+                tax_rate=row_tax_rate,
+            )
 
             # 项目：优先使用用户选择的项目，否则从Excel中读取
             project = selected_project

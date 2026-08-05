@@ -437,6 +437,18 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                     unit = unit_map.get(unit_val, 'PCS')
 
                     # 创建新物料（不更新已有物料）
+                    # 三价列无「未税/含税」前缀，按含税口径解读（供应商/客户报价均含税）；
+                    # 用行内税率反算未税后写入，保持与下游 MRP/成本核算的未税入账语义一致。
+                    from apps.core.price_parsing import resolve_import_prices
+
+                    _item_tax_rate = get_int(tax_col, 13)
+                    _raw_purchase = get_num(purchase_col) or None
+                    _raw_sale = get_num(sale_col) or None
+                    _raw_cost = get_num(cost_col) or None
+                    _purchase_excl, _ = resolve_import_prices(None, _raw_purchase, _item_tax_rate)
+                    _sale_excl, _ = resolve_import_prices(None, _raw_sale, _item_tax_rate)
+                    _cost_excl, _ = resolve_import_prices(None, _raw_cost, _item_tax_rate)
+
                     item_fields = dict(
                         name=name,
                         specification=specification,
@@ -444,10 +456,10 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                         model=parsed_model,
                         unit=unit,
                         item_type=item_type,
-                        purchase_price=get_num(purchase_col),
-                        sale_price=get_num(sale_col),
-                        standard_cost=get_num(cost_col),
-                        tax_rate=get_int(tax_col, 13),
+                        purchase_price=_purchase_excl,
+                        sale_price=_sale_excl,
+                        standard_cost=_cost_excl,
+                        tax_rate=_item_tax_rate,
                         manufacturer=get_val(mfr_col),
                         origin_country=get_val(origin_col),
                         safety_stock=get_num(safety_col),

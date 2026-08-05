@@ -1791,6 +1791,11 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         price_without_tax_column = find_column(df, ['未税单价', '未税价', '不含税单价'])
         tax_rate_column = find_column(df, ['税率'])
         delivery_days_column = find_column(df, ['交期', '交货天数'])
+        # 裸「单价」列：两个明确列都缺失时，折叠进含税侧（供应商报价均含税）
+        if not price_with_tax_column and not price_without_tax_column:
+            bare_price_column = find_column(df, ['单价'])
+            if bare_price_column:
+                price_with_tax_column = bare_price_column
 
         if not sku_column:
             return Response({'error': 'Excel文件必须包含"物料编码"列'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1828,16 +1833,18 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             price_without_tax = None
             tax_rate = None
             delivery_days = None
+            raw_incl = None
+            raw_excl = None
 
             if price_with_tax_column and pd.notna(row.get(price_with_tax_column)):
                 try:
-                    price_with_tax = float(row[price_with_tax_column])
+                    raw_incl = float(row[price_with_tax_column])
                 except (ValueError, TypeError):
                     pass
 
             if price_without_tax_column and pd.notna(row.get(price_without_tax_column)):
                 try:
-                    price_without_tax = float(row[price_without_tax_column])
+                    raw_excl = float(row[price_without_tax_column])
                 except (ValueError, TypeError):
                     pass
 
@@ -1853,8 +1860,19 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 except (ValueError, TypeError):
                     pass
 
-            # 必须至少有含税单价或未税单价
-            if price_with_tax is None and price_without_tax is None:
+            # 统一解析：裸「单价」已折叠进 price_with_tax_column，无需额外处理
+            if raw_incl is not None or raw_excl is not None:
+                from apps.core.price_parsing import resolve_import_prices
+
+                row_tax_rate = tax_rate if tax_rate is not None else 13
+                price_without_tax, price_with_tax = resolve_import_prices(
+                    raw_exclusive=raw_excl,
+                    raw_inclusive=raw_incl,
+                    tax_rate=row_tax_rate,
+                )
+
+            # 必须至少有含税单价或未税单价（raw_incl/raw_excl 均 None 表示用户未填任何价格）
+            if raw_incl is None and raw_excl is None:
                 error_rows.append(
                     {'row': row_num, 'sku': sku, 'error': f'物料 {sku} 缺少价格信息（含税单价或未税单价至少填写一项）'}
                 )
