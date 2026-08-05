@@ -197,6 +197,19 @@
       <el-table :data="requests" v-loading="loading" stripe border @selection-change="handleSelectionChange">
         <el-table-column v-permission="'purchase:request:delete'" v-if="canDelete" type="selection" width="55" fixed :selectable="(row: any) => ['DRAFT', 'REJECTED'].includes(row.status)" />
         <el-table-column prop="request_no" label="采购申请号" width="140" fixed />
+        <el-table-column label="采购合同PO号" width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <template v-if="row.po_numbers && row.po_numbers.length">
+              <el-tag v-for="no in row.po_numbers" :key="no" size="small" type="success" style="margin-right: 4px;">{{ no }}</el-tag>
+            </template>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="project_code" label="项目号" width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.project_code || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="project_name" label="项目" width="160" show-overflow-tooltip />
         <el-table-column label="物料名称" width="150" show-overflow-tooltip>
           <template #default="{ row }">
@@ -210,9 +223,15 @@
             {{ row.item_summary?.specification || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="单价" width="90" align="right">
+        <el-table-column label="未税单价" width="90" align="right">
           <template #default="{ row }">
             <span v-if="row.item_summary">¥{{ formatMoney(row.item_summary.unit_price) }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="含税单价" width="90" align="right">
+          <template #default="{ row }">
+            <span v-if="row.item_summary">¥{{ formatMoney(row.item_summary.price_with_tax) }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -301,7 +320,7 @@
           </el-col>
           <el-col :span="6">
             <el-form-item label="增值税率">
-              <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;">
+              <el-select v-model="form.tax_rate" placeholder="选择税率" style="width: 100%;" @change="onTaxContextChange">
                 <el-option :value="0" label="0% (免税)" />
                 <el-option :value="1" label="1%" />
                 <el-option :value="3" label="3%" />
@@ -309,6 +328,21 @@
                 <el-option :value="9" label="9%" />
                 <el-option :value="13" label="13%" />
               </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="单价口径">
+              <el-radio-group v-model="form.price_input_mode" @change="onTaxContextChange">
+                <el-radio-button value="EXCLUSIVE">按未税单价录入</el-radio-button>
+                <el-radio-button value="INCLUSIVE">按含税单价录入</el-radio-button>
+              </el-radio-group>
+              <span class="mode-hint">
+                {{ isInclusiveMode
+                  ? '直接填供应商含税报价，系统自动反算未税单价入账'
+                  : '填未税单价，系统自动算出含税单价' }}
+              </span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -359,9 +393,34 @@
               {{ getItemUnit(row.item) }}
             </template>
           </el-table-column>
-          <el-table-column label="单价" width="100">
-            <template #default="{ row }">
-              <el-input-number v-model="row.estimated_price" :min="0" :precision="2" size="small" controls-position="right" style="width: 100%;" />
+          <el-table-column label="未税单价" width="100">
+            <template #default="{ row, $index }">
+              <el-input-number
+                v-if="!isInclusiveMode"
+                v-model="row.estimated_price"
+                :min="0"
+                :precision="2"
+                size="small"
+                controls-position="right"
+                style="width: 100%;"
+                @change="onExclusivePriceChange($index)"
+              />
+              <span v-else class="derived-price">¥{{ getLinePriceWithoutTax(row).toFixed(2) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="含税单价" width="100">
+            <template #default="{ row, $index }">
+              <el-input-number
+                v-if="isInclusiveMode"
+                v-model="row.price_with_tax"
+                :min="0"
+                :precision="2"
+                size="small"
+                controls-position="right"
+                style="width: 100%;"
+                @change="onInclusivePriceChange($index)"
+              />
+              <span v-else class="derived-price">¥{{ getLinePriceWithTax(row).toFixed(2) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="金额" width="90" align="right">
@@ -427,9 +486,17 @@
           <el-tag :type="getStatusType(currentRequest.status)">{{ getStatusLabel(currentRequest.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="申请人">{{ currentRequest.requestor_name }}</el-descriptions-item>
+        <el-descriptions-item label="项目号">{{ currentRequest.project_code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="关联项目">{{ currentRequest.project_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="采购合同PO号">
+          <template v-if="currentRequest.po_numbers && currentRequest.po_numbers.length">
+            <el-tag v-for="no in currentRequest.po_numbers" :key="no" size="small" type="success" style="margin-right: 4px;">{{ no }}</el-tag>
+          </template>
+          <span v-else>-</span>
+        </el-descriptions-item>
         <el-descriptions-item label="供应商">{{ currentRequest.supplier_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="需求日期">{{ currentRequest.required_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="单价口径">{{ currentRequest.price_input_mode_display || '未税单价' }}</el-descriptions-item>
         <el-descriptions-item label="不含税金额">¥{{ parseFloat(currentRequest.total_amount || 0).toFixed(2) }}</el-descriptions-item>
         <el-descriptions-item label="税额">¥{{ parseFloat(currentRequest.tax_amount || 0).toFixed(2) }}</el-descriptions-item>
         <el-descriptions-item label="含税总额">¥{{ parseFloat(currentRequest.total_with_tax || 0).toFixed(2) }}</el-descriptions-item>
@@ -442,9 +509,14 @@
         <el-table-column prop="item_name" label="物料" min-width="150" />
         <el-table-column prop="qty" label="数量" width="70" align="right" />
         <el-table-column prop="item_unit" label="单位" width="60" align="center" />
-        <el-table-column label="单价" width="90" align="right">
+        <el-table-column label="未税单价" width="90" align="right">
           <template #default="{ row }">
             ¥{{ parseFloat(row.estimated_price || 0).toFixed(2) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="含税单价" width="90" align="right">
+          <template #default="{ row }">
+            ¥{{ parseFloat(row.price_with_tax || 0).toFixed(2) }}
           </template>
         </el-table-column>
         <el-table-column label="金额" width="90" align="right">
@@ -684,9 +756,60 @@ const form = reactive<Record<string, any>>({
   supplier: null,
   required_date: '',
   tax_rate: 13,
+  price_input_mode: 'EXCLUSIVE',
   notes: '',
   lines: []
 })
+
+const isInclusiveMode = computed(() => form.price_input_mode === 'INCLUSIVE')
+
+/** 与后端 price_exclusive_from_inclusive / price_inclusive_from_exclusive 保持同一口径（2位四舍五入） */
+const round2 = (value: number) => Math.round((Number(value) || 0) * 100 + Number.EPSILON) / 100
+const toExclusive = (priceWithTax: any, taxRate: any) => {
+  const divisor = 1 + (Number(taxRate) || 0) / 100
+  if (!divisor) return round2(priceWithTax)
+  return round2((Number(priceWithTax) || 0) / divisor)
+}
+const toInclusive = (priceWithoutTax: any, taxRate: any) =>
+  round2((Number(priceWithoutTax) || 0) * (1 + (Number(taxRate) || 0) / 100))
+
+const makeEmptyLine = () => ({
+  item: null,
+  qty: 1,
+  estimated_price: 0,
+  price_with_tax: 0,
+  required_date: '',
+  notes: ''
+})
+
+// 明细行两个单价的展示值：录入侧取用户输入，另一侧实时反算
+const getLinePriceWithoutTax = (row: any) =>
+  isInclusiveMode.value ? toExclusive(row.price_with_tax, form.tax_rate) : round2(row.estimated_price)
+const getLinePriceWithTax = (row: any) =>
+  isInclusiveMode.value ? round2(row.price_with_tax) : toInclusive(row.estimated_price, form.tax_rate)
+
+// 单价互算：始终把两个字段都写实，保存时后端按口径取用其中一个
+const onExclusivePriceChange = (index: number) => {
+  const line = form.lines[index]
+  if (!line) return
+  line.price_with_tax = toInclusive(line.estimated_price, form.tax_rate)
+}
+const onInclusivePriceChange = (index: number) => {
+  const line = form.lines[index]
+  if (!line) return
+  line.estimated_price = toExclusive(line.price_with_tax, form.tax_rate)
+}
+
+// 改税率或切换口径后，按当前口径以录入侧为准重算另一侧，避免两列自相矛盾
+const onTaxContextChange = () => {
+  form.lines.forEach((line: any, index: number) => {
+    if (isInclusiveMode.value) {
+      onInclusivePriceChange(index)
+    } else {
+      onExclusivePriceChange(index)
+    }
+  })
+}
 
 const convertForm = reactive<Record<string, any>>({
   supplier: null
@@ -882,6 +1005,7 @@ const onProjectChange = async (projectId: any) => {
   form.lines.forEach((line: any) => {
     line.item = null
     line.estimated_price = 0
+    line.price_with_tax = 0
   })
 }
 
@@ -934,8 +1058,9 @@ const handleAdd = () => {
     supplier: null,
     required_date: '',
     tax_rate: 13,
+    price_input_mode: 'EXCLUSIVE',
     notes: '',
-    lines: [{ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' }]
+    lines: [makeEmptyLine()]
   })
   dialogVisible.value = true
 }
@@ -951,25 +1076,32 @@ const handleEdit = async (row: any) => {
     const res = await getPurchaseRequest(row.id)
     const data = res.data || res
 
+    const taxRate = data.tax_rate ?? 13
     Object.assign(form, {
       id: data.id,
       project: data.project,
       supplier: data.supplier,
       required_date: data.required_date || '',
-      tax_rate: data.tax_rate ?? 13,
+      tax_rate: taxRate,
+      price_input_mode: data.price_input_mode || 'EXCLUSIVE',
       notes: data.notes || '',
-      lines: (data.lines || []).map((line: any) => ({
-        id: line.id,
-        item: line.item,
-        qty: line.qty,
-        estimated_price: parseFloat(line.estimated_price || 0),
-        required_date: line.required_date || '',
-        notes: line.notes || ''
-      }))
+      lines: (data.lines || []).map((line: any) => {
+        const estimatedPrice = parseFloat(line.estimated_price || 0)
+        return {
+          id: line.id,
+          item: line.item,
+          qty: line.qty,
+          estimated_price: estimatedPrice,
+          // 存量行（0010 之前）可能没有含税单价，按表头税率补算，避免含税列显示 0
+          price_with_tax: parseFloat(line.price_with_tax || 0) || toInclusive(estimatedPrice, taxRate),
+          required_date: line.required_date || '',
+          notes: line.notes || ''
+        }
+      })
     })
 
     if (form.lines.length === 0) {
-      form.lines = [{ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' }]
+      form.lines = [makeEmptyLine()]
     }
 
     // 如果有项目，加载项目BOM物料
@@ -995,7 +1127,7 @@ const handleView = async (row: any) => {
 }
 
 const addLine = () => {
-  form.lines.push({ item: null, qty: 1, estimated_price: 0, required_date: '', notes: '' })
+  form.lines.push(makeEmptyLine())
 }
 
 const removeLine = (index: any) => {
@@ -1010,7 +1142,9 @@ const onItemChange = (index: any) => {
   const line = form.lines[index]
   const item = items.value.find(i => i.id === line.item)
   if (item) {
+    // 物料主数据上的采购价/标准成本都是未税口径，含税单价由它反推
     line.estimated_price = parseFloat(item.purchase_price || item.standard_cost || 0)
+    onExclusivePriceChange(index)
   }
 }
 
@@ -1045,9 +1179,9 @@ const getItemType = (itemId: any) => {
   return item?.item_type_display || item?.category_name || '-'
 }
 
-// 计算行金额（不含税）
+// 计算行金额（不含税）；含税模式下未税单价由含税价反算而来
 const getLineAmount = (row: any) => {
-  return (row.qty || 0) * (row.estimated_price || 0)
+  return (row.qty || 0) * getLinePriceWithoutTax(row)
 }
 
 // 计算行税额
@@ -1092,11 +1226,14 @@ const handleSave = async () => {
       supplier: form.supplier,
       required_date: form.required_date,
       tax_rate: form.tax_rate,
+      price_input_mode: form.price_input_mode,
       notes: form.notes,
+      // 两个单价都提交，后端按 price_input_mode 取录入侧那个作为准，另一侧由它重算
       lines: validLines.map((line: any) => ({
         item: line.item,
         qty: line.qty,
         estimated_price: line.estimated_price,
+        price_with_tax: line.price_with_tax,
         required_date: line.required_date || null,
         notes: line.notes || ''
       }))
@@ -1261,11 +1398,14 @@ const handleBomData = async () => {
           project: data.project,
           required_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 默认7天后
           tax_rate: 13,
+          // BOM 带过来的 estimated_price 是未税口径，故按未税模式预填
+          price_input_mode: 'EXCLUSIVE',
           notes: `根据项目 ${data.projectName} 的BOM清单生成`,
           lines: data.lines.map((line: any) => ({
             item: line.item,
             qty: line.qty,
-            estimated_price: line.estimated_price || 0
+            estimated_price: line.estimated_price || 0,
+            price_with_tax: toInclusive(line.estimated_price || 0, 13)
           }))
         })
         dialogVisible.value = true
@@ -1582,5 +1722,20 @@ onMounted(async () => {
   color: #f56c6c;
   font-weight: bold;
   font-size: 18px;
+}
+
+.mode-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #909399;
+}
+
+/* 非录入侧的单价：只读展示，与可编辑输入框区分 */
+.derived-price {
+  display: inline-block;
+  width: 100%;
+  text-align: right;
+  padding-right: 4px;
+  color: #909399;
 }
 </style>

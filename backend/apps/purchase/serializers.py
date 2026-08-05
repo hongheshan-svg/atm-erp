@@ -28,8 +28,53 @@ from .models import (
     PurchaseOrderLine,
     PurchaseRequest,
     PurchaseRequestLine,
+    price_exclusive_from_inclusive,
+    price_inclusive_from_exclusive,
 )
 from .services import BudgetValidationService
+
+
+def parse_pr_lines(lines_data, tax_rate, price_input_mode):
+    """按录入口径解析采购申请明细,返回 [(line_data, qty, 未税单价, 含税单价), ...] 与不含税合计。
+
+    含税口径下用户录的是含税单价,这里反算未税单价作为入账基准;未税口径下反向回填
+    含税单价供展示。无论哪种口径,estimated_price 始终是未税,下游(转 PO/询价/预算/
+    成本)的计算链路不变。
+    """
+    parsed = []
+    total_amount = Decimal('0')
+    inclusive = price_input_mode == 'INCLUSIVE'
+
+    for line_data in lines_data:
+        if not (line_data.get('item') and line_data.get('qty')):
+            continue
+        qty = _to_decimal(line_data['qty'])
+        if inclusive:
+            price_with_tax = _to_decimal(line_data.get('price_with_tax', 0))
+            estimated_price = price_exclusive_from_inclusive(price_with_tax, tax_rate)
+        else:
+            estimated_price = _to_decimal(line_data.get('estimated_price', 0))
+            price_with_tax = price_inclusive_from_exclusive(estimated_price, tax_rate)
+        total_amount += qty * estimated_price
+        parsed.append((line_data, qty, estimated_price, price_with_tax))
+
+    return parsed, total_amount
+
+
+def resolve_po_line_prices(line_data, tax_rate, price_input_mode):
+    """按录入口径解出采购订单明细的 (未税单价, 含税单价)。
+
+    与 parse_pr_lines 同一套口径规则,unit_price 始终是未税(入账基准)。
+
+    含税口径下若调用方没送 price_with_tax(采购订单页当前只提交 unit_price,而口径
+    可能是从来源采购申请继承来的 INCLUSIVE),退回按未税解读 unit_price,否则单价会
+    被静默算成 0。
+    """
+    if price_input_mode == 'INCLUSIVE' and line_data.get('price_with_tax') is not None:
+        price_with_tax = _to_decimal(line_data['price_with_tax'])
+        return price_exclusive_from_inclusive(price_with_tax, tax_rate), price_with_tax
+    unit_price = _to_decimal(line_data.get('unit_price', 0))
+    return unit_price, price_inclusive_from_exclusive(unit_price, tax_rate)
 
 
 class PurchaseRequestLineSerializer(serializers.ModelSerializer):
@@ -58,6 +103,7 @@ class PurchaseRequestLineSerializer(serializers.ModelSerializer):
             'item_property',
             'qty',
             'estimated_price',
+            'price_with_tax',
             'line_amount',
             'required_date',
             'project',
@@ -85,6 +131,7 @@ class PurchaseRequestLineCreateSerializer(serializers.ModelSerializer):
             'item',
             'qty',
             'estimated_price',
+            'price_with_tax',
             'required_date',
             'project',
             'bom_item',
@@ -103,16 +150,20 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
     """PurchaseRequest serializer."""
 
     project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True, allow_null=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     requestor_name = serializers.CharField(source='requestor.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
+    price_input_mode_display = serializers.CharField(source='get_price_input_mode_display', read_only=True)
     lines = PurchaseRequestLineSerializer(many=True, read_only=True)
     budget_info = serializers.SerializerMethodField()
     # 物料摘要信息（用于列表展示）
     item_summary = serializers.SerializerMethodField()
     lines_count = serializers.SerializerMethodField()
     total_qty = serializers.SerializerMethodField()
+    # 转出的采购订单号（列表上从申请反查 PO，历史数据可能为空）
+    po_numbers = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseRequest
@@ -121,6 +172,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'request_no',
             'project',
             'project_name',
+            'project_code',
             'supplier',
             'supplier_name',
             'requestor',
@@ -131,6 +183,8 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'status_display',
             'tax_rate',
             'tax_rate_display',
+            'price_input_mode',
+            'price_input_mode_display',
             'total_amount',
             'tax_amount',
             'total_with_tax',
@@ -143,6 +197,7 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'item_summary',
             'lines_count',
             'total_qty',
+            'po_numbers',
         ]
         read_only_fields = [
             'request_no',
@@ -168,7 +223,16 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             'unit': first_line.item.get_unit_display() if first_line.item else '',
             'qty': float(first_line.qty or 0),
             'unit_price': float(first_line.estimated_price or 0),
+            'price_with_tax': float(first_line.price_with_tax or 0),
         }
+
+    def get_po_numbers(self, obj) -> list:
+        """转出的采购订单号列表。
+
+        source_pr 在本次改动前不存在,历史 PO 只能由数据迁移经 BOM 关联尽力回填,
+        回填不到的返回空列表(前端显示 '-')。
+        """
+        return list(obj.converted_orders.filter(is_deleted=False).values_list('order_no', flat=True))
 
     def get_lines_count(self, obj) -> int:
         """获取明细行数"""
@@ -195,25 +259,24 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
 
         # 预算事前控制：先汇总不含税总额，超项目材料预算则直接拒绝（raise ValidationError）。
         # 在建单前拦截，避免生成又回滚的孤儿单号。
-        parsed_lines = []
-        total_amount = Decimal('0')
-        for line_data in lines_data:
-            if line_data.get('item') and line_data.get('qty'):
-                qty = _to_decimal(line_data['qty'])
-                estimated_price = _to_decimal(line_data.get('estimated_price', 0))
-                total_amount += qty * estimated_price
-                parsed_lines.append((line_data, qty, estimated_price))
+        # 含税口径下明细单价需先反算未税再汇总，否则预算会按含税额校验（偏严）。
+        tax_rate = validated_data.get('tax_rate', PurchaseRequest._meta.get_field('tax_rate').default)
+        price_input_mode = validated_data.get(
+            'price_input_mode', PurchaseRequest._meta.get_field('price_input_mode').default
+        )
+        parsed_lines, total_amount = parse_pr_lines(lines_data, tax_rate, price_input_mode)
         BudgetValidationService.enforce_purchase_request(validated_data.get('project'), total_amount)
 
         with transaction.atomic():
             pr = PurchaseRequest.objects.create(**validated_data)
 
-            for line_data, qty, estimated_price in parsed_lines:
+            for line_data, qty, estimated_price, price_with_tax in parsed_lines:
                 PurchaseRequestLine.objects.create(
                     pr=pr,
                     item_id=line_data['item'],
                     qty=qty,
                     estimated_price=estimated_price,
+                    price_with_tax=price_with_tax,
                     required_date=line_data.get('required_date'),
                     project_id=line_data.get('project'),
                     notes=line_data.get('notes', ''),
@@ -232,10 +295,10 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
         lines_data = self.initial_data.get('lines', [])
 
         # 预算事前控制：改单时同样按新明细汇总校验（排除本单已计入的用量）。
-        new_total = Decimal('0')
-        for line_data in lines_data:
-            if line_data.get('item') and line_data.get('qty'):
-                new_total += _to_decimal(line_data['qty']) * _to_decimal(line_data.get('estimated_price', 0))
+        # 税率/口径可能在本次提交里一起改，换算必须用新值而非 instance 上的旧值。
+        tax_rate = validated_data.get('tax_rate', instance.tax_rate)
+        price_input_mode = validated_data.get('price_input_mode', instance.price_input_mode)
+        parsed_lines, new_total = parse_pr_lines(lines_data, tax_rate, price_input_mode)
         BudgetValidationService.enforce_purchase_request(
             validated_data.get('project', instance.project), new_total, exclude_pr_id=instance.id
         )
@@ -249,26 +312,22 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
             # Delete old lines and create new ones
             instance.lines.all().delete()
 
-            total_amount = 0
-            for line_data in lines_data:
-                if line_data.get('item') and line_data.get('qty'):
-                    qty = _to_decimal(line_data['qty'])
-                    estimated_price = _to_decimal(line_data.get('estimated_price', 0))
-                    PurchaseRequestLine.objects.create(
-                        pr=instance,
-                        item_id=line_data['item'],
-                        qty=qty,
-                        estimated_price=estimated_price,
-                        required_date=line_data.get('required_date'),
-                        project_id=line_data.get('project'),
-                        notes=line_data.get('notes', ''),
-                        created_by=instance.created_by,
-                    )
-                    total_amount += qty * estimated_price
+            for line_data, qty, estimated_price, price_with_tax in parsed_lines:
+                PurchaseRequestLine.objects.create(
+                    pr=instance,
+                    item_id=line_data['item'],
+                    qty=qty,
+                    estimated_price=estimated_price,
+                    price_with_tax=price_with_tax,
+                    required_date=line_data.get('required_date'),
+                    project_id=line_data.get('project'),
+                    notes=line_data.get('notes', ''),
+                    created_by=instance.created_by,
+                )
 
-            instance.total_amount = total_amount
-            instance.tax_amount = total_amount * instance.tax_rate / 100
-            instance.total_with_tax = total_amount + instance.tax_amount
+            instance.total_amount = new_total
+            instance.tax_amount = new_total * instance.tax_rate / 100
+            instance.total_with_tax = new_total + instance.tax_amount
             instance.save()
 
         return instance
@@ -305,6 +364,7 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
             'specification',
             'qty',
             'unit_price',
+            'price_with_tax',
             'line_amount',
             'received_qty',
             'remaining_qty',
@@ -344,8 +404,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
+    project_code = serializers.CharField(source='project.code', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     tax_rate_display = serializers.CharField(source='get_tax_rate_display', read_only=True)
+    price_input_mode_display = serializers.CharField(source='get_price_input_mode_display', read_only=True)
+    source_pr_no = serializers.CharField(source='source_pr.request_no', read_only=True, allow_null=True)
     payment_terms_display = serializers.CharField(source='get_payment_terms_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     expected_date = serializers.DateField(source='delivery_date', read_only=True)  # 前端兼容字段
@@ -396,6 +459,9 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'supplier_name',
             'project',
             'project_name',
+            'project_code',
+            'source_pr',
+            'source_pr_no',
             'order_date',
             'delivery_date',
             'expected_date',
@@ -403,6 +469,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'status_display',
             'tax_rate',
             'tax_rate_display',
+            'price_input_mode',
+            'price_input_mode_display',
             'total_amount',
             'tax_amount',
             'total_with_tax',
@@ -430,15 +498,28 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'status',
             'created_at',
             'updated_at',
+            # 来源申请只由 convert_to_po 回写,不允许前端任意改挂
+            'source_pr',
+            'source_pr_no',
         ]
 
     def create(self, validated_data):
         """Create PO with lines."""
         lines_data = self.initial_data.get('lines', [])
+        tax_rate = validated_data.get('tax_rate', PurchaseOrder._meta.get_field('tax_rate').default)
+        price_input_mode = validated_data.get(
+            'price_input_mode', PurchaseOrder._meta.get_field('price_input_mode').default
+        )
         for line_data in lines_data:
             if not line_data.get('qty') or float(line_data.get('qty', 0)) <= 0:
                 raise serializers.ValidationError({'lines': '数量必须大于0'})
-            if float(line_data.get('unit_price', 0)) < 0:
+            # 校验的单价字段随口径切换(与 resolve_po_line_prices 的取值口径一致),
+            # 否则含税录入时 unit_price 缺省为 0 会漏过负数校验
+            if price_input_mode == 'INCLUSIVE' and line_data.get('price_with_tax') is not None:
+                price_field = 'price_with_tax'
+            else:
+                price_field = 'unit_price'
+            if float(line_data.get(price_field, 0)) < 0:
                 raise serializers.ValidationError({'lines': '单价不能为负数'})
 
         with transaction.atomic():
@@ -446,11 +527,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
+                    unit_price, price_with_tax = resolve_po_line_prices(line_data, tax_rate, price_input_mode)
                     PurchaseOrderLine.objects.create(
                         po=po,
                         item_id=line_data['item'],
                         qty=_to_decimal(line_data['qty']),
-                        unit_price=_to_decimal(line_data.get('unit_price', 0)),
+                        unit_price=unit_price,
+                        price_with_tax=price_with_tax,
                         notes=line_data.get('notes', ''),
                         created_by=po.created_by,
                     )
@@ -467,6 +550,9 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Update PO with lines."""
         lines_data = self.initial_data.get('lines', [])
+        # 税率/口径可能随本次提交一起改,换算用新值
+        tax_rate = validated_data.get('tax_rate', instance.tax_rate)
+        price_input_mode = validated_data.get('price_input_mode', instance.price_input_mode)
 
         with transaction.atomic():
             # Update PO fields
@@ -480,11 +566,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
             for line_data in lines_data:
                 if line_data.get('item') and line_data.get('qty'):
+                    unit_price, price_with_tax = resolve_po_line_prices(line_data, tax_rate, price_input_mode)
                     PurchaseOrderLine.objects.create(
                         po=instance,
                         item_id=line_data['item'],
                         qty=_to_decimal(line_data['qty']),
-                        unit_price=_to_decimal(line_data.get('unit_price', 0)),
+                        unit_price=unit_price,
+                        price_with_tax=price_with_tax,
                         notes=line_data.get('notes', ''),
                         created_by=instance.created_by,
                     )

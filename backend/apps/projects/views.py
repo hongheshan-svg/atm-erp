@@ -1946,7 +1946,12 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
         """
         from decimal import Decimal
 
-        from apps.purchase.models import PurchaseRequest, PurchaseRequestLine
+        from apps.purchase.models import (
+            PurchaseRequest,
+            PurchaseRequestLine,
+            price_exclusive_from_inclusive,
+            price_inclusive_from_exclusive,
+        )
 
         project_id = request.data.get('project')
         item_ids = request.data.get('item_ids', [])  # Optional: specific items
@@ -2011,8 +2016,22 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
             for item_data in bom_items:
                 bom = item_data['bom']
                 needed_qty = item_data['needed_qty']
-                # 优先使用询价信息中的价格（未税单价 > 含税单价 > 标准成本）
-                estimated_price = bom.price_without_tax or bom.price_with_tax or bom.item.standard_cost or Decimal('0')
+                # 优先使用询价信息中的价格（未税单价 > 含税单价反算 > 标准成本）。
+                # estimated_price 是未税入账基准，只有含税价时必须按 BOM 行税率反算，
+                # 否则采购申请会在含税价上再叠一次税，含税总额虚高。
+                if bom.price_without_tax:
+                    estimated_price = bom.price_without_tax
+                    price_with_tax = bom.price_with_tax or price_inclusive_from_exclusive(
+                        estimated_price, bom.tax_rate if bom.tax_rate is not None else pr.tax_rate
+                    )
+                elif bom.price_with_tax:
+                    price_with_tax = bom.price_with_tax
+                    estimated_price = price_exclusive_from_inclusive(
+                        price_with_tax, bom.tax_rate if bom.tax_rate is not None else pr.tax_rate
+                    )
+                else:
+                    estimated_price = bom.item.standard_cost or Decimal('0')
+                    price_with_tax = price_inclusive_from_exclusive(estimated_price, pr.tax_rate)
                 line_amount = needed_qty * estimated_price
 
                 # 获取询价供应商
@@ -2023,6 +2042,7 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                     item=bom.item,
                     qty=needed_qty,
                     estimated_price=estimated_price,
+                    price_with_tax=price_with_tax,
                     project=project,
                     notes=f'BOM计划: {bom.planned_qty}, 已用: {bom.actual_qty}, 询价交期: {bom.quote_delivery_days or "-"}天',
                     created_by=request.user,
@@ -2035,7 +2055,10 @@ class ProjectBOMViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, vie
                 bom.pr_qty = needed_qty
                 bom.save(update_fields=['order_status', 'purchase_request', 'pr_qty', 'updated_at'])
 
+            # 税额/含税总额一并落库，否则采购申请列表的「含税总额」列显示 ¥0.00
             pr.total_amount = total_amount
+            pr.tax_amount = total_amount * pr.tax_rate / 100
+            pr.total_with_tax = total_amount + pr.tax_amount
             pr.save()
 
         from apps.purchase.serializers import PurchaseRequestSerializer

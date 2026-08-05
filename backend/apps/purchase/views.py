@@ -27,6 +27,8 @@ from .models import (
     PurchaseOrderLine,
     PurchaseRequest,
     PurchaseRequestLine,
+    price_exclusive_from_inclusive,
+    price_inclusive_from_exclusive,
 )
 from .serializers import (
     GoodsReceiptLineSerializer,
@@ -353,8 +355,10 @@ class PurchaseRequestViewSet(
             po = PurchaseOrder.objects.create(
                 supplier_id=supplier_id,
                 project=pr.project,
+                source_pr=pr,  # 回写来源申请，供申请列表反查 PO 号
                 delivery_date=pr.required_date,
                 tax_rate=pr.tax_rate,  # 继承申请税率，避免含税总额口径变化
+                price_input_mode=pr.price_input_mode,  # 继承单价录入口径
                 created_by=request.user,
             )
 
@@ -364,6 +368,7 @@ class PurchaseRequestViewSet(
                     item=pr_line.item,
                     qty=pr_line.qty,
                     unit_price=pr_line.estimated_price,
+                    price_with_tax=pr_line.price_with_tax,
                     # 继承 BOM/关键件/长周期/功能模块/交期/备注
                     bom_item=pr_line.bom_item,
                     is_critical=pr_line.is_critical,
@@ -456,10 +461,28 @@ class PurchaseRequestViewSet(
                         return col
             return None
 
+        def _cell_float(row, column, default=None):
+            """读单元格为 float，空值/非数字返回 default。"""
+            if column and pd.notna(row.get(column)):
+                try:
+                    return float(row[column])
+                except (ValueError, TypeError):
+                    return default
+            return default
+
         sku_column = find_column(df, ['物料编码', 'SKU', '编码'])
         qty_column = find_column(df, ['数量'])
         supplier_column = find_column(df, ['供应商'])
-        price_column = find_column(df, ['单价'])
+        # find_column 是子串匹配，「含税单价」同样含「单价」。必须先认更具体的列名，
+        # 再退回裸「单价」（兼容旧模板，按未税处理）。
+        price_with_tax_column = find_column(df, ['含税单价', '含税价'])
+        price_without_tax_column = find_column(df, ['未税单价', '未税价', '不含税单价'])
+        tax_rate_column = find_column(df, ['税率'])
+        if not price_without_tax_column:
+            legacy_price_column = find_column(df, ['单价'])
+            # 旧模板只有一个「单价」列；若它就是含税列则不要重复当未税用
+            if legacy_price_column and legacy_price_column != price_with_tax_column:
+                price_without_tax_column = legacy_price_column
         payment_method_column = find_column(df, ['付款方式'])
         payment_terms_column = find_column(df, ['账期'])
         project_column = find_column(df, ['项目号', '项目'])
@@ -470,6 +493,9 @@ class PurchaseRequestViewSet(
 
         if not qty_column:
             return Response({'error': 'Excel文件必须包含"数量"列'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Excel 未给税率时的兜底：用采购申请单的默认税率，保证含税/未税互算口径一致
+        default_tax_rate = PurchaseRequest._meta.get_field('tax_rate').default
 
         # 第一遍：校验项目号
         project_mismatch_rows = []
@@ -562,11 +588,19 @@ class PurchaseRequestViewSet(
             if not supplier_name:
                 supplier_name = '未指定供应商'
 
-            # 获取单价
-            try:
-                price = float(row[price_column]) if price_column and pd.notna(row.get(price_column)) else 0
-            except (ValueError, TypeError):
+            # 获取单价：未税优先；只给含税价时按本行税率(缺省取申请单默认税率)反算未税。
+            # estimated_price 始终是未税入账基准，不能把含税价直接塞进去。
+            row_tax_rate = _cell_float(row, tax_rate_column, default=default_tax_rate)
+            price = _cell_float(row, price_without_tax_column, default=None)
+            price_with_tax = _cell_float(row, price_with_tax_column, default=None)
+            if price is None and price_with_tax is not None:
+                price = float(price_exclusive_from_inclusive(price_with_tax, row_tax_rate))
+            elif price is not None and price_with_tax is None:
+                price_with_tax = float(price_inclusive_from_exclusive(price, row_tax_rate))
+            if price is None:
                 price = 0
+            if price_with_tax is None:
+                price_with_tax = 0
 
             # 项目：优先使用用户选择的项目，否则从Excel中读取
             project = selected_project
@@ -602,7 +636,9 @@ class PurchaseRequestViewSet(
                     'lines': [],
                 }
 
-            supplier_groups[supplier_name]['lines'].append({'item': item, 'qty': qty, 'price': price, 'notes': notes})
+            supplier_groups[supplier_name]['lines'].append(
+                {'item': item, 'qty': qty, 'price': price, 'price_with_tax': price_with_tax, 'notes': notes}
+            )
 
         if not supplier_groups:
             return Response({'error': '没有可导入的有效数据', 'errors': error_rows}, status=status.HTTP_400_BAD_REQUEST)
@@ -640,6 +676,7 @@ class PurchaseRequestViewSet(
                         item=line_data['item'],
                         qty=line_data['qty'],
                         estimated_price=line_data['price'],
+                        price_with_tax=line_data['price_with_tax'],
                         project=group_data['project'],
                         notes=line_data['notes'],
                         created_by=request.user,
@@ -731,6 +768,9 @@ class PurchaseRequestViewSet(
                 {'bg_color': '#FFF2CC', 'border': 1, 'italic': True, 'font_color': '#666666'}
             )
 
+            # 单价拆成未税/含税两列，与项目 BOM 导入模板口径一致：填哪列就按哪个口径入账，
+            # 只填含税单价时按税率反算未税。原先只有一个含义模糊的「单价」列，
+            # 采购员拿到的供应商报价多是含税价，直填会被再叠一次税。
             headers = [
                 ('项目号', 12, 'optional'),
                 ('物料编码*', 15, 'required'),
@@ -739,7 +779,9 @@ class PurchaseRequestViewSet(
                 ('单位', 8, 'optional'),
                 ('数量*', 10, 'required'),
                 ('供应商', 18, 'optional'),
-                ('单价', 12, 'optional'),
+                ('未税单价', 12, 'optional'),
+                ('含税单价', 12, 'optional'),
+                ('税率(%)', 10, 'optional'),
                 ('付款方式', 12, 'optional'),
                 ('账期', 12, 'optional'),
                 ('备注', 25, 'optional'),
@@ -752,7 +794,7 @@ class PurchaseRequestViewSet(
                 worksheet.write(0, col, header, fmt)
                 worksheet.set_column(col, col, width)
 
-            # 示例数据
+            # 示例数据：未税/含税单价只需填一列，这里演示只填含税单价的常见情形
             example = [
                 'PJ2601',
                 '1126000001',
@@ -761,10 +803,12 @@ class PurchaseRequestViewSet(
                 'PCS',
                 10,
                 '示例供应商',
-                100.00,
+                '',
+                113.00,
+                13,
                 '电汇',
                 '月结30天',
-                '备注信息',
+                '未税/含税单价填一列即可',
             ]
             for col, val in enumerate(example):
                 worksheet.write(1, col, val, example_format)

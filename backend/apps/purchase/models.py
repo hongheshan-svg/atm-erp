@@ -2,10 +2,37 @@
 Purchase management models - PR, PO, Goods Receipt.
 """
 
+from decimal import ROUND_HALF_UP, Decimal
+
 from django.db import models
 
 from apps.core.models import BaseModel
 from apps.core.utils import generate_code
+
+# 单价换算保留位数。行金额/税额一律 2 位,单价多留 2 位以减少反算误差
+PRICE_QUANT = Decimal('0.01')
+
+
+def price_exclusive_from_inclusive(price_with_tax, tax_rate):
+    """含税单价 -> 未税单价。tax_rate 为百分数(13 表示 13%)。
+
+    未税单价是入账基准(estimated_price/unit_price),必须与行金额同为 2 位小数,
+    否则 金额=数量x未税单价 会与前端展示对不上。
+    """
+    price = Decimal(str(price_with_tax or 0))
+    rate = Decimal(str(tax_rate or 0))
+    divisor = Decimal('1') + rate / Decimal('100')
+    if divisor == 0:
+        return price.quantize(PRICE_QUANT, rounding=ROUND_HALF_UP)
+    return (price / divisor).quantize(PRICE_QUANT, rounding=ROUND_HALF_UP)
+
+
+def price_inclusive_from_exclusive(price_without_tax, tax_rate):
+    """未税单价 -> 含税单价。用于未税口径下回填展示用的含税单价。"""
+    price = Decimal(str(price_without_tax or 0))
+    rate = Decimal(str(tax_rate or 0))
+    multiplier = Decimal('1') + rate / Decimal('100')
+    return (price * multiplier).quantize(PRICE_QUANT, rounding=ROUND_HALF_UP)
 
 
 class PurchaseRequest(BaseModel):
@@ -28,6 +55,12 @@ class PurchaseRequest(BaseModel):
         (6, '6%'),
         (9, '9%'),
         (13, '13%'),
+    ]
+
+    # 单价录入口径:供应商报价常是含税价,采购员原先要手工除以(1+税率)反算未税再录入
+    PRICE_INPUT_MODE_CHOICES = [
+        ('EXCLUSIVE', '未税单价'),
+        ('INCLUSIVE', '含税单价'),
     ]
 
     request_no = models.CharField(max_length=50, verbose_name='申请单号')
@@ -56,6 +89,13 @@ class PurchaseRequest(BaseModel):
 
     # 税率相关
     tax_rate = models.IntegerField(choices=TAX_RATE_CHOICES, default=13, verbose_name='增值税税率(%)')
+    price_input_mode = models.CharField(
+        max_length=10,
+        choices=PRICE_INPUT_MODE_CHOICES,
+        default='EXCLUSIVE',
+        verbose_name='单价录入口径',
+        help_text='整单统一口径。含税时按含税单价反算未税单价入账,存量单据保持未税语义',
+    )
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='不含税金额')
     tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='税额')
     total_with_tax = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='含税总额')
@@ -93,7 +133,12 @@ class PurchaseRequestLine(BaseModel):
     pr = models.ForeignKey(PurchaseRequest, on_delete=models.CASCADE, related_name='lines', verbose_name='采购申请')
     item = models.ForeignKey('masterdata.Item', on_delete=models.PROTECT, related_name='pr_lines', verbose_name='物料')
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='数量')
-    estimated_price = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='预估单价')
+    estimated_price = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='预估单价(未税)')
+    # 含税单价:含税口径下为用户录入原值,未税口径下由未税单价回填。仅供展示与对账,
+    # 不参与金额计算(金额/税额/含税总额一律由 estimated_price 正向推算,保证三者自洽)
+    price_with_tax = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name='含税单价', help_text='展示用,不参与金额计算'
+    )
     line_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='行金额')
     required_date = models.DateField(null=True, blank=True, verbose_name='交期')
     project = models.ForeignKey(
@@ -138,6 +183,10 @@ class PurchaseRequestLine(BaseModel):
 
     def save(self, *args, **kwargs):
         self.line_amount = self.qty * self.estimated_price
+        # 兜底回填含税单价:MRP/BOM 等非表单入口不会传这个字段,留 0 会让列表显示 ¥0.00。
+        # 表单入口由序列化器按录入口径显式赋值,此处不覆盖。
+        if not self.price_with_tax and self.estimated_price and self.pr_id:
+            self.price_with_tax = price_inclusive_from_exclusive(self.estimated_price, self.pr.tax_rate)
         super().save(*args, **kwargs)
 
 
@@ -194,6 +243,15 @@ class PurchaseOrder(BaseModel):
     supplier = models.ForeignKey(
         'masterdata.Supplier', on_delete=models.PROTECT, related_name='purchase_orders', verbose_name='供应商'
     )
+    source_pr = models.ForeignKey(
+        PurchaseRequest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='converted_orders',
+        verbose_name='来源采购申请',
+        help_text='由采购申请转换生成时回填,用于在申请列表上反查 PO 号',
+    )
     project = models.ForeignKey(
         'projects.Project',
         on_delete=models.SET_NULL,
@@ -208,6 +266,13 @@ class PurchaseOrder(BaseModel):
 
     # 税率相关
     tax_rate = models.IntegerField(choices=TAX_RATE_CHOICES, default=13, verbose_name='增值税税率(%)')
+    price_input_mode = models.CharField(
+        max_length=10,
+        choices=PurchaseRequest.PRICE_INPUT_MODE_CHOICES,
+        default='EXCLUSIVE',
+        verbose_name='单价录入口径',
+        help_text='整单统一口径。转单时从采购申请继承',
+    )
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='不含税金额')
     tax_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='税额')
     total_with_tax = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='含税总额')
@@ -254,7 +319,11 @@ class PurchaseOrderLine(BaseModel):
     po = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='lines', verbose_name='采购订单')
     item = models.ForeignKey('masterdata.Item', on_delete=models.PROTECT, related_name='po_lines', verbose_name='物料')
     qty = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='订购数量')
-    unit_price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单价')
+    unit_price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='单价(未税)')
+    # 与 PurchaseRequestLine.price_with_tax 同语义:展示用,不参与金额计算
+    price_with_tax = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0, verbose_name='含税单价', help_text='展示用,不参与金额计算'
+    )
     line_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='行金额')
     received_qty = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name='已收货数量')
 
@@ -296,6 +365,9 @@ class PurchaseOrderLine(BaseModel):
 
     def save(self, *args, **kwargs):
         self.line_amount = self.qty * self.unit_price
+        # 与 PurchaseRequestLine 一致:非表单入口未传含税单价时按税率回填,避免展示 ¥0.00
+        if not self.price_with_tax and self.unit_price and self.po_id:
+            self.price_with_tax = price_inclusive_from_exclusive(self.unit_price, self.po.tax_rate)
         super().save(*args, **kwargs)
 
 
