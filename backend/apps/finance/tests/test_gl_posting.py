@@ -136,6 +136,8 @@ class GLAutoPostingTest(TestCase):
         self.assertEqual(lines['2202'].supplier_id, self.supplier.pk)
 
     def test_deleted_payment_posts_single_reversing_voucher(self):
+        from unittest.mock import patch
+
         from apps.finance.accounting import AccountBalance, JournalVoucher
         from apps.finance.models import Payment
 
@@ -148,8 +150,13 @@ class GLAutoPostingTest(TestCase):
             amount=Decimal('400.00'),
         )
 
-        pay.soft_delete()
-        pay.soft_delete()
+        # 红字冲销按「当前日期」找开放会计期间(posting.reverse_document 用 timezone.localdate())。
+        # 不冻结的话,只要今天不落在 setUp 建的 7 月期间内就会抛「没有开放会计期间」——测试从而
+        # 只在 2026 年 7 月内才绿。把时钟固定到 7 月期间内,使冲销凭证回落到 self.period,下面按
+        # self.period 断言的期间借贷才成立,测试不再随真实日期漂移。
+        with patch('django.utils.timezone.localdate', return_value=date(2026, 7, 20)):
+            pay.soft_delete()
+            pay.soft_delete()
 
         reversal = self._voucher('REVERSAL_AR_RECEIPT', pay.pk)
         self.assertEqual(reversal.status, 'POSTED')
