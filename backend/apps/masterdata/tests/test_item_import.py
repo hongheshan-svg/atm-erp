@@ -73,3 +73,43 @@ class ItemImportSoftDeletedSkuTest(TestCase):
         self.assertEqual(response.data['revived_count'], 0)
         item.refresh_from_db()
         self.assertEqual(item.name, '在用物料')
+
+    def test_import_reads_tax_exclusive_column_directly(self):
+        """列名带「(未税)」时按未税直读，不再按税率反算——与采购申请/BOM 导入口径一致。"""
+        response = self.import_rows(
+            [
+                {
+                    '物料编码': 'IMP-EXCL-001',
+                    '物料名称': '未税录入物料',
+                    '单位': '个',
+                    '采购单价(未税)': 100,
+                    '税率(%)': 13,
+                }
+            ]
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['errors'], [])
+        item = Item.objects.get(sku='IMP-EXCL-001')
+        # 未税直读：存 100.00，而不是 100/1.13≈88.50
+        self.assertEqual(float(item.purchase_price), 100.0)
+
+    def test_import_reverse_calcs_tax_inclusive_column(self):
+        """列名带「(含税)」维持原语义：按行内税率反算未税后存储。"""
+        response = self.import_rows(
+            [
+                {
+                    '物料编码': 'IMP-INCL-001',
+                    '物料名称': '含税录入物料',
+                    '单位': '个',
+                    '采购单价(含税)': 113,
+                    '税率(%)': 13,
+                }
+            ]
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['errors'], [])
+        item = Item.objects.get(sku='IMP-INCL-001')
+        # 含税反算：113 / 1.13 = 100.00
+        self.assertEqual(float(item.purchase_price), 100.0)

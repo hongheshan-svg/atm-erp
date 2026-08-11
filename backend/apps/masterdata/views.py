@@ -166,9 +166,26 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
             version_brand_col = find_column(df, ['版本/品牌'])
             unit_col = find_column(df, ['单位', 'unit'])
             item_type_col = find_column(df, ['物料属性', 'item_type'])  # 原材料/产成品/半成品/服务
-            purchase_col = find_column(df, ['采购单价(含税)', '采购单价', '采购价', 'purchase'])
-            sale_col = find_column(df, ['销售单价(含税)', '销售单价', '销售价', 'sale'])
-            cost_col = find_column(df, ['标准成本(含税)', '标准成本', 'standard_cost'])
+
+            # 三价各支持含税/未税两侧列名,与采购申请、BOM 导入口径一致:
+            # 未税列命中即按未税直读,否则含税/裸列按含税反算(见「创建新物料」处)。
+            # find_column 是子串匹配,「采购单价(未税)」同样含「采购单价」,故先认未税列,
+            # 再用带排除的 find_incl_col 检测含税/裸列,避免同一列被两侧串台。
+            def find_incl_col(keywords, exclude_col):
+                for col in df.columns:
+                    if col == exclude_col:
+                        continue
+                    for keyword in keywords:
+                        if keyword in str(col):
+                            return col
+                return None
+
+            purchase_excl_col = find_column(df, ['采购单价(未税)', '采购未税单价', '不含税采购单价'])
+            sale_excl_col = find_column(df, ['销售单价(未税)', '销售未税单价', '不含税销售单价'])
+            cost_excl_col = find_column(df, ['标准成本(未税)', '未税标准成本', '不含税标准成本'])
+            purchase_col = find_incl_col(['采购单价(含税)', '采购单价', '采购价', 'purchase'], purchase_excl_col)
+            sale_col = find_incl_col(['销售单价(含税)', '销售单价', '销售价', 'sale'], sale_excl_col)
+            cost_col = find_incl_col(['标准成本(含税)', '标准成本', 'standard_cost'], cost_excl_col)
             tax_col = find_column(df, ['税率', 'tax'])
             mfr_col = find_column(df, ['生产厂家', '厂家', 'manufacturer'])
             origin_col = find_column(df, ['产地', 'origin'])
@@ -437,18 +454,21 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                     unit = unit_map.get(unit_val, 'PCS')
 
                     # 创建新物料（不更新已有物料）
-                    # 三价列列名已带「(含税)」后缀，旧名（无后缀）向后兼容；
-                    # 统一按含税口径解读，用行内税率反算未税后写入，
-                    # 保持与下游 MRP/成本核算的未税入账语义一致。
+                    # 三价各支持含税/未税两侧列名(含税列名带「(含税)」后缀、旧无后缀名兼容;
+                    # 未税列名带「(未税)/不含税」)。未税列有值按未税直读,否则含税/裸列按含税
+                    # 反算未税后写入,保持与下游 MRP/成本核算的未税入账语义一致。
                     from apps.core.price_parsing import resolve_import_prices
 
                     _item_tax_rate = get_int(tax_col, 13)
                     _raw_purchase = get_num(purchase_col) or None
                     _raw_sale = get_num(sale_col) or None
                     _raw_cost = get_num(cost_col) or None
-                    _purchase_excl, _ = resolve_import_prices(None, _raw_purchase, _item_tax_rate)
-                    _sale_excl, _ = resolve_import_prices(None, _raw_sale, _item_tax_rate)
-                    _cost_excl, _ = resolve_import_prices(None, _raw_cost, _item_tax_rate)
+                    _raw_purchase_excl = get_num(purchase_excl_col) or None
+                    _raw_sale_excl = get_num(sale_excl_col) or None
+                    _raw_cost_excl = get_num(cost_excl_col) or None
+                    _purchase_excl, _ = resolve_import_prices(_raw_purchase_excl, _raw_purchase, _item_tax_rate)
+                    _sale_excl, _ = resolve_import_prices(_raw_sale_excl, _raw_sale, _item_tax_rate)
+                    _cost_excl, _ = resolve_import_prices(_raw_cost_excl, _raw_cost, _item_tax_rate)
 
                     item_fields = dict(
                         name=name,
@@ -835,6 +855,10 @@ class ItemViewSet(PermissionMixin, SoftDeleteMixin, UserTrackingMixin, viewsets.
                 ('  • 单位：个/套/千克/米/平方米/立方米/箱/包/小时（或PCS/SET/KG等英文），默认个', None),
                 (
                     '  • 采购单价(含税)/销售单价(含税)/标准成本(含税)：请填含税价格（含增值税），系统自动按税率换算未税后存储，默认0',
+                    None,
+                ),
+                (
+                    '  • 如需按未税录入：把列名改为「采购单价(未税)/销售单价(未税)/标准成本(未税)」，系统按未税直接存储不再换算',
                     None,
                 ),
                 ('  • 税率(%)：增值税率，默认13', None),
