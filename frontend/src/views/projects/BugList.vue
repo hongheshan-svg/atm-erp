@@ -341,6 +341,7 @@ import { getProjectList } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getUsers } from '@/api/auth'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 
@@ -744,7 +745,7 @@ const handleStatusSubmit = async () => {
     loadBugs()
     loadStats()
   } catch (error: any) {
-    const msg = error.response?.data?.error || '状态变更失败'
+    const msg = extractApiError(error, '状态变更失败')
     ElMessage.error(msg)
   } finally {
     changingStatus.value = false

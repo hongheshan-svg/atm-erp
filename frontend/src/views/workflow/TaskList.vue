@@ -131,6 +131,7 @@ import { Refresh, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { getMyPendingTasks, getPendingTaskCount, approveTask, rejectTask, deleteWorkflowTask, batchDeleteWorkflowTasks } from '@/api/workflow'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -269,7 +270,7 @@ const handleDelete = async (row: any) => {
     loadTasks()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '删除失败')
+      ElMessage.error(extractApiError(error, '删除失败'))
     }
   } finally {
     deleting.value = false
@@ -293,7 +294,7 @@ const handleBatchDelete = async () => {
     loadTasks()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '批量删除失败')
+      ElMessage.error(extractApiError(error, '批量删除失败'))
     }
   } finally {
     deleting.value = false

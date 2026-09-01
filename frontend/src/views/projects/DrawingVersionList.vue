@@ -120,6 +120,7 @@ getDrawingVersions, createDrawingVersion, getDrawingTimeline,
   approveDrawingVersion, rejectDrawingVersion, submitDrawingReview
 } from '@/api/projects/enhancement'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/drawing-versions/', { onSuccess: () => loadList() })
 
@@ -164,7 +165,7 @@ const submitReview = async (row: any) => {
     ElMessage.success('已提交审核')
     loadList()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '提交审核失败')
+    ElMessage.error(extractApiError(e, '提交审核失败'))
   }
 }
 

@@ -320,6 +320,7 @@ import { getAndonCallList, getPendingAndonCalls, getAndonStatusBoard, getAndonSt
 import { getUserList } from '@/api/accounts'
 import * as echarts from '@/utils/echarts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/production/andon-calls/', { onSuccess: () => fetchCalls() })
 
@@ -544,7 +545,7 @@ const handleRespond = async (row: any) => {
     fetchStations()
     fetchStats()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 

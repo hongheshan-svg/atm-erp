@@ -282,6 +282,7 @@ import { getUsers } from '@/api/auth'
 import { getCustomerList } from '@/api/masterdata'
 import { getOrdersForLinking } from '@/api/sales'
 import { projectFormRules } from '@/utils/businessPricing'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -629,7 +630,7 @@ const handleSubmitApproval = async (row: any) => {
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('提交审批失败:', error)
-      ElMessage.error(error.response?.data?.error || error.response?.data?.detail || '提交审批失败')
+      ElMessage.error(extractApiError(error, '提交审批失败'))
     }
   } finally {
     submitLoading.value = null

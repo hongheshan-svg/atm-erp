@@ -146,6 +146,7 @@ import { Refresh, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { getMySubmittedWorkflows, withdrawWorkflow, deleteWorkflowInstance, batchDeleteWorkflowInstances } from '@/api/workflow'
+import { extractApiError } from '@/utils/apiError'
 
 const userStore = useUserStore()
 const permissionStore = usePermissionStore()
@@ -233,7 +234,7 @@ const handleWithdraw = async (row: any) => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '操作失败')
+      ElMessage.error(extractApiError(error, '操作失败'))
     }
   }
 }
@@ -253,7 +254,7 @@ const handleDelete = async (row: any) => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '删除失败')
+      ElMessage.error(extractApiError(error, '删除失败'))
     }
   } finally {
     deleting.value = false
@@ -277,7 +278,7 @@ const handleBatchDelete = async () => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '批量删除失败')
+      ElMessage.error(extractApiError(error, '批量删除失败'))
     }
   } finally {
     deleting.value = false

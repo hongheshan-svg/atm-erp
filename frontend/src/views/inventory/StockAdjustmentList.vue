@@ -162,6 +162,7 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getWarehouseList } from '@/api/masterdata'
 import { toFixedSafe } from '@/utils/number'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -308,7 +309,7 @@ const handleSubmitApproval = async (row: any) => {
     loadAdjustments()
   } catch (error: any) {
     if (error !== 'cancel') {
-      const msg = error.response?.data?.error || '提交失败'
+      const msg = extractApiError(error, '提交失败')
       ElMessage.error(msg)
     }
   }

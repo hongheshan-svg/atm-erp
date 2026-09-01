@@ -312,6 +312,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { getDeliveryOrders, getDeliveryOrder, submitDeliveryOrder, confirmDeliveryPrepared, confirmDeliveryLogistics, confirmDeliverySigned, uploadDeliveryReceipt, projectConfirmDelivery, rejectDeliveryOrder } from '@/api/sales'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 const route = useRoute()
@@ -469,7 +470,7 @@ const handleSubmit = async (row: any) => {
     loadDeliveryOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '提交失败')
+      ElMessage.error(extractApiError(error, '提交失败'))
     }
   }
 }
@@ -488,7 +489,7 @@ const handleConfirmPrepared = async (row: any) => {
     loadDeliveryOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '操作失败')
+      ElMessage.error(extractApiError(error, '操作失败'))
     }
   }
 }
@@ -514,7 +515,7 @@ const submitLogistics = async () => {
     logisticsDialogVisible.value = false
     loadDeliveryOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(error, '操作失败'))
   } finally {
     submitting.value = false
   }
@@ -540,7 +541,7 @@ const submitSigned = async () => {
     signedDialogVisible.value = false
     loadDeliveryOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(error, '操作失败'))
   } finally {
     submitting.value = false
   }
@@ -569,7 +570,7 @@ const submitUpload = async () => {
     uploadDialogVisible.value = false
     loadDeliveryOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '上传失败')
+    ElMessage.error(extractApiError(error, '上传失败'))
   } finally {
     submitting.value = false
   }
@@ -584,7 +585,7 @@ const handleProjectConfirm = async (row: any) => {
     loadDeliveryOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '操作失败')
+      ElMessage.error(extractApiError(error, '操作失败'))
     }
   }
 }
@@ -608,7 +609,7 @@ const submitReject = async () => {
     rejectDialogVisible.value = false
     loadDeliveryOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(error, '操作失败'))
   } finally {
     submitting.value = false
   }

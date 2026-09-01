@@ -360,6 +360,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getPurchaseReconciliations, getPurchaseReconciliation, createPurchaseReconciliation, deletePurchaseReconciliation, getPurchaseReconciliationSupplierSummary, getPurchaseReconciliationOpeningBalance, generatePurchaseReconciliationLines, submitPurchaseReconciliation, confirmPurchaseReconciliation, confirmPurchaseReconciliationReceipt } from '@/api/finance'
 import { getSupplierList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/purchase-reconciliations/', { onSuccess: () => loadReconciliations() })
 
@@ -586,7 +587,7 @@ const submitCreate = async () => {
     loadReconciliations()
     handleDetail(res)
   } catch (error: any) {
-    ElMessage.error('创建失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '创建失败'))
   } finally {
     submitting.value = false
   }

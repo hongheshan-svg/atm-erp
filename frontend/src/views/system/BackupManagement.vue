@@ -126,6 +126,7 @@ import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Document } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/unknown/')
 
@@ -186,7 +187,7 @@ const confirmCreate = async () => {
     showCreateDialog.value = false
     fetchBackups()
   } catch (error: any) {
-    ElMessage.error('备份创建失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '备份创建失败'))
   } finally {
     creating.value = false
   }
@@ -210,7 +211,7 @@ const confirmRestore = async () => {
     ElMessage.success('数据恢复成功，请刷新页面')
     showRestoreDialog.value = false
   } catch (error: any) {
-    ElMessage.error('恢复失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '恢复失败'))
   } finally {
     restoring.value = ''
   }
@@ -232,7 +233,7 @@ const deleteBackup = async (backup: any) => {
     fetchBackups()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '删除失败'))
     }
   }
 }
@@ -255,7 +256,7 @@ const cleanupBackups = async () => {
     fetchBackups()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('清理失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '清理失败'))
     }
   } finally {
     cleaning.value = false

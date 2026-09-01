@@ -281,6 +281,7 @@ import { getSalesContracts, getSalesContract, createContractFromSO, patchSalesCo
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getCustomerList } from '@/api/masterdata'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -471,7 +472,7 @@ const handleCreateFromSO = async () => {
     handleEdit(contract)
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '创建合同失败')
+      ElMessage.error(extractApiError(error, '创建合同失败'))
     }
   } finally {
     creating.value = false
@@ -556,7 +557,7 @@ const handleSubmitApproval = async (row: any) => {
     loadContracts()
   } catch (error: any) {
     if (error !== 'cancel') {
-      const msg = error.response?.data?.error || '提交失败'
+      const msg = extractApiError(error, '提交失败')
       ElMessage.error(msg)
     }
   }

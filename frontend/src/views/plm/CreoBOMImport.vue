@@ -331,6 +331,7 @@ import { getItemList } from '@/api/masterdata'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Plus, Download, Connection } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/creo-bom-imports/', { onSuccess: () => loadSessions() })
 
@@ -500,7 +501,7 @@ const doUpload = async () => {
     currentSession.value = res.session
     showDetail.value = true
   } catch (e: any) {
-    ElMessage.error('上传失败: ' + (e.response?.data?.error || e.message))
+    ElMessage.error(extractApiError(e, '上传失败'))
   } finally {
     uploading.value = false
   }
@@ -538,7 +539,7 @@ const createItems = async (session: any) => {
     }
   } catch (e: any) {
     if (e !== 'cancel') {
-      ElMessage.error('创建失败: ' + (e.response?.data?.error || e.message))
+      ElMessage.error(extractApiError(e, '创建失败'))
     }
   }
 }
@@ -566,7 +567,7 @@ const importBOM = async (session: any) => {
       currentSession.value = res.session
     }
   } catch (e: any) {
-    ElMessage.error('导入失败: ' + (e.response?.data?.error || e.message))
+    ElMessage.error(extractApiError(e, '导入失败'))
   }
 }
 
@@ -593,7 +594,7 @@ const importHierarchicalBOM = async (session: any) => {
       currentSession.value = res.session
     }
   } catch (e: any) {
-    ElMessage.error('层级导入失败: ' + (e.response?.data?.error || e.message))
+    ElMessage.error(extractApiError(e, '层级导入失败'))
   }
 }
 
@@ -641,7 +642,7 @@ const doManualMatch = async () => {
     showManualMatch.value = false
     viewSession(currentSession.value)
   } catch (e: any) {
-    ElMessage.error('匹配失败: ' + (e.response?.data?.error || e.message))
+    ElMessage.error(extractApiError(e, '匹配失败'))
   }
 }
 

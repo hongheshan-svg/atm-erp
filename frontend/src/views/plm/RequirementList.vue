@@ -318,6 +318,7 @@ import { getUsers } from '@/api/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/requirements/', { onSuccess: () => fetchList() })
 
@@ -578,7 +579,7 @@ const handleSubmit = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 
@@ -589,7 +590,7 @@ const handleApprove = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 

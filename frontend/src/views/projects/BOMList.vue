@@ -703,6 +703,7 @@ import { getProjectList } from '@/api/projects/project'
 import { getUsers } from '@/api/auth'
 import { getItemList, getSupplierList } from '@/api/masterdata'
 import { toFixedSafe } from '@/utils/number'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 
@@ -1464,7 +1465,7 @@ const handleConfirmCopy = async () => {
     fetchBOM()
   } catch (error: any) {
     console.error('复制失败:', error)
-    ElMessage.error(error.response?.data?.error || '复制失败')
+    ElMessage.error(extractApiError(error, '复制失败'))
   } finally {
     copying.value = false
   }
@@ -1487,7 +1488,7 @@ const handleMaterialCheck = async () => {
     materialCheckData.value = response.data || response
   } catch (error: any) {
     console.error('齐套检查失败:', error)
-    ElMessage.error(error.response?.data?.error || '齐套检查失败')
+    ElMessage.error(extractApiError(error, '齐套检查失败'))
   } finally {
     materialCheckLoading.value = false
   }

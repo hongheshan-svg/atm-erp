@@ -86,6 +86,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDeliveryCollaborations, getDeliveryCollaboration, confirmDeliveryCollaboration } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/delivery-collaborations/', { onSuccess: () => loadData() })
 
@@ -145,7 +146,7 @@ const saveConfirm = async () => {
     confirmDialogVisible.value = false
     loadData()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '确认失败')
+    ElMessage.error(extractApiError(error, '确认失败'))
   } finally {
     saving.value = false
   }

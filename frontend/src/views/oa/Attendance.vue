@@ -184,6 +184,7 @@ import { ElMessage } from 'element-plus'
 import { Clock, CircleCheck, Document, Timer, Van, Box } from '@element-plus/icons-vue'
 import { getAttendanceToday, getAttendanceRecords, getAttendanceMonthlySummary, checkIn, checkOut } from '@/api/oa'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/oa/attendance-records/', { onSuccess: () => loadRecords() })
 
@@ -289,7 +290,7 @@ const handleCheckIn = async () => {
     ElMessage.success('签到成功')
     loadRecords()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '签到失败')
+    ElMessage.error(extractApiError(error, '签到失败'))
   } finally {
     checking.value = false
   }
@@ -307,7 +308,7 @@ const handleCheckOut = async () => {
     loadRecords()
     loadMonthlySummary()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '签退失败')
+    ElMessage.error(extractApiError(error, '签退失败'))
   } finally {
     checking.value = false
   }

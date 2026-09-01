@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { extractApiError } from '@/utils/apiError'
 import { usePermissionStore } from '@/stores/permission'
 import { useUserStore } from '@/stores/user'
 
@@ -90,7 +91,7 @@ service.interceptors.response.use(
     }
 
     if (error.response) {
-      const { status, data } = error.response
+      const { status } = error.response
 
       if (status === 401 && !originalRequest._retry && !originalRequest.skipAuthRefresh) {
         const refreshToken = localStorage.getItem('refresh_token')
@@ -139,15 +140,17 @@ service.interceptors.response.use(
           isRefreshing = false
         }
       } else if (!originalRequest.skipErrorMessage) {
+        // 兜底文案只在后端没给出可读原因时使用（真 500 无 JSON body），
+        // 否则 403/404/500 会把后端明确写好的原因糊成通用文案。
+        let fallback = '请求失败'
         if (status === 403) {
-          ElMessage.error('没有权限执行此操作')
+          fallback = '没有权限执行此操作'
         } else if (status === 404) {
-          ElMessage.error('请求的资源不存在')
+          fallback = '请求的资源不存在'
         } else if (status === 500) {
-          ElMessage.error('服务器错误，请稍后再试')
-        } else {
-          ElMessage.error(data?.detail || data?.error || '请求失败')
+          fallback = '服务器错误，请稍后再试'
         }
+        ElMessage.error(extractApiError(error, fallback))
       }
     } else if (!originalRequest?.skipErrorMessage) {
       ElMessage.error('网络错误，请检查您的网络连接')

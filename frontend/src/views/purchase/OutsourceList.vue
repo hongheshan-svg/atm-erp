@@ -385,6 +385,7 @@ getOutsourceOrders, getOutsourceOrder, createOutsourceOrder, updateOutsourceOrde
   createOutsourceReceipt, confirmOutsourceReceipt
 } from '@/api/purchase'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/purchase/outsource-orders/', { onSuccess: () => loadOrders() })
 
@@ -653,7 +654,7 @@ const handleSave = async () => {
     dialogVisible.value = false
     loadOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '保存失败')
+    ElMessage.error(extractApiError(error, '保存失败'))
   } finally {
     saving.value = false
   }
@@ -667,7 +668,7 @@ const handleConfirm = async (row: any) => {
     loadOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '确认失败')
+      ElMessage.error(extractApiError(error, '确认失败'))
     }
   }
 }
@@ -680,7 +681,7 @@ const handleCancel = async (row: any) => {
     loadOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '取消失败')
+      ElMessage.error(extractApiError(error, '取消失败'))
     }
   }
 }
@@ -754,7 +755,7 @@ const submitIssue = async () => {
     issueDialogVisible.value = false
     loadOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '发料失败')
+    ElMessage.error(extractApiError(error, '发料失败'))
   } finally {
     saving.value = false
   }
@@ -827,7 +828,7 @@ const submitReceipt = async () => {
     receiptDialogVisible.value = false
     loadOrders()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '收货失败')
+    ElMessage.error(extractApiError(error, '收货失败'))
   } finally {
     saving.value = false
   }

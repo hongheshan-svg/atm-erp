@@ -570,6 +570,7 @@ import { usePermission } from '@/composables/usePermission'
 import { getItemList, getSupplierList } from '@/api/masterdata'
 import { exportQuoteBOM, getBOMList, getBOMPendingQuoteCount, importQuoteBOM } from '@/api/projects/bom'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 
@@ -977,7 +978,7 @@ const handleCreateFromBOM = async () => {
     loadData()
   } catch (error: any) {
     console.error('创建询价单失败:', error)
-    ElMessage.error(error.response?.data?.error || '创建失败')
+    ElMessage.error(extractApiError(error, '创建失败'))
   }
 }
 
@@ -1009,7 +1010,7 @@ const handleCreateFromTemplate = async () => {
     loadData()
   } catch (error: any) {
     console.error('创建询价单失败:', error)
-    ElMessage.error(error.response?.data?.error || '创建失败')
+    ElMessage.error(extractApiError(error, '创建失败'))
   }
 }
 
@@ -1129,7 +1130,7 @@ const confirmSendToSuppliers = async () => {
     sendDialogVisible.value = false
     loadData()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '发送失败')
+    ElMessage.error(extractApiError(error, '发送失败'))
   }
 }
 

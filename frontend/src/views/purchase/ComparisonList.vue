@@ -266,6 +266,7 @@ import {
   completeComparison, approveComparison, convertComparisonToPO, batchDeleteComparisons
 } from '@/api/purchase'
 import { useUserStore } from '@/stores/user'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -456,7 +457,7 @@ const submitCreate = async () => {
     router.push(`/purchase/comparisons/${res.id}`)
   } catch (error: any) {
     console.error('创建比价失败:', error)
-    const errorMsg = error.response?.data?.error || error.response?.data?.detail || '创建失败'
+    const errorMsg = extractApiError(error, '创建失败')
     ElMessage.error(errorMsg)
   }
 }
@@ -503,7 +504,7 @@ const handleConvertToPO = async (row: any) => {
     router.push(`/purchase/orders/${res.id}`)
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '转换失败')
+      ElMessage.error(extractApiError(error, '转换失败'))
     }
   }
 }
@@ -526,7 +527,7 @@ const handleDelete = async (row: any) => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '删除失败')
+      ElMessage.error(extractApiError(error, '删除失败'))
     }
   }
 }
@@ -551,7 +552,7 @@ const handleBatchDelete = async () => {
     loadData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '批量删除失败')
+      ElMessage.error(extractApiError(error, '批量删除失败'))
     }
   }
 }

@@ -272,6 +272,7 @@ getAttendanceToday,
   submitOvertimeRequest
 } from '@/api/accounts'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/auth/attendance-records/', { onSuccess: () => fetchRecords() })
 
@@ -407,7 +408,7 @@ const handleCheckIn = async () => {
     ElMessage.success('签到成功')
     fetchRecords()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '签到失败')
+    ElMessage.error(extractApiError(e, '签到失败'))
   }
 }
 
@@ -418,7 +419,7 @@ const handleCheckOut = async () => {
     ElMessage.success('签退成功')
     fetchRecords()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '签退失败')
+    ElMessage.error(extractApiError(e, '签退失败'))
   }
 }
 
@@ -483,7 +484,7 @@ const handleSubmitLeave = async (row: any) => {
     ElMessage.success('已提交审批')
     fetchLeaveRequests()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '提交失败')
+    ElMessage.error(extractApiError(e, '提交失败'))
   }
 }
 
@@ -493,7 +494,7 @@ const handleSubmitOvertime = async (row: any) => {
     ElMessage.success('已提交审批')
     fetchOvertimeRequests()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '提交失败')
+    ElMessage.error(extractApiError(e, '提交失败'))
   }
 }
 
@@ -504,7 +505,7 @@ const handleCancelLeave = async (row: any) => {
     ElMessage.success('撤回成功')
     fetchLeaveRequests()
   } catch (error: any) {
-    if (error !== 'cancel') ElMessage.error(error.response?.data?.error || '撤回失败')
+    if (error !== 'cancel') ElMessage.error(extractApiError(error, '撤回失败'))
   }
 }
 

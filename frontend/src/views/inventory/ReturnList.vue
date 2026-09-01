@@ -291,6 +291,7 @@ import { usePermissionStore } from '@/stores/permission'
 import { getAfterSalesOrderList } from '@/api/aftersales'
 import { getItemList, getWarehouseList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -616,7 +617,7 @@ const handleSubmit = async (row: any) => {
     loadList()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('提交失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '提交失败'))
     }
   }
 }
@@ -627,7 +628,7 @@ const handleInspect = async (row: any) => {
     ElMessage.success('开始检验')
     loadList()
   } catch (error: any) {
-    ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '操作失败'))
   }
 }
 
@@ -670,7 +671,7 @@ const confirmReceive = async () => {
     receiveDialogVisible.value = false
     loadList()
   } catch (error: any) {
-    ElMessage.error('入库失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '入库失败'))
   } finally {
     receiving.value = false
   }
@@ -695,7 +696,7 @@ const confirmReject = async () => {
     rejectDialogVisible.value = false
     loadList()
   } catch (error: any) {
-    ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '操作失败'))
   } finally {
     rejecting.value = false
   }

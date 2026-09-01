@@ -346,6 +346,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getSalesReconciliations, getSalesReconciliation, createSalesReconciliation, deleteSalesReconciliation, getSalesReconciliationCustomerSummary, getSalesReconciliationOpeningBalance, generateSalesReconciliationLines, submitSalesReconciliation, confirmSalesReconciliation, confirmSalesReconciliationDelivery } from '@/api/finance'
 import { getCustomerList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/finance/sales-reconciliations/', { onSuccess: () => loadReconciliations() })
 
@@ -541,7 +542,7 @@ const submitCreate = async () => {
     // 打开明细
     handleDetail(res)
   } catch (error: any) {
-    ElMessage.error('创建失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '创建失败'))
   } finally {
     submitting.value = false
   }

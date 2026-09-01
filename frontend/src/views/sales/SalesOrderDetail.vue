@@ -262,6 +262,7 @@ import { Van, Edit, Check, Close, RefreshLeft } from '@element-plus/icons-vue'
 import { getOrder, getDeliveryOrders, confirmOrder, returnOrderToDraft, cancelOrder, createDeliveryOrder, submitDeliveryOrder } from '@/api/sales'
 import { getWarehouseList } from '@/api/masterdata'
 import { getTaxInclusiveTotal } from '@/utils/businessPricing'
+import { extractApiError } from '@/utils/apiError'
 
 const route = useRoute()
 const router = useRouter()
@@ -401,7 +402,7 @@ const handleReturnToDraft = async () => {
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('退回草稿失败:', error)
-      ElMessage.error('退回草稿失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '退回草稿失败'))
     }
   }
 }
@@ -535,7 +536,7 @@ const submitDelivery = async () => {
     loadOrderDetail()
   } catch (error: any) {
     console.error('创建发货单失败:', error)
-    ElMessage.error(error.response?.data?.detail || error.response?.data?.error || '创建发货单失败')
+    ElMessage.error(error.response?.data?.detail || extractApiError(error, '创建发货单失败'))
   }
 }
 

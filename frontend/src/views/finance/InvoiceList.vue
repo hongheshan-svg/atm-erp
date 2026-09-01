@@ -493,6 +493,7 @@ import { Plus, Upload, Download, Document, Files, Link } from '@element-plus/ico
 import { getInvoices, getInvoice, createInvoice, updateInvoice, deleteInvoice, autoMatchInvoices, matchInvoiceOrder, getInvoiceAttachments, bulkDeleteInvoices, downloadInvoiceTemplate, exportInvoices, getInvoiceReconciliations, getInvoiceReconciliation, createInvoiceReconciliation, generateInvoiceReconciliationLines, confirmInvoiceReconciliation } from '@/api/finance'
 import { deleteAttachment, downloadAttachment } from '@/api/core'
 import request from '@/utils/request'
+import { extractApiError } from '@/utils/apiError'
 
 const loading = ref(false)
 const reconciliationLoading = ref(false)
@@ -718,7 +719,7 @@ const handleMatchOrder = async (row: any) => {
     loadInvoices()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '匹配失败')
+      ElMessage.error(extractApiError(error, '匹配失败'))
     }
   }
 }
@@ -918,7 +919,7 @@ const handleGenerateReconciliation = async (row: any) => {
     ElMessage.success('生成成功')
     loadReconciliationList()
   } catch (error: any) {
-    if (error !== 'cancel') ElMessage.error('生成失败: ' + (error.response?.data?.error || error.message))
+    if (error !== 'cancel') ElMessage.error(extractApiError(error, '生成失败'))
   }
 }
 

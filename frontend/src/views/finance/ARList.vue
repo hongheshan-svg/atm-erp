@@ -382,6 +382,7 @@ import { exportARReport } from '@/api/core'
 import { getCustomerList } from '@/api/masterdata'
 import { getOrders } from '@/api/sales'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 const loading = ref(false)
 const bankLoading = ref(false)
@@ -689,7 +690,7 @@ const submitBankMatch = async () => {
     loadBankStatements()
     loadData()
   } catch (error: any) {
-    ElMessage.error('匹配失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '匹配失败'))
   } finally {
     matching.value = false
   }

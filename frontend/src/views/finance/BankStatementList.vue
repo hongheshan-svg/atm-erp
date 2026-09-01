@@ -172,6 +172,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
+import { extractApiError } from '@/utils/apiError'
 import {
   getBankStatements,
   getBankNames,
@@ -317,7 +318,7 @@ const handleImport = async () => {
     loadData()
     loadBankNames()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '导入失败')
+    ElMessage.error(extractApiError(e, '导入失败'))
   } finally {
     importing.value = false
   }

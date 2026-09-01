@@ -135,6 +135,7 @@ import { Box } from '@element-plus/icons-vue'
 import { getWarehouseList } from '@/api/masterdata'
 import { getTaxInclusiveTotal } from '@/utils/businessPricing'
 import { getGoodsReceiptStatusLabel, getGoodsReceiptStatusType } from '@/utils/purchaseStatus'
+import { extractApiError } from '@/utils/apiError'
 import {
   getPurchaseOrder, confirmPurchaseOrder, cancelPurchaseOrder,
   getGoodsReceipts, createGoodsReceipt
@@ -234,7 +235,7 @@ const submitReceipt = async () => {
     receiptDialogVisible.value = false
     loadOrderDetail()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || error.response?.data?.lines || '创建收货单失败')
+    ElMessage.error(extractApiError(error, '创建收货单失败'))
   }
 }
 

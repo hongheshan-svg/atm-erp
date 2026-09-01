@@ -192,6 +192,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getCustomerList, getCustomerContactList, createCustomerContact, updateCustomerContact, deleteCustomerContact } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/masterdata/customer-contacts/', { onSuccess: () => loadContacts() })
 
@@ -332,7 +333,7 @@ const handleSubmit = async () => {
     loadContacts()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('保存失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '保存失败'))
     }
   } finally {
     submitting.value = false

@@ -256,6 +256,7 @@ import { getCustomerList, createCustomer, updateCustomer, exportCustomers, downl
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -388,7 +389,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadCustomers()
   } catch (error: any) {
-    if (error !== 'cancel') ElMessage.error('保存客户失败: ' + (error.response?.data?.error || error.message))
+    if (error !== 'cancel') ElMessage.error(extractApiError(error, '保存客户失败'))
   } finally {
     submitting.value = false
   }

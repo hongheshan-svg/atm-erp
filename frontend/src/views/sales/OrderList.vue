@@ -353,6 +353,7 @@ import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { usePermissionStore } from '@/stores/permission'
 import { getCustomerList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 const route = useRoute()
@@ -665,7 +666,7 @@ const handleSubmitApproval = async (row: any) => {
     loadOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      const msg = error.response?.data?.error || '提交失败'
+      const msg = extractApiError(error, '提交失败')
       ElMessage.error(msg)
     }
   }
@@ -827,7 +828,7 @@ const handleBulkDelete = async () => {
     loadOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '批量删除失败')
+      ElMessage.error(extractApiError(error, '批量删除失败'))
     }
   }
 }

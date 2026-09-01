@@ -317,6 +317,7 @@ import { getProjectList } from '@/api/projects/project'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getItemList } from '@/api/masterdata'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -527,7 +528,7 @@ const handleSave = async () => {
     loadDrawings()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '保存失败')
+      ElMessage.error(extractApiError(error, '保存失败'))
     }
   } finally {
     saving.value = false
@@ -542,7 +543,7 @@ const handleSubmitReview = async (row: any) => {
     loadDrawings()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '提交失败')
+      ElMessage.error(extractApiError(error, '提交失败'))
     }
   }
 }
@@ -555,7 +556,7 @@ const handleApprove = async (row: any) => {
     loadDrawings()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '批准失败')
+      ElMessage.error(extractApiError(error, '批准失败'))
     }
   }
 }
@@ -572,7 +573,7 @@ const handleReject = async (row: any) => {
     loadDrawings()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '驳回失败')
+      ElMessage.error(extractApiError(error, '驳回失败'))
     }
   }
 }
@@ -585,7 +586,7 @@ const handleRelease = async (row: any) => {
     loadDrawings()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '发布失败')
+      ElMessage.error(extractApiError(error, '发布失败'))
     }
   }
 }
@@ -611,7 +612,7 @@ const submitNewRevision = async () => {
     revisionDialogVisible.value = false
     loadDrawings()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '创建失败')
+    ElMessage.error(extractApiError(error, '创建失败'))
   } finally {
     saving.value = false
   }

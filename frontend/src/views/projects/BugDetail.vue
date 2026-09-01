@@ -182,6 +182,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
 import { getBug, changeBugStatus, addBugComment } from '@/api/projects/bug'
+import { extractApiError } from '@/utils/apiError'
 
 const route = useRoute()
 const router = useRouter()
@@ -322,7 +323,7 @@ const handleStatusSubmit = async () => {
     statusDialogVisible.value = false
     loadBug()
   } catch (error: any) {
-    const msg = error.response?.data?.error || '状态变更失败'
+    const msg = extractApiError(error, '状态变更失败')
     ElMessage.error(msg)
   } finally {
     changingStatus.value = false

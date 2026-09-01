@@ -482,6 +482,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowDown, Trophy, Money, Clock, Check, Warning, CircleCheck } from '@element-plus/icons-vue'
+import { extractApiError } from '@/utils/apiError'
 import {
   getComparison, getComparisonReport, applyComparisonTemplate,
   autoScoreComparison, updateComparisonScore, updateComparisonWeights,
@@ -689,7 +690,7 @@ const saveWeights = async () => {
     showWeightDialog.value = false
     loadData()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '更新失败')
+    ElMessage.error(extractApiError(error, '更新失败'))
   }
 }
 
@@ -730,7 +731,7 @@ const handleConvertToPO = async () => {
     router.push(`/purchase/orders/${res.id}`)
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '转换失败')
+      ElMessage.error(extractApiError(error, '转换失败'))
     }
   }
 }

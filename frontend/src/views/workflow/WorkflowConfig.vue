@@ -372,6 +372,7 @@ import {
   getWorkflowSteps, createWorkflowStep, updateWorkflowStep, deleteWorkflowStep, reorderWorkflowSteps
 } from '@/api/workflow'
 import { getUsers, getRoles } from '@/api/auth'
+import { extractApiError } from '@/utils/apiError'
 
 // 状态
 const loading = ref(false)
@@ -752,7 +753,7 @@ const moveStep = async (index: any, direction: any) => {
     await reorderWorkflowSteps(step1.id, step2.id)
     await loadSteps()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '移动失败')
+    ElMessage.error(extractApiError(error, '移动失败'))
   }
 }
 

@@ -697,6 +697,7 @@ import { usePermission } from '@/composables/usePermission'
 import { getItemList, getSupplierList } from '@/api/masterdata'
 import { exportBOMForQuote, getBOMList } from '@/api/projects/bom'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 const route = useRoute()
 
@@ -1289,7 +1290,7 @@ const handleApprove = async (row: any) => {
     loadRequests()
   } catch (error: any) {
     if (error !== 'cancel') {
-      const msg = error.response?.data?.error || error.response?.data?.detail || error.message || '批准失败'
+      const msg = extractApiError(error, '批准失败')
       console.error('审批失败:', msg, error)
       ElMessage.error(msg)
     }
@@ -1313,7 +1314,7 @@ const handleReject = async (row: any) => {
     loadRequests()
   } catch (error: any) {
     if (error !== 'cancel') {
-      const msg = error.response?.data?.error || error.response?.data?.detail || error.message || '操作失败'
+      const msg = extractApiError(error, '操作失败')
       console.error('拒绝失败:', msg, error)
       ElMessage.error(msg)
     }
@@ -1328,7 +1329,7 @@ const handleWithdraw = async (row: any) => {
     loadRequests()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '撤回失败')
+      ElMessage.error(extractApiError(error, '撤回失败'))
     }
   }
 }
@@ -1355,7 +1356,7 @@ const doConvertToPO = async () => {
     convertDialogVisible.value = false
     loadRequests()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.error || '转换为采购订单失败')
+    ElMessage.error(extractApiError(error, '转换为采购订单失败'))
   } finally {
     converting.value = false
   }
@@ -1519,7 +1520,7 @@ const exportBomForQuote = async (bomIds: any, exportName: any) => {
     ElMessage.success(`导出${exportName}成功，共${bomIds.length}项物料`)
   } catch (error: any) {
     console.error('导出失败:', error)
-    ElMessage.error('导出失败: ' + (error.response?.data?.error || '未知错误'))
+    ElMessage.error('导出失败: ' + (extractApiError(error, '未知错误')))
   }
 }
 

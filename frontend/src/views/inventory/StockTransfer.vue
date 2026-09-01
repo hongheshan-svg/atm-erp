@@ -109,6 +109,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getStocks, getMoves, createTransfer } from '@/api/inventory'
 import { getWarehouseList } from '@/api/masterdata'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchExport } = useBatchOperation('/api/inventory/')
 
@@ -198,7 +199,7 @@ const handleSubmit = async () => {
       loadHistory()
     } catch (error: any) {
       // 后端库存不足等校验错误以可读消息返回（error/detail 字段）
-      const msg = error?.response?.data?.error || error?.response?.data?.detail || '调拨失败'
+      const msg = extractApiError(error, '调拨失败')
       ElMessage.error(msg)
     } finally {
       submitting.value = false

@@ -272,6 +272,7 @@ import { getAfterSalesOrderList } from '@/api/aftersales'
 import { getWarehouseList } from '@/api/masterdata'
 import { getBOMList } from '@/api/projects/bom'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -601,7 +602,7 @@ const handleSubmit = async (row: any) => {
     loadList()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('提交失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '提交失败'))
     }
   }
 }
@@ -614,7 +615,7 @@ const handleApprove = async (row: any) => {
     loadList()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '操作失败'))
     }
   }
 }
@@ -627,7 +628,7 @@ const handleReject = async (row: any) => {
     loadList()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error(extractApiError(error, '操作失败'))
     }
   }
 }
@@ -638,7 +639,7 @@ const handlePrepare = async (row: any) => {
     ElMessage.success('开始备料')
     loadList()
   } catch (error: any) {
-    ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '操作失败'))
   }
 }
 
@@ -648,7 +649,7 @@ const handleReady = async (row: any) => {
     ElMessage.success('备料完成，等待出库')
     loadList()
   } catch (error: any) {
-    ElMessage.error('操作失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '操作失败'))
   }
 }
 
@@ -689,7 +690,7 @@ const confirmIssue = async () => {
     issueDialogVisible.value = false
     loadList()
   } catch (error: any) {
-    ElMessage.error('出库失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error(extractApiError(error, '出库失败'))
   } finally {
     issuing.value = false
   }

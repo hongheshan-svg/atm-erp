@@ -407,6 +407,7 @@ import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { batchUploadAttachments } from '@/api/core'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -663,7 +664,7 @@ const handleImport = () => {
       }
       loadItems()
     } catch (error: any) {
-      ElMessage.error('导入失败: ' + (error.response?.data?.error || '未知错误'))
+      ElMessage.error('导入失败: ' + (extractApiError(error, '未知错误')))
     }
   }
   input.click()

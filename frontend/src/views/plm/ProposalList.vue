@@ -247,6 +247,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { getProposalList, getProposal, createProposal, patchProposal, getProposalStatistics, submitProposal, startProposalReview, approveProposal, requestProposalRevision, rejectProposal, createProposalVersion } from '@/api/plm/proposal'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/projects/proposals/', { onSuccess: () => fetchList() })
 
@@ -401,7 +402,7 @@ const handleRequestRevision = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+    if (e !== 'cancel') ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 
@@ -413,7 +414,7 @@ const handleReject = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+    if (e !== 'cancel') ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 
@@ -424,7 +425,7 @@ const handleSubmit = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 
@@ -435,7 +436,7 @@ const handleStartReview = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 
@@ -446,7 +447,7 @@ const handleApprove = async (row: any) => {
     fetchList()
     fetchStats()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.error(extractApiError(e, '操作失败'))
   }
 }
 

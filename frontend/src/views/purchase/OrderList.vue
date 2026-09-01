@@ -300,6 +300,7 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { getItemList, getSupplierList } from '@/api/masterdata'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 import { getPurchaseOrderUnitPrice } from '@/utils/businessPricing'
 
 const router = useRouter()
@@ -608,7 +609,7 @@ const handleSubmit = async (row: any) => {
     loadOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '提交审批失败')
+      ElMessage.error(extractApiError(error, '提交审批失败'))
     }
   }
 }
@@ -647,7 +648,7 @@ const handleWithdraw = async (row: any) => {
     loadOrders()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '撤回失败')
+      ElMessage.error(extractApiError(error, '撤回失败'))
     }
   }
 }
@@ -671,7 +672,7 @@ const handleContract = async (row: any) => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.error || '合同操作失败')
+      ElMessage.error(extractApiError(error, '合同操作失败'))
     }
   }
 }

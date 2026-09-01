@@ -216,6 +216,7 @@ import { useRouter } from 'vue-router'
 import { getQuotations, getQuotation, submitQuotation, createQuotationVersion, convertQuotationToOrder } from '@/api/sales'
 import { getCustomerList } from '@/api/masterdata'
 import { getTaxInclusiveTotal } from '@/utils/businessPricing'
+import { extractApiError } from '@/utils/apiError'
 
 const router = useRouter()
 
@@ -374,7 +375,7 @@ const handleSubmitApproval = async (row: any) => {
     loadQuotations()
   } catch (error: any) {
     if (error !== 'cancel') {
-      const msg = error.response?.data?.error || '提交失败'
+      const msg = extractApiError(error, '提交失败')
       ElMessage.error(msg)
     }
   }

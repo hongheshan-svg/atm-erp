@@ -241,6 +241,7 @@ import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
 import { usePermissionStore } from '@/stores/permission'
 import { getProjectList } from '@/api/projects/project'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -478,7 +479,7 @@ const handleConfirmAllocation = async () => {
     loadData()
   } catch (error: any) {
     console.error('分摊失败:', error)
-    ElMessage.error(error.response?.data?.error || '分摊失败')
+    ElMessage.error(extractApiError(error, '分摊失败'))
   } finally {
     submitting.value = false
   }

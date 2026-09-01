@@ -261,6 +261,7 @@ import { getSupplierList, createSupplier, updateSupplier, exportSuppliers, downl
 import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { usePermission } from '@/composables/usePermission'
+import { extractApiError } from '@/utils/apiError'
 
 // 权限检查
 const { canDelete } = usePermission()
@@ -392,7 +393,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadSuppliers()
   } catch (error: any) {
-    if (error !== 'cancel') ElMessage.error('保存供应商失败: ' + (error.response?.data?.error || error.message))
+    if (error !== 'cancel') ElMessage.error(extractApiError(error, '保存供应商失败'))
   } finally {
     submitting.value = false
   }

@@ -190,6 +190,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMRPPlans, createMRPPlan, getMRPPlan, calculateMRPPlan, approveMRPPlan, generateMRPPlanPR } from '@/api/inventory'
 import { useBatchOperation } from '@/composables/useBatchOperation'
+import { extractApiError } from '@/utils/apiError'
 
 const { selectedRows, handleSelectionChange, batchDelete, batchExport } = useBatchOperation('/api/inventory/mrp-plans/', { onSuccess: () => fetchList() })
 
@@ -299,7 +300,7 @@ const handleCalculate = async (row: any) => {
     fetchList()
   } catch (e: any) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '计算失败')
+      ElMessage.error(extractApiError(e, '计算失败'))
     }
   }
 }
@@ -310,7 +311,7 @@ const handleApprove = async (row: any) => {
     ElMessage.success('批准成功')
     fetchList()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.error || '批准失败')
+    ElMessage.error(extractApiError(e, '批准失败'))
   }
 }
 
@@ -323,7 +324,7 @@ const handleGeneratePR = async (row: any) => {
     fetchList()
   } catch (e: any) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '生成失败')
+      ElMessage.error(extractApiError(e, '生成失败'))
     }
   }
 }
