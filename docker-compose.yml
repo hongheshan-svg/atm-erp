@@ -52,6 +52,9 @@ services:
       - DEBUG=${DEBUG:-False}
       - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,app}
+      # 站点跑在 HTTPS 之后时置 True:一并启用 SSL 跳转、HSTS 与 Secure Cookie。
+      # 纯 HTTP 部署下开启会导致站点被 301 到 https 而无法访问,详见 config/settings.py。
+      - DEPLOY_HTTPS=${DEPLOY_HTTPS:-False}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-erp_db}

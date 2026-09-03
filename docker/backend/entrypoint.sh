@@ -22,6 +22,9 @@ if [ "${RUN_BOOTSTRAP:-0}" = "1" ]; then
     echo "Ensuring finance master data..."
     python manage.py init_finance
 
+    echo "Ensuring document code rules..."
+    python manage.py init_code_rules
+
     echo "Synchronizing permissions with frontend routes..."
     python manage.py init_permissions
     python manage.py sync_frontend_menu_permissions

@@ -10,11 +10,15 @@ from apps.core.permission_models_new import Permission
 
 class PermissionBootstrapTests(TestCase):
     def test_frontend_routes_and_default_roles_are_synchronized(self):
+        # 生产镜像只带前端构建产物、不含源码，此时该断言无从比对，跳过而不是报错。
+        router_path = Path(__file__).resolve().parents[4] / 'frontend' / 'src' / 'router' / 'index.ts'
+        if not router_path.is_file():
+            self.skipTest(f'前端路由源码不存在，跳过菜单同步比对: {router_path}')
+
         call_command('init_permissions', verbosity=0)
         call_command('sync_frontend_menu_permissions', verbosity=0)
         call_command('init_roles', force=True, verbosity=0)
 
-        router_path = Path(__file__).resolve().parents[4] / 'frontend' / 'src' / 'router' / 'index.ts'
         route_codes = set(re.findall(r"menuId:\s*'([^']+)'", router_path.read_text(encoding='utf-8')))
         active_menu_codes = set(
             Permission.objects.filter(type='menu', is_active=True, is_deleted=False).values_list('code', flat=True)

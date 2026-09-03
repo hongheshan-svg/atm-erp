@@ -366,18 +366,26 @@ ERP_UPDATE_MANIFEST_URL = config(
 # Security Settings (Production)
 # =============================================================================
 
+# 总开关：站点已经跑在 HTTPS 之后时设 DEPLOY_HTTPS=True，下面四组安全项一并生效
+# （SSL 跳转、HSTS、两个 Secure Cookie），不必逐个记住变量名；
+# 每一项仍可用自己的环境变量单独覆盖。
+# 注意：纯 HTTP 部署下打开它会导致站点被 301 到 https 而无法访问，
+# 且 HSTS 会被浏览器缓存一年——务必先备好可信证书再开。
+DEPLOY_HTTPS = config('DEPLOY_HTTPS', default=False, cast=bool)
+
 # HTTPS Settings - Enable in production
-SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=DEPLOY_HTTPS, cast=bool)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # HSTS Settings
-SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000 if DEPLOY_HTTPS else 0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=DEPLOY_HTTPS, cast=bool)
+# preload 需要主动提交到浏览器内置列表且很难撤回，永远显式开启，不随 DEPLOY_HTTPS 联动。
 SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
 
 # Cookie Security
-SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
-CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=DEPLOY_HTTPS, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=DEPLOY_HTTPS, cast=bool)
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 
