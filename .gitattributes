@@ -1,0 +1,17 @@
+# Windows 检出（core.autocrlf=true）会把 shell 脚本换成 CRLF，进了 Linux 容器后
+# shebang 变成 `#!/bin/bash\r`，内核找不到解释器，报的却是
+# `exec /entrypoint.sh: no such file or directory`（app 容器起不来）；
+# 本机 bash 跑 scripts/*.sh 同样会挂在 `set -o pipefail\r: invalid option name`。
+# 这类脚本必须始终以 LF 检出，与运行平台无关。
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+# 容器内消费的配置同理（nginx/supervisord 对 CRLF 不报错但行为诡异）
+docker/**/Dockerfile text eol=lf
+docker/nginx/*.conf text eol=lf
+docker/app/*.conf text eol=lf
+entrypoint.sh text eol=lf
+
+# 证书/密钥保持原样，别做任何换行转换
+*.crt -text
+*.key -text

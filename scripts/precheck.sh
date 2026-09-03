@@ -73,8 +73,11 @@ fi
 #   否则一旦该目录下存在 root 属主的残留（早期不带 --user 跑过就会产生），
 #   降权后的容器写不进缓存，ruff 会以 "Permission denied" 直接崩掉——
 #   表现为预检失败但原因与代码无关，属于假警报。
+# MSYS_NO_PATHCONV: Git Bash (Windows) 会把 -w /repo/backend 这类参数当路径改写成
+#   C:/Program Files/Git/repo/backend，docker 报 "working directory ... is invalid"。
+#   这个变量只对 MSYS 生效，Linux/macOS 上是无害的无关环境变量。
 run_ruff(){
-  docker run --rm \
+  MSYS_NO_PATHCONV=1 docker run --rm \
     --user "$(id -u):$(id -g)" \
     --tmpfs /tmp/ruff-cache:exec \
     -e RUFF_CACHE_DIR=/tmp/ruff-cache \
