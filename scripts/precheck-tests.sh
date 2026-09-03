@@ -11,6 +11,13 @@
 # 测试栈与生产库完全隔离: 独立网络/容器/数据卷,前缀 erp-testenv-,不映射宿主机端口。
 set -euo pipefail
 
+# Git Bash (Windows) 会把 `-w /repo/backend`、`-v .../repo:ro` 这类参数当路径改写成
+# C:/Program Files/Git/repo/backend，docker 报
+# "working directory ... is invalid"（已实测，整个脚本一行测试都跑不到）。
+# 与 scripts/precheck.sh 同一处置；这个变量只对 MSYS 生效，Linux/macOS 上是
+# 无害的无关环境变量。
+export MSYS_NO_PATHCONV=1
+
 c_info(){ printf '\033[0;36m[i]\033[0m %s\n' "$1"; }
 c_ok(){   printf '\033[0;32m[\xe2\x9c\x93]\033[0m %s\n' "$1"; }
 c_warn(){ printf '\033[0;33m[!]\033[0m %s\n' "$1" >&2; }
@@ -420,9 +427,15 @@ LOG_DIR="$(mktemp -d -t erp-precheck-XXXXXX)"
 
 # 与 CI 的差异只有 --keepdb 一处(CI 每次新建库)。
 # 代价: 改写/删除既有迁移文件后本地库会陈旧,用 --fresh-db 重建。新增迁移无妨,keepdb 仍会 apply。
+# --tmpfs /repo/backend/uploads: 仓库以 :ro 挂载,而 MEDIA_ROOT 硬编码为 BASE_DIR/uploads,
+#   FilePreviewService.__init__ 一被实例化就 mkdir 它,而 drf-spectacular 生成 schema 时会
+#   实例化每个 view class —— test_openapi_schema 因此报 Read-only file system。CI 的 checkout
+#   可写所以踩不到。给它一块可写 tmpfs,容器退出即消失,不落任何东西到仓库里。
+#   注意: 注释不能夹在 docker run 的续行之间——`#` 会吃掉整行且不带续行符,命令在那里被截断。
 docker_test_run(){
   docker run --rm --network "$NET" \
     -v "$REPO_ROOT:/repo:ro" -w /repo/backend \
+    --tmpfs /repo/backend/uploads \
     "${ENV_ISOLATION_MOUNTS[@]+"${ENV_ISOLATION_MOUNTS[@]}"}" \
     -e PYTHONDONTWRITEBYTECODE=1 \
     -e DJANGO_SETTINGS_MODULE=config.settings \
