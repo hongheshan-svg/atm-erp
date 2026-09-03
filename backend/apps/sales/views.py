@@ -8,6 +8,7 @@ from django.db import models, transaction
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
@@ -155,6 +156,9 @@ class SalesQuotationViewSet(
 
             return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+        except APIException:
+            # 审批流抛出的业务/配置错误（如「无法确定审批人」400）原样透出，不改写成 5xx
+            raise
         except Exception as e:
             # 工作流服务异常不可 fail-open 自动通过：保持原状态，返回 5xx 供重试
             logger.exception('报价单提交工作流异常 quote_no=%s', quotation.quote_no)
@@ -389,6 +393,9 @@ class SalesOrderViewSet(
 
             return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+        except APIException:
+            # 同上：审批流的业务/配置错误原样透出
+            raise
         except Exception as e:
             # 工作流服务异常不可 fail-open 自动确认：保持原状态，返回 5xx 供重试
             logger.exception('销售订单提交工作流异常 order_no=%s', so.order_no)
@@ -1447,6 +1454,9 @@ class DeliveryOrderViewSet(
 
             return Response({'error': result['message']}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+        except APIException:
+            # 同上：审批流的业务/配置错误原样透出
+            raise
         except Exception as e:
             # 工作流服务异常不可 fail-open：备货下一步即扣库存，必须保持原状态、返回 5xx 供重试
             logger.exception('发货单提交工作流异常 delivery_no=%s', delivery.delivery_no)

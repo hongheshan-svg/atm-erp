@@ -43,6 +43,11 @@ class WorkflowService:
     def is_missing_workflow_error(error):
         return bool(error and error.startswith('未找到适用于 '))
 
+    @staticmethod
+    def is_unresolved_approver_error(error):
+        """审批人解析不到——属于组织/流程配置缺口,可由管理员修好,不是服务故障。"""
+        return bool(error and '无法确定审批人' in error)
+
     @classmethod
     def start_workflow(cls, business_type, business_id, business_no, submitter, amount=None):
         """
@@ -206,6 +211,10 @@ class WorkflowService:
         assignee = cls._get_step_assignee(step, instance)
         return [assignee] if assignee else []
 
+    # 审批人靠运行时组织数据解析的步骤类型:解析不到人是数据问题(部门没设经理等),
+    # 有兜底链;其余类型解析不到人是配置问题,直接报错。
+    DYNAMIC_APPROVER_TYPES = ('DEPARTMENT_MANAGER', 'PROJECT_MANAGER', 'SUPERIOR')
+
     @classmethod
     def _get_step_assignee(cls, step, instance):
         """
@@ -254,6 +263,21 @@ class WorkflowService:
         # Fallback to approver_role if no assignee found
         if not assignee and step.approver_role:
             assignee = User.objects.filter(roles=step.approver_role, is_active=True, is_deleted=False).first()
+
+        # 最终兜底:组织数据和兜底角色都解析不出人时,交给最高权限用户(超管)处理,
+        # 而不是让提交单据直接失败。宁可让超管在待办里改派,也不能把用户卡在提交这一步。
+        #
+        # 只对动态审批人生效:DEPARTMENT_MANAGER / PROJECT_MANAGER / SUPERIOR 的审批人取决于
+        # 运行时组织数据,数据不全是常态。而 USER / ROLE 步骤解析不到人=字段没填,属于流程
+        # 配置错误,必须报错让管理员去改,不能被超管兜底盖住
+        # (见 test_unresolvable_assignee_is_rejected_instead_of_falling_back_to_superuser)。
+        if not assignee and step.approver_type in cls.DYNAMIC_APPROVER_TYPES:
+            assignee = (
+                User.objects.filter(is_superuser=True, is_active=True, is_deleted=False)
+                .exclude(id=instance.submitter_id)
+                .order_by('id')
+                .first()
+            )
 
         # 兜底解析出的审批人仍可能==提交人,再尽力上溯一次(职责分离,审计 batch1 #5;
         # 同样非破坏:找不到上级则保留)。

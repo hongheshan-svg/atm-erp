@@ -25,56 +25,100 @@ def ensure_default_scope(role, scope_type):
 class Command(BaseCommand):
     help = 'Initialize default workflow definitions for all modules'
 
+    def _resolve_role(self, canonical_code, legacy_code, legacy_name, scope_type):
+        """优先复用 init_roles 建立的正式角色，没有时才退回本命令的历史角色。
+
+        审批人兜底靠「角色里第一个在职用户」解析。真实用户挂的是 init_roles 的角色
+        （purchase_manager / finance_manager ...），若这里仍指向历史大写角色
+        （PURCHASE / FINANCE ...），角色里一个人都没有，兜底链等于没接上。
+        """
+        role = Role.objects.filter(code=canonical_code, is_deleted=False).first()
+        if role:
+            return role
+        role, _ = Role.objects.get_or_create(code=legacy_code, defaults={'name': legacy_name, 'permissions': {}})
+        ensure_default_scope(role, scope_type)
+        return role
+
     def handle(self, *args, **options):
         self.stdout.write('Creating default workflows for all modules...')
 
         # Get or create roles
-        finance_role, _ = Role.objects.get_or_create(code='FINANCE', defaults={'name': '财务', 'permissions': {}})
-        ensure_default_scope(finance_role, 'ALL')
-        manager_role, _ = Role.objects.get_or_create(code='MANAGER', defaults={'name': '经理', 'permissions': {}})
-        ensure_default_scope(manager_role, 'DEPARTMENT')
-        sales_role, _ = Role.objects.get_or_create(code='SALES', defaults={'name': '销售', 'permissions': {}})
-        ensure_default_scope(sales_role, 'SELF')
-        purchase_role, _ = Role.objects.get_or_create(code='PURCHASE', defaults={'name': '采购', 'permissions': {}})
-        ensure_default_scope(purchase_role, 'SELF')
-        admin_role, _ = Role.objects.get_or_create(code='ADMIN', defaults={'name': '管理员', 'permissions': {}})
-        ensure_default_scope(admin_role, 'ALL')
-        hr_role, _ = Role.objects.get_or_create(code='HR', defaults={'name': '人事', 'permissions': {}})
-        ensure_default_scope(hr_role, 'ALL')
-        warehouse_role, _ = Role.objects.get_or_create(code='WAREHOUSE', defaults={'name': '仓库', 'permissions': {}})
-        ensure_default_scope(warehouse_role, 'DEPARTMENT')
+        finance_role = self._resolve_role('finance_manager', 'FINANCE', '财务', 'ALL')
+        manager_role = self._resolve_role('project_manager', 'MANAGER', '经理', 'DEPARTMENT')
+        sales_role = self._resolve_role('sales_manager', 'SALES', '销售', 'SELF')
+        purchase_role = self._resolve_role('purchase_manager', 'PURCHASE', '采购', 'SELF')
+        admin_role = self._resolve_role('general_manager', 'ADMIN', '管理员', 'ALL')
+        hr_role = self._resolve_role('hr_admin', 'HR', '人事', 'ALL')
+        warehouse_role = self._resolve_role('warehouse_manager', 'WAREHOUSE', '仓库', 'DEPARTMENT')
 
         # ============ 采购管理模块 ============
-        self._create_purchase_request_workflows(finance_role, admin_role)
-        self._create_purchase_order_workflows(finance_role, admin_role)
+        self._create_purchase_request_workflows(finance_role, admin_role, manager_role)
+        self._create_purchase_order_workflows(finance_role, admin_role, purchase_role)
 
         # ============ 销售管理模块 ============
         self._create_quotation_workflows(sales_role, finance_role, admin_role)
-        self._create_sales_order_workflows(finance_role, admin_role)
-        self._create_sales_contract_workflows(finance_role, admin_role)
+        self._create_sales_order_workflows(finance_role, admin_role, sales_role)
+        self._create_sales_contract_workflows(finance_role, admin_role, sales_role)
         self._create_delivery_order_workflows(finance_role, admin_role, warehouse_role)
 
         # ============ 财务管理模块 ============
-        self._create_expense_workflows(finance_role, admin_role)
+        self._create_expense_workflows(finance_role, admin_role, manager_role)
         self._create_payment_workflows(finance_role, admin_role)
 
         # ============ 项目管理模块 ============
-        self._create_project_workflows(finance_role, admin_role)
-        self._create_ecn_workflows(finance_role, admin_role)
+        self._create_project_workflows(finance_role, admin_role, manager_role)
+        self._create_ecn_workflows(finance_role, admin_role, manager_role)
 
         # ============ 库存管理模块 ============
         self._create_stock_adjustment_workflows(finance_role, warehouse_role)
 
         # ============ OA办公模块 ============
-        self._create_leave_request_workflows(hr_role, admin_role)
-        self._create_overtime_request_workflows(hr_role, admin_role)
-        self._create_vehicle_request_workflows(admin_role)
-        self._create_asset_borrow_workflows(admin_role)
+        self._create_leave_request_workflows(hr_role, admin_role, manager_role)
+        self._create_overtime_request_workflows(hr_role, admin_role, manager_role)
+        self._create_vehicle_request_workflows(admin_role, manager_role)
+        self._create_asset_borrow_workflows(admin_role, manager_role)
+
+        self._backfill_dynamic_approver_roles(
+            {
+                '采购': purchase_role,
+                '销售': sales_role,
+                '项目': manager_role,
+                '财务': finance_role,
+                '仓库': warehouse_role,
+                '部门经理': manager_role,
+            },
+            default_role=admin_role,
+        )
 
         self.stdout.write(self.style.SUCCESS('Workflow initialization complete!'))
 
+    def _backfill_dynamic_approver_roles(self, keyword_roles, default_role):
+        """给已存在的动态审批人步骤补上 approver_role 兜底。
+
+        上面的建流程逻辑都是 ``if created:``，只对空库生效；线上库里那些没配
+        approver_role 的历史步骤（以及用户在界面上自建的流程）不会被覆盖，提交单据
+        照样报「无法确定审批人」。这里按步骤名关键字补一个兜底角色，找不到关键字就用
+        默认的最高权限角色，保证兜底链一定能落到人。
+        """
+        pending = WorkflowStep.objects.filter(
+            approver_type__in=('DEPARTMENT_MANAGER', 'PROJECT_MANAGER', 'SUPERIOR'),
+            approver_role__isnull=True,
+            is_deleted=False,
+        ).select_related('workflow')
+
+        fixed = 0
+        for step in pending:
+            role = next((r for kw, r in keyword_roles.items() if kw in step.name), default_role)
+            step.approver_role = role
+            step.save(update_fields=['approver_role', 'updated_at'])
+            fixed += 1
+            self.stdout.write(f'  Backfilled approver_role: {step.workflow.code}/{step.name} -> {role.name}')
+
+        if fixed:
+            self.stdout.write(self.style.SUCCESS(f'  补齐 {fixed} 个动态审批步骤的兜底审批角色'))
+
     # ============ 采购管理 ============
-    def _create_purchase_request_workflows(self, finance_role, admin_role):
+    def _create_purchase_request_workflows(self, finance_role, admin_role, manager_role):
         """采购申请审批流程"""
         # 小额采购申请
         workflow, created = WorkflowDefinition.objects.get_or_create(
@@ -93,6 +137,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -115,6 +160,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='项目经理审批',
                 approver_type='PROJECT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -138,7 +184,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_purchase_order_workflows(self, finance_role, admin_role):
+    def _create_purchase_order_workflows(self, finance_role, admin_role, purchase_role):
         """采购订单审批流程"""
         workflow, created = WorkflowDefinition.objects.get_or_create(
             code='PO_DEFAULT',
@@ -156,6 +202,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='采购经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=purchase_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -190,6 +237,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='销售经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=sales_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -212,6 +260,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='销售经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=sales_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -226,7 +275,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_sales_order_workflows(self, finance_role, admin_role):
+    def _create_sales_order_workflows(self, finance_role, admin_role, sales_role):
         """销售订单审批流程"""
         # 小额订单
         workflow, created = WorkflowDefinition.objects.get_or_create(
@@ -245,6 +294,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='销售经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=sales_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -267,6 +317,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='销售经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=sales_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -290,7 +341,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_sales_contract_workflows(self, finance_role, admin_role):
+    def _create_sales_contract_workflows(self, finance_role, admin_role, sales_role):
         """销售合同审批流程"""
         workflow, created = WorkflowDefinition.objects.get_or_create(
             code='CONTRACT_DEFAULT',
@@ -308,6 +359,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='销售经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=sales_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -398,7 +450,7 @@ class Command(BaseCommand):
             self.stdout.write(f'  Created: {workflow.name}')
 
     # ============ 财务管理 ============
-    def _create_expense_workflows(self, finance_role, admin_role):
+    def _create_expense_workflows(self, finance_role, admin_role, manager_role):
         """费用报销审批流程"""
         # 小额报销
         workflow, created = WorkflowDefinition.objects.get_or_create(
@@ -417,6 +469,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -439,6 +492,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -520,7 +574,7 @@ class Command(BaseCommand):
             self.stdout.write(f'  Created: {workflow.name}')
 
     # ============ 项目管理 ============
-    def _create_project_workflows(self, finance_role, admin_role):
+    def _create_project_workflows(self, finance_role, admin_role, manager_role):
         """项目立项审批流程"""
         workflow, created = WorkflowDefinition.objects.get_or_create(
             code='PROJECT_APPROVAL',
@@ -538,6 +592,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='项目经理确认',
                 approver_type='PROJECT_MANAGER',
+                approver_role=manager_role,
                 action_type='REVIEW',
                 timeout_hours=24,
             )
@@ -561,7 +616,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_ecn_workflows(self, finance_role, admin_role):
+    def _create_ecn_workflows(self, finance_role, admin_role, manager_role):
         """工程变更审批流程"""
         # 小额变更
         workflow, created = WorkflowDefinition.objects.get_or_create(
@@ -580,6 +635,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='项目经理审批',
                 approver_type='PROJECT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -602,6 +658,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='项目经理审批',
                 approver_type='PROJECT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -660,7 +717,7 @@ class Command(BaseCommand):
             self.stdout.write(f'  Created: {workflow.name}')
 
     # ============ OA办公 ============
-    def _create_leave_request_workflows(self, hr_role, admin_role):
+    def _create_leave_request_workflows(self, hr_role, admin_role, manager_role):
         """请假申请审批流程"""
         # 短期请假（3天以内）
         workflow, created = WorkflowDefinition.objects.get_or_create(
@@ -679,6 +736,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -701,6 +759,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -724,7 +783,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_overtime_request_workflows(self, hr_role, admin_role):
+    def _create_overtime_request_workflows(self, hr_role, admin_role, manager_role):
         """加班申请审批流程"""
         workflow, created = WorkflowDefinition.objects.get_or_create(
             code='OVERTIME_DEFAULT',
@@ -742,6 +801,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )
@@ -756,7 +816,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_vehicle_request_workflows(self, admin_role):
+    def _create_vehicle_request_workflows(self, admin_role, manager_role):
         """用车申请审批流程"""
         workflow, created = WorkflowDefinition.objects.get_or_create(
             code='VEHICLE_DEFAULT',
@@ -774,6 +834,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=12,
             )
@@ -788,7 +849,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'  Created: {workflow.name}')
 
-    def _create_asset_borrow_workflows(self, admin_role):
+    def _create_asset_borrow_workflows(self, admin_role, manager_role):
         """资产借用审批流程"""
         workflow, created = WorkflowDefinition.objects.get_or_create(
             code='ASSET_BORROW_DEFAULT',
@@ -806,6 +867,7 @@ class Command(BaseCommand):
                 step_order=1,
                 name='部门经理审批',
                 approver_type='DEPARTMENT_MANAGER',
+                approver_role=manager_role,
                 action_type='APPROVE',
                 timeout_hours=24,
             )

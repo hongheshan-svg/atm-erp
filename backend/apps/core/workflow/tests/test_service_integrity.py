@@ -5,8 +5,9 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
+from rest_framework import status
 
-from apps.accounts.models import Role
+from apps.accounts.models import Department, Role
 from apps.core.models import SystemNotification
 from apps.core.workflow.mixins import WorkflowEnforcementMixin, WorkflowStartError
 from apps.core.workflow.models import WorkflowDefinition, WorkflowInstance, WorkflowStep, WorkflowTask
@@ -181,6 +182,147 @@ class WorkflowServiceIntegrityTest(TestCase):
         self.assertIsNone(instance)
         self.assertIn('无法确定审批人', error)
 
+    def test_dept_manager_step_falls_back_to_role_when_department_has_no_manager(self):
+        # 刘敏场景：部门经理字段为空，但角色「采购经理」有成员 -> 应解析到该角色成员而非报错
+        dept = Department.objects.create(name='采购部', code='DEPT_PURCHASE_NO_MGR')
+        self.submitter.department = dept
+        self.submitter.save(update_fields=['department'])
+        mgr_role = Role.objects.create(name='采购经理', code='PURCHASE_MANAGER')
+        role_member = User.objects.create_user(
+            username='purchase_mgr_member',
+            password='x',
+            employee_id='purchase_mgr_member',
+        )
+        role_member.roles.add(mgr_role)
+
+        workflow = WorkflowDefinition.objects.create(
+            name='dept mgr fallback',
+            code='dept_mgr_fallback',
+            business_type='PURCHASE_REQUEST',
+            is_active=True,
+        )
+        WorkflowStep.objects.create(
+            workflow=workflow,
+            step_order=1,
+            name='采购经理审批',
+            approver_type='DEPARTMENT_MANAGER',
+            approver_role=mgr_role,
+            action_type='APPROVE',
+        )
+
+        instance, error = WorkflowService.start_workflow(
+            'PURCHASE_REQUEST',
+            1110,
+            'PR-DEPT-MGR-FALLBACK',
+            self.submitter,
+        )
+
+        self.assertIsNone(error, f'应在无部门经理时回退到角色成员，实际错误: {error}')
+        task = WorkflowTask.objects.get(instance=instance)
+        self.assertEqual(task.assignee, role_member)
+
+    def test_dept_manager_step_prefers_department_manager_over_role(self):
+        # 部门确实有经理时，仍以部门经理为准（角色仅作兜底，不能覆盖真实经理）
+        dept = Department.objects.create(name='采购部', code='DEPT_PURCHASE_WITH_MGR')
+        self.submitter.department = dept
+        self.submitter.save(update_fields=['department'])
+        mgr_role = Role.objects.create(name='采购经理', code='PURCHASE_MANAGER_2')
+        role_member = User.objects.create_user(
+            username='purchase_mgr_member2',
+            password='x',
+            employee_id='purchase_mgr_member2',
+        )
+        role_member.roles.add(mgr_role)
+        dept.manager = self.approver
+        dept.save(update_fields=['manager'])
+
+        workflow = WorkflowDefinition.objects.create(
+            name='dept mgr prefer manager',
+            code='dept_mgr_prefer_manager',
+            business_type='PURCHASE_REQUEST',
+            is_active=True,
+        )
+        WorkflowStep.objects.create(
+            workflow=workflow,
+            step_order=1,
+            name='采购经理审批',
+            approver_type='DEPARTMENT_MANAGER',
+            approver_role=mgr_role,
+            action_type='APPROVE',
+        )
+
+        instance, error = WorkflowService.start_workflow(
+            'PURCHASE_REQUEST',
+            1111,
+            'PR-DEPT-MGR-PREFER',
+            self.submitter,
+        )
+
+        self.assertIsNone(error, f'部门有经理时应正常启动，实际错误: {error}')
+        task = WorkflowTask.objects.get(instance=instance)
+        self.assertEqual(task.assignee, self.approver)
+
+    def test_unresolvable_dynamic_approver_falls_back_to_superuser(self):
+        # 组织数据与兜底角色都解析不到人时，路由给最高权限用户（超管），不能让提交直接失败
+        superuser = User.objects.create_superuser(
+            username='workflow_root',
+            password='x',
+            employee_id='workflow_root',
+        )
+        workflow = WorkflowDefinition.objects.create(
+            name='no approver at all',
+            code='no_approver_at_all',
+            business_type='PURCHASE_REQUEST',
+            is_active=True,
+        )
+        WorkflowStep.objects.create(
+            workflow=workflow,
+            step_order=1,
+            name='部门经理审批',
+            approver_type='DEPARTMENT_MANAGER',
+            action_type='APPROVE',
+        )
+
+        instance, error = WorkflowService.start_workflow(
+            'PURCHASE_REQUEST',
+            1112,
+            'PR-SUPERUSER-FALLBACK',
+            self.submitter,
+        )
+
+        self.assertIsNone(error, f'应兜底到超管，实际错误: {error}')
+        task = WorkflowTask.objects.get(instance=instance)
+        self.assertEqual(task.assignee, superuser)
+
+    def test_superuser_fallback_never_assigns_the_submitter(self):
+        # 超管自己提单时不能把单子派回给自己（职责分离），此时仍应报配置错误
+        self.submitter.is_superuser = True
+        self.submitter.is_staff = True
+        self.submitter.save(update_fields=['is_superuser', 'is_staff'])
+        workflow = WorkflowDefinition.objects.create(
+            name='superuser submits',
+            code='superuser_submits',
+            business_type='PURCHASE_REQUEST',
+            is_active=True,
+        )
+        WorkflowStep.objects.create(
+            workflow=workflow,
+            step_order=1,
+            name='部门经理审批',
+            approver_type='DEPARTMENT_MANAGER',
+            action_type='APPROVE',
+        )
+
+        instance, error = WorkflowService.start_workflow(
+            'PURCHASE_REQUEST',
+            1113,
+            'PR-SUPERUSER-SELF',
+            self.submitter,
+        )
+
+        self.assertIsNone(instance)
+        self.assertIn('无法确定审批人', error)
+
     def test_can_reject_false_blocks_full_rejection(self):
         workflow = self._definition('reject_disabled')
         step = workflow.steps.get()
@@ -331,6 +473,31 @@ class WorkflowServiceIntegrityTest(TestCase):
         ):
             with self.assertRaisesMessage(WorkflowStartError, '已有进行中'):
                 DummyView().start_workflow_or_auto_approve(DummyObject(), self.submitter)
+
+    def test_mixin_unresolvable_approver_raises_config_error_instead_of_generic_failure(self):
+        # 无法确定审批人属配置/数据问题（400 语义，明确文案），不能与「服务暂时不可用」混淆
+        class DummyObject:
+            id = 1075
+            status = 'DRAFT'
+            total_amount = Decimal('1')
+            request_no = 'PR-MIXIN-NO-APPROVER'
+
+        class DummyView(WorkflowEnforcementMixin):
+            workflow_business_type = 'PURCHASE_REQUEST'
+            workflow_no_field = 'request_no'
+
+        with (
+            patch.object(
+                WorkflowService, 'start_workflow', return_value=(None, '步骤“采购经理审批”无法确定审批人，流程未启动')
+            ),
+            patch('apps.core.workflow.mixins.logger.warning'),
+        ):
+            with self.assertRaises(WorkflowStartError) as ctx:
+                DummyView().start_workflow_or_auto_approve(DummyObject(), self.submitter)
+
+        # 配置错误应给 400 而不是 503：这是可修复的配置/数据缺口，不是临时故障
+        self.assertEqual(ctx.exception.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('无法确定审批人', str(ctx.exception))
 
     def test_cancel_workflow_is_idempotent_and_closes_pending_tasks(self):
         self._definition('cancel_workflow')

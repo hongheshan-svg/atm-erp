@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Sum
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 
 from apps.core.mixins import SoftDeleteMixin, UserTrackingMixin
@@ -235,6 +236,10 @@ class PurchaseRequestViewSet(
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        except APIException:
+            # 审批流自身抛出的业务/配置错误（如「无法确定审批人」400）要原样透出，
+            # 不能被下面的兜底改写成「服务异常，请稍后重试」——重试永远不会好。
+            raise
         except Exception as e:
             # 工作流服务异常不应自动批准，避免绕过审批；返回错误让用户重试
             logger.error(f'工作流服务异常，采购申请 {pr.request_no} 提交失败: {e}')
@@ -965,6 +970,9 @@ class PurchaseOrderViewSet(
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        except APIException:
+            # 同上：审批流的业务/配置错误原样透出，保留其状态码与可操作的提示文案
+            raise
         except Exception as e:
             # 审批模块异常不应自动确认，避免跳过 AP 创建导致应付账款永久缺失
             logger.error(f'采购订单 {po.order_no} 提交时工作流服务异常: {e}')

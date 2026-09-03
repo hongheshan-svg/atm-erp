@@ -24,6 +24,14 @@ class WorkflowStartError(APIException):
     default_code = 'workflow_start_failed'
 
 
+class WorkflowApproverUnresolvedError(WorkflowStartError):
+    """审批步骤解析不出审批人：配置/组织数据缺口，管理员可修复，不是临时故障。"""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = '审批步骤无法确定审批人'
+    default_code = 'workflow_approver_unresolved'
+
+
 class WorkflowEnforcementMixin:
     """
     Mixin to enforce workflow approval for business objects.
@@ -147,6 +155,10 @@ class WorkflowEnforcementMixin:
             }
 
         logger.warning(f'{self.workflow_business_type} {business_no} 工作流启动失败: {error}')
+        if WorkflowService.is_unresolved_approver_error(error):
+            raise WorkflowApproverUnresolvedError(
+                f'{error}。请为提交人所在部门设置部门经理，或在该审批步骤上指定兜底审批角色'
+            )
         raise WorkflowStartError(error or '审批流程启动失败')
 
 
