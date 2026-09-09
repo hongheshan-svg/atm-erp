@@ -224,3 +224,10 @@
 - 实际归档`/private/tmp/lean-operational-backups/20260909.zip`恢复到独立18355环境：30张表和57个附件校验完全一致；非空目标拒绝恢复且数据不变，重复安装保留数据。日志`/private/tmp/lean-operational-restore.log`，逐表/附件证据`/private/tmp/lean-operational-restore-evidence.json`。运维脚本对该真实归档和18350健康接口返回ok=true，记录`/private/tmp/lean-operational-ops-check.json`。
 - 已查看最终桌面报表、项目收付款和移动收付款截图；当前标签可见、首列金额摘要和紧凑报表主列可读。截图保存于`/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/operational-review/`。
 - 尚未提供企业真实脱敏订单，试运行清单已准备；实际主机告警接收渠道未配置，不声称已发送外部告警。未提交、推送或发布版本。
+# 三平台发布补充（2026-09-09）
+
+- v1.0.0 / v1.1.0 业务源码保持原 tag；发布附件叠加独立可追溯安装器及说明，不改变业务、角色、schema guard 或数据库版本。
+- Docker 保留三个服务与原安装器；原生应用使用 Daphne + Nginx，数据库/Redis 由部署者显式配置。Windows 不内置 Redis 7，需已有服务；包为联网安装包，不是离线镜像。
+- 安装器配置不覆盖、生产环境强制、路径转义、服务失败阻止迁移、附件不公开的自动测试位于 scripts/tests/test_native_install.py。
+- GitHub Platform release installers 对 macOS/Linux/Windows 验证脚本及依赖；Linux 对两版本真实原生进程执行首次/重复安装、登录、前端资源、匿名权限、附件拒绝及限流验证。Windows/macOS 完整真实数据库业务链不由这些检查替代。
+- 运行及升级入口详见 docs/INSTALL_PLATFORMS.md。发布附件包含源码/安装器提交记录与 SHA256 校验清单。
