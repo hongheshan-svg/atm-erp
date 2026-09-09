@@ -55,10 +55,10 @@ class RunnerTests(unittest.TestCase):
         job = {'id': 1, 'claim': 'secret'}
         with patch.object(runner, 'api', side_effect=OSError('offline')):
             runner.report(job, 'installing', '备份完成', '/backup')
-        self.assertEqual(json.loads(runner.path.read_text())['pending'][0]['status'], 'installing')
+        self.assertEqual(json.loads(runner.path.read_text(encoding='utf-8'))['pending'][0]['status'], 'installing')
         with patch.object(runner, 'api', return_value={}):
             runner.flush()
-        self.assertEqual(json.loads(runner.path.read_text())['pending'], [])
+        self.assertEqual(json.loads(runner.path.read_text(encoding='utf-8'))['pending'], [])
 
     def test_terminal_status_is_recorded_before_network_confirmation(self):
         runner = object.__new__(ota.Runner)
@@ -66,7 +66,7 @@ class RunnerTests(unittest.TestCase):
         runner.path = self.folder / 'state.json'
         with patch.object(runner, 'api', side_effect=OSError('offline')):
             runner.report(runner.state['inflight'], 'succeeded', '完成')
-        saved = json.loads(runner.path.read_text())
+        saved = json.loads(runner.path.read_text(encoding='utf-8'))
         self.assertEqual(saved['terminal'], 7)
         self.assertEqual(saved['pending'][0]['status'], 'succeeded')
 
