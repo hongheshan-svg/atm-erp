@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { ElConfigProvider } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useRoute, useRouter } from 'vue-router'
@@ -7,6 +7,7 @@ import { user, logout } from './session'
 import { navigation } from './navigation'
 const route = useRoute()
 const router = useRouter()
+const currentModule = computed(() => navigation().find(item => route.path.startsWith('/' + item.key))?.label || '工作台')
 watch(user, (value) => {
   if (!value && route.path !== '/login') void router.replace('/login')
 })
@@ -33,9 +34,10 @@ watch(user, (value) => {
       </aside>
       <main>
         <header class="topbar">
-          <span>精简工作空间</span>
-          <div>
-            {{ user?.display_name || user?.username }} <el-button text @click="logout">退出登录</el-button>
+          <div class="breadcrumb"><span>工作空间</span><span aria-hidden="true">/</span><strong>{{ currentModule }}</strong></div>
+          <div class="account-menu">
+            <span class="account-avatar" aria-hidden="true">{{ (user?.display_name || user?.username || 'P').slice(0, 1).toUpperCase() }}</span>
+            <span class="account-name">{{ user?.display_name || user?.username }}</span><el-button text @click="logout">退出登录</el-button>
           </div>
         </header>
         <div class="content"><router-view :key="route.path" /></div>
