@@ -83,6 +83,8 @@ htmlcov/
 coverage.xml
 *.cover
 .worktrees/
+.native/
+native-config.json
 *.xls
 *.xlsx
 frontend/coverage/

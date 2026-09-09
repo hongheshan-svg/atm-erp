@@ -85,3 +85,6 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
 
 当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。其他历史文档不作为本版安装或模块清单。
+# 三平台安装包
+
+v1.0.0 / v1.1.0 的 GitHub Release 提供 macOS、Linux、Windows 的原生与 Docker 联网安装附件。使用带平台名的 ZIP，入口、依赖及升级方式见 [三平台安装说明](docs/INSTALL_PLATFORMS.md)。原 tag 不改写，补充安装器来源记录在包内 `INSTALL-MANIFEST.json`。

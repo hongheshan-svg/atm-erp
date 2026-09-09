@@ -13,7 +13,7 @@ async function save(page: Page) {
   await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
   const response = await pending
   expect(response.status(), await response.text()).toBeLessThan(300)
-  await expect(dialog(page)).not.toBeVisible()
+  await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
 }
 async function action(page: Page, target: Locator, label: string) {
   await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
