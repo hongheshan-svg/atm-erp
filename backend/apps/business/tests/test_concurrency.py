@@ -16,6 +16,66 @@ from .test_commercial_chain import TODAY, BusinessFixtures
 
 
 class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
+    def test_concurrent_quarantine_release_cannot_double_stock(self):
+        purchase = self.purchase(self.project, qty='1')
+        line = purchase.lines.get()
+        self.post(
+            'warehouse',
+            f'purchases/{purchase.pk}/receive/',
+            {
+                'location': '主仓',
+                'reason': '隔离',
+                'lines': [{'line': line.pk, 'quantity': '0', 'pending_quantity': '1'}],
+            },
+        )
+        payload = {'location': '主仓', 'reason': '复检合格', 'lines': [{'line': line.pk, 'quantity': '1'}]}
+        results = self.together([('warehouse', f'purchases/{purchase.pk}/quality-accept/', payload)] * 2)
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(Stock.objects.get().quantity, 1)
+
+    def test_concurrent_contract_amendments_preserve_one_version(self):
+        from apps.business.models import ContractAmendment, Document
+
+        sale = self.project.sale
+        doc = Document.objects.create(
+            project=self.project,
+            category='contract',
+            original_name='agreement.pdf',
+            file='test',
+            size=1,
+            sha256='a' * 64,
+        )
+        payload = {
+            'expected_updated_at': sale.updated_at.isoformat(),
+            'reason': '追加设备费用',
+            'date': TODAY,
+            'document': doc.pk,
+            'amount': '10100',
+            'equipment_quantity': 1,
+            'warranty_months': 12,
+            'milestones': [{'title': '追加', 'amount': '100', 'due_date': TODAY}],
+        }
+        results = self.together([('manager', f'sales/{sale.pk}/amend/', payload)] * 2)
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(ContractAmendment.objects.count(), 1)
+        self.assertEqual(Entry.objects.filter(title='追加').count(), 1)
+
+    def test_concurrent_import_confirmation_creates_one_batch(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.business.models import Item
+        from apps.business.services.transfers import preview
+
+        batch = preview(
+            self.users['admin'],
+            'items',
+            SimpleUploadedFile('items.csv', '物料编码,名称,规格,单位\nBATCH1,批量物料,,件\n'.encode()),
+        )
+        results = self.together([('admin', 'items/import-confirm/', {'token': batch['token']})] * 2)
+        self.assertEqual([status for status, _ in results], [200, 200], results)
+        self.assertEqual(results[0][1], results[1][1])
+        self.assertEqual(Item.objects.filter(code='BATCH1').count(), 1)
+
     def setUp(self):
         self.assertEqual(connection.vendor, 'postgresql')
         self.setup_business()
@@ -49,6 +109,54 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
         results = self.together([('manager', f'purchases/{purchase.pk}/approve/', {})] * 2)
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(Entry.objects.filter(purchase=purchase).count(), 1)
+
+    def test_manual_and_automatic_material_codes_cannot_collide(self):
+        from apps.business.models import Item
+
+        results = self.together(
+            [
+                ('purchaser', 'items/', {'name': '手工', 'code': 'MAT000001'}),
+                ('purchaser', 'items/', {'name': '自动'}),
+            ]
+        )
+        self.assertIn(sorted(status for status, _ in results), [[201, 201], [201, 400]])
+        codes = list(Item.objects.filter(name__in=['手工', '自动']).values_list('code', flat=True))
+        self.assertEqual(len(codes), len(set(codes)))
+        self.assertTrue(Item.objects.filter(name='自动').exists())
+
+    def test_two_sales_cannot_sign_with_same_contract_number(self):
+        from apps.business.models import SalesOrder
+
+        sales = [
+            self.post(
+                'manager',
+                'sales/',
+                {'name': name, 'customer': self.customer.pk, 'manager': self.users['manager'].pk},
+                status=201,
+            )
+            for name in ['合同甲', '合同乙']
+        ]
+        for sale in sales:
+            self.post('manager', f'sales/{sale["id"]}/quote/', {'amount': '100', 'reason': '确认'})
+        data = {
+            'date': TODAY,
+            'contract_number': 'HT-CONCURRENT',
+            'milestones': [{'title': '款项', 'amount': '100', 'due_date': TODAY}],
+        }
+        results = self.together([('manager', f'sales/{sale["id"]}/sign/', data) for sale in sales])
+        self.assertEqual(sorted(status for status, _ in results), [200, 400])
+        self.assertEqual(SalesOrder.objects.filter(contract_number='HT-CONCURRENT').count(), 1)
+
+    def test_two_purchase_approvals_cannot_both_consume_remaining_budget(self):
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/budget/',
+            {'materials': '500', 'labor': '0', 'expenses': '0', 'expected_revision': 0, 'reason': '限额'},
+        )
+        purchases = [self.purchase(self.project, qty='3', approve=False) for _ in range(2)]
+        results = self.together([('manager', f'purchases/{p.pk}/approve/', {}) for p in purchases])
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(Entry.objects.filter(purchase__in=purchases).count(), 1)
 
     def test_concurrent_bom_revisions_do_not_overwrite_same_snapshot(self):
         from apps.business.models import BOMLine

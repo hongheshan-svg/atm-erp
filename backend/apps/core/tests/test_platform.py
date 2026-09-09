@@ -1,4 +1,5 @@
 import io
+from datetime import date
 from unittest.mock import patch
 
 from django.core.management import call_command
@@ -10,12 +11,74 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.accounts.models import User
 from apps.core.actions import perform
 from apps.core.api import Conflict
+from apps.core.codes import configure
 from apps.core.models import ActionReceipt, AuditLog, CodeRule, Company, SchemaVersion
 from apps.core.permissions import ADMIN, require_role
 from apps.core.schema_guard import check_schema
 
 
 class PlatformTests(TestCase):
+    def test_number_configuration_endpoint_rejects_nonadmin_and_counter_writes(self):
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(self.actor)
+        rule = CodeRule.objects.get(key='project')
+        url = f'/api/core/codes/{rule.pk}/configure/'
+        data = dict(prefix='XM', date_format='', padding=6, reset_cycle='never', reason='规范编号', expected_revision=0)
+        response = client.post(url, data, format='json', HTTP_IDEMPOTENCY_KEY='configure-api')
+        self.assertEqual(response.status_code, 200, response.data)
+        response = client.post(url, {**data, 'counter': 0}, format='json', HTTP_IDEMPOTENCY_KEY='counter-api')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.actor.role = 'manager'
+        self.actor.save()
+        self.assertEqual(client.post(url, data, format='json', HTTP_IDEMPOTENCY_KEY='configure-api').status_code, 403)
+        self.assertEqual(client.get('/api/core/codes/').status_code, 403)
+
+    def test_number_configuration_version_permissions_and_replay(self):
+        rule = CodeRule.objects.get(key='project')
+        CodeRule.generate_code('project')
+        payload = dict(
+            prefix='XM-',
+            date_format='YYYYMM',
+            padding=4,
+            reset_cycle='month',
+            reason='采用企业编号',
+            expected_revision=0,
+        )
+        result = configure(self.actor, 'config-1', str(rule.pk), payload)
+        self.assertEqual(configure(self.actor, 'config-1', str(rule.pk), payload), result)
+        with self.assertRaises(Conflict):
+            configure(self.actor, 'config-2', str(rule.pk), payload)
+        rule.refresh_from_db()
+        self.assertEqual((rule.counter, rule.revision), (1, 1))
+        self.assertEqual(AuditLog.objects.filter(operation='code.configure').count(), 1)
+        for bad in [dict(reset_cycle='day'), dict(padding=0), dict(prefix='x' * 11), dict(counter=0), dict(reason='')]:
+            with self.subTest(bad=bad), self.assertRaises(ValidationError):
+                configure(self.actor, 'invalid', str(rule.pk), {**payload, 'expected_revision': 1, **bad})
+        User.objects.filter(pk=self.actor.pk).update(role='manager')
+        with self.assertRaises(PermissionDenied):
+            configure(self.actor, 'config-1', str(rule.pk), payload)
+
+    def test_number_reset_boundaries_and_no_reset_default(self):
+        rule = CodeRule.objects.get(key='project')
+        for cycle, fmt, period, same, next_day in [
+            ('year', 'YYYY', '2026', date(2026, 12, 31), date(2027, 1, 1)),
+            ('month', 'YYYYMM', '202609', date(2026, 9, 30), date(2026, 10, 1)),
+            ('day', 'YYYYMMDD', '20260909', date(2026, 9, 9), date(2026, 9, 10)),
+        ]:
+            CodeRule.objects.filter(pk=rule.pk).update(
+                date_format=fmt, reset_cycle=cycle, period=period, padding=3, counter=8
+            )
+            with patch('apps.core.models.timezone.localdate', return_value=same):
+                self.assertEqual(CodeRule.generate_code('project'), f'PRJ{same.strftime("%Y%m%d")[: len(fmt)]}009')
+            with patch('apps.core.models.timezone.localdate', return_value=next_day):
+                self.assertEqual(CodeRule.generate_code('project'), f'PRJ{next_day.strftime("%Y%m%d")[: len(fmt)]}001')
+        CodeRule.objects.filter(pk=rule.pk).update(
+            date_format='', reset_cycle='never', period='', padding=2, counter=99
+        )
+        self.assertEqual(CodeRule.generate_code('project'), 'PRJ100')
+
     def setUp(self):
         self.actor = User.objects.create_user(username='admin', password='Foundation-Tests-672', role='admin')
         CodeRule.objects.create(key='project', prefix='PRJ')

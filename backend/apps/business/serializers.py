@@ -35,7 +35,7 @@ class MoneyFilter:
 class ItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Item
-        fields = ['id', 'code', 'name', 'specification', 'unit', 'is_active', 'updated_at']
+        fields = ['id', 'code', 'name', 'specification', 'brand', 'part_type', 'unit', 'is_active', 'updated_at']
 
 
 class PartnerSerializer(serializers.ModelSerializer):
@@ -78,16 +78,32 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
 
 
 class BOMSerializer(serializers.ModelSerializer):
+    brand = serializers.CharField(source='item.brand', read_only=True)
+    part_type = serializers.CharField(source='item.part_type', read_only=True)
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     unit = serializers.CharField(source='item.unit', read_only=True)
 
     class Meta:
         model = BOMLine
-        fields = ['id', 'project', 'item', 'item_code', 'item_name', 'unit', 'quantity', 'change_note', 'updated_at']
+        fields = [
+            'id',
+            'project',
+            'item',
+            'item_code',
+            'item_name',
+            'brand',
+            'part_type',
+            'assembly_unit',
+            'unit',
+            'quantity',
+            'change_note',
+            'updated_at',
+        ]
 
 
 class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
+    assembly_unit = serializers.CharField(source='bom_line.assembly_unit', read_only=True, default='')
     sensitive_fields = ('unit_price',)
     money_roles = MONEY_READERS | {'purchaser'}
     item_code = serializers.CharField(source='item.code', read_only=True)
@@ -101,6 +117,9 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
             'item_code',
             'item_name',
             'bom_line',
+            'assembly_unit',
+            'due_date',
+            'pending_quantity',
             'quantity',
             'unit_price',
             'received_quantity',
@@ -113,6 +132,15 @@ class PurchaseSerializer(serializers.ModelSerializer):
     lines = PurchaseLineSerializer(many=True, read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    next_delivery_date = serializers.SerializerMethodField()
+
+    def get_next_delivery_date(self, obj):
+        dates = [
+            line.due_date or obj.due_date
+            for line in obj.lines.all()
+            if line.quantity > line.received_quantity + line.cancelled_quantity
+        ]
+        return min(dates) if dates else None
 
     class Meta:
         model = PurchaseOrder
@@ -123,6 +151,8 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'project_name',
             'supplier',
             'supplier_name',
+            'payment_due_date',
+            'next_delivery_date',
             'status',
             'due_date',
             'note',
@@ -232,6 +262,7 @@ class DeliverySerializer(serializers.ModelSerializer):
             'project',
             'quantity',
             'shipped_date',
+            'material_requirements',
             'accepted_date',
             'warranty_until',
             'note',
@@ -268,6 +299,26 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    evidence = serializers.SerializerMethodField()
+
+    def get_evidence(self, obj):
+        records = (
+            [{'document': obj.document_id, 'name': obj.document.original_name, 'reason': '登记时关联'}]
+            if obj.document_id
+            else []
+        )
+        records.extend(
+            {
+                'document': row.document_id,
+                'name': row.document.original_name,
+                'reason': row.reason,
+                'date': row.created_at,
+                'actor': row.created_by.display_name,
+            }
+            for row in obj.evidence.all()
+        )
+        return records
+
     reversed_by = serializers.IntegerField(source='reversal.pk', read_only=True, default=None)
     entry_title = serializers.CharField(source='entry.title', read_only=True)
     project = serializers.IntegerField(source='entry.project_id', read_only=True)
@@ -278,6 +329,11 @@ class PaymentSerializer(serializers.ModelSerializer):
             'id',
             'entry',
             'entry_title',
+            'evidence',
+            'method',
+            'account',
+            'reference',
+            'document',
             'project',
             'amount',
             'date',

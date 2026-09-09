@@ -1,4 +1,4 @@
-import { test, expect, observePage, expectHttpError, type Page, type Locator } from './fixtures'
+import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator } from './fixtures'
 const password = 'Lean-QA-2026-password'
 const day = (offset = 0) => {
   const d = new Date()
@@ -37,11 +37,7 @@ const row = (p: Page, text: string, region?: string) =>
   (region ? p.getByRole('region', { name: region, exact: true }) : p)
     .locator('.el-table__body tr:visible').filter({ hasText: text }).first()
 async function login(p: Page, username: string, pw = password) {
-  await p.goto('/erp/login')
-  await p.getByLabel('用户名', { exact: true }).fill(username)
-  await p.getByLabel('密码', { exact: true }).fill(pw)
-  await p.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(p).toHaveURL(/workbench/)
+  await loginWithRetry(p, username, pw)
 }
 async function read(p: Page, path: string) {
   const token = await p.evaluate(() => localStorage.getItem('access_token'))
@@ -68,7 +64,7 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   const errors: string[] = []
   page.setDefaultTimeout(15000)
   await login(page, 'admin', adminPassword)
-  await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(9)
+  await expect(page.getByRole('navigation', { includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(10)
   await page.goto('/erp/settings')
   for (const role of roles) {
     await page.getByRole('button', { name: '新增用户', exact: true }).click()
@@ -94,6 +90,7 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   await purchaser.goto('/erp/masterdata')
   await purchaser.getByRole('button', { name: '新增物料', exact: true }).click()
   await fill(purchaser, '物料名称', names.item)
+  await fill(purchaser, '物料编码（留空自动生成）', 'CUSTOM-' + suffix)
   await save(purchaser)
   for (const [kind, name] of [
     ['customer', names.customer],
@@ -130,12 +127,14 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   await reason(manager, '重新确认')
   await save(manager)
   await action(manager, saleRow, '签约')
+  await fill(manager, '合同编号（按签署合同填写）', 'HT-' + suffix)
   await choose(manager, '项目成员', 'member' + suffix)
   await fill(manager, '日期', day(-2))
   await save(manager)
   await expect(manager.locator('.el-message')).toHaveCount(0)
   await action(manager, saleRow, '查看明细')
   await expect(dialog(manager).getByLabel('合同金额（元）', { exact: true })).toHaveValue('10000.00')
+  await expect(dialog(manager).getByLabel('合同编号', { exact: true })).toHaveValue('HT-' + suffix)
   await expect(dialog(manager).getByRole('button', { name: '保存', exact: true })).toHaveCount(0)
   await dialog(manager).getByRole('button', { name: '关闭', exact: true }).click()
   await expect(dialog(manager)).not.toBeVisible()
@@ -143,6 +142,14 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   await saleRow.getByRole('link').click()
   await expect(manager).toHaveURL(/\/projects\/\d+$/)
   const id = Number(manager.url().split('/').pop())
+  await manager.getByRole('button', { name: '设置预算', exact: true }).click()
+  await fill(manager, '材料预算（元）', '300')
+  await fill(manager, '人工预算（元）', '400')
+  await fill(manager, '费用预算（元）', '50')
+  await reason(manager, '确定初始项目预算')
+  await save(manager)
+  const initialBudget = await read(manager, `business/projects/${id}/cost-analysis/`)
+  expect(initialBudget.budget_total).toBe('750.00')
   await manager.getByRole('tab', { name: 'BOM', exact: true }).click()
   const item = (await read(manager, 'business/items/?search=' + encodeURIComponent(names.item))).results[0]
   await manager
@@ -157,6 +164,8 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   await purchaser.goto(`/erp/projects/${id}`)
   await purchaser.getByRole('tab', { name: 'BOM', exact: true }).click()
   await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
+  await purchaser.getByRole('button', { name: '全选筛选结果', exact: true }).click()
+  await purchaser.getByRole('button', { name: '填写采购单（1 项）', exact: true }).click()
   await choose(purchaser, '供应商', names.supplier)
   await fill(purchaser, '含税单价（元）', '100')
   await save(purchaser)
@@ -165,9 +174,20 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   await purchaser.goto('/erp/purchases')
   await action(purchaser, row(purchaser, po.code), '提交采购')
   await save(purchaser)
-  await manager.goto('/erp/purchases')
-  await action(manager, row(manager, po.code), '批准采购')
+  await page.goto('/erp/purchases')
+  await action(page, row(page, po.code), '批准采购')
+  await expect(dialog(page).getByRole('heading', { name: '超预算采购审批' })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('over-budget-approval.png'), animations: 'disabled' })
+  await fill(page, '超预算批准原因', '管理员复核预算调整人的申请，批准本次超额')
+  await dialog(page).getByLabel('确认承担本次超预算采购', { exact: true }).check()
+  await save(page)
+  await manager.goto(`/erp/projects/${id}`)
+  await expect(manager.getByRole('region', { name: '项目预算与成本管控' }).getByRole('alert')).toContainText('超预算')
+  await manager.getByRole('button', { name: '设置预算', exact: true }).click()
+  await fill(manager, '材料预算（元）', '500')
+  await reason(manager, '确认追加材料预算并保留修改依据')
   await save(manager)
+  await manager.goto('/erp/purchases')
   await finance.goto('/erp/finance')
   await action(finance, row(finance, po.code, '应收应付与费用'), '登记收付款')
   await reason(finance)
@@ -178,7 +198,10 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   const paymentRows = finance.getByRole('region', { name: '收付款流水', exact: true }).locator('.el-table__body tr:visible').filter({ hasText: po.code })
   await expect(paymentRows.filter({ hasText: '已冲销' })).toHaveCount(1)
   await expect(paymentRows.filter({ hasText: '冲销记录' })).toHaveCount(1)
-  await expect(paymentRows.getByRole('button', { name: '操作 ▾', exact: true })).toHaveCount(0)
+  await paymentRows.first().getByRole('button', { name: '操作 ▾', exact: true }).click()
+  await expect(finance.getByRole('menuitem', { name: '冲销付款', exact: true })).toHaveCount(0)
+  await expect(finance.getByRole('menuitem', { name: '补录凭证', exact: true })).toBeVisible()
+  await finance.keyboard.press('Escape')
   await action(finance, row(finance, po.code, '应收应付与费用'), '登记收付款')
   await reason(finance, '重新登记付款')
   await save(finance)
@@ -216,7 +239,7 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
   await action(warehouse, row(warehouse, po2.code), '收货')
   await reason(warehouse)
   await save(warehouse)
-  await manager.goto(`/erp/projects/${id}`)
+  await manager.goto(`/erp/projects/${id}?tab=tasks`)
   for (const [kind, title] of [
     ['design', '设计'],
     ['assembly', '装配'],
@@ -229,7 +252,7 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
     await save(manager)
   }
   await member.goto(`/erp/projects/${id}`)
-  await expect(member.getByRole('navigation').getByRole('link')).toHaveCount(5)
+  await expect(member.getByRole('navigation', { includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(5)
   await expect(member.getByLabel('项目成本', { exact: true })).toHaveCount(0)
   expect((await read(member, 'business/projects/')).results.map((p: { id: number }) => p.id)).toEqual([id])
   const memberToken = await member.evaluate(() => localStorage.getItem('access_token'))
@@ -360,6 +383,12 @@ test('六角色完成签约采购生产分批交付售后与结算', async ({ br
     purchase_return_variance: '0.00',
     total: '950.00',
   })
+  const finalBudget = await read(manager, `business/projects/${id}/cost-analysis/`)
+  expect(finalBudget.budget_total).toBe('950.00')
+  expect(finalBudget.actual_total).toBe('950.00')
+  expect(finalBudget.committed_total).toBe('0.00')
+  expect(finalBudget.purchase_net).toBe('500.00')
+  expect(finalBudget.over_budget).toBe(false)
   await manager.reload()
   await projectAction(manager, '结项')
   await reason(manager)

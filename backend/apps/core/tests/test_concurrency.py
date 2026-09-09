@@ -48,3 +48,13 @@ class ConcurrencyTests(TransactionTestCase):
         results = self.concurrent_codes(['one', 'two', 'three', 'four'])
         self.assertEqual(len({result['code'] for result in results}), 4)
         self.assertEqual(CodeRule.objects.get(key='project').counter, 4)
+
+    def test_concurrent_period_rollover_resets_only_once(self):
+        from django.utils import timezone
+
+        CodeRule.objects.filter(key='project').update(
+            date_format='YYYYMMDD', reset_cycle='day', period='20000101', counter=900, padding=3
+        )
+        results = self.concurrent_codes(['a', 'b', 'c', 'd'])
+        prefix = 'PRJ' + timezone.localdate().strftime('%Y%m%d')
+        self.assertEqual({r['code'] for r in results}, {f'{prefix}{i:03d}' for i in range(1, 5)})

@@ -16,6 +16,7 @@ class User(AbstractUser):
     display_name = models.CharField(max_length=80, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
     hourly_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    management_reports = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'lean_user'

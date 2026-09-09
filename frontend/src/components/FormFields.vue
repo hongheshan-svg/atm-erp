@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Field, Row } from '../types'
 import { defaults } from '../forms'
-defineProps<{ fields: Field[]; disabled?: boolean }>()
+defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean }>()
 const model = defineModel<Row>({ required: true })
 </script>
 <template>
@@ -9,13 +9,16 @@ const model = defineModel<Row>({ required: true })
     <template v-for="field in fields" :key="field.key">
       <fieldset v-if="field.type === 'rows'" class="row-list">
         <legend>{{ field.label }}</legend>
-        <div v-for="(_, i) in model[field.key]" :key="i" class="line-fields">
+        <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>
+          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" min-width="140" show-overflow-tooltip />
+        </el-table>
+        <div v-for="(_, i) in readonly ? [] : model[field.key]" :key="i" class="line-fields">
           <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" />
-          <el-button v-if="!disabled" @click="model[field.key].splice(i, 1)">移除此行</el-button>
+          <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
-        <el-button v-if="!disabled" @click="model[field.key].push(defaults(field.fields!))">添加行</el-button>
+        <el-button v-if="!disabled && !field.readonly" @click="model[field.key].push(defaults(field.fields!))">添加行</el-button>
       </fieldset>
-      <label v-else class="field">
+      <label v-else-if="!field.hidden" class="field">
         <span>{{ field.label }}<small v-if="field.optional">（选填）</small></span>
         <select
           :aria-label="field.label"

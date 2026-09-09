@@ -9,6 +9,7 @@ from .api.masterdata import ItemView, PartnerView
 from .api.projects import ProjectView
 from .api.purchases import PurchaseView
 from .attachments import DocumentView
+from .reports import ReportsView
 from .sales import SalesView
 from .workbench import WorkbenchView
 
@@ -27,4 +28,4 @@ router.register('tasks', TaskView)
 router.register('deliveries', DeliveryView)
 router.register('time', TimeView)
 router.register('documents', DocumentView)
-urlpatterns = [path('workbench/', WorkbenchView.as_view()), *router.urls]
+urlpatterns = [path('workbench/', WorkbenchView.as_view()), path('reports/', ReportsView.as_view()), *router.urls]

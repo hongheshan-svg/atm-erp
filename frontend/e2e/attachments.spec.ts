@@ -1,13 +1,9 @@
-import { test, expect } from './fixtures'
+import { test, expect, login } from './fixtures'
 import { readFile } from 'node:fs/promises'
 test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, info) => {
   const password = process.env.E2E_ADMIN_PASSWORD
   expect(password).toBeTruthy()
-  await page.goto('/erp/login')
-  await page.getByLabel('用户名', { exact: true }).fill('admin')
-  await page.getByLabel('密码', { exact: true }).fill(password!)
-  await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page).toHaveURL(/workbench/)
+  await login(page, 'admin', password!)
   const suffix = String(Date.now())
   const customer = '附件客户' + suffix
   const project = '附件项目' + suffix

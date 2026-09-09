@@ -10,11 +10,17 @@ TARGETS = {
     'business': (
         'apps.business.tests.test_models',
         'apps.business.tests.test_sales',
+        'apps.business.tests.test_budgets',
         'apps.business.tests.test_commercial_chain',
         'apps.business.tests.test_inventory',
         'apps.business.tests.test_execution',
         'apps.business.tests.test_import_documents',
         'apps.business.tests.test_workbench',
+        'apps.business.tests.test_reports',
+        'apps.business.tests.test_transfers',
+        'apps.business.tests.test_bom_selection',
+        'apps.business.tests.test_review_remediation',
+        'apps.business.tests.test_operational_review',
     ),
     'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
 }

@@ -14,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/precheck-tests.sh --all
+      - run: python3 -m unittest discover -s scripts/tests -p test_ops_check.py
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -29,6 +30,7 @@ jobs:
     env:
       LEAN_PROJECT_NAME: lean-ci
       LEAN_HTTP_PORT: '18320'
+      LEAN_ENVIRONMENT: development
       LEAN_ADMIN_PASSWORD: Lean-CI-only-password-2026
       E2E_BASE_URL: http://127.0.0.1:18320
       E2E_ADMIN_PASSWORD: Lean-CI-only-password-2026

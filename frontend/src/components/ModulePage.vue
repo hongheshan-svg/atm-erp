@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { user } from '../session'
 import { all } from '../api'
 import { message } from '../utils/request'
 import { today } from '../forms'
 import type { Row } from '../types'
 const props = defineProps<{ title: string; projectFilter?: boolean; requireProject?: boolean }>()
 const projects = ref<Row[]>([])
-const projectId = ref<number>()
+const route = useRoute()
+const projectKey = `module-project-${user.value?.id}-${props.title}`
+const savedProject = Number(route.query.project || sessionStorage.getItem(projectKey))
+const projectId = ref<number | undefined>(Number.isSafeInteger(savedProject) && savedProject > 0 ? savedProject : undefined)
+watch(projectId, value => { if (value) sessionStorage.setItem(projectKey, String(value)); else sessionStorage.removeItem(projectKey) })
 const revision = ref(0)
 const error = ref('')
 async function refresh() {

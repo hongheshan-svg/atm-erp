@@ -173,7 +173,24 @@ class CommercialChainTests(BusinessFixtures, TestCase):
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.post('member', 'items/', {'name': '非法新建'}, status=403)
-        self.post('purchaser', 'items/', {'name': '非法字段', 'code': 'FORGED'}, status=400)
+        self.post('purchaser', 'items/', {'name': '非法字段', 'created_by': 1}, status=400)
+
+    def test_manual_item_codes_reserve_automatic_numbers_and_cannot_be_edited(self):
+        manual = self.post('purchaser', 'items/', {'name': '企业物料', 'code': ' MAT000001 '}, status=201)
+        self.post('purchaser', 'items/', {'name': '重复', 'code': 'MAT000001'}, status=400)
+        auto = self.post('purchaser', 'items/', {'name': '自动编码'}, status=201)
+        self.assertEqual(Item.objects.get(pk=auto['id']).code, 'MAT000002')
+        obj = Item.objects.get(pk=manual['id'])
+        obj.soft_delete(self.users['purchaser'])
+        self.post('purchaser', 'items/', {'name': '已删除编码仍占用', 'code': 'MAT000001'}, status=400)
+        response = self.clients['purchaser'].patch(
+            f'/api/business/items/{auto["id"]}/',
+            {'code': 'CHANGED'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Item.objects.get(pk=auto['id']).code, 'MAT000002')
 
     def test_contract_node_mismatch_rolls_back_and_same_key_can_retry(self):
         project = SalesOrder.objects.create(

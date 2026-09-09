@@ -123,8 +123,13 @@ def edit(actor, key, sale_id, data):
 
 def sign(actor, key, sale_id, data):
     def execute(user, sale):
-        fields(data, {'date', 'milestones', 'manager', 'members'})
+        fields(data, {'date', 'milestones', 'manager', 'members', 'contract_number'})
         state(sale, {'quoted'})
+        # Serialize contract identifiers with the existing sales numbering lock.
+        CodeRule.objects.select_for_update().get(key='sale')
+        sale.contract_number = text(data, 'contract_number', default='', maximum=80) or None
+        if sale.contract_number and SalesOrder.all_objects.filter(contract_number=sale.contract_number).exists():
+            raise ValidationError({'contract_number': '合同编号已使用。'})
         milestones = []
         for row in rows(data, 'milestones'):
             fields(row, {'title', 'amount', 'due_date'})
@@ -164,11 +169,18 @@ def sign(actor, key, sale_id, data):
             )
         sale.project = project
         sale.contract_amount = sale.quote_amount
+        sale.original_contract_amount = sale.quote_amount
         sale.status = 'signed'
         save(sale, user)
         finance.record_contract(user, project, milestones)
         result = audit(
-            user, 'sale.sign', sale, project=project.pk, amount=str(sale.contract_amount), milestones=len(milestones)
+            user,
+            'sale.sign',
+            sale,
+            project=project.pk,
+            amount=str(sale.contract_amount),
+            milestones=len(milestones),
+            contract_number=sale.contract_number,
         )
         return {**result, 'project': project.pk}
 

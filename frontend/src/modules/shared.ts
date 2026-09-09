@@ -53,6 +53,7 @@ export function endpoint(resource: string) {
   return `${['users'].includes(resource) ? '/auth/' : ['company', 'codes', 'audit'].includes(resource) ? '/core/' : '/business/'}${resource}/`
 }
 export const labels: Record<string, string> = {
+  bank: '银行转账', cash: '现金',
   signed: '已签约',
   draft: '草稿',
   quoted: '已报价',

@@ -6,7 +6,7 @@ from apps.core.permissions import MANAGERS, MONEY_READERS
 
 from .api.common import ReadView, key
 from .models import SalesOrder
-from .services import sales
+from .services import amendments, sales
 
 
 class SalesSerializer(serializers.ModelSerializer):
@@ -33,7 +33,9 @@ class SalesSerializer(serializers.ModelSerializer):
             'warranty_months',
             'quote_amount',
             'contract_amount',
+            'original_contract_amount',
             'contract_date',
+            'contract_number',
             'created_at',
             'updated_at',
         ]
@@ -44,7 +46,7 @@ class SalesView(ReadView):
     serializer_class = SalesSerializer
     read_roles = MONEY_READERS
     write_roles = MANAGERS
-    search_fields = ['code', 'name', 'customer__name']
+    search_fields = ['code', 'name', 'customer__name', 'contract_number']
     filterset_fields = ['status', 'customer', 'manager', 'project']
 
     def create(self, request):
@@ -65,3 +67,17 @@ class SalesView(ReadView):
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         return Response(sales.cancel(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'])
+    def amend(self, request, pk=None):
+        return Response(amendments.amend(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['get'], url_path='amendments')
+    def amendment_history(self, request, pk=None):
+        return Response(
+            list(
+                self.get_object()
+                .amendments.order_by('pk')
+                .values('id', 'date', 'reason', 'before', 'after', 'document', 'document__original_name', 'created_by')
+            )
+        )

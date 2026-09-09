@@ -99,7 +99,7 @@ class ImportTests(BusinessFixtures, TestCase):
         self.preview(f'物料编码,数量,变更说明\n{self.item.code},2,\n'.encode(), role='member', status=403)
         response = self.clients['manager'].get('/api/business/projects/bom-template/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content.decode('utf-8-sig').strip(), '物料编码,数量,变更说明')
+        self.assertEqual(response.content.decode('utf-8-sig').strip(), '物料编码,数量,变更说明,单元')
 
     def test_existing_bom_requires_reason_and_observes_ordered_floor(self):
         self.post(

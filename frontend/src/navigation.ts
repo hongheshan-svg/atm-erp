@@ -1,4 +1,4 @@
-import { can } from './session'
+import { can, reports } from './session'
 import {
   House,
   Folder,
@@ -12,6 +12,7 @@ import {
 export function navigation() {
   return [
     { key: 'workbench', label: '工作台', icon: House },
+    ...(reports() ? [{ key: 'reports', label: '经营报表', icon: Files }] : []),
     ...(can(['admin', 'manager', 'finance']) ? [{ key: 'sales', label: '销售', icon: Files }] : []),
     { key: 'projects', label: '项目', icon: Folder },
     { key: 'bom', label: 'BOM', icon: Files },

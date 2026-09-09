@@ -8,6 +8,7 @@ export const router = createRouter({
     { path: '/', redirect: '/workbench' },
     { path: '/projects/:id', component: () => import('./views/ProjectPage.vue') },
     { path: '/workbench', component: () => import('./views/WorkbenchPage.vue') },
+    { path: '/reports', component: () => import('./views/ReportsPage.vue') },
     { path: '/sales', component: () => import('./views/SalesPage.vue') },
     { path: '/projects', component: () => import('./views/ProjectsPage.vue') },
     { path: '/bom', component: () => import('./views/BOMPage.vue') },

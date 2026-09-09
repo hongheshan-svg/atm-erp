@@ -17,9 +17,15 @@ def quantity(**kwargs):
 
 
 class Item(BaseModel):
+    class PartType(models.TextChoices):
+        STANDARD = 'standard', '标准件'
+        CUSTOM = 'custom', '非标件'
+
     code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=150)
     specification = models.CharField(max_length=250, blank=True)
+    brand = models.CharField(max_length=80, blank=True)
+    part_type = models.CharField(max_length=20, choices=PartType.choices, blank=True, default='')
     unit = models.CharField(max_length=20, default='件')
     is_active = models.BooleanField(default=True)
 
@@ -66,11 +72,36 @@ class Project(BaseModel):
     equipment_quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     warranty_months = models.PositiveIntegerField(default=12)
     close_reason = models.TextField(blank=True)
+    budget_materials = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    budget_labor = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    budget_expenses = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    budget_revision = models.PositiveIntegerField(default=0)
+    budget_changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, models.PROTECT, null=True, blank=True, related_name='+'
+    )
+    remaining_labor = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    remaining_expenses = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    forecast_revision = models.PositiveIntegerField(default=0)
+    remaining_materials = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    forecast_at = models.DateTimeField(null=True, blank=True)
+    forecast_by = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, null=True, blank=True, related_name='+')
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_project'
         constraints = [
             models.CheckConstraint(condition=Q(equipment_quantity__gt=0), name='lean_equipment_positive'),
+            models.CheckConstraint(
+                condition=Q(budget_materials__isnull=True, budget_labor__isnull=True, budget_expenses__isnull=True)
+                | Q(
+                    budget_materials__isnull=False,
+                    budget_materials__gte=0,
+                    budget_labor__isnull=False,
+                    budget_labor__gte=0,
+                    budget_expenses__isnull=False,
+                    budget_expenses__gte=0,
+                ),
+                name='lean_project_budget_valid',
+            ),
         ]
 
     # Read-only projections: commercial facts belong to the sales order.
@@ -88,7 +119,9 @@ class Project(BaseModel):
 
 
 class SalesOrder(BaseModel):
+    original_contract_amount = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     code = models.CharField(max_length=30, unique=True)
+    contract_number = models.CharField(max_length=80, unique=True, null=True, blank=True)
     name = models.CharField(max_length=150)
     customer = models.ForeignKey(Partner, models.PROTECT, related_name='sales')
     manager = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, related_name='managed_sales')
@@ -114,17 +147,30 @@ class SalesOrder(BaseModel):
         ]
 
 
+class ContractAmendment(ImmutableLedger):
+    sale = models.ForeignKey(SalesOrder, models.PROTECT, related_name='amendments')
+    document = models.ForeignKey('Document', models.PROTECT, related_name='+')
+    reason = models.CharField(max_length=500)
+    before = models.JSONField()
+    after = models.JSONField()
+    date = models.DateField()
+
+    class Meta(LedgerModel.Meta):
+        db_table = 'lean_contract_amendment'
+
+
 class BOMLine(BaseModel):
     project = models.ForeignKey(Project, models.PROTECT, related_name='bom_lines')
     item = models.ForeignKey(Item, models.PROTECT)
     quantity = quantity(validators=[MinValueValidator(Decimal('0.001'))])
     change_note = models.CharField(max_length=500, blank=True)
+    assembly_unit = models.CharField(max_length=100, blank=True)
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_bom_line'
         constraints = [
             models.UniqueConstraint(
-                fields=['project', 'item'], condition=Q(is_deleted=False), name='lean_live_bom_item'
+                fields=['project', 'item', 'assembly_unit'], condition=Q(is_deleted=False), name='lean_live_bom_unit'
             ),
             models.CheckConstraint(condition=Q(quantity__gt=0), name='lean_bom_positive'),
         ]
@@ -144,6 +190,7 @@ class PurchaseOrder(BaseModel):
     supplier = models.ForeignKey(Partner, models.PROTECT)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     due_date = models.DateField()
+    payment_due_date = models.DateField(null=True, blank=True)
     note = models.CharField(max_length=500, blank=True)
 
     class Meta(BaseModel.Meta):
@@ -159,10 +206,19 @@ class PurchaseLine(BaseModel):
     received_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     cancelled_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     returned_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    pending_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=0)
+    due_date = models.DateField(null=True, blank=True)
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_purchase_line'
         constraints = [
+            models.CheckConstraint(
+                condition=Q(
+                    pending_quantity__gte=0,
+                    quantity__gte=F('received_quantity') + F('cancelled_quantity') + F('pending_quantity'),
+                ),
+                name='lean_purchase_pending_limit',
+            ),
             models.CheckConstraint(condition=Q(quantity__gt=0, unit_price__gte=0), name='lean_purchase_positive'),
             models.CheckConstraint(
                 condition=Q(received_quantity__gte=0, cancelled_quantity__gte=0, returned_quantity__gte=0),
@@ -194,6 +250,7 @@ class Stock(LedgerModel):
 
 
 class Delivery(BaseModel):
+    material_requirements = models.JSONField(null=True, blank=True)
     code = models.CharField(max_length=30, unique=True)
     project = models.ForeignKey(Project, models.PROTECT, related_name='deliveries')
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
@@ -289,11 +346,25 @@ class Payment(ImmutableLedger):
     amount = money()
     date = models.DateField()
     reason = models.CharField(max_length=500)
+    method = models.CharField(max_length=20, blank=True)
+    account = models.CharField(max_length=100, blank=True)
+    reference = models.CharField(max_length=100, blank=True)
+    document = models.ForeignKey('Document', models.PROTECT, null=True, blank=True, related_name='payments')
     reversal_of = models.OneToOneField('self', models.PROTECT, null=True, blank=True, related_name='reversal')
 
     class Meta(LedgerModel.Meta):
         db_table = 'lean_payment'
         constraints = [models.CheckConstraint(condition=~Q(amount=0), name='lean_payment_nonzero')]
+
+
+class PaymentEvidence(ImmutableLedger):
+    payment = models.ForeignKey(Payment, models.PROTECT, related_name='evidence')
+    document = models.ForeignKey('Document', models.PROTECT, related_name='+')
+    reason = models.CharField(max_length=500)
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_payment_evidence'
+        constraints = [models.UniqueConstraint(fields=['payment', 'document'], name='lean_payment_evidence_unique')]
 
 
 class TimeEntry(ImmutableLedger):
