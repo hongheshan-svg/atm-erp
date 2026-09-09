@@ -61,7 +61,8 @@ def main():
             assert assets
             assert "javascript" in request("/erp/assets/" + assets[0].name)[2]["Content-Type"]
             assert request("/uploads/private.pdf")[0] == 404
-            assert request("/api/business/projects/")[0] == 401
+            denied_status, denied_body, _ = request("/api/business/projects/")
+            assert denied_status == 403, (denied_status, denied_body)
             credentials = {"username": "admin", "password": config["ADMIN_PASSWORD"]}
             status, body, _ = request("/api/auth/login/", credentials)
             assert status == 200, body

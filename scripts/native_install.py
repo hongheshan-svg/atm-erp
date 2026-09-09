@@ -73,7 +73,7 @@ def environment(config, data):
     for key in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD", "REDIS_URL",
                 "SECRET_KEY", "ADMIN_PASSWORD", "ALLOWED_HOSTS", "APP_ENVIRONMENT"):
         env[key] = config[key]
-    env.update(DEBUG="false", MEDIA_ROOT=str(data / "uploads"), PYTHONUNBUFFERED="1")
+    env.update(DEBUG="false", MEDIA_ROOT=str(data / "uploads"), PYTHONUNBUFFERED="1", PYTHONUTF8="1")
     return env
 
 
@@ -234,6 +234,10 @@ def start(config, data):
 
 
 def main():
+    # Redirected PowerShell output can otherwise use an ASCII/ANSI code page.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("configure", "install", "start", "check"))
     parser.add_argument("--config", type=Path, default=ROOT / "native-config.json")
