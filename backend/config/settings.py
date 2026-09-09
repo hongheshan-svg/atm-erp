@@ -1,426 +1,93 @@
-"""
-Django settings for ERP project.
-"""
+"""Fresh-install Lean ERP. Configuration comes only from process environment."""
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
-# Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Security settings
-# SECURITY WARNING: In production, set SECRET_KEY via environment variable
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
-
-# SECURITY WARNING: don't run with debug turned on in production!
-# Default is False for security - must explicitly enable for development
-DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
-
-# Application definition
+DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
+TESTING = False
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
+if len(SECRET_KEY) < 32:
+    raise ImproperlyConfigured('SECRET_KEY 必须配置为至少 32 字符的随机密钥。')
+ALLOWED_HOSTS = [v.strip() for v in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if v.strip()]
 INSTALLED_APPS = [
-    'daphne',  # Must be first for ASGI
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
-    'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Third party apps
     'rest_framework',
-    'rest_framework_simplejwt',
     'corsheaders',
-    'drf_spectacular',
-    'django_extensions',
     'django_filters',
-    'channels',
-    # Local apps
     'apps.core',
-    'apps.core.workflow',
     'apps.accounts',
-    'apps.masterdata',
-    'apps.projects',
-    'apps.purchase',
-    'apps.sales',
-    'apps.inventory',
-    'apps.finance',
-    'apps.reports',
-    'apps.analytics',
-    'apps.production',
-    'apps.oa',
-    # AI gateway (LLM 网关 + RAG 检索基础脚手架; 默认 provider 关闭)
-    'apps.ai',
+    'apps.business',
 ]
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    # 安全响应头(CSP / Referrer-Policy / Permissions-Policy / nosniff 等)。
-    # 仅 process_response，放在靠前位置以覆盖所有下游响应；被动加头，不拦截请求，
-    # 因此不影响既有 DRF 限流/鉴权与测试。RateLimit/SQLi/XSS 等主动拦截中间件
-    # 依赖 Redis 且与 DRF 限流职责重叠，暂不在此启用（见 security_middleware.py）。
-    'apps.core.security_middleware.SecurityHeadersMiddleware',
     'corsheaders.middleware.CorsMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    # i18n: 依据 Accept-Language / 会话 / cookie 激活语言(须在 SessionMiddleware 之后、
-    # CommonMiddleware 之前)。仅在启用了 USE_I18N 时生效,被动选择语言,不改变既有
-    # API 行为——未提供翻译目录时回落到 LANGUAGE_CODE(zh-hans)。
-    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'apps.core.middleware.AuditLogMiddleware',
 ]
-
 ROOT_URLCONF = 'config.urls'
-
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
-
-WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-
-# Channels configuration
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [(config('REDIS_HOST', default='redis'), 6379)],
-        },
-    },
-}
-
-# Database
+WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='erp_db'),
-        'USER': config('DB_USER', default='erp_user'),
-        'PASSWORD': config('DB_PASSWORD', default='erp_password'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+        'NAME': os.environ.get('DB_NAME', 'atm_erp_lean'),
+        'USER': os.environ.get('DB_USER', 'atm_erp_lean'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', 'postgres'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {'connect_timeout': 5},
     }
 }
-
-# Password validation
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
-
-# Internationalization
-LANGUAGE_CODE = 'zh-hans'
-TIME_ZONE = 'Asia/Shanghai'
-USE_I18N = True
-USE_TZ = True
-
-# 支持的语言(i18n 基础脚手架)。LocaleMiddleware 会据此在 zh-hans / en 之间协商;
-# 未提供 .po/.mo 翻译目录时 gettext 回落到源串(现为中文 verbose_name),行为不变。
-# 后续里程碑:用 gettext_lazy 包裹模型 verbose_name / 提示语并编译 locale/ 下的翻译。
-LANGUAGES = [
-    ('zh-hans', '简体中文'),
-    ('en', 'English'),
-]
-# 翻译文件搜索路径(makemessages/compilemessages 输出目录)。目录暂可为空,不影响运行。
-LOCALE_PATHS = [BASE_DIR / 'locale']
-
-# Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# Media files
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'uploads'
-
-# Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Custom User Model
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_URL', 'redis://redis:6379/0'),
+    }
+}
 AUTH_USER_MODEL = 'accounts.User'
-
-# REST Framework settings
-LOGIN_THROTTLE_ENABLED = config('LOGIN_THROTTLE_ENABLED', default=True, cast=bool)
-LOGIN_THROTTLE_RATE = config('LOGIN_THROTTLE_RATE', default='5/minute')
-
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
-    'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-        'rest_framework.parsers.FormParser',
-        'rest_framework.parsers.MultiPartParser',
-    ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-    ],
-    'DEFAULT_PAGINATION_CLASS': 'apps.core.pagination.StandardPagination',
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_PAGINATION_CLASS': 'apps.core.api.Pagination',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
     ],
-    'DEFAULT_SCHEMA_CLASS': 'apps.core.schema.ERPAutoSchema',
-    'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
-    'DATE_FORMAT': '%Y-%m-%d',
-    # Rate limiting
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-    ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '200/hour',
-        'login': LOGIN_THROTTLE_RATE,
-    },
+    'DEFAULT_THROTTLE_RATES': {'login': '10/min'},
+    'EXCEPTION_HANDLER': 'apps.core.api.exception_handler',
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
 }
-
-
-# JWT Settings
-def _jwt_lifetime(token_name, legacy_name, default):
-    """Read a JWT lifetime accepting both the documented `*_TOKEN_LIFETIME_*`
-    name (used by .env.prod.example) and the legacy `*_LIFETIME_*` name, so a
-    prod env that sets the documented variable no longer silently falls back to
-    the default. Empty/invalid values fall back to `default`.
-    """
-    raw = config(token_name, default='') or config(legacy_name, default='')
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return default
-
-
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(
-        minutes=_jwt_lifetime('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', 'JWT_ACCESS_LIFETIME_MINUTES', 120)
-    ),
-    'REFRESH_TOKEN_LIFETIME': timedelta(
-        days=_jwt_lifetime('JWT_REFRESH_TOKEN_LIFETIME_DAYS', 'JWT_REFRESH_LIFETIME_DAYS', 7)
-    ),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,  # Enable token blacklist for security
-    'UPDATE_LAST_LOGIN': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=12),
+    'CHECK_REVOKE_TOKEN': True,
+    'UPDATE_LAST_LOGIN': False,
 }
-
-# CORS Settings
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173,http://127.0.0.1:5173',
-    cast=lambda v: [s.strip() for s in v.split(',')],
-)
-CORS_ALLOW_CREDENTIALS = True
-
-# Cache settings (Redis)
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': config('REDIS_URL', default='redis://redis:6379/1'),
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        },
-    }
-}
-
-# Celery Configuration
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://redis:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_ENABLE_UTC = True
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-
-# API Documentation
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'ERP System API',
-    'DESCRIPTION': 'Enterprise Resource Planning System - Project Management, PSI & Cost Control',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'POSTPROCESSING_HOOKS': ['apps.core.schema.postprocess_contextual_enums'],
-}
-
-# Logging
-LOG_DIR = BASE_DIR / 'logs'  # Use /app/logs in Docker
-try:
-    if not LOG_DIR.exists():
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-except PermissionError:
-    # Fallback to /tmp if no write permission
-    LOG_DIR = Path('/tmp/erp_logs')
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
-}
-
-# =============================================================================
-# Notification Settings (DingTalk / WeChat Work)
-# =============================================================================
-
-# DingTalk (钉钉) Configuration
-DINGTALK_WEBHOOK_URL = config('DINGTALK_WEBHOOK_URL', default='')
-DINGTALK_WEBHOOK_SECRET = config('DINGTALK_WEBHOOK_SECRET', default='')
-DINGTALK_APP_KEY = config('DINGTALK_APP_KEY', default='')
-DINGTALK_APP_SECRET = config('DINGTALK_APP_SECRET', default='')
-DINGTALK_AGENT_ID = config('DINGTALK_AGENT_ID', default='')
-
-# WeChat Work (企业微信) Configuration
-WECHAT_WORK_WEBHOOK_URL = config('WECHAT_WORK_WEBHOOK_URL', default='')
-WECHAT_WORK_CORP_ID = config('WECHAT_WORK_CORP_ID', default='')
-WECHAT_WORK_CORP_SECRET = config('WECHAT_WORK_CORP_SECRET', default='')
-WECHAT_WORK_AGENT_ID = config('WECHAT_WORK_AGENT_ID', default='')
-
-# Feishu / Lark (飞书) Configuration
-FEISHU_APP_ID = config('FEISHU_APP_ID', default='')
-FEISHU_APP_SECRET = config('FEISHU_APP_SECRET', default='')
-
-# =============================================================================
-# 企业 IM 扫码登录 (OAuth) — 企业微信 / 钉钉 / 飞书
-# =============================================================================
-# 首登自动建号:组织成员扫码即在 ERP 自动建号(默认 employee 最小权限,管理员事后授权)。
-OAUTH_AUTO_CREATE = config('OAUTH_AUTO_CREATE', default=True, cast=bool)
-# 自动建号是否直接激活(False 则建号后需管理员激活才能登录)。
-OAUTH_NEW_USER_ACTIVE = config('OAUTH_NEW_USER_ACTIVE', default=True, cast=bool)
-# 可选:仅允许这些邮箱域名的成员自动建号(逗号分隔;空=不限)。
-OAUTH_ALLOWED_EMAIL_DOMAINS = config(
-    'OAUTH_ALLOWED_EMAIL_DOMAINS',
-    default='',
-    cast=lambda v: [s.strip().lower() for s in v.split(',') if s.strip()],
-)
-# 自动建号默认角色编码(对齐 init_roles 的 employee,data_scope=SELF)。
-OAUTH_DEFAULT_ROLE_CODE = config('OAUTH_DEFAULT_ROLE_CODE', default='employee')
-# 是否允许「扫码时按手机号自动绑定到已存在的 ERP 账号」。默认 False(安全):
-# 首扫不静默绑定既有账号,避免账号接管;既有员工由管理员一次性绑定其 IM ID 即可扫码。
-# 设为 True 时,组织信任「IM 平台核验的手机号」,非特权既有账号可按手机号自动绑定(特权账号始终拒绝)。
-OAUTH_BIND_EXISTING_BY_PHONE = config('OAUTH_BIND_EXISTING_BY_PHONE', default=False, cast=bool)
-
-# Frontend URL for notification links
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost')
-
-# Enable notification channels
-NOTIFICATION_CHANNELS_ENABLED = config(
-    'NOTIFICATION_CHANNELS_ENABLED', default='email,wechat_work', cast=lambda v: [s.strip() for s in v.split(',')]
-)
-
-# =============================================================================
-# Inventory Costing Method
-# =============================================================================
-# Options: 'WEIGHTED_AVG' (default), 'FIFO'
-INVENTORY_COSTING_METHOD = config('INVENTORY_COSTING_METHOD', default='WEIGHTED_AVG')
-
-# =============================================================================
-# Remote Upgrade
-# =============================================================================
-ERP_UPDATE_MANIFEST_URL = config(
-    'ERP_UPDATE_MANIFEST_URL',
-    default='https://raw.githubusercontent.com/hongheshan-svg/atm-erp/main/manifest.json',
-)
-
-# =============================================================================
-# Security Settings (Production)
-# =============================================================================
-
-# HTTPS Settings - Enable in production
-SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-# HSTS Settings
-SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
-SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
-
-# Cookie Security
-SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
-CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = True
-
-# Content Security
+CORS_ALLOWED_ORIGINS = [v.strip() for v in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if v.strip()]
+LANGUAGE_CODE = 'zh-hans'
+TIME_ZONE = 'Asia/Shanghai'
+USE_I18N = True
+USE_TZ = True
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'uploads')))
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = 'DENY'
-
-# CSRF Trusted Origins
-CSRF_TRUSTED_ORIGINS = config(
-    'CSRF_TRUSTED_ORIGINS',
-    default='http://localhost:3000,http://localhost:5173',
-    cast=lambda v: [s.strip() for s in v.split(',')],
-)
-
-# Password Policy Settings
-PASSWORD_MIN_LENGTH = config('PASSWORD_MIN_LENGTH', default=8, cast=int)
-PASSWORD_REQUIRE_UPPERCASE = config('PASSWORD_REQUIRE_UPPERCASE', default=True, cast=bool)
-PASSWORD_REQUIRE_LOWERCASE = config('PASSWORD_REQUIRE_LOWERCASE', default=True, cast=bool)
-PASSWORD_REQUIRE_DIGIT = config('PASSWORD_REQUIRE_DIGIT', default=True, cast=bool)
-PASSWORD_REQUIRE_SPECIAL = config('PASSWORD_REQUIRE_SPECIAL', default=True, cast=bool)
-PASSWORD_EXPIRY_DAYS = config('PASSWORD_EXPIRY_DAYS', default=90, cast=int)
-
-# Login Security
-MAX_LOGIN_ATTEMPTS = config('MAX_LOGIN_ATTEMPTS', default=5, cast=int)
-LOCKOUT_DURATION_MINUTES = config('LOCKOUT_DURATION_MINUTES', default=30, cast=int)
-
-# =============================================================================
-# Backup Encryption
-# =============================================================================
-# 数据库备份加密密钥（Fernet key）。留空则备份仅 gzip 压缩（明文，兼容本地开发）。
-# 生产环境应设置一个由以下命令生成的密钥，使备份落盘即为 AES-128-CBC+HMAC 加密：
-#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-BACKUP_ENCRYPTION_KEY = config('BACKUP_ENCRYPTION_KEY', default='')
-
-# =============================================================================
-# AI Gateway (LLM 网关 + RAG 检索基础脚手架)
-# =============================================================================
-# 默认关闭(AI_PROVIDER 为空 -> LLMGateway 使用 NullProvider,返回“未配置”提示,
-# 不发起任何网络调用)。启用真实 provider 时设置 AI_PROVIDER(如 'anthropic')与
-# AI_API_KEY;真实 provider 采用惰性导入,未安装 SDK 时也不影响本模块 import/运行。
-AI_PROVIDER = config('AI_PROVIDER', default='')
-AI_API_KEY = config('AI_API_KEY', default='')
-AI_MODEL = config('AI_MODEL', default='claude-opus-4-8')
-# RAG 检索当前使用数据库 icontains，完整向量 RAG 为后续能力。
-AI_RAG_TOP_K = config('AI_RAG_TOP_K', default=5, cast=int)

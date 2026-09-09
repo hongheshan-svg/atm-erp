@@ -1,31 +1,21 @@
 import { defineConfig } from '@playwright/test'
-import { resolve } from 'node:path'
-import { loadEnv } from 'vite'
-
-const rootEnv = loadEnv('', resolve(import.meta.dirname, '..'), '')
-const useDocker = Boolean(process.env.E2E_BASE_URL || rootEnv.HTTP_PORT)
-const httpPort = rootEnv.HTTP_PORT || '3000'
-
-process.env.E2E_USERNAME ||= rootEnv.ADMIN_USERNAME || 'admin'
-process.env.E2E_PASSWORD ||= rootEnv.ADMIN_PASSWORD
-
+if (!process.env.E2E_BASE_URL) throw new Error('请显式设置 E2E_BASE_URL，且只能使用隔离测试安装。')
+if (!process.env.E2E_ADMIN_PASSWORD) throw new Error('请显式设置隔离测试安装的 E2E_ADMIN_PASSWORD。')
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30000,
-  retries: 1,
+  timeout: 120000,
+  retries: 0,
   workers: 1,
+  projects: [
+    { name: 'desktop', use: { viewport: { width: 1440, height: 1000 } } },
+    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+  ],
   use: {
-    baseURL: process.env.E2E_BASE_URL || `http://localhost:${httpPort}`,
+    actionTimeout: 15000,
+    baseURL: process.env.E2E_BASE_URL,
     headless: true,
-    viewport: { width: 1280, height: 720 },
+    viewport: { width: 1440, height: 1000 },
     screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
   },
-  webServer: useDocker
-    ? undefined
-    : {
-        command: 'npm run dev',
-        port: 3000,
-        reuseExistingServer: true,
-        timeout: 120000,
-      },
 })

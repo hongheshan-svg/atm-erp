@@ -1,98 +1,57 @@
-"""Generate the GitHub Actions backend test matrix and guard app coverage."""
-
-from __future__ import annotations
+"""Single registry of backend test targets, shared by local runs and CI."""
 
 import argparse
-import importlib
 import json
-import os
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / 'backend'
-sys.path.insert(0, str(BACKEND))
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-
-django = importlib.import_module('django')
-apps = importlib.import_module('django.apps').apps
-
-
-GROUPS = (
-    {
-        'name': 'platform, permissions and accounts',
-        'modules': ('apps.core', 'apps.core.workflow', 'apps.accounts', 'apps.ai'),
-        'targets': ('apps.core.tests', 'apps.core.workflow', 'apps.accounts.tests', 'apps.ai.tests'),
-    },
-    {
-        'name': 'projects, master data and sales',
-        'modules': ('apps.masterdata', 'apps.projects', 'apps.sales'),
-        'targets': ('apps.masterdata.tests', 'apps.projects.tests', 'apps.sales.tests'),
-    },
-    {
-        'name': 'supply chain, inventory and production',
-        'modules': ('apps.purchase', 'apps.inventory', 'apps.production'),
-        'targets': ('apps.purchase.tests', 'apps.inventory.tests', 'apps.production.tests'),
-    },
-    {
-        'name': 'finance, reporting and office',
-        'modules': ('apps.finance', 'apps.reports', 'apps.analytics', 'apps.oa'),
-        'targets': ('apps.finance.tests', 'apps.reports.tests', 'apps.analytics.tests', 'apps.oa'),
-    },
-)
+TARGETS = {
+    'platform': ('apps.core.tests.test_platform', 'apps.accounts.tests.test_auth'),
+    'business': (
+        'apps.business.tests.test_models',
+        'apps.business.tests.test_sales',
+        'apps.business.tests.test_commercial_chain',
+        'apps.business.tests.test_inventory',
+        'apps.business.tests.test_execution',
+        'apps.business.tests.test_import_documents',
+        'apps.business.tests.test_workbench',
+    ),
+    'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
+}
 
 
-def validate_coverage() -> None:
-    django.setup()
-    installed = {config.name for config in apps.get_app_configs() if config.name.startswith('apps.')}
-    covered = [module for group in GROUPS for module in group['modules']]
-    duplicates = sorted({module for module in covered if covered.count(module) > 1})
-    missing = sorted(installed - set(covered))
-    unexpected = sorted(set(covered) - installed)
-
-    if duplicates or missing or unexpected:
-        details = []
-        if duplicates:
-            details.append(f'duplicate modules: {", ".join(duplicates)}')
-        if missing:
-            details.append(f'uncovered installed modules: {", ".join(missing)}')
-        if unexpected:
-            details.append(f'unknown modules: {", ".join(unexpected)}')
-        raise SystemExit('Backend test matrix coverage is invalid: ' + '; '.join(details))
+def validate_coverage():
+    actual = {
+        str(path.relative_to(ROOT / 'backend')).replace('/', '.')[:-3]
+        for path in (ROOT / 'backend' / 'apps').rglob('test_*.py')
+    }
+    registered = [target for targets in TARGETS.values() for target in targets]
+    duplicates = {target for target in registered if registered.count(target) > 1}
+    if set(registered) != actual or duplicates:
+        raise SystemExit(
+            f'Test registry mismatch: missing={actual - set(registered)}, stale={set(registered) - actual}, duplicate={duplicates}'
+        )
+    if not all(TARGETS.values()):
+        raise SystemExit('Each backend stage must contain explicit test targets.')
 
 
-def build_matrix() -> dict[str, list[dict[str, str]]]:
+def build_matrix():
+    validate_coverage()
     return {
-        'include': [
-            {
-                'name': group['name'],
-                'targets': ','.join(group['targets']),
-            }
-            for group in GROUPS
-        ]
+        'include': [{'name': stage, 'stage': stage, 'targets': ','.join(targets)} for stage, targets in TARGETS.items()]
     }
 
 
-def main() -> int:
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--github-output', type=Path)
     args = parser.parse_args()
-
-    validate_coverage()
-    matrix = build_matrix()
-    encoded = json.dumps(matrix, separators=(',', ':'))
-
-    for group in GROUPS:
-        print(f'{group["name"]}: {", ".join(group["modules"])}')
-
+    matrix = json.dumps(build_matrix(), separators=(',', ':'))
     if args.github_output:
-        with args.github_output.open('a', encoding='utf-8') as output:
-            output.write(f'matrix={encoded}\n')
-    else:
-        print(encoded)
-    return 0
+        with args.github_output.open('a') as output:
+            output.write(f'matrix={matrix}\n')
+    print(matrix)
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    main()

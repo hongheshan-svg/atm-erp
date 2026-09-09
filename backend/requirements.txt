@@ -1,60 +1,12 @@
-# Core Django
 Django==5.2.16
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
 django-filter==26.1
-
-# Database
 psycopg2-binary==2.9.10
-
-# CORS handling
 django-cors-headers==4.9.0
-
-# API Documentation
-drf-spectacular==0.30.0
-
-# Data processing
-pandas==2.1.4
-numpy==1.26.3
-
-# Async tasks
-celery==5.3.4
 redis==5.0.1
-django-redis==5.4.0
-
-# Excel import/export
-openpyxl==3.1.2
-xlrd==2.0.1
-xlsxwriter==3.1.9
-
-# PDF generation
-reportlab==4.0.7
-
-# Barcode/QR code generation
-python-barcode==0.15.1
-qrcode==7.4.2
-Pillow==12.3.0
-
-# WebSocket support
-channels==4.3.2
-channels-redis==4.3.0
 daphne==4.2.3
 Twisted[http2,tls]==26.4.0
-
-# Environment variables
-python-decouple==3.8
-
-# HTTP requests
-requests==2.33.0
-
-# ZKTECO attendance device integration
-pyzk==0.9
-
-# Date utilities
+openpyxl==3.1.2
+defusedxml==0.7.1
 python-dateutil==2.8.2
-
-# Timezone
-pytz==2023.3
-
-# Development
-django-extensions==4.1

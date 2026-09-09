@@ -1,198 +1,78 @@
-import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
-import { ElMessage } from 'element-plus'
-import router from '@/router'
-import { extractApiError } from '@/utils/apiError'
-import { usePermissionStore } from '@/stores/permission'
-import { useUserStore } from '@/stores/user'
-
-interface QueueItem {
-  resolve: (token: string) => void
-  reject: (error: any) => void
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+export const request = axios.create({ baseURL: '/api', timeout: 25000 })
+let epoch = 0
+let flight: Promise<void> | undefined
+export function resetSession(access?: string, refresh?: string) {
+  epoch++
+  flight = undefined
+  for (const [key, value] of [
+    ['access_token', access],
+    ['refresh_token', refresh],
+  ]) {
+    if (value) localStorage.setItem(key!, value)
+    else localStorage.removeItem(key!)
+  }
+  window.dispatchEvent(new Event('erp-session'))
 }
-
-export interface ERPRequestConfig extends AxiosRequestConfig {
-  skipAuthRefresh?: boolean
-  skipErrorMessage?: boolean
-}
-
-const service = axios.create({
-  baseURL: '/api',
-  timeout: 30000
+type Config = InternalAxiosRequestConfig & { epoch?: number; retried?: boolean }
+request.interceptors.request.use((config: Config) => {
+  config.epoch = epoch
+  const token = localStorage.getItem('access_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
 })
-
-let isRefreshing = false
-let failedQueue: QueueItem[] = []
-
-// 升级中:后端容器正在重建,各类后台轮询会短暂 502/网络失败。此开关打开时,
-// 响应拦截器静默失败(不弹错误提示、不跳登录),避免升级过程中满屏报错。
-let upgrading = false
-export function setUpgrading(v: boolean): void {
-  upgrading = v
-}
-
-const syncUserProfile = async (accessToken: string): Promise<void> => {
-  try {
-    const response = await axios.get('/api/auth/users/profile/', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    })
-    const profile = response.data?.data || response.data
-    const userStore = useUserStore()
-    const permissionStore = usePermissionStore()
-
-    userStore.userInfo = profile
-    permissionStore.setPermissions(profile.permissions || [])
-    permissionStore.setMenus(profile.menus || [])
-    permissionStore.setDataScopes(profile.data_scopes || {})
-    userStore.profileReady = true
-  } catch (syncError: any) {
-    console.warn('Failed to sync user profile after token refresh:', syncError)
-  }
-}
-
-const processQueue = (error: any, token: string | null = null): void => {
-  failedQueue.forEach(prom => {
-    if (error) {
-      prom.reject(error)
-    } else {
-      prom.resolve(token!)
-    }
-  })
-  failedQueue = []
-}
-
-service.interceptors.request.use(
-  config => {
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
-    }
-    return config
+request.interceptors.response.use(
+  (response) => {
+    if ((response.config as Config).epoch !== epoch) throw new Error('登录状态已变化，请重试。')
+    return response
   },
-  error => {
-    return Promise.reject(error)
-  }
-)
-
-service.interceptors.response.use(
-  (response: AxiosResponse) => {
-    if (response.config.responseType === 'blob') {
-      return response
+  async (error: AxiosError) => {
+    const config = error.config as Config | undefined
+    if (
+      !config ||
+      config.epoch !== epoch ||
+      error.response?.status !== 401 ||
+      config.retried ||
+      config.url?.startsWith('/auth/login')
+    )
+      throw error
+    const refresh = localStorage.getItem('refresh_token')
+    if (!refresh) {
+      resetSession()
+      throw error
     }
-    return response.data
+    const started = epoch
+    if (!flight) {
+      const current = axios
+        .post('/api/auth/refresh/', { refresh }, { timeout: 15000 })
+        .then(({ data }) => {
+          if (epoch !== started) throw new Error('登录状态已变化。')
+          localStorage.setItem('access_token', data.access)
+        })
+        .catch((e) => {
+          if (epoch === started && [400, 401, 403].includes(e.response?.status)) resetSession()
+          throw e
+        })
+        .finally(() => {
+          if (flight === current) flight = undefined
+        })
+      flight = current
+    }
+    await flight
+    if (epoch !== started) throw new Error('登录状态已变化。')
+    config.retried = true
+    return request(config)
   },
-  async error => {
-    const originalRequest = error.config
-
-    // 升级中:后端在重建,静默失败(不弹错误、不跳登录),升级完成会自动刷新页面
-    if (upgrading) {
-      return Promise.reject(error)
-    }
-
-    if (error.response) {
-      const { status } = error.response
-
-      if (status === 401 && !originalRequest._retry && !originalRequest.skipAuthRefresh) {
-        const refreshToken = localStorage.getItem('refresh_token')
-
-        if (!refreshToken) {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          router.push('/login')
-          ElMessage.error('请先登录')
-          return Promise.reject(error)
-        }
-
-        if (isRefreshing) {
-          return new Promise<string>((resolve, reject) => {
-            failedQueue.push({ resolve, reject })
-          }).then(token => {
-            originalRequest.headers['Authorization'] = `Bearer ${token}`
-            return service.request(originalRequest)
-          }).catch(err => Promise.reject(err))
-        }
-
-        originalRequest._retry = true
-        isRefreshing = true
-
-        try {
-          const response = await axios.post('/api/accounts/refresh/', {
-            refresh: refreshToken
-          })
-
-          const { access } = response.data
-          localStorage.setItem('access_token', access)
-          await syncUserProfile(access)
-
-          processQueue(null, access)
-
-          originalRequest.headers['Authorization'] = `Bearer ${access}`
-          return service.request(originalRequest)
-        } catch (refreshError: any) {
-          processQueue(refreshError, null)
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          router.push('/login')
-          ElMessage.error('登录已过期，请重新登录')
-          return Promise.reject(refreshError)
-        } finally {
-          isRefreshing = false
-        }
-      } else if (!originalRequest.skipErrorMessage) {
-        // 兜底文案只在后端没给出可读原因时使用（真 500 无 JSON body），
-        // 否则 403/404/500 会把后端明确写好的原因糊成通用文案。
-        let fallback = '请求失败'
-        if (status === 403) {
-          fallback = '没有权限执行此操作'
-        } else if (status === 404) {
-          fallback = '请求的资源不存在'
-        } else if (status === 500) {
-          fallback = '服务器错误，请稍后再试'
-        }
-        ElMessage.error(extractApiError(error, fallback))
-      }
-    } else if (!originalRequest?.skipErrorMessage) {
-      ElMessage.error('网络错误，请检查您的网络连接')
-    }
-
-    return Promise.reject(error)
-  }
 )
-
-/**
- * 响应拦截器在上方 `return response.data` 处对响应做了解包，因此运行时 `request({...})` /
- * `request.get(...)` 实际 resolve 的是「业务数据」而非 `AxiosResponse`。但 axios 实例的方法签名
- * 返回的是 `Promise<AxiosResponse<T>>`，与运行时不符——这会让全站调用点把解包后的数据当作
- * AxiosResponse 使用而触发大量 TS2339（属性不存在于 AxiosResponse）。这里用一个可调用接口把
- * 默认导出重新声明为「返回解包后数据」的客户端，使类型与运行时一致。
- * （blob 下载分支返回完整 response，调用点按需指定 T 或访问 .data。）
- */
-export interface RequestClient {
-  <T = any>(config: ERPRequestConfig): Promise<T>
-  request<T = any>(config: ERPRequestConfig): Promise<T>
-  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
-  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
-  head<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
-  options<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
-  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>
-  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>
-  patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>
-}
-
-const client = service as unknown as RequestClient
-
-export default client
-
-export function request<T = any>(config: ERPRequestConfig): Promise<T> {
-  return service(config) as unknown as Promise<T>
-}
-
-/**
- * blob 下载专用：响应拦截器对 responseType==='blob' 返回完整 AxiosResponse（含 .data/.headers），
- * 故此处如实声明为 Promise<AxiosResponse<Blob>>，避免被 RequestClient 的「解包」统一签名误描述
- * （调用点应取 response.data/response.headers，而非把它当解包后的业务数据）。
- */
-export function requestBlob(config: AxiosRequestConfig): Promise<AxiosResponse<Blob>> {
-  return service({ ...config, responseType: 'blob' }) as unknown as Promise<AxiosResponse<Blob>>
+export function message(error: unknown): string {
+  const detail = axios.isAxiosError(error) ? error.response?.data || error.message : error
+  function flatten(value: any): string {
+    if (value == null) return ''
+    if (typeof value === 'string') return value
+    if (value instanceof Error) return value.message
+    if (Array.isArray(value)) return value.map(flatten).join('；')
+    if (typeof value === 'object') return Object.values(value).map(flatten).join('；')
+    return String(value)
+  }
+  return flatten(detail) || '操作失败，请重试。'
 }
