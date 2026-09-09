@@ -1,33 +1,39 @@
-import { expect, test as base } from '@playwright/test'
+import { test as base, expect, type Page } from '@playwright/test'
 
-type RuntimeConsoleFixtures = {
-  allowedConsoleMessages: string[]
-  runtimeConsoleGuard: void
+const expectedHttpErrors = new WeakMap<Page, { url: string; status: number }[]>()
+
+export function expectHttpError(page: Page, path: string, status: number) {
+  const expected = expectedHttpErrors.get(page) || []
+  expected.push({ url: new URL(path, page.url()).href, status })
+  expectedHttpErrors.set(page, expected)
 }
 
-export const test = base.extend<RuntimeConsoleFixtures>({
-  allowedConsoleMessages: [[], { option: true }],
-  runtimeConsoleGuard: [
-    async ({ allowedConsoleMessages, page }, use) => {
-      const runtimeMessages: string[] = []
+export function observePage(page: Page, errors: string[]) {
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', (message) => {
+    const expected = expectedHttpErrors.get(page) || []
+    const index = expected.findIndex(({ url, status }) =>
+      message.type() === 'error' && message.location().url === url &&
+      message.text().startsWith('Failed to load resource:') &&
+      message.text().includes(`status of ${status} `),
+    )
+    if (index !== -1) {
+      expected.splice(index, 1)
+      return
+    }
+    if (['error', 'warning'].includes(message.type())) errors.push(message.text())
+  })
+}
 
-      page.on('console', message => {
-        if (message.type() === 'error' || message.type() === 'warning') {
-          runtimeMessages.push(`${message.type()}: ${message.text()}`)
-        }
-      })
-      page.on('pageerror', error => {
-        runtimeMessages.push(`pageerror: ${error.message}`)
-      })
-
-      await use()
-      const unexpectedMessages = runtimeMessages.filter(
-        message => !allowedConsoleMessages.some(allowedMessage => message.includes(allowedMessage))
-      )
-      expect(unexpectedMessages).toEqual([])
-    },
-    { auto: true },
-  ],
+export const test = base.extend<{ consoleCheck: void }>({
+  consoleCheck: [async ({ context }, use) => {
+    const errors: string[] = []
+    const observe = (page: Page) => observePage(page, errors)
+    context.pages().forEach(observe)
+    context.on('page', observe)
+    await use()
+    expect(errors, '浏览器不应出现运行异常或控制台警告').toEqual([])
+  }, { auto: true }],
 })
-
 export { expect }
+export type { Page, Locator } from '@playwright/test'

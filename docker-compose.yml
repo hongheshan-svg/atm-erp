@@ -1,136 +1,58 @@
-# ATM-ERP 精简编排:4 个服务(postgres + redis + app[全合一] + updater)。
-# app = Django(Daphne) + Celery(worker+beat) + 升级进度中转 + 前端静态 + Nginx(由 supervisord 统一拉起)。
-# 镜像来自 GHCR;本地构建用 docker-compose.build.yml override。
-name: ${COMPOSE_PROJECT_NAME:-atm-erp}
-
+name: ${LEAN_PROJECT_NAME:-atm-erp-lean}
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: erp-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-erp_db}
-      POSTGRES_USER: ${DB_USER:-erp_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-erp_password}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_DB: atm_erp_lean
+      POSTGRES_USER: atm_erp_lean
+      POSTGRES_PASSWORD: ${LEAN_DB_PASSWORD:?Set LEAN_DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - lean_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-erp_user} -d ${DB_NAME:-erp_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - erp-network
-
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U atm_erp_lean -d atm_erp_lean']
+      interval: 5s
+      timeout: 3s
+      retries: 20
   redis:
     image: redis:7-alpine
-    container_name: erp-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
+    command: [redis-server, --save, '', --appendonly, 'no', --maxmemory, 128mb, --maxmemory-policy, allkeys-lru]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - erp-network
-
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
   app:
+    image: ${LEAN_IMAGE:-atm-erp-lean:local}
     build:
       context: .
       dockerfile: docker/app/Dockerfile
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-app:${IMAGE_TAG:-latest}
-    container_name: erp-app
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
+      - '${LEAN_BIND_ADDRESS:-127.0.0.1}:${LEAN_HTTP_PORT:-8080}:8080'
     environment:
-      - DEBUG=${DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY:-django-insecure-change-this-in-production-123456}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,app}
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-erp_db}
-      - DB_USER=${DB_USER:-erp_user}
-      - DB_PASSWORD=${DB_PASSWORD:-erp_password}
-      - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379/1
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-http://localhost,http://127.0.0.1}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
-      - RUN_BOOTSTRAP=1
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
-      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-0}
-      - DEMO_USER_PASSWORD=${DEMO_USER_PASSWORD:-}
-      - WECHAT_WORK_WEBHOOK_URL=${WECHAT_WORK_WEBHOOK_URL:-}
-      - WECHAT_WORK_CORP_ID=${WECHAT_WORK_CORP_ID:-}
-      - WECHAT_WORK_CORP_SECRET=${WECHAT_WORK_CORP_SECRET:-}
-      - WECHAT_WORK_AGENT_ID=${WECHAT_WORK_AGENT_ID:-}
-      - APP_VERSION=${IMAGE_TAG:-latest}
-      - DEPLOY_MODE=docker
+      SECRET_KEY: ${LEAN_SECRET_KEY:?Set LEAN_SECRET_KEY}
+      ADMIN_PASSWORD: ${LEAN_ADMIN_PASSWORD:-}
+      ALLOWED_HOSTS: ${LEAN_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DB_HOST: postgres
+      DB_NAME: atm_erp_lean
+      DB_USER: atm_erp_lean
+      DB_PASSWORD: ${LEAN_DB_PASSWORD:?Set LEAN_DB_PASSWORD}
+      REDIS_URL: redis://redis:6379/0
+      MEDIA_ROOT: /app/uploads
+      DEBUG: 'false'
     volumes:
-      - static_files:/app/staticfiles
-      - media_files:/app/uploads
-      - backend_logs:/app/logs
-      - ./docker/ssl:/etc/nginx/ssl:ro
+      - lean_uploads:/app/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/api/v1/health/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      # 首启需迁移 + 初始化(权限/角色/widget/工作流),可达数分钟
-      start_period: 600s
-    networks:
-      - erp-network
-
-  # 升级代理:唯一持有 docker.sock 的最小服务,平时空转,升级时重建 app 容器。
-  erp-updater:
-    build:
-      context: .
-      dockerfile: docker/updater/Dockerfile
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-hongheshan-svg}/atm-erp-updater:${IMAGE_TAG:-latest}
-    container_name: erp-updater
-    restart: unless-stopped
-    environment:
-      - REDIS_URL=redis://redis:6379/1
-      - ERP_HEALTH_URL=http://app/api/v1/health/
-      # 用宿主真实绝对路径,使 app 容器的相对 bind mount(如 ./docker/ssl)在重建时解析正确
-      - ERP_PROJECT_DIR=${ERP_HOST_DIR:-/project}
-      - PGHOST=postgres
-      - PGUSER=${DB_USER:-erp_user}
-      - PGPASSWORD=${DB_PASSWORD:-erp_password}
-      - PGDATABASE=${DB_NAME:-erp_db}
-      - APP_VERSION=${IMAGE_TAG:-latest}
-      - DEPLOY_MODE=docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      # 把宿主部署目录挂到容器内**同一绝对路径**(配合 ERP_PROJECT_DIR),修复 bind mount 路径错位
-      - ${ERP_HOST_DIR:-.}:${ERP_HOST_DIR:-/project}
-      - backend_logs:/var/backups/erp
-    depends_on:
-      - redis
-    networks:
-      - erp-network
-
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/api/health/",timeout=3)']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
 volumes:
-  postgres_data:
-  redis_data:
-  static_files:
-  media_files:
-  backend_logs:
-
-networks:
-  erp-network:
-    driver: bridge
+  lean_postgres:
+  lean_uploads:

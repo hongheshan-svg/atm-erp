@@ -1,591 +1,73 @@
-# ATM-ERP
+# 项目 ERP · 精简版
 
-**English** ｜ [简体中文](./README.zh-CN.md)
+面向约 50 人非标自动化公司，以项目串联 **需求 → 报价签约 → BOM → 采购收货 → 设计装配调试 → 分批发货安装验收 → 售后 → 收付款与成本**。
 
-> An enterprise-grade ERP for the **custom (non-standard) automation equipment
-> industry**, built **around projects** — covering the full closed loop of
-> Sales → Design → BOM → Procurement → Production → Delivery → Cost Accounting.
-> Django REST Framework backend + Vue 3 frontend, with a WeChat Mini Program for
-> mobile approvals.
+九个入口：工作台、销售、项目、BOM、采购、库存、收付款、基础资料、设置。固定管理员、项目经理、采购员、仓管、财务、成员六角色。没有 OA、复杂 MES/APS、可配置审批流、BI、会计总账或小程序。
 
-<p align="center">
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white">
-  <img alt="Django" src="https://img.shields.io/badge/Django-4.2-092E20?logo=django&logoColor=white">
-  <img alt="DRF" src="https://img.shields.io/badge/DRF-3.14-A30000">
-  <img alt="Vue" src="https://img.shields.io/badge/Vue-3.4-4FC08D?logo=vuedotjs&logoColor=white">
-  <img alt="Vite" src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white">
-  <img alt="Element Plus" src="https://img.shields.io/badge/Element%20Plus-2.4-409EFF">
-  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white">
-  <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white">
-</p>
+## 全新安装
 
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Core Features](#core-features)
-- [Modules](#modules)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Quick Start](#quick-start)
-  - [One-click install (Linux / macOS / Windows)](#one-click-install-linux--macos--windows)
-  - [Option 1: Docker Compose (recommended)](#option-1-docker-compose-recommended)
-  - [Option 2: One-click native deploy on Ubuntu](#option-2-one-click-native-deploy-on-ubuntu)
-  - [Option 3: Manual local dev setup](#option-3-manual-local-dev-setup)
-- [First-time Bootstrap](#first-time-bootstrap)
-- [Default Ports](#default-ports)
-- [Environment Variables](#environment-variables)
-- [Common Commands](#common-commands)
-- [Testing](#testing)
-- [Code Style & Git Workflow](#code-style--git-workflow)
-- [Project Structure](#project-structure)
-- [Design Conventions](#design-conventions)
-- [Remote Upgrade](#remote-upgrade)
-- [WeChat Mini Program](#wechat-mini-program)
-- [Documentation](#documentation)
-- [License](#license)
-
----
-
-## Overview
-
-ATM-ERP is an integrated business platform purpose-built for **custom automation
-equipment manufacturers**. Unlike generic ERPs, it is organized **around the
-"project"** — every sales order, drawing, BOM, purchase order, work order, and
-expense claim traces back to a specific project, enabling **project-level
-lifecycle cost accounting and profit analysis**.
-
-It spans the entire chain from lead/opportunity acquisition, through quotation,
-order, engineering selection, BOM explosion, procurement, production scheduling
-(APS/MES), inbound/outbound, and delivery, all the way to AR/AP and project
-settlement — with a configurable approval workflow, fine-grained RBAC, data-scope
-control, audit logging, real-time notifications, and WeCom (Enterprise WeChat)
-integration built in.
-
-## Core Features
-
-- 🎯 **Project-centric** — sales orders must link to a project; cost, labor,
-  expense, and procurement all roll up to the project dimension.
-- 🔐 **Enterprise RBAC** — roles + permission tree + data scope (all / department /
-  self / custom), with unified front-end and back-end permission keys.
-- 🧩 **Configurable approval workflow** — enforced at the ViewSet layer, supporting
-  multi-level approval and amount thresholds.
-- 📦 **End-to-end inventory costing** — weighted-average cost on stock moves, with
-  batches, spare parts, MRP, and low-stock alerts.
-- 🏭 **Manufacturing execution (MES/APS)** — routings, capacity planning,
-  scheduling, kanban, and Andon.
-- 🧾 **Full finance suite** — AR/AP, expense reimbursement, tax, accounting,
-  assets, bank reconciliation, and aging analysis.
-- 🔔 **Real-time notifications + WeCom push** — approvals, goods arrival, delivery
-  dates, and project deadlines pushed precisely to the responsible owner.
-- 📱 **Mobile approval Mini Program** — approve and view dashboards anywhere via WeChat.
-- 🔍 **Business search** — cross-module PostgreSQL search without an external search service.
-- 📊 **BI & reports** — dashboard widgets, project profit analysis (Pandas), and
-  multi-dimensional report export.
-- 🧱 **Soft delete + audit log** — all business models inherit `BaseModel`; changes
-  are tracked automatically.
-- 🐳 **Ready-to-run deployment** — one-command Docker Compose or a one-click native
-  Ubuntu script.
-
-## Modules
-
-The backend is split into 12 Django apps (under `backend/apps/`):
-
-| App | Domain | Key capabilities |
-|-----|--------|------------------|
-| `core` | Platform core | BaseModel, audit log, attachments, notifications, permissions, code rules, workflow engine |
-| `accounts` | Org & auth | Users, roles, departments, attendance (ZKTeco device integration) |
-| `masterdata` | Master data | Items, customers, suppliers, warehouses, categories, credit management |
-| `projects` | Projects | Projects/budget, BOM, drawings (PLM), tasks (WBS), timesheets, equipment records |
-| `sales` | Sales & CRM | Quotes, sales orders (must link to a project), delivery, leads/opportunities |
-| `purchase` | Procurement | Purchase requests (PR), RFQ, purchase orders (PO), receiving, subcontracting |
-| `inventory` | Inventory | Stock, stock moves (weighted-average), MRP, batches, alerts, spare parts |
-| `finance` | Finance | AR/AP, expenses, tax, accounting, assets, bank reconciliation, aging |
-| `production` | Production | MES, APS scheduling, kanban, Andon, routings, capacity planning |
-| `oa` | Office automation | Vehicles, assets, records, instant messaging, knowledge base |
-| `reports` | Reports | Project profit analysis, multi-dimensional reports, Excel/PDF export |
-| `analytics` | Analytics | Dashboard widgets, data visualization |
-
-Frontend views (`frontend/src/views/`) map one-to-one to these modules, plus
-dedicated pages for after-sales, equipment records, knowledge base, PLM, MES,
-workflow, and system settings.
-
-## Tech Stack
-
-### Backend
-
-| Category | Technology |
-|----------|------------|
-| Language / Framework | Python 3.11+ · Django 5.2 LTS · Django REST Framework 3.17 |
-| Async / Realtime | ASGI (Daphne) · Django Channels 4 · WebSocket |
-| Database | PostgreSQL 15 |
-| Cache / Broker | Redis 7 (cache + Celery broker) · django-redis |
-| Async tasks | Celery 5.3 + Celery Beat |
-| Search | PostgreSQL database search (no external search service) |
-| Auth | JWT (simplejwt) · RBAC |
-| Data processing | Pandas · NumPy |
-| Import / Export | openpyxl · xlrd · xlsxwriter · reportlab (PDF) · qrcode / python-barcode |
-| API docs | drf-spectacular (Swagger / OpenAPI) |
-| Config | python-decouple (`.env`) |
-| Hardware | pyzk (ZKTeco attendance device) |
-
-### Frontend
-
-| Category | Technology |
-|----------|------------|
-| Framework | Vue 3 (Composition API) · TypeScript |
-| Build | Vite 8 |
-| UI | Element Plus · @element-plus/icons-vue |
-| Visualization | ECharts / vue-echarts · vue-ganttastic (Gantt) · Three.js (3D) |
-| State | Pinia |
-| Router | Vue Router 4 (lazy load + permission guard) |
-| HTTP | Axios (JWT refresh, 401 queued retry) |
-| Utils | dayjs · xlsx |
-| Testing | Vitest · @vue/test-utils · Playwright |
-| Quality | ESLint (flat config) · vue-tsc type check |
-
-### Infrastructure
-
-Docker Compose orchestrates 4 services: `postgres`, `redis`, `app` (Nginx,
-Daphne, Celery Worker/Beat, and frontend assets), and `erp-updater`.
-
-## Architecture
-
-```
-                          ┌─────────────────────────────┐
-   Web Browser ──────────►│ app: Nginx + frontend      │
-   Mini Program ─────────►│ Daphne + Celery Worker/Beat│
-                          └─────────────┬───────────────┘
-                                        │
-                          ┌─────────────┴───────────────┐
-                          │                             │
-                ┌─────────▼─────┐               ┌──────▼─────┐
-                │ PostgreSQL 15 │               │  Redis 7   │
-                │ data / search │               │ cache / MQ │
-                └───────────────┘               └────────────┘
-```
-
-- **Decoupled front/back end** — the frontend is served under `base: '/erp/'`; all
-  routes are prefixed with `/erp/`, matching the Nginx routing.
-- **API entry** — REST under `/api/`, WebSocket under `/ws/`.
-- **Unified app container** — supervisord manages Nginx, Daphne, Celery
-  Worker/Beat, and the upgrade progress relay.
-
-## Quick Start
-
-### One-click install (Linux / macOS / Windows)
-
-Pre-built multi-arch images are published to GHCR; the installer detects Docker,
-generates a `.env`, pulls images, starts the stack, and prints the admin login.
-
-**Linux / macOS:**
+需要 Docker 与 Compose v2。从源码目录运行：
 
 ```bash
-curl -fsSL https://github.com/hongheshan-svg/atm-erp/releases/latest/download/install.sh | bash
+bash install.sh
 ```
 
-**Windows (PowerShell):**
+Windows PowerShell：`./install.ps1`。安装构建 PostgreSQL 15、Redis 7、应用三个服务，应用包含 Daphne 与 Nginx。默认访问 **http://127.0.0.1:8080/erp/**，管理员用户名 `admin`，首次随机密码在 `.env.lean` 的 `LEAN_ADMIN_PASSWORD`。
 
-```powershell
-irm https://github.com/hongheshan-svg/atm-erp/releases/latest/download/install.ps1 | iex
-```
+首次安装可设置 `LEAN_HTTP_PORT` 改端口；局域网部署在 `.env.lean` 设置 `LEAN_BIND_ADDRESS=0.0.0.0`，并在 `LEAN_ALLOWED_HOSTS=localhost,127.0.0.1` 后追加实际 IP 或域名，再重跑安装。环境配置文件需单独保管。重复安装保留已有账户、密码和数据。源码变更后重跑安装会重新构建应用。
 
-Pin a version with `--tag 0.2.0` (Linux/macOS) or `-Tag 0.2.0` (Windows). To build
-from source instead of pulling images, see [Option 1](#option-1-docker-compose-recommended)
-with the `docker-compose.build.yml` override.
+**此版只支持独立的新数据库，不兼容旧版表或迁移。** 默认项目名 `atm-erp-lean` 和独立卷避免复用旧部署。发现旧表会拒绝启动，不能通过清库、fake migration 或跳过保护安装。原有旧版系统应保持独立，需要的数据由业务人员确认后重新录入。
 
-> After installation, open **`http://localhost/erp/`** in your browser (the SPA is
-> served under `/erp/`; the root `/` returns 404). The first run pulls images and
-> runs a multi-minute first-boot bootstrap; the admin username and generated password
-> are printed to the console at the end.
+## 日常操作
 
-### Option 1: Docker Compose (recommended)
+1. 管理员在设置建立账户；采购员维护物料、客户和供应商。
+2. 经理在销售中新建需求、报价及签约，签约时分配项目成员。收款节点合计必须等于最终报价，销售通过交接服务生成执行项目和应收；从销售单的执行项目链接进入后续工作。内部项目也可直接在项目模块创建。
+3. 在项目 BOM 页维护或导入明细；采购员按缺料建采购，提交后由经理批准，自动生成应付。
+4. 仓管分批收货、按项目领料。未收余量可取消，退货、盘点和退款保留历史。
+5. 经理安排设计、装配、调试，成员完成任务并登记工时。发货前检查任务和对应领料量，支持多批设备交付。
+6. 每批完成安装后由经理验收。售后关联验收批次：质保内免费，质保外登记收费。售后领料和工时纳入项目成本。
+7. 财务登记费用、收付款、退款和冲销。任务、采购及余额全部处理后才能结项；需要继续售后时可重新打开项目。
 
-Best for spinning up the full stack quickly. Requires Docker and Docker Compose.
+合同/费用、采购/库存、工时各只维护一份业务事实。成本为 CNY 含税经营口径，不替代法定会计账。附件通过登录鉴权下载；成员仅可访问所属项目，敏感金额由后端按角色过滤。
+
+## 备份与恢复
+
+Python 3.11+：
 
 ```bash
-# 1. Clone
-git clone <repo-url> atm-erp && cd atm-erp
-
-# 2. Prepare the env file
-cp .env.docker.example .env.docker
-# Edit secrets, DB password, domain, etc.
-
-# 3. Start all services
-docker compose up -d
-
-# 4. Tail logs
-docker compose logs -f app
-
-# 5. First-time bootstrap (see below)
-docker compose exec app python manage.py migrate
-docker compose exec app python manage.py init_permissions
-docker compose exec app python manage.py init_roles --force
-docker compose exec app python manage.py init_dashboard_widgets
-docker compose exec app python manage.py createsuperuser
+python3 scripts/backup.py backup --env-file .env.lean --archive backups/erp-20260909.zip
 ```
 
-Then open:
+备份短暂停止应用写入，一起保存数据库和附件，完成后恢复服务。归档有校验和，Unix 系统中备份文件默认仅当前用户可读，**不包含 `.env.lean` 密钥**。另行安全保存环境配置。
 
-- Frontend: `http://localhost/erp/` (or the configured `HTTP_PORT`)
-- API docs (Swagger): `http://localhost/api/docs/`
-
-> PostgreSQL `5433` and Redis `6380` are exposed to the host only when
-> `docker-compose.expose.yml` is included. Container traffic always uses
-> `5432` / `6379`.
-
-Ops commands:
+恢复必须使用新的 Compose 项目名、端口、数据库卷与附件卷。准备目标配置但不要先初始化应用，然后运行：
 
 ```bash
-docker compose logs -f app           # Django / Celery / Nginx logs
-docker compose up -d --build app      # Rebuild & restart the unified app
-docker compose restart app            # Restart after changing Celery tasks
-docker compose down                   # Stop all services
+python3 scripts/backup.py restore --env-file .env.restore --archive backups/erp-20260909.zip
 ```
 
-### Option 2: One-click native deploy on Ubuntu
+目标环境需使用已构建的当前应用镜像；若镜像标签不同，设置 `LEAN_IMAGE`。恢复拒绝非空数据库、非空附件卷和正在运行的应用，绝不覆盖现有业务数据。原账户密码保持备份时的值。
 
-For (pre-)production servers without Docker. The script installs and configures
-PostgreSQL, Redis, Node.js 22, a Python venv, Gunicorn, Celery, Nginx, and systemd
-units. Supports **Ubuntu 20.04 / 22.04 / 24.04 and Debian 11 / 12**.
+## 开发与验证
 
-```bash
-sudo bash install.sh
-```
-
-Main steps (`scripts/deploy-native-ubuntu.sh`):
-
-1. Install system dependencies (Python, Node.js 22, Nginx, …)
-2. Set up and start PostgreSQL (create database & user)
-3. Set up and start Redis
-4. Create a Python venv and install dependencies (incl. gunicorn)
-5. Run migrations and init (`migrate`, `init_workflows`, `init_dashboard_widgets`, `collectstatic`)
-6. Build the frontend (`npm install && npm run build`)
-7. Configure Gunicorn + Daphne and register systemd units
-8. Configure the Nginx reverse proxy and start it
-
-Service management (systemd):
+后端：Django REST Framework，三个本地 app `core/accounts/business`。前端：Vue 3、TypeScript、Element Plus，网络统一经过 `src/utils/request.ts`。
 
 ```bash
-sudo systemctl start   erp-backend erp-celery erp-celery-beat
-sudo systemctl stop    erp-backend erp-celery erp-celery-beat
-sudo systemctl restart erp-backend erp-celery erp-celery-beat
-```
+# Docker 中的临时 PostgreSQL 测试，自动清理测试容器
+bash scripts/precheck-tests.sh --all
 
-### Option 3: Manual local dev setup
-
-For development. Provide your own PostgreSQL 15 and Redis 7.
-
-**Backend (`backend/`):**
-
-```bash
-cd backend
-
-# 1. venv + dependencies
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-# 2. env vars
-cp ../.env.example ../.env
-# Edit DB host/port etc. (local is usually 127.0.0.1:5432)
-
-# 3. migrate
-python manage.py migrate
-
-# 4. bootstrap (see below)
-python manage.py init_permissions
-python manage.py init_roles --force
-python manage.py init_dashboard_widgets
-python manage.py createsuperuser
-
-# 5. run
-python manage.py runserver 0.0.0.0:8000
-```
-
-**Frontend (`frontend/`):**
-
-```bash
 cd frontend
-
-# 1. install deps
-npm install
-
-# 2. point to the backend (local, non-Docker)
-export VITE_API_BASE_URL=http://localhost:8000
-
-# 3. dev server (port 3000, base path /erp/)
-npm run dev
-# open http://localhost:3000/erp/
+npm ci
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+# 必须指向独立测试安装，会创建完整模拟业务数据
+E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm run test:e2e
 ```
 
-> Vite proxies `/api` and `/ws` to `http://backend:8000` (inside Docker) or to
-> `VITE_API_BASE_URL` (local).
+本地前端 `npm run dev`，默认端口 18310，API 代理默认 `127.0.0.1:18301`，可用 `VITE_API_BASE_URL` 修改。后端显式设置 `SECRET_KEY`、`DB_*`、`REDIS_URL` 后运行 `migrate`、`init_system`、`runserver`；它不读取旧 `.env`。
 
-## First-time Bootstrap
+测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
 
-These commands are **order-sensitive** — run them in sequence on first deploy
-(in `backend/` or inside the container):
-
-```bash
-python manage.py migrate                  # database migrations
-python manage.py init_permissions         # permission tree seed
-python manage.py init_roles --force       # roles + permission assignment + data scope
-python manage.py init_dashboard_widgets   # dashboard widgets
-python manage.py seed_data                # optional: sample data
-python manage.py createsuperuser          # admin superuser
-python manage.py collectstatic --noinput  # collect static files (production)
-```
-
-## Local Git Hooks (contributors)
-
-Run this **once per clone**:
-
-```bash
-bash scripts/setup-hooks.sh
-```
-
-It points `core.hooksPath` at the repo's `.githooks/`, enabling two gates that
-catch the failures CI catches, before you push:
-
-| Hook | What it blocks |
-|------|----------------|
-| `pre-commit` | Direct commits to `main`; staged `backend/` + `scripts/ci/` changes that fail Ruff lint/format |
-| `pre-push` | Backend test groups affected by your changes, run on an isolated test stack |
-
-`core.hooksPath` lives in `.git/config` and is **not** synced with the repo, so
-cloning is not enough — without this command the hooks sit in the tree and git
-never calls them, silently. Check the current state with
-`bash scripts/setup-hooks.sh --check`.
-
-Both gates are skippable when you need to: `git commit --no-verify`,
-`git push --no-verify`. If you prefer the `pre-commit` framework instead, see
-the note in [CLAUDE.md](CLAUDE.md) — the two mechanisms are mutually exclusive.
-
-## Default Ports
-
-| Service | In-container | Host mapping | Note |
-|---------|--------------|--------------|------|
-| app / Nginx | 80 / 443 | `${HTTP_PORT:-80}` / `${HTTPS_PORT:-443}` | Web entry |
-| Backend (Daphne) | 8000 | — | Proxied inside the app container |
-| PostgreSQL | 5432 | **5433** (expose override only) | Optional host debugging port |
-| Redis | 6379 | **6380** (expose override only) | Optional host debugging port |
-| Frontend dev | — | **3000** | Local dev only |
-
-## Environment Variables
-
-Env vars are read from `.env` via `python-decouple`. See the templates
-`.env.example` (local) and `.env.docker.example` (Docker).
-
-| Variable | Description |
-|----------|-------------|
-| `SECRET_KEY` | Django secret key; **must be random in production** |
-| `DEBUG` | Debug flag; `False` in production |
-| `ALLOWED_HOSTS` | Allowed hosts / IPs |
-| `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | PostgreSQL settings |
-| `REDIS_HOST` / `REDIS_URL` | Redis settings |
-| `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery settings |
-| `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` | CORS & CSRF allowlist |
-| `FRONTEND_URL` | Frontend URL |
-| `JWT_ACCESS_LIFETIME_MINUTES` / `JWT_REFRESH_LIFETIME_DAYS` | JWT lifetimes |
-| `SECURE_SSL_REDIRECT` / `SECURE_HSTS_SECONDS` / `*_COOKIE_SECURE` | HTTPS hardening (enable in production) |
-
-## Common Commands
-
-### Backend (`backend/`)
-
-```bash
-python manage.py makemigrations
-python manage.py migrate
-
-ruff check . --fix     # lint (line-length 120, single quotes)
-ruff format .          # format
-python manage.py shell_plus   # requires django-extensions
-```
-
-### Frontend (`frontend/`)
-
-```bash
-npm run dev            # dev server
-npm run build          # production build
-npm run preview        # preview the build
-npm run lint           # ESLint check
-npm run lint:fix       # auto-fix
-npm run typecheck      # vue-tsc type check
-```
-
-### Celery
-
-```bash
-celery -A config worker -l info --concurrency=2
-celery -A config beat -l info
-```
-
-## Testing
-
-### Backend unit tests (`backend/`)
-
-```bash
-python manage.py test                                  # all
-python manage.py test apps.core                        # single app
-python manage.py test apps.core.tests.test_permission_service  # single file
-```
-
-### Frontend tests (`frontend/`)
-
-```bash
-npm run test           # single run
-npm run test:ui        # interactive
-npm run test:coverage  # coverage
-```
-
-### Integration / browser / permission tests
-
-Run from the repo root; requires Docker running.
-
-```bash
-python run_all_tests.py              # auto bootstrap (migrate + init_roles) + full suite
-python test_browser_simulation.py    # frontend smoke test
-python test_browser_deep.py          # deep interaction test
-python test_vue_runtime.py           # Vue runtime error detection
-
-# Run these when touching RBAC / data scope
-python test_permissions.py
-python test_comprehensive_permissions.py
-python test_frontend_permissions.py
-
-# pytest integration (backend/, needs Docker)
-cd backend && pip install -r requirements-dev.txt
-pytest tests/integration -v --tb=short
-```
-
-## Code Style & Git Workflow
-
-- **Backend** — Ruff (pycodestyle/pyflakes/isort/bugbear/django), line-length 120,
-  single quotes, migrations excluded. Config in `backend/pyproject.toml`.
-- **Frontend** — ESLint flat config (`frontend/eslint.config.js`) + vue-tsc type checks.
-- **Pre-commit hooks** — Ruff, ESLint, a guard against committing to `main`, plus
-  trailing-whitespace / end-of-file-fixer / check-yaml / check-added-large-files (500KB).
-
-```bash
-pip install pre-commit
-pre-commit install
-pre-commit run --all-files
-```
-
-> Direct commits to `main` are blocked — use a feature branch + PR.
-
-## Project Structure
-
-```
-atm-erp/
-├── backend/              # Django REST Framework backend
-│   ├── apps/             # 12 business apps (see Modules)
-│   ├── config/           # settings.py / urls.py / asgi.py
-│   └── requirements.txt
-├── frontend/             # Vue 3 + Vite + TypeScript frontend
-│   └── src/
-│       ├── api/          # API wrappers per module (.ts)
-│       ├── stores/       # Pinia (user / permission / websocket / companyConfig)
-│       ├── router/       # routes + permission guard
-│       ├── utils/        # request.ts (JWT refresh, 401 retry)
-│       └── views/        # 19+ business module views
-├── miniprogram/          # WeChat Mini Program (mobile approval)
-├── nginx/                # Nginx reverse-proxy config
-├── docker/               # Dockerfiles & build config
-├── scripts/              # deploy & ops scripts (native deploy, packaging, SSL…)
-├── docs/                 # requirements, dev guide, business processes, manuals
-├── docker-compose.yml    # 7-service orchestration
-├── install.sh            # native deploy entry (Ubuntu)
-└── CLAUDE.md             # engineering conventions for AI agents
-```
-
-## Design Conventions
-
-> Follow these when extending the system; see `CLAUDE.md` for full details.
-
-- **BaseModel** — all business models inherit `apps.core.models.BaseModel`, which
-  provides `created_at/updated_at/created_by/updated_by` timestamps and
-  `is_deleted/deleted_at` soft-delete fields.
-- **Soft delete** — the default `objects` manager filters `is_deleted=False`; use
-  `all_objects` to bypass, and delete via `instance.soft_delete()`.
-- **Unified permission mixin** — `apps.core.permission_mixin.PermissionMixin` is the
-  current approach; configure `permission_module` / `permission_resource` /
-  `context_role_fields`.
-- **Standard ViewSet mixins** — compose `UserTrackingMixin` / `SoftDeleteMixin` /
-  `DataScopeMixin` (all in `apps.core.mixins`).
-- **Approval workflow** — `WorkflowEnforcementMixin` (`apps.core.workflow.mixins`);
-  set `workflow_business_type` / `workflow_amount_field` / `workflow_no_field`.
-- **Audit log** — `AuditLogMiddleware` records all changes automatically.
-- **Code rules** — business numbers are generated dynamically via `CodeRule`; never
-  hard-code prefixes or sequence formats.
-- **Frontend permission trio** — route `meta.permission`,
-  `usePermissionStore().hasPermission()`, and the `v-permission` directive must use
-  identical permission keys.
-- **Frontend networking** — all HTTP goes through `frontend/src/utils/request.ts`;
-  add new endpoints under `frontend/src/api/<module>.ts`, organized per module.
-  **Never `import axios` directly in view components.**
-
-## Remote Upgrade
-
-From the admin panel under **System Settings → System Upgrade**, super-administrators can:
-
-1. **Check for updates** — the system fetches the public release manifest
-   (`manifest.json` at the repo root, served via `raw.githubusercontent.com`)
-   and compares the latest version against the running version reported by
-   `GET /api/v1/health/`.
-2. **One-click upgrade** — clicking "Upgrade" queues the job; the `erp-updater`
-   service then:
-   - takes an automatic PostgreSQL snapshot (rollback safety net),
-   - pulls the new images (Docker) or downloads and verifies the signed tar.gz (native),
-   - restarts the stack and waits for the health gate to pass,
-   - auto-rolls back to the previous version if the health gate fails within 60 s.
-3. **Live progress** — real-time step updates stream to the browser via WebSocket;
-   progress is also persisted so the UI can resume after a backend restart.
-
-Requires the `system:upgrade` permission (super-admin only by default).
-See [`docs/REMOTE_UPGRADE.md`](docs/REMOTE_UPGRADE.md) for the full architecture,
-manifest format, security design, and a step-by-step manual test procedure.
-
-## WeChat Mini Program
-
-`miniprogram/` is a standalone WeChat client (independent from the Vue frontend),
-focused on **mobile approvals**:
-
-- 📋 **Mobile approval** — to-do list, detail view, one-tap approve/reject, comments,
-  and withdrawal.
-- 📁 **Projects** — list/detail, budget usage, task progress.
-- 📊 **Dashboard** — finance overview, project stats, inventory overview, cash-flow forecast.
-
-> When the API contract changes, also update `miniprogram/pages/` and
-> `miniprogram/utils/request.js`.
-
-## Documentation
-
-Full docs live under `docs/`:
-
-| Document | Description |
-|----------|-------------|
-| `docs/DEVELOPMENT_GUIDE.md` | Environment & deployment guide |
-| `docs/REQUIREMENTS-PRD.md` | Product requirements (PRD) |
-| `docs/REQUIREMENTS-IMPLEMENTATION-MAPPING.md` | Requirement-to-implementation mapping |
-| `docs/业务流程手册.md` | Business process handbook |
-| `docs/USER_MANUAL.md` | User manual |
-| `docs/SYSTEM_REQUIREMENTS.md` | System requirements |
-| `docs/REMOTE_UPGRADE.md` | Remote upgrade architecture, manifest format, security, and manual test procedure |
-
-Live API docs:
-
-- Swagger UI: `/api/docs/`
-- OpenAPI schema: `/api/schema/`
-
-## License
-
-Licensed under the **GNU Affero General Public License v3.0** (`AGPL-3.0-only`) — see [LICENSE](./LICENSE).
-
-AGPL-3.0 is a strong copyleft license: if you run a modified version of this software to provide a
-service over a network, you must offer the complete corresponding source code of your modified
-version to the users of that service. Any distribution or derivative work must also be licensed
-under AGPL-3.0.
-
-Copyright (C) 2026 ATM-ERP contributors.
+当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。其他历史文档不作为本版安装或模块清单。

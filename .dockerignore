@@ -1,64 +1,26 @@
-# Node.js
-**/node_modules
-**/npm-debug.log
-**/.npm
-
-# Build outputs
-**/dist
-**/.vite
-**/.nuxt
-
-# Git
 .git
-.gitignore
 .github
-
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-*~
-
-# Documentation
-*.md
-!README.md
-docs/
-
-# Tests
-**/__tests__
-**/*.test.js
-**/*.spec.js
-**/coverage
-**/playwright-report
-**/test-results
-
-# Logs
-*.log
-logs/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Python cache
-**/__pycache__
-**/*.pyc
-**/*.pyo
-**/.pytest_cache
-**/.mypy_cache
-**/.ruff_cache
-
-# Django
-**/staticfiles
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/uploads
 **/media
-
-# Docker
-docker-compose*.yml
-Dockerfile*
-
-# Misc
-.env.local
-.env.*.local
-*.bak
-*.tmp
+**/logs
+**/staticfiles
+**/backups
+**/test-results
+**/playwright-report
+**/coverage
+**/__pycache__
+**/.ruff_cache
+**/.pytest_cache
+**/.vite
+**/*.pyc
+**/*.log
+**/*.spec.ts
+**/tests
+frontend/e2e
+docs
+erpnext
+.DS_Store
