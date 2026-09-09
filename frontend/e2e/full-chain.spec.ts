@@ -21,7 +21,8 @@ async function save(p: Page) {
   await dialog(p).getByRole('button', { name: '保存', exact: true }).click()
   const r = await response
   expect(r.status(), await r.text()).toBeLessThan(300)
-  await expect(dialog(p)).not.toBeVisible()
+  // Selection and purchase dialogs can overlap briefly during their leave transitions.
+  await expect(p.locator('[role="dialog"]:visible')).toHaveCount(0)
 }
 async function action(p: Page, row: Locator, name: string) {
   await row.getByRole('button', { name: '操作 ▾', exact: true }).click()

@@ -35,7 +35,7 @@ test('采购按品牌单元类别组合多选，跨页保留勾选且只生成�
   await bom.locator('input[type=file]').setInputFiles({ name: 'bom.csv', mimeType: 'text/csv', buffer: Buffer.from('物料编码,数量,变更说明,单元\n' + Array.from({ length: 13 }, (_, i) => `${tag}-${i},1,初版,${i < 12 ? '上料单元' : '检测单元'}`).join('\n')) })
   await bom.getByRole('button', { name: '确认导入', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click()
-  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
   const picker = page.getByRole('dialog', { name: '选择 BOM 下单', exact: true })
