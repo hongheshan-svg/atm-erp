@@ -18,19 +18,144 @@
 
 开发安装的配置文件可设置 `LEAN_ENVIRONMENT=development` 关闭登录限流；发布部署必须设置 `LEAN_ENVIRONMENT=production`，默认即为 production，启用 10 次/分钟登录限制。修改配置后重跑安装脚本（可用 `--skip-build`）使运行环境生效。原生后端使用对应的 `APP_ENVIRONMENT`，开发标记不会开启 DEBUG。
 
-## 全新安装
+## 安装（macOS / Linux / Windows）
 
-需要 Docker 与 Compose v2。从源码目录运行：
+下载版本：[v1.1.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.1.0) · [v1.0.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.0.0)。安装说明统一在本 README 阅读，Release 页面保留版本变化和安装包下载。
+
+v1.0.0、v1.1.0 各提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。使用自己配置的 PostgreSQL / Redis / Nginx 服务，第三方依赖按各自许可使用。
+
+原 tag 保持不变。`INSTALL-MANIFEST.json` 记录业务源码提交与补充安装器提交，补充文件清单独立列出。GitHub 自动生成的 Source code ZIP 不含补充安装器，请下载带平台和安装方式的附件。校验文件为 `atm-erp-vX.Y.Z-SHA256SUMS.txt`。
+
+**全新部署必须使用独立数据库，不兼容早期非 Lean ERP 的表或迁移。** 检测到旧表或回滚时会拒绝启动，不清库、不使用 fake migration、不绕过 schema guard。已有 Lean 数据库只允许正常前向迁移。
+
+### Docker 安装（三平台推荐）
+
+前提：已安装并启动 Docker Engine / Docker Desktop，支持 **Linux 容器**及 Compose v2。Windows 使用 Docker Desktop Linux 容器模式；macOS 使用 Docker Desktop；Linux 使用 Docker Engine + Compose 插件。需能联网拉取 postgres:15-alpine、redis:7-alpine、node:22-alpine、python:3.11-slim，以及 npm / PyPI 依赖。镜像按主机架构本地构建，不宣称提供预制多架构镜像。
+
+解压到独立目录，进入该目录：
 
 ```bash
+# macOS / Linux
 bash install.sh
 ```
 
-Windows PowerShell：`./install.ps1`。安装构建 PostgreSQL 15、Redis 7、应用三个服务，应用包含 Daphne 与 Nginx。默认访问 **http://127.0.0.1:8080/erp/**，管理员用户名 `admin`，首次随机密码在 `.env.lean` 的 `LEAN_ADMIN_PASSWORD`。
+```powershell
+# Windows PowerShell，按组织脚本执行策略允许本目录脚本
+.\install.ps1
+```
 
-首次安装可设置 `LEAN_HTTP_PORT` 改端口；局域网部署在 `.env.lean` 设置 `LEAN_BIND_ADDRESS=0.0.0.0`，并在 `LEAN_ALLOWED_HOSTS=localhost,127.0.0.1` 后追加实际 IP 或域名，再重跑安装。环境配置文件需单独保管。重复安装保留已有账户、密码和数据。源码变更后重跑安装会重新构建应用。
+默认访问 http://127.0.0.1:8080/erp/，账户 admin，首次密码在 `.env.lean` 的 LEAN_ADMIN_PASSWORD。保留配置及 Docker 卷；重复安装不会重置账户。应用、PostgreSQL、Redis 均由 Compose 管理。
 
-**此版只支持独立的新数据库，不兼容旧版表或迁移。** 默认项目名 `atm-erp-lean` 和独立卷避免复用旧部署。发现旧表会拒绝启动，不能通过清库、fake migration 或跳过保护安装。原有旧版系统应保持独立，需要的数据由业务人员确认后重新录入。
+```bash
+docker compose --env-file .env.lean ps
+docker compose --env-file .env.lean logs --tail 100 app
+docker compose --env-file .env.lean stop
+docker compose --env-file .env.lean start
+```
+
+不要使用 `down -v`，它会删除数据卷。同时试用两个版本时，分别指定不同 LEAN_PROJECT_NAME、LEAN_IMAGE 和 LEAN_HTTP_PORT，不能复用另一版本的数据库卷。发布环境保持 LEAN_ENVIRONMENT=production（默认），登录限流开启。
+
+### 原生安装（三平台）
+
+应用直接运行 Python/Daphne 和 Nginx，无需 Docker。前置依赖由管理员预先准备：
+
+| 平台 | 应用运行依赖 | 数据服务 |
+| --- | --- | --- |
+| macOS | Python 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
+| Linux | Python 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
+| Windows | Python 3.11 x64（含 py 启动器）、Windows Nginx，PowerShell | PostgreSQL 15；Redis 7 使用已有可连接服务（例如独立 Linux 服务器） |
+
+Windows 包不包含、不冒充提供官方 Windows Redis 7 服务。需要全套本机管理的数据服务时使用 Docker 包。原生安装器不会安装操作系统软件、创建数据库用户、开启防火墙或注册开机自启。发布包已有前端产物，无需 Node.js；从 Git 源码运行则先用 Node.js 22 执行 `cd frontend && npm ci && npm run build`。
+
+#### 1. 准备独立数据库
+
+由数据库管理员创建新的独立库及专用用户，不连接旧 ERP 库。例如 PostgreSQL 管理终端中执行（自行替换密码）：
+
+```sql
+CREATE ROLE atm_erp_lean LOGIN PASSWORD '替换成随机强密码';
+CREATE DATABASE atm_erp_lean OWNER atm_erp_lean;
+```
+
+Redis 7 使用独立服务或分配独立逻辑库；如有密码/TLS，在 REDIS_URL 中配置。数据库和 Redis 不直接向公网开放。
+
+#### 2. 生成配置
+
+```bash
+# macOS / Linux
+bash install-native.sh configure
+```
+
+```powershell
+# Windows
+.\install-native.ps1 configure
+```
+
+编辑生成的 `native-config.json`，填写 DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD、REDIS_URL。NGINX_EXECUTABLE 填 Nginx 命令或完整可执行文件路径。Windows JSON 路径推荐使用 `/`，例如 `C:/nginx/nginx.exe`。配置文件包含密钥与首次管理员密码，只供部署账户访问；生成时设置私有权限。
+
+DATA_DIR 为虚拟环境、附件、前端、日志与 Nginx 配置的绝对路径，默认安装目录下 `.native`。HTTP_PORT 默认 8080，APP_PORT 默认 18001（Daphne 仅监听本机）。默认只允许本机访问；局域网部署需配置 BIND_ADDRESS 和 ALLOWED_HOSTS。保持 APP_ENVIRONMENT=production，安装器强制 DEBUG=false。
+
+#### 3. 安装并启动
+
+```bash
+# macOS / Linux
+bash install-native.sh install
+bash install-native.sh start
+```
+
+```powershell
+# Windows
+.\install-native.ps1 install
+.\install-native.ps1 start
+```
+
+安装会创建独立 Python 虚拟环境、下载锁定依赖、检查 PostgreSQL/Redis 连接、执行原版 schema guard/迁移及初始化、配置 Nginx。任何失败立即退出，不清库、不绕过保护。首次管理员密码见配置，已有账户保持不变。
+
+看到“已启动”后访问 http://127.0.0.1:8080/erp/。启动器前台监控两个子进程；终端需保持打开，Ctrl+C 同时停止 Daphne 与 Nginx。进程异常退出时启动器非零退出。日志在 DATA_DIR/logs，诊断依赖连接用 `check`。需要开机自启时，由运维用本平台服务管理器运行相同 `start` 命令，工作目录设为解压目录，使用非管理员专用账户，保持配置私有。
+
+可用 `--config /absolute/path/config.json`（sh）或 `-Config C:/path/config.json`（PowerShell）指定持久配置；可通过 PYTHON 环境变量指定 Python 3.11 可执行文件。
+
+### 升级、备份与校验
+
+原生升级：先停止应用，备份 PostgreSQL（pg_dump 自定义格式）、DATA_DIR/uploads 附件及私有配置。新目录解压新版本，沿用原 native-config.json 和 DATA_DIR，执行 install，再 start。
+
+Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供下方备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 重建应用并前向迁移。
+
+禁止把 v1.1.0 库交给 v1.0.0 运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
+
+Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL 和附件须一起备份，定期在独立数据库演练恢复。原生安装不复用仅面向 Compose 的备份脚本。
+
+```bash
+# Linux
+sha256sum -c atm-erp-v1.1.0-SHA256SUMS.txt
+# macOS
+shasum -a 256 -c atm-erp-v1.1.0-SHA256SUMS.txt
+```
+
+```powershell
+# Windows：输出应与 SHA256SUMS 文件对应行一致
+Get-FileHash .\atm-erp-v1.1.0-windows-native.zip -Algorithm SHA256
+```
+
+仅下载单个包时，校验文件内其他未下载包会提示不存在；核对自己下载包的对应哈希即可。首次上线后检查登录、角色权限、附件下载及备份恢复，不以健康页替代完整业务验收。
+
+### 常见问题
+
+#### Docker
+
+- Docker 连接失败：确认 Docker 已启动，Windows/macOS 的 Docker Desktop 使用 Linux 容器模式。
+- 拉取或构建失败：检查镜像仓库、npm、PyPI 网络连接；本包不含离线镜像。
+- 端口被占用：修改 .env.lean 的 LEAN_HTTP_PORT 后重跑安装器。
+- 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。
+- 密码见 .env.lean；重新安装不会重置已有用户密码。
+
+#### 原生安装
+
+- Python 版本不符：使用 Python 3.11，可通过 PYTHON 环境变量指定完整可执行文件路径。
+- 找不到 Nginx：确认已安装，并设置 NGINX_EXECUTABLE 为完整路径。
+- 数据库或 Redis 连接失败：核对配置、专用数据库、账号、密码和服务监听地址。
+- 端口占用：停止已有应用，或为 HTTP_PORT 与 APP_PORT 分别设置空闲端口。
+- 配置文件已存在：configure 不覆盖既有配置，直接编辑原文件后运行 install。
+- 终端关闭后应用停止：start 为前台进程；开机自启需运维使用操作系统服务管理器配置。
 
 ## 日常操作
 
@@ -44,7 +169,9 @@ Windows PowerShell：`./install.ps1`。安装构建 PostgreSQL 15、Redis 7、�
 
 合同/费用、采购/库存、工时各只维护一份业务事实。成本为 CNY 含税经营口径，不替代法定会计账。附件通过登录鉴权下载；成员仅可访问所属项目，敏感金额由后端按角色过滤。
 
-## 备份与恢复
+## Docker 备份与恢复
+
+以下脚本面向 Docker/Compose 部署；原生部署按上文备份 PostgreSQL、附件及配置。
 
 Python 3.11+：
 
@@ -85,6 +212,3 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
 
 当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。其他历史文档不作为本版安装或模块清单。
-# 三平台安装包
-
-v1.0.0 / v1.1.0 的 GitHub Release 提供 macOS、Linux、Windows 的原生与 Docker 联网安装附件。使用带平台名的 ZIP，入口、依赖及升级方式见 [三平台安装说明](docs/INSTALL_PLATFORMS.md)。原 tag 不改写，补充安装器来源记录在包内 `INSTALL-MANIFEST.json`。
