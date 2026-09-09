@@ -396,7 +396,9 @@ class Document(BaseModel):
         DELIVERY = 'delivery', '交付验收'
         OTHER = 'other', '其他'
 
-    project = models.ForeignKey(Project, models.PROTECT, related_name='documents')
+    project = models.ForeignKey(Project, models.PROTECT, related_name='documents', null=True, blank=True)
+    sale = models.ForeignKey(SalesOrder, models.PROTECT, related_name='documents', null=True, blank=True)
+    purchase = models.ForeignKey(PurchaseOrder, models.PROTECT, related_name='documents', null=True, blank=True)
     category = models.CharField(max_length=20, choices=Category.choices)
     file = models.FileField(upload_to='protected/%Y/%m/')
     original_name = models.CharField(max_length=250)
@@ -405,3 +407,13 @@ class Document(BaseModel):
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_document'
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(project__isnull=False, sale__isnull=True, purchase__isnull=True)
+                    | Q(project__isnull=True, sale__isnull=False, purchase__isnull=True)
+                    | Q(project__isnull=True, sale__isnull=True, purchase__isnull=False)
+                ),
+                name='lean_document_one_owner',
+            )
+        ]

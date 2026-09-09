@@ -11,18 +11,21 @@ const pages = ref<Row>({})
 function changePage(key: string, page: number) { pages.value[`${key}_page`] = page; void load() }
 const error = ref('')
 const loading = ref(false)
-const bucketIcons = { tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet, overdue_purchases: Box }
+const bucketIcons = { sales: Document, tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet, overdue_purchases: Box }
 const bucketNotes: Record<string, string> = {
+  sales: '跟进负责的报价、签约、交付和回款',
   overdue_purchases: '按明细承诺交期跟进未到货或待处理物料',
   tasks: '按计划推进项目任务', approvals: '确认采购，衔接后续执行', receipts: '核对到货，及时更新库存',
   drafts: '完善采购明细后提交', settlements: '跟进到期款项与退款',
 }
 const bucketEmpty: Record<string, string> = {
+  sales: '新建或分配给你的销售单会显示在这里',
   overdue_purchases: '暂无逾期采购',
   tasks: '新分配的任务会显示在这里', approvals: '提交后的采购单会显示在这里', receipts: '待入库的采购单会显示在这里',
   drafts: '尚未提交的采购单会显示在这里', settlements: '到期未结清款项会显示在这里',
 }
 const bucketLabels: Record<string, string> = {
+  sales: '我的销售订单',
   overdue_purchases: '采购明细逾期',
   tasks: '我的待办',
   approvals: '待批准采购',
@@ -31,6 +34,7 @@ const bucketLabels: Record<string, string> = {
   settlements: '到期收付 / 待退款',
 }
 function target(key: string, row: Row) {
+  if (key === 'sales') return { path: '/sales', query: { search: row.code } }
   const resource = key === 'tasks' ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
   return { path: `/projects/${row.project}`, query: { tab: resource === 'tasks' ? 'tasks' : resource === 'entries' ? 'finance' : 'purchases', resource, focus: row.id } }
 }
@@ -81,8 +85,8 @@ onMounted(load)
       ><el-pagination v-if="bucket.count > 20" :current-page="bucket.page" :page-size="20" :total="bucket.count" layout="prev, pager, next, total" @current-change="changePage(String(key), $event)" />
       <footer class="work-card-footer">
         <span>{{ bucket.count ? '按业务进度及时处理' : '暂无需要处理的事项' }}</span>
-        <router-link :to="key === 'tasks' ? '/projects' : key === 'settlements' ? '/finance' : '/purchases'">
-          {{ key === 'tasks' ? '查看项目' : key === 'settlements' ? '查看收付款' : '查看采购' }}<el-icon aria-hidden="true"><ArrowRight /></el-icon>
+        <router-link :to="key === 'sales' ? '/sales' : key === 'tasks' ? '/projects' : key === 'settlements' ? '/finance' : '/purchases'">
+          {{ key === 'sales' ? '查看销售' : key === 'tasks' ? '查看项目' : key === 'settlements' ? '查看收付款' : '查看采购' }}<el-icon aria-hidden="true"><ArrowRight /></el-icon>
         </router-link>
       </footer>
     </section>

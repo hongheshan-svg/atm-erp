@@ -9,7 +9,21 @@ WAREHOUSE = {'admin', 'warehouse'}
 FINANCE = {'admin', 'finance'}
 MONEY_READERS = {'admin', 'manager', 'finance'}
 PURCHASE_READERS = {'admin', 'manager', 'purchaser', 'warehouse', 'finance'}
-ALL_ROLES = PURCHASE_READERS | {'member'}
+OPERATION_ROLES = PURCHASE_READERS | {'member'}
+ALL_ROLES = OPERATION_ROLES | {'sales_manager'}
+SALES = MANAGERS | {'sales_manager'}
+SALES_READERS = MONEY_READERS | {'sales_manager'}
+
+
+def sales_for(user, queryset):
+    require_role(user, SALES_READERS)
+    return queryset.filter(manager=user) if role(user) == 'sales_manager' else queryset
+
+
+def require_sale(user, sale):
+    require_role(user, SALES)
+    if role(user) == 'sales_manager' and sale.manager_id != user.pk:
+        raise PermissionDenied('仅能操作自己负责的销售单。')
 
 
 def role(user):
@@ -28,14 +42,14 @@ def require_reports(user):
 
 
 def projects_for(user, queryset):
-    require_role(user, ALL_ROLES)
+    require_role(user, OPERATION_ROLES)
     if role(user) == 'member':
         return queryset.filter(Q(members=user) | Q(manager=user)).distinct()
     return queryset
 
 
 def require_project(user, project):
-    require_role(user, ALL_ROLES)
+    require_role(user, OPERATION_ROLES)
     if role(user) == 'member' and project.manager_id != user.pk and not project.members.filter(pk=user.pk).exists():
         raise PermissionDenied('无权访问此项目。')
 
@@ -49,5 +63,5 @@ class RolePermission(BasePermission):
 
 class PermissionMixin:
     permission_classes = [RolePermission]
-    read_roles = ALL_ROLES
+    read_roles = OPERATION_ROLES
     write_roles = ADMIN

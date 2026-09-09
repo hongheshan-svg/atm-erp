@@ -7,7 +7,7 @@ import * as masterdata from './modules/masterdata'
 import * as settings from './modules/settings'
 import * as documents from './modules/documents'
 import { salesColumns, salesActions, salesCommand } from './modules/sales'
-import { manager } from './session'
+import { manager, can } from './session'
 import type { Command, Row, Column } from './types'
 export { endpoint, display, labels } from './modules/shared'
 export { bomCommand } from './modules/bom'
@@ -52,7 +52,7 @@ export const columns: Record<string, Column[]> = {
 }
 export function createLabel(resource: string) {
   return resource === 'sales'
-    ? manager()
+    ? (manager() || can(['sales_manager']))
       ? '新建销售'
       : ''
     : definition(resource).createLabel(resource)

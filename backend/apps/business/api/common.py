@@ -5,7 +5,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.core.permissions import (
-    ALL_ROLES,
+    OPERATION_ROLES,
     PermissionMixin,
     role,
 )
@@ -19,7 +19,7 @@ def key(request):
 
 class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     parser_classes = [JSONParser]
-    write_roles = ALL_ROLES
+    write_roles = OPERATION_ROLES
 
     @action(detail=False, methods=['get'], url_path='export')
     def export(self, request):

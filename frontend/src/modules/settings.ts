@@ -9,6 +9,7 @@ export const userFields: Field[] = [
     choices({
       admin: '管理员',
       manager: '项目经理',
+      sales_manager: '销售经理',
       purchaser: '采购员',
       warehouse: '仓管',
       finance: '财务',
@@ -16,7 +17,7 @@ export const userFields: Field[] = [
     }),
   ),
   { key: 'hourly_cost', label: '小时成本（元）', initial: '0.00' },
-  { key: 'management_reports', label: '总经理报表权限（仅经理角色）', type: 'boolean', initial: false },
+  { key: 'management_reports', label: '总经理报表权限（仅项目经理角色）', type: 'boolean', initial: false },
   { key: 'password', label: '密码', type: 'password' },
   { key: 'is_active', label: '启用', type: 'boolean' },
 ]

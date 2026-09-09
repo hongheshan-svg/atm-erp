@@ -1,8 +1,9 @@
 import { all, read, download } from '../api'
 import { options } from '../catalog'
-import { can, manager } from '../session'
+import { can, manager, user } from '../session'
 import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
+import { display } from './shared'
 export const salesColumns: Column[] = [
   { key: 'code', label: '销售单号' },
   { key: 'contract_number', label: '合同编号' },
@@ -14,6 +15,11 @@ export const salesColumns: Column[] = [
   { key: 'project_code', label: '执行项目' },
 ]
 export function salesActions(row: Row): string[] {
+  const actions = salesBusinessActions(row)
+  return actions.length ? [...actions, '附件'] : actions
+}
+function salesBusinessActions(row: Row): string[] {
+  if (can(['sales_manager'])) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
   if (!can(['admin', 'manager', 'finance'])) return []
   if (row.status === 'signed') return ['查看明细', '补充协议记录', ...(manager() ? ['签订补充协议'] : [])]
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
@@ -22,6 +28,14 @@ export function salesActions(row: Row): string[] {
 const reason: Field = { key: 'reason', label: '原因 / 说明' }
 export async function salesCommand(row?: Row, action?: string): Promise<Command> {
   const path = '/business/sales/'
+  if (row && action === '交付与回款') {
+    const data = await read(`${path}${row.id}/progress/`)
+    return { title: '交付与回款', path: '', readonly: true, initial: { ...data, project_status: display(data.project_status) }, fields: [
+      { key: 'project_status', label: '项目状态' },
+      { key: 'deliveries', label: '交付批次', type: 'rows', fields: [{ key: 'code', label: '批次' }, { key: 'quantity', label: '数量' }, { key: 'shipped_date', label: '发货日期' }, { key: 'accepted_date', label: '验收日期' }] },
+      { key: 'receivables', label: '应收与回款', type: 'rows', fields: [{ key: 'title', label: '款项' }, { key: 'balance', label: '待收 / 待退' }, { key: 'paid', label: '净回款' }, { key: 'amount', label: '原应收' }, { key: 'credit_amount', label: '已抵减' }, { key: 'due_date', label: '到期日' }] },
+    ], notice: { type: 'info', text: '复用交付和财务记录；负余额表示待退款。销售经理只读，收款登记与纠错由财务处理。' } }
+  }
   if (row && action === '补充协议记录') {
     const records = await read(`${path}${row.id}/amendments/`)
     const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${value}`).join('；')
@@ -31,7 +45,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     const [detail, docs, entries] = await Promise.all([read(`${path}${row.id}/`), all('/business/documents/', { project: row.project, category: 'contract' }), all('/business/entries/', { project: row.project, kind: 'receivable' })])
     return { title: action, path: `${path}${row.id}/amend/`, fields: [
       { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date' }, reason,
-      { key: 'document', label: '补充协议附件（先在项目附件上传）', type: 'select', options: docs.map(d => ({ value: d.id, label: d.original_name })) },
+      { key: 'document', label: '补充协议附件（先在销售或项目附件上传）', type: 'select', options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
       { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '期限', type: 'date' }] },
       { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
     ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
@@ -68,7 +82,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
           type: 'select',
           options: options(partners.filter((p) => p.kind !== 'supplier')),
         },
-        { key: 'manager', label: '负责人', type: 'select', options: options(users) },
+        { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => can(['sales_manager']) ? u.id === user.value?.id : ['admin', 'manager', 'sales_manager'].includes(u.role))) },
         { key: 'requirements', label: '需求说明', type: 'textarea', optional: true },
         { key: 'due_date', label: '计划交期', type: 'date', optional: true },
         { key: 'equipment_quantity', label: '设备数量', initial: 1 },
@@ -100,8 +114,8 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
               key: 'manager',
               label: '项目负责人',
               type: 'select' as const,
-              options: options(users),
-              initial: row.manager,
+              options: options(users.filter(u => ['admin', 'manager'].includes(u.role))),
+              initial: can(['sales_manager']) ? undefined : row.manager,
             },
             {
               key: 'members',

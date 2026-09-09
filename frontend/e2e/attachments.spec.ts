@@ -16,7 +16,7 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
     expect(response.status(), await response.text()).toBeLessThan(300)
     await expect(page.getByRole('dialog')).not.toBeVisible()
   }
-  await page.goto('/erp/masterdata')
+  await page.goto('/erp/masterdata?section=partners')
   await page.getByRole('button', { name: '新增往来单位', exact: true }).click()
   await page.getByRole('dialog').getByLabel('单位名称', { exact: true }).fill(customer)
   await page.getByRole('dialog').getByLabel('类型', { exact: true }).selectOption('customer')
@@ -32,7 +32,7 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
   await page.getByRole('dialog').getByLabel('项目成员', { exact: true }).selectOption('1')
   await save()
   await page.getByRole('link', { name: project, exact: true }).click()
-  await expect(page).toHaveURL(/\/projects\/\d+$/)
+  await expect(page).toHaveURL(/\/projects\/\d+(?:\?|$)/)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   await page.getByRole('tab', { name: '附件', exact: true }).click()
   await page.getByRole('button', { name: '上传附件', exact: true }).click()

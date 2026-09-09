@@ -1,6 +1,6 @@
 import { test, expect, login } from './fixtures'
 
-test('低频设置默认收起，键盘展开后加载并保留内容', async ({ page }, info) => {
+test('设置页签按需加载，键盘切换并保留内容', async ({ page }, info) => {
   const requests: string[] = []
   page.on('request', request => {
     const path = new URL(request.url()).pathname
@@ -13,25 +13,26 @@ test('低频设置默认收起，键盘展开后加载并保留内容', async ({
   ])
   await expect(page.getByRole('button', { name: '新增用户', exact: true })).toBeVisible()
   expect(requests).toEqual([])
-  await page.screenshot({ path: info.outputPath('settings-collapsed.png'), fullPage: true, animations: 'disabled' })
+  await page.screenshot({ path: info.outputPath('settings-tabs.png'), fullPage: true, animations: 'disabled' })
   for (const [title, endpoint] of [['公司资料', 'company'], ['编号规则', 'codes'], ['操作审计', 'audit']]) {
-    const section = page.locator('details').filter({ has: page.locator('summary', { hasText: title }) })
-    const summary = section.locator('summary')
-    const panel = section.getByRole('region', { name: title, exact: true })
+    const tab = page.getByRole('tab', { name: title, exact: true })
+    const panel = page.getByRole('region', { name: title, exact: true })
     await expect(panel).toHaveCount(0)
     const response = page.waitForResponse(r => new URL(r.url()).pathname === `/api/core/${endpoint}/`)
-    if (info.project.name === 'desktop') { await summary.focus(); await summary.press('Enter') }
-    else await summary.tap()
+    if (info.project.name === 'desktop') { await tab.focus(); await tab.press('Enter') }
+    else await tab.tap()
     expect((await response).status()).toBe(200)
     await expect(panel).toBeVisible()
-    if (info.project.name === 'desktop') { await summary.focus(); await summary.press('Space') }
-    else await summary.tap()
+    await page.getByRole('tab', { name: '用户管理', exact: true }).click()
     await expect(panel).not.toBeVisible()
-    if (info.project.name === 'desktop') await summary.press('Enter')
-    else await summary.tap()
+    await tab.click()
     await expect(panel).toBeVisible()
     expect(requests.filter(path => path === `/api/core/${endpoint}/`)).toHaveLength(1)
   }
+  await page.getByRole('tab', { name: '编号规则', exact: true }).click()
+  await expect(page).toHaveURL(/section=codes/)
+  await page.reload()
+  await expect(page.getByRole('tab', { name: '编号规则', exact: true })).toHaveAttribute('aria-selected', 'true')
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const response = await page.request.get('/api/core/codes/', { headers: { Authorization: `Bearer ${token}` } })
   expect(response.ok()).toBeTruthy()
@@ -68,7 +69,7 @@ test('低频设置默认收起，键盘展开后加载并保留内容', async ({
     await expect(row).toContainText(new RegExp(prefix + '\\d{12,}'))
   } finally {
     await page.goto('/erp/settings')
-    await page.locator('summary').filter({ hasText: '编号规则' }).click()
+    await page.getByRole('tab', { name: '编号规则', exact: true }).click()
     await edit(original)
   }
 })

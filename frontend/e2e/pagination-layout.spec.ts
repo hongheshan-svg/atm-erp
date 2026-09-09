@@ -18,9 +18,11 @@ test('每页数量跨页面保存，长表格内部滚动且桌面侧栏背景�
   expect(await panel.locator('.el-table').evaluate(el => el.getBoundingClientRect().height)).toBeLessThanOrEqual(561)
   await page.goto('/erp/masterdata')
   for (const name of ['物料', '客户与供应商']) {
+    await page.getByRole('tab', { name, exact: true }).click()
     await expect(page.getByRole('region', { name, exact: true }).getByLabel('每页显示条目', { exact: true })).toHaveValue('50')
   }
   await page.reload()
+  await page.getByRole('tab', { name: '物料', exact: true }).click()
   await expect(page.getByRole('region', { name: '物料', exact: true }).getByLabel('每页显示条目', { exact: true })).toHaveValue('50')
   await page.getByRole('region', { name: '物料', exact: true }).getByLabel('每页显示条目', { exact: true }).selectOption('10')
   await page.goto('/erp/reports')

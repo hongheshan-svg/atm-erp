@@ -11,6 +11,108 @@ from .test_commercial_chain import TODAY, BusinessFixtures
 
 
 class SalesTests(BusinessFixtures, TestCase):
+    def sales_manager_order(self):
+        data = {'name': '销售经理订单', 'customer': self.customer.pk, 'manager': self.users['sales_manager'].pk}
+        return self.post('sales_manager', 'sales/', data, status=201)['id']
+
+    def test_sales_manager_scope_and_handoff(self):
+        own = self.sales_manager_order()
+        other = self.sale()
+        client = self.clients['sales_manager']
+        self.assertEqual(client.get('/api/business/sales/').data['count'], 1)
+        self.assertEqual(client.get(f'/api/business/sales/{other.pk}/').status_code, 404)
+        self.assertEqual(client.get(f'/api/business/sales/{other.pk}/progress/').status_code, 404)
+        export = client.get('/api/business/sales/export/?file_format=csv')
+        self.assertEqual(export.status_code, 200)
+        self.assertNotIn(other.code, export.content.decode('utf-8-sig'))
+        self.post('sales_manager', f'sales/{other.pk}/quote/', {'amount': '100', 'reason': '越权'}, status=404)
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '100', 'reason': '报价'})
+        self.post('sales_manager', f'sales/{own}/sign/', self.signing(), status=400)
+        payload = {**self.signing(), 'manager': self.users['manager'].pk}
+        result = self.post('sales_manager', f'sales/{own}/sign/', payload, key='sales-sign')
+        self.assertEqual(result, self.post('sales_manager', f'sales/{own}/sign/', payload, key='sales-sign'))
+        project = Project.objects.get(pk=result['project'])
+        self.assertEqual(project.manager_id, self.users['manager'].pk)
+        entry = Entry.objects.get(project=project)
+        self.post('finance', f'entries/{entry.pk}/pay/', {'amount': '25', 'date': TODAY, 'reason': '回款'})
+        detail = client.get(f'/api/business/sales/{own}/progress/').data
+        self.assertEqual(detail['receivables'][0]['paid'], '25.00')
+        self.assertEqual(detail['receivables'][0]['balance'], '75.00')
+        self.assertNotIn('cost', detail)
+        self.assertEqual(client.get('/api/business/workbench/').data['sales']['count'], 1)
+
+    def test_sales_manager_cannot_access_operational_or_financial_interfaces(self):
+        project = self.active_project()
+        client = self.clients['sales_manager']
+        for path in (
+            'projects/',
+            f'projects/{project.pk}/cost/',
+            'bom/',
+            'purchases/',
+            'stocks/',
+            'moves/',
+            'entries/',
+            'payments/',
+            'tasks/',
+            'time/',
+            'deliveries/',
+            'items/',
+            'reports/',
+        ):
+            self.assertEqual(client.get('/api/business/' + path).status_code, 403, path)
+        self.assertEqual(client.get('/api/business/documents/').data['count'], 0)
+        self.post('sales_manager', 'purchases/', {}, status=403)
+        self.post('sales_manager', 'entries/expense/', {}, status=403)
+        self.post('sales_manager', 'projects/', {}, status=403)
+        self.assertEqual(client.get('/api/auth/users/').status_code, 403)
+        self.assertEqual(client.get('/api/core/upgrade/').status_code, 403)
+
+    def test_sales_manager_cannot_assign_others_or_replay_after_transfer(self):
+        from rest_framework.exceptions import PermissionDenied
+
+        from apps.business.services import sales
+
+        self.post(
+            'sales_manager',
+            'sales/',
+            {'name': '越权', 'customer': self.customer.pk, 'manager': self.users['manager'].pk},
+            status=403,
+        )
+        own = self.sales_manager_order()
+        payload = {'amount': '100', 'reason': '报价'}
+        self.post('sales_manager', f'sales/{own}/quote/', payload, key='old-quote')
+        SalesOrder.objects.filter(pk=own).update(manager=self.users['manager'])
+        with self.assertRaises(PermissionDenied):
+            sales.quote(self.users['sales_manager'], 'old-quote', own, payload)
+
+    def test_sales_manager_customer_and_import_permissions(self):
+        client = self.clients['sales_manager']
+        self.assertEqual(client.get('/api/business/partners/').data['count'], 1)
+        self.assertEqual(client.get(f'/api/business/partners/{self.supplier.pk}/').status_code, 404)
+        self.post('sales_manager', 'partners/', {'name': '新增客户', 'kind': 'customer'}, status=201)
+        self.post('sales_manager', 'partners/', {'name': '供应商', 'kind': 'supplier'}, status=403)
+        for resource in ('sales', 'partners'):
+            self.assertEqual(client.get(f'/api/business/{resource}/import-template/').status_code, 200)
+        self.assertEqual(client.get('/api/business/projects/import-template/').status_code, 403)
+
+    def test_downgraded_sales_manager_cannot_replay_previous_supplier_or_assignment(self):
+        from rest_framework.exceptions import PermissionDenied
+
+        from apps.business.models import Partner
+        from apps.business.services import masterdata, sales
+
+        actor = self.users['manager']
+        customer = {'name': '旧供应商', 'kind': 'supplier'}
+        order = {'name': '转交订单', 'customer': self.customer.pk, 'manager': self.users['admin'].pk}
+        masterdata.masterdata(actor, 'old-supplier', Partner, customer)
+        sales.create(actor, 'old-assignment', order)
+        actor.role = 'sales_manager'
+        actor.save()
+        with self.assertRaises(PermissionDenied):
+            masterdata.masterdata(actor, 'old-supplier', Partner, customer)
+        with self.assertRaises(PermissionDenied):
+            sales.create(actor, 'old-assignment', order)
+
     def test_contract_number_unique_searchable_and_immutable_after_signing(self):
         first, second = self.sale(), self.sale()
         for sale in (first, second):

@@ -17,8 +17,8 @@ const preview = ref<Row | null>(null)
 const result = ref('')
 const page = ref(1)
 const roles: Record<string, string[]> = {
-  items: ['admin', 'manager', 'purchaser'], partners: ['admin', 'manager', 'purchaser'],
-  sales: ['admin', 'manager'], projects: ['admin', 'manager'], purchases: ['admin', 'manager', 'purchaser'],
+  items: ['admin', 'manager', 'purchaser'], partners: ['admin', 'manager', 'purchaser', 'sales_manager'],
+  sales: ['admin', 'manager', 'sales_manager'], projects: ['admin', 'manager'], purchases: ['admin', 'manager', 'purchaser'],
   tasks: ['admin', 'manager'], stocks: ['admin'], entries: ['admin', 'finance'], payments: ['admin', 'finance'],
   time: ['admin', 'manager', 'purchaser', 'warehouse', 'finance', 'member'],
   moves: ['admin', 'warehouse'], deliveries: ['admin', 'manager'],

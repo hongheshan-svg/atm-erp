@@ -30,6 +30,8 @@ class ReportTests(BusinessFixtures, TestCase):
 
     def test_cost_commitments_balances_and_overdue_use_existing_facts(self):
         self.purchase(self.project)
+        # Keep the payable due today: the shared fixture uses a fixed historical date.
+        Entry.objects.filter(project=self.project, kind='payable').update(due_date=timezone.localdate())
         self.post(
             'manager',
             f'projects/{self.project.pk}/budget/',

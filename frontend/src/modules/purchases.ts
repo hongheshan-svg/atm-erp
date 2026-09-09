@@ -58,6 +58,7 @@ export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (resource === 'purchases') {
     a.push('查看明细', '处理记录')
+    if (buyer() || money()) a.push('附件')
     if (buyer() && r.status === 'draft') a.push('修改采购', '提交采购')
     if (manager() && r.status === 'submitted') a.push('批准采购', '退回修改')
     if (warehouse() && ['approved', 'partial'].includes(r.status)) a.push('收货')

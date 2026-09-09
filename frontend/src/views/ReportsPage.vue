@@ -85,10 +85,10 @@ watch(pageSize, () => load())
         <el-table-column label="状态" min-width="85"><template #default="{ row }">{{ labels[row.status] }}</template></el-table-column>
         <el-table-column label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>
         <el-table-column label="预算" min-width="110" align="right"><template #default="{ row }">{{ row.budget === null ? '未设置' : money(row.budget) }}</template></el-table-column>
-        <el-table-column label="实际成本" min-width="115" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'tasks' } }">{{ money(row.actual_cost) }}</router-link></template></el-table-column>
+        <el-table-column label="实际成本" min-width="115" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</router-link></template></el-table-column>
         <el-table-column label="在途采购" min-width="115" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'purchases' } }">{{ money(row.committed_cost) }}</router-link></template></el-table-column>
 
-        <el-table-column label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'finance' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</router-link></template></el-table-column>
+        <el-table-column label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'finance', section: 'entries' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</router-link></template></el-table-column>
         <el-table-column label="关注" width="85"><template #default="{ row }">{{ row.over_budget ? '超预算' : row.overdue ? '逾期' : row.unbudgeted ? '未设预算' : '—' }}</template></el-table-column>
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
       </el-table>

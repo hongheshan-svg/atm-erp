@@ -88,6 +88,7 @@ export const labels: Record<string, string> = {
   both: '客户及供应商',
   admin: '管理员',
   manager: '项目经理',
+  sales_manager: '销售经理',
   purchaser: '采购员',
   warehouse: '仓管',
   finance: '财务',
