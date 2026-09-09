@@ -10,7 +10,7 @@ from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.models import User
 from apps.core.actions import perform
-from apps.core.permissions import ADMIN, ALL_ROLES, FINANCE, MANAGERS, PURCHASERS, WAREHOUSE, require_role
+from apps.core.permissions import ADMIN, ALL_ROLES, FINANCE, MANAGERS, PURCHASERS, SALES, WAREHOUSE, require_role
 
 from ..models import Item, Partner, Project
 from . import execution, finance, inventory, masterdata, projects, sales, supply
@@ -40,10 +40,10 @@ SCHEMAS = {
         ],
     ),
     'partners': (
-        PURCHASERS,
+        PURCHASERS | {'sales_manager'},
         [('名称', 'name'), ('类型', 'kind'), ('联系人', 'contact'), ('电话', 'phone'), ('地址', 'address')],
     ),
-    'sales': (MANAGERS, DETAIL),
+    'sales': (SALES, DETAIL),
     'projects': (MANAGERS, DETAIL + [('成员账号（分号分隔）', 'members')]),
     'purchases': (
         PURCHASERS,

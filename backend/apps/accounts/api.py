@@ -81,7 +81,10 @@ class PasswordView(APIView):
 class DirectoryView(APIView):
     def get(self, request):
         return Response(
-            [{'id': u.pk, 'display_name': u.display_name or u.username} for u in User.objects.filter(is_active=True)]
+            [
+                {'id': u.pk, 'display_name': u.display_name or u.username, 'role': role(u)}
+                for u in User.objects.filter(is_active=True)
+            ]
         )
 
 

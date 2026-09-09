@@ -5,15 +5,30 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.core.permissions import projects_for
+from apps.core.permissions import ALL_ROLES
 
 from .api.common import ReadView, key
-from .models import Document, Project
+from .models import Document
 from .services import documents
+from .services.common import identity
 
 
 class DocumentSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
+    project = serializers.SerializerMethodField()
+    source = serializers.SerializerMethodField()
+
+    def get_project(self, obj):
+        return obj.sale.project_id if obj.sale_id else obj.purchase.project_id if obj.purchase_id else obj.project_id
+
+    def get_source(self, obj):
+        return (
+            f'销售单 {obj.sale.code}'
+            if obj.sale_id
+            else f'采购单 {obj.purchase.code}'
+            if obj.purchase_id
+            else '项目附件'
+        )
 
     def get_download_url(self, obj):
         return f'/api/business/documents/{obj.pk}/download/'
@@ -23,6 +38,9 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'project',
+            'sale',
+            'purchase',
+            'source',
             'category',
             'original_name',
             'size',
@@ -34,23 +52,37 @@ class DocumentSerializer(serializers.ModelSerializer):
 
 
 class DocumentView(ReadView):
-    queryset = Document.objects.all()
+    read_roles = ALL_ROLES
+    write_roles = ALL_ROLES
+    queryset = Document.objects.select_related('sale', 'purchase')
     serializer_class = DocumentSerializer
     parser_classes = [MultiPartParser]
-    filterset_fields = ['project', 'category']
+    filterset_fields = ['sale', 'purchase', 'category']
+    search_fields = ['original_name']
 
     def get_queryset(self):
-        scoped = super().get_queryset().filter(project__in=projects_for(self.request.user, Project.objects.all()))
-        return documents.visible_documents(self.request.user, scoped)
+        scoped = documents.visible_documents(self.request.user, super().get_queryset())
+        if self.request.query_params.get('project'):
+            scoped = documents.for_project(scoped, identity(self.request.query_params['project'], 'project'))
+        return scoped
 
     def create(self, request):
-        if set(request.data) != {'project', 'category', 'file'} or any(
-            len(request.data.getlist(field)) != 1 for field in ('project', 'category', 'file')
+        owners = set(request.data) & {'project', 'sale', 'purchase'}
+        if (
+            len(owners) != 1
+            or set(request.data) != owners | {'category', 'file'}
+            or any(len(request.data.getlist(field)) != 1 for field in request.data)
         ):
-            raise ValidationError('请提交项目、附件分类和一个文件。')
+            raise ValidationError('请提交一个项目、销售单或采购单，附件分类和一个文件。')
         return Response(
             documents.upload(
-                request.user, key(request), request.data['project'], request.data['category'], request.FILES.get('file')
+                request.user,
+                key(request),
+                request.data.get('project'),
+                request.data['category'],
+                request.FILES.get('file'),
+                sale_id=request.data.get('sale'),
+                purchase_id=request.data.get('purchase'),
             ),
             status=201,
         )

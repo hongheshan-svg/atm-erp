@@ -2,11 +2,11 @@ from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.core.permissions import MANAGERS, MONEY_READERS
+from apps.core.permissions import SALES, SALES_READERS, sales_for
 
 from .api.common import ReadView, key
 from .models import SalesOrder
-from .services import amendments, sales
+from .services import amendments, finance, sales
 
 
 class SalesSerializer(serializers.ModelSerializer):
@@ -44,10 +44,36 @@ class SalesSerializer(serializers.ModelSerializer):
 class SalesView(ReadView):
     queryset = SalesOrder.objects.select_related('customer', 'manager', 'project')
     serializer_class = SalesSerializer
-    read_roles = MONEY_READERS
-    write_roles = MANAGERS
+    read_roles = SALES_READERS
+    write_roles = SALES
     search_fields = ['code', 'name', 'customer__name', 'contract_number']
     filterset_fields = ['status', 'customer', 'manager', 'project']
+
+    def get_queryset(self):
+        return sales_for(self.request.user, super().get_queryset())
+
+    @action(detail=True, methods=['get'])
+    def progress(self, request, pk=None):
+        sale = self.get_object()
+        if not sale.project_id:
+            return Response({'project_status': None, 'deliveries': [], 'receivables': []})
+        return Response(
+            {
+                'project_status': sale.project.status,
+                'deliveries': list(sale.project.deliveries.values('code', 'quantity', 'shipped_date', 'accepted_date')),
+                'receivables': [
+                    {
+                        'title': entry.title,
+                        'due_date': entry.due_date,
+                        'amount': str(entry.amount),
+                        'credit_amount': str(entry.credit_amount),
+                        'paid': f'{finance.paid(entry):.2f}',
+                        'balance': f'{finance.balance(entry):.2f}',
+                    }
+                    for entry in sale.project.entries.filter(kind='receivable')
+                ],
+            }
+        )
 
     def create(self, request):
         return Response(sales.create(request.user, key(request), request.data), status=201)

@@ -1,5 +1,6 @@
 """Append-only supplementary agreements; settlement adjustments reuse Entry."""
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import ValidationError
@@ -43,7 +44,11 @@ def amend(actor, key, sale_id, data):
         if expected != sale.updated_at:
             raise Conflict('合同已更新，请重新查看补充协议。')
         reason = text(data, 'reason')
-        document = lookup(Document, data.get('document'), 'document', project=project, category='contract')
+        document = get_object_or_404(
+            Document.objects.filter(Q(project=project) | Q(sale=sale)),
+            pk=identity(data.get('document'), 'document'),
+            category='contract',
+        )
         date = day(data, 'date')
         if date < sale.contract_date:
             raise ValidationError('补充协议日期不能早于签约日期。')

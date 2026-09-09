@@ -642,6 +642,12 @@ button:focus-visible {
 }
 :root { --mobile-nav-width: 250px; }
 .mobile-menu-toggle, .nav-backdrop { display: none !important; }
+/* Native horizontal scrolling keeps the active module reachable on narrow screens. */
+.scrollable-tabs > .el-tabs__header .el-tabs__nav-wrap { padding: 0; }
+.scrollable-tabs > .el-tabs__header .el-tabs__nav-prev,
+.scrollable-tabs > .el-tabs__header .el-tabs__nav-next { display: none; }
+.scrollable-tabs > .el-tabs__header .el-tabs__nav-scroll { overflow-x: auto; scrollbar-width: thin; }
+.scrollable-tabs > .el-tabs__header .el-tabs__nav { transform: none !important; }
 .mobile-row-summary { display: none; }
 .dialog-footer { flex-wrap: wrap; gap: 8px; }
 @media (max-width: 760px) {

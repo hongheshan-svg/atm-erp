@@ -8,6 +8,7 @@ import { choices } from './shared'
 import { buyer } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
+import { can } from '../session'
 export const columns: Record<string, Column[]> = {
   items: [
     C('code', '编码'),
@@ -30,7 +31,7 @@ export const columns: Record<string, Column[]> = {
 export function createLabel(resource: string) {
   return (
     (
-      { items: buyer() && '新增物料', partners: buyer() && '新增往来单位' } as Record<
+      { items: buyer() && '新增物料', partners: (buyer() || can(['sales_manager'])) && '新增往来单位' } as Record<
         string,
         string | boolean
       >
@@ -55,7 +56,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
       select(
         'kind',
         '类型',
-        choices({ customer: '客户', supplier: '供应商', both: '客户及供应商' }),
+        choices(can(['sales_manager']) ? { customer: '客户' } : { customer: '客户', supplier: '供应商', both: '客户及供应商' }),
       ),
       t('contact', '联系人', true),
       t('phone', '电话', true),
@@ -71,6 +72,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
 export function actionNames(resource: string, _r: Row): string[] {
   const a: string[] = []
   if (['items', 'partners'].includes(resource) && buyer()) a.push('编辑')
+  if (resource === 'partners' && can(['sales_manager']) && _r.kind === 'customer') a.push('编辑')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {

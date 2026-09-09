@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
@@ -11,6 +11,13 @@ import ResourcePanel from '../components/ResourcePanel.vue'
 import BOMDemand from '../components/BOMDemand.vue'
 import BudgetPanel from '../components/BudgetPanel.vue'
 import ActionDialog from '../components/ActionDialog.vue'
+import ModuleTabs from '../components/ModuleTabs.vue'
+import { revealActiveTab } from '../utils/tabs'
+const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
+const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
+const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
+const financeTabs = [{ key: 'entries', label: '项目款项', resources: ['entries'] }, { key: 'payments', label: '项目收付流水', resources: ['payments'] }]
+const costTabs = [{ key: 'budget', label: '预算与预测' }, { key: 'actual', label: '实际成本' }]
 const route = useRoute()
 const router = useRouter()
 const id = Number(route.params.id)
@@ -18,8 +25,10 @@ const project = ref<Row | null>(null)
 const cost = ref<Row>({})
 const revision = ref(0)
 const tabsRef = ref<TabsInstance>()
-async function revealTab() { await nextTick(); tabsRef.value?.tabNavRef?.scrollToActiveTab() }
-const allowedTabs = ['tasks', 'bom', ...(can(['admin', 'manager', 'purchaser', 'warehouse', 'finance']) ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance'] : []), 'documents']
+async function revealTab() {
+  await revealActiveTab(() => tabsRef.value)
+}
+const allowedTabs = ['tasks', 'bom', ...(can(['admin', 'manager', 'purchaser', 'warehouse', 'finance']) ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
 const initialTab = String(route.query.tab || sessionStorage.getItem(`project-tab-${id}`) || 'tasks')
 const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
 const overview = ref(sessionStorage.getItem('project-overview') !== 'collapsed')
@@ -27,12 +36,13 @@ watch(overview, value => sessionStorage.setItem('project-overview', value ? 'exp
 watch(tab, value => { sessionStorage.setItem(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
 watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value))) tab.value = String(value) })
 watch(tab, revealTab, { flush: 'post' })
+watch(tab, value => { if (value === 'cost') void load() })
 const error = ref('')
 const command = ref<Command | null>(null)
 async function load() {
   try {
     project.value = await read(`/business/projects/${id}/`)
-    if (money()) cost.value = await read(`/business/projects/${id}/cost/`)
+    if (money() && tab.value === 'cost') cost.value = await read(`/business/projects/${id}/cost/`)
     revision.value++
     await revealTab()
   } catch (e) {
@@ -97,52 +107,33 @@ onMounted(load)
       </div>
     </section>
     <p v-if="project.requirements" class="requirements">{{ project.requirements }}</p>
-    <section v-if="money()" class="panel cost-panel" aria-label="项目成本">
-      <h2>实际成本 <span class="muted">CNY 含税经营口径</span></h2>
-      <div class="cost-grid">
-        <div
-          v-for="(label, key) in {
-            materials: '材料',
-            labor: '人工',
-            expenses: '费用',
-            purchase_return_variance: '退货价差',
-            total: '合计',
-          }"
-          :key="key"
-        >
-          <small>{{ label }}</small
-          ><strong>¥ {{ cost[key] ?? '—' }}</strong>
-        </div>
-      </div>
-    </section>
-    <BudgetPanel v-if="money()" :project-id="id" :revision="revision" :status="project.status" />
     </div>
-    <el-tabs ref="tabsRef" v-model="tab"
+    <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab"
       ><el-tab-pane label="任务与工时" name="tasks"
-        ><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ResourcePanel
           resource="tasks"
           title="项目任务"
           :allow-create="['active', 'delivering'].includes(project.status)"
           :project-id="id"
           :params="{ project: id }"
           :revision="revision"
-          @changed="load" /><ResourcePanel
+          @changed="load" /></template><template #time><ResourcePanel
           resource="time"
           title="工时记录"
           :params="{ task__project: id }"
           :revision="revision"
-          @changed="load" /></el-tab-pane
+          @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane label="BOM" name="bom" lazy
-        ><BOMDemand
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'bom'" :tabs="bomTabs" :storage-key="`project-${id}-bom`"><template #demand><BOMDemand
           :project-id="id"
           :status="project.status"
           :revision="revision"
-          @changed="load" /><ResourcePanel
+          @changed="load" /></template><template #lines><ResourcePanel
           resource="bom"
           title="BOM 明细"
           :params="{ project: id }"
           :revision="revision"
-          @changed="load" /></el-tab-pane
+          @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane
         v-if="can(['admin', 'manager', 'purchaser', 'warehouse', 'finance'])"
         label="采购"
@@ -157,29 +148,39 @@ onMounted(load)
           :revision="revision"
           @changed="load" /></el-tab-pane
       ><el-tab-pane label="交付与售后" name="deliveries" lazy
-        ><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'deliveries'" :tabs="deliveryTabs" :storage-key="`project-${id}-deliveries`"><template #deliveries><ResourcePanel
           resource="deliveries"
           title="交付批次"
           :params="{ project: id }"
           :revision="revision"
-          @changed="load" /><ResourcePanel
+          @changed="load" /></template><template #service><ResourcePanel
           resource="tasks"
           title="售后任务"
           :allow-create="false"
           :params="{ project: id, kind: 'service' }"
           :project-id="id"
           :revision="revision"
-          @changed="load" /></el-tab-pane
+          @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane v-if="money()" label="收付款" name="finance" lazy
-        ><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'finance'" :tabs="financeTabs" :storage-key="`project-${id}-finance`"><template #entries><ResourcePanel
           resource="entries"
           title="项目款项"
           :allow-create="['active', 'delivering', 'warranty'].includes(project.status)"
           :params="{ project: id }"
           :project-id="id"
           :revision="revision"
-          @changed="load" /><ResourcePanel resource="payments" title="项目收付流水" :allow-create="false" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></el-tab-pane
-      ><el-tab-pane label="附件" name="documents" lazy
+          @changed="load" /></template><template #payments><ResourcePanel resource="payments" title="项目收付流水" :allow-create="false" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template></ModuleTabs></el-tab-pane
+      ><el-tab-pane v-if="money()" label="成本与预算" name="cost" lazy>
+        <ModuleTabs :parent-tab="tab" v-if="tab === 'cost'" :tabs="costTabs" :storage-key="`project-${id}-cost`">
+          <template #budget><BudgetPanel :project-id="id" :revision="revision" :status="project.status" /></template>
+          <template #actual><section class="panel cost-panel" aria-label="项目成本">
+            <h2>实际成本 <span class="muted">CNY 含税经营口径</span></h2>
+            <div class="cost-grid"><div v-for="(label, key) in { materials: '材料', labor: '人工', expenses: '费用', purchase_return_variance: '退货价差', total: '合计' }" :key="key">
+              <small>{{ label }}</small><strong>¥ {{ cost[key] ?? '—' }}</strong>
+            </div></div>
+          </section></template>
+        </ModuleTabs>
+      </el-tab-pane><el-tab-pane label="附件" name="documents" lazy
         ><ResourcePanel
           resource="documents"
           title="项目附件"

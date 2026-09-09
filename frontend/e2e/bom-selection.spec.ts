@@ -22,9 +22,10 @@ async function importRows(page: Page, title: string, content: string) {
 test('采购按品牌单元类别组合多选，跨页保留勾选且只生成所选BOM行', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const tag = `BOM${Date.now()}`
-  await page.goto('/erp/masterdata')
+  await page.goto('/erp/masterdata?section=partners')
   const partner = await importRows(page, '客户与供应商', `名称,类型,联系人,电话,地址\n${tag},both,,,\n`)
   const partnerRow = await read(page, `partners/${partner.results[0].id}/`)
+  await page.getByRole('tab', { name: '物料', exact: true }).click()
   const items = await importRows(page, '物料', '物料编码,名称,规格,单位,品牌,物料类别\n' + Array.from({ length: 13 }, (_, i) => `${tag}-${i},测试件${i},规格,件,${i < 12 ? '品牌A' : '品牌B'},${i < 12 ? 'standard' : 'custom'}`).join('\n'))
   await page.goto('/erp/projects')
   const project = await importRows(page, '项目列表', `名称,客户编码,负责人账号,需求说明,计划交期,设备数量,质保月数,成员账号（分号分隔）\n${tag},${partnerRow.code},admin,,,1,12,\n`)

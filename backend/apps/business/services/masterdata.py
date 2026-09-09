@@ -1,10 +1,10 @@
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
 from apps.core.models import CodeRule
-from apps.core.permissions import PURCHASERS, require_role
+from apps.core.permissions import PURCHASERS, require_role, role
 
-from ..models import Item
+from ..models import Item, Partner
 from .common import (
     audit,
     fields,
@@ -15,6 +15,15 @@ from .common import (
 
 
 def masterdata(actor, key, model, data, object_id=None):
+    def authorize(user):
+        require_role(user, PURCHASERS | ({'sales_manager'} if model is Partner else set()))
+        if role(user) == 'sales_manager':
+            current = model.objects.select_for_update().get(pk=identity(object_id)) if object_id else None
+            if data.get('kind', current.kind if current else None) != 'customer' or (
+                current and current.kind != 'customer'
+            ):
+                raise PermissionDenied('销售经理只能维护纯客户资料。')
+
     allowed = {'name', 'is_active'} | (
         {'specification', 'unit', 'brand', 'part_type'} if model is Item else {'kind', 'contact', 'phone', 'address'}
     )
@@ -30,6 +39,10 @@ def masterdata(actor, key, model, data, object_id=None):
         ):
             raise ValidationError({'part_type': '请选择标准件或非标件，未分类可留空。'})
         obj = model.objects.select_for_update().get(pk=identity(object_id)) if object_id else model()
+        if role(user) == 'sales_manager' and (
+            model is not Partner or data.get('kind', obj.kind) != 'customer' or (object_id and obj.kind != 'customer')
+        ):
+            raise PermissionDenied('销售经理只能维护纯客户资料，不能修改供应商或双用途往来单位。')
         if not object_id:
             # Manual and automatic item codes share the same lock and uniqueness domain.
             if model is Item:
@@ -62,6 +75,6 @@ def masterdata(actor, key, model, data, object_id=None):
         key=key,
         operation=f'{model._meta.model_name}.save',
         payload={'id': object_id, 'data': data},
-        authorize=lambda user: require_role(user, PURCHASERS),
+        authorize=authorize,
         execute=execute,
     )

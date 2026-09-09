@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { user, can, logout } from '../session'
 import type { Command } from '../types'
 import ResourcePanel from '../components/ResourcePanel.vue'
 import ActionDialog from '../components/ActionDialog.vue'
-import DeferredSection from '../components/DeferredSection.vue'
+import ModuleTabs from '../components/ModuleTabs.vue'
+const tabs = computed(() => [
+  ...(can(['admin']) ? [
+    { key: 'users', label: '用户管理' }, { key: 'company', label: '公司资料' },
+    { key: 'codes', label: '编号规则' }, { key: 'audit', label: '操作审计' },
+  ] : []),
+  { key: 'account', label: '我的账户' },
+])
 const command = ref<Command | null>(null)
 function password() {
   command.value = {
@@ -24,16 +31,16 @@ function password() {
 </script>
 <template>
   <header class="page-heading"><h1>设置</h1></header>
-  <section class="panel">
+  <ModuleTabs :tabs="tabs" storage-key="settings">
+    <template #account><section class="panel">
     <h2>我的账户</h2>
     <p>{{ user?.username }} · {{ user?.display_name }}</p>
     <el-button @click="password">修改密码</el-button>
-  </section>
-  <template v-if="can(['admin'])">
-    <ResourcePanel resource="users" title="用户管理" />
-    <DeferredSection title="公司资料"><ResourcePanel resource="company" title="公司资料" /></DeferredSection>
-    <DeferredSection title="编号规则"><ResourcePanel resource="codes" title="编号规则" /></DeferredSection>
-    <DeferredSection title="操作审计"><ResourcePanel resource="audit" title="操作审计" /></DeferredSection>
-  </template>
+    </section></template>
+    <template #users><ResourcePanel v-if="can(['admin'])" resource="users" title="用户管理" /></template>
+    <template #company><ResourcePanel v-if="can(['admin'])" resource="company" title="公司资料" /></template>
+    <template #codes><ResourcePanel v-if="can(['admin'])" resource="codes" title="编号规则" /></template>
+    <template #audit><ResourcePanel v-if="can(['admin'])" resource="audit" title="操作审计" /></template>
+  </ModuleTabs>
   <ActionDialog :command="command" @close="command = null" @saved="logout" />
 </template>

@@ -13,7 +13,6 @@ from .common import ZERO
 
 def summary(request):
     user = request.user
-    projects = projects_for(user, Project.objects.all())
 
     def bucket(queryset, serializer, name):
         try:
@@ -29,6 +28,13 @@ def summary(request):
             'results': serializer(selected.object_list, many=True, context={'request': request}).data,
         }
 
+    if role(user) == 'sales_manager':
+        from ..models import SalesOrder
+        from ..sales import SalesSerializer
+
+        sales = SalesOrder.objects.filter(manager=user).select_related('project', 'customer', 'manager').order_by('-id')
+        return {'sales': bucket(sales.exclude(status='cancelled'), SalesSerializer, 'sales')}
+    projects = projects_for(user, Project.objects.all())
     tasks = (
         Task.objects.filter(project__in=projects, assignee=user, status='open')
         .exclude(project__status__in=['closed', 'cancelled'])

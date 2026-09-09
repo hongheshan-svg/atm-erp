@@ -1,7 +1,9 @@
 from rest_framework.response import Response
 
 from apps.core.permissions import (
+    OPERATION_ROLES,
     PURCHASERS,
+    role,
 )
 
 from ..models import (
@@ -39,6 +41,14 @@ class ItemView(MasterView):
 
 
 class PartnerView(MasterView):
+    read_roles = OPERATION_ROLES | {'sales_manager'}
+    write_roles = PURCHASERS | {'sales_manager'}
     queryset = Partner.objects.all()
     serializer_class = PartnerSerializer
     filterset_fields = ['is_active', 'kind']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return (
+            queryset.filter(kind__in=['customer', 'both']) if role(self.request.user) == 'sales_manager' else queryset
+        )

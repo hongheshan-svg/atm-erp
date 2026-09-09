@@ -3,10 +3,25 @@ import { all, read } from '../api'
 import { actionCommand, actionNames, createCommand } from '../business'
 import { user } from '../session'
 import { shortageCommand } from './purchases'
+import { navigation } from '../navigation'
+import { userFields } from './settings'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), write: vi.fn() }))
 
 describe('模块边界', () => {
+  it('销售经理的签约交接与菜单不继承项目管理权限', async () => {
+    user.value = { id: 7, role: 'sales_manager' }
+    expect(navigation().map(n => n.key)).toEqual(['workbench', 'sales', 'masterdata', 'settings'])
+    expect(userFields.find(f => f.key === 'role')?.options).toContainEqual({ value: 'sales_manager', label: '销售经理' })
+    vi.mocked(all).mockResolvedValue([{ id: 7, role: 'sales_manager' }, { id: 8, role: 'manager' }, { id: 9, role: 'finance' }])
+    const create = await createCommand('sales')
+    expect(create.fields.find(f => f.key === 'manager')?.options?.map(o => o.value)).toEqual([7])
+    const sign = await actionCommand('sales', { id: 1, manager: 7, status: 'quoted' }, '签约')
+    expect(sign.fields.find(f => f.key === 'manager')?.options?.map(o => o.value)).toEqual([8])
+    expect(sign.fields.find(f => f.key === 'manager')?.initial).toBeUndefined()
+    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '交付与回款', '附件'])
+    expect(actionNames('purchases', { status: 'submitted' })).not.toContain('批准采购')
+  })
   it('相同物料跨单元下单仍保留每个 BOM 行，不按物料覆盖关联', async () => {
     vi.mocked(read).mockResolvedValue({ lines: [{ bom_line: 11, item: 1, shortage: '2' }, { bom_line: 12, item: 1, shortage: '3' }] })
     const command = await shortageCommand(9, [11, 12])
@@ -122,9 +137,9 @@ describe('模块边界', () => {
   })
 
   it('签约后仅经理可签补充协议，财务仍只读', () => {
-    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '补充协议记录', '签订补充协议'])
+    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '补充协议记录', '签订补充协议', '附件'])
     user.value = { role: 'finance' }
-    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '补充协议记录'])
-    expect(actionNames('sales', { status: 'quoted' })).toEqual(['查看明细'])
+    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '补充协议记录', '附件'])
+    expect(actionNames('sales', { status: 'quoted' })).toEqual(['查看明细', '附件'])
   })
 })

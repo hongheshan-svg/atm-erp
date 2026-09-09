@@ -14,6 +14,7 @@ import { endpoint } from './shared'
 export const columns: Record<string, Column[]> = {
   documents: [
     C('original_name', '文件'),
+    C('source', '来源'),
     C('category', '分类'),
     C('size', '字节'),
     C('created_at', '上传时间'),

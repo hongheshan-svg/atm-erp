@@ -1,12 +1,12 @@
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.models import User
 from apps.core.actions import perform
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import MANAGERS, require_role, role
+from apps.core.permissions import SALES, require_role, require_sale, role
 
 from ..models import Partner, Project, SalesOrder
 from . import finance, projects
@@ -17,8 +17,8 @@ DETAIL_FIELDS = {'name', 'customer', 'manager', 'requirements', 'due_date', 'equ
 
 def detail_values(data):
     manager = lookup(User, data.get('manager'), 'manager', is_active=True)
-    if role(manager) not in MANAGERS:
-        raise ValidationError({'manager': '销售负责人必须是管理员或项目经理。'})
+    if role(manager) not in SALES:
+        raise ValidationError({'manager': '销售负责人必须是管理员、项目经理或销售经理。'})
     return {
         'name': text(data, 'name', maximum=150),
         'customer': lookup(Partner, data.get('customer'), 'customer', is_active=True, kind__in=['customer', 'both']),
@@ -43,12 +43,20 @@ def detail_snapshot(sale):
 
 
 def create(actor, key, data):
+    def authorize(user):
+        require_role(user, SALES)
+        if role(user) == 'sales_manager' and identity(data.get('manager')) != user.pk:
+            raise PermissionDenied('销售经理只能为自己建立销售单。')
+
     def execute(user):
         fields(data, DETAIL_FIELDS)
+        values = detail_values(data)
+        if role(user) == 'sales_manager' and values['manager'].pk != user.pk:
+            raise ValidationError({'manager': '销售经理只能为自己建立销售单。'})
         sale = save(
             SalesOrder(
                 code=CodeRule.generate_code('sale'),
-                **detail_values(data),
+                **values,
             ),
             user,
         )
@@ -59,7 +67,7 @@ def create(actor, key, data):
         key=key,
         operation='sale.create',
         payload=data,
-        authorize=lambda user: require_role(user, MANAGERS),
+        authorize=authorize,
         execute=execute,
     )
 
@@ -70,7 +78,9 @@ def action(actor, key, operation, sale_id, data, execute):
         key=key,
         operation=operation,
         payload={'id': sale_id, 'data': data},
-        authorize=lambda user: require_role(user, MANAGERS),
+        authorize=lambda user: require_sale(
+            user, get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
+        ),
         execute=lambda user: execute(
             user, get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
         ),
@@ -107,6 +117,8 @@ def edit(actor, key, sale_id, data):
             raise Conflict('销售单已更新，请刷新后重新编辑。')
         before = detail_snapshot(sale)
         values = detail_values({**before, **{key: value for key, value in data.items() if key in DETAIL_FIELDS}})
+        if role(user) == 'sales_manager' and values['manager'].pk != user.pk:
+            raise ValidationError({'manager': '销售单转交须由管理员或项目经理操作。'})
         for field, value in values.items():
             setattr(sale, field, value)
         after = detail_snapshot(sale)

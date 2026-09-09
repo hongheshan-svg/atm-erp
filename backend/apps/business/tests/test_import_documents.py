@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from openpyxl import Workbook
 from rest_framework.exceptions import ValidationError
 
-from apps.business.models import BOMLine, Document
+from apps.business.models import BOMLine, Document, SalesOrder
 from apps.core.models import ActionReceipt
 
 from .test_commercial_chain import BusinessFixtures
@@ -116,6 +116,143 @@ class ImportTests(BusinessFixtures, TestCase):
 
 
 class DocumentTests(BusinessFixtures, TestCase):
+    def owner_upload(self, role, owner, owner_id, *, key=None, status=201, category='contract'):
+        response = self.clients[role].post(
+            '/api/business/documents/',
+            {
+                owner: owner_id,
+                'category': category,
+                'file': SimpleUploadedFile('单据合同.pdf', b'private contract'),
+            },
+            format='multipart',
+            HTTP_IDEMPOTENCY_KEY=key or str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, status, response.data)
+        return response.data
+
+    def draft_sale(self):
+        return self.post(
+            'sales_manager',
+            'sales/',
+            {
+                'name': '未签约销售',
+                'customer': self.customer.pk,
+                'manager': self.users['sales_manager'].pk,
+            },
+            status=201,
+        )['id']
+
+    def test_draft_sales_contract_replay_and_project_aggregation_after_signing(self):
+        from .test_commercial_chain import TODAY
+
+        sale = self.draft_sale()
+        uploaded = self.owner_upload('sales_manager', 'sale', sale, key='contract')
+        self.assertEqual(uploaded, self.owner_upload('sales_manager', 'sale', sale, key='contract'))
+        doc = Document.objects.get(pk=uploaded['id'])
+        self.assertIsNone(doc.project_id)
+        self.assertEqual(doc.sale_id, sale)
+        self.post('sales_manager', f'sales/{sale}/quote/', {'amount': '100', 'reason': '确认'})
+        signed = self.post(
+            'sales_manager',
+            f'sales/{sale}/sign/',
+            {
+                'date': TODAY,
+                'manager': self.users['manager'].pk,
+                'milestones': [{'title': '合同款', 'amount': '100', 'due_date': TODAY}],
+            },
+        )
+        listing = self.clients['manager'].get(f'/api/business/documents/?project={signed["project"]}').data
+        self.assertEqual([row['id'] for row in listing['results']], [doc.pk])
+        self.assertEqual(listing['results'][0]['project'], signed['project'])
+        self.assertEqual(Document.objects.count(), 1)
+        self.assertEqual(len([p for p in Path(self.directory.name).rglob('*') if p.is_file()]), 1)
+        self.assertEqual(
+            self.clients['sales_manager'].get(f'/api/business/documents/{doc.pk}/download/').status_code, 200
+        )
+
+    def test_order_attachment_permissions_apply_to_listing_export_and_download(self):
+        sale = SalesOrder.objects.get(project=self.project)
+        sales_doc = self.owner_upload('manager', 'sale', sale.pk, category='other')['id']
+        purchase = self.purchase(self.project)
+        purchase_doc = self.owner_upload('purchaser', 'purchase', purchase.pk)['id']
+        project_doc = self.upload(role='manager', category='contract')['id']
+        for role, visible in [
+            ('manager', {sales_doc, purchase_doc, project_doc}),
+            ('finance', {sales_doc, purchase_doc, project_doc}),
+            ('purchaser', {purchase_doc}),
+            ('warehouse', set()),
+            ('member', set()),
+            ('sales_manager', set()),
+        ]:
+            client = self.clients[role]
+            listing = client.get(f'/api/business/documents/?project={self.project.pk}')
+            self.assertEqual({row['id'] for row in listing.data['results']}, visible)
+            for doc_id in [sales_doc, purchase_doc, project_doc]:
+                self.assertEqual(
+                    client.get(f'/api/business/documents/{doc_id}/download/').status_code,
+                    200 if doc_id in visible else 404,
+                )
+            exported = client.get('/api/business/documents/export/?file_format=csv')
+            self.assertEqual(exported.status_code, 200)
+            if not visible:
+                self.assertNotIn('单据合同.pdf', exported.content.decode('utf-8-sig'))
+        self.owner_upload('sales_manager', 'sale', sale.pk, status=403)
+        self.owner_upload('warehouse', 'purchase', purchase.pk, status=403)
+        self.owner_upload('finance', 'purchase', purchase.pk, status=403)
+
+    def test_order_replay_rechecks_current_owner_and_role(self):
+        sale_id = self.draft_sale()
+        self.owner_upload('sales_manager', 'sale', sale_id, key='own-doc')
+        SalesOrder.objects.filter(pk=sale_id).update(manager=self.users['manager'])
+        self.owner_upload('sales_manager', 'sale', sale_id, key='own-doc', status=403)
+        self.assertEqual(self.clients['sales_manager'].get('/api/business/documents/').data['count'], 0)
+        purchase = self.purchase(self.project)
+        self.owner_upload('purchaser', 'purchase', purchase.pk, key='po-doc')
+        self.users['purchaser'].role = 'warehouse'
+        self.users['purchaser'].save(update_fields=['role'])
+        self.owner_upload('purchaser', 'purchase', purchase.pk, key='po-doc', status=403)
+        self.assertEqual(Document.objects.count(), 2)
+
+    def test_order_upload_rejects_ambiguous_owner_and_wrong_category(self):
+        sale_id = self.draft_sale()
+        self.owner_upload('sales_manager', 'sale', sale_id, category='receipt', status=400)
+        response = self.clients['admin'].post(
+            '/api/business/documents/',
+            {
+                'project': self.project.pk,
+                'sale': sale_id,
+                'category': 'contract',
+                'file': SimpleUploadedFile('a.pdf', b'a'),
+            },
+            format='multipart',
+            HTTP_IDEMPOTENCY_KEY='invalid-owner',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Document.objects.exists())
+        self.post('sales_manager', f'sales/{sale_id}/cancel/', {'reason': '取消'})
+        self.owner_upload('sales_manager', 'sale', sale_id, status=409)
+
+    def test_sales_contract_can_support_amendment_but_purchase_contract_cannot(self):
+        from .test_commercial_chain import TODAY
+
+        sale = SalesOrder.objects.get(project=self.project)
+        purchase = self.purchase(self.project)
+        purchase_doc = self.owner_upload('purchaser', 'purchase', purchase.pk)['id']
+        sales_doc = self.owner_upload('manager', 'sale', sale.pk)['id']
+        payload = {
+            'expected_updated_at': sale.updated_at.isoformat(),
+            'document': purchase_doc,
+            'reason': '调整设备数量',
+            'date': TODAY,
+            'amount': '10000.00',
+            'equipment_quantity': 2,
+            'warranty_months': 12,
+        }
+        self.post('manager', f'sales/{sale.pk}/amend/', payload, status=404)
+        self.post('manager', f'sales/{sale.pk}/amend/', {**payload, 'document': sales_doc})
+        sale.refresh_from_db()
+        self.assertEqual(sale.equipment_quantity, 2)
+
     def setUp(self):
         self.setup_business()
         self.project = self.active_project()

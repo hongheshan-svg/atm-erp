@@ -16,6 +16,7 @@ import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
+import AttachmentDialog from './AttachmentDialog.vue'
 import { pageSize } from '../pagination'
 import { useRoute, useRouter } from 'vue-router'
 import { user } from '../session'
@@ -34,11 +35,12 @@ const records = ref<Row[]>([])
 const count = ref(0)
 const page = ref(1)
 const searchKey = () => `resource-search-${user.value?.id}-${props.resource}-${JSON.stringify(props.params || {})}`
-const search = ref(sessionStorage.getItem(searchKey()) || '')
+const search = ref((props.resource === 'sales' && typeof route.query.search === 'string' ? route.query.search : '') || sessionStorage.getItem(searchKey()) || '')
 const appliedSearch = ref(search.value)
 const loading = ref(false)
 const error = ref('')
 const command = ref<Command | null>(null)
+const attachmentRow = ref<Row | null>(null)
 let generation = 0
 let focused = ''
 const shownColumns = computed(() => columns[props.resource]?.filter(col => !props.projectId || col.key !== 'project_name'))
@@ -101,7 +103,7 @@ watch(
   { immediate: true, deep: true },
 )
 watch(() => props.revision, () => { void load() })
-watch(() => [route.query.focus, route.query.resource], () => { void load() })
+watch([() => route.query.focus, () => route.query.resource], () => { void load() })
 async function create() {
   try {
     command.value = await createCommand(props.resource, props.projectId)
@@ -111,6 +113,11 @@ async function create() {
 }
 async function action(row: Row, name: string) {
   try {
+    if (name === '附件' && ['sales', 'purchases'].includes(props.resource)) {
+      command.value = null
+      attachmentRow.value = row
+      return
+    }
     if (name === '下载') await download(row.download_url, row.original_name)
     else if (name === '下载凭证') {
       const doc = await read(`/business/documents/${row.document}/`)
@@ -192,7 +199,7 @@ function closeCommand() {
           ><router-link v-if="resource === 'projects' && col.key === 'name'" :to="`/projects/${row.id}`">{{
             row.name
           }}</router-link
-          ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
+          ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && user?.role !== 'sales_manager'" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
           ><span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
@@ -217,5 +224,6 @@ function closeCommand() {
     </el-table>
     <ListPagination :page="page" :total="count" @change="page = $event; load()" />
     <ActionDialog :command="command" @close="closeCommand" @saved="saved" />
+    <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
   </section>
 </template>
