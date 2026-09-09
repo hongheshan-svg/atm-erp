@@ -30,6 +30,7 @@ def create_config(path):
         "SECRET_KEY": secrets.token_hex(48),
         "ADMIN_PASSWORD": "Lean-" + secrets.token_hex(24),
         "ALLOWED_HOSTS": "localhost,127.0.0.1", "APP_ENVIRONMENT": "production",
+        "OTA_AGENT_TOKEN": secrets.token_hex(32),
         "BIND_ADDRESS": "127.0.0.1", "HTTP_PORT": 8080, "APP_PORT": 18001,
         "DATA_DIR": str(ROOT / ".native"), "NGINX_EXECUTABLE": "nginx",
     }
@@ -74,6 +75,7 @@ def environment(config, data):
                 "SECRET_KEY", "ADMIN_PASSWORD", "ALLOWED_HOSTS", "APP_ENVIRONMENT"):
         env[key] = config[key]
     env.update(DEBUG="false", MEDIA_ROOT=str(data / "uploads"), PYTHONUNBUFFERED="1", PYTHONUTF8="1")
+    env['OTA_AGENT_TOKEN'] = config.get('OTA_AGENT_TOKEN', '')
     return env
 
 
@@ -111,6 +113,9 @@ http {{
   server_tokens off;
   client_body_temp_path temp/client;
   proxy_temp_path temp/proxy;
+  fastcgi_temp_path temp/fastcgi;
+  uwsgi_temp_path temp/uwsgi;
+  scgi_temp_path temp/scgi;
   server {{
     listen {config['BIND_ADDRESS']}:{config['HTTP_PORT']};
     root {public};
@@ -189,11 +194,22 @@ def start(config, data):
     run([*nginx, "-t"])
     children = []
     old_handlers = {}
+    nonce = secrets.token_hex(16)
+    runtime = data / 'native-runtime.json'
+    stop_file = data / 'native-stop.txt'
+
+    def heartbeat():
+        temporary = data / 'native-runtime.tmp'
+        temporary.write_text(json.dumps({'nonce': nonce, 'seen': time.time()}), encoding='utf-8')
+        temporary.replace(runtime)
+        if stop_file.exists() and stop_file.read_text(encoding='utf-8') == nonce:
+            raise KeyboardInterrupt
 
     def stop_signal(signum, frame):
         raise KeyboardInterrupt
 
     try:
+        heartbeat()
         for sig in (signal.SIGINT, signal.SIGTERM):
             old_handlers[sig] = signal.signal(sig, stop_signal)
         with (data / "logs/daphne.log").open("a", encoding="utf-8") as log:
@@ -204,6 +220,7 @@ def start(config, data):
             host = "127.0.0.1" if config["BIND_ADDRESS"] == "0.0.0.0" else config["BIND_ADDRESS"]
             url = f"http://{host}:{config['HTTP_PORT']}"
             for attempt in range(60):
+                heartbeat()
                 if any(child.poll() is not None for child in children):
                     raise RuntimeError("服务退出，请查看 DATA_DIR/logs")
                 try:
@@ -216,6 +233,7 @@ def start(config, data):
                 raise RuntimeError("服务未就绪，请查看 DATA_DIR/logs")
             print(f"已启动 {url}/erp/；按 Ctrl+C 停止。", flush=True)
             while all(child.poll() is None for child in children):
+                heartbeat()
                 time.sleep(1)
             raise RuntimeError("服务意外退出，请查看 DATA_DIR/logs")
     except KeyboardInterrupt:
@@ -235,6 +253,29 @@ def start(config, data):
                     child.wait()
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
+        if runtime.exists() and json.loads(runtime.read_text(encoding='utf-8')).get('nonce') == nonce:
+            runtime.unlink()
+        if stop_file.exists() and stop_file.read_text(encoding='utf-8') == nonce:
+            stop_file.unlink()
+
+
+def stop(config, data):
+    runtime = data / 'native-runtime.json'
+    if not runtime.exists():
+        available_ports(config)
+        print('应用未运行。')
+        return
+    state = json.loads(runtime.read_text(encoding='utf-8'))
+    if time.time() - state['seen'] > 15:
+        raise ValueError('运行状态已过期，请检查原生进程后手动停止，不能强制终止未知进程')
+    (data / 'native-stop.txt').write_text(state['nonce'], encoding='utf-8')
+    for _ in range(60):
+        if not runtime.exists():
+            available_ports(config)
+            print('应用已停止。')
+            return
+        time.sleep(1)
+    raise RuntimeError('停止应用超时，升级未继续')
 
 
 def main():
@@ -243,7 +284,7 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("configure", "install", "start", "check"))
+    parser.add_argument("action", choices=("configure", "install", "start", "stop", "check"))
     parser.add_argument("--config", type=Path, default=ROOT / "native-config.json")
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 11):
@@ -260,6 +301,8 @@ def main():
             print("PostgreSQL / Redis 连接正常。")
         elif args.action == "install":
             install(config, data)
+        elif args.action == "stop":
+            stop(config, data)
         else:
             start(config, data)
     except (ValueError, OSError, subprocess.CalledProcessError, RuntimeError) as exc:

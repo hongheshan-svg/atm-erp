@@ -27,6 +27,7 @@ LEAN_ALLOWED_HOSTS=${LEAN_ALLOWED_HOSTS:-localhost,127.0.0.1}
 LEAN_ENVIRONMENT=${LEAN_ENVIRONMENT:-production}
 LEAN_DB_PASSWORD=$(openssl rand -hex 32)
 LEAN_SECRET_KEY=$(openssl rand -hex 32)
+LEAN_OTA_AGENT_TOKEN=$(openssl rand -hex 32)
 LEAN_ADMIN_PASSWORD=Lean-$(openssl rand -hex 24)
 EOF
   )

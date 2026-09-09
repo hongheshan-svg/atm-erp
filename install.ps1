@@ -23,6 +23,7 @@ if (-not (Test-Path $EnvFile)) {
     "LEAN_ENVIRONMENT=$(Setting 'LEAN_ENVIRONMENT' 'production')"
     "LEAN_DB_PASSWORD=$(Random-Hex 32)"
     "LEAN_SECRET_KEY=$(Random-Hex 32)"
+    "LEAN_OTA_AGENT_TOKEN=$(Random-Hex 32)"
     "LEAN_ADMIN_PASSWORD=Lean-$(Random-Hex 24)"
   ) -join "`n"
   $stream = [IO.File]::Open($EnvFile, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)

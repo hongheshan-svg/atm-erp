@@ -12,6 +12,7 @@ APP_ENVIRONMENT = os.environ.get('APP_ENVIRONMENT', 'production')
 if APP_ENVIRONMENT not in ('development', 'production'):
     raise ImproperlyConfigured('APP_ENVIRONMENT 必须为 development 或 production。')
 TESTING = False
+OTA_AGENT_TOKEN = os.environ.get('OTA_AGENT_TOKEN', '')
 SECRET_KEY = os.environ.get('SECRET_KEY', '')
 if len(SECRET_KEY) < 32:
     raise ImproperlyConfigured('SECRET_KEY 必须配置为至少 32 字符的随机密钥。')

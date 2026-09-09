@@ -10,7 +10,9 @@ from .permissions import ADMIN, PermissionMixin
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def health(request):
-    return Response({'status': 'ok', 'schema': 'lean-erp-v1'})
+    from .version import VERSION
+
+    return Response({'status': 'ok', 'schema': 'lean-erp-v1', 'version': VERSION})
 
 
 class CompanySerializer(serializers.ModelSerializer):

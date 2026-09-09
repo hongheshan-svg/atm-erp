@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {
-    'platform': ('apps.core.tests.test_platform', 'apps.accounts.tests.test_auth'),
+    'platform': ('apps.core.tests.test_platform', 'apps.core.tests.test_ota', 'apps.accounts.tests.test_auth'),
     'business': (
         'apps.business.tests.test_models',
         'apps.business.tests.test_sales',

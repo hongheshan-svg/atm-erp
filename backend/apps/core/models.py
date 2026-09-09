@@ -73,6 +73,20 @@ class ImmutableLedger(LedgerModel):
         return super().save(*args, **kwargs)
 
 
+class UpgradeJob(BaseModel):
+    target = models.CharField(max_length=40)
+    status = models.CharField(max_length=20, default='queued')
+    mode = models.CharField(max_length=10)
+    platform = models.CharField(max_length=10)
+    asset = models.JSONField(default=dict)
+    claim = models.CharField(max_length=64, blank=True)
+    detail = models.CharField(max_length=500, blank=True)
+    backup = models.CharField(max_length=500, blank=True)
+
+    class Meta(BaseModel.Meta):
+        db_table = 'lean_upgrade_job'
+
+
 class Company(models.Model):
     name = models.CharField(max_length=150, default='我的公司')
     address = models.CharField(max_length=250, blank=True)

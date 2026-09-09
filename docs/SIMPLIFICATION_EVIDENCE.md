@@ -231,3 +231,13 @@
 - 安装器配置不覆盖、生产环境强制、路径转义、服务失败阻止迁移、附件不公开的自动测试位于 scripts/tests/test_native_install.py。
 - GitHub Platform release installers 对 macOS/Linux/Windows 验证脚本及依赖；Linux 对两版本真实原生进程执行首次/重复安装、登录、前端资源、匿名权限、附件拒绝及限流验证。Windows/macOS 完整真实数据库业务链不由这些检查替代。
 - 运行及升级入口详见 docs/INSTALL_PLATFORMS.md。发布附件包含源码/安装器提交记录与 SHA256 校验清单。
+
+## ERP 在线升级验证（2026-09-09）
+
+- 管理员左上角版本入口复用现有会话和固定角色；升级任务独立保留审计与幂等结果，不增加业务成本或库存事实。应用容器不访问 Docker socket，宿主机执行器只使用专用升级令牌。
+- 后端完整检查通过 169 项（平台 38、业务 110、并发 21），覆盖非管理员拒绝、重复任务、版本/资产校验、执行器绑定及状态推进；日志 `/private/tmp/lean-ota-backend-final.log`。
+- 前端 lint、typecheck、29 项单元测试和 build 通过；执行器 7 项及原生安装器 7 项单元测试通过。
+- Docker 隔离升级实际完成安装包校验、停机、数据库与附件备份校验、前向迁移、原公司和管理员保留、目标版本健康及成功状态；日志 `/private/tmp/lean-ota-rehearsal-final.log`。
+- Linux 隔离原生进程实际完成 Daphne/Nginx 受控停止与重启、PostgreSQL 15 备份、前向迁移、数据保留及任务完成；日志 `/private/tmp/lean-ota-native-rehearsal.log`。测试不挂 Docker socket，验证了非 root Nginx 临时目录。未声称完成 Windows/macOS 真机 OTA。
+- 演练使用仅本地 v9.0.0 安装包及迁移夹具，替代远端下载流；官方资产校验另有单元测试。未发布该版本，也未改动 v1.0.0/v1.1.0 标签。一次性宿主机配置及故障恢复边界写在 README。
+- 隔离端口 18360 上桌面与移动端完整浏览器回归 22 项通过，含六角色全链、附件、导入导出、BOM 多选和版本入口；日志 `/private/tmp/lean-ota-browser-final.log`。截图发现窄屏弹窗溢出后补充自适应宽度和边界断言，专项复测日志 `/private/tmp/lean-ota-dialog-final.log`。
