@@ -23,7 +23,7 @@ onMounted(refresh)
 <template>
   <header class="page-heading">
     <div>
-      <p class="eyebrow">PROJECT WORKSPACE · {{ today() }}</p>
+      <p class="eyebrow">业务管理 / {{ today() }}</p>
       <h1>{{ title }}</h1>
     </div>
     <el-button @click="refresh">刷新</el-button>

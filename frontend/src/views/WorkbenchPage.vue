@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-plus/icons-vue'
 import { read } from '../api'
+import { today } from '../forms'
 import { user } from '../session'
 import { message } from '../utils/request'
 import type { Row } from '../types'
 const work = ref<Row>({})
 const error = ref('')
+const loading = ref(false)
+const bucketIcons = { tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet }
+const bucketNotes: Record<string, string> = {
+  tasks: '按计划推进项目任务', approvals: '确认采购，衔接后续执行', receipts: '核对到货，及时更新库存',
+  drafts: '完善采购明细后提交', settlements: '跟进到期款项与退款',
+}
+const bucketEmpty: Record<string, string> = {
+  tasks: '新分配的任务会显示在这里', approvals: '提交后的采购单会显示在这里', receipts: '待入库的采购单会显示在这里',
+  drafts: '尚未提交的采购单会显示在这里', settlements: '到期未结清款项会显示在这里',
+}
 const bucketLabels: Record<string, string> = {
   tasks: '我的待办',
   approvals: '待批准采购',
@@ -14,11 +26,15 @@ const bucketLabels: Record<string, string> = {
   settlements: '到期收付 / 待退款',
 }
 async function load() {
+  if (loading.value) return
+  loading.value = true
   error.value = ''
   try {
     work.value = await read('/business/workbench/')
   } catch (e) {
     error.value = message(e)
+  } finally {
+    loading.value = false
   }
 }
 onMounted(load)
@@ -26,18 +42,24 @@ onMounted(load)
 <template>
   <header class="page-heading">
     <div>
+      <p class="eyebrow">今日协作 / {{ today() }}</p>
       <h1>工作台</h1>
       <p class="muted">{{ user?.display_name }}，从待办开始今天的协作。</p>
     </div>
-    <el-button @click="load">刷新</el-button>
+    <el-button :loading="loading" @click="load">刷新</el-button>
   </header>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-  <div class="workbench-grid">
-    <section v-for="(bucket, key) in work" :key="key" class="panel">
-      <h2>
-        {{ bucketLabels[key] }} <el-tag>{{ bucket.count }}</el-tag>
-      </h2>
-      <p v-if="!bucket.results.length" class="muted empty">暂无待办</p>
+  <div class="workbench-grid" :aria-busy="loading">
+    <section v-for="(bucket, key) in work" :key="key" class="panel work-card" :class="`work-card-${key}`">
+      <header class="work-card-heading">
+        <span class="work-card-icon" aria-hidden="true"><el-icon><component :is="bucketIcons[key as keyof typeof bucketIcons]" /></el-icon></span>
+        <div><h2>{{ bucketLabels[key] }}</h2><p>{{ bucketNotes[key] }}</p></div>
+        <span class="work-card-count" :aria-label="`${bucket.count} 项待处理`">{{ bucket.count }}</span>
+      </header>
+      <div v-if="!bucket.results.length" class="work-empty">
+        <el-icon aria-hidden="true"><CircleCheck /></el-icon>
+        <strong>暂无待办</strong><span>{{ bucketEmpty[key] }}</span>
+      </div>
       <router-link
         v-for="row in bucket.results"
         :key="row.id"
@@ -52,6 +74,12 @@ onMounted(load)
         :to="key === 'tasks' ? '/projects' : key === 'settlements' ? '/finance' : '/purchases'"
         >查看全部 {{ bucket.count }} 条</router-link
       >
+      <footer class="work-card-footer">
+        <span>{{ bucket.count ? '按业务进度及时处理' : '暂无需要处理的事项' }}</span>
+        <router-link :to="key === 'tasks' ? '/projects' : key === 'settlements' ? '/finance' : '/purchases'">
+          {{ key === 'tasks' ? '查看项目' : key === 'settlements' ? '查看收付款' : '查看采购' }}<el-icon aria-hidden="true"><ArrowRight /></el-icon>
+        </router-link>
+      </footer>
     </section>
   </div>
 </template>

@@ -85,7 +85,7 @@ function searchRecords() {
   <section class="panel" :aria-label="title">
     <header class="panel-heading">
       <h2>
-        {{ title }} <span class="muted">{{ count }}</span>
+        {{ title }} <span class="record-count">{{ count }}</span>
       </h2>
       <div class="toolbar">
         <form
