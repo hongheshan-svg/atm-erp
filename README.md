@@ -1,6 +1,6 @@
 # 项目 ERP · 精简版
 
-当前版本：**v1.1.0**。查看[发布说明](docs/releases/v1.1.0.md)及旧版数据库兼容性限制。
+当前版本：**v1.2.0**。查看[发布说明](docs/releases/v1.2.0.md)及下方数据库兼容性限制。
 
 面向约 50 人非标自动化公司，以项目串联 **需求 → 报价签约 → BOM → 采购收货 → 设计装配调试 → 分批发货安装验收 → 售后 → 收付款与成本**。
 
@@ -20,9 +20,9 @@
 
 ## 安装（macOS / Linux / Windows）
 
-下载版本：[v1.1.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.1.0) · [v1.0.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.0.0)。安装说明统一在本 README 阅读，Release 页面保留版本变化和安装包下载。
+下载版本：[v1.2.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.2.0) · [v1.1.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.1.0) · [v1.0.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.0.0)。安装说明统一在本 README 阅读，Release 页面保留版本变化和安装包下载。
 
-v1.0.0、v1.1.0 各提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。使用自己配置的 PostgreSQL / Redis / Nginx 服务，第三方依赖按各自许可使用。
+每个版本提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。使用自己配置的 PostgreSQL / Redis / Nginx 服务，第三方依赖按各自许可使用。
 
 原 tag 保持不变。`INSTALL-MANIFEST.json` 记录业务源码提交与补充安装器提交，补充文件清单独立列出。GitHub 自动生成的 Source code ZIP 不含补充安装器，请下载带平台和安装方式的附件。校验文件为 `atm-erp-vX.Y.Z-SHA256SUMS.txt`。
 
@@ -120,15 +120,15 @@ bash install-native.sh start
 
 Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供下方备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 重建应用并前向迁移。
 
-禁止把 v1.1.0 库交给 v1.0.0 运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
+禁止将已升级的数据库交给旧版本运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
 
 Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL 和附件须一起备份，定期在独立数据库演练恢复。原生安装不复用仅面向 Compose 的备份脚本。
 
 ```bash
 # Linux
-sha256sum -c atm-erp-v1.1.0-SHA256SUMS.txt
+sha256sum -c atm-erp-v1.2.0-SHA256SUMS.txt
 # macOS
-shasum -a 256 -c atm-erp-v1.1.0-SHA256SUMS.txt
+shasum -a 256 -c atm-erp-v1.2.0-SHA256SUMS.txt
 ```
 
 ```powershell
