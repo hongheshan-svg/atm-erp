@@ -68,6 +68,14 @@ class NativeInstallTests(unittest.TestCase):
                 native.install(self.config, self.root / "data")
             run.assert_not_called()
 
+    def test_live_listener_is_never_treated_as_free_port(self):
+        with native.socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            self.config["HTTP_PORT"] = listener.getsockname()[1]
+            with self.assertRaises(OSError):
+                native.available_ports(self.config)
+
     def test_dependency_failure_stops_before_migration(self):
         (self.root / "frontend/dist").mkdir(parents=True)
         (self.root / "frontend/dist/index.html").write_text("test")

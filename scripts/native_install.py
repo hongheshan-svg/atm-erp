@@ -138,6 +138,10 @@ http {{
 def available_ports(config):
     for host, port in ((config["BIND_ADDRESS"], config["HTTP_PORT"]), ("127.0.0.1", config["APP_PORT"])):
         with socket.socket() as sock:
+            # Unix TIME_WAIT after a clean stop is not an active listener.
+            # Windows REUSEADDR can steal a live port, so keep exclusive binding there.
+            option = socket.SO_EXCLUSIVEADDRUSE if os.name == "nt" else socket.SO_REUSEADDR
+            sock.setsockopt(socket.SOL_SOCKET, option, 1)
             sock.bind((host, port))
 
 
