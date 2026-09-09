@@ -5,6 +5,7 @@ import type { Row } from './types'
 export const user = ref<Row | null>(null)
 export const manager = () => ['admin', 'manager'].includes(user.value?.role)
 export const money = () => ['admin', 'manager', 'finance'].includes(user.value?.role)
+export const reports = () => user.value?.role === 'admin' || (user.value?.role === 'manager' && user.value?.management_reports === true)
 export const can = (roles: string[]) => roles.includes(user.value?.role)
 window.addEventListener('erp-session', () => {
   user.value = null

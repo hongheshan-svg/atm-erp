@@ -16,6 +16,7 @@ export const userFields: Field[] = [
     }),
   ),
   { key: 'hourly_cost', label: '小时成本（元）', initial: '0.00' },
+  { key: 'management_reports', label: '总经理报表权限（仅经理角色）', type: 'boolean', initial: false },
   { key: 'password', label: '密码', type: 'password' },
   { key: 'is_active', label: '启用', type: 'boolean' },
 ]
@@ -33,10 +34,15 @@ export const columns: Record<string, Column[]> = {
     C('display_name', '姓名'),
     C('role', '角色'),
     C('hourly_cost', '小时成本'),
+    C('management_reports', '总经理报表权限'),
     C('is_active', '启用'),
   ],
   company: [C('name', '公司名称'), C('address', '地址'), C('phone', '电话')],
-  codes: [C('key', '用途'), C('prefix', '前缀'), C('counter', '已用序号')],
+  codes: [
+    { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位' }[String(r.key)] || r.key) },
+    C('prefix', '前缀'), { key: 'date_format', label: '日期格式', format: r => r.date_format || '无日期' }, C('padding', '流水位数'),
+    { key: 'reset_cycle', label: '重置周期', format: r => ({ never: '不重置', year: '每年', month: '每月', day: '每天' }[String(r.reset_cycle)] || r.reset_cycle) }, C('counter', '当前序号'),
+  ],
   audit: [
     C('actor', '操作人'),
     C('operation', '操作'),
@@ -63,10 +69,17 @@ export async function createCommand(resource: string, projectId?: number): Promi
 }
 export function actionNames(resource: string, _r: Row): string[] {
   const a: string[] = []
-  if (['users', 'company'].includes(resource) && can(['admin'])) a.push('编辑')
+  if (['users', 'company', 'codes'].includes(resource) && can(['admin'])) a.push('编辑')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (name === '编辑' && resource === 'codes') return {
+    title: '编辑编号规则', path: `${endpoint(resource)}${r.id}/configure/`,
+    fields: [t('prefix', '前缀'), select('date_format', '日期格式', choices({ none: '无日期', YYYY: '年', YYYYMM: '年月', YYYYMMDD: '年月日' })),
+      t('padding', '流水位数（1–10）'), select('reset_cycle', '重置周期', choices({ never: '不重置', year: '每年', month: '每月', day: '每天' })), t('reason', '修改原因')],
+    initial: { ...r, date_format: r.date_format || 'none' }, prepare: data => ({ ...data, date_format: data.date_format === 'none' ? '' : data.date_format, expected_revision: r.revision }),
+    notice: { type: 'info', text: '仅影响新编号；格式为前缀＋日期＋流水号。日期须包含重置周期。修改规则不回退当前流水，周期切换后从 1 起；重复编号自动跳过，历史编码保持不变。' },
+  }
   if (name !== '编辑' || !['users', 'company'].includes(resource)) throw new Error('不支持的设置操作。')
   const fields = resource === 'company'
     ? [t('name', '公司名称'), t('address', '地址', true), t('phone', '电话', true)]

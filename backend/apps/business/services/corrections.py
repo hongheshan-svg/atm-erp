@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import ValidationError
 
@@ -6,7 +6,7 @@ from apps.accounts.models import User
 from apps.core.api import Conflict
 from apps.core.permissions import MANAGERS, role
 
-from ..models import BOMLine, Entry, Partner
+from ..models import BOMLine, Entry, Partner, PurchaseLine
 from .bom import incoming, issued
 from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
 from .execution import STAGES, assignee, task_action
@@ -187,7 +187,19 @@ def remove_bom(actor, key, line_id, data):
         line = get_object_or_404(BOMLine.all_objects.select_for_update(), pk=source.pk, project=project)
         if line.is_deleted:
             raise Conflict('此 BOM 行已移除。')
-        if issued(project, line.item_id) or incoming(project, line.item_id):
+        other_quantity = (
+            BOMLine.objects.filter(project=project, item_id=line.item_id)
+            .exclude(pk=line.pk)
+            .aggregate(total=Sum('quantity'))['total']
+            or ZERO
+        )
+        linked_pending = (
+            PurchaseLine.objects.filter(bom_line=line)
+            .exclude(purchase__status='cancelled')
+            .filter(quantity__gt=F('received_quantity') + F('cancelled_quantity'))
+            .exists()
+        )
+        if linked_pending or other_quantity < issued(project, line.item_id) + incoming(project, line.item_id):
             raise Conflict('此物料已有领用或在途采购，请先处理相关单据。')
         reason = text(data, 'reason')
         line.soft_delete(user)

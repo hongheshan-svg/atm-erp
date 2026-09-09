@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, watch, nextTick } from 'vue'
+import type { TabsInstance } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
 import { money, can } from '../session'
 import { actionNames, actionCommand, display } from '../business'
@@ -8,12 +9,24 @@ import { message } from '../utils/request'
 import type { Row, Command } from '../types'
 import ResourcePanel from '../components/ResourcePanel.vue'
 import BOMDemand from '../components/BOMDemand.vue'
+import BudgetPanel from '../components/BudgetPanel.vue'
 import ActionDialog from '../components/ActionDialog.vue'
-const id = Number(useRoute().params.id)
+const route = useRoute()
+const router = useRouter()
+const id = Number(route.params.id)
 const project = ref<Row | null>(null)
 const cost = ref<Row>({})
 const revision = ref(0)
-const tab = ref('tasks')
+const tabsRef = ref<TabsInstance>()
+async function revealTab() { await nextTick(); tabsRef.value?.tabNavRef?.scrollToActiveTab() }
+const allowedTabs = ['tasks', 'bom', ...(can(['admin', 'manager', 'purchaser', 'warehouse', 'finance']) ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance'] : []), 'documents']
+const initialTab = String(route.query.tab || sessionStorage.getItem(`project-tab-${id}`) || 'tasks')
+const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
+const overview = ref(sessionStorage.getItem('project-overview') !== 'collapsed')
+watch(overview, value => sessionStorage.setItem('project-overview', value ? 'expanded' : 'collapsed'))
+watch(tab, value => { sessionStorage.setItem(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
+watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value))) tab.value = String(value) })
+watch(tab, revealTab, { flush: 'post' })
 const error = ref('')
 const command = ref<Command | null>(null)
 async function load() {
@@ -21,6 +34,7 @@ async function load() {
     project.value = await read(`/business/projects/${id}/`)
     if (money()) cost.value = await read(`/business/projects/${id}/cost/`)
     revision.value++
+    await revealTab()
   } catch (e) {
     error.value = message(e)
   }
@@ -47,6 +61,7 @@ onMounted(load)
         </p>
       </div>
       <div class="toolbar">
+        <el-button @click="overview = !overview" :aria-expanded="overview">{{ overview ? '收起项目概览' : '展开项目概览' }}</el-button>
         <el-button @click="load">刷新</el-button
         ><el-dropdown
           v-if="actionNames('projects', project).length"
@@ -66,6 +81,7 @@ onMounted(load)
         >
       </div>
     </header>
+    <div v-show="overview">
     <section class="project-summary">
       <div>
         <small>设备数量</small><strong>{{ project.equipment_quantity }} 台</strong>
@@ -99,7 +115,9 @@ onMounted(load)
         </div>
       </div>
     </section>
-    <el-tabs v-model="tab"
+    <BudgetPanel v-if="money()" :project-id="id" :revision="revision" :status="project.status" />
+    </div>
+    <el-tabs ref="tabsRef" v-model="tab"
       ><el-tab-pane label="任务与工时" name="tasks"
         ><ResourcePanel
           resource="tasks"
@@ -160,7 +178,7 @@ onMounted(load)
           :params="{ project: id }"
           :project-id="id"
           :revision="revision"
-          @changed="load" /></el-tab-pane
+          @changed="load" /><ResourcePanel resource="payments" title="项目收付流水" :allow-create="false" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></el-tab-pane
       ><el-tab-pane label="附件" name="documents" lazy
         ><ResourcePanel
           resource="documents"

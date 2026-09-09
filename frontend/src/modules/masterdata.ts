@@ -13,6 +13,8 @@ export const columns: Record<string, Column[]> = {
     C('code', '编码'),
     C('name', '物料'),
     C('specification', '规格'),
+    C('brand', '品牌'),
+    { key: 'part_type', label: '物料类别', format: r => ({ standard: '标准件', custom: '非标件' }[String(r.part_type)] || '未分类') },
     C('unit', '单位'),
     C('is_active', '启用'),
   ],
@@ -40,8 +42,11 @@ export async function createCommand(resource: string, projectId?: number): Promi
   let path = endpoint(resource)
   if (resource === 'items')
     fields = [
+      t('code', '物料编码（留空自动生成）', true),
       t('name', '物料名称'),
       t('specification', '规格', true),
+      t('brand', '品牌', true),
+      select('part_type', '物料类别', choices({ standard: '标准件', custom: '非标件' }), true),
       { key: 'unit', label: '单位', initial: '件' },
     ]
   if (resource === 'partners')
@@ -72,6 +77,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name !== '编辑' || !['items', 'partners'].includes(resource)) throw new Error('不支持的基础资料操作。')
   return {
     title: name, path: endpoint(resource) + r.id + '/', method: 'patch', initial: r,
-    fields: [...(await createCommand(resource)).fields, { key: 'is_active', label: '启用', type: 'boolean' }],
+    fields: [...(await createCommand(resource)).fields.filter(f => f.key !== 'code'), { key: 'is_active', label: '启用', type: 'boolean' }],
+    prepare: data => resource === 'items' ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '' } : data,
   }
 }

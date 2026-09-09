@@ -8,6 +8,9 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
+APP_ENVIRONMENT = os.environ.get('APP_ENVIRONMENT', 'production')
+if APP_ENVIRONMENT not in ('development', 'production'):
+    raise ImproperlyConfigured('APP_ENVIRONMENT 必须为 development 或 production。')
 TESTING = False
 SECRET_KEY = os.environ.get('SECRET_KEY', '')
 if len(SECRET_KEY) < 32:

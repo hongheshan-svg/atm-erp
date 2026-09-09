@@ -93,17 +93,58 @@ class CodeRule(models.Model):
     key = models.CharField(max_length=30, unique=True)
     prefix = models.CharField(max_length=10)
     counter = models.PositiveBigIntegerField(default=0)
+    date_format = models.CharField(
+        max_length=8,
+        default='',
+        blank=True,
+        choices=[('', '无日期'), ('YYYY', '年'), ('YYYYMM', '年月'), ('YYYYMMDD', '年月日')],
+    )
+    padding = models.PositiveSmallIntegerField(default=6)
+    reset_cycle = models.CharField(
+        max_length=5,
+        default='never',
+        choices=[('never', '不重置'), ('year', '每年'), ('month', '每月'), ('day', '每天')],
+    )
+    period = models.CharField(max_length=8, default='', blank=True)
+    revision = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'lean_code_rule'
 
     @classmethod
     def generate_code(cls, key):
+        from django.apps import apps
+
         with transaction.atomic():
             rule = cls.objects.select_for_update().get(key=key)
-            rule.counter += 1
-            rule.save(update_fields=['counter'])
-            return f'{rule.prefix}{rule.counter:06d}'
+            stamp = timezone.localdate().strftime('%Y%m%d')
+            period = stamp[: {'never': 0, 'year': 4, 'month': 6, 'day': 8}[rule.reset_cycle]]
+            if rule.period != period:
+                rule.counter = 0
+                rule.period = period
+            date = stamp[: len(rule.date_format)]
+            model = apps.get_model(
+                'business',
+                {
+                    'project': 'Project',
+                    'sale': 'SalesOrder',
+                    'purchase': 'PurchaseOrder',
+                    'delivery': 'Delivery',
+                    'item': 'Item',
+                    'partner': 'Partner',
+                }[key],
+            )
+            while True:
+                rule.counter += 1
+                if rule.counter > 9223372036854775807:
+                    raise ValidationError('编号流水已耗尽，请调整规则。')
+                code = f'{rule.prefix}{date}{rule.counter:0{rule.padding}d}'
+                if len(code) > 30:
+                    raise ValidationError('编号超过 30 字符，请调整规则。')
+                if not model.all_objects.filter(code=code).exists():
+                    break
+            rule.save(update_fields=['counter', 'period'])
+            return code
 
 
 class AuditLog(models.Model):

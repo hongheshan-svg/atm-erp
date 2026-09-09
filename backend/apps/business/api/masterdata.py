@@ -34,6 +34,8 @@ class MasterView(ReadView):
 class ItemView(MasterView):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
+    filterset_fields = ['is_active', 'brand', 'part_type']
+    search_fields = ['code', 'name', 'specification', 'brand']
 
 
 class PartnerView(MasterView):

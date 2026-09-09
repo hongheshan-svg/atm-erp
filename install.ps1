@@ -20,6 +20,7 @@ if (-not (Test-Path $EnvFile)) {
     "LEAN_HTTP_PORT=$(Setting 'LEAN_HTTP_PORT' '8080')"
     "LEAN_BIND_ADDRESS=$(Setting 'LEAN_BIND_ADDRESS' '127.0.0.1')"
     "LEAN_ALLOWED_HOSTS=$(Setting 'LEAN_ALLOWED_HOSTS' 'localhost,127.0.0.1')"
+    "LEAN_ENVIRONMENT=$(Setting 'LEAN_ENVIRONMENT' 'production')"
     "LEAN_DB_PASSWORD=$(Random-Hex 32)"
     "LEAN_SECRET_KEY=$(Random-Hex 32)"
     "LEAN_ADMIN_PASSWORD=Lean-$(Random-Hex 24)"

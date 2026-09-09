@@ -1,0 +1,40 @@
+import { test, expect, login } from './fixtures'
+
+test('每页数量跨页面保存，长表格内部滚动且桌面侧栏背景覆盖到底', async ({ page }, info) => {
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const first = page.waitForResponse(r => r.url().includes('/api/business/reports/'))
+  await page.goto('/erp/reports')
+  const baseline = await (await first).json()
+  const panel = page.getByRole('region', { name: '项目经营明细', exact: true })
+  const size = panel.getByLabel('每页显示条目', { exact: true })
+  await expect(size).toHaveValue('10')
+  expect(baseline.page_size).toBe(10)
+  const changed = page.waitForResponse(r => r.url().includes('/api/business/reports/') && new URL(r.url()).searchParams.get('page_size') === '50')
+  await size.selectOption('50')
+  const result = await (await changed).json()
+  expect(result.summary).toEqual(baseline.summary)
+  expect(result.page).toBe(1)
+  await expect(panel.getByLabel('每页显示条目', { exact: true })).toHaveValue('50')
+  expect(await panel.locator('.el-table').evaluate(el => el.getBoundingClientRect().height)).toBeLessThanOrEqual(561)
+  await page.goto('/erp/masterdata')
+  for (const name of ['物料', '客户与供应商']) {
+    await expect(page.getByRole('region', { name, exact: true }).getByLabel('每页显示条目', { exact: true })).toHaveValue('50')
+  }
+  await page.reload()
+  await expect(page.getByRole('region', { name: '物料', exact: true }).getByLabel('每页显示条目', { exact: true })).toHaveValue('50')
+  await page.getByRole('region', { name: '物料', exact: true }).getByLabel('每页显示条目', { exact: true }).selectOption('10')
+  await page.goto('/erp/reports')
+  await expect(page.getByRole('region', { name: '项目经营明细', exact: true }).getByLabel('每页显示条目', { exact: true })).toHaveValue('10')
+  if (info.project.name === 'desktop') {
+    const layout = await page.locator('.shell').evaluate(el => ({ color: getComputedStyle(el).backgroundColor, height: el.getBoundingClientRect().height, documentHeight: document.documentElement.scrollHeight }))
+    expect(layout.color).toBe('rgb(20, 36, 58)')
+    expect(layout.height).toBeGreaterThanOrEqual(layout.documentHeight - 1)
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await expect(page.locator('.sidebar-navigation')).toBeInViewport({ ratio: 1 })
+    const footer = await page.locator('.sidebar-note').evaluate(el => ({ bottom: el.getBoundingClientRect().bottom + window.scrollY, documentHeight: document.documentElement.scrollHeight }))
+    expect(footer.documentHeight - footer.bottom).toBeGreaterThanOrEqual(23)
+    expect(footer.documentHeight - footer.bottom).toBeLessThanOrEqual(25)
+    await page.evaluate(() => window.scrollTo(0, 0))
+  }
+  await page.screenshot({ path: info.outputPath('compact-reports.png'), fullPage: true, animations: 'disabled' })
+})

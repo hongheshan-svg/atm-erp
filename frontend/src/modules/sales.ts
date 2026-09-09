@@ -1,10 +1,11 @@
-import { all } from '../api'
+import { all, read, download } from '../api'
 import { options } from '../catalog'
 import { can, manager } from '../session'
 import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
 export const salesColumns: Column[] = [
   { key: 'code', label: '销售单号' },
+  { key: 'contract_number', label: '合同编号' },
   { key: 'name', label: '销售名称' },
   { key: 'customer_name', label: '客户' },
   { key: 'status', label: '状态' },
@@ -14,12 +15,27 @@ export const salesColumns: Column[] = [
 ]
 export function salesActions(row: Row): string[] {
   if (!can(['admin', 'manager', 'finance'])) return []
+  if (row.status === 'signed') return ['查看明细', '补充协议记录', ...(manager() ? ['签订补充协议'] : [])]
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
 const reason: Field = { key: 'reason', label: '原因 / 说明' }
 export async function salesCommand(row?: Row, action?: string): Promise<Command> {
   const path = '/business/sales/'
+  if (row && action === '补充协议记录') {
+    const records = await read(`${path}${row.id}/amendments/`)
+    const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${value}`).join('；')
+    return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after) })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], actions: records.map((r: Row) => ({ label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } })) }
+  }
+  if (row && action === '签订补充协议') {
+    const [detail, docs, entries] = await Promise.all([read(`${path}${row.id}/`), all('/business/documents/', { project: row.project, category: 'contract' }), all('/business/entries/', { project: row.project, kind: 'receivable' })])
+    return { title: action, path: `${path}${row.id}/amend/`, fields: [
+      { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date' }, reason,
+      { key: 'document', label: '补充协议附件（先在项目附件上传）', type: 'select', options: docs.map(d => ({ value: d.id, label: d.original_name })) },
+      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '期限', type: 'date' }] },
+      { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
+    ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
+  }
   if (row && action === '查看明细') return {
     title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: row,
     fields: [
@@ -29,7 +45,9 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       { key: 'due_date', label: '计划交期', optional: true },
       { key: 'equipment_quantity', label: '设备数量' }, { key: 'warranty_months', label: '质保月数' },
       { key: 'quote_amount', label: '报价金额（元）' }, { key: 'contract_amount', label: '合同金额（元）' },
+      { key: 'original_contract_amount', label: '原签约金额（元）', optional: true },
       { key: 'contract_date', label: '签约日期', optional: true }, { key: 'project_code', label: '执行项目', optional: true },
+      { key: 'contract_number', label: '合同编号', optional: true },
     ],
   }
   if (!row || action === '编辑销售') {
@@ -75,6 +93,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     path: `${path}${row.id}/sign/`,
     fields: [
       { key: 'date', label: '日期', type: 'date', initial: today() },
+      { key: 'contract_number', label: '合同编号（按签署合同填写）', optional: true },
       ...(!row.project
         ? [
             {

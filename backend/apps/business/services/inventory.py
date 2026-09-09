@@ -1,5 +1,3 @@
-from decimal import ROUND_CEILING, Decimal
-
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
@@ -102,8 +100,13 @@ def issue(actor, key, data):
             raise ValidationError({'task': '已验收项目领料必须关联未完成的售后任务。'})
         qty = number(data.get('quantity'), 'quantity', 3, positive=True)
         if not service:
-            bom = BOMLine.objects.filter(project=project, item_id=source.item_id).first()
-            if bom is None or qty > bom.quantity - issued(project, source.item_id):
+            required = (
+                BOMLine.objects.filter(project=project, item_id=source.item_id).aggregate(total=Sum('quantity'))[
+                    'total'
+                ]
+                or ZERO
+            )
+            if qty > required - issued(project, source.item_id):
                 raise Conflict('领料超过 BOM 剩余需求，请先修订 BOM。')
         reason = text(data, 'reason')
         stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
@@ -136,11 +139,16 @@ def return_material(actor, key, source_id, data):
         if original.task_id is None or original.task.kind != 'service':
             shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
             if shipped:
-                bom = BOMLine.objects.filter(project=project, item_id=original.stock.item_id).first()
-                if bom:
-                    required = (bom.quantity * Decimal(shipped) / project.equipment_quantity).quantize(
-                        Decimal('0.001'), rounding=ROUND_CEILING
-                    )
+                required_total = (
+                    BOMLine.objects.filter(project=project, item_id=original.stock.item_id).aggregate(
+                        total=Sum('quantity')
+                    )['total']
+                    or ZERO
+                )
+                if required_total:
+                    from .execution import delivered_materials
+
+                    required = delivered_materials(project).get(original.stock.item_id, ZERO)
                     if issued(project, original.stock.item_id) - qty < required:
                         raise Conflict('已交付设备对应的领料不能退回，请只退回未使用余料。')
         stock = lock_stocks([original.stock.item_id], original.stock.location, user)[original.stock.item_id]

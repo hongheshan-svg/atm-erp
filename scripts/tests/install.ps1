@@ -10,6 +10,7 @@ try {
   & (Join-Path $root 'install.ps1') -EnvFile $testFile -SkipBuild
   $before = [IO.File]::ReadAllText($testFile)
   if ($before -notmatch 'LEAN_IMAGE=atm-erp-lean:local') { throw 'Image setting was not persisted' }
+  if ($before -notmatch 'LEAN_ENVIRONMENT=production') { throw 'Fresh installs must default to production login throttling' }
   if ($before -notmatch 'LEAN_ADMIN_PASSWORD=Lean-[a-f0-9]{48}') { throw 'Initial password is missing' }
   if ($global:DockerCalls.Exists([Predicate[string]]{ param($value) $value -match ' build app$' })) { throw 'SkipBuild still built the image' }
   & (Join-Path $root 'install.ps1') -EnvFile $testFile

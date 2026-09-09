@@ -4,11 +4,13 @@ from django.shortcuts import get_object_or_404
 from apps.core.api import Conflict
 from apps.core.permissions import FINANCE
 
-from ..models import Entry, Payment, StockMove, TimeEntry
+from ..models import Document, Entry, Payment, PaymentEvidence, StockMove, TimeEntry
 from .common import ZERO, audit, day, fields, lookup, number, project_action, rounded, save, state, text
 
 
 def paid(entry):
+    if hasattr(entry, 'net_paid'):
+        return entry.net_paid
     return entry.payments.aggregate(total=Sum('amount'))['total'] or ZERO
 
 
@@ -30,7 +32,7 @@ def pay(actor, key, entry_id, data, *, refund=False):
     operation = 'entry.refund' if refund else 'entry.pay'
 
     def execute(user, entry):
-        fields(data, {'amount', 'date', 'reason'})
+        fields(data, {'amount', 'date', 'reason', 'method', 'account', 'reference', 'document'})
         # Cancelled projects must remain able to settle refunds; closed projects must reopen first.
         if entry.project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开。')
@@ -42,11 +44,51 @@ def pay(actor, key, entry_id, data, *, refund=False):
             amount = -amount
         elif remaining <= 0 or amount > remaining:
             raise Conflict('付款超过当前未结余额。')
-        payment = save(Payment(entry=entry, amount=amount, date=day(data, 'date'), reason=text(data, 'reason')), user)
+        method = text(data, 'method', default='', maximum=20)
+        if method not in {'', 'bank', 'cash', 'other'}:
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError({'method': '请选择银行转账、现金或其他。'})
+        document = (
+            lookup(Document, data['document'], 'document', project=entry.project, category='receipt')
+            if data.get('document')
+            else None
+        )
+        payment = save(
+            Payment(
+                entry=entry,
+                amount=amount,
+                date=day(data, 'date'),
+                reason=text(data, 'reason'),
+                method=method,
+                account=text(data, 'account', default='', maximum=100),
+                reference=text(data, 'reference', default='', maximum=100),
+                document=document,
+            ),
+            user,
+        )
         audit(user, operation, entry, payment=payment.pk, amount=str(amount))
         return {'id': payment.pk}
 
     return entry_action(actor, key, operation, entry_id, data, execute)
+
+
+def attach_evidence(actor, key, payment_id, data):
+    original = lookup(Payment, payment_id)
+
+    def execute(user, entry):
+        fields(data, {'document', 'reason'})
+        source = get_object_or_404(Payment.objects.select_for_update(), pk=original.pk, entry=entry)
+        document = lookup(Document, data.get('document'), 'document', project=entry.project, category='receipt')
+        if source.document_id == document.pk or source.evidence.filter(document=document).exists():
+            raise Conflict('此凭证已关联到该流水，请刷新查看。')
+        evidence = save(PaymentEvidence(payment=source, document=document, reason=text(data, 'reason')), user)
+        audit(user, 'payment.evidence', source, document=document.pk, reason=evidence.reason)
+        return {'id': evidence.pk}
+
+    return entry_action(
+        actor, key, 'payment.evidence', original.entry_id, {'payment': original.pk, 'data': data}, execute
+    )
 
 
 def reverse(actor, key, payment_id, data):
@@ -112,31 +154,41 @@ def cancel_expense(actor, key, entry_id, data):
 
 
 def cost(project):
-    materials = -(
-        StockMove.objects.filter(project=project, kind__in=['issue', 'return']).aggregate(total=Sum('value'))['total']
-        or ZERO
+    return costs([project.pk])[project.pk]
+
+
+def costs(project_ids):
+    """Shared grouped projection for project detail, budgets and management reports."""
+    from django.db.models import Q
+
+    result = {pk: dict(materials=ZERO, purchase_return_variance=ZERO, labor=ZERO, expenses=ZERO) for pk in project_ids}
+    moves = (
+        StockMove.objects.filter(project_id__in=project_ids)
+        .values('project_id')
+        .annotate(
+            materials=Sum('value', filter=Q(kind__in=['issue', 'return'])),
+            returned=Sum('value', filter=Q(kind='purchase_return')),
+            credit=Sum('supplier_credit', filter=Q(kind='purchase_return')),
+        )
     )
-    variance = sum(
-        (
-            -move.value - move.supplier_credit
-            for move in StockMove.objects.filter(project=project, kind='purchase_return')
-        ),
-        ZERO,
-    )
-    labor = TimeEntry.objects.filter(task__project=project).aggregate(total=Sum('cost'))['total'] or ZERO
-    expenses = (
-        Entry.objects.filter(project=project, kind='expense', cancelled=False).aggregate(total=Sum('amount'))['total']
-        or ZERO
-    )
+    for row in moves:
+        result[row['project_id']]['materials'] = -(row['materials'] or ZERO)
+        result[row['project_id']]['purchase_return_variance'] = -(row['returned'] or ZERO) - (row['credit'] or ZERO)
+    for row in (
+        TimeEntry.objects.filter(task__project_id__in=project_ids)
+        .values('task__project_id')
+        .annotate(total=Sum('cost'))
+    ):
+        result[row['task__project_id']]['labor'] = row['total'] or ZERO
+    for row in (
+        Entry.objects.filter(project_id__in=project_ids, kind='expense', cancelled=False)
+        .values('project_id')
+        .annotate(total=Sum('amount'))
+    ):
+        result[row['project_id']]['expenses'] = row['total'] or ZERO
     return {
-        key: str(rounded(value))
-        for key, value in {
-            'materials': materials,
-            'purchase_return_variance': variance,
-            'labor': labor,
-            'expenses': expenses,
-            'total': materials + variance + labor + expenses,
-        }.items()
+        pk: {key: str(rounded(value)) for key, value in {**values, 'total': sum(values.values(), ZERO)}.items()}
+        for pk, values in result.items()
     }
 
 

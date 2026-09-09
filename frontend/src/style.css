@@ -36,7 +36,7 @@ select,
 textarea {
   font: inherit;
 }
-input:not([type='checkbox']),
+input:not([type='checkbox']):not(.el-select__input),
 select,
 textarea {
   width: 100%;
@@ -47,13 +47,13 @@ textarea {
   background: white;
   color: #243245;
 }
-input:focus,
+input:not(.el-select__input):focus,
 select:focus,
 textarea:focus {
   outline: 2px solid #b7cdf4;
   outline-offset: 1px;
 }
-input:disabled,
+input:not(.el-select__input):disabled,
 select:disabled {
   background: #f5f7fa;
   color: #53647a;
@@ -82,6 +82,7 @@ h3 {
 .shell {
   display: flex;
   min-height: 100vh;
+  background: #14243a;
 }
 .sidebar {
   width: 224px;
@@ -91,9 +92,11 @@ h3 {
   display: flex;
   flex-direction: column;
   padding: 30px 16px 24px;
+}
+.sidebar-navigation {
   position: sticky;
-  top: 0;
-  height: 100dvh;
+  top: 30px;
+  max-height: calc(100dvh - 60px);
   overflow-y: auto;
 }
 .brand {
@@ -171,7 +174,21 @@ h3 {
 .shell > main {
   min-width: 0;
   flex: 1;
+  background: #f3f6fa;
 }
+.list-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.transfer-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.transfer-tools > select { width: 85px; min-height: 32px; }
+.import-errors { max-height: 220px; overflow: auto; color: #b42318; }
+.transfer-dialog { display: flex; flex-direction: column; max-height: 85dvh; }
+.transfer-dialog .el-dialog__body { overflow-y: auto; min-height: 0; }
+.transfer-dialog .el-dialog__header, .transfer-dialog .el-dialog__footer { flex-shrink: 0; }
+.bom-purchase-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.bom-purchase-filters > label { display: flex; flex-direction: column; gap: 6px; width: 200px; max-width: 100%; }
+.bom-purchase-filters .el-select { width: 100%; }
+.list-pagination > label { display: flex; align-items: center; gap: 8px; color: #78869a; font-size: 13px; white-space: nowrap; }
+.list-pagination select { width: 90px; min-height: 32px; padding: 5px 8px; }
+.list-pagination .el-pagination { margin: 0; padding: 0; flex-wrap: wrap; row-gap: 8px; }
 .topbar {
   height: 68px;
   border-bottom: 1px solid #e6ebf1;
@@ -506,6 +523,7 @@ button:focus-visible {
 @media (max-width: 850px) {
   .shell {
     display: block;
+    background: #f3f6fa;
   }
   .sidebar {
     width: 100%;
@@ -517,6 +535,11 @@ button:focus-visible {
   .brand {
     padding: 0 5px 12px;
     font-size: 16px;
+  }
+  .sidebar-navigation {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
   .brand small,
   .sidebar-note {
@@ -609,4 +632,17 @@ button:focus-visible {
   .cost-grid strong {
     font-size: 18px;
   }
+}
+:root { --mobile-nav-width: 250px; }
+.mobile-menu-toggle, .nav-backdrop { display: none !important; }
+.mobile-row-summary { display: none; }
+.dialog-footer { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 760px) {
+  .mobile-row-summary { display: block; white-space: normal; color: #526178; font-size: 12px; line-height: 1.6; margin-top: 6px; }
+  .mobile-menu-toggle { display: inline-flex !important; }
+  .shell .sidebar { display: none; position: fixed; inset: 0 auto 0 0; width: var(--mobile-nav-width); height: 100dvh; z-index: 2101; }
+  .shell .sidebar.mobile-open { display: flex; flex-direction: column; }
+  .shell .sidebar nav { display: flex; flex-direction: column; }
+  .shell .sidebar-note { display: block; margin-top: auto; }
+  .nav-backdrop { display: block !important; position: fixed; inset: 0; border: 0; background: #0006; z-index: 2100; }
 }

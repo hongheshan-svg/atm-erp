@@ -19,7 +19,7 @@ export const taskFields = (c: Catalog): Field[] => [
   person(c),
   date('due_date', '期限', true),
 ]
-import { all } from '../api'
+import { all, read } from '../api'
 import { catalog } from '../catalog'
 import { options } from '../catalog'
 import { manager } from '../session'
@@ -94,6 +94,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
 }
 export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
+  if (resource === 'deliveries') a.push('查看配套清单')
   if (resource === 'projects') {
     if (manager()) {
       if (!['closed', 'cancelled'].includes(r.status)) a.push('编辑项目')
@@ -127,6 +128,11 @@ export function actionNames(resource: string, r: Row): string[] {
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (name === '查看配套清单') {
+    const detail = await read(`/business/deliveries/${r.id}/`)
+    const demand = await read(`/business/projects/${r.project}/demand/`)
+    return { title: name, path: '', readonly: true, notice: { type: 'info', text: detail.material_requirements == null ? '历史批次沿用当时按设备数量比例交付的规则，未补造物料快照。' : '本批实际核对的配套数量；退料检查会保留已交付用量。' }, initial: { lines: (detail.material_requirements || []).map((line: Row) => ({ ...line, item_name: demand.lines.find((item: Row) => item.item === line.item)?.item_name || `物料${line.item}` })) }, fields: [{ key: 'lines', label: '配套物料', type: 'rows', fields: [t('item_name', '物料'), t('quantity', '配套数量')] }] }
+  }
   const c = await catalog(['projects', 'partners', 'users'])
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
@@ -167,8 +173,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       person(c, 'installer', '安装人'),
       person(c, 'acceptor', '验收负责人'),
       t('note', '说明', true),
+      { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: [...new Map((await read(`/business/projects/${r.id}/demand/`)).lines.map((line: Row) => [line.item, { value: line.item, label: `${line.item_code} · ${line.item_name} · ${line.assembly_unit || '未分单元'}` }])).values()] as { value: number; label: string }[] }, qty] },
     ]
-    initial = { quantity: '1', installer: r.manager, acceptor: r.manager }
+    initial = { quantity: '1', installer: r.manager, acceptor: r.manager, materials: [] }
   }
   if (name === '登记售后')
     fields = [

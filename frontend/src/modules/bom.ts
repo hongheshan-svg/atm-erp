@@ -16,6 +16,8 @@ export const columns: Record<string, Column[]> = {
   bom: [
     C('item_code', '物料编码'),
     C('item_name', '物料'),
+    C('brand', '品牌'),
+    C('assembly_unit', '单元'),
     C('quantity', '需求数量'),
     C('unit', '单位'),
     C('change_note', '变更说明'),
@@ -59,14 +61,17 @@ export async function bomCommand(projectId: number): Promise<Command> {
   return {
     title: '维护 BOM',
     path: `/business/projects/${projectId}/revise-bom/`,
-    fields: [rows('lines', 'BOM 明细', [item(c), qty, t('change_note', '变更说明')])],
+    previewPath: `/business/projects/${projectId}/bom-change-preview/`,
+    fields: [rows('lines', 'BOM 明细', [{ key: 'id', label: 'BOM 行', hidden: true, optional: true }, item(c), qty, t('assembly_unit', '单元', true), t('change_note', '变更说明')])],
     initial: {
       lines: demand.lines.map((r: Row) => ({
+        id: r.bom_line,
         item: r.item,
         quantity: r.quantity,
+        assembly_unit: r.assembly_unit || '',
         change_note: '',
       })),
     },
-    prepare: (data) => ({ ...data, expected_revision: demand.revision }),
+    prepare: (data) => ({ ...data, lines: data.lines.map((r: Row) => ({ ...r, assembly_unit: r.assembly_unit ?? '' })), expected_revision: demand.revision }),
   }
 }

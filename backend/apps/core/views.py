@@ -1,5 +1,5 @@
 from rest_framework import mixins, serializers, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -41,13 +41,19 @@ class CompanyView(PermissionMixin, mixins.ListModelMixin, mixins.UpdateModelMixi
 class CodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CodeRule
-        fields = ['id', 'key', 'prefix', 'counter']
+        fields = ['id', 'key', 'prefix', 'counter', 'date_format', 'padding', 'reset_cycle', 'period', 'revision']
 
 
 class CodeView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     read_roles = ADMIN
     queryset = CodeRule.objects.order_by('id')
     serializer_class = CodeSerializer
+
+    @action(detail=True, methods=['post'])
+    def configure(self, request, pk=None):
+        from .codes import configure
+
+        return Response(configure(request.user, request.headers.get('Idempotency-Key'), pk, request.data))
 
 
 class AuditSerializer(serializers.ModelSerializer):

@@ -16,8 +16,16 @@ export async function all(path: string, params: Row = {}) {
 export async function write(path: string, data: Row | FormData, key: string, method = 'post') {
   return (await request({ url: path, method, data, headers: { 'Idempotency-Key': key } })).data
 }
-export async function download(path: string, name: string) {
-  const response = await request.get(path.replace(/^\/api\//, '/'), { responseType: 'blob' })
+export async function download(path: string, name: string, params: Row = {}) {
+  let response
+  try {
+    response = await request.get(path.replace(/^\/api\//, '/'), { responseType: 'blob', params })
+  } catch (error: any) {
+    if (error.response?.data instanceof Blob) {
+      try { error.response.data = JSON.parse(await error.response.data.text()) } catch { /* retain original error */ }
+    }
+    throw error
+  }
   const url = URL.createObjectURL(response.data)
   const anchor = document.createElement('a')
   anchor.href = url

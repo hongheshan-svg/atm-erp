@@ -206,9 +206,27 @@ def amend_time(actor, key, entry_id, data):
     )
 
 
+def delivered_materials(project):
+    result = {}
+    legacy_quantity = 0
+    for delivery in project.deliveries.all():
+        if delivery.material_requirements is None:
+            legacy_quantity += delivery.quantity
+        else:
+            for row in delivery.material_requirements:
+                item = int(row['item'])
+                result[item] = result.get(item, ZERO) + Decimal(row['quantity'])
+    if legacy_quantity:
+        for line in project.bom_lines.values('item_id').annotate(total=Sum('quantity')):
+            result[line['item_id']] = result.get(line['item_id'], ZERO) + (
+                line['total'] * legacy_quantity / project.equipment_quantity
+            ).quantize(Decimal('0.001'), rounding=ROUND_CEILING)
+    return result
+
+
 def ship(actor, key, project_id, data):
     def execute(user, project):
-        fields(data, {'quantity', 'date', 'installer', 'acceptor', 'note'})
+        fields(data, {'quantity', 'date', 'installer', 'acceptor', 'note', 'materials'})
         state(project, {'active', 'delivering'})
         for stage in STAGES:
             completed_stage(project, stage)
@@ -216,15 +234,36 @@ def ship(actor, key, project_id, data):
         shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
         if shipped + qty > project.equipment_quantity:
             raise Conflict('本次交付数量超过项目设备剩余数量。')
-        bom = list(project.bom_lines.all())
+        bom = list(project.bom_lines.values('item_id').annotate(total=Sum('quantity')))
         if not bom:
             raise Conflict('请先登记设备 BOM 并完成领料。')
+        previous = delivered_materials(project)
+        planned = {}
+        if data.get('materials'):
+            if not isinstance(data['materials'], list) or len(data['materials']) > 1000:
+                raise ValidationError({'materials': '本批配套清单必须为最多1000行的列表。'})
+            for row in data['materials']:
+                fields(row, {'item', 'quantity'})
+                item = identity(row.get('item'), 'item')
+                if item in planned or item not in {line['item_id'] for line in bom}:
+                    raise ValidationError({'materials': '物料重复或不属于本项目BOM。'})
+                planned[item] = number(row.get('quantity'), 'quantity', 3, positive=True)
+        else:
+            if len({line.assembly_unit for line in project.bom_lines.all() if line.assembly_unit}) > 1:
+                raise Conflict('多单元项目请填写本批配套物料清单，明确本批实际用量。')
+            for line in bom:
+                target = (line['total'] * Decimal(shipped + qty) / project.equipment_quantity).quantize(
+                    Decimal('0.001'), rounding=ROUND_CEILING
+                )
+                planned[line['item_id']] = max(ZERO, target - previous.get(line['item_id'], ZERO))
         for line in bom:
-            required = (line.quantity * Decimal(shipped + qty) / project.equipment_quantity).quantize(
-                Decimal('0.001'), rounding=ROUND_CEILING
-            )
-            if issued(project, line.item_id) < required:
-                raise Conflict('累计领料不足以支持本批交付，请先完成领料。')
+            required = previous.get(line['item_id'], ZERO) + planned.get(line['item_id'], ZERO)
+            if required > line['total']:
+                raise Conflict('累计交付配套数量超过BOM，请先核对清单或完成设计变更。')
+            if shipped + qty == project.equipment_quantity and required < line['total']:
+                raise Conflict('最后一批交付必须覆盖剩余BOM配套物料，请补齐清单。')
+            if issued(project, line['item_id']) < required:
+                raise Conflict('累计领料不足以支持本批交付，请到库存完成领料。')
         date = event_date(data)
         if project.contract_date and date < project.contract_date:
             raise ValidationError({'date': '交付日期不能早于签约日期。'})
@@ -236,6 +275,9 @@ def ship(actor, key, project_id, data):
                 project=project,
                 quantity=qty,
                 shipped_date=date,
+                material_requirements=[
+                    {'item': item, 'quantity': str(amount)} for item, amount in planned.items() if amount > ZERO
+                ],
                 note=text(data, 'note', default=''),
             ),
             user,

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from django.db.models import Q
@@ -18,6 +19,11 @@ from .models import User
 
 class LoginThrottle(SimpleRateThrottle):
     scope = 'login'
+
+    def allow_request(self, request, view):
+        if settings.APP_ENVIRONMENT == 'development':
+            return True
+        return super().allow_request(request, view)
 
     def get_cache_key(self, request, view):
         return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
@@ -40,7 +46,13 @@ class RefreshView(TokenRefreshView):
 
 
 def profile(user):
-    return {'id': user.pk, 'username': user.username, 'display_name': user.display_name, 'role': role(user)}
+    return {
+        'id': user.pk,
+        'username': user.username,
+        'display_name': user.display_name,
+        'role': role(user),
+        'management_reports': user.management_reports,
+    }
 
 
 class MeView(APIView):
@@ -78,11 +90,24 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'display_name', 'role', 'hourly_cost', 'is_active', 'password']
+        fields = [
+            'id',
+            'username',
+            'display_name',
+            'role',
+            'hourly_cost',
+            'is_active',
+            'password',
+            'management_reports',
+        ]
         read_only_fields = ['id']
         extra_kwargs = {'hourly_cost': {'min_value': 0}}
 
     def validate(self, attrs):
+        report_access = attrs.get('management_reports', self.instance.management_reports if self.instance else False)
+        target_role = attrs.get('role', self.instance.role if self.instance else 'member')
+        if report_access and target_role != 'manager':
+            raise ValidationError({'management_reports': '总经理报表授权仅用于经理角色账号；管理员默认可查看。'})
         if not self.instance and 'password' not in attrs:
             raise ValidationError({'password': '新增用户必须设置密码。'})
         if 'password' in attrs:
@@ -129,7 +154,12 @@ class UserView(
         with transaction.atomic():
             self._lock_admin()
             user = serializer.save()
-            AuditLog.objects.create(actor=self.request.user, operation='user.create', resource=f'user:{user.pk}')
+            AuditLog.objects.create(
+                actor=self.request.user,
+                operation='user.create',
+                resource=f'user:{user.pk}',
+                detail={'management_reports': user.management_reports},
+            )
 
     def _lock_admin(self):
         Company.objects.select_for_update().get(pk=1)
@@ -153,11 +183,15 @@ class UserView(
                 )
                 if not other_admin:
                     raise ValidationError('至少保留一位启用的管理员。')
+            previous_reports = user.management_reports
             serializer.save()
             AuditLog.objects.create(
                 actor=request.user,
                 operation='user.update',
                 resource=f'user:{user.pk}',
-                detail={'fields': sorted(k for k in data if k != 'password')},
+                detail={
+                    'fields': sorted(k for k in data if k != 'password'),
+                    'management_reports': {'before': previous_reports, 'after': user.management_reports},
+                },
             )
             return Response(serializer.data)

@@ -11,6 +11,23 @@ from .test_commercial_chain import TODAY, BusinessFixtures
 
 
 class SalesTests(BusinessFixtures, TestCase):
+    def test_contract_number_unique_searchable_and_immutable_after_signing(self):
+        first, second = self.sale(), self.sale()
+        for sale in (first, second):
+            self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '确认'})
+        data = {**self.signing(), 'contract_number': ' HT-2026-001 '}
+        self.post('manager', f'sales/{first.pk}/sign/', data, key='sign-custom')
+        self.post('manager', f'sales/{first.pk}/sign/', data, key='sign-custom')
+        self.post('manager', f'sales/{second.pk}/sign/', data, status=400)
+        second.refresh_from_db()
+        self.assertIsNone(second.project_id)
+        self.assertEqual(Entry.objects.count(), 1)
+        self.assertEqual(self.clients['manager'].get('/api/business/sales/?search=HT-2026-001').data['count'], 1)
+        self.post('manager', f'sales/{first.pk}/sign/', {**data, 'contract_number': 'OTHER'}, status=409)
+        first.refresh_from_db()
+        self.assertEqual(first.contract_number, 'HT-2026-001')
+        self.post('manager', f'sales/{second.pk}/sign/', self.signing())
+
     def setUp(self):
         self.setup_business()
 

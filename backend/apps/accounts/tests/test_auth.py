@@ -1,5 +1,5 @@
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -29,7 +29,21 @@ class AuthenticationTests(TestCase):
             response = self.client.get('/api/auth/me/')
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data['role'], role)
-            self.assertEqual(set(response.data), {'id', 'username', 'display_name', 'role'})
+            self.assertEqual(set(response.data), {'id', 'username', 'display_name', 'role', 'management_reports'})
+
+    def test_report_access_requires_explicit_admin_grant_and_revokes_immediately(self):
+        self.login('admin')
+        url = f'/api/auth/users/{self.users["manager"].pk}/'
+        self.assertEqual(self.client.patch(url, {'management_reports': True}, format='json').status_code, 200)
+        member_url = f'/api/auth/users/{self.users["member"].pk}/'
+        self.assertEqual(self.client.patch(member_url, {'management_reports': True}, format='json').status_code, 400)
+        self.login('manager')
+        self.assertEqual(self.client.get('/api/business/reports/').status_code, 200)
+        self.assertEqual(self.client.patch(url, {'management_reports': True}, format='json').status_code, 403)
+        User.objects.filter(pk=self.users['manager'].pk).update(management_reports=False)
+        self.assertEqual(self.client.get('/api/business/reports/').status_code, 403)
+        detail = AuditLog.objects.filter(operation='user.update').latest('id').detail
+        self.assertEqual(detail['management_reports'], {'before': False, 'after': True})
 
     def test_only_admin_can_manage_users_or_read_rates(self):
         for role in User.Role.values:
@@ -103,6 +117,7 @@ class AuthenticationTests(TestCase):
         for url in ['/media/a.pdf', '/api/ai/chat/', '/api/oa/', '/api/production/', '/admin/']:
             self.assertEqual(self.client.get(url).status_code, 404)
 
+    @override_settings(APP_ENVIRONMENT='production')
     def test_login_is_throttled(self):
         for _ in range(10):
             response = self.client.post('/api/auth/login/', {'username': 'member', 'password': 'incorrect'})
@@ -110,3 +125,33 @@ class AuthenticationTests(TestCase):
         self.assertEqual(
             self.client.post('/api/auth/login/', {'username': 'member', 'password': PASSWORD}).status_code, 429
         )
+
+    @override_settings(APP_ENVIRONMENT='development')
+    def test_development_login_does_not_throttle(self):
+        for _ in range(12):
+            response = self.client.post('/api/auth/login/', {'username': 'member', 'password': 'incorrect'})
+            self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            self.client.post('/api/auth/login/', {'username': 'member', 'password': PASSWORD}).status_code, 200
+        )
+
+    def test_environment_defaults_to_production_and_rejects_typos(self):
+        import os
+        import subprocess
+        import sys
+
+        env = dict(os.environ)
+        env.pop('APP_ENVIRONMENT', None)
+        for value, expected in [(None, 'production'), ('development', 'development'), ('develpment', None)]:
+            current = env if value is None else {**env, 'APP_ENVIRONMENT': value}
+            result = subprocess.run(
+                [sys.executable, '-c', 'from config.settings import APP_ENVIRONMENT; print(APP_ENVIRONMENT)'],
+                env=current,
+                capture_output=True,
+                text=True,
+            )
+            if expected:
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), expected)
+            else:
+                self.assertNotEqual(result.returncode, 0)

@@ -1,3 +1,5 @@
+from django.db.models import DecimalField, Sum, Value
+from django.db.models.functions import Coalesce
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -21,7 +23,15 @@ from .common import ReadView, key
 class EntryView(ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
-    queryset = Entry.objects.select_related('project')
+    queryset = (
+        Entry.objects.select_related('project')
+        .annotate(
+            net_paid=Coalesce(
+                Sum('payments__amount'), Value(0), output_field=DecimalField(max_digits=18, decimal_places=2)
+            )
+        )
+        .order_by('-id')
+    )
     serializer_class = EntrySerializer
     filterset_fields = ['project', 'kind', 'cancelled']
 
@@ -45,9 +55,15 @@ class EntryView(ReadView):
 class PaymentView(ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
-    queryset = Payment.objects.select_related('entry', 'reversal')
+    queryset = Payment.objects.select_related('entry', 'reversal', 'document').prefetch_related(
+        'evidence__document', 'evidence__created_by'
+    )
     serializer_class = PaymentSerializer
     filterset_fields = ['entry', 'entry__project']
+
+    @action(detail=True, methods=['post'], url_path='attach-evidence')
+    def attach_evidence(self, request, pk=None):
+        return Response(finance.attach_evidence(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['post'])
     def reverse(self, request, pk=None):

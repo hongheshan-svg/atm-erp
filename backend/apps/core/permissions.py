@@ -21,6 +21,12 @@ def require_role(user, allowed):
         raise PermissionDenied('没有此操作权限。')
 
 
+def require_reports(user):
+    require_role(user, MANAGERS)
+    if role(user) != 'admin' and not user.management_reports:
+        raise PermissionDenied('未获得总经理报表授权。')
+
+
 def projects_for(user, queryset):
     require_role(user, ALL_ROLES)
     if role(user) == 'member':
