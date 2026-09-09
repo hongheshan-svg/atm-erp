@@ -1,6 +1,6 @@
 # macOS / Linux / Windows 安装
 
-v1.0.0、v1.1.0 各提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。无需购买软件许可证；使用自己的 PostgreSQL / Redis / Nginx 服务。
+v1.0.0、v1.1.0 各提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。使用自己配置的 PostgreSQL / Redis / Nginx 服务，第三方依赖按各自许可使用。
 
 原 tag 保持不变。`INSTALL-MANIFEST.json` 记录业务源码提交与补充安装器提交，补充文件清单独立列出。GitHub 自动生成的 Source code ZIP 不含补充安装器，请下载带平台和安装方式的附件。校验文件为 `atm-erp-vX.Y.Z-SHA256SUMS.txt`。
 
