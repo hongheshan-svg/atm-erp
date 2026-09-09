@@ -3,7 +3,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import signal
 import subprocess
 import sys
 import time
@@ -72,7 +71,7 @@ def main():
                 assert 429 in statuses, "Release login throttle must be enabled"
             print(f"Native installation {iteration + 1}: login, assets, auth and upload protection passed", flush=True)
         finally:
-            process.send_signal(signal.SIGTERM)
+            subprocess.run([*command, 'stop', '--config', str(config_path)], check=True)
             try:
                 process.wait(timeout=30)
             except subprocess.TimeoutExpired:

@@ -5,6 +5,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useRoute, useRouter } from 'vue-router'
 import { user, logout } from './session'
 import { navigation } from './navigation'
+import SystemUpgrade from './components/SystemUpgrade.vue'
 const menuOpen = ref(false)
 const route = useRoute()
 watch(() => route.path, () => { menuOpen.value = false })
@@ -25,6 +26,7 @@ watch(user, (value) => {
           <span class="brand-mark">P</span>
           <div>项目 ERP<small>从需求到交付</small></div>
         </div>
+        <SystemUpgrade @opened="menuOpen = false" />
         <nav aria-label="主导航">
           <router-link
             v-for="item in navigation()"

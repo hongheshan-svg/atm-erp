@@ -3,6 +3,18 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  ota-upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci && npm run build
+        working-directory: frontend
+      - run: python scripts/tests/ota_smoke.py
+      - run: bash scripts/tests/native-ota-smoke.sh
   windows-installer:
     runs-on: windows-latest
     steps:
@@ -15,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash scripts/precheck-tests.sh --all
       - run: python3 -m unittest discover -s scripts/tests -p test_ops_check.py
+      - run: python3 -m unittest discover -s scripts/tests -p test_ota_runner.py
   frontend:
     runs-on: ubuntu-latest
     defaults:

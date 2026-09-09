@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -19,8 +20,8 @@ def git(*args):
 
 
 def build(tag, output):
-    if tag not in ("v1.0.0", "v1.1.0"):
-        raise ValueError("Only the requested immutable releases may be packaged")
+    if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
+        raise ValueError("Only stable semantic version tags may be packaged")
     commit = git("rev-parse", f"{tag}^{{}}")
     installer_commit = git("rev-parse", "HEAD")
     if git("status", "--porcelain", "--", *OVERLAY, "scripts/package_release.py"):
@@ -59,7 +60,7 @@ def build(tag, output):
                 command = (".\\install-native.ps1 configure" if platform == "windows" else "bash install-native.sh configure") if mode == "native" else (".\\install.ps1" if platform == "windows" else "bash install.sh")
                 (source / "INSTALL-START-HERE.txt").write_text(
                     f"Lean ERP {tag} / {platform} / {mode}\n\n"
-                    f"先阅读 docs/INSTALL_PLATFORMS.md，安装前置依赖。\n入口：{command}\n"
+                    f"先阅读 README.md 的安装说明，安装前置依赖。\n入口：{command}\n"
                     "这是联网安装包，不内置 Python、数据库、Nginx 或 Docker 镜像。\n"
                     "业务源码保持原 tag；安装器补充版本见 INSTALL-MANIFEST.json。\n",
                     encoding="utf-8")
@@ -75,7 +76,7 @@ def build(tag, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tag", choices=("v1.0.0", "v1.1.0"))
+    parser.add_argument("tag")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     build(args.tag, args.output.resolve())

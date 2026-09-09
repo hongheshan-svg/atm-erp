@@ -131,6 +131,13 @@ h3 {
   display: grid;
   gap: 5px;
 }
+.system-upgrade-entry { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: -14px 0 18px; padding: 8px 10px; color: #d8e7ff; background: #ffffff0c; border: 1px solid #ffffff20; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; }
+.system-upgrade-entry:hover, .system-upgrade-entry:focus-visible { background: #ffffff20; outline: 2px solid #75aaff; }
+.system-upgrade-entry small { color: #9fbbdf; }
+.upgrade-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.upgrade-job { padding: 12px; margin: 16px 0; background: #f3f6fa; border-radius: 8px; overflow-wrap: anywhere; }
+.upgrade-notes { margin: 16px 0; }
+.upgrade-notes-text { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 .sidebar nav a {
   display: flex;
   align-items: center;

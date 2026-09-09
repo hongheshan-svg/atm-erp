@@ -43,6 +43,7 @@ services:
       MEDIA_ROOT: /app/uploads
       DEBUG: 'false'
       APP_ENVIRONMENT: ${LEAN_ENVIRONMENT:-production}
+      OTA_AGENT_TOKEN: ${LEAN_OTA_AGENT_TOKEN:-}
     volumes:
       - lean_uploads:/app/uploads
     depends_on:

@@ -1,5 +1,23 @@
 import { test, expect, login } from './fixtures'
 
+test('管理员从左上角查看版本，未连接执行器时不能升级', async ({ page }, info) => {
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  if (info.project.name === 'mobile') await page.getByRole('button', { name: '菜单', exact: true }).click()
+  const entry = page.getByRole('button', { name: /版本与升级/ })
+  await expect(entry).toBeInViewport({ ratio: 1 })
+  await entry.click()
+  const dialog = page.getByRole('dialog', { name: 'ERP 版本与升级', exact: true })
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('当前版本')
+  const bounds = await dialog.boundingBox()
+  expect(bounds!.x).toBeGreaterThanOrEqual(0)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+  await expect(dialog.getByRole('button', { name: '备份并升级', exact: true })).toBeDisabled()
+  await page.screenshot({ path: info.outputPath('system-upgrade.png'), animations: 'disabled' })
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+})
+
 test('各入口可直接操作，长表单在短视口保留保存和取消', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const nav = page.getByRole('navigation', { name: '主导航' })

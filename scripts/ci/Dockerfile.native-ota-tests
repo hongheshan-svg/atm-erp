@@ -1,0 +1,6 @@
+FROM python:3.11-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends nginx postgresql-client-15 && rm -rf /var/lib/apt/lists/*
+RUN useradd -u 10001 -m erp
+USER erp
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /repo
