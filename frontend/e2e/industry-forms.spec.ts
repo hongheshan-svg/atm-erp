@@ -17,7 +17,7 @@ test('设备需求提示、整数校验和多行输入适应桌面与移动端',
     const first = await select.locator('option').nth(1).getAttribute('value')
     await select.selectOption(first!)
   }
-  await page.screenshot({ path: info.outputPath('industry-project-form.png'), fullPage: true })
+  await page.screenshot({ path: info.outputPath('industry-project-form.png'), fullPage: true, animations: 'disabled' })
   await dialog.getByLabel('设备数量', { exact: true }).fill('1.5')
   let writes = 0
   page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/business/projects/')) writes++ })
@@ -26,7 +26,7 @@ test('设备需求提示、整数校验和多行输入适应桌面与移动端',
   expect(writes).toBe(0)
   await dialog.getByLabel('设备数量', { exact: true }).fill('1')
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeInViewport()
-  await page.screenshot({ path: info.outputPath('industry-project-validation.png'), fullPage: true })
+  await page.screenshot({ path: info.outputPath('industry-project-validation.png'), fullPage: true, animations: 'disabled' })
   await dialog.getByRole('button', { name: '取消', exact: true }).click()
   expect(writes).toBe(0)
 })

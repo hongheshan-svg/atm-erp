@@ -344,7 +344,7 @@
 - 计划日期不默认今天，实际发生与合格收货日期保留当天默认；销售收款节点要求明确期限。行业例子仅作为提示，不自动写入业务数据。多行说明占整行，明细显示行号，添加后切到新行所在页。
 - `npm ci`、lint、typecheck、59 项前端测试及构建通过；日志 `/private/tmp/erp-industry-npm-ci.log`、`/private/tmp/erp-industry-unit-final.log`、`/private/tmp/erp-industry-build-final.log`。后端完整入口通过 245 项（平台 52、业务 169、并发 24），日志 `/private/tmp/erp-industry-backend.log`。
 - 显式指定隔离地址 `http://127.0.0.1:18360` 和测试口令，桌面、移动端各 19 项通过，均包含七角色完整链路；各跳过 1 项仅适用全新安装的向导测试，未重置现有安装。日志 `/private/tmp/erp-industry-browser.log`、`/private/tmp/erp-industry-mobile.log`。首次安装由 GitHub 浏览器工作流在新环境单独验证。
-- 最终使用原安装脚本更新测试运行环境，日志 `/private/tmp/erp-industry-deploy-verified.log`；保留数据库、附件和账户。浏览器验证为桌面与移动视口，未声称手机真机键盘验收；未打发布 tag。
+- 最终使用原安装脚本更新测试运行环境，日志 `/private/tmp/erp-industry-deploy-verified.log`；保留数据库、附件和账户。最终双端表单专项 2 项通过，日志 `/private/tmp/erp-industry-form-stable.log`，已查看同目录下桌面和移动端截图，确认多行输入与固定操作区布局。截图结束弹窗过渡动画后生成，避免把动画中的半透明画面当作最终状态。浏览器验证为桌面与移动视口，未声称手机真机键盘验收；未打发布 tag。
 
 ## 模块页面拆分验证（2026-09-09）
 
