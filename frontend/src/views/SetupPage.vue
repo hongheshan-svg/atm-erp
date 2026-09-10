@@ -5,8 +5,17 @@ import { read, write } from '../api'
 import { user, logout } from '../session'
 import { message } from '../utils/request'
 import type { Row } from '../types'
+import { Document } from '@element-plus/icons-vue'
+import { version } from '../../package.json'
 const router = useRouter()
 const steps = ['管理员账号', '公司资料', '人员与兼岗', '编号规则', '确认启用']
+const stepHelp = [
+  '请妥善保存管理员账号与新密码。完成配置后，需要使用新密码重新登录。',
+  '此处信息将用于采购合同等业务单据，可在设置中维护。',
+  '岗位可兼任。总经理经营报表需单独授权，日后可在用户管理中调整。',
+  '可直接使用默认规则。物料支持手填编码，编号规则只影响之后新建的单据。',
+  '请核对公司与人员信息。启用后即可维护客户、物料并创建销售单。',
+]
 const step = ref(0)
 const loaded = ref(false)
 const required = ref(true)
@@ -67,15 +76,16 @@ function clearPasswords() { form.old_password = ''; form.new_password = ''; repe
 onBeforeRouteLeave(() => { clearPasswords() })
 </script>
 <template>
+  <header class="setup-topbar"><div class="brand"><span class="brand-mark">P</span><span>项目 ERP</span></div><span>初次安装</span><small>v{{ version }}</small></header>
   <main class="setup-page">
-    <header class="setup-heading"><div class="brand-mark">P</div><div><p class="muted">项目 ERP · 首次使用</p><h1>{{ required ? '快速安装向导' : '配置已就绪' }}</h1></div><el-button text @click="logout">退出登录</el-button></header>
+    <header class="setup-heading"><div><h1>{{ required ? '欢迎使用项目 ERP' : '配置已就绪' }}</h1><p class="muted">{{ required ? '完成基础配置，即可开始使用。' : '基础配置已完成，可以开始业务协作。' }}</p></div><el-button text @click="logout">退出登录</el-button></header>
     <el-alert v-if="error" :title="error" type="error" role="alert" :closable="false" />
     <section v-if="!loaded" class="panel"><p>正在读取安装状态…</p><el-button v-if="error" @click="load">重新加载</el-button></section>
     <template v-else-if="required">
-      <p class="muted">完成下面五步即可启用。已有默认编号，不需要填写数据库等技术参数。</p>
       <ol class="setup-steps" aria-label="配置进度"><li v-for="(name, i) in steps" :key="name" :class="{ active: i === step, done: i < step }" :aria-current="i === step ? 'step' : undefined"><span>{{ i + 1 }}</span>{{ name }}</li></ol>
       <form class="panel setup-form" @submit.prevent="step < 4 ? next() : finish()">
         <h2 ref="heading" tabindex="-1">{{ steps[step] }}</h2>
+        <div class="setup-form-layout">
         <fieldset :disabled="busy" class="setup-fields">
           <template v-if="step === 0">
             <p>当前账号：{{ user?.username }}。请将安装器生成的初始密码换成自己的密码。</p>
@@ -123,6 +133,8 @@ onBeforeRouteLeave(() => { clearPasswords() })
             <label><input v-model="confirmed" type="checkbox" required />我已核对以上资料，确认启用</label>
           </template>
         </fieldset>
+        <aside class="setup-step-help"><el-icon aria-hidden="true"><Document /></el-icon><p>{{ stepHelp[step] }}</p></aside>
+        </div>
         <footer class="setup-actions"><el-button v-if="step > 0" :disabled="busy" @click="step--; error = ''">上一步</el-button><span>第 {{ step + 1 }} / 5 步</span><el-button type="primary" native-type="submit" :loading="busy">{{ step === 4 ? '完成配置并启用' : '下一步' }}</el-button></footer>
       </form>
     </template>
@@ -130,12 +142,20 @@ onBeforeRouteLeave(() => { clearPasswords() })
   </main>
 </template>
 <style scoped>
-.setup-page { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+.setup-topbar { display: flex; align-items: center; gap: 22px; height: 64px; background: #142a3e; color: #d9e6f5; padding: 0 32px; }
+.setup-topbar .brand { padding: 0; color: #fff; }
+.setup-topbar > small { margin-left: auto; color: #bfd0e3; }
+.setup-page { max-width: 1200px; margin: 36px auto; padding: 32px; border: 1px solid var(--surface-border); border-radius: 8px; background: #fff; }
 .setup-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .setup-heading h1, .setup-heading p { margin: 0 0 6px; }
 .setup-heading > button { margin-left: auto; }
-.setup-steps { display: flex; gap: 12px; list-style: none; padding: 0; margin: 24px 0; flex-wrap: wrap; }
-.setup-steps li { display: flex; align-items: center; gap: 7px; color: #64748b; }
+.setup-steps { display: flex; gap: 12px; list-style: none; padding: 0; margin: 32px 0; }
+.setup-steps li { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 10px; color: #64748b; border-top: 2px solid #e4eaf3; padding-top: 14px; text-align: center; }
+.setup-form { box-shadow: none; margin-bottom: 0; }
+.setup-form-layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 28px; }
+.setup-step-help { background: #f3f7fe; border-radius: 8px; padding: 28px 22px; color: #61718a; line-height: 1.8; align-self: start; }
+.setup-step-help .el-icon { font-size: 48px; color: #7ba7ed; display: block; margin: 12px auto 26px; }
+.setup-fields .field { margin: 18px 0; }
 .setup-steps span { display: grid; place-items: center; border-radius: 50%; background: #e2e8f0; width: 28px; height: 28px; }
 .setup-steps .active { color: #255ac2; font-weight: 700; }
 .setup-steps .active span, .setup-steps .done span { background: #255ac2; color: white; }
@@ -148,4 +168,5 @@ onBeforeRouteLeave(() => { clearPasswords() })
 .setup-summary dd { margin: 6px 0; overflow-wrap: anywhere; }
 .setup-links { display: grid; gap: 20px; padding: 12px 0; }
 @media(max-width: 600px) { .setup-page { padding: 20px 12px; } .setup-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .setup-heading h1 { font-size: 24px; } .setup-steps { font-size: 12px; } }
+@media(max-width: 850px) { .setup-page { margin: 16px 12px; padding: 20px 14px; } .setup-form-layout { grid-template-columns: minmax(0, 1fr); } .setup-step-help { padding: 12px 16px; } .setup-step-help .el-icon { display: none; } .setup-topbar { padding: 0 16px; gap: 14px; } .setup-steps { gap: 6px; } }
 </style>

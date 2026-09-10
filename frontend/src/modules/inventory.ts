@@ -18,8 +18,11 @@ export const columns: Record<string, Column[]> = {
   stocks: [
     C('item_code', '物料编码'),
     C('item_name', '物料名称'),
+    C('specification', '规格'), C('brand', '品牌'),
+    { key: 'part_type', label: '类别', format: row => (({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类') },
     C('location', '库位'),
     C('quantity', '库存数量'),
+    C('unit', '单位'),
   ],
   moves: [
     C('item_name', '物料'),

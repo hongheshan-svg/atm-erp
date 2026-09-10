@@ -128,6 +128,23 @@ class BusinessFixtures:
 
 
 class CommercialChainTests(BusinessFixtures, TestCase):
+    def test_unsettled_filter_keeps_refunds_and_uses_actual_net_payments(self):
+        project = self.active_project()
+        entry = Entry.objects.create(
+            project=project, title='筛选测试合同款', kind='receivable', amount='100', due_date=TODAY
+        )
+        url = '/api/business/entries/'
+        query = {'search': '筛选测试合同款', 'unsettled': 'true'}
+        self.assertEqual(self.clients['finance'].get(url, query).data['count'], 1)
+        Payment.objects.create(entry=entry, amount='100', date=TODAY, reason='筛选测试付款')
+        self.assertEqual(self.clients['finance'].get(url, query).data['count'], 0)
+        entry.credit_amount = Decimal('20')
+        entry.save()
+        result = self.clients['finance'].get(url, query)
+        self.assertEqual(result.data['count'], 1)
+        self.assertEqual(Decimal(result.data['results'][0]['balance']), Decimal('-20'))
+        self.assertEqual(self.clients['member'].get(url, query).status_code, 403)
+
     def setUp(self):
         self.setup_business()
 

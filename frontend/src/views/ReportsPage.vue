@@ -8,6 +8,7 @@ import ListPagination from '../components/ListPagination.vue'
 import TransferTools from '../components/TransferTools.vue'
 import { pageSize } from '../pagination'
 import ReportAttention from '../components/ReportAttention.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 
 const data = ref<Row | null>(null)
 const loading = ref(false)
@@ -59,7 +60,6 @@ watch(pageSize, () => load())
     <div><p class="eyebrow">经营全景 / 项目累计</p><h1>经营报表</h1><p class="muted">从合同、成本和收付款看经营进度，定位需要跟进的项目。</p></div>
     <div class="toolbar"><TransferTools resource="reports" path="/business/reports/" export-path="/business/reports/" :params="exportFilters" /><el-button :loading="loading" @click="load(data?.page || 1)">刷新</el-button></div>
   </header>
-  <ReportAttention />
   <section class="panel report-filters">
     <form @submit.prevent="filter">
       <label>项目<input v-model="search" aria-label="搜索项目" placeholder="项目名称或编号" maxlength="150" /></label>
@@ -84,7 +84,7 @@ watch(pageSize, () => load())
       <header class="panel-heading"><h2>项目经营明细 <span class="record-count">{{ data.count }}</span></h2><small class="muted">更新于 {{ new Date(data.generated_at).toLocaleString('zh-CN') }}</small></header>
       <el-table :data="data.results" :max-height="560" stripe empty-text="没有符合筛选条件的项目">
         <el-table-column label="项目" min-width="190" fixed><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="`/projects/${row.id}`">{{ row.name }}</component><small class="report-code">{{ row.code }} · {{ row.manager }}</small></template></el-table-column>
-        <el-table-column label="状态" min-width="85"><template #default="{ row }">{{ labels[row.status] }}</template></el-table-column>
+        <el-table-column label="状态" min-width="100"><template #default="{ row }"><StatusBadge :value="row.status" /></template></el-table-column>
         <el-table-column label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>
         <el-table-column label="预算" min-width="110" align="right"><template #default="{ row }">{{ row.budget === null ? '未设置' : money(row.budget) }}</template></el-table-column>
         <el-table-column label="实际成本" min-width="115" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</component></template></el-table-column>
@@ -98,15 +98,18 @@ watch(pageSize, () => load())
       <p class="muted">已承诺仅含未收货采购；人工和费用使用实际记录。采购净额超材料预算同样计入超预算项目。取消项目的待退款仍保留，退款与正向待收待付分别展示。</p>
     </section>
   </template>
+  <ReportAttention />
 </template>
 <style scoped>
 .report-detail { padding: 12px 24px; line-height: 1.8; }
+.report-filters { padding: 16px 20px; margin-bottom: 12px; }
+.report-filters > .muted { font-size: 11px; margin-bottom: 0; }
 .report-filters form { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
-.report-filters label { display: grid; gap: 8px; min-width: 180px; color: var(--muted); font-size: 13px; }
+.report-filters label { display: grid; flex: 1; gap: 8px; min-width: 180px; color: var(--muted); font-size: 13px; }
 .report-filters input, .report-filters select { padding: 10px 12px; border: 1px solid #d9e1ed; border-radius: 8px; background: white; color: #243b5a; }
-.report-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
-.report-metric { display: grid; gap: 12px; margin: 0; }
-.report-metric strong { color: #285ec1; font-size: 24px; overflow-wrap: anywhere; }
+.report-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 12px 0; padding: 12px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; }
+.report-metric { display: grid; gap: 4px; margin: 0; padding: 10px 12px; }
+.report-metric strong { color: #2563eb; font-size: 23px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .report-metric small, .report-code { color: #7b8ba3; font-size: 12px; }
 .report-watch { display: flex; flex-wrap: wrap; gap: 20px; }
 .report-watch strong { color: #285ec1; margin-left: 4px; }

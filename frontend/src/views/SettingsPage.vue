@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, provide, ref } from 'vue'
 import { user, can, logout } from '../session'
 import type { Command } from '../types'
 import ResourcePanel from '../components/ResourcePanel.vue'
@@ -13,6 +13,8 @@ const tabs = computed(() => [
   { key: 'account', label: '我的账户' },
 ])
 const command = ref<Command | null>(null)
+const toolbarTarget = ref<HTMLElement | null>(null)
+provide('moduleToolbar', toolbarTarget)
 function password() {
   command.value = {
     title: '修改密码',
@@ -30,7 +32,7 @@ function password() {
 }
 </script>
 <template>
-  <header class="page-heading"><h1>设置</h1><router-link v-if="can(['admin'])" to="/setup">启用指南</router-link></header>
+  <header class="page-heading"><div><h1>设置</h1><p class="muted">公司资料与人员配置，分模块维护。</p></div><div class="settings-actions"><router-link v-if="can(['admin'])" to="/setup">启用指南</router-link><div ref="toolbarTarget" class="module-toolbar-target" /></div></header>
   <ModuleTabs :tabs="tabs" storage-key="settings">
     <template #account><section class="panel">
     <h2>我的账户</h2>

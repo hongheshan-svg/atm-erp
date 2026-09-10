@@ -17,6 +17,8 @@ async function render() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
   const wrapper = mount(WorkbenchPage, { global: { plugins: [ElementPlus, router] } })
   await flushPromises()
+  expect(wrapper.findAll('.work-card')).toHaveLength(1)
+  await wrapper.find('.work-filters button').trigger('click')
   return wrapper
 }
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(read).mockResolvedValue(data()) })

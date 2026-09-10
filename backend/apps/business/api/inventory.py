@@ -21,7 +21,8 @@ class StockView(ReadView):
     read_roles = PURCHASE_READERS
     queryset = Stock.objects.select_related('item')
     serializer_class = StockSerializer
-    filterset_fields = ['item', 'location']
+    filterset_fields = ['item', 'location', 'item__brand', 'item__part_type']
+    search_fields = ['item__code', 'item__name', 'item__specification', 'item__brand']
 
     @action(detail=False, methods=['post'])
     def opening(self, request):

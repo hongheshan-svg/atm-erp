@@ -194,6 +194,20 @@ class UserView(
     queryset = User.objects.all()
     serializer_class = UserSerializer
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
+    search_fields = ['username', 'display_name']
+    filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        selected_role = self.request.query_params.get('role')
+        if selected_role:
+            if selected_role not in User.Role.values:
+                raise ValidationError({'role': '请选择有效岗位。'})
+            predicate = Q(role=selected_role) | Q(additional_roles__contains=[selected_role])
+            if selected_role == User.Role.ADMIN:
+                predicate |= Q(is_superuser=True)
+            queryset = queryset.filter(predicate)
+        return queryset
 
     def perform_create(self, serializer):
         with transaction.atomic():

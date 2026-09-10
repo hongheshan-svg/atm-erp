@@ -8,9 +8,14 @@ const model = defineModel<Row>({ required: true })
 const pages = reactive<Record<string, number>>({})
 const start = (key: string) => Math.min(pages[key] || 0, Math.max(0, Math.ceil((model.value[key]?.length || 0) / 20) - 1)) * 20
 const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[key]?.length || 0) - start(key)) }, (_, i) => start(key) + i)
+function readonlyValue(field: Field) {
+  const value = model.value[field.key]
+  if (field.options) return field.options.filter(option => (Array.isArray(value) ? value : [value]).includes(option.value)).map(option => option.label).join('、') || '—'
+  return value === true ? '启用' : value === false ? '停用' : value == null || value === '' ? '—' : String(value)
+}
 </script>
 <template>
-  <div class="fields">
+  <div class="fields" :class="{ 'readonly-fields': readonly }">
     <template v-for="field in fields" :key="field.key">
       <fieldset v-if="field.type === 'rows'" class="row-list">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
@@ -34,8 +39,9 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
         <small v-if="field.hint">{{ field.hint }}</small>
       </fieldset>
       <label v-else-if="!field.hidden" class="field" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
-        <span>{{ field.label }}<small v-if="field.optional">（选填）</small></span>
-        <RemoteSelect v-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
+        <span>{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></span>
+        <textarea v-if="readonly" :value="readonlyValue(field)" :aria-label="field.label" readonly rows="1" class="readonly-text" />
+        <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <select
           :aria-label="field.label"
           v-else-if="field.type === 'select' || field.type === 'multi'"
@@ -84,8 +90,14 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
           :placeholder="field.placeholder"
           :inputmode="field.numeric ? (field.numeric.signed ? 'text' : field.numeric.scale ? 'decimal' : 'numeric') : undefined"
         />
-        <small v-if="field.hint">{{ field.hint }}</small>
+        <small v-if="field.hint && !readonly">{{ field.hint }}</small>
       </label>
     </template>
   </div>
 </template>
+<style scoped>
+.readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: #25364d; padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: #25364d; }
+.readonly-fields .field > span { color: #64748b; font-size: 12px; }
+.readonly-fields .field { gap: 4px; }
+.readonly-fields .readonly-text { field-sizing: content; resize: none; line-height: 1.6; width: 100%; min-height: 26px; }
+</style>
