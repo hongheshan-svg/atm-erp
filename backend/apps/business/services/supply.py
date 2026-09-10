@@ -7,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import MANAGERS, PURCHASERS, WAREHOUSE
+from apps.core.permissions import MANAGERS, PURCHASERS, WAREHOUSE, has_role
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
 from .bom import demand, incoming, issued
@@ -157,7 +157,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
                 raise Conflict('预算或成本已变化，请重新打开采购审批。')
             if not report['over_budget']:
                 raise Conflict('当前没有超预算，请使用普通批准。')
-            if user.role != 'admin' and user.pk == purchase.project.budget_changed_by_id:
+            if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
                 raise PermissionDenied('预算调整人不能批准本项目超预算采购，请由其他经理审批；管理员例外必须填写原因。')
         elif report['over_budget']:
             raise Conflict('；'.join(report['warnings']) + '。请重新打开审批，填写超预算批准原因。')

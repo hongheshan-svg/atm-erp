@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from apps.core.permissions import (
     OPERATION_ROLES,
     PURCHASERS,
-    role,
+    has_role,
 )
 
 from ..models import (
@@ -50,5 +50,7 @@ class PartnerView(MasterView):
     def get_queryset(self):
         queryset = super().get_queryset()
         return (
-            queryset.filter(kind__in=['customer', 'both']) if role(self.request.user) == 'sales_manager' else queryset
+            queryset.filter(kind__in=['customer', 'both'])
+            if not has_role(self.request.user, OPERATION_ROLES)
+            else queryset
         )

@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 
@@ -16,6 +17,7 @@ class User(AbstractUser):
     user_permissions = None
     display_name = models.CharField(max_length=80, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
+    additional_roles = ArrayField(models.CharField(max_length=20, choices=Role.choices), default=list, blank=True)
     hourly_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     management_reports = models.BooleanField(default=False)
 

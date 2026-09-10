@@ -8,7 +8,7 @@ import { choices } from './shared'
 import { buyer } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
-import { can } from '../session'
+import { can, customerOnly } from '../session'
 import { termFields, termLabel } from './payment-terms'
 export const columns: Record<string, Column[]> = {
   items: [
@@ -58,12 +58,12 @@ export async function createCommand(resource: string, projectId?: number): Promi
       select(
         'kind',
         '类型',
-        choices(can(['sales_manager']) ? { customer: '客户' } : { customer: '客户', supplier: '供应商', both: '客户及供应商' }),
+        choices(customerOnly() ? { customer: '客户' } : { customer: '客户', supplier: '供应商', both: '客户及供应商' }),
       ),
       t('contact', '联系人', true),
       t('phone', '电话', true),
       t('address', '地址', true),
-      ...(!can(['sales_manager']) ? termFields() : []),
+      ...(!customerOnly() ? termFields() : []),
     ]
   return {
     title: String(createLabel(resource)),
@@ -75,7 +75,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
 export function actionNames(resource: string, _r: Row): string[] {
   const a: string[] = []
   if (['items', 'partners'].includes(resource) && buyer()) a.push('编辑')
-  if (resource === 'partners' && can(['sales_manager']) && _r.kind === 'customer') a.push('编辑')
+  if (resource === 'partners' && customerOnly() && _r.kind === 'customer') a.push('编辑')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {

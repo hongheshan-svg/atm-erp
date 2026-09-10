@@ -115,7 +115,7 @@ def project_action(actor, key, operation, project_id, data, roles, execute):
     def authorize(current_actor):
         require_role(current_actor, roles)
         project = get_object_or_404(Project.objects.select_for_update(), pk=identity(project_id, 'project'))
-        current_actor.refresh_from_db(fields=['role', 'is_active', 'is_superuser'])
+        current_actor.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
         require_role(current_actor, roles)
         require_project(current_actor, project)
         context['project'] = project

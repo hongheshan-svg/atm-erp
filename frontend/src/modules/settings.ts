@@ -3,10 +3,8 @@ import { select } from './shared'
 export const userFields: Field[] = [
   t('username', '用户名'),
   t('display_name', '姓名'),
-  select(
-    'role',
-    '角色',
-    choices({
+  { key: 'roles', label: '角色', type: 'multi', initial: ['member'], hint: '可兼任多个岗位；电脑按住 Ctrl / Command 多选。权限按业务合并，报表需单独授权。',
+    options: choices({
       admin: '管理员',
       manager: '项目经理',
       sales_manager: '销售经理',
@@ -15,7 +13,7 @@ export const userFields: Field[] = [
       finance: '财务',
       member: '成员',
     }),
-  ),
+  },
   { key: 'hourly_cost', label: '小时成本（元）', initial: '0.00' },
   { key: 'management_reports', label: '总经理报表权限（仅项目经理角色）', type: 'boolean', initial: false },
   { key: 'password', label: '密码', type: 'password' },
@@ -33,7 +31,7 @@ export const columns: Record<string, Column[]> = {
   users: [
     C('username', '用户名'),
     C('display_name', '姓名'),
-    C('role', '角色'),
+    { key: 'roles', label: '角色', format: r => (r.roles ?? [r.role]).map((role: string) => ({ admin: '管理员', manager: '项目经理', sales_manager: '销售经理', purchaser: '采购员', warehouse: '仓管', finance: '财务', member: '成员' }[role] || role)).join('、') },
     C('hourly_cost', '小时成本'),
     C('management_reports', '总经理报表权限'),
     C('is_active', '启用'),

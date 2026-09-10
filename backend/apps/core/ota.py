@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 from .actions import perform
 from .api import Conflict
 from .models import AuditLog, Company, UpgradeJob
-from .permissions import ADMIN, PermissionMixin, require_role
+from .permissions import ADMIN, PermissionMixin, has_role, require_role
 from .version import VERSION
 
 REPO = 'hongheshan-svg/atm-erp'
@@ -203,11 +203,7 @@ class AgentView(APIView):
                     return Response({'job': None})
                 if job.mode != mode or job.platform != platform or job.asset.get('_runner_id') != runner_id:
                     raise Conflict('执行器与任务部署方式不一致。')
-                if (
-                    not job.created_by
-                    or not job.created_by.is_active
-                    or not (job.created_by.is_superuser or job.created_by.role == 'admin')
-                ):
+                if not job.created_by or not job.created_by.is_active or not has_role(job.created_by, ADMIN):
                     job.status, job.detail = 'failed', '发起人已失去管理员权限，任务未执行'
                     job.save()
                     return Response({'job': None})

@@ -17,12 +17,12 @@ SALES_READERS = MONEY_READERS | {'sales_manager'}
 
 def sales_for(user, queryset):
     require_role(user, SALES_READERS)
-    return queryset.filter(manager=user) if role(user) == 'sales_manager' else queryset
+    return queryset if has_role(user, MONEY_READERS) else queryset.filter(manager=user)
 
 
 def require_sale(user, sale):
     require_role(user, SALES)
-    if role(user) == 'sales_manager' and sale.manager_id != user.pk:
+    if not has_role(user, MANAGERS) and sale.manager_id != user.pk:
         raise PermissionDenied('仅能操作自己负责的销售单。')
 
 
@@ -30,27 +30,39 @@ def role(user):
     return 'admin' if user.is_superuser else user.role
 
 
+def roles(user):
+    return {role(user), *getattr(user, 'additional_roles', [])} & ALL_ROLES
+
+
+def has_role(user, allowed):
+    return bool(roles(user) & allowed)
+
+
 def require_role(user, allowed):
-    if not user.is_authenticated or not user.is_active or role(user) not in allowed:
+    if not user.is_authenticated or not user.is_active or not has_role(user, allowed):
         raise PermissionDenied('没有此操作权限。')
 
 
 def require_reports(user):
     require_role(user, MANAGERS)
-    if role(user) != 'admin' and not user.management_reports:
+    if not has_role(user, ADMIN) and not user.management_reports:
         raise PermissionDenied('未获得总经理报表授权。')
 
 
 def projects_for(user, queryset):
     require_role(user, OPERATION_ROLES)
-    if role(user) == 'member':
+    if not has_role(user, OPERATION_ROLES - {'member'}):
         return queryset.filter(Q(members=user) | Q(manager=user)).distinct()
     return queryset
 
 
 def require_project(user, project):
     require_role(user, OPERATION_ROLES)
-    if role(user) == 'member' and project.manager_id != user.pk and not project.members.filter(pk=user.pk).exists():
+    if (
+        not has_role(user, OPERATION_ROLES - {'member'})
+        and project.manager_id != user.pk
+        and not project.members.filter(pk=user.pk).exists()
+    ):
         raise PermissionDenied('无权访问此项目。')
 
 

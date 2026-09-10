@@ -14,9 +14,13 @@
 
 ## 平台接口
 
-`/api/auth/login/` 接收 username/password，返回 access/refresh；`refresh/` 接收 refresh；`me/` 返回 id、username、display_name、role、management_reports；`directory/` 返回启用人员 id/display_name 数组。`password/` 接收 old_password/new_password，修改后令牌撤销，重新登录。
+账号支持兼任多个固定角色：用户管理接受非空、无重复的 `roles` 数组，仅允许现有七种角色；`me`、人员目录和用户列表返回 `roles`。旧 `role` 字段兼容单角色请求，提交该字段且未提交 roles 时替换为单角色。已有账号保留原角色，新增兼岗字段默认为空，不变更历史审计或业务负责人。
 
-`/api/auth/users/` 管理员 GET/POST，`users/{id}/` GET/PATCH：username、display_name、role、hourly_cost、is_active、password、management_reports。新增必填密码，至少 12 位；不可移除最后管理员。management_reports 默认为 false，仅 manager 角色允许设为 true；管理员自动可看经营报表。授权更正留审计，me 返回本人此开关，不接受用户自行更改。
+授权按业务角色集合合并，不通过主角色推断。销售读权限可合并财务读权限，但没有 admin/manager 时只能修改本人销售单；销售兼成员沿用项目成员范围。菜单、金额过滤、附件下载及幂等重放均检查有效角色。总经理报表仍需具备 manager 并显式授权，admin 默认允许；最后启用管理员保护也检查兼岗角色。用户修改审计保留角色集合前后值。兼岗不改变原有按操作人身份执行的审批限制。
+
+`/api/auth/login/` 接收 username/password，返回 access/refresh；`refresh/` 接收 refresh；`me/` 返回 id、username、display_name、role、roles、management_reports；`directory/` 返回启用人员 id/display_name/role/roles 数组。`password/` 接收 old_password/new_password，修改后令牌撤销，重新登录。
+
+`/api/auth/users/` 管理员 GET/POST，`users/{id}/` GET/PATCH：username、display_name、roles（兼容旧 role）、hourly_cost、is_active、password、management_reports。新增必填密码，至少 12 位；不可移除最后管理员。management_reports 默认为 false，包含 manager 角色时允许设为 true；管理员自动可看经营报表。授权更正留审计，me 返回本人此开关，不接受用户自行更改。
 
 登录及令牌刷新沿用 LoginThrottle：APP_ENVIRONMENT=production（默认）为10次/分钟，development关闭限流，其他值拒绝启动。Compose/安装器通过 LEAN_ENVIRONMENT 设置该值，默认 production；发布时不得沿用 development 配置。DEBUG 独立且默认关闭。
 
@@ -34,9 +38,9 @@
 
 ## 销售
 
-- sales_manager 为独立销售经理角色，仅能查询、导出及操作 manager=当前用户的销售单。新增或导入只能分配给自己，转交由管理员/项目经理执行；动作及幂等回放重新检查当前角色和订单负责人。签约需独立指定 admin/manager 作为项目负责人，销售经理不能担任项目经理。
+- 仅 sales_manager 角色时，只能查询、导出及操作 manager=当前用户的销售单。新增或导入只能分配给自己，转交由管理员/项目经理执行；动作及幂等回放重新检查当前角色集合和订单负责人。签约指定具备 admin/manager 角色的项目负责人，兼任该岗位时可以承担项目经理职责。兼岗权限按平台接口所述规则合并。
 - `sales/{id}/progress/` GET 复用关联项目状态、交付批次和 receivable 应收的原金额/抵减/净回款/余额（负数表示待退款）。只读且沿用销售范围，不返回项目成本、应付、银行账号或附件内容。补充协议仍由管理员/项目经理处理。
-- 销售经理可读取共享客户及双用途往来单位，只能新增/编辑/导入纯 customer，不能改供应商或双用途记录。人员目录额外返回 role 供销售负责人和项目负责人分别筛选，不返回工时成本。
+- 仅具备销售维护权限时，可读取共享客户及双用途往来单位，只能新增/编辑/导入纯 customer；兼任采购维护岗位可维护供应商。人员目录返回 roles 供销售负责人和项目负责人分别筛选，不返回工时成本。
 
 - `sales/` GET/POST：name/customer/manager/requirements/due_date/equipment_quantity/warranty_months。项目经理、管理员或销售经理创建；管理员、项目经理、财务及按本人范围的销售经理可读，其他角色禁止。
 - `sales/{id}/quote/` POST amount/reason；需求中或已报价可报价。

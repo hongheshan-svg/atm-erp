@@ -3,7 +3,7 @@ from rest_framework.exceptions import ValidationError
 from apps.accounts.models import User
 from apps.core.actions import perform
 from apps.core.models import CodeRule
-from apps.core.permissions import MANAGERS, require_role, role
+from apps.core.permissions import MANAGERS, has_role, require_role
 
 from ..models import Partner, Project
 from .common import (
@@ -34,7 +34,7 @@ def create_record(user, data):
     )
     customer = lookup(Partner, data.get('customer'), 'customer', is_active=True, kind__in=['customer', 'both'])
     manager = lookup(User, data.get('manager'), 'manager', is_active=True)
-    if role(manager) not in MANAGERS:
+    if not has_role(manager, MANAGERS):
         raise ValidationError({'manager': '项目负责人必须是启用的管理员或项目经理。'})
     member_ids = data.get('members', [])
     if not isinstance(member_ids, list) or len(member_ids) > 500:

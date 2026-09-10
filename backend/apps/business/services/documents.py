@@ -18,11 +18,11 @@ from apps.core.permissions import (
     PURCHASERS,
     SALES,
     SALES_READERS,
+    has_role,
     projects_for,
     require_project,
     require_role,
     require_sale,
-    role,
 )
 
 from ..models import Document, Project, PurchaseOrder, SalesOrder
@@ -34,17 +34,17 @@ MONEY_CATEGORIES = {'contract', 'receipt'}
 
 def visible_documents(user, queryset):
     allowed = Q(pk__in=[])
-    if role(user) in OPERATION_ROLES:
+    if has_role(user, OPERATION_ROLES):
         direct = Q(project__in=projects_for(user, Project.objects.all()))
-        if role(user) not in MONEY_READERS:
+        if not has_role(user, MONEY_READERS):
             direct &= ~Q(category__in=MONEY_CATEGORIES)
         allowed |= direct
-    if role(user) in SALES_READERS:
+    if has_role(user, SALES_READERS):
         sales = SalesOrder.objects.all()
-        if role(user) == 'sales_manager':
+        if not has_role(user, MONEY_READERS):
             sales = sales.filter(manager=user)
         allowed |= Q(sale__in=sales)
-    if role(user) in PURCHASERS | FINANCE:
+    if has_role(user, PURCHASERS | FINANCE):
         allowed |= Q(purchase__in=PurchaseOrder.objects.filter(project__in=Project.objects.all()))
     return queryset.filter(allowed)
 
@@ -116,7 +116,7 @@ def upload(actor, key, project_id, category, file, *, sale_id=None, purchase_id=
                 source = get_object_or_404(model.objects.select_for_update(), pk=owner_id)
                 if source.project_id != initial.project_id:
                     raise Conflict('单据项目关联已变化，请重试。')
-                user.refresh_from_db(fields=['role', 'is_active', 'is_superuser'])
+                user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
                 require_role(user, roles)
                 if owner == 'sale':
                     require_sale(user, source)

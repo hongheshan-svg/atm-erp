@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from apps.core.permissions import (
     OPERATION_ROLES,
     PermissionMixin,
-    role,
+    has_role,
 )
 
 from ..services import tabular, transfers
@@ -28,7 +28,7 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             raise ValidationError('导出超过20000条，请缩小筛选范围。')
         serializer = self.get_serializer()
         fields = list(serializer.fields)
-        if hasattr(serializer, 'money_roles') and role(request.user) not in serializer.money_roles:
+        if hasattr(serializer, 'money_roles') and not has_role(request.user, serializer.money_roles):
             fields = [field for field in fields if field not in serializer.sensitive_fields]
         return tabular.export_rows(
             self.basename,
