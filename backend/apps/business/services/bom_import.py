@@ -18,12 +18,13 @@ from .bom import incoming, issued, revision
 from .common import number, state
 
 MAX_BYTES = 5 * 1024 * 1024
-HEADERS = ['物料编码', '数量', '变更说明', '单元']
+LEGACY_HEADERS = ['物料编码', '数量', '变更说明', '单元']
+HEADERS = ['物料编码', '单元', '需求数量', '变更说明']
 
 
-def read_file(upload, headers=None, legacy_headers=None):
+def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False):
     if headers is None:
-        legacy_headers = HEADERS[:3]
+        legacy_headers = [LEGACY_HEADERS, LEGACY_HEADERS[:3]]
     headers = HEADERS if headers is None else headers
     if upload is None or not hasattr(upload, 'read'):
         raise ValidationError({'file': '请选择 CSV 或 XLSX 文件。'})
@@ -77,7 +78,7 @@ def read_file(upload, headers=None, legacy_headers=None):
         if any(value not in (None, '') for value in row[len(header) :]):
             raise ValidationError({'file': '数据列数不能超过表头。'})
         normalized.append(list(row[: len(header)]) + [''] * max(0, len(header) - len(row)))
-    return normalized
+    return (header, normalized) if return_headers else normalized
 
 
 def read_xlsx(content, columns=3):
@@ -132,7 +133,9 @@ def message(detail):
 def preview(project, upload):
     state(project, {'draft', 'quoted', 'active', 'delivering'})
     expected_revision = revision(project)
-    raw = read_file(upload)
+    headers, raw = read_file(upload, return_headers=True)
+    if headers == HEADERS:
+        raw = [[row[0], row[2], row[3], row[1]] for row in raw]
     codes = {str(row[0]).strip() for row in raw if row and row[0] is not None}
     items = {item.code: item for item in Item.objects.filter(code__in=codes, is_active=True)}
     existing = list(BOMLine.objects.filter(project=project))
@@ -179,6 +182,10 @@ def preview(project, upload):
                     'item': item.pk,
                     'item_code': code,
                     'item_name': item.name,
+                    'brand': item.brand,
+                    'specification': item.specification,
+                    'unit': item.unit,
+                    'part_type': item.part_type,
                     'quantity': str(qty),
                     'change_note': note,
                     'assembly_unit': assembly_unit,

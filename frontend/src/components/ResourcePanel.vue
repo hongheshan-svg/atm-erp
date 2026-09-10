@@ -184,7 +184,7 @@ function closeCommand() {
       </h2>
       <div class="toolbar">
         <BOMPurchasePicker v-if="resource === 'purchases'" :project-id="projectId" @saved="saved" />
-        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, search: appliedSearch }" @changed="saved" />
+        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <form
           v-if="['sales', 'projects', 'purchases', 'items', 'partners'].includes(resource)"
           @submit.prevent="searchRecords"

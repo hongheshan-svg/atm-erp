@@ -27,7 +27,7 @@ DETAIL = [
     ('设备数量', 'equipment_quantity'),
     ('质保月数', 'warranty_months'),
 ]
-SCHEMAS = {
+LEGACY_SCHEMAS = {
     'items': (
         PURCHASERS,
         [
@@ -127,6 +127,102 @@ SCHEMAS = {
         [('项目编号', 'project'), ('库存ID', 'stock'), ('任务ID', 'task'), ('数量', 'quantity'), ('原因', 'reason')],
     ),
 }
+# Keep old downloads readable by their original headers, never by the new column position.
+LABEL_OVERRIDES = {
+    'items': {'name': '物料名称'},
+    'partners': {'name': '往来单位'},
+    'sales': {'name': '销售名称'},
+    'projects': {'name': '项目名称'},
+    'stocks': {'quantity': '库存数量'},
+    'entries': {'title': '款项', 'amount': '原金额', 'due_date': '最近待付期限'},
+    'payments': {'reason': '说明', 'method': '结算方式'},
+    'deliveries': {'date': '发货日'},
+    'moves': {'reason': '说明'},
+}
+ORDERS = {
+    'items': ['code', 'name', 'specification', 'brand', 'part_type', 'unit', 'duplicate_reason'],
+    'partners': ['name', 'kind', 'contact', 'phone', 'payment_term', 'payment_days', 'address'],
+    'projects': [
+        'name',
+        'customer',
+        'manager',
+        'due_date',
+        'requirements',
+        'equipment_quantity',
+        'warranty_months',
+        'members',
+    ],
+    'purchases': [
+        'group',
+        'project',
+        'supplier',
+        'payment_term',
+        'payment_days',
+        'due_date',
+        'payment_due_date',
+        'note',
+        'item',
+        'quantity',
+        'unit_price',
+        'line_due_date',
+    ],
+    'tasks': ['title', 'kind', 'assignee', 'due_date', 'project', 'description'],
+    'moves': ['stock', 'quantity', 'reason', 'project', 'task'],
+}
+SCHEMAS = {}
+for resource, (roles, old_columns) in LEGACY_SCHEMAS.items():
+    labels = {key: LABEL_OVERRIDES.get(resource, {}).get(key, label) for label, key in old_columns}
+    SCHEMAS[resource] = (roles, [(labels[key], key) for key in ORDERS.get(resource, list(labels))])
+
+TABLE_KEYS = {
+    'item': ['item_code', 'item_name'],
+    'project': ['project_name'],
+    'customer': ['customer_name'],
+    'supplier': ['supplier_name'],
+    'manager': ['manager_name'],
+    'assignee': ['assignee_name'],
+    'user': ['user_name'],
+    'task': ['task_title'],
+    'entry': ['entry_title'],
+    'stock': ['item_name', 'location'],
+}
+FIELD_HINTS = {
+    'item': '填写基础资料中的物料编码，名称等资料由编码关联。',
+    'customer': '填写客户编码，不能填写客户名称或内部 ID。',
+    'supplier': '填写供应商编码，不能填写供应商名称或内部 ID。',
+    'project': '填写执行项目编号；文件中的编号决定归属，不自动使用当前筛选项目。',
+    'manager': '填写登录账号，不能填写姓名。',
+    'assignee': '填写登录账号，不能填写姓名。',
+    'user': '填写登录账号，不能填写姓名。',
+    'installer': '填写安装人员登录账号。',
+    'acceptor': '填写验收人员登录账号。',
+    'members': '填写登录账号，多个账号用英文分号分隔。',
+    'entry': '从应收应付列表导出获取记录ID，页面显示对应款项名称。',
+    'stock': '从共享库存列表导出获取记录ID，对应物料和库位。',
+    'task': '从项目任务列表导出获取记录ID，页面显示对应任务名称。',
+    'document': '填写已上传的同项目收付凭证记录ID，可留空。',
+    'reconciliation': '采购付款填写已确认且仍有效的对账单ID；客户收款可留空。',
+    'group': '仅用于将多行合并为一张采购草稿，不是采购编号；同组单据信息须一致。',
+    'code': '可自定义，留空自动生成；不能覆盖已有编码。',
+    'part_type': '填写标准件、非标件，或 standard/custom；可留空。',
+    'payment_term': '填写指定日期、现付、月结30天、月结60天、月结90天、月结120天、自定义月结；也兼容原英文值。',
+    'payment_days': '仅自定义月结填写 0～365；月结按收货当月月底加天数。',
+    'duplicate_reason': '相同物料独立建码时填写原因；不显示在物料主列表，保留审计。',
+    'method': '填写银行转账、现金、其他（兼容 bank/cash/other）。',
+}
+ENUMS = {
+    'method': {'银行转账': 'bank', '现金': 'cash', '其他': 'other'},
+    'part_type': {'标准件': 'standard', '非标件': 'custom'},
+    'payment_term': {
+        '指定日期': 'manual',
+        '现付': 'cash',
+        '月结30天': 'month30',
+        '月结60天': 'month60',
+        '月结90天': 'month90',
+        '月结120天': 'month120',
+        '自定义月结': 'custom',
+    },
+}
 NOTES = {
     'items': '新增物料；编码留空自动生成，不覆盖现有物料。类别填写 standard（标准件）或 custom（非标件），可留空。',
     'partners': '新增往来单位；类型填写 customer（客户）、supplier（供应商）或 both（两者）。采购账期可填 manual/cash/month30/month60/month90/month120/custom；custom另填0到365天，纯客户只用manual。',
@@ -149,6 +245,27 @@ def schema(actor, resource):
     roles, columns = SCHEMAS[resource]
     require_role(actor, roles)
     return columns
+
+
+def layout(actor, resource):
+    columns = []
+    for label, key in schema(actor, resource):
+        table_keys = TABLE_KEYS.get(key, [key])
+        if resource == 'deliveries' and key == 'date':
+            table_keys = ['shipped_date']
+        hint = FIELD_HINTS.get(key, '按列名填写；仅新增，不覆盖原记录。')
+        if key in {'date', 'due_date', 'line_due_date', 'payment_due_date'}:
+            hint = (
+                '日期格式 YYYY-MM-DD；明细交期留空沿用订单交期。' if key == 'line_due_date' else '日期格式 YYYY-MM-DD。'
+            )
+        if key == 'kind':
+            hint = (
+                '填写客户、供应商、客户及供应商（兼容 customer/supplier/both）。'
+                if resource == 'partners'
+                else '填写设计、装配、调试（兼容 design/assembly/test）。'
+            )
+        columns.append({'key': key, 'label': label, 'table_keys': table_keys, 'hint': hint})
+    return {'columns': columns, 'note': NOTES[resource]}
 
 
 def template(actor, resource, file_format):
@@ -209,18 +326,22 @@ def parse(actor, resource, upload):
     columns = schema(actor, resource)
     records = []
     headers = [label for label, _ in columns]
-    legacy = (
-        [headers[:4], headers[:8]]
+    old_columns = LEGACY_SCHEMAS[resource][1]
+    old_headers = [label for label, _ in old_columns]
+    legacy = [old_headers] + (
+        [old_headers[:4], old_headers[:8]]
         if resource == 'payments'
-        else [headers[:4], headers[:6]]
+        else [old_headers[:4], old_headers[:6]]
         if resource == 'items'
-        else [headers[:8], headers[:9], headers[:10]]
+        else [old_headers[:8], old_headers[:9], old_headers[:10]]
         if resource == 'purchases'
-        else headers[:5]
+        else [old_headers[:5]]
         if resource == 'partners'
-        else None
+        else []
     )
-    for index, row in enumerate(read_file(upload, headers, legacy), 2):
+    actual_headers, rows = read_file(upload, headers, legacy, return_headers=True)
+    source_columns = columns if actual_headers == headers else old_columns[: len(actual_headers)]
+    for index, row in enumerate(rows, 2):
         if not any(value not in (None, '') for value in row):
             continue
         if any(value not in (None, '') for value in row[len(columns) :]):
@@ -232,10 +353,28 @@ def parse(actor, resource, upload):
             elif isinstance(value, date):
                 value = value.isoformat()
             values.append('' if value is None else str(value).strip())
-        values += [''] * (len(columns) - len(values))
-        records.append({'row': index, 'data': dict(zip([key for _, key in columns], values, strict=True))})
+        raw = dict(zip([key for _, key in source_columns], values, strict=True))
+        records.append({'row': index, 'data': {key: raw.get(key, '') for _, key in columns}})
     if not records:
         raise ValidationError('文件没有可导入明细。')
+    return records
+
+
+def executable_records(resource, records):
+    # Preview keeps one row per file row; service payloads are separate from display data.
+    records = [{'row': r['row'], 'data': dict(r['data'])} for r in records]
+    for record in records:
+        data = record['data']
+        for key, translations in ENUMS.items():
+            if key in data:
+                data[key] = translations.get(data[key], data[key])
+        kinds = (
+            {'客户': 'customer', '供应商': 'supplier', '客户及供应商': 'both'}
+            if resource == 'partners'
+            else {'设计': 'design', '装配': 'assembly', '调试': 'test'}
+        )
+        if 'kind' in data:
+            data['kind'] = kinds.get(data['kind'], data['kind'])
     if resource == 'purchases':
         grouped = {}
         for record in records:
@@ -274,7 +413,8 @@ def run(actor, resource, records, *, preview=False):
 
 
 def preview(actor, resource, upload):
-    records = parse(actor, resource, upload)
+    display_records = parse(actor, resource, upload)
+    records = executable_records(resource, display_records)
     _, errors = run(actor, resource, records, preview=True)
     token = (
         signing.dumps(
@@ -287,7 +427,9 @@ def preview(actor, resource, upload):
     )
     return {
         'count': len(records),
-        'rows': records,
+        'rows': display_records,
+        'row_count': len(display_records),
+        'columns': layout(actor, resource)['columns'],
         'errors': errors,
         'can_import': not errors,
         'token': token,

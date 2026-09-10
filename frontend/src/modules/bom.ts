@@ -15,7 +15,7 @@ import { endpoint } from './shared'
 export const columns: Record<string, Column[]> = {
   bom: [
     C('item_code', '物料编码'),
-    C('item_name', '物料'),
+    C('item_name', '物料名称'),
     C('brand', '品牌'),
     C('assembly_unit', '单元'),
     C('quantity', '需求数量'),

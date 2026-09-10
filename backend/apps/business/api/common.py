@@ -60,6 +60,10 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             request.user, self.request.path.split('/')[-3], request.query_params.get('file_format', 'csv')
         )
 
+    @action(detail=False, methods=['get'], url_path='import-schema')
+    def import_schema(self, request):
+        return Response(transfers.layout(request.user, request.path.split('/')[-3]))
+
     @action(detail=False, methods=['post'], url_path='import-file', parser_classes=[MultiPartParser])
     def import_file(self, request):
         if set(request.data) != {'file'} or len(request.FILES.getlist('file')) != 1:

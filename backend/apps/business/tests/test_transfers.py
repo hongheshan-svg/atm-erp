@@ -18,7 +18,7 @@ class TransferTests(BusinessFixtures, TestCase):
         self.setup_business()
 
     def preview(self, resource, rows, role='admin', xlsx=False):
-        headers = [label for label, _ in transfers.SCHEMAS[resource][1]]
+        headers = [label for label, _ in transfers.LEGACY_SCHEMAS[resource][1]]
         if xlsx:
             output = io.BytesIO()
             book = Workbook()
@@ -177,3 +177,127 @@ class TransferTests(BusinessFixtures, TestCase):
         missing = self.preview('payments', [['999999', '1', TODAY, '不存在']])
         self.assertEqual(missing.status_code, 200)
         self.assertFalse(missing.data['can_import'])
+
+    def downloaded_preview(self, resource, rows, fmt='csv'):
+        response = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': fmt})
+        self.assertEqual(response.status_code, 200)
+        if fmt == 'csv':
+            headers = next(csv.reader(io.StringIO(response.content.decode('utf-8-sig'))))
+            stream = io.StringIO()
+            writer = csv.writer(stream)
+            writer.writerow(headers)
+            writer.writerows([[row.get(label, '') for label in headers] for row in rows])
+            content = stream.getvalue().encode()
+        else:
+            book = load_workbook(io.BytesIO(response.content))
+            headers = [cell.value for cell in book.active[1]]
+            for row in rows:
+                book.active.append([row.get(label, '') for label in headers])
+            stream = io.BytesIO()
+            book.save(stream)
+            book.close()
+            content = stream.getvalue()
+        response = self.clients['admin'].post(
+            f'/api/business/{resource}/import-file/',
+            {'file': SimpleUploadedFile('filled.' + fmt, content)},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['can_import'], response.data)
+        self.assertEqual([column['label'] for column in response.data['columns']], headers)
+        return response
+
+    def test_downloaded_templates_match_schema_and_preview_for_every_resource(self):
+        project = self.active_project(equipment=2)
+        task = Task.objects.create(project=project, title='模板工时任务', kind='design', assignee=self.users['admin'])
+        self.commit('entries', self.preview('entries', [[project.code, '待付费用', '100', TODAY]]))
+        entry = project.entries.get(kind='expense')
+        self.commit('stocks', self.preview('stocks', [['I1', '领料仓', '5', '2', '期初']]))
+        stock = Stock.objects.get(location='领料仓')
+        BOMLine.objects.create(project=project, item=self.item, quantity=2)
+        for stage in ['design', 'assembly', 'test']:
+            Task.objects.create(project=project, title=stage, kind=stage, assignee=self.users['admin'], status='done')
+        task.status = 'done'
+        task.save()
+        self.commit('moves', self.preview('moves', [[project.code, str(stock.pk), '', '1', '发货准备']]))
+        samples = {
+            'items': {
+                '物料编码': 'NEW-TEMPLATE',
+                '物料名称': '模板物料',
+                '规格': '规格A',
+                '品牌': '品牌B',
+                '物料类别': '标准件',
+                '单位': '台',
+            },
+            'partners': {'往来单位': '模板供应商', '类型': '供应商', '采购账期': '月结30天', '电话': '00123'},
+            'sales': {'销售名称': '模板销售', '客户编码': 'C1', '负责人账号': 'manager', '设备数量': '1'},
+            'projects': {'项目名称': '模板项目', '客户编码': 'C1', '负责人账号': 'manager', '设备数量': '1'},
+            'purchases': {
+                '分组号': 'G1',
+                '项目编号': project.code,
+                '供应商编码': 'S1',
+                '交期': TODAY,
+                '物料编码': 'I1',
+                '数量': '1',
+                '含税单价': '12.34',
+                '采购账期': '现付',
+            },
+            'tasks': {'任务名称': '新设计', '阶段': '设计', '执行人账号': 'member', '项目编号': project.code},
+            'stocks': {'物料编码': 'I1', '库位': '新期初仓', '库存数量': '2', '单位成本': '3.45', '原因': '期初'},
+            'entries': {'项目编号': project.code, '款项': '模板差旅', '原金额': '10.25', '最近待付期限': TODAY},
+            'payments': {
+                '款项ID': str(entry.pk),
+                '金额': '10',
+                '日期': TODAY,
+                '说明': '实际支付',
+                '结算方式': '银行转账',
+            },
+            'time': {'任务ID': str(task.pk), '人员账号': 'admin', '日期': TODAY, '工时': '1.25', '说明': '设计'},
+            'deliveries': {
+                '项目编号': project.code,
+                '设备数量': '1',
+                '发货日': TODAY,
+                '安装人账号': 'member',
+                '验收人账号': 'manager',
+            },
+            'moves': {'库存ID': str(stock.pk), '数量': '1', '说明': '生产领料', '项目编号': project.code},
+        }
+        self.assertEqual(set(samples), set(transfers.SCHEMAS))
+        for resource, row in samples.items():
+            for fmt in ['csv', 'xlsx']:
+                with self.subTest(resource=resource, fmt=fmt):
+                    layout = self.clients['admin'].get(f'/api/business/{resource}/import-schema/')
+                    self.assertEqual(layout.status_code, 200)
+                    preview = self.downloaded_preview(resource, [row], fmt)
+                    self.assertEqual(preview.data['columns'], layout.data['columns'])
+                    self.assertEqual(preview.data['row_count'], 1)
+                    self.assertEqual(preview.data['rows'][0]['row'], 2)
+        # Confirm the new order does not swap brand/category/unit, including Chinese enums.
+        result = self.commit('items', self.downloaded_preview('items', [samples['items']], 'xlsx'))
+        item = Item.objects.get(pk=result['results'][0]['id'])
+        self.assertEqual((item.brand, item.part_type, item.unit), ('品牌B', 'standard', '台'))
+        self.assertEqual(self.clients['member'].get('/api/business/items/import-schema/').status_code, 403)
+
+    def test_purchase_preview_retains_file_rows_and_grouped_confirmation(self):
+        project = self.active_project()
+        row = {
+            '分组号': 'GROUP',
+            '项目编号': project.code,
+            '供应商编码': 'S1',
+            '交期': TODAY,
+            '物料编码': 'I1',
+            '数量': '2',
+            '含税单价': '10',
+        }
+        other = Item.objects.create(code='SECOND', name='第二物料')
+        preview = self.downloaded_preview(
+            'purchases', [row, {**row, '物料编码': other.code, '数量': '3', '含税单价': '20'}]
+        )
+        self.assertEqual((preview.data['count'], preview.data['row_count']), (1, 2))
+        self.assertEqual([r['row'] for r in preview.data['rows']], [2, 3])
+        self.assertNotIn('lines', preview.data['rows'][0]['data'])
+        self.assertEqual(preview.data['rows'][1]['data']['item'], 'SECOND')
+        self.commit('purchases', preview)
+        purchase = PurchaseOrder.objects.get()
+        self.assertEqual(purchase.status, 'draft')
+        self.assertEqual(list(purchase.lines.order_by('id').values_list('quantity', 'unit_price')), [(2, 10), (3, 20)])

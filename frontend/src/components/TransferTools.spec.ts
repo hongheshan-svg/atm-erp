@@ -1,14 +1,53 @@
-import { flushPromises, shallowMount } from '@vue/test-utils'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { shallowMount, flushPromises } from '@vue/test-utils'
+import ElementPlus from 'element-plus'
 import TransferTools from './TransferTools.vue'
-import { write } from '../api'
+import { read, write } from '../api'
+import { user } from '../session'
 
-vi.mock('../api', () => ({ write: vi.fn(), download: vi.fn() }))
-vi.mock('../session', () => ({ can: () => true }))
+vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn(), download: vi.fn() }))
 
-beforeEach(() => vi.resetAllMocks())
+describe('导入模板与预览', () => {
+  it('使用后端模板列逐列显示，采购保留文件行号且不展示分组 JSON', async () => {
+    user.value = { role: 'admin' }
+    const columns = [
+      { key: 'group', label: '分组号', table_keys: ['group'], hint: '同组合单' },
+      { key: 'item', label: '物料编码', table_keys: ['item_code'], hint: '填写物料编码' },
+      { key: 'quantity', label: '数量', table_keys: ['quantity'], hint: '填写数量' },
+    ]
+    vi.mocked(read).mockResolvedValue({ columns, note: '生成采购草稿' })
+    vi.mocked(write).mockResolvedValue({ columns, rows: [
+      { row: 2, data: { group: 'G', item: 'A', quantity: '2' } },
+      { row: 3, data: { group: 'G', item: 'B', quantity: '3' } },
+    ], count: 1, row_count: 2, can_import: true, errors: [], token: 'signed-token' })
+    const wrapper = shallowMount(TransferTools, {
+      props: { resource: 'purchases', path: '/business/purchases/', tableColumns: [{ key: 'code', label: '采购编号' }] },
+      global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElDialog: { template: '<div><slot /><slot name="footer" /></div>' }, ElTableColumn: { template: '<div class="column-stub" />' } } },
+    })
+    await wrapper.findAll('el-button-stub').find(b => b.text() === '导入')!.trigger('click')
+    await flushPromises()
+    expect(read).toHaveBeenCalledWith('/business/purchases/import-schema/')
+    expect(wrapper.text()).toContain('采购编号 由系统生成')
+    const input = wrapper.get('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['csv'], 'rows.csv')], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    const tables = wrapper.findAll('el-table-stub')
+    const preview = tables[tables.length - 1]!
+    expect(preview.findAll('.column-stub').map(c => c.attributes('label'))).toEqual(['文件行号', '分组号', '物料编码', '数量'])
+    expect(wrapper.text()).toContain('文件 2 行明细合并为 1 张采购草稿')
+    vi.mocked(write).mockRejectedValue(new Error('格式不正确'))
+    await input.trigger('change')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('文件 2 行明细')
+    expect(wrapper.findAll('el-button-stub').find(b => b.text() === '确认导入')!.attributes('disabled')).toBe('true')
+    wrapper.unmount()
+  })
+})
 
 it('银行原始文件先预览汇总，确认时提交凭据并显示去重结果', async () => {
+  vi.clearAllMocks()
+  user.value = { role: 'admin' }
   const wrapper = shallowMount(TransferTools, {
     props: { resource: 'bank-records', path: '/business/bank-records/' },
     global: { stubs: {

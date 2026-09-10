@@ -1,4 +1,3 @@
-from django.http import HttpResponse
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
@@ -147,11 +146,9 @@ class ProjectView(ReadView):
     @action(detail=False, methods=['get'], url_path='bom-template')
     def bom_template(self, request):
         require_role(request.user, MANAGERS)
-        response = HttpResponse(
-            ('\ufeff' + ','.join(bom_import.HEADERS) + '\r\n').encode('utf-8'), content_type='text/csv; charset=utf-8'
-        )
-        response['Content-Disposition'] = 'attachment; filename="bom-template.csv"'
-        return response
+        from ..services.tabular import document
+
+        return document('bom-template', bom_import.HEADERS, [], request.query_params.get('file_format', 'csv'))
 
     @action(detail=True, methods=['post'])
     def edit(self, request, pk=None):

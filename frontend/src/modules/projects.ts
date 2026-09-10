@@ -39,14 +39,14 @@ import { endpoint, ledgerStatus } from './shared'
 export const columns: Record<string, Column[]> = {
   projects: [
     C('code', '项目编号'),
-    C('name', '项目'),
+    C('name', '项目名称'),
     C('customer_name', '客户'),
     C('manager_name', '负责人'),
     C('status', '状态'),
     C('due_date', '计划交期'),
   ],
   tasks: [
-    C('title', '任务'),
+    C('title', '任务名称'),
     C('kind', '阶段'),
     C('assignee_name', '执行人'),
     C('status', '状态'),

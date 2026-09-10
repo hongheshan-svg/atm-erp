@@ -79,6 +79,12 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual(preview['summary']['income'], '100.00')
         self.assertEqual(preview['summary']['expense'], '20.00')
         self.assertTrue(preview['can_import'])
+        self.assertEqual(
+            [column['label'] for column in preview['columns']],
+            ['银行日期', '账户', '流水号 / 导入标识', '对方户名', '收入 / 支出', '说明'],
+        )
+        self.assertEqual(preview['row_count'], 2)
+        self.assertEqual(preview['rows'][1]['data']['amount'], '-20.00')
         self.assertEqual(self.confirm(preview['token']), {'count': 2, 'skipped': 0})
         self.assertEqual(self.confirm(preview['token']), {'count': 2, 'skipped': 0})
         # New filename, preview and user still deduplicate by transaction, not batch nonce.

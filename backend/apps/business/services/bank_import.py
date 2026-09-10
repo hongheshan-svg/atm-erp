@@ -245,7 +245,27 @@ def preview(actor, upload):
         if not errors
         else None
     )
-    return dict(rows=records, count=len(records), errors=errors, summary=summary, can_import=not errors, token=token)
+    columns = [
+        {'key': key, 'label': label}
+        for key, label in [
+            ('date', '银行日期'),
+            ('account', '账户'),
+            ('reference', '流水号 / 导入标识'),
+            ('counterparty', '对方户名'),
+            ('amount', '收入 / 支出'),
+            ('reason', '说明'),
+        ]
+    ]
+    return dict(
+        rows=records,
+        columns=columns,
+        row_count=len(records),
+        count=len(records),
+        errors=errors,
+        summary=summary,
+        can_import=not errors,
+        token=token,
+    )
 
 
 def confirm(actor, token):
