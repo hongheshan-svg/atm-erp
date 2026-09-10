@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.core.permissions import MONEY_READERS, role
@@ -17,6 +18,7 @@ from .models import (
     Task,
     TimeEntry,
 )
+from .services import payment_terms
 from .services.finance import balance, paid
 
 
@@ -41,7 +43,19 @@ class ItemSerializer(serializers.ModelSerializer):
 class PartnerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Partner
-        fields = ['id', 'code', 'name', 'kind', 'contact', 'phone', 'address', 'is_active', 'updated_at']
+        fields = [
+            'id',
+            'code',
+            'name',
+            'kind',
+            'contact',
+            'phone',
+            'address',
+            'payment_term',
+            'payment_days',
+            'is_active',
+            'updated_at',
+        ]
 
 
 class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
@@ -152,6 +166,8 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'supplier',
             'supplier_name',
             'payment_due_date',
+            'payment_term',
+            'payment_days',
             'next_delivery_date',
             'status',
             'due_date',
@@ -193,6 +209,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'quantity',
             'value',
             'supplier_credit',
+            'received_date',
             'reason',
             'created_at',
             'created_by',
@@ -203,6 +220,20 @@ class EntrySerializer(serializers.ModelSerializer):
     paid_amount = serializers.SerializerMethodField()
     balance = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
+    due_date = serializers.SerializerMethodField()
+    payment_schedule = serializers.SerializerMethodField()
+    due_amount = serializers.SerializerMethodField()
+
+    def get_due_date(self, obj):
+        return (
+            payment_terms.next_due(obj) if obj.purchase_id and obj.purchase.payment_term != 'manual' else obj.due_date
+        )
+
+    def get_payment_schedule(self, obj):
+        return [{'due_date': row['due_date'], 'amount': str(row['amount'])} for row in payment_terms.schedule(obj)]
+
+    def get_due_amount(self, obj):
+        return str(payment_terms.due_amount(obj, timezone.localdate(), inclusive=True))
 
     def get_paid_amount(self, obj):
         return str(paid(obj))
@@ -223,6 +254,8 @@ class EntrySerializer(serializers.ModelSerializer):
             'amount',
             'credit_amount',
             'paid_amount',
+            'payment_schedule',
+            'due_amount',
             'balance',
             'due_date',
             'cancelled',
@@ -300,6 +333,11 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     evidence = serializers.SerializerMethodField()
+    bank_matched = serializers.BooleanField(read_only=True, default=False)
+    cash_amount = serializers.SerializerMethodField()
+
+    def get_cash_amount(self, obj):
+        return str(obj.amount if obj.entry.kind == 'receivable' else -obj.amount)
 
     def get_evidence(self, obj):
         records = (
@@ -333,6 +371,9 @@ class PaymentSerializer(serializers.ModelSerializer):
             'method',
             'account',
             'reference',
+            'reconciliation',
+            'bank_matched',
+            'cash_amount',
             'document',
             'project',
             'amount',

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -27,6 +28,7 @@ from .common import (
     state,
     text,
 )
+from .payment_terms import terms
 
 
 def total(purchase):
@@ -35,9 +37,25 @@ def total(purchase):
 
 def create_purchase(actor, key, data):
     def execute(user, project):
-        fields(data, {'project', 'supplier', 'due_date', 'payment_due_date', 'note', 'lines', 'from_demand'})
+        fields(
+            data,
+            {
+                'project',
+                'supplier',
+                'due_date',
+                'payment_due_date',
+                'payment_term',
+                'payment_days',
+                'note',
+                'lines',
+                'from_demand',
+            },
+        )
         state(project, {'active', 'delivering', 'warranty'})
         supplier = lookup(Partner, data.get('supplier'), 'supplier', is_active=True, kind__in=['supplier', 'both'])
+        agreed = terms(data, supplier)
+        if agreed['payment_term'] != 'manual' and data.get('payment_due_date'):
+            raise ValidationError({'payment_due_date': '自动账期按实际收货计算，请清空指定付款日期。'})
         from_demand = data.get('from_demand', False)
         if not isinstance(from_demand, bool):
             raise ValidationError({'from_demand': '必须为布尔值。'})
@@ -59,6 +77,7 @@ def create_purchase(actor, key, data):
                 due_date=day(data, 'due_date'),
                 payment_due_date=day(data, 'payment_due_date') if data.get('payment_due_date') else None,
                 note=text(data, 'note', default=''),
+                **agreed,
             ),
             user,
         )
@@ -163,7 +182,10 @@ def approve(actor, key, purchase_id, data, *, override=False):
 
 def receive(actor, key, purchase_id, data, *, from_quarantine=False):
     def execute(user, purchase):
-        fields(data, {'location', 'lines', 'reason'})
+        fields(data, {'location', 'lines', 'reason', 'received_date'})
+        received_date = day(data, 'received_date') if data.get('received_date') else timezone.localdate()
+        if received_date > timezone.localdate():
+            raise ValidationError({'received_date': '实际收货日期不能晚于今天。'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'approved', 'partial'})
         location = text(data, 'location', default='主仓', maximum=80)
@@ -211,6 +233,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
                     project=purchase.project,
                     purchase_line=line,
                     kind='receipt',
+                    received_date=received_date,
                     quantity=qty,
                     value=value,
                     reason=reason,
@@ -317,7 +340,19 @@ def delivery_plan(actor, key, purchase_id, data):
 
 def edit(actor, key, purchase_id, data):
     def execute(user, purchase):
-        fields(data, {'expected_updated_at', 'reason', 'due_date', 'payment_due_date', 'note', 'lines'})
+        fields(
+            data,
+            {
+                'expected_updated_at',
+                'reason',
+                'due_date',
+                'payment_due_date',
+                'payment_term',
+                'payment_days',
+                'note',
+                'lines',
+            },
+        )
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'draft'})
         version = data.get('expected_updated_at')
@@ -329,6 +364,13 @@ def edit(actor, key, purchase_id, data):
             raise Conflict('采购单已更新，请刷新后重试。')
         reason = text(data, 'reason')
         lines = {line.pk: line for line in purchase.lines.select_for_update()}
+        agreed = terms(data, purchase)
+        if agreed['payment_term'] != 'manual' and data.get('payment_due_date'):
+            raise ValidationError({'payment_due_date': '自动账期按实际收货计算，请清空指定付款日期。'})
+        for field, value in agreed.items():
+            setattr(purchase, field, value)
+        if purchase.payment_term != 'manual':
+            purchase.payment_due_date = None
         selected = {}
         for row in rows(data):
             fields(row, {'id', 'quantity', 'unit_price', 'due_date'})

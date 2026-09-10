@@ -25,6 +25,7 @@ class Command(BaseCommand):
                 ('delivery', 'DEL'),
                 ('item', 'MAT'),
                 ('partner', 'PTY'),
+                ('reconciliation', 'DZ'),
             ]:
                 CodeRule.objects.get_or_create(key=key, defaults={'prefix': prefix})
             if not User.objects.exists():

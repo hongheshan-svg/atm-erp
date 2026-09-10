@@ -23,6 +23,33 @@ TODAY = '2026-09-09'
 
 
 class BusinessFixtures:
+    def reconciliation_data(self, entry, *, prepayment=False):
+        """Explicitly prepare authorization through the same API used by finance."""
+        from apps.business.services.finance import balance
+
+        entry = Entry.objects.get(pk=entry.pk if isinstance(entry, Entry) else entry)
+        remaining = balance(entry)
+        kind = 'refund' if remaining < 0 else 'prepayment' if prepayment else 'settlement'
+        result = self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': kind,
+                'counterparty_balance': str(remaining),
+                'approved_amount': str(abs(remaining)),
+                'basis': '合同 HT-TEST 约定预付',
+                'reason': '核对原始业务',
+            },
+            status=201,
+        )
+        self.post(
+            'manager' if kind == 'prepayment' else 'finance',
+            f'reconciliations/{result["id"]}/confirm/',
+            {'reason': '核对完成'},
+        )
+        return {'reconciliation': result['id']}
+
     def bom_version(self, project_id):
         response = self.clients['manager'].get(f'/api/business/projects/{project_id}/demand/')
         self.assertEqual(response.status_code, 200, response.data)
@@ -104,6 +131,25 @@ class CommercialChainTests(BusinessFixtures, TestCase):
     def setUp(self):
         self.setup_business()
 
+    def test_purchase_contract_preview_uses_source_values_and_blocks_sensitive_roles(self):
+        purchase = self.purchase(self.active_project(), approve=False)
+        path = f'/api/business/purchases/{purchase.pk}/contract-preview/'
+        for role in ['admin', 'manager', 'purchaser', 'finance']:
+            response = self.clients[role].get(path)
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertTrue(response.data['draft'])
+            self.assertEqual(response.data['total'], '500.00')
+            self.assertEqual(response.data['lines'][0]['code'], self.item.code)
+            self.assertEqual(response.data['supplier']['name'], self.supplier.name)
+        for role in ['warehouse', 'member', 'sales_manager']:
+            self.assertEqual(self.clients[role].get(path).status_code, 403)
+        self.post('manager', f'purchases/{purchase.pk}/approve/')
+        self.assertFalse(self.clients['purchaser'].get(path).data['draft'])
+        self.post('purchaser', f'purchases/{purchase.pk}/cancel-remainder/', {'reason': '取消未收货'})
+        response = self.clients['purchaser'].get(path)
+        self.assertEqual(response.data['status'], 'cancelled')
+        self.assertEqual(response.data['cancelled_amount'], '500.00')
+
     def test_quote_contract_bom_purchase_receipt_and_settlement(self):
         project = self.active_project()
         self.assertEqual(project.contract_amount, Decimal('10000.00'))
@@ -154,7 +200,12 @@ class CommercialChainTests(BusinessFixtures, TestCase):
             self.post(
                 'finance',
                 f'entries/{entry.pk}/pay/',
-                {'amount': str(entry.amount), 'date': TODAY, 'reason': '银行已确认'},
+                {
+                    'amount': str(entry.amount),
+                    'date': TODAY,
+                    'reason': '银行已确认',
+                    **(self.reconciliation_data(entry) if entry.purchase_id else {}),
+                },
             )
             response = self.clients['finance'].get(f'/api/business/entries/{entry.pk}/')
             self.assertEqual(Decimal(response.data['balance']), 0)
@@ -259,7 +310,11 @@ class CommercialChainTests(BusinessFixtures, TestCase):
         project = self.active_project()
         purchase = self.purchase(project)
         entry = Entry.objects.get(purchase=purchase)
-        self.post('finance', f'entries/{entry.pk}/pay/', {'amount': '500', 'date': TODAY, 'reason': '预付'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '500', 'date': TODAY, 'reason': '预付', **self.reconciliation_data(entry, prepayment=True)},
+        )
         self.post(
             'warehouse',
             f'purchases/{purchase.pk}/receive/',
@@ -273,7 +328,11 @@ class CommercialChainTests(BusinessFixtures, TestCase):
         self.post(
             'finance', f'entries/{entry.pk}/refund/', {'amount': '301', 'date': TODAY, 'reason': '超额'}, status=409
         )
-        self.post('finance', f'entries/{entry.pk}/refund/', {'amount': '300', 'date': TODAY, 'reason': '退款到账'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/refund/',
+            {'amount': '300', 'date': TODAY, 'reason': '退款到账', **self.reconciliation_data(entry)},
+        )
         self.assertEqual(Decimal(self.clients['finance'].get(f'/api/business/entries/{entry.pk}/').data['balance']), 0)
         self.assertEqual(Stock.objects.get().quantity, Decimal('2'))
 
@@ -383,7 +442,11 @@ class CommercialChainTests(BusinessFixtures, TestCase):
         self.assertEqual(Payment.objects.count(), 2)
         self.post('finance', f'entries/{expense_id}/pay/', {'amount': '100', 'date': TODAY, 'reason': '重新登记'})
         self.post('finance', f'entries/{expense_id}/cancel-expense/', {'reason': '交通取消并退款'})
-        self.post('finance', f'entries/{expense_id}/refund/', {'amount': '100', 'date': TODAY, 'reason': '退回银行'})
+        self.post(
+            'finance',
+            f'entries/{expense_id}/refund/',
+            {'amount': '100', 'date': TODAY, 'reason': '退回银行', **self.reconciliation_data(expense_id)},
+        )
         self.assertEqual(
             self.clients['finance'].get(f'/api/business/projects/{project.pk}/cost/').data['expenses'], '0.00'
         )
@@ -396,11 +459,15 @@ class CommercialChainTests(BusinessFixtures, TestCase):
         purchase = self.purchase(project)
         entry = Entry.objects.get(purchase=purchase)
         payment = self.post(
-            'finance', f'entries/{entry.pk}/pay/', {'amount': '500', 'date': TODAY, 'reason': '预付款'}
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '500', 'date': TODAY, 'reason': '预付款', **self.reconciliation_data(entry, prepayment=True)},
         )['id']
         self.post('purchaser', f'purchases/{purchase.pk}/cancel-remainder/', {'reason': '订单取消'})
         refund = self.post(
-            'finance', f'entries/{entry.pk}/refund/', {'amount': '500', 'date': TODAY, 'reason': '已退款'}
+            'finance',
+            f'entries/{entry.pk}/refund/',
+            {'amount': '500', 'date': TODAY, 'reason': '已退款', **self.reconciliation_data(entry)},
         )['id']
         count = ActionReceipt.objects.count()
         self.post('finance', f'payments/{payment}/reverse/', {'date': TODAY, 'reason': '顺序错误'}, status=409)

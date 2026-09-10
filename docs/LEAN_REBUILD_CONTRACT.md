@@ -131,6 +131,29 @@
 - `GET /documents/?sale=ID`、`?purchase=ID` 读取单据附件；`?project=ID` 按原关联汇总项目及其销售、采购附件，签约后自动可见，不复制文件。序列化的 `project` 为实际所属项目，`sale/purchase/source` 标明来源。列表、元数据导出和下载共用权限过滤。
 - 补充协议可关联当前销售单上传的合同或原项目合同，不接受采购合同。财务凭证继续沿用原项目附件流程。
 
+## 业务对账与银行核对
+
+- `reconciliations/` 财务/管理员 POST `entry/kind/counterparty_balance/approved_amount/basis?/document?/reason`，kind 为 settlement/prepayment/refund；金额按两位小数字符串，退款对方余额为负数。生成 DZ 编号及原业务快照；GET 列表和详情仅金额可读角色，支持 `entry/entry__project/status/kind` 筛选及原导出入口。
+- `reconciliations/{id}/confirm/` POST reason。普通对账/退款由财务或管理员确认，预付款由项目经理或管理员核准；原数据变化、差异非零、额度超过可结算金额时拒绝。采购普通结算额度=min(未结余额, 收货净值-原净付款)，不含隔离品；未收货部分必须填写合同依据并申请 prepayment。`void/` 财务 POST reason 作废剩余额度，历史不删除。
+- `entries/{id}/pay/`、`refund/` 增加可选 reconciliation。采购付款和所有退款必须提供同款项的有效确认单；普通客户收款、费用支付不强制。核准额度可分次使用，原单、收退货或其他资金流水改变后重新对账；原操作同键回放仍重新授权，冲销不能恢复旧授权额度。历史付款保留，无需倒补虚构对账。收付款导入追加“对账单ID”第9列，兼容旧4/8列；采购付款缺有效对账仍拒绝导入，不能绕过服务。
+- `bank-records/` 财务/管理员 POST `project?/amount/date/account/reference/counterparty/reason`；收入正、支出负，账户+银行流水号在有效记录中唯一。记录实际银行事实，不修改 Entry/Payment 或项目成本，可暂不指定项目。GET 支持 project、search，返回 remaining_amount、匹配及退回历史。`void/` POST reason 仅作废无有效关联的误录记录，保留历史后可重新录入正确事实。
+- `bank-records/{id}/allocate/` POST `entry/amount/reason/reconciliation?`：仅实际收入，客户收款或供应商退款经原 finance.pay 生成 Payment 后建立银行匹配，事务失败全部回滚；供应商退款仍需有效退款对账。允许分次认领或跨项目拆分，已明确项目的记录不能认领到其他项目。
+- `bank-records/{id}/match/` POST payment/reason：匹配已有未冲销、未匹配的银行方式付款，核对账户、方向、流水号（原记录有填写时）和可用金额。允许一条银行记录匹配多笔付款，不新增资金流水。`unmatch/` POST match/reason 追加撤销匹配，不冲销付款；已匹配付款须先解除银行关联后才能冲销，已结项相关项目须先重开。
+- `bank-records/{id}/return-unclaimed/` POST returned/amount/reason：未认领收入关联真实银行退款支出，核对账户、对方户名、项目及双方未匹配金额，追加不可变关联，不生成虚构项目款项。`reverse-return/` POST offset/reason 追加撤销关联，保留原始银行事实。
+- 银行列表仅财务/管理员访问，对账单沿用金额可读权限，附件仍走原鉴权下载；新表为快照、银行原始记录及其关联，既有应收、应付、费用、成本仍只有原业务事实。工作台按角色展示预付款核准、财务对账、银行待认领；已结项项目实际银行流水仍可登记，但相关核销纠错需重新打开。
+
+## 采购账期与到期投影
+
+采购单保存后通过 `GET /api/business/purchases/{id}/contract-preview/` 自动投影打印合同；仅 admin/manager/purchaser/finance 可读，warehouse/member/sales_manager 拒绝。合同沿用采购单编号，引用当前公司、供应商、物料、交期、账期和备注，金额由服务端按明细计算；草稿/未批准、已取消和取消余量明确标示，不伪造签署状态。前端采购操作“预览采购合同”打开 A4 页面，可打印或另存 PDF；签署文件上传原采购附件，预览不新增合同金额台账或公开下载地址。
+
+合同正文采用单页 A4 紧凑排版，包含交付结算、质量验收、每批验收合格起一年质保、维修更换费用、违约赔偿、不可抗力、保密及争议处理条款。多项或长明细在正文汇总，完整附件独立预览和打印，保留全部物料及长备注，附件允许分页；双方按同编号确认正文和附件。打印件不带系统生成说明、更新时间或系统订单状态，保留草稿/取消提示及业务条款。模板条款不自动新增采购售后台账，也不改变付款或收货服务规则。
+
+- Partner、PurchaseOrder 增加 payment_term（manual/cash/month30/month60/month90/month120/custom）及 payment_days；custom 为0～365自然日。供应商只提供新单默认值，采购创建时保存条款；草稿可改，提交后沿用原审批和退回流程，供应商改默认值不追改已有订单。
+- 月结＝每批实际合格收货日期的当月月底＋天数，不按下单日期、不按整单最后收货日，也不自动顺延工作日。cash＝合格收货日；隔离品合格入库才起算。receive/quality-accept 接受 received_date（缺省今天，不得晚于今天），存入不可变 StockMove；历史缺省日期仅在投影中回退为流水本地创建日。
+- 继续一单一应付，不新增可编辑应付分账。payment_schedule 从原收货金额、原批次退货 supplier_credit 和净 Payment 计算，退货冲原批次，净付款按先到期顺序抵扣。未收货部分没有自动到期日；API due_date 为最近未结到期日，due_amount 为今天及之前到期金额，报表逾期只计今天之前的未结分批金额。数据库原 Entry.due_date 仅作为旧手工期限事实保留。
+- manual 沿用独立 payment_due_date（留空兼容原交期）；自动账期不能同时填写指定付款日期。采购账期和 bank/cash/other 支付方式独立；到期投影不跳过对账或预付款核准，也不把未来到期付款一律禁止。
+- 采购模板12列（兼容8/9/10列），供应商模板7列（兼容5列），末尾追加采购账期和自定义月结天数；同一采购分组条款必须一致。列表、导出及对账快照保留条款，到期明细可在收付款页面查看。
+
 ## 模块页面布局
 
 - 设置按用户管理、公司资料、编号规则、操作审计、我的账户分为独立页签；非管理员仅有我的账户。基础资料、库存、收付款中的原上下堆叠模块使用同一页签组件。

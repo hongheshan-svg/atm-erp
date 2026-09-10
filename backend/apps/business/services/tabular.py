@@ -11,6 +11,11 @@ from rest_framework.exceptions import ValidationError
 MAX_EXPORT = 20000
 LABELS = {
     'payment_due_date': '付款到期日',
+    'payment_term': '采购账期',
+    'payment_days': '月结天数',
+    'payment_schedule': '未结到期明细',
+    'due_amount': '当前到期金额',
+    'received_date': '实际合格收货日期',
     'next_delivery_date': '最近待到货日',
     'material_requirements': '交付配套快照',
     'evidence': '关联凭证记录',

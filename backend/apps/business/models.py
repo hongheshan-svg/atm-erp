@@ -16,6 +16,16 @@ def quantity(**kwargs):
     return models.DecimalField(max_digits=18, decimal_places=3, default=0, **kwargs)
 
 
+class PaymentTerm(models.TextChoices):
+    MANUAL = 'manual', '指定付款日期'
+    CASH = 'cash', '现付（合格收货日）'
+    MONTH30 = 'month30', '月结30天'
+    MONTH60 = 'month60', '月结60天'
+    MONTH90 = 'month90', '月结90天'
+    MONTH120 = 'month120', '月结120天'
+    CUSTOM = 'custom', '月结自定义天数'
+
+
 class Item(BaseModel):
     class PartType(models.TextChoices):
         STANDARD = 'standard', '标准件'
@@ -45,6 +55,8 @@ class Partner(BaseModel):
     contact = models.CharField(max_length=80, blank=True)
     phone = models.CharField(max_length=50, blank=True)
     address = models.CharField(max_length=250, blank=True)
+    payment_term = models.CharField(max_length=20, choices=PaymentTerm.choices, default=PaymentTerm.MANUAL)
+    payment_days = models.PositiveSmallIntegerField(default=30)
     is_active = models.BooleanField(default=True)
 
     class Meta(BaseModel.Meta):
@@ -191,6 +203,8 @@ class PurchaseOrder(BaseModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     due_date = models.DateField()
     payment_due_date = models.DateField(null=True, blank=True)
+    payment_term = models.CharField(max_length=20, choices=PaymentTerm.choices, default=PaymentTerm.MANUAL)
+    payment_days = models.PositiveSmallIntegerField(default=30)
     note = models.CharField(max_length=500, blank=True)
 
     class Meta(BaseModel.Meta):
@@ -311,6 +325,7 @@ class StockMove(ImmutableLedger):
     quantity = quantity()
     value = money()
     supplier_credit = money()
+    received_date = models.DateField(null=True, blank=True)
     reason = models.CharField(max_length=500)
 
     class Meta(LedgerModel.Meta):
@@ -343,6 +358,7 @@ class Entry(LedgerModel):
 
 class Payment(ImmutableLedger):
     entry = models.ForeignKey(Entry, models.PROTECT, related_name='payments')
+    reconciliation = models.ForeignKey('Reconciliation', models.PROTECT, null=True, blank=True, related_name='payments')
     amount = money()
     date = models.DateField()
     reason = models.CharField(max_length=500)
@@ -365,6 +381,84 @@ class PaymentEvidence(ImmutableLedger):
     class Meta(ImmutableLedger.Meta):
         db_table = 'lean_payment_evidence'
         constraints = [models.UniqueConstraint(fields=['payment', 'document'], name='lean_payment_evidence_unique')]
+
+
+class Reconciliation(LedgerModel):
+    code = models.CharField(max_length=30, unique=True)
+    entry = models.ForeignKey(Entry, models.PROTECT, related_name='reconciliations')
+    kind = models.CharField(
+        max_length=20, choices=[('settlement', '业务对账'), ('prepayment', '预付款核准'), ('refund', '退款对账')]
+    )
+    status = models.CharField(
+        max_length=20, default='draft', choices=[('draft', '待确认'), ('confirmed', '已确认'), ('void', '已作废')]
+    )
+    snapshot = models.JSONField(default=dict, blank=True)
+    counterparty_balance = money()
+    approved_amount = money()
+    basis = models.CharField(max_length=500, blank=True)
+    document = models.ForeignKey('Document', models.PROTECT, null=True, blank=True, related_name='reconciliations')
+    reason = models.CharField(max_length=500)
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, null=True, blank=True, related_name='+')
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.CharField(max_length=500, blank=True)
+
+    class Meta(LedgerModel.Meta):
+        db_table = 'lean_reconciliation'
+        constraints = [models.CheckConstraint(condition=Q(approved_amount__gt=0), name='lean_reconcile_positive')]
+
+
+class BankRecord(LedgerModel):
+    project = models.ForeignKey(Project, models.PROTECT, null=True, blank=True, related_name='bank_records')
+    amount = money()
+    date = models.DateField()
+    account = models.CharField(max_length=100)
+    reference = models.CharField(max_length=100)
+    counterparty = models.CharField(max_length=150)
+    reason = models.CharField(max_length=500)
+    void_reason = models.CharField(max_length=500, blank=True)
+
+    class Meta(LedgerModel.Meta):
+        db_table = 'lean_bank_record'
+        constraints = [
+            models.CheckConstraint(condition=~Q(amount=0), name='lean_bank_nonzero'),
+            models.UniqueConstraint(
+                fields=['account', 'reference'], condition=Q(void_reason=''), name='lean_bank_reference_unique'
+            ),
+        ]
+
+
+class BankMatch(ImmutableLedger):
+    bank = models.ForeignKey(BankRecord, models.PROTECT, related_name='matches')
+    payment = models.ForeignKey(Payment, models.PROTECT, related_name='bank_matches')
+    amount = money()
+    reason = models.CharField(max_length=500)
+    reversal_of = models.OneToOneField('self', models.PROTECT, null=True, blank=True, related_name='reversal')
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_bank_match'
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0, reversal_of__isnull=True) | Q(amount__lt=0, reversal_of__isnull=False),
+                name='lean_bank_match_direction',
+            )
+        ]
+
+
+class BankOffset(ImmutableLedger):
+    source = models.ForeignKey(BankRecord, models.PROTECT, related_name='returned_funds')
+    returned = models.ForeignKey(BankRecord, models.PROTECT, related_name='return_sources')
+    amount = money()
+    reason = models.CharField(max_length=500)
+    reversal_of = models.OneToOneField('self', models.PROTECT, null=True, blank=True, related_name='reversal')
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_bank_offset'
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0, reversal_of__isnull=True) | Q(amount__lt=0, reversal_of__isnull=False),
+                name='lean_bank_offset_direction',
+            )
+        ]
 
 
 class TimeEntry(ImmutableLedger):

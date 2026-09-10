@@ -83,6 +83,8 @@ async function load() {
       focused = focus
       if (props.resource === 'purchases') await action(row, '查看明细')
       else if (props.resource === 'entries') await action(row, '查看收付流水')
+      else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
+      else if (props.resource === 'bank-records') await action(row, '查看银行明细')
       else { command.value = { title: '待办详情', path: '', readonly: true, initial: row, fields: [{ key: 'title', label: '任务' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'due_date', label: '期限' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
     }
   } catch (e) {
@@ -113,6 +115,10 @@ async function create() {
 }
 async function action(row: Row, name: string) {
   try {
+    if (props.resource === 'purchases' && name === '预览采购合同') {
+      await router.push(`/purchases/${row.id}/contract`)
+      return
+    }
     if (name === '附件' && ['sales', 'purchases'].includes(props.resource)) {
       command.value = null
       attachmentRow.value = row

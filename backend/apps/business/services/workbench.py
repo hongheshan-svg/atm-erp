@@ -4,11 +4,12 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.core.permissions import MANAGERS, MONEY_READERS, PURCHASERS, WAREHOUSE, projects_for, role
+from apps.core.permissions import FINANCE, MANAGERS, MONEY_READERS, PURCHASERS, WAREHOUSE, projects_for, role
 
 from ..models import Entry, Project, PurchaseOrder, Task
 from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
 from .common import ZERO
+from .payment_terms import due_amount, with_sources
 
 
 def summary(request):
@@ -69,14 +70,46 @@ def summary(request):
             result['overdue_purchases'] = bucket(overdue, PurchaseSerializer, 'overdue_purchases')
     if role(user) in MONEY_READERS:
         amount = DecimalField(max_digits=18, decimal_places=2)
-        entries = (
+        entries = with_sources(
             Entry.objects.filter(project__in=projects)
             .exclude(project__status='closed')
             .select_related('project')
             .annotate(net_paid=Coalesce(Sum('payments__amount'), Value(ZERO), output_field=amount))
             .annotate(remaining=F('amount') - F('credit_amount') - F('net_paid'))
-            .filter(Q(remaining__lt=0) | Q(remaining__gt=0, due_date__lte=timezone.localdate()))
+            .filter(Q(remaining__lt=0) | Q(remaining__gt=0))
             .order_by('due_date', 'pk')
         )
+        eligible_ids = [
+            entry.pk
+            for entry in entries
+            if entry.remaining < 0 or due_amount(entry, timezone.localdate(), inclusive=True) > 0
+        ]
+        entries = entries.filter(pk__in=eligible_ids)
         result['settlements'] = bucket(entries, EntrySerializer, 'settlements')
+    if role(user) in FINANCE | MANAGERS:
+        from ..api.reconciliation import BankSerializer, ReconciliationSerializer
+        from ..models import BankRecord, Reconciliation
+        from .banking import with_remaining
+
+        pending = (
+            Reconciliation.objects.filter(status='draft')
+            .select_related('entry__project', 'entry__purchase__supplier', 'confirmed_by')
+            .order_by('id')
+        )
+        if role(user) in MANAGERS:
+            prepayments = pending.filter(kind='prepayment')
+            if prepayments.exists():
+                result['prepayments'] = bucket(prepayments, ReconciliationSerializer, 'prepayments')
+        if role(user) in FINANCE:
+            statements = pending.exclude(kind='prepayment')
+            if statements.exists():
+                result['reconciliations'] = bucket(statements, ReconciliationSerializer, 'reconciliations')
+            banks = (
+                with_remaining(BankRecord.objects.filter(void_reason=''))
+                .filter(net_remaining__gt=0)
+                .select_related('project')
+                .order_by('date', 'id')
+            )
+            if banks.exists():
+                result['bank_records'] = bucket(banks, BankSerializer, 'bank_records')
     return result

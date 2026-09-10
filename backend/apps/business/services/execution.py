@@ -392,6 +392,9 @@ def close(actor, key, project_id, data):
             raise Conflict('项目还有未处理完成的采购。')
         if any(balance(entry) != 0 for entry in project.entries.select_for_update()):
             raise Conflict('项目还有未结清款项或待退款。')
+        from .banking import check_close
+
+        check_close(project)
         reason = text(data, 'reason')
         project.status, project.close_reason = 'closed', reason
         save(project, user)

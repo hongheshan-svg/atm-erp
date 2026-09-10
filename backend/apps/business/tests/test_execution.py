@@ -175,7 +175,12 @@ class ExecutionTests(ExecutionFixtures, TestCase):
             self.post(
                 'finance',
                 f'entries/{entry["id"]}/pay/',
-                {'amount': entry['balance'], 'date': TODAY, 'reason': '银行到账确认'},
+                {
+                    'amount': entry['balance'],
+                    'date': TODAY,
+                    'reason': '银行到账确认',
+                    **(self.reconciliation_data(entry['id']) if entry['purchase'] else {}),
+                },
             )
         result = self.clients['finance'].get(f'/api/business/projects/{project.pk}/cost/').data
         self.assertEqual(
@@ -297,7 +302,11 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.assertEqual(task.status, 'cancelled')
         entry.refresh_from_db()
         self.assertEqual(entry.credit_amount, Decimal('10000'))
-        self.post('finance', f'entries/{entry.pk}/refund/', {'amount': '500', 'date': TODAY, 'reason': '预收款退还'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/refund/',
+            {'amount': '500', 'date': TODAY, 'reason': '预收款退还', **self.reconciliation_data(entry)},
+        )
         self.post('manager', f'projects/{project.pk}/reopen/', {'reason': '客户恢复项目'})
         self.assertEqual(project.entries.count(), 1)
         entry.refresh_from_db()

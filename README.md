@@ -1,6 +1,6 @@
 # 项目 ERP · 精简版
 
-当前版本：**v1.2.0**。查看[发布说明](docs/releases/v1.2.0.md)及下方数据库兼容性限制。
+当前版本：**v1.4.0**。查看[发布说明](docs/releases/v1.4.0.md)及下方数据库兼容性限制。
 
 面向约 50 人非标自动化公司，以项目串联 **需求 → 报价签约 → BOM → 采购收货 → 设计装配调试 → 分批发货安装验收 → 售后 → 收付款与成本**。
 
@@ -20,7 +20,7 @@
 
 ## 安装（macOS / Linux / Windows）
 
-下载版本：[v1.2.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.2.0) · [v1.1.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.1.0) · [v1.0.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.0.0)。安装说明统一在本 README 阅读，Release 页面保留版本变化和安装包下载。
+下载版本：[v1.4.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.4.0) · [历史版本](https://github.com/hongheshan-svg/atm-erp/releases)。完整安装说明在本 README 阅读；后续 Release 页面按[发布模板](docs/releases/TEMPLATE.md)，在版本说明最下方附简短安装命令、安装包下载提示及仓库和安装指南链接。
 
 每个版本提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。使用自己配置的 PostgreSQL / Redis / Nginx 服务，第三方依赖按各自许可使用。
 
@@ -126,9 +126,9 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 
 ```bash
 # Linux
-sha256sum -c atm-erp-v1.2.0-SHA256SUMS.txt
+sha256sum -c atm-erp-v1.4.0-SHA256SUMS.txt
 # macOS
-shasum -a 256 -c atm-erp-v1.2.0-SHA256SUMS.txt
+shasum -a 256 -c atm-erp-v1.4.0-SHA256SUMS.txt
 ```
 
 ```powershell

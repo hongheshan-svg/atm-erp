@@ -16,6 +16,80 @@ from .test_commercial_chain import TODAY, BusinessFixtures
 
 
 class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
+    def test_concurrent_bank_allocations_cannot_overclaim(self):
+        from apps.business.models import BankMatch, BankRecord
+        from apps.business.services.banking import remaining
+
+        bank = self.post(
+            'finance',
+            'bank-records/',
+            {
+                'amount': '500',
+                'date': TODAY,
+                'account': 'BANK-A',
+                'reference': 'B-001',
+                'counterparty': '客户',
+                'reason': '实际到账',
+            },
+            status=201,
+        )['id']
+        entry = self.project.entries.get(kind='receivable')
+        payload = {'entry': entry.pk, 'amount': '400', 'reason': '并发认领'}
+        results = self.together([('finance', f'bank-records/{bank}/allocate/', payload)] * 2)
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(BankMatch.objects.count(), 1)
+        self.assertEqual(remaining(BankRecord.objects.get(pk=bank)), 100)
+
+    def test_concurrent_bank_matches_cannot_match_same_payment_twice(self):
+        from apps.business.models import BankMatch
+
+        bank = self.post(
+            'finance',
+            'bank-records/',
+            {
+                'amount': '1000',
+                'date': TODAY,
+                'account': 'BANK-A',
+                'reference': 'B-002',
+                'counterparty': '客户',
+                'reason': '实际到账',
+            },
+            status=201,
+        )['id']
+        entry = self.project.entries.get(kind='receivable')
+        payment = self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '400', 'date': TODAY, 'method': 'bank', 'account': 'BANK-A', 'reason': '已登记收款'},
+        )['id']
+        results = self.together(
+            [('finance', f'bank-records/{bank}/match/', {'payment': payment, 'reason': '并发匹配'})] * 2
+        )
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(BankMatch.objects.count(), 1)
+
+    def test_concurrent_payments_cannot_overrun_confirmed_limit(self):
+        entry = self.purchase(self.project).entry
+        statement = self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': 'prepayment',
+                'counterparty_balance': '500',
+                'approved_amount': '100',
+                'basis': '合同预付20%',
+                'reason': '预付核准',
+            },
+            status=201,
+        )['id']
+        self.post('manager', f'reconciliations/{statement}/confirm/', {'reason': '按合同确认'})
+        payload = {'amount': '80', 'date': TODAY, 'reason': '并发付款', 'reconciliation': statement}
+        results = self.together([('finance', f'entries/{entry.pk}/pay/', payload)] * 2)
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(Payment.objects.get().amount, 80)
+
     def test_concurrent_quarantine_release_cannot_double_stock(self):
         purchase = self.purchase(self.project, qty='1')
         line = purchase.lines.get()
@@ -223,7 +297,12 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
     def test_concurrent_payments_cannot_exceed_balance(self):
         purchase = self.purchase(self.project)
         entry = Entry.objects.get(purchase=purchase)
-        payload = {'amount': '400', 'date': TODAY, 'reason': '并发付款'}
+        payload = {
+            'amount': '400',
+            'date': TODAY,
+            'reason': '并发付款',
+            **self.reconciliation_data(entry, prepayment=True),
+        }
         results = self.together([('finance', f'entries/{entry.pk}/pay/', payload)] * 2)
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(Payment.objects.get(entry=entry).amount, Decimal('400'))
@@ -233,9 +312,13 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
 
         purchase = self.purchase(self.project)
         entry = Entry.objects.get(purchase=purchase)
-        self.post('finance', f'entries/{entry.pk}/pay/', {'amount': '500', 'date': TODAY, 'reason': '预付款'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '500', 'date': TODAY, 'reason': '预付款', **self.reconciliation_data(entry, prepayment=True)},
+        )
         self.post('purchaser', f'purchases/{purchase.pk}/cancel-remainder/', {'reason': '供应商取消'})
-        payload = {'amount': '500', 'date': TODAY, 'reason': '退款到账'}
+        payload = {'amount': '500', 'date': TODAY, 'reason': '退款到账', **self.reconciliation_data(entry)}
         results = self.together([('finance', f'entries/{entry.pk}/refund/', payload)] * 2)
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         entry.refresh_from_db()
