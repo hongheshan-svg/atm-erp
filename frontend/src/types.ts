@@ -11,9 +11,14 @@ export type Field = {
   readonly?: boolean
   hidden?: boolean
   hint?: string
+  displayOnly?: boolean
+  remotePath?: string
+  remoteParams?: Row
+  remoteFilter?: (row: Row) => boolean
 }
 export type Command = {
   title: string
+  subject?: string
   path: string
   method?: 'post' | 'patch'
   fields: Field[]

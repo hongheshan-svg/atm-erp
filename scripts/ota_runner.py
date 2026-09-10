@@ -223,15 +223,23 @@ class Runner:
         env = {**os.environ, 'PGPASSWORD': values['DB_PASSWORD']}
         self.command(['pg_dump', '-h', values['DB_HOST'], '-p', values['DB_PORT'], '-U', values['DB_USER'],
                       '-d', values['DB_NAME'], '-Fc', '--no-owner', '--no-acl', '-f', backup / 'database.dump'], log, env=env)
-        uploads = Path(values['DATA_DIR']) / 'uploads'
-        with tarfile.open(backup / 'uploads.tar', 'w') as tar:
-            for path in uploads.rglob('*'):
+        uploads = Path(values['DATA_DIR']).expanduser().resolve() / 'uploads'
+        if not uploads.is_dir():
+            raise ValueError('Uploads directory is missing; refusing an incomplete backup')
+        def walk(directory):
+            # iterdir propagates permission errors; rglob may silently omit them.
+            for path in directory.iterdir():
                 if path.is_symlink():
                     raise ValueError('Uploads backup contains a symlink')
-                if not path.is_file() and not path.is_dir():
+                if path.is_dir():
+                    yield from walk(path)
+                elif path.is_file():
+                    yield path
+                else:
                     raise ValueError('Uploads backup contains a special file')
-                if path.is_file():
-                    tar.add(path, arcname=path.relative_to(uploads).as_posix(), recursive=False)
+        with tarfile.open(backup / 'uploads.tar', 'w') as tar:
+            for path in walk(uploads):
+                tar.add(path, arcname=path.relative_to(uploads).as_posix(), recursive=False)
         shutil.copyfile(self.config, backup / 'native-config.json')
         atomic_json(backup / 'manifest.json', {'sha256': {name: file_hash(backup / name)
                     for name in ('database.dump', 'uploads.tar', 'native-config.json')}})

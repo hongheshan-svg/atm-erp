@@ -18,7 +18,7 @@ export function defaults(fields: Field[], initial: Row = {}): Row {
 export function payload(fields: Field[], data: Row): Row {
   return Object.fromEntries(
     fields
-      .filter((f) => !(f.optional && (data[f.key] === '' || data[f.key] == null)))
+      .filter((f) => !f.displayOnly && !(f.optional && (data[f.key] === '' || data[f.key] == null)))
       .map((f) => [
         f.key,
         f.type === 'rows' ? data[f.key].map((r: Row) => payload(f.fields!, r)) : data[f.key],

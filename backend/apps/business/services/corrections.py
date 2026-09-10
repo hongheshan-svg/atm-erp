@@ -103,6 +103,7 @@ def cancel_project(actor, key, project_id, data):
         reason = text(data, 'reason')
         for entry in entries:
             if entry.kind == 'receivable' and entry.task_id is None:
+                entry.cancellation_credit = entry.credit_amount
                 entry.credit_amount, entry.cancelled = entry.amount, True
                 save(entry, user)
         for task in project.tasks.select_for_update().filter(status='open'):
@@ -126,7 +127,16 @@ def reopen_project(actor, key, project_id, data):
             for entry in project.entries.select_for_update().filter(
                 kind='receivable', task__isnull=True, cancelled=True
             ):
-                entry.credit_amount, entry.cancelled = ZERO, False
+                credit = entry.cancellation_credit
+                if credit is None:
+                    # Old cancellations did not retain their per-entry credits.
+                    # Never invent a zero credit for an amended contract.
+                    sale = getattr(project, 'sale', None)
+                    if sale and sale.amendments.exists():
+                        raise Conflict('历史取消记录缺少原抵减快照，请先核对补充协议并恢复原抵减金额。')
+                    credit = ZERO
+                entry.credit_amount, entry.cancelled = credit, False
+                entry.cancellation_credit = None
                 save(entry, user)
         else:
             project.status = 'warranty'

@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import type { Field, Row } from '../types'
 import { defaults } from '../forms'
+import { reactive } from 'vue'
+import RemoteSelect from './RemoteSelect.vue'
 defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean }>()
 const model = defineModel<Row>({ required: true })
+const pages = reactive<Record<string, number>>({})
+const start = (key: string) => Math.min(pages[key] || 0, Math.max(0, Math.ceil((model.value[key]?.length || 0) / 20) - 1)) * 20
+const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[key]?.length || 0) - start(key)) }, (_, i) => start(key) + i)
 </script>
 <template>
   <div class="fields">
@@ -12,10 +17,11 @@ const model = defineModel<Row>({ required: true })
         <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>
           <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" min-width="140" show-overflow-tooltip />
         </el-table>
-        <div v-for="(_, i) in readonly ? [] : model[field.key]" :key="i" class="line-fields">
+        <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields">
           <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" />
           <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
+        <div v-if="!readonly && model[field.key]?.length > 20"><button type="button" :disabled="start(field.key) === 0" @click="pages[field.key] = start(field.key) / 20 - 1">上一页明细</button> {{ start(field.key) + 1 }}–{{ Math.min(start(field.key) + 20, model[field.key].length) }} / {{ model[field.key].length }} <button type="button" :disabled="start(field.key) + 20 >= model[field.key].length" @click="pages[field.key] = start(field.key) / 20 + 1">下一页明细</button></div>
         <el-button v-if="!disabled && !field.readonly" @click="model[field.key].push(defaults(field.fields!))">添加行</el-button>
       </fieldset>
       <fieldset v-else-if="field.type === 'checks' && !field.hidden" class="role-checks" :disabled="disabled || field.readonly">
@@ -27,9 +33,10 @@ const model = defineModel<Row>({ required: true })
       </fieldset>
       <label v-else-if="!field.hidden" class="field">
         <span>{{ field.label }}<small v-if="field.optional">（选填）</small></span>
+        <RemoteSelect v-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <select
           :aria-label="field.label"
-          v-if="field.type === 'select' || field.type === 'multi'"
+          v-else-if="field.type === 'select' || field.type === 'multi'"
           v-model="model[field.key]"
           :multiple="field.type === 'multi'"
           :disabled="disabled || field.readonly"

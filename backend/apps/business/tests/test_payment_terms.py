@@ -40,6 +40,13 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         return response.data
 
+    def assert_workbench_maturity(self, entry, expected, today):
+        with patch('django.utils.timezone.localdate', return_value=today):
+            response = self.clients['finance'].get('/api/business/workbench/')
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = {r['id'] for r in response.data['settlements']['results']}
+        self.assertEqual(entry.pk in ids, expected)
+
     def test_month_end_calendar_including_leap_year_and_year_boundary(self):
         for start, days, end in [
             ('2026-09-01', 30, '2026-10-30'),
@@ -61,10 +68,13 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         self.assertIsNone(detail['due_date'])
         self.assertEqual(detail['payment_schedule'], [])
         self.assertEqual(detail['balance'], '500.00')
+        self.assert_workbench_maturity(purchase.entry, False, date(2026, 9, 1))
         self.receive(purchase, '2', '2026-07-10')
         detail = self.detail(purchase.entry)
         self.assertEqual(str(detail['due_date']), '2026-08-30')
         self.assertEqual(detail['payment_schedule'][0]['amount'], '200.00')
+        self.assert_workbench_maturity(purchase.entry, False, date(2026, 8, 29))
+        self.assert_workbench_maturity(purchase.entry, True, date(2026, 8, 30))
 
     def test_cross_month_partial_payment_return_and_reversal_reuse_source_facts(self):
         self.supplier_terms('month30')
@@ -88,10 +98,12 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         detail = self.detail(entry)
         self.assertEqual(str(detail['due_date']), '2026-09-30')
         self.assertEqual(detail['payment_schedule'][0]['amount'], '250.00')
+        self.assert_workbench_maturity(entry, False, date(2026, 9, 1))
         self.post('warehouse', f'moves/{original.pk}/return-purchase/', {'quantity': '1', 'reason': '原批次退货'})
         self.assertEqual(self.detail(entry)['payment_schedule'][0]['amount'], '150.00')
         self.post('finance', f'payments/{payment["id"]}/reverse/', {'date': TODAY, 'reason': '付款录入有误'})
         self.assertEqual([r['amount'] for r in self.detail(entry)['payment_schedule']], ['100.00', '300.00'])
+        self.assert_workbench_maturity(entry, True, date(2026, 9, 1))
 
     def test_cash_and_quarantine_only_start_on_qualified_receipt(self):
         self.supplier_terms('cash')
