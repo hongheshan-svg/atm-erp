@@ -1,0 +1,100 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable tag on main (e.g. v1.7.0)'
+        type: string
+        required: true
+      publish:
+        description: 'Publish after verification (false creates a draft)'
+        type: boolean
+        default: false
+      force_validation:
+        description: 'Run full validation even when matching evidence exists'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      commit: ${{ steps.check.outputs.commit }}
+      validate: ${{ steps.check.outputs.validate }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          FORCE: ${{ inputs.force_validation }}
+        run: |
+          args=()
+          if [[ "$FORCE" == true ]]; then args+=(--force); fi
+          python3 scripts/ci/release_gate.py --tag "$TAG" "${args[@]}"
+  validate:
+    needs: preflight
+    if: needs.preflight.outputs.validate == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.preflight.outputs.commit }}
+      suite: full
+  package:
+    needs: [preflight, validate]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && ((needs.preflight.outputs.validate == 'true' && needs.validate.result == 'success') || (needs.preflight.outputs.validate == 'false' && needs.validate.result == 'skipped')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          python scripts/package_release.py "$TAG" --output dist/releases
+          python -m scripts.ci.publish_release --tag "$TAG" --folder dist/releases
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ needs.preflight.outputs.tag }}
+          path: dist/releases
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: [preflight, package]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.package.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.commit }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: installers-${{ needs.preflight.outputs.tag }}
+          path: dist/releases
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.preflight.outputs.tag }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
+        run: |
+          args=()
+          if [[ "$PUBLISH" == true ]]; then args+=(--publish); fi
+          python3 -m scripts.ci.publish_release --tag "$TAG" --folder dist/releases --upload "${args[@]}"

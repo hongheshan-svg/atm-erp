@@ -25,7 +25,7 @@ def commands(stage):
                     '--config',
                     'backend/pyproject.toml',
                     'backend',
-                    'scripts/ci/backend_test_matrix.py',
+                    'scripts/ci',
                     'scripts/backup.py',
                     'run_all_tests.py',
                 ],
@@ -41,7 +41,7 @@ def commands(stage):
                     '--config',
                     'backend/pyproject.toml',
                     'backend',
-                    'scripts/ci/backend_test_matrix.py',
+                    'scripts/ci',
                     'scripts/backup.py',
                     'run_all_tests.py',
                 ],
@@ -63,11 +63,15 @@ def commands(stage):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--stage', choices=['checks', *TARGETS, 'frontend', 'browser', 'all'], default='checks')
+    parser.add_argument(
+        '--stage', choices=['checks', *TARGETS, 'backend', 'frontend', 'browser', 'all'], default='checks'
+    )
     parser.add_argument('--plan-only', action='store_true')
     args = parser.parse_args()
     validate_coverage()
-    stages = ['checks', *TARGETS, 'frontend', 'browser'] if args.stage == 'all' else [args.stage]
+    stages = ['checks', *TARGETS] if args.stage == 'backend' else [args.stage]
+    if args.stage == 'all':
+        stages = ['checks', *TARGETS, 'frontend', 'browser']
     if not args.plan_only and any(stage in TARGETS for stage in stages):
         if not all(os.environ.get(key) for key in ('PG_TEST_HOST', 'PG_TEST_USER', 'PG_TEST_PASSWORD')):
             parser.error('Backend tests require explicit PG_TEST_HOST, PG_TEST_USER and PG_TEST_PASSWORD.')

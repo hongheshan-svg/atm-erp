@@ -1,0 +1,81 @@
+name: Browser validation
+on:
+  workflow_dispatch:
+    inputs:
+      projects:
+        description: Browser viewports
+        type: choice
+        options: [both, desktop, mobile]
+        default: both
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      projects:
+        type: string
+        default: both
+permissions:
+  contents: read
+concurrency:
+  group: browser-${{ inputs.ref && github.run_id || github.ref }}-${{ inputs.projects || 'both' }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(inputs.projects == 'desktop' && '["desktop"]' || inputs.projects == 'mobile' && '["mobile"]' || '["desktop","mobile"]') }}
+    env:
+      LEAN_PROJECT_NAME: lean-ci-${{ matrix.project }}
+      LEAN_IMAGE: lean-ci-browser:local
+      LEAN_HTTP_PORT: '18320'
+      LEAN_ENVIRONMENT: development
+      LEAN_ADMIN_PASSWORD: Lean-CI-only-password-2026
+      E2E_BASE_URL: http://127.0.0.1:18320
+      E2E_ADMIN_PASSWORD: Lean-CI-only-password-2026
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.ref || github.ref }}'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/package-lock.json') }}
+      - run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+        working-directory: frontend
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app/Dockerfile
+          load: true
+          tags: lean-ci-browser:local
+          cache-from: type=gha,scope=browser-app
+          cache-to: type=gha,scope=browser-app,mode=max
+      - run: bash install.sh --skip-build
+      - name: First-install wizard
+        run: npm run test:e2e -- e2e/setup.spec.ts --project="$PROJECT" --grep '全新安装' --output=test-results-first-install
+        working-directory: frontend
+        env:
+          PROJECT: ${{ matrix.project }}
+          E2E_FIRST_INSTALL: '1'
+          E2E_SETUP_NEW_PASSWORD: Lean-CI-ready-password-2026
+      - run: npm run test:e2e -- --project="$PROJECT"
+        working-directory: frontend
+        env:
+          PROJECT: ${{ matrix.project }}
+          E2E_ADMIN_PASSWORD: Lean-CI-ready-password-2026
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-${{ matrix.project }}-${{ github.run_attempt }}
+          path: |
+            frontend/test-results
+            frontend/test-results-first-install
+          retention-days: 7
+      - if: always()
+        run: test ! -f .env.lean || docker compose --env-file .env.lean down -v

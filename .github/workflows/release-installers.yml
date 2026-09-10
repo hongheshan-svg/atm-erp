@@ -1,19 +1,19 @@
-name: Platform release installers
+name: Installer validation
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'scripts/native_install.py'
-      - 'scripts/package_release.py'
-      - 'scripts/tests/*native*'
-      - 'install-native.*'
-      - '.github/workflows/release-installers.yml'
-  push:
-    branches: ['codex/cross-platform-release-installers']
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
 permissions:
   contents: read
+concurrency:
+  group: installers-${{ inputs.ref && github.run_id || github.ref }}
+  cancel-in-progress: true
 jobs:
   platform:
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -21,10 +21,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.ref || github.ref }}'}
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - run: python -m unittest discover -s scripts/tests -p test_native_install.py
-      - run: python -m unittest discover -s scripts/tests -p test_ota_runner.py
       - run: python -m pip install -r backend/requirements.txt
       - run: python -c "import daphne, psycopg2, redis; print('Native dependencies import successfully')"
       - if: runner.os == 'Windows'
@@ -37,41 +40,41 @@ jobs:
         run: |
           bash -n install.sh install-native.sh
           PYTHON=python bash install-native.sh configure --config "$RUNNER_TEMP/native-config.json"
-  packages:
+  native-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: atm_erp_lean
+          POSTGRES_USER: atm_erp_lean
+          POSTGRES_PASSWORD: native-ci-only
+        ports: ['18432:5432']
+        options: >-
+          --health-cmd "pg_isready -U atm_erp_lean -d atm_erp_lean"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['18479:6379']
     steps:
       - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
+        with: {ref: '${{ inputs.ref || github.ref }}'}
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - run: |
-          python scripts/package_release.py v1.0.0 --output dist/releases
-          python scripts/package_release.py v1.1.0 --output dist/releases
+        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci --no-audit --no-fund && npm run build
+        working-directory: frontend
       - run: sudo apt-get update && sudo apt-get install -y nginx
-      - name: Isolated dependency services
+      - name: Current revision installation and repeat installation
+        env:
+          NATIVE_SMOKE_DB_PASSWORD: native-ci-only
         run: |
-          docker run -d --name native-release-pg -e POSTGRES_DB=atm_erp_lean -e POSTGRES_USER=atm_erp_lean -e POSTGRES_PASSWORD=native-ci-only -p 127.0.0.1:18432:5432 postgres:15-alpine
-          docker run -d --name native-release-redis -p 127.0.0.1:18479:6379 redis:7-alpine
-          for i in $(seq 1 30); do docker exec native-release-pg pg_isready -U atm_erp_lean && break; sleep 2; done
-      - name: Native v1.0.0 installation and repeat installation
-        env: {NATIVE_SMOKE_DB_PASSWORD: native-ci-only}
-        run: |
-          unzip -q dist/releases/atm-erp-v1.0.0-linux-native.zip -d "$RUNNER_TEMP/native packages"
-          python scripts/tests/native_smoke.py "$RUNNER_TEMP/native packages/atm-erp-v1.0.0-linux-native" --db-port 18432 --redis-port 18479
-      - name: Independent database for v1.1.0
-        run: |
-          docker rm -f native-release-pg native-release-redis
-          docker run -d --name native-release-pg -e POSTGRES_DB=atm_erp_lean -e POSTGRES_USER=atm_erp_lean -e POSTGRES_PASSWORD=native-ci-only -p 127.0.0.1:18432:5432 postgres:15-alpine
-          docker run -d --name native-release-redis -p 127.0.0.1:18479:6379 redis:7-alpine
-          for i in $(seq 1 30); do docker exec native-release-pg pg_isready -U atm_erp_lean && break; sleep 2; done
-      - name: Native v1.1.0 installation and repeat installation
-        env: {NATIVE_SMOKE_DB_PASSWORD: native-ci-only}
-        run: |
-          unzip -q dist/releases/atm-erp-v1.1.0-linux-native.zip -d "$RUNNER_TEMP/native packages"
-          python scripts/tests/native_smoke.py "$RUNNER_TEMP/native packages/atm-erp-v1.1.0-linux-native" --db-port 18432 --redis-port 18479
-      - uses: actions/upload-artifact@v4
-        with: {name: release-installers, path: dist/releases, retention-days: 14}
-      - if: always()
-        run: docker rm -f native-release-pg native-release-redis || true
+          mkdir -p "$RUNNER_TEMP/native"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/native"
+          cp -R frontend/dist "$RUNNER_TEMP/native/frontend/dist"
+          python scripts/tests/native_smoke.py "$RUNNER_TEMP/native" --db-port 18432 --redis-port 18479
