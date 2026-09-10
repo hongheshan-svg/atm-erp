@@ -62,10 +62,13 @@ def main():
         models = stage / 'backend/apps/core/models.py'
         models.write_text(models.read_text().replace('class Company(models.Model):',
                           "class Company(models.Model):\n    ota_test_marker = models.CharField(max_length=40, default='ota-smoke-marker')"))
-        (stage / 'backend/apps/core/migrations/0005_ota_smoke.py').write_text(
+        migrations = stage / 'backend/apps/core/migrations'
+        latest = max(migrations.glob('[0-9]*_*.py'), key=lambda path: int(path.name.split('_')[0]))
+        next_number = int(latest.name.split('_')[0]) + 1
+        (migrations / f'{next_number:04d}_ota_smoke.py').write_text(
             "from django.db import migrations, models\n"
             "class Migration(migrations.Migration):\n"
-            "    dependencies = [('core', '0004_upgradejob')]\n"
+            f"    dependencies = [('core', '{latest.stem}')]\n"
             "    operations = [migrations.AddField(model_name='company', name='ota_test_marker', field=models.CharField(max_length=40, default='ota-smoke-marker'))]\n")
         (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'docker', 'platform': ota.PLATFORM}))
         archive = task / 'fixture.zip'
@@ -112,6 +115,8 @@ def main():
         print(f'OTA rehearsal passed: download hash, stop, backup hash, forward migration, retained company/admin, restart, target version, completed job. Evidence: {task}', flush=True)
     finally:
         log.close()
+        for path in (task / 'state').glob('job-*/upgrade.log'):
+            print(path.read_text()[-2000:], flush=True)
         # Only the newly generated isolated project/volumes are removed.
         subprocess.run([*compose, 'down', '-v'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
