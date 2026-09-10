@@ -1,40 +1,67 @@
 # 项目 ERP · 精简版
 
-当前版本：**v1.6.0**。查看[发布说明](docs/releases/v1.6.0.md)及下方数据库兼容性限制。
+面向约 50 人非标自动化公司，以项目串联销售、采购、交付和收付款。
 
-GitHub验证可按快速检查、浏览器、OTA、安装器独立或组合运行；PR按变动范围选任务，发布复用同代码的全量通过记录。操作入口与命令见 [CI与发布操作](docs/CI_OPERATIONS.md)。
+**当前版本：v1.6.0** · [下载最新版本](https://github.com/hongheshan-svg/atm-erp/releases/latest) · [版本说明](docs/releases/v1.6.0.md) · [历史版本](https://github.com/hongheshan-svg/atm-erp/releases)
 
-面向约 50 人非标自动化公司，以项目串联 **需求 → 报价签约 → BOM → 采购收货 → 设计装配调试 → 分批发货安装验收 → 售后 → 收付款与成本**。
+[系统概览](#系统概览) · [安装](#安装) · [首次启用](#首次启用) · [日常使用](#日常使用) · [升级与备份](#升级与备份) · [常见问题](#常见问题) · [开发与验证](#开发与验证)
 
-十个入口：工作台、经营报表、销售、项目、BOM、采购、库存、收付款、基础资料、设置，按权限显示。固定管理员、项目经理、销售经理、采购员、仓管、财务、成员七角色。销售经理负责本人销售订单的报价和签约，通过“交付与回款”查看履约与应收情况；签约交接时另选项目经理，不继承采购、库存、成本及财务记账权限。没有 OA、复杂 MES/APS、可配置审批流、报表构建器、会计总账或小程序。
+## 系统概览
 
-经营报表汇总当前筛选项目的合同、成本、在途采购、待收待付及风险；管理员默认可看。总经理使用经理角色账号，由管理员在“设置 → 用户管理”开启“总经理报表权限”，其他经理默认不可看。
+业务主线：**需求 → 报价签约 → 项目与 BOM → 采购收货 → 设计装配调试 → 分批交付验收 → 售后与结算**。
 
-管理员可在设置中配置六类自动编号的前缀、日期、流水位数及重置周期，仅影响新记录。物料新建支持手工编码（留空自动生成），销售签约支持填写独立合同编号；编码唯一，历史编号保留。
+| 模块 | 主要用途 |
+| --- | --- |
+| 工作台、经营报表 | 个人待办、项目经营数据与风险 |
+| 销售 | 需求、报价、合同、签约交接及交付回款进度 |
+| 项目、BOM | 任务工时、材料清单、预算成本、交付与售后 |
+| 采购、库存 | 按 BOM 多选下单、采购合同、收货、领退料与盘点 |
+| 收付款 | 应收应付、对账、收付款、退款与冲销 |
+| 基础资料、设置 | 物料、客户供应商、用户岗位、编号与启用配置 |
 
-业务列表、经营报表及 BOM 支持每页 10/20/50/100 条，默认 10 条，选择在当前浏览器保存并跨页面复用；长表格在内部滚动。
+七种固定岗位：管理员、项目经理、销售经理、采购员、仓管、财务、成员。**一个账号可兼任多个岗位**，菜单按权限显示，销售负责人和项目成员的数据范围继续生效。经营报表向管理员开放；总经理使用经理角色，并由管理员单独开启“总经理报表权限”。
 
-采购列表“从 BOM 多选下单”及项目BOM“按缺料采购”支持按品牌、功能单元、标准件/非标件组合筛选，跨页勾选或全选筛选结果，再统一填写供应商、数量和单价。品牌和类别在物料资料维护，功能单元在项目BOM行维护；保存时重验实际缺口，订单仍需提交审批。
+金额采用 **CNY 含税经营口径**，不替代法定会计账。不包含 OA、复杂 MES/APS、可配置审批流或报表构建器。完整边界见 [系统范围](docs/CORE_ERP_SCOPE.md)。
 
-业务页面可选择 Excel/CSV 导出全部筛选结果，采购明细逐行展开，经营报表带合计。支持物料、客户供应商、销售和采购草稿、项目、任务、期初库存、领料、费用、收付款、工时及发货的模板下载和批量导入；BOM 保留原导入入口。操作顺序为下载模板 → 选择文件预览 → 修正行级错误 → 确认导入。单文件最多1000行/5MB，导出最多20000行；确认再次校验并整批保存，导入不覆盖原记录，签约、审批及流水纠错仍走原操作。
+## 安装
 
-开发安装的配置文件可设置 `LEAN_ENVIRONMENT=development` 关闭登录限流；发布部署必须设置 `LEAN_ENVIRONMENT=production`，默认即为 production，启用 10 次/分钟登录限制。修改配置后重跑安装脚本（可用 `--skip-build`）使运行环境生效。原生后端使用对应的 `APP_ENVIRONMENT`，开发标记不会开启 DEBUG。
+### 选择安装方式与下载包
 
-## 安装（macOS / Linux / Windows）
+| 方式 | 适合场景 | 需要提前准备 |
+| --- | --- | --- |
+| **Docker（推荐）** | 三平台快速部署，由 Compose 管理应用和数据服务 | Docker Engine / Docker Desktop、Compose v2、Linux 容器模式 |
+| 原生 | 已有数据库及 Redis，由运维管理运行环境 | Python 3.11、Nginx、PostgreSQL 15、Redis 7 |
 
-下载版本：[v1.5.0](https://github.com/hongheshan-svg/atm-erp/releases/tag/v1.5.0) · [历史版本](https://github.com/hongheshan-svg/atm-erp/releases)。完整安装说明在本 README 阅读；后续 Release 页面按[发布模板](docs/releases/TEMPLATE.md)，在版本说明最下方附简短安装命令、安装包下载提示及仓库和安装指南链接。
+在[发布页面](https://github.com/hongheshan-svg/atm-erp/releases/latest)的 **Assets** 下载 `atm-erp-v版本号-平台-方式.zip`。平台为 `macos` / `linux` / `windows`，方式为 `docker` / `native`，每版共 6 个安装包。请选择对应附件，GitHub 自动生成的 **Source code** 压缩包不等同于安装包。
 
-每个版本提供 6 个 ZIP 附件：平台 `macos`、`linux`、`windows` × 方式 `native`、`docker`。均为**联网安装包**，不是离线安装镜像、签名桌面 App、MSI 或内置数据库的一键安装器。ZIP 已包含对应 tag 的完整源码与预构建前端；各平台共用同一业务实现。使用自己配置的 PostgreSQL / Redis / Nginx 服务，第三方依赖按各自许可使用。
+这些是**联网安装包**，包含源码和预构建前端，不是离线镜像或桌面安装程序。Docker 镜像在本机构建，目前没有预制 GHCR 镜像拉取命令。包内 `INSTALL-MANIFEST.json` 记录源码和安装器来源；历史版本补包不改写原 tag。
 
-原 tag 保持不变。`INSTALL-MANIFEST.json` 记录业务源码提交与补充安装器提交，补充文件清单独立列出。GitHub 自动生成的 Source code ZIP 不含补充安装器，请下载带平台和安装方式的附件。校验文件为 `atm-erp-vX.Y.Z-SHA256SUMS.txt`。
+> 全新部署必须使用独立数据库，不兼容早期非 Lean ERP 的表或迁移。系统发现旧表或回滚会拒绝启动；不要清库或绕过 schema guard。已有 Lean 数据库只能正常前向迁移。
 
-**全新部署必须使用独立数据库，不兼容早期非 Lean ERP 的表或迁移。** 检测到旧表或回滚时会拒绝启动，不清库、不使用 fake migration、不绕过 schema guard。已有 Lean 数据库只允许正常前向迁移。
+<details>
+<summary>下载校验（SHA256）</summary>
 
-### Docker 安装（三平台推荐）
+同时下载发布页的 `atm-erp-v1.6.0-SHA256SUMS.txt`，在安装包目录执行。其他版本请替换版本号。
 
-前提：已安装并启动 Docker Engine / Docker Desktop，支持 **Linux 容器**及 Compose v2。Windows 使用 Docker Desktop Linux 容器模式；macOS 使用 Docker Desktop；Linux 使用 Docker Engine + Compose 插件。需能联网拉取 postgres:15-alpine、redis:7-alpine、node:22-alpine、python:3.11-slim，以及 npm / PyPI 依赖。镜像按主机架构本地构建，不宣称提供预制多架构镜像。
+```bash
+# Linux
+sha256sum -c atm-erp-v1.6.0-SHA256SUMS.txt
+# macOS
+shasum -a 256 -c atm-erp-v1.6.0-SHA256SUMS.txt
+```
 
-解压到独立目录，进入该目录：
+```powershell
+# Windows：将输出与清单中对应文件的哈希比较
+Get-FileHash .\atm-erp-v1.6.0-windows-native.zip -Algorithm SHA256
+```
+
+仅下载一个包时，其他未下载文件会提示不存在，核对所下载包的哈希即可。
+
+</details>
+
+### Docker 安装
+
+启动 Docker，确认使用 Linux 容器与 Compose v2。安装过程需要访问 Docker 镜像仓库、npm 和 PyPI。解压安装包，进入解压目录后执行：
 
 ```bash
 # macOS / Linux
@@ -42,36 +69,21 @@ bash install.sh
 ```
 
 ```powershell
-# Windows PowerShell，按组织脚本执行策略允许本目录脚本
+# Windows PowerShell，按组织脚本执行策略运行
 .\install.ps1
 ```
 
-默认访问 http://127.0.0.1:8080/erp/，账户 admin，首次密码在 `.env.lean` 的 LEAN_ADMIN_PASSWORD。保留配置及 Docker 卷；重复安装不会重置账户。应用、PostgreSQL、Redis 均由 Compose 管理。
+安装完成后打开 **http://127.0.0.1:8080/erp/**，用户名为 `admin`，首次密码在 `.env.lean` 的 `LEAN_ADMIN_PASSWORD`。登录后完成下方[首次启用](#首次启用)。重复安装不会重置已有账号密码。
 
-### 首次登录：快速安装向导
+| 常用配置（`.env.lean`） | 用途 |
+| --- | --- |
+| `LEAN_HTTP_PORT` | 访问端口，默认 8080 |
+| `LEAN_BIND_ADDRESS`、`LEAN_ALLOWED_HOSTS` | 默认仅本机访问；局域网部署时显式配置 |
+| `LEAN_ENVIRONMENT` | 正式部署保持 `production`（默认） |
 
-Docker 与三平台原生安装启动后共用网页向导，无需在网页填写数据库参数。用安装器生成的 admin 初始密码登录，自动进入五步配置：
+修改配置后重新运行安装脚本使其生效；无需重新构建时可使用 `--skip-build`。保留配置和数据卷，同时部署多个环境须分别设置 `LEAN_PROJECT_NAME`、`LEAN_IMAGE`、`LEAN_HTTP_PORT`，不能共用数据卷。
 
-1. **管理员账号**：填写姓名、初始密码和新的登录密码（至少12位）。
-2. **公司资料**：填写实际公司名称、地址和联系电话，用于采购合同。
-3. **人员与兼岗**：可选添加人员、独立密码和一个或多个岗位；也可留空，稍后在用户管理中维护。总经理报表需明确授权。
-4. **编号规则**：默认规则可直接使用，也可调整前缀、日期、流水位数和重置周期。物料仍支持手工编码。
-5. **确认启用**：核对后一次性保存，使用新密码重新登录，即可进入工作台并开单。
-
-校验失败不会保存半套配置。填写期间密码只在当前页面内存中，刷新或退出需重新填写；若提交时断网，请用新密码重新登录核对完成状态，未完成时仍使用初始密码。完成后的初始密码不再有效，重复运行安装器也不会重置密码。
-
-向导不生成虚构客户、库存或订单。进入“设置 → 启用指南”可直达客户供应商、物料导入、人员管理及销售开单。已有系统升级保留现状，不强制重新初始化；业务期初及生产备份仍按实际资料配置。
-
-```bash
-docker compose --env-file .env.lean ps
-docker compose --env-file .env.lean logs --tail 100 app
-docker compose --env-file .env.lean stop
-docker compose --env-file .env.lean start
-```
-
-不要使用 `down -v`，它会删除数据卷。同时试用两个版本时，分别指定不同 LEAN_PROJECT_NAME、LEAN_IMAGE 和 LEAN_HTTP_PORT，不能复用另一版本的数据库卷。发布环境保持 LEAN_ENVIRONMENT=production（默认），登录限流开启。
-
-### 原生安装（三平台）
+### 原生安装
 
 应用直接运行 Python/Daphne 和 Nginx，无需 Docker。前置依赖由管理员预先准备：
 
@@ -124,97 +136,52 @@ bash install-native.sh start
 .\install-native.ps1 start
 ```
 
-安装会创建独立 Python 虚拟环境、下载锁定依赖、检查 PostgreSQL/Redis 连接、执行原版 schema guard/迁移及初始化、配置 Nginx。任何失败立即退出，不清库、不绕过保护。首次管理员密码见配置，已有账户保持不变。
+安装会创建独立 Python 虚拟环境、下载锁定依赖、检查 PostgreSQL/Redis 连接、执行原版 schema guard/迁移及初始化、配置 Nginx。任何失败立即退出，不清库、不绕过保护。首次管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；已有账户保持不变。
 
 看到“已启动”后访问 http://127.0.0.1:8080/erp/。启动器前台监控两个子进程；终端需保持打开，Ctrl+C 同时停止 Daphne 与 Nginx。进程异常退出时启动器非零退出。日志在 DATA_DIR/logs，诊断依赖连接用 `check`。需要开机自启时，由运维用本平台服务管理器运行相同 `start` 命令，工作目录设为解压目录，使用非管理员专用账户，保持配置私有。
 
 可用 `--config /absolute/path/config.json`（sh）或 `-Config C:/path/config.json`（PowerShell）指定持久配置；可通过 PYTHON 环境变量指定 Python 3.11 可执行文件。
 
-### 升级、备份与校验
+## 首次启用
 
-原生升级：先停止应用，备份 PostgreSQL（pg_dump 自定义格式）、DATA_DIR/uploads 附件及私有配置。新目录解压新版本，沿用原 native-config.json 和 DATA_DIR，执行 install，再 start。
+Docker 与三平台原生安装启动后共用网页向导，无需在网页填写数据库参数。用安装器生成的 admin 初始密码登录，自动进入五步配置：
 
-Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供下方备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 重建应用并前向迁移。
+1. **管理员账号**：填写姓名、初始密码和新的登录密码（至少12位）。
+2. **公司资料**：填写实际公司名称、地址和联系电话，用于采购合同。
+3. **人员与兼岗**：可选添加人员、独立密码和一个或多个岗位；也可留空，稍后在用户管理中维护。总经理报表需明确授权。
+4. **编号规则**：默认规则可直接使用，也可调整前缀、日期、流水位数和重置周期。物料仍支持手工编码。
+5. **确认启用**：核对后一次性保存，使用新密码重新登录，即可进入工作台并开单。
 
-禁止将已升级的数据库交给旧版本运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
+校验失败不会保存半套配置。填写期间密码只在当前页面内存中，刷新或退出需重新填写；若提交时断网，请用新密码重新登录核对完成状态，未完成时仍使用初始密码。完成后的初始密码不再有效，重复运行安装器也不会重置密码。
 
-Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL 和附件须一起备份，定期在独立数据库演练恢复。原生安装不复用仅面向 Compose 的备份脚本。
+向导不生成虚构客户、库存或订单。进入“设置 → 启用指南”可直达客户供应商、物料导入、人员管理及销售开单。已有系统升级保留现状，不强制重新初始化；业务期初及生产备份仍按实际资料配置。
 
-```bash
-# Linux
-sha256sum -c atm-erp-v1.5.0-SHA256SUMS.txt
-# macOS
-shasum -a 256 -c atm-erp-v1.5.0-SHA256SUMS.txt
-```
+## 日常使用
 
-```powershell
-# Windows：输出应与 SHA256SUMS 文件对应行一致
-Get-FileHash .\atm-erp-v1.1.0-windows-native.zip -Algorithm SHA256
-```
+1. **基础资料**：维护客户供应商、物料和人员；可下载模板、预览校验后批量导入。
+2. **销售交接**：录入需求、报价、合同及收款节点，签约时指定项目经理，生成执行项目和应收。
+3. **项目采购**：设置材料、人工、费用预算，维护 BOM；按品牌、单元、标准件/非标件筛选并多选采购。
+4. **生产交付**：审批采购、分批收货、项目领料、任务工时、分批发货、安装验收和售后。
+5. **财务结算**：按业务规则完成对账、收付款及纠错，处理任务、采购与余额后结项。
 
-仅下载单个包时，校验文件内其他未下载包会提示不存在；核对自己下载包的对应哈希即可。首次上线后检查登录、角色权限、附件下载及备份恢复，不以健康页替代完整业务验收。
+物料编码可手工填写，留空自动生成；合同编号可独立填写。列表支持每页 10/20/50/100 条，销售、采购及项目附件通过鉴权下载。
 
-### 常见问题
+详细操作、导入导出限制及成本口径见 [日常使用说明](docs/LEAN_USER_GUIDE.md)；对账、锁账等固定管控见 [业务管控说明](docs/OPERATIONAL_HARDENING.md)。
 
-#### Docker
+## 升级与备份
 
-- Docker 连接失败：确认 Docker 已启动，Windows/macOS 的 Docker Desktop 使用 Linux 容器模式。
-- 拉取或构建失败：检查镜像仓库、npm、PyPI 网络连接；本包不含离线镜像。
-- 端口被占用：修改 .env.lean 的 LEAN_HTTP_PORT 后重跑安装器。
-- 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。
-- 密码见 .env.lean；重新安装不会重置已有用户密码。
-
-#### 原生安装
-
-- Python 版本不符：使用 Python 3.11，可通过 PYTHON 环境变量指定完整可执行文件路径。
-- 找不到 Nginx：确认已安装，并设置 NGINX_EXECUTABLE 为完整路径。
-- 数据库或 Redis 连接失败：核对配置、专用数据库、账号、密码和服务监听地址。
-- 端口占用：停止已有应用，或为 HTTP_PORT 与 APP_PORT 分别设置空闲端口。
-- 配置文件已存在：configure 不覆盖既有配置，直接编辑原文件后运行 install。
-- 终端关闭后应用停止：start 为前台进程；开机自启需运维使用操作系统服务管理器配置。
-
-## 在线升级（OTA）
-
-管理员在左上角“版本与升级”查看当前版本、检查正式发布版本及更新内容。只允许向更高正式版本升级，不支持预发布版本或降级。点击“备份并升级”前需确认已通知使用者暂停业务操作。
-
-首次使用需手动安装含 OTA 功能的代码，并在宿主机启用执行器；此前发布的 v1.0.0/v1.1.0 原始业务源码不会凭空获得此入口。应用容器本身不接触 Docker socket。执行器使用 Python 3.11，Docker 部署需宿主机 Docker/Compose，原生部署额外需要 PostgreSQL 15 的 pg_dump 客户端。执行器目录要放在安装目录外、空间充足的私有位置，保存下载包、日志、备份和当前安装路径，不能随旧版本目录一起删除。
-
-新安装生成的 .env.lean 中包含 LEAN_OTA_AGENT_TOKEN，原生 native-config.json 中包含 OTA_AGENT_TOKEN；已有配置缺少时，生成至少 32 字符随机密钥填入对应字段，再重新运行安装器并启动应用。该密钥仅供本机执行器使用，不在页面显示。
+### 服务状态与日志（Docker）
 
 ```bash
-# macOS / Linux：Docker 部署，替换成自己的绝对路径与端口
-python3.11 scripts/ota_runner.py --mode docker --config /absolute/path/.env.lean --state-dir /absolute/path/erp-ota --url http://127.0.0.1:8080
-
-# 原生部署（先使用新的 install-native.sh start 启动应用）
-python3.11 scripts/ota_runner.py --mode native --config /absolute/path/native-config.json --state-dir /absolute/path/erp-ota --url http://127.0.0.1:8080
+docker compose --env-file .env.lean ps
+docker compose --env-file .env.lean logs --tail 100 app
+docker compose --env-file .env.lean stop
+docker compose --env-file .env.lean start
 ```
 
-```powershell
-# Windows：Docker；原生部署将 mode 改为 native，并指向 native-config.json
-py -3.11 scripts/ota_runner.py --mode docker --config C:/erp/.env.lean --state-dir C:/erp-ota --url http://127.0.0.1:8080
-```
+**不要使用 `down -v`，它会删除数据卷。** 原生运行方式、日志目录和开机自启要求见上方原生安装步骤。
 
-保持执行器运行；如需开机自启，由运维在操作系统服务管理器配置上述命令。非本机 API 必须使用 HTTPS。页面显示执行器已连接后即可提交升级，普通成员及其他角色无此权限。
-
-执行器只下载固定仓库 hongheshan-svg/atm-erp 中有 SHA256 的对应平台安装包，再次核对 GitHub 元数据、版本、压缩包路径和运行时版本。Docker 先构建新镜像，再停机备份；原生先停止受控应用，再备份数据库、附件及配置。备份成功才执行安装和前向迁移；新健康页返回目标版本后才记为完成。停机期间页面会自动重试，状态报告保存在宿主机并在应用恢复后补交。
-
-升级成功后，执行器状态文件记录新的源码/配置路径；之后手动管理或重启也应使用该路径。不要再从旧目录启动应用。发布新版本时，backend/apps/core/version.py 与发布 tag 必须一致，并发布对应平台安装 ZIP；没有运行时版本标识的旧包不会被用于 OTA。
-
-如果备份前后但迁移尚未开始就失败，会尝试启动原应用。迁移开始后的失败不会自动回退数据库或将旧应用连接新 schema；查看执行器目录 job-*/upgrade.log 和 backup，按独立恢复流程处理。若应用无法启动，页面无法读取失败详情，但日志与待补交状态仍在宿主机保存。执行器中断后不会自动重复升级，应先人工核对日志和备份。
-
-## 日常操作
-
-1. 管理员在设置建立账户；采购员维护物料、客户和供应商。
-2. 经理在销售中新建需求、报价及签约，签约时分配项目成员。收款节点合计必须等于最终报价，销售通过交接服务生成执行项目和应收；从销售单的执行项目链接进入后续工作。内部项目也可直接在项目模块创建。
-3. 经理可先在项目“预算与成本管控”设置材料、人工、费用预算，再维护或导入 BOM。采购员按缺料建采购，提交后由经理批准，自动生成应付。超预算时需明确确认并填写原因，核算快照留在审计中；未设置预算的旧项目仅提示、不拦截。
-4. 仓管分批收货、按项目领料。未收余量可取消，退货、盘点和退款保留历史。
-5. 经理安排设计、装配、调试，成员完成任务并登记工时。发货前检查任务和对应领料量，支持多批设备交付。
-6. 每批完成安装后由经理验收。售后关联验收批次：质保内免费，质保外登记收费。售后领料和工时纳入项目成本。
-7. 财务登记费用、收付款、退款和冲销。任务、采购及余额全部处理后才能结项；需要继续售后时可重新打开项目。
-
-合同/费用、采购/库存、工时各只维护一份业务事实。成本为 CNY 含税经营口径，不替代法定会计账。附件通过登录鉴权下载；成员仅可访问所属项目，敏感金额由后端按角色过滤。
-
-## Docker 备份与恢复
+### 备份与恢复
 
 以下脚本面向 Docker/Compose 部署；原生部署按上文备份 PostgreSQL、附件及配置。
 
@@ -234,7 +201,46 @@ python3 scripts/backup.py restore --env-file .env.restore --archive backups/erp-
 
 目标环境需使用已构建的当前应用镜像；若镜像标签不同，设置 `LEAN_IMAGE`。恢复拒绝非空数据库、非空附件卷和正在运行的应用，绝不覆盖现有业务数据。原账户密码保持备份时的值。
 
+### 手动升级
+
+原生升级：先停止应用，备份 PostgreSQL（pg_dump 自定义格式）、DATA_DIR/uploads 附件及私有配置。新目录解压新版本，沿用原 native-config.json 和 DATA_DIR，执行 install，再 start。
+
+Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 重建应用并前向迁移。
+
+禁止将已升级的数据库交给旧版本运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
+
+Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL 和附件须一起备份，定期在独立数据库演练恢复。原生安装不复用仅面向 Compose 的备份脚本。
+
+### 在线升级（OTA）
+
+管理员通过页面左上角“版本与升级”检查正式版本。启用宿主机执行器后，可发起“备份并升级”；执行器校验安装包 SHA256，备份成功才迁移，完成后核对运行版本。不支持降级，迁移失败后不会自动回退数据库。
+
+执行器安装、三平台启动命令、密钥配置和故障处理见 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。应用容器不挂载 Docker socket。
+
+首次上线和升级后，应检查登录、角色权限、附件下载及备份恢复，不能仅以健康页作为业务验收结果。
+
+## 常见问题
+
+### Docker
+
+- Docker 连接失败：确认 Docker 已启动，Windows/macOS 的 Docker Desktop 使用 Linux 容器模式。
+- 拉取或构建失败：检查镜像仓库、npm、PyPI 网络连接；本包不含离线镜像。
+- 端口被占用：修改 .env.lean 的 LEAN_HTTP_PORT 后重跑安装器。
+- 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。
+- 密码见 .env.lean；重新安装不会重置已有用户密码。
+
+### 原生安装
+
+- Python 版本不符：使用 Python 3.11，可通过 PYTHON 环境变量指定完整可执行文件路径。
+- 找不到 Nginx：确认已安装，并设置 NGINX_EXECUTABLE 为完整路径。
+- 数据库或 Redis 连接失败：核对配置、专用数据库、账号、密码和服务监听地址。
+- 端口占用：停止已有应用，或为 HTTP_PORT 与 APP_PORT 分别设置空闲端口。
+- 配置文件已存在：configure 不覆盖既有配置，直接编辑原文件后运行 install。
+- 终端关闭后应用停止：start 为前台进程；开机自启需运维使用操作系统服务管理器配置。
+
 ## 开发与验证
+
+### 本地检查
 
 后端：Django REST Framework，三个本地 app `core/accounts/business`。前端：Vue 3、TypeScript、Element Plus，网络统一经过 `src/utils/request.ts`。
 
@@ -254,6 +260,23 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 
 本地前端 `npm run dev`，默认端口 18310，API 代理默认 `127.0.0.1:18301`，可用 `VITE_API_BASE_URL` 修改。后端显式设置 `SECRET_KEY`、`DB_*`、`REDIS_URL` 后运行 `migrate`、`init_system`、`runserver`；它不读取旧 `.env`。
 
-测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
+测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|backend|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
 
 当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。其他历史文档不作为本版安装或模块清单。
+
+开发环境可设置 `LEAN_ENVIRONMENT=development` 关闭登录限流；直接运行后端时对应 `APP_ENVIRONMENT=development`。开发标记不会开启 DEBUG。发布安装保持 `production`，登录限制为 10 次/分钟；原生发布安装器强制检查该配置。
+
+### GitHub CI 与发布
+
+进入 [GitHub Actions](https://github.com/hongheshan-svg/atm-erp/actions)，选择工作流后点击 **Run workflow**（需登录有权限的账号）：
+
+| 工作流 | 手动运行内容 |
+| --- | --- |
+| Lean ERP CI | 全量、单项，或 `custom` 勾选组合 |
+| Fast checks | 前后端快速检查 |
+| Browser validation | 桌面、手机或两端并行 |
+| OTA validation | Docker 与原生升级演练 |
+| Installer validation | 三平台安装器验证 |
+| Release | 已存在 tag 的验证、打包及草稿/正式发布 |
+
+PR 按变动选择任务，合并不重复启动全套验证。Release 仅复用代码内容完全一致的全量通过记录，否则先补跑验证。参数、命令和发布流程见 [CI 与发布操作指南](docs/CI_OPERATIONS.md)。
