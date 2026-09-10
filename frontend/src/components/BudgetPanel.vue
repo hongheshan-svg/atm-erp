@@ -8,7 +8,7 @@ import ActionDialog from './ActionDialog.vue'
 import CostSources from './CostSources.vue'
 const showSources = ref(false)
 const amount = (value: unknown) => { if (value == null) return '未设置'; const [integer, fraction = ''] = String(value).split('.'); return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}` }
-const props = defineProps<{ projectId: number; revision: number; status: string }>()
+const props = defineProps<{ projectId: number; revision: number; status: string; canManage?: boolean }>()
 const report = ref<Row | null>(null)
 const error = ref('')
 const command = ref<Command | null>(null)
@@ -53,7 +53,7 @@ function estimate() {
     <header class="panel-heading">
       <h2>预算与成本管控</h2>
       <el-button @click="showSources = true">追溯成本明细</el-button>
-      <div class="toolbar"><el-button @click="load">刷新</el-button><el-button v-if="manager() && ['active', 'delivering', 'warranty'].includes(status)" @click="edit" :disabled="!report || Boolean(error)">设置预算</el-button></div>
+      <div class="toolbar"><el-button @click="load">刷新</el-button><el-button v-if="manager() && canManage !== false && ['active', 'delivering', 'warranty'].includes(status)" @click="edit" :disabled="!report || Boolean(error)">设置预算</el-button></div>
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <template v-if="report">
@@ -69,7 +69,7 @@ function estimate() {
       </el-table>
       <div class="budget-totals"><span>预算合计 <strong>{{ report.budget_total ?? '未设置' }}</strong></span><span>实际＋在途合计 <strong>¥ {{ report.occupied_total }}</strong></span><span>累计采购净额 <strong>¥ {{ report.purchase_net }}</strong></span></div>
       <p class="muted budget-basis">已承诺仅含已批准未收货采购；实际材料含退货价差。人工、费用仅计已有实际记录，未付款费用不重复计入承诺。累计采购净额另与材料预算比较，收货不会释放采购额度；以上不代表完工成本预测。</p>
-      <div class="budget-totals"><span>预计剩余材料 {{ report.remaining_materials ?? '未估算' }}</span><span>预计剩余人工 {{ report.remaining_labor ?? '未估算' }}</span><span>预计剩余费用 {{ report.remaining_expenses ?? '未估算' }}</span><strong :class="{ 'budget-overrun': report.configured && report.forecast_total != null && Number(report.forecast_total) > Number(report.budget_total) }">预计完工成本 {{ report.forecast_total ?? '未完整估算' }}</strong><el-button v-if="manager() && ['active', 'delivering', 'warranty'].includes(status)" @click="estimate" :disabled="Boolean(error)">更新完工估算</el-button></div>
+      <div class="budget-totals"><span>预计剩余材料 {{ report.remaining_materials ?? '未估算' }}</span><span>预计剩余人工 {{ report.remaining_labor ?? '未估算' }}</span><span>预计剩余费用 {{ report.remaining_expenses ?? '未估算' }}</span><strong :class="{ 'budget-overrun': report.configured && report.forecast_total != null && Number(report.forecast_total) > Number(report.budget_total) }">预计完工成本 {{ report.forecast_total ?? '未完整估算' }}</strong><el-button v-if="manager() && canManage !== false && ['active', 'delivering', 'warranty'].includes(status)" @click="estimate" :disabled="Boolean(error)">更新完工估算</el-button></div>
       <p class="muted">完工估算包含实际、在途及剩余材料、人工和费用，不记入实际成本。估算人：{{ report.forecast_by || '—' }} · 更新于 {{ report.forecast_at ? new Date(report.forecast_at).toLocaleString() : '—' }}。{{ report.forecast_stale ? '估算待复核：项目已变更、尚未估算或超过30天。' : '' }}</p>
     </template>
     <ActionDialog :command="command" @close="command = null" @saved="load" />

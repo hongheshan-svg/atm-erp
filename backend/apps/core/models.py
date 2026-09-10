@@ -88,9 +88,13 @@ class UpgradeJob(BaseModel):
 
 
 class Company(models.Model):
+    setup_required = models.BooleanField(default=False)
+    setup_completed_at = models.DateTimeField(null=True, blank=True)
     name = models.CharField(max_length=150, default='我的公司')
     address = models.CharField(max_length=250, blank=True)
     phone = models.CharField(max_length=50, blank=True)
+    locked_through = models.DateField(null=True, blank=True)
+    period_revision = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'lean_company'

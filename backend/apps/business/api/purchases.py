@@ -28,11 +28,47 @@ class PurchaseView(ReadView):
     filterset_fields = ['project', 'supplier', 'status']
     search_fields = ['code', 'supplier__name', 'project__name']
 
+    @action(detail=True, methods=['get', 'post'])
+    def warranty(self, request, pk=None):
+        from ..services import purchase_warranty
+
+        purchase = self.get_object()
+        if request.method == 'POST':
+            return Response(purchase_warranty.record(request.user, key(request), purchase.pk, request.data))
+        return Response(purchase_warranty.listing(purchase))
+
     @action(detail=True, methods=['get'], url_path='contract-preview')
     def contract_preview(self, request, pk=None):
-        from ..services.purchase_contract import preview
+        from ..services.purchase_contract import fingerprint, preview
 
-        return Response(preview(request.user, self.get_object()))
+        purchase = self.get_object()
+        current = preview(request.user, purchase)
+        versions = purchase.contract_versions.order_by('-version')
+        selected = request.query_params.get('version')
+        if selected and selected != 'current':
+            from django.shortcuts import get_object_or_404
+            from rest_framework.exceptions import ValidationError
+
+            if not selected.isdecimal() or len(selected) > 9 or int(selected) < 1:
+                raise ValidationError({'version': '请选择有效的合同版本。'})
+            saved = get_object_or_404(versions, version=selected)
+        else:
+            saved = versions.first() if selected != 'current' else None
+        return Response(
+            {
+                **(saved.snapshot if saved else current),
+                'snapshot_hash': fingerprint(current),
+                'archived_version': saved.version if saved else None,
+                'signed_document': saved.document_id if saved else None,
+                'versions': list(versions.values('version', 'created_at', 'document_id', 'reason')),
+            }
+        )
+
+    @action(detail=True, methods=['post'], url_path='archive-contract')
+    def archive_contract(self, request, pk=None):
+        from ..services.purchase_contract import archive
+
+        return Response(archive(request.user, key(request), self.get_object().pk, request.data), status=201)
 
     def create(self, request):
         return Response(supply.create_purchase(request.user, key(request), request.data), status=201)

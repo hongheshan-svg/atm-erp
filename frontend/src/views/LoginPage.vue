@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { login } from '../session'
 import { message } from '../utils/request'
 const router = useRouter()
+const route = useRoute()
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -27,6 +28,7 @@ async function submit() {
       <div class="brand-mark">P</div>
       <h1>项目 ERP</h1>
       <p class="muted">连接需求、采购、交付与售后</p>
+      <el-alert v-if="route.query.setup === 'complete'" title="首次配置完成，请使用新密码登录。" type="success" :closable="false" />
       <form @submit.prevent="submit">
         <el-alert v-if="error" :title="error" type="error" role="alert" :closable="false" /><label
           class="field"

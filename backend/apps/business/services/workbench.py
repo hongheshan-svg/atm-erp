@@ -64,7 +64,11 @@ def summary(request):
         .order_by('due_date', 'pk')
     )
     if has_role(user, MANAGERS):
-        result['approvals'] = bucket(purchases.filter(status='submitted'), PurchaseSerializer, 'approvals')
+        result['approvals'] = bucket(
+            purchases.filter(status='submitted', project__in=projects_for(user, Project.objects.all(), MANAGERS)),
+            PurchaseSerializer,
+            'approvals',
+        )
     if has_role(user, WAREHOUSE):
         result['receipts'] = bucket(
             purchases.filter(status__in=['approved', 'partial']), PurchaseSerializer, 'receipts'
@@ -107,12 +111,14 @@ def summary(request):
         from .banking import with_remaining
 
         pending = (
-            Reconciliation.objects.filter(status='draft')
+            Reconciliation.objects.filter(status='draft', entry__project__in=projects)
             .select_related('entry__project', 'entry__purchase__supplier', 'confirmed_by')
             .order_by('id')
         )
         if has_role(user, MANAGERS):
-            prepayments = pending.filter(kind='prepayment')
+            prepayments = pending.filter(
+                kind='prepayment', entry__project__in=projects_for(user, Project.objects.all(), MANAGERS)
+            )
             if prepayments.exists():
                 result['prepayments'] = bucket(prepayments, ReconciliationSerializer, 'prepayments')
         if has_role(user, FINANCE):

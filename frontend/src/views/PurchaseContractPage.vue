@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { read } from '../api'
+import { all, read } from '../api'
 import { message } from '../utils/request'
 import { termLabel } from '../modules/payment-terms'
-import type { Row } from '../types'
+import type { Command, Row } from '../types'
+import ActionDialog from '../components/ActionDialog.vue'
+import { buyer } from '../modules/shared'
 const route = useRoute()
 const data = ref<Row | null>(null), error = ref(''), loading = ref(false)
 const appendix = ref(false)
+const packagePrint = ref(false), selectedVersion = ref(''), command = ref<Command | null>(null)
 const summarized = computed(() => {
   const d = data.value
   if (!d) return false
@@ -24,12 +27,27 @@ const payment = computed(() => {
 })
 async function load() {
   loading.value = true; data.value = null; error.value = ''; appendix.value = false
-  try { data.value = await read(`/business/purchases/${route.params.id}/contract-preview/`) }
+  try { data.value = await read(`/business/purchases/${route.params.id}/contract-preview/`, selectedVersion.value ? { version: selectedVersion.value } : {}) }
   catch (e) { error.value = message(e) }
   finally { loading.value = false }
 }
-watch(() => route.params.id, load, { immediate: true })
+watch(() => route.params.id, () => { selectedVersion.value = ''; packagePrint.value = false; void load() }, { immediate: true })
 function print() { window.print() }
+async function archive() {
+  if (!data.value || data.value.archived_version) return
+  const docs = await all('/business/documents/', { purchase: route.params.id, category: 'contract' })
+  command.value = {
+    title: '归档已签署合同版本', path: `/business/purchases/${route.params.id}/archive-contract/`,
+    fields: [
+      { key: 'document', label: '已签署合同附件', type: 'select', options: docs.map(d => ({ value: d.id, label: d.original_name })) },
+      { key: 'delivery_address', label: '双方确认的收货地址' },
+      { key: 'reason', label: '归档或修订原因', type: 'textarea' },
+      { key: 'confirmed', label: '已核对签署文件与本版正文、明细及收货地址一致', type: 'boolean', initial: false },
+    ],
+    prepare: values => ({ ...values, expected_snapshot: data.value!.snapshot_hash }),
+    notice: { type: 'warning', text: '先在采购附件中上传双方签署的完整合同。归档后本版资料不可覆盖；后续修订创建新版本，金额仍以原采购业务为准。' },
+  }
+}
 </script>
 <template>
   <section class="purchase-contract-page" v-loading="loading">
@@ -38,35 +56,39 @@ function print() { window.print() }
       <div><el-button :disabled="loading" @click="load">刷新预览</el-button><el-button :disabled="!data || loading" @click="appendix = !appendix">{{ appendix ? '查看合同正文' : '查看完整附件' }}</el-button><el-button type="primary" :disabled="!data || loading" @click="print">打印 / 另存为 PDF</el-button></div>
     </div>
     <el-alert v-if="error" type="error" :title="error" :closable="false" />
-    <p class="contract-help">合同正文按单页 A4 排版；明细较多或内容较长时列入同编号附件，可单独预览、打印完整附件。请将正文与附件一并确认签署，再上传采购附件保存。</p>
-    <article v-if="data" class="contract-paper" :class="{ 'contract-appendix': appendix }" aria-label="采购合同预览">
+    <div v-if="data" class="contract-toolbar">
+      <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
+      <label><input v-model="packagePrint" type="checkbox"> 正文与完整附件一起打印</label>
+      <el-button v-if="buyer() && !data.draft && !data.archived_version && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">归档签署版本</el-button>
+      <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : '当前采购资料预览，尚未归档签署版本' }}</span>
+    </div>
+    <p class="contract-help">正文按单页 A4 排版，完整附件允许分页；勾选整套打印可一次输出正文与附件。签署文件请从采购附件查看，归档前需补齐双方资料并核对收货地址。</p>
+    <template v-if="data"><article v-for="sheet in (packagePrint ? [false, true] : [appendix])" :key="String(sheet)" class="contract-paper" :class="{ 'contract-appendix': sheet }" aria-label="采购合同预览">
       <h1>采购合同<span v-if="data.draft">（草稿 · 未批准）</span><span v-else-if="data.status === 'cancelled'">（已取消）</span></h1>
-      <p v-if="appendix" class="contract-state">附件：完整采购明细、主体资料及补充约定</p>
+      <p v-if="sheet" class="contract-state">附件：完整采购明细、主体资料及补充约定</p>
       <div class="contract-meta"><span>合同编号：{{ data.code }}</span><span>制单日期：{{ data.date }}</span></div>
       <p v-if="Number(data.cancelled_amount) > 0" class="contract-state">已有取消余量，请结合原合同及变更记录核对。</p>
       <div class="contract-parties">
-        <section><h2>甲方（采购方）</h2><p>名称：{{ appendix ? data.buyer.name : brief(data.buyer.name, 45) }}</p><p>地址：{{ appendix ? data.buyer.address : brief(data.buyer.address) }}</p><p>电话：{{ data.buyer.phone || '________________' }}</p></section>
-        <section><h2>乙方（供货方）</h2><p>名称：{{ appendix ? data.supplier.name : brief(data.supplier.name, 45) }}</p><p>地址：{{ appendix ? data.supplier.address : brief(data.supplier.address) }}</p><p>联系人：{{ appendix ? data.supplier.contact : brief(data.supplier.contact, 30) }}；电话：{{ data.supplier.phone || '________________' }}</p></section>
+        <section><h2>甲方（采购方）</h2><p>名称：{{ sheet ? data.buyer.name : brief(data.buyer.name, 45) }}</p><p>地址：{{ sheet ? data.buyer.address : brief(data.buyer.address) }}</p><p>电话：{{ data.buyer.phone || '________________' }}</p></section>
+        <section><h2>乙方（供货方）</h2><p>名称：{{ sheet ? data.supplier.name : brief(data.supplier.name, 45) }}</p><p>地址：{{ sheet ? data.supplier.address : brief(data.supplier.address) }}</p><p>联系人：{{ sheet ? data.supplier.contact : brief(data.supplier.contact, 30) }}；电话：{{ data.supplier.phone || '________________' }}</p></section>
       </div>
-      <p>项目：{{ appendix ? data.project : brief(data.project, 60) }}</p>
+      <p>项目：{{ sheet ? data.project : brief(data.project, 60) }}</p>
+      <p v-if="data.delivery_address">收货地址：{{ sheet ? data.delivery_address : brief(data.delivery_address, 60) }}</p>
       <h2>一、采购明细（CNY 人民币，含税）</h2>
-      <p v-if="summarized && !appendix">共 {{ data.lines.length }} 项物料，编码、名称、规格、品牌、数量、单价及逐项交期详见同编号合同附件。</p>
+      <p v-if="summarized && !sheet">共 {{ data.lines.length }} 项物料，编码、名称、规格、品牌、数量、单价及逐项交期详见同编号合同附件。</p>
       <div v-else class="contract-table-wrap"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td>{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td>{{ line.specification || '—' }}<br>{{ line.brand }}</td><td>{{ line.unit }}</td><td>{{ line.quantity }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ line.cancelled_quantity }}</small></td><td>{{ line.unit_price }}</td><td>{{ line.amount }}</td><td>{{ line.due_date }}</td></tr></tbody></table></div>
       <p class="contract-total">订单原含税合计：人民币 ¥ {{ data.total }}</p>
-      <template v-if="!appendix">
+      <template v-if="!sheet">
         <h2>二、交付与结算</h2><p>订单交期：{{ data.due_date }}；逐项交期以明细为准。乙方负责适运包装并交至甲方书面指定地点，运输及包装费用含于合同价，另有书面约定除外。</p><p>{{ payment }} 乙方按约提供合法有效发票；甲方按约支付无争议到期款项。</p>
         <h2>三、质量、验收与一年质保</h2>
-        <p>乙方保证货物为符合约定的全新合格品，品牌、规格及性能符合明细、双方确认的图纸和技术要求，并满足适用的强制性标准；随货提供合格证明及必要资料，未经甲方书面同意不得替换。</p>
-        <p>甲方到货后及时核验数量、外观及技术指标，发现不符及时书面通知乙方；签收不等于质量验收。隐蔽缺陷发现后及时提出，不因外观验收而免除乙方责任。</p>
-        <p><strong>质保期为各批货物验收合格之日起一年。</strong>质保期内因产品质量问题，乙方免费维修或更换，承担必要运输、拆装费用，并在接到通知后及时响应、在双方确认期限内处理；非质量原因损坏由双方确认处理费用。法定责任或另行承诺的更长质保不受本条缩短。</p>
+        <p v-for="clause in data.clauses.quality" :key="clause">{{ clause }}</p>
         <h2>四、违约责任与其他约定</h2>
-        <p>迟延交货、逾期付款或质量不符的，违约方应及时纠正并依法赔偿可归责的损失；质量不符可要求修理、更换、减价，符合法定或约定条件时退货、解除合同及退还相应价款。违约金有双方书面约定的按约处理，受损方应采取合理措施防止损失扩大。</p>
-        <p>不可抗力影响履约时，应及时通知、提供证明并减轻损失，依法按影响程度处理责任。双方对图纸、价格及商业资料负保密义务，依法披露除外。变更须经双方书面确认；争议先协商，协商不成向有管辖权的人民法院起诉。</p>
-        <p>本合同经双方授权代表签字或盖章生效，一式两份，各执一份。同编号附件经双方确认后为合同组成部分；补充约定与正文不一致的，以双方明确确认的补充约定为准。</p>
+        <p v-for="clause in data.clauses.liability" :key="clause">{{ clause }}</p>
       </template>
-      <h2>{{ appendix ? '二' : '五' }}、补充约定</h2><p class="contract-note">{{ data.note ? (appendix ? data.note : brief(data.note, 90)) : '无；其他事项由双方另行书面确认。' }}</p>
+      <h2>{{ sheet ? '二' : '五' }}、补充约定</h2><p class="contract-note">{{ data.note ? (sheet ? data.note : brief(data.note, 90)) : '无；其他事项由双方另行书面确认。' }}</p>
       <div class="contract-signatures"><section><p>甲方签字 / 盖章：________________</p><p>签署日期：________________</p></section><section><p>乙方签字 / 盖章：________________</p><p>签署日期：________________</p></section></div>
-    </article>
+    </article></template>
+    <ActionDialog :command="command" @close="command = null" @saved="selectedVersion = ''; load()" />
   </section>
 </template>
 <style>
@@ -82,10 +104,15 @@ function print() { window.print() }
 @media screen and (max-width:700px) { .contract-paper { padding:20px 12px; }.contract-meta,.contract-parties,.contract-signatures { grid-template-columns:1fr; gap:8px; }.contract-paper table { min-width:650px; } }
 @media print {
   @page { size:A4; margin:12mm; }
+  body:has(.purchase-contract-page) .el-message,
+  body:has(.purchase-contract-page) .el-notification,
+  body:has(.purchase-contract-page) .el-overlay,
+  body:has(.purchase-contract-page) .el-loading-mask { display:none !important; }
   html:has(.purchase-contract-page),body:has(.purchase-contract-page) { background:white; }
   body:has(.purchase-contract-page) .sidebar,body:has(.purchase-contract-page) .topbar,.contract-toolbar,.contract-help { display:none !important; }
   body:has(.purchase-contract-page) .shell { display:block; min-height:0; background:white; }body:has(.purchase-contract-page) main,body:has(.purchase-contract-page) .content { margin:0; padding:0; width:auto; min-height:0; background:white; }
   .contract-paper { width:100%; max-width:none; margin:0; padding:0; box-shadow:none; font-size:9pt; line-height:1.5; }
+  .contract-paper + .contract-paper { break-before:page; }
   .contract-table-wrap { overflow:visible; }.contract-paper table { min-width:0; table-layout:fixed; font-size:9pt; }.contract-paper th,.contract-paper td { overflow-wrap:anywhere; white-space:normal; }.contract-paper th:nth-child(1) { width:4%; }.contract-paper th:nth-child(2) { width:25%; }.contract-paper th:nth-child(3) { width:20%; }.contract-paper th:nth-child(4) { width:5%; }.contract-paper th:nth-child(5) { width:8%; }.contract-paper th:nth-child(6),.contract-paper th:nth-child(7) { width:11%; }.contract-paper th:nth-child(8) { width:16%; }.contract-paper thead { display:table-header-group; }.contract-paper tr,.contract-signatures { break-inside:avoid; }
 }
 </style>

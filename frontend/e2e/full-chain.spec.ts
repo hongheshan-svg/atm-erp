@@ -1,5 +1,6 @@
 import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
+import { selectRoles } from './role-helpers'
 const password = 'Lean-QA-2026-password'
 const day = (offset = 0) => {
   const d = new Date()
@@ -72,7 +73,7 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
     await page.getByRole('button', { name: '新增用户', exact: true }).click()
     await fill(page, '用户名', role + suffix)
     await fill(page, '姓名', role + suffix)
-    await dialog(page).getByLabel('角色', { exact: true }).selectOption(role)
+    await selectRoles(dialog(page), [role])
     await fill(page, '小时成本（元）', role === 'member' ? '50' : '0')
     await fill(page, '密码', password)
     await save(page)

@@ -37,4 +37,4 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT/docker-compose.yml")
 if [[ "$BUILD" == true ]]; then "${COMPOSE[@]}" build app; fi
 "${COMPOSE[@]}" up -d --wait --wait-timeout 180
 echo "安装完成。管理员用户名：admin；首次密码保存在 $ENV_FILE 的 LEAN_ADMIN_PASSWORD。"
-echo '使用配置中的端口访问 /erp/。重复安装保留现有账户与数据。'
+echo '使用配置中的端口访问 /erp/，首次登录自动进入快速安装向导：修改初始密码、填写公司、可选添加人员和调整编号，完成后即可使用。重复安装保留现有账户与数据。'

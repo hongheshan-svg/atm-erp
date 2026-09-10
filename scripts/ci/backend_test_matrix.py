@@ -6,7 +6,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {
-    'platform': ('apps.core.tests.test_platform', 'apps.core.tests.test_ota', 'apps.accounts.tests.test_auth'),
+    'platform': (
+        'apps.core.tests.test_platform',
+        'apps.core.tests.test_ota',
+        'apps.accounts.tests.test_auth',
+        'apps.core.tests.test_setup',
+    ),
     'business': (
         'apps.business.tests.test_models',
         'apps.business.tests.test_sales',
@@ -23,6 +28,7 @@ TARGETS = {
         'apps.business.tests.test_operational_review',
         'apps.business.tests.test_reconciliation',
         'apps.business.tests.test_payment_terms',
+        'apps.business.tests.test_hardening',
     ),
     'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
 }

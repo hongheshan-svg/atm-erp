@@ -13,7 +13,7 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   expect(template.suggestedFilename()).toBe('items-template.xlsx')
   expect((await readFile((await template.path())!)).subarray(0, 2).toString()).toBe('PK')
   const prefix = `IMPORT${Date.now()}`
-  const csv = '物料编码,名称,规格,单位\n' + Array.from({ length: 12 }, (_, i) => `${prefix}-${i},导入验收${i},标准,件`).join('\n')
+  const csv = '物料编码,名称,规格,单位\n' + Array.from({ length: 12 }, (_, i) => `${prefix}-${i},导入验收${prefix.slice(6)}-${i},标准,件`).join('\n')
   await dialog.locator('input[type=file]').setInputFiles({ name: 'items.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
   await expect(dialog.getByText('共 12 条，确认时再次校验', { exact: false })).toBeVisible()
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeEnabled()

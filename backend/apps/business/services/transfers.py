@@ -37,6 +37,7 @@ SCHEMAS = {
             ('单位', 'unit'),
             ('品牌', 'brand'),
             ('物料类别', 'part_type'),
+            ('独立建码原因', 'duplicate_reason'),
         ],
     ),
     'partners': (
@@ -211,7 +212,7 @@ def parse(actor, resource, upload):
     legacy = (
         [headers[:4], headers[:8]]
         if resource == 'payments'
-        else headers[:4]
+        else [headers[:4], headers[:6]]
         if resource == 'items'
         else [headers[:8], headers[:9], headers[:10]]
         if resource == 'purchases'

@@ -3,7 +3,7 @@ export type Option = { value: string | number; label: string }
 export type Field = {
   key: string
   label: string
-  type?: 'text' | 'password' | 'date' | 'select' | 'multi' | 'boolean' | 'rows' | 'file' | 'textarea'
+  type?: 'text' | 'password' | 'date' | 'select' | 'multi' | 'checks' | 'boolean' | 'rows' | 'file' | 'textarea'
   options?: Option[]
   fields?: Field[]
   optional?: boolean

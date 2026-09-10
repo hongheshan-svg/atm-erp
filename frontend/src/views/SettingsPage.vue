@@ -30,7 +30,7 @@ function password() {
 }
 </script>
 <template>
-  <header class="page-heading"><h1>设置</h1></header>
+  <header class="page-heading"><h1>设置</h1><router-link v-if="can(['admin'])" to="/setup">启用指南</router-link></header>
   <ModuleTabs :tabs="tabs" storage-key="settings">
     <template #account><section class="panel">
     <h2>我的账户</h2>

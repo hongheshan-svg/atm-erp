@@ -12,6 +12,7 @@ from apps.core.models import CodeRule
 from apps.core.permissions import FINANCE, MANAGERS, require_role
 
 from ..models import Document, Entry, Reconciliation, StockMove
+from .approval import independent_approval
 from .common import ZERO, audit, fields, lookup, number, project_action, rounded, save, text
 
 
@@ -22,10 +23,11 @@ def signed_number(value, key):
 
 def snapshot(statement):
     entry = statement.entry
+    history = entry.payments.all()
+    if statement.pk:
+        history = history.exclude(reconciliation_id=statement.pk)
     payments = list(
-        entry.payments.exclude(reconciliation_id=statement.pk)
-        .order_by('pk')
-        .values('id', 'amount', 'reversal_of', 'date', 'reason', 'method', 'account', 'reference')
+        history.order_by('pk').values('id', 'amount', 'reversal_of', 'date', 'reason', 'method', 'account', 'reference')
     )
     baseline_paid = sum((p['amount'] for p in payments), ZERO)
     remaining = entry.amount - entry.credit_amount - baseline_paid
@@ -95,6 +97,13 @@ def snapshot(statement):
         data['received_net'] = received_value
         if statement.kind == 'settlement':
             eligible = max(ZERO, min(remaining, received_value - baseline_paid))
+            if statement.settlement_month:
+                from .monthly import entry_totals
+
+                monthly = entry_totals(entry, statement.settlement_month, excluded_statement=statement.pk)
+                data['monthly'] = {'month': statement.settlement_month, **monthly}
+                data['balance'] = Decimal(monthly['closing'])
+                eligible = max(ZERO, min(eligible, data['balance']))
     else:
         sale = getattr(entry.project, 'sale', None)
         data['contract'] = (
@@ -131,11 +140,30 @@ def create(actor, key, data):
     entry = lookup(Entry, data.get('entry'), 'entry')
 
     def execute(user, project):
-        fields(data, {'entry', 'kind', 'counterparty_balance', 'approved_amount', 'basis', 'document', 'reason'})
+        fields(
+            data,
+            {
+                'entry',
+                'kind',
+                'counterparty_balance',
+                'approved_amount',
+                'basis',
+                'document',
+                'reason',
+                'settlement_month',
+            },
+        )
         if project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开。')
         source = Entry.objects.select_for_update().get(pk=entry.pk)
         kind = data.get('kind', 'settlement')
+        month = text(data, 'settlement_month', default='', maximum=7)
+        if month:
+            from .monthly import bounds
+
+            bounds(month)
+            if kind != 'settlement' or not source.purchase_id:
+                raise ValidationError('月度核对仅适用于采购普通结算。')
         if kind not in {'settlement', 'prepayment', 'refund'} or (kind == 'prepayment' and not source.purchase_id):
             raise ValidationError({'kind': '预付款核准仅适用于采购应付。'})
         doc = lookup(Document, data['document'], 'document') if data.get('document') else None
@@ -155,6 +183,7 @@ def create(actor, key, data):
             code=CodeRule.generate_code('reconciliation'),
             entry=source,
             kind=kind,
+            settlement_month=month,
             counterparty_balance=signed_number(data.get('counterparty_balance'), 'counterparty_balance'),
             approved_amount=number(data.get('approved_amount'), 'approved_amount', positive=True),
             basis=basis,
@@ -184,6 +213,7 @@ def action(actor, key, statement_id, data, *, void=False):
             .get(pk=initial.pk)
         )
         reason = text(data, 'reason')
+        self_approval = False
         if statement.status == 'void' or (not void and statement.status != 'draft'):
             raise Conflict('此对账单已处理，请刷新。')
         if void:
@@ -191,6 +221,8 @@ def action(actor, key, statement_id, data, *, void=False):
             statement.status, statement.void_reason = 'void', reason
         else:
             require_role(user, MANAGERS if statement.kind == 'prepayment' else FINANCE)
+            if statement.kind == 'prepayment':
+                self_approval = independent_approval(user, {statement.created_by_id}, reason)
             if not current(statement):
                 raise Conflict('原单据、收退货或资金流水已变化，请作废后重新生成对账单。')
             if difference(statement) != 0:
@@ -201,7 +233,13 @@ def action(actor, key, statement_id, data, *, void=False):
                 raise Conflict('项目已结项，请先重新打开。')
             statement.status, statement.confirmed_at, statement.confirmed_by = 'confirmed', timezone.now(), user
         save(statement, user)
-        return audit(user, 'reconciliation.void' if void else 'reconciliation.confirm', statement, reason=reason)
+        return audit(
+            user,
+            'reconciliation.void' if void else 'reconciliation.confirm',
+            statement,
+            reason=reason,
+            self_approval=self_approval,
+        )
 
     return project_action(
         actor,
@@ -209,7 +247,7 @@ def action(actor, key, statement_id, data, *, void=False):
         'reconciliation.void' if void else 'reconciliation.confirm',
         initial.entry.project_id,
         {'id': initial.pk, 'data': data},
-        FINANCE | MANAGERS,
+        MANAGERS if initial.kind == 'prepayment' and not void else FINANCE,
         execute,
     )
 

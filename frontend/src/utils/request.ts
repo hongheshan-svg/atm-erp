@@ -65,7 +65,7 @@ request.interceptors.response.use(
   },
 )
 export function message(error: unknown): string {
-  const detail = axios.isAxiosError(error) ? error.response?.data || error.message : error
+  const detail = axios.isAxiosError(error) ? error.response?.data?.detail || error.response?.data || error.message : error
   function flatten(value: any): string {
     if (value == null) return ''
     if (typeof value === 'string') return value
@@ -75,4 +75,8 @@ export function message(error: unknown): string {
     return String(value)
   }
   return flatten(detail) || '操作失败，请重试。'
+}
+export function recoveryActions(error: unknown): { label: string; path: string }[] {
+  const actions = axios.isAxiosError(error) ? error.response?.data?.actions : []
+  return Array.isArray(actions) ? actions.filter(a => typeof a.label === 'string' && typeof a.path === 'string' && /^\/(projects|purchases|finance)(\/\d+)?(\?|$)/.test(a.path)) : []
 }

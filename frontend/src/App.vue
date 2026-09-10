@@ -17,7 +17,7 @@ watch(user, (value) => {
 </script>
 <template>
   <ElConfigProvider :locale="zhCn">
-    <router-view v-if="route.path === '/login'" />
+    <router-view v-if="['/login', '/setup'].includes(route.path)" />
     <div v-else class="shell">
       <button v-if="menuOpen" class="nav-backdrop" aria-label="关闭导航" @click="menuOpen = false" />
       <aside class="sidebar" :class="{ 'mobile-open': menuOpen }">

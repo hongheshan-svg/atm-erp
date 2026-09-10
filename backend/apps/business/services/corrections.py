@@ -4,7 +4,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.accounts.models import User
 from apps.core.api import Conflict
-from apps.core.permissions import MANAGERS, OPERATION_ROLES, has_role
+from apps.core.permissions import GLOBAL_PROJECT_ROLES, MANAGERS, has_role
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine
 from .bom import incoming, issued
@@ -61,7 +61,7 @@ def edit_project(actor, key, project_id, data):
                 .exclude(assignee_id__in=ids | {project.manager_id})
                 .select_related('assignee')
             )
-            if any(not has_role(task.assignee, OPERATION_ROLES - {'member'}) for task in stranded):
+            if any(not has_role(task.assignee, GLOBAL_PROJECT_ROLES) for task in stranded):
                 raise Conflict('移除的成员还有未完成任务，请先重新分配或取消任务。')
             project.members.set(members)
         for field, maximum in [('name', 150), ('requirements', 20000)]:

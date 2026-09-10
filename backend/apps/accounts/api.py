@@ -53,6 +53,7 @@ def profile(user):
         'role': role(user),
         'roles': sorted(roles(user)),
         'management_reports': user.management_reports,
+        'setup_required': has_role(user, ADMIN) and Company.objects.filter(pk=1, setup_required=True).exists(),
     }
 
 

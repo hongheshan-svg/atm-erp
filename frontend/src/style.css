@@ -645,6 +645,10 @@ button:focus-visible {
   }
 }
 :root { --mobile-nav-width: 250px; }
+.role-checks { display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 14px; border: 1px solid var(--el-border-color); border-radius: 8px; min-width: 0; }
+.role-checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.role-checks input { width: 17px; height: 17px; accent-color: #2b60b5; }
+.role-checks small { flex-basis: 100%; color: #64748b; }
 .mobile-menu-toggle, .nav-backdrop { display: none !important; }
 /* Native horizontal scrolling keeps the active module reachable on narrow screens. */
 .scrollable-tabs > .el-tabs__header .el-tabs__nav-wrap { padding: 0; }

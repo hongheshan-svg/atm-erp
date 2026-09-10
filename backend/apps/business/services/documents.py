@@ -45,7 +45,7 @@ def visible_documents(user, queryset):
             sales = sales.filter(manager=user)
         allowed |= Q(sale__in=sales)
     if has_role(user, PURCHASERS | FINANCE):
-        allowed |= Q(purchase__in=PurchaseOrder.objects.filter(project__in=Project.objects.all()))
+        allowed |= Q(purchase__in=PurchaseOrder.objects.filter(project__in=projects_for(user, Project.objects.all())))
     return queryset.filter(allowed)
 
 
@@ -121,7 +121,7 @@ def upload(actor, key, project_id, category, file, *, sale_id=None, purchase_id=
                 if owner == 'sale':
                     require_sale(user, source)
                 elif project:
-                    require_project(user, project)
+                    require_project(user, project, roles)
                 context.update(project=project, source=source)
 
             return perform(

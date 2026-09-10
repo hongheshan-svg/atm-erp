@@ -7,7 +7,7 @@ export function defaults(fields: Field[], initial: Row = {}): Row {
         f.initial ??
         (f.type === 'rows'
           ? [defaults(f.fields!)]
-          : f.type === 'multi'
+          : f.type === 'multi' || f.type === 'checks'
             ? []
             : f.type === 'boolean'
               ? true

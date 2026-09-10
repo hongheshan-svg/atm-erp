@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.permissions import require_reports
+from apps.core.permissions import projects_for, require_reports
 
 from .services.reports import summary
 from .services.tabular import export_rows
@@ -10,6 +10,10 @@ from .services.tabular import export_rows
 class ReportsView(APIView):
     def get(self, request):
         require_reports(request.user)
+        if request.query_params.get('view'):
+            from .services.attention import projection
+
+            return Response(projection(request.query_params))
         if request.query_params.get('file_format'):
             data = summary(request.query_params, export=True)
             rows = [{'record_type': '项目', **row} for row in data['results']]
@@ -41,4 +45,14 @@ class ReportsView(APIView):
                 request.query_params['file_format'],
                 ['code', 'name', 'contract_amount', 'actual_cost'],
             )
-        return Response(summary(request.query_params))
+        from .models import Project
+
+        data = summary(request.query_params)
+        permitted = set(
+            projects_for(
+                request.user, Project.objects.filter(pk__in=[row['id'] for row in data['results']])
+            ).values_list('pk', flat=True)
+        )
+        for row in data['results']:
+            row['can_open'] = row['id'] in permitted
+        return Response(data)

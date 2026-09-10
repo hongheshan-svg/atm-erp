@@ -58,7 +58,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   const detail = await response.json()
   expect(detail.payment_term).toBe('month30')
   await post(`purchases/${purchase.id}/submit/`, {})
-  await post(`purchases/${purchase.id}/approve/`, {})
+  await post(`purchases/${purchase.id}/approve/`, { reason: '隔离验收：管理员明确记录本人申请的例外审批依据' })
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
   await dialog(page).getByRole('button', { name: '预览采购合同', exact: true }).click()
   const contract = page.getByRole('article', { name: '采购合同预览' })
@@ -71,7 +71,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await expect(page.locator('body')).toHaveAttribute('data-print-requested', 'yes')
   await page.emulateMedia({ media: 'print' })
   await expect(page.locator('.sidebar')).toBeHidden()
-  await expect(page.locator('.contract-toolbar')).toBeHidden()
+  await expect(page.locator('.contract-toolbar:visible')).toHaveCount(0)
   await expect(contract).toBeVisible()
   expect(await page.locator('.shell > main').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)')
   expect(await page.locator('html').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 255)')
@@ -99,6 +99,24 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await expect(dialog(page)).toContainText('300.00')
   await expect(dialog(page).getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
   await page.screenshot({ path: info.outputPath('monthly-payment-schedule.png'), animations: 'disabled' })
+
+  await page.goto('/erp/finance?section=monthly')
+  await page.getByLabel('对账供应商', { exact: true }).selectOption(String(supplier.id))
+  await page.getByLabel('对账月份', { exact: true }).fill('2026-08')
+  await page.getByRole('button', { name: '查询月度对账', exact: true }).click()
+  await expect(page.getByRole('region', { name: '供应商月度对账', exact: true })).toContainText('期初 200.00')
+  await page.getByRole('button', { name: '确认月度对账', exact: true }).click()
+  await dialog(page).getByLabel('供应商确认的期末余额', { exact: true }).fill('500.00')
+  await dialog(page).getByLabel('核对依据与说明', { exact: true }).fill('隔离验收供应商八月账单')
+  await save(page, '/supplier-monthly/')
+  await page.screenshot({ path: info.outputPath('supplier-monthly.png'), animations: 'disabled' })
+
+  await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
+  await dialog(page).getByRole('button', { name: '登记采购质保', exact: true }).click()
+  await select(page, '原收货批次', '数量2')
+  await dialog(page).getByLabel('数量', { exact: true }).fill('1')
+  await dialog(page).getByLabel('故障描述', { exact: true }).fill('隔离验收：供应商维修跟进')
+  await save(page, `/purchases/${purchase.id}/warranty/`)
 
   const lines = []
   for (let i = 0; i < 30; i++) {

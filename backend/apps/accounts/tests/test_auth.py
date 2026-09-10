@@ -30,7 +30,8 @@ class AuthenticationTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data['role'], role)
             self.assertEqual(
-                set(response.data), {'id', 'username', 'display_name', 'role', 'roles', 'management_reports'}
+                set(response.data),
+                {'id', 'username', 'display_name', 'role', 'roles', 'management_reports', 'setup_required'},
             )
 
     def test_report_access_requires_explicit_admin_grant_and_revokes_immediately(self):

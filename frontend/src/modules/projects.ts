@@ -96,7 +96,7 @@ export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (resource === 'deliveries') a.push('查看配套清单')
   if (resource === 'projects') {
-    if (manager()) {
+    if (manager() && r.can_manage !== false) {
       if (!['closed', 'cancelled'].includes(r.status)) a.push('编辑项目')
       if (['draft', 'quoted', 'active'].includes(r.status)) a.push('取消项目')
       if (['active', 'delivering'].includes(r.status)) a.push('发货')

@@ -37,6 +37,7 @@ class ReconciliationSerializer(serializers.ModelSerializer):
             'project',
             'project_name',
             'kind',
+            'settlement_month',
             'status',
             'snapshot',
             'counterparty_balance',
@@ -63,6 +64,16 @@ class ReconciliationView(ReadView):
     serializer_class = ReconciliationSerializer
     filterset_fields = ['entry', 'entry__project', 'status', 'kind']
     search_fields = ['code', 'entry__title', 'entry__project__name']
+
+    @action(detail=False, methods=['get', 'post'], url_path='supplier-monthly')
+    def supplier_monthly(self, request):
+        from ..services import monthly
+
+        if request.method == 'POST':
+            return Response(monthly.confirm(request.user, key(request), request.data))
+        return Response(
+            monthly.summary(request.user, request.query_params.get('supplier'), request.query_params.get('month'))
+        )
 
     def create(self, request):
         return Response(reconciliation.create(request.user, key(request), request.data), status=201)

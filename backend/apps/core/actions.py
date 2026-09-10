@@ -19,6 +19,9 @@ def perform(*, actor, key, operation, payload, authorize, execute):
         raise ValidationError('操作数据必须为有效 JSON。') from exc
     fingerprint = hashlib.sha256(encoded.encode()).hexdigest()
     with transaction.atomic():
+        from .periods import mutation_lock
+
+        mutation_lock(exclusive=operation == 'period.lock')
         current_actor = get_user_model().objects.get(pk=actor.pk)
         if not current_actor.is_active:
             raise PermissionDenied('用户已停用。')

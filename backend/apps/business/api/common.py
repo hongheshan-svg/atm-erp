@@ -5,11 +5,14 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.core.permissions import (
+    GLOBAL_PROJECT_ROLES,
     OPERATION_ROLES,
     PermissionMixin,
     has_role,
+    projects_for,
 )
 
+from ..models import Project
 from ..services import tabular, transfers
 
 
@@ -20,6 +23,20 @@ def key(request):
 class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     parser_classes = [JSONParser]
     write_roles = OPERATION_ROLES
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # List, detail, export and action lookup share the same project boundary.
+        path = {
+            'purchaseorder': 'project',
+            'entry': 'project',
+            'payment': 'entry__project',
+            'reconciliation': 'entry__project',
+            'stockmove': 'project',
+        }.get(queryset.model._meta.model_name)
+        if path and not has_role(self.request.user, GLOBAL_PROJECT_ROLES):
+            queryset = queryset.filter(**{f'{path}__in': projects_for(self.request.user, Project.objects.all())})
+        return queryset
 
     @action(detail=False, methods=['get'], url_path='export')
     def export(self, request):
