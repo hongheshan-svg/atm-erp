@@ -101,6 +101,7 @@ def demand(project):
                 'unit': line.item.unit,
                 'is_active': line.item.is_active,
                 'quantity': str(line.quantity),
+                'change_note': line.change_note,
                 'issued': str(used),
                 'incoming': str(ordered),
                 'available': str(available),

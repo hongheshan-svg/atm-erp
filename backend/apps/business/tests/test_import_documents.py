@@ -99,7 +99,34 @@ class ImportTests(BusinessFixtures, TestCase):
         self.preview(f'物料编码,数量,变更说明\n{self.item.code},2,\n'.encode(), role='member', status=403)
         response = self.clients['manager'].get('/api/business/projects/bom-template/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content.decode('utf-8-sig').strip(), '物料编码,数量,变更说明,单元')
+        self.assertEqual(response.content.decode('utf-8-sig').strip(), '物料编码,单元,需求数量,变更说明')
+
+    def test_new_bom_template_order_and_readable_preview(self):
+        from openpyxl import load_workbook
+
+        response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'xlsx'})
+        book = load_workbook(io.BytesIO(response.content))
+        self.assertEqual([cell.value for cell in book.active[1]], ['物料编码', '单元', '需求数量', '变更说明'])
+        book.active.append([self.item.code, '装配单元', '2.125', '初版'])
+        content = io.BytesIO()
+        book.save(content)
+        book.close()
+        preview = self.preview(content.getvalue(), 'bom.xlsx')
+        self.assertTrue(preview['can_import'])
+        line = preview['lines'][0]
+        self.assertEqual(
+            (line['item_code'], line['item_name'], line['assembly_unit'], line['quantity']),
+            (self.item.code, self.item.name, '装配单元', '2.125'),
+        )
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/revise-bom/',
+            {
+                'expected_revision': preview['expected_revision'],
+                'lines': [{key: line[key] for key in ['item', 'assembly_unit', 'quantity', 'change_note']}],
+            },
+        )
+        self.assertEqual(BOMLine.objects.get().assembly_unit, '装配单元')
 
     def test_existing_bom_requires_reason_and_observes_ordered_floor(self):
         self.post(

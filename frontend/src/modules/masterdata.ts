@@ -12,8 +12,8 @@ import { can, customerOnly } from '../session'
 import { termFields, termLabel } from './payment-terms'
 export const columns: Record<string, Column[]> = {
   items: [
-    C('code', '编码'),
-    C('name', '物料'),
+    C('code', '物料编码'),
+    C('name', '物料名称'),
     C('specification', '规格'),
     C('brand', '品牌'),
     { key: 'part_type', label: '物料类别', format: r => ({ standard: '标准件', custom: '非标件' }[String(r.part_type)] || '未分类') },
@@ -27,6 +27,7 @@ export const columns: Record<string, Column[]> = {
     C('contact', '联系人'),
     C('phone', '电话'),
     { key: 'payment_term', label: '采购账期', format: r => r.kind === 'customer' ? '—' : termLabel(r) },
+    C('address', '地址'),
     C('is_active', '启用'),
   ],
 }

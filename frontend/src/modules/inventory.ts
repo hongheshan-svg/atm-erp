@@ -16,8 +16,8 @@ import { item } from './shared'
 import { endpoint } from './shared'
 export const columns: Record<string, Column[]> = {
   stocks: [
-    C('item_code', '编码'),
-    C('item_name', '物料'),
+    C('item_code', '物料编码'),
+    C('item_name', '物料名称'),
     C('location', '库位'),
     C('quantity', '库存数量'),
   ],

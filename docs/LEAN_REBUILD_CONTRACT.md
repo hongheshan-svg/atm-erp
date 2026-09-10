@@ -20,6 +20,10 @@
 
 ## 表格导入导出
 
+- `{resource}/import-schema/` GET 与模板共用有序字段定义，返回 `columns[{key,label,table_keys,hint}]` 和业务说明，沿用对应导入权限。模板及预览统一中文列名、列序；引用列明确填写编码、账号或ID，并映射页面显示名称。状态、派生余额、自动编号不作为新增输入。
+- 新模板保留旧版列头兼容，按匹配模板的字段映射读取，不按新位置解释旧文件。标准件/非标件、往来类型、任务阶段、采购账期和结算方式可填写页面中文值，兼容原英文值。预览 `rows` 始终按文件行展开，`row_count` 为文件明细数，`count` 为待创建记录数；采购按分组创建草稿而不折叠预览行。
+- BOM 新模板列为物料编码、单元、需求数量、变更说明，支持CSV/XLSX下载，兼容原三列/四列模板；物料名称、规格及品牌在预览中只读关联，已领、在途、库存和缺料仍由业务计算。
+
 - 业务列表 `{resource}/export/?file_format=csv|xlsx` 使用原列表全部筛选结果，忽略分页，最多20000行；沿用 queryset 项目范围及序列化金额过滤。采购按明细展开。附件列表仅导出元数据，附件内容仍走独立鉴权下载。设置不属于业务表格导入范围。
 - `reports/?file_format=csv|xlsx` 导出全部筛选项目明细与合计，沿用管理员/总经理报表授权。金额为 CNY 含税经营口径；XLSX数值使用文本单元格保存，CSV保存原始十进制字符串，避免服务端转换损失精度。Excel读取CSV时应按文本导入编码/大金额列，以免软件自动转换前导零或长数字。危险公式前缀转义为文本。
 - items/partners/sales/projects/purchases/tasks/stocks/moves/entries/payments/time/deliveries 提供 `import-template/` GET（file_format同上）、`import-file/` POST multipart单个file、`import-confirm/` POST JSON `{token}`。CSV为UTF-8，XLSX仅一个工作表，禁止公式，文件5MB/1000行上限，严格使用模板列。关联使用编码或账号，标注ID的列从列表导出获取。
