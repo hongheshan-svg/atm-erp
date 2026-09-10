@@ -4,7 +4,7 @@ import { choices } from './shared'
 export const projectFields = (c: Catalog): Field[] => [
   t('name', '项目名称'),
   select('customer', '客户', options(c.partners.filter((p) => p.kind !== 'supplier'))),
-  person(c, 'manager', '负责人'),
+  select('manager', '负责人', options(c.users.filter(u => hasRoles(u, ['admin', 'manager'])))),
   { key: 'members', label: '项目成员', type: 'multi', optional: true, options: options(c.users) },
   t('requirements', '需求说明', true),
   date('due_date', '计划交期', true),
@@ -22,7 +22,7 @@ export const taskFields = (c: Catalog): Field[] => [
 import { all, read } from '../api'
 import { catalog } from '../catalog'
 import { options } from '../catalog'
-import { manager } from '../session'
+import { manager, hasRoles } from '../session'
 import { user } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'

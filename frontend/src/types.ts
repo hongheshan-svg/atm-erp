@@ -11,6 +11,9 @@ export type Field = {
   readonly?: boolean
   hidden?: boolean
   hint?: string
+  placeholder?: string
+  wide?: boolean
+  numeric?: { scale: number; signed?: boolean; min?: number; max?: number }
   displayOnly?: boolean
   remotePath?: string
   remoteParams?: Row

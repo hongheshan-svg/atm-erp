@@ -96,6 +96,16 @@ describe('模块边界', () => {
     expect(command.fields.map(f => f.key)).toContain('requirements')
   })
 
+  it('项目负责人只列管理员和项目经理，兼岗按角色集合判断', async () => {
+    vi.mocked(all).mockImplementation(async path => path === '/auth/directory/' ? [
+      { id: 1, roles: ['member'], display_name: '装配员' },
+      { id: 2, roles: ['purchaser', 'manager'], display_name: '兼岗经理' },
+      { id: 3, roles: ['admin'], display_name: '管理员' },
+    ] : [])
+    const command = await createCommand('projects')
+    expect(command.fields.find(f => f.key === 'manager')?.options?.map(o => o.value)).toEqual([2, 3])
+  })
+
   it('已完成任务可补录工时，取消任务不提供入口', () => {
     user.value = { role: 'member', id: 7 }
     expect(actionNames('tasks', { status: 'done', assignee: 7, kind: 'test' })).toEqual(['登记工时'])

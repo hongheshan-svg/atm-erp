@@ -166,7 +166,7 @@ Docker 与三平台原生安装启动后共用网页向导，无需在网页填�
 
 物料编码可手工填写，留空自动生成；合同编号可独立填写。列表支持每页 10/20/50/100 条，销售、采购及项目附件通过鉴权下载。
 
-详细操作、导入导出限制及成本口径见 [日常使用说明](docs/LEAN_USER_GUIDE.md)；对账、锁账等固定管控见 [业务管控说明](docs/OPERATIONAL_HARDENING.md)。
+详细操作、导入导出限制及成本口径见 [日常使用说明](docs/LEAN_USER_GUIDE.md)；设备需求、图纸版本、BOM、验收及付款依据的填写口径见 [自动化设备表单指南](docs/AUTOMATION_FORM_GUIDE.md)；对账、锁账等固定管控见 [业务管控说明](docs/OPERATIONAL_HARDENING.md)。
 
 ## 升级与备份
 

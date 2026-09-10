@@ -48,6 +48,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('客户确认')
   await save(page, `/sales/${sale.id}/quote/`)
   await action(page, saleRow, '签约')
+  await dialog(page).getByLabel('期限', { exact: true }).fill('2026-12-31')
   const signed = await save(page, `/sales/${sale.id}/sign/`)
   const id = signed.project
   const entry = (await read(page, `entries/?project=${id}`)).results[0]
