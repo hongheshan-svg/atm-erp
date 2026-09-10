@@ -98,9 +98,10 @@ def trusted_asset(job, mode, host_platform):
     return {'url': expected, 'sha256': digest[7:], 'size': asset['size'], 'name': name}
 
 
-def download(asset, destination):
+def download(asset, destination, progress=None):
     digest = hashlib.sha256()
     size = 0
+    last_report = 0
     request = urllib.request.Request(asset['url'], headers={'User-Agent': 'Lean-ERP-host-upgrade'})
     with urllib.request.urlopen(request, timeout=60) as response, destination.open('xb') as output:
         while chunk := response.read(1024 * 1024):
@@ -109,6 +110,9 @@ def download(asset, destination):
                 raise ValueError('Package size exceeds release metadata')
             digest.update(chunk)
             output.write(chunk)
+            if progress and (time.monotonic() - last_report >= 2 or size == asset['size']):
+                progress(size, asset['size'])
+                last_report = time.monotonic()
     if digest.hexdigest() != asset['sha256'] or size != asset['size']:
         raise ValueError('Package SHA256 mismatch')
 
@@ -207,10 +211,49 @@ class Runner:
         except OSError:
             pass  # During application downtime, reports remain durably queued.
 
-    def command(self, argv, log, **kwargs):
+    def command(self, argv, log, progress=None, **kwargs):
         kwargs.setdefault('env', {key: value for key, value in os.environ.items() if not key.startswith(('LEAN_', 'COMPOSE_'))})
         kwargs.setdefault('timeout', 1800)
-        subprocess.run([str(arg) for arg in argv], check=True, stdout=log, stderr=log, **kwargs)
+        args = [str(arg) for arg in argv]
+        if progress is None:
+            subprocess.run(args, check=True, stdout=log, stderr=log, **kwargs)
+            return
+        timeout = kwargs.pop('timeout')
+        started = time.monotonic()
+        with subprocess.Popen(args, stdout=log, stderr=log, **kwargs) as process:
+            try:
+                while True:
+                    elapsed = int(time.monotonic() - started)
+                    if elapsed >= timeout:
+                        raise subprocess.TimeoutExpired(args, timeout)
+                    try:
+                        code = process.wait(timeout=min(5, timeout - elapsed))
+                        if code:
+                            raise subprocess.CalledProcessError(code, args)
+                        return
+                    except subprocess.TimeoutExpired:
+                        progress(int(time.monotonic() - started))
+            except BaseException:
+                process.kill()
+                process.wait()
+                raise
+
+    def running_version(self):
+        """The checkout can be newer than the container; only running code is authoritative."""
+        with urllib.request.urlopen(self.url + '/api/health/', timeout=10) as response:
+            health_version = json.load(response).get('version', '')
+        if not re.fullmatch(r'\d+\.\d+\.\d+', health_version):
+            raise ValueError('无法确认正在运行的 ERP 版本，升级未开始。')
+        if self.mode == 'docker':
+            environment = {key: value for key, value in os.environ.items() if not key.startswith(('LEAN_', 'COMPOSE_'))}
+            container_version = subprocess.check_output(
+                [*self.compose(), 'exec', '-T', 'app', 'python', '-c',
+                 'from apps.core.version import VERSION; print(VERSION)'],
+                text=True, encoding='utf-8', timeout=30, env=environment,
+            ).strip()
+            if container_version != health_version:
+                raise ValueError('网页地址与 Docker 容器版本不一致，请检查执行器配置。')
+        return tuple(map(int, health_version.split('.')))
 
     def compose(self, root=None, config=None):
         return ['docker', 'compose', '--env-file', str(config or self.config), '-f', str((root or self.root) / 'docker-compose.yml')]
@@ -253,30 +296,41 @@ class Runner:
         self.save()
         stopped = False
         migration_started = False
+        backup_complete = False
+        phase = '版本预检'
         with (folder / 'upgrade.log').open('a', encoding='utf-8') as log:
             try:
-                current = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", (self.root / 'backend/apps/core/version.py').read_text())
-                if (not current or not re.fullmatch(r'v\d+\.\d+\.\d+', job['target'])
-                        or tuple(map(int, job['target'][1:].split('.'))) <= tuple(map(int, current.group(1).split('.')))):
-                    raise ValueError('Host runner refuses a downgrade or same-version installation')
+                self.report(job, 'downloading', '正在核对运行中版本与升级目标')
+                current = self.running_version()
+                if (not re.fullmatch(r'v\d+\.\d+\.\d+', job['target'])
+                        or tuple(map(int, job['target'][1:].split('.'))) <= current):
+                    raise ValueError('目标版本不高于正在运行的版本，拒绝重复安装或降级。')
+                phase = '下载与校验'
+                self.report(job, 'downloading', '正在校验 GitHub 正式发布信息')
                 asset = trusted_asset(job, self.mode, PLATFORM)
                 archive = folder / 'package.zip'
-                download(asset, archive)
+                download(asset, archive, lambda size, total: self.report(
+                    job, 'downloading', f'下载安装包：{size * 100 // total}%（{size // 1024} / {total // 1024} KB）'))
+                self.report(job, 'downloading', '下载完成，正在验证并解压安装包')
                 target = unpack(archive, folder / 'release', job['target'], self.mode, PLATFORM)
                 if self.mode == 'docker':
+                    phase = '构建 Docker 镜像'
                     new_config = folder / '.env.lean'
                     contents = self.config.read_text(encoding='utf-8')
                     contents = re.sub(r'^LEAN_IMAGE=.*\n?', '', contents, flags=re.M)
                     new_config.write_text(contents.rstrip() + f"\nLEAN_IMAGE=atm-erp-lean:ota-{job['target']}-{asset['sha256'][:12]}\n", encoding='utf-8')
                     os.chmod(new_config, 0o600)
-                    self.command([*self.compose(target, new_config), 'build', 'app'], log)
+                    self.report(job, 'downloading', '正在构建 Docker 镜像，原系统保持运行')
+                    self.command([*self.compose(target, new_config), 'build', 'app'], log,
+                                 progress=lambda seconds: self.report(job, 'downloading', f'正在构建 Docker 镜像 · 已运行 {seconds} 秒，原系统保持运行'))
                 else:
                     if not shutil.which('pg_dump'):
                         raise ValueError('pg_dump is required before stopping a native application')
                     client_version = subprocess.check_output(['pg_dump', '--version'], text=True)
                     if not re.search(r'PostgreSQL\) 15\.', client_version):
                         raise ValueError('Use the PostgreSQL 15 pg_dump client for this database')
-                self.report(job, 'backing_up', '正在停机并备份数据库与附件', str(backup))
+                phase = '备份数据'
+                self.report(job, 'backing_up', '正在停机并备份数据库与附件；完成前不显示可用备份位置')
                 if self.mode == 'docker':
                     self.command([*self.compose(), 'stop', 'app'], log)
                     stopped = True
@@ -287,6 +341,8 @@ class Runner:
                     self.command(self.native(self.root, 'stop'), log)
                     stopped = True
                     self.native_backup(backup, log)
+                backup_complete = True
+                phase = '安装与迁移'
                 self.report(job, 'installing', '备份完成，正在执行前向迁移与安装', str(backup))
                 migration_started = True
                 if self.mode == 'docker':
@@ -295,6 +351,7 @@ class Runner:
                     self.command(self.native(target, 'install'), log)
                     subprocess.Popen([str(arg) for arg in self.native(target, 'start')], stdout=log, stderr=log,
                                      **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
+                phase = '验证新版本'
                 self.report(job, 'verifying', '正在验证新版本健康状态', str(backup))
                 for _ in range(60):
                     try:
@@ -325,7 +382,11 @@ class Runner:
                                              **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
                     except Exception:
                         pass
-                self.report(job, 'failed', '升级未完成，请检查宿主机日志；备份已保留，不会自动回退数据库。', str(backup))
+                cause = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+                backup_note = '完整备份已保留。' if backup_complete else '尚未生成完整备份。'
+                safety_note = '迁移已开始，不会自动回退数据库。' if migration_started else '数据库迁移尚未开始。'
+                self.report(job, 'failed', f'{phase}失败：{cause} {backup_note}{safety_note} 日志：{folder / "upgrade.log"}',
+                            str(backup) if backup_complete else '')
             finally:
                 self.state.pop('inflight', None)
                 self.save()
