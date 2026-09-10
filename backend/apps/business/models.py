@@ -378,6 +378,7 @@ class Entry(LedgerModel):
     title = models.CharField(max_length=150)
     amount = money()
     credit_amount = money()
+    cancellation_credit = models.DecimalField(max_digits=18, decimal_places=2, null=True, editable=False)
     due_date = models.DateField()
     cancelled = models.BooleanField(default=False)
 
@@ -442,6 +443,9 @@ class Reconciliation(LedgerModel):
 
 
 class BankRecord(LedgerModel):
+    import_fingerprint = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    source = models.JSONField(default=dict, blank=True)
+    needs_review = models.BooleanField(default=False)
     project = models.ForeignKey(Project, models.PROTECT, null=True, blank=True, related_name='bank_records')
     amount = money()
     date = models.DateField()

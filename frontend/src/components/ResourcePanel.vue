@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { read, download } from '../api'
 import {
@@ -40,6 +40,11 @@ const appliedSearch = ref(search.value)
 const loading = ref(false)
 const error = ref('')
 const command = ref<Command | null>(null)
+const active = inject<Ref<boolean>>('panelActive', computed(() => true))
+const preparing = ref(false)
+let commandGeneration = 0
+let dirty = true
+onBeforeUnmount(() => { generation++; commandGeneration++ })
 const attachmentRow = ref<Row | null>(null)
 let generation = 0
 let focused = ''
@@ -62,6 +67,8 @@ function mobileSummary(row: Row) {
   return [row.status ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : ''].filter(Boolean).join(' · ')
 }
 async function load() {
+  if (!active.value) { dirty = true; return }
+  dirty = false
   const current = ++generation
   loading.value = true
   error.value = ''
@@ -94,7 +101,7 @@ async function load() {
   }
 }
 watch(
-  () => [props.resource, JSON.stringify(props.params || {}), pageSize.value],
+  [() => props.resource, () => JSON.stringify(props.params || {}), () => pageSize.value],
   () => {
     page.value = 1
     search.value = sessionStorage.getItem(searchKey()) || ''
@@ -102,18 +109,26 @@ watch(
     focused = ''
     void load()
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 watch(() => props.revision, () => { void load() })
-watch([() => route.query.focus, () => route.query.resource], () => { void load() })
+watch(active, value => { if (value && dirty) void load() })
+watch([() => route.query.focus, () => route.query.resource], () => {
+  if (route.query.resource === props.resource && route.query.focus) void load()
+})
 async function create() {
+  const current = ++commandGeneration
+  preparing.value = true
   try {
-    command.value = await createCommand(props.resource, props.projectId)
+    const next = await createCommand(props.resource, props.projectId)
+    if (current === commandGeneration) command.value = next
   } catch (e) {
-    error.value = message(e)
-  }
+    if (current === commandGeneration) error.value = message(e)
+  } finally { if (current === commandGeneration) preparing.value = false }
 }
 async function action(row: Row, name: string) {
+  const current = ++commandGeneration
+  preparing.value = true
   try {
     if (props.resource === 'purchases' && name === '预览采购合同') {
       await router.push(`/purchases/${row.id}/contract`)
@@ -131,15 +146,17 @@ async function action(row: Row, name: string) {
     }
     else {
       const next = await actionCommand(props.resource, row, name)
+      if (current !== commandGeneration) return
       if (next.readonly) next.actions = [...(next.actions || []), ...actionNames(props.resource, row).filter(label => label !== name).map(label => ({ label, run: () => action(row, label) }))]
+      next.subject = row.code || row.title || row.reference || `#${row.id}`
       command.value = next
     }
   } catch (e) {
-    error.value = message(e)
-  }
+    if (current === commandGeneration) error.value = message(e)
+  } finally { if (current === commandGeneration) preparing.value = false }
 }
 function saved() {
-  void load()
+  if (props.revision === undefined) void load()
   emit('changed')
 }
 function searchRecords() {
@@ -149,6 +166,8 @@ function searchRecords() {
   void load()
 }
 function closeCommand() {
+  commandGeneration++
+  preparing.value = false
   command.value = null
   focused = ''
   if (route.query.resource === props.resource && route.query.focus) {
@@ -184,6 +203,7 @@ function closeCommand() {
       </div>
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
+    <p v-if="preparing" role="status">正在准备操作…</p>
     <el-table
       v-loading="loading"
       :data="records"
@@ -215,6 +235,7 @@ function closeCommand() {
           ><el-dropdown
             v-if="actionNames(resource, row).length"
             trigger="click"
+            :persistent="false"
             @command="(name: string) => action(row, String(name))"
             ><el-button size="small">操作 ▾</el-button
             ><template #dropdown

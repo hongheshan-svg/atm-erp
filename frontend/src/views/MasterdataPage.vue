@@ -10,12 +10,13 @@ const tabs = computed(() => [
 ])
 </script>
 <template>
-  <ModulePage title="基础资料" v-slot="{ revision }"
+  <ModulePage title="基础资料" v-slot="{ revision, refresh }"
     ><ModuleTabs :tabs="tabs" storage-key="masterdata">
-    <template #items><ResourcePanel v-if="operations()" resource="items" title="物料" :revision="revision" /></template>
+    <template #items><ResourcePanel v-if="operations()" resource="items" title="物料" :revision="revision" @changed="refresh" /></template>
     <template #partners><ResourcePanel
       resource="partners"
       :title="operations() ? '客户与供应商' : '客户资料'"
       :revision="revision"
+      @changed="refresh"
   /></template></ModuleTabs></ModulePage>
 </template>

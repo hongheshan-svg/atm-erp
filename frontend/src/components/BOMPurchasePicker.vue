@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElSelect, ElOption } from 'element-plus'
-import { all, read } from '../api'
+import { read } from '../api'
+import RemoteSelect from './RemoteSelect.vue'
 import { shortageCommand } from '../modules/purchases'
 import { buyer } from '../modules/shared'
 import { message } from '../utils/request'
@@ -13,7 +14,6 @@ import ActionDialog from './ActionDialog.vue'
 const props = withDefaults(defineProps<{ projectId?: number; label?: string }>(), { label: '从 BOM 多选下单' })
 const emit = defineEmits<{ saved: [] }>()
 const opened = ref(false)
-const projects = ref<Row[]>([])
 const project = ref<number>()
 const lines = ref<Row[]>([])
 const selected = ref<number[]>([])
@@ -64,7 +64,6 @@ async function open() {
   busy.value = true
   error.value = ''
   try {
-    if (!props.projectId) projects.value = (await all('/business/projects/')).filter(p => ['active', 'delivering', 'warranty'].includes(p.status))
     await changeProject()
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
@@ -83,7 +82,7 @@ function saved() { selected.value = []; emit('saved') }
   <el-button v-if="buyer()" :disabled="busy" @click="open">{{ label }}</el-button>
   <el-dialog v-model="opened" class="transfer-dialog" title="选择 BOM 下单" width="min(1150px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
     <div class="bom-purchase-filters">
-      <label v-if="!projectId">项目<select v-model="project" aria-label="采购项目" :disabled="busy" @change="changeProject"><option :value="undefined">请选择项目</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} · {{ p.name }}</option></select></label>
+      <label v-if="!projectId">项目<RemoteSelect :model-value="project" @update:model-value="project = $event ? Number($event) : undefined; changeProject()" path="/business/projects/" label="采购项目" :disabled="busy" :accept="p => ['active', 'delivering', 'warranty'].includes(p.status)" /></label>
       <label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称或规格" :disabled="busy" /></label>
       <label>品牌<ElSelect v-model="brands" multiple clearable filterable aria-label="筛选品牌" placeholder="全部品牌" :disabled="busy"><ElOption v-for="v in options('brand')" :key="v" :label="v || '未填写'" :value="v" /></ElSelect></label>
       <label>单元<ElSelect v-model="units" multiple clearable filterable aria-label="筛选单元" placeholder="全部单元" :disabled="busy"><ElOption v-for="v in options('assembly_unit')" :key="v" :label="v || '未填写'" :value="v" /></ElSelect></label>

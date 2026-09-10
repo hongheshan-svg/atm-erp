@@ -19,7 +19,7 @@ from apps.core.permissions import (
 from ..models import Entry, Project, PurchaseOrder, Task
 from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
 from .common import ZERO
-from .payment_terms import due_amount, with_sources
+from .payment_terms import due_entries, with_sources
 
 
 def summary(request):
@@ -35,7 +35,7 @@ def summary(request):
         selected = Paginator(queryset, 20).get_page(page)
         return {
             'page': selected.number,
-            'count': queryset.count(),
+            'count': selected.paginator.count,
             'results': serializer(selected.object_list, many=True, context={'request': request}).data,
         }
 
@@ -98,23 +98,17 @@ def summary(request):
             .filter(Q(remaining__lt=0) | Q(remaining__gt=0))
             .order_by('due_date', 'pk')
         )
-        eligible_ids = [
-            entry.pk
-            for entry in entries
-            if entry.remaining < 0 or due_amount(entry, timezone.localdate(), inclusive=True) > 0
-        ]
-        entries = entries.filter(pk__in=eligible_ids)
+        entries = due_entries(entries, timezone.localdate())
         result['settlements'] = bucket(entries, EntrySerializer, 'settlements')
     if has_role(user, FINANCE | MANAGERS):
-        from ..api.reconciliation import BankSerializer, ReconciliationSerializer
+        from ..api.reconciliation import BankSerializer, ReconciliationSerializer, bank_list
         from ..models import BankRecord, Reconciliation
         from .banking import with_remaining
+        from .reconciliation import with_snapshot_sources
 
-        pending = (
+        pending = with_snapshot_sources(
             Reconciliation.objects.filter(status='draft', entry__project__in=projects)
-            .select_related('entry__project', 'entry__purchase__supplier', 'confirmed_by')
-            .order_by('id')
-        )
+        ).order_by('id')
         if has_role(user, MANAGERS):
             prepayments = pending.filter(
                 kind='prepayment', entry__project__in=projects_for(user, Project.objects.all(), MANAGERS)
@@ -126,7 +120,7 @@ def summary(request):
             if statements.exists():
                 result['reconciliations'] = bucket(statements, ReconciliationSerializer, 'reconciliations')
             banks = (
-                with_remaining(BankRecord.objects.filter(void_reason=''))
+                bank_list(with_remaining(BankRecord.objects.filter(void_reason='')))
                 .filter(net_remaining__gt=0)
                 .select_related('project')
                 .order_by('date', 'id')

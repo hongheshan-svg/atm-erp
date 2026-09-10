@@ -41,7 +41,7 @@ describe('模块边界', () => {
     vi.mocked(all).mockResolvedValue([])
     vi.mocked(read).mockResolvedValue({ lines: [{ bom_line: 11, item: 1, shortage: '2' }, { bom_line: 12, item: 2, shortage: '3' }] })
     const command = await shortageCommand(9, [12])
-    expect(command.initial?.lines).toEqual([{ item: 2, bom_line: 12, quantity: '3', unit_price: '' }])
+    expect(command.initial?.lines).toEqual([{ item: 2, item_label: 2, bom_line: 12, quantity: '3', unit_price: '' }])
     expect(command.prepare?.({ lines: [{ item: 2, quantity: '1', unit_price: '10' }] }).lines[0].bom_line).toBe(12)
     vi.mocked(read).mockResolvedValue({ lines: [{ bom_line: 12, item: 2, shortage: '0' }] })
     await expect(shortageCommand(9, [12])).rejects.toThrow('状态已变化')

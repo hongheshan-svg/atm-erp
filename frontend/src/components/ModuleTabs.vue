@@ -4,6 +4,7 @@ import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { user } from '../session'
 import { revealActiveTab } from '../utils/tabs'
+import TabContent from './TabContent.vue'
 
 const props = defineProps<{
   tabs: { key: string; label: string; resources?: string[] }[]
@@ -63,7 +64,7 @@ watch(() => [route.query.tab, route.query.section, route.query.resource, props.t
 <template>
   <el-tabs ref="tabsRef" class="module-tabs scrollable-tabs" :model-value="active" @tab-change="choose" @keydown="activateByKeyboard">
     <el-tab-pane v-for="item in tabs" :key="item.key" :name="item.key" :label="item.label" lazy>
-      <slot :name="item.key" />
+      <TabContent :active="active === item.key"><slot :name="item.key" /></TabContent>
     </el-tab-pane>
   </el-tabs>
 </template>

@@ -12,8 +12,8 @@ export const columns: Record<string, Column[]> = {
     { key: 'kind', label: '类型', format: r => kinds[String(r.kind)] || String(r.kind) },
     { key: 'status', label: '状态', format: r => r.status !== 'void' && !r.valid ? '原业务已变化' : states[String(r.status)] || String(r.status) },
     C('difference', '对账差异'), C('approved_amount', '核准金额'), C('remaining_amount', '剩余额度'), C('confirmed_name', '确认人')],
-  'bank-records': [C('date', '银行日期'), C('account', '账户'), C('reference', '银行流水号'), C('counterparty', '对方户名'), C('project_name', '项目'), C('amount', '收入 / 支出'), C('remaining_amount', '未匹配金额'),
-    { key: 'void_reason', label: '状态', format: r => r.void_reason ? '已作废' : Number(r.remaining_amount) === 0 ? '已核对' : '待认领 / 匹配' }],
+  'bank-records': [C('date', '银行日期'), C('account', '账户'), C('reference', '流水号 / 导入标识'), C('counterparty', '对方户名'), C('project_name', '项目'), C('amount', '收入 / 支出'), C('remaining_amount', '未匹配金额'),
+    { key: 'void_reason', label: '状态', format: r => r.void_reason ? '已作废' : r.needs_review ? '待核实户名' : Number(r.remaining_amount) === 0 ? '已核对' : '待认领 / 匹配' }],
 }
 export const createLabel = (resource: string) => resource === 'bank-records' && finance() ? '登记银行到账 / 出账' : ''
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
@@ -40,13 +40,20 @@ export function actionNames(resource: string, r: Row): string[] {
     ...(r.status !== 'void' && finance() ? ['作废对账'] : [])]
   if (!finance()) return []
   return ['查看银行明细', ...(!r.void_reason ? [
-    ...(Number(r.remaining_amount) > 0 ? [...(Number(r.amount) > 0 ? ['认领到账', '关联未认领款退回'] : []), '匹配已有收付款'] : []),
+    ...(r.needs_review ? ['核实对方户名'] : []),
+    ...(!r.needs_review && Number(r.remaining_amount) > 0 ? [...(Number(r.amount) > 0 ? ['认领到账', '关联未认领款退回'] : []), '匹配已有收付款'] : []),
     ...(Number(r.amount) > 0 && (r.returns || []).some((m: Row) => !m.reversal_of && !m.reversal__id) ? ['撤销退回关联'] : []),
     ...(r.matches.some((m: Row) => !m.reversal_of && !m.reversal__id) ? ['撤销银行匹配'] : []),
     ...(Number(r.remaining_amount) === Math.abs(Number(r.amount)) ? ['作废误录银行记录'] : []),
   ] : [])]
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (name === '查看银行明细' && r.source?.file) {
+    const command = await actionCommand(resource, { ...r, source: undefined }, name)
+    command.fields.unshift({ key: 'sourceFacts', label: '原始银行凭据', type: 'rows', fields: [t('label', '字段'), t('value', '内容')] })
+    command.initial = { ...command.initial, sourceFacts: Object.entries({ 文件: r.source.file, 原文件行号: r.source.row, 银行原始编号: r.source.original_reference, 原始户名: r.source.counterparty || '原文件未提供', 对方账号: r.source.counterparty_account, 交易时间: r.source.timestamp, 银行余额: r.source.balance }).map(([label, value]) => ({ label, value })) }
+    return command
+  }
   if (name === '确认对账' || name === '作废对账') return { title: name, path: `/business/reconciliations/${r.id}/${name === '确认对账' ? 'confirm' : 'void'}/`, fields: [reason], notice: { type: 'info', text: name === '确认对账' ? '确认前请查看对账明细并核对对方余额、合同、收退货及原收付款。服务端将重新检查源数据和额度。' : '保留原对账及已关联流水，未使用额度立即失效。' } }
   if (name === '查看对账明细') {
     const d = await read(`/business/reconciliations/${r.id}/`), s = d.snapshot
@@ -69,6 +76,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       actions: d.document ? [{ label: '下载对账附件', run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } }] : [] }
   }
   const path = `/business/bank-records/${r.id}/`
+  if (name === '核实对方户名') return { title: name, path: path + 'review/', fields: [t('counterparty', '核实后的对方户名'), reason], notice: { type: 'info', text: '根据银行回单核实真实户名并填写依据。原始文件内容仍保留在银行明细，核实操作记录审计日志，不自动核销。' } }
   if (name === '关联未认领款退回') {
     const banks = await all('/business/bank-records/')
     return { title: name, path: path + 'return-unclaimed/', fields: [{ key: 'returned', label: '实际退回的银行支出', type: 'select', options: banks.filter(b => !b.void_reason && Number(b.amount) < 0 && Number(b.remaining_amount) > 0 && b.account === r.account && b.counterparty === r.counterparty).map(b => ({ value: b.id, label: `${b.reference} · ${b.date} · 可匹配 ${b.remaining_amount}` })) }, t('amount', '退回金额（元）'), reason], initial: { amount: r.remaining_amount }, notice: { type: 'info', text: '用于错汇、多汇的未认领部分。先登记真实银行支出，再关联原收入；不会虚增合同、费用或项目收付款。' } }

@@ -109,6 +109,7 @@ async function submit() {
   >
     <form v-if="command" class="action-form" @submit.prevent="submit">
       <div ref="fieldsContainer" class="action-fields">
+      <p v-if="command.subject"><strong>当前单据：{{ command.subject }}</strong></p>
       <el-alert v-if="command.notice" :title="command.notice.text" :type="command.notice.type" :closable="false" show-icon />
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
       <p v-for="action in recovery" :key="action.path"><router-link :to="action.path" @click="emit('close')">{{ action.label }}</router-link></p>

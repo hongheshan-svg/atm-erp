@@ -18,6 +18,8 @@ COPY --from=frontend /frontend/dist/ /var/www/erp/
 COPY docker/app/nginx.conf /etc/nginx/nginx.conf
 COPY docker/app/supervisord.conf /etc/supervisord.conf
 COPY docker/app/entrypoint.sh /entrypoint.sh
+COPY docker/app/watchdog.py /watchdog.py
+COPY scripts/restore_uploads.py /restore_uploads.py
 RUN groupadd -g 10001 erp && useradd -u 10001 -g erp --no-create-home erp && mkdir -p /app/uploads /tmp/nginx && chown -R erp:erp /app/uploads /tmp/nginx && chmod +x /entrypoint.sh
 USER erp
 EXPOSE 8080
