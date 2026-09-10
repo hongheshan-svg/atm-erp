@@ -1,4 +1,5 @@
 import { test, expect, observePage, login } from './fixtures'
+import { selectRoles } from './role-helpers'
 
 test('总经理单独授权后查看筛选报表，撤销后接口和入口均拒绝', async ({ page, browser }, info) => {
   const name = 'reportgm' + Date.now()
@@ -9,7 +10,7 @@ test('总经理单独授权后查看筛选报表，撤销后接口和入口均�
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('用户名', { exact: true }).fill(name)
   await dialog.getByLabel('姓名', { exact: true }).fill('总经理报表验收')
-  await dialog.getByLabel('角色', { exact: true }).selectOption('manager')
+  await selectRoles(dialog, ['manager'])
   await dialog.getByLabel('密码', { exact: true }).fill(password)
   await dialog.getByLabel('总经理报表权限（仅项目经理角色）', { exact: true }).check()
   const created = page.waitForResponse(r => r.url().endsWith('/auth/users/') && r.request().method() === 'POST')

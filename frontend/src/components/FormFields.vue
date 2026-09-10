@@ -18,6 +18,13 @@ const model = defineModel<Row>({ required: true })
         </div>
         <el-button v-if="!disabled && !field.readonly" @click="model[field.key].push(defaults(field.fields!))">添加行</el-button>
       </fieldset>
+      <fieldset v-else-if="field.type === 'checks' && !field.hidden" class="role-checks" :disabled="disabled || field.readonly">
+        <legend>{{ field.label }}</legend>
+        <label v-for="option in field.options" :key="option.value">
+          <input v-model="model[field.key]" type="checkbox" :value="option.value" /> {{ option.label }}
+        </label>
+        <small v-if="field.hint">{{ field.hint }}</small>
+      </fieldset>
       <label v-else-if="!field.hidden" class="field">
         <span>{{ field.label }}<small v-if="field.optional">（选填）</small></span>
         <select

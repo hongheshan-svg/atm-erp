@@ -1,5 +1,6 @@
 from apps.accounts.api import DirectoryView, LoginView, MeView, PasswordView, RefreshView, UserView
 from apps.core.ota import AgentView, UpgradeView
+from apps.core.setup import SetupView
 from apps.core.views import AuditView, CodeView, CompanyView, health
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
@@ -12,6 +13,7 @@ core.register('codes', CodeView)
 core.register('audit', AuditView)
 
 urlpatterns = [
+    path('api/core/setup/', SetupView.as_view()),
     path('api/core/upgrade/', UpgradeView.as_view()),
     path('api/core/upgrade/agent/', AgentView.as_view()),
     path('api/health/', health),

@@ -89,6 +89,9 @@ def lookup(model, value, key='id', **filters):
 
 
 def save(obj, actor):
+    from apps.core.periods import check_record
+
+    check_record(obj)
     if obj._state.adding:
         obj.created_by = actor
     obj.updated_by = actor
@@ -117,7 +120,7 @@ def project_action(actor, key, operation, project_id, data, roles, execute):
         project = get_object_or_404(Project.objects.select_for_update(), pk=identity(project_id, 'project'))
         current_actor.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
         require_role(current_actor, roles)
-        require_project(current_actor, project)
+        require_project(current_actor, project, roles)
         context['project'] = project
 
     return perform(

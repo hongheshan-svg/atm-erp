@@ -179,6 +179,7 @@ def install(config, data):
     (data / "nginx.conf").write_text(nginx_config(config, data), encoding="utf-8")
     run([nginx, "-p", data.as_posix() + "/", "-c", "nginx.conf", "-t"])
     print("安装完成。管理员 admin；首次密码见配置文件 ADMIN_PASSWORD。执行 start 启动。")
+    print("访问 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。")
 
 
 def start(config, data):

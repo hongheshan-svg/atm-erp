@@ -54,10 +54,23 @@ jobs:
       - run: npm ci && npx playwright install --with-deps chromium
         working-directory: frontend
       - run: bash install.sh
+      - name: Complete first-install wizard
+        run: npm run test:e2e -- e2e/setup.spec.ts --project=desktop --grep '全新安装' --output=test-results-first-install
+        working-directory: frontend
+        env:
+          E2E_FIRST_INSTALL: '1'
+          E2E_SETUP_NEW_PASSWORD: Lean-CI-ready-password-2026
       - run: npm run test:e2e
         working-directory: frontend
+        env:
+          E2E_ADMIN_PASSWORD: Lean-CI-ready-password-2026
       - uses: actions/upload-artifact@v4
         if: always()
-        with: {name: browser-evidence, path: frontend/test-results, retention-days: 7}
+        with:
+          name: browser-evidence
+          path: |
+            frontend/test-results
+            frontend/test-results-first-install
+          retention-days: 7
       - if: always()
         run: docker compose --env-file .env.lean down -v

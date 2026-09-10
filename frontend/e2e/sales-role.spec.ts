@@ -1,4 +1,5 @@
 import { test, expect, login } from './fixtures'
+import { selectRoles } from './role-helpers'
 
 test('管理员新增销售经理，销售建单报价签约并只读交付回款', async ({ page }, info) => {
   const suffix = String(Date.now())
@@ -28,7 +29,7 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await page.getByRole('button', { name: '新增用户', exact: true }).click()
   await dialog().getByLabel('用户名', { exact: true }).fill(username)
   await dialog().getByLabel('姓名', { exact: true }).fill(username)
-  await dialog().getByLabel('角色', { exact: true }).selectOption('sales_manager')
+  await selectRoles(dialog(), ['sales_manager'])
   await dialog().getByLabel('密码', { exact: true }).fill(password)
   await save()
   await login(page, username, password)

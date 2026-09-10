@@ -71,9 +71,12 @@ def main():
         models = stage / 'backend/apps/core/models.py'
         models.write_text(models.read_text().replace('class Company(models.Model):',
                           "class Company(models.Model):\n    ota_test_marker = models.CharField(max_length=40, default='native-ota')"))
-        (stage / 'backend/apps/core/migrations/0005_ota_smoke.py').write_text(
+        migrations = stage / 'backend/apps/core/migrations'
+        latest = max(migrations.glob('[0-9]*_*.py'), key=lambda path: int(path.name.split('_')[0]))
+        next_number = int(latest.name.split('_')[0]) + 1
+        (migrations / f'{next_number:04d}_ota_smoke.py').write_text(
             "from django.db import migrations, models\nclass Migration(migrations.Migration):\n"
-            "    dependencies = [('core', '0004_upgradejob')]\n"
+            f"    dependencies = [('core', '{latest.stem}')]\n"
             "    operations = [migrations.AddField(model_name='company', name='ota_test_marker', field=models.CharField(max_length=40, default='native-ota'))]\n")
         (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'native', 'platform': 'linux'}))
         archive = task / 'fixture.zip'

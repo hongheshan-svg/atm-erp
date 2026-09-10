@@ -1,10 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { user, loadUser } from './session'
+import { user, loadUser, can } from './session'
 import { navigation } from './navigation'
 export const router = createRouter({
   history: createWebHistory('/erp/'),
   routes: [
     { path: '/login', component: () => import('./views/LoginPage.vue') },
+    { path: '/setup', component: () => import('./views/SetupPage.vue') },
     { path: '/', redirect: '/workbench' },
     { path: '/projects/:id', component: () => import('./views/ProjectPage.vue') },
     { path: '/workbench', component: () => import('./views/WorkbenchPage.vue') },
@@ -31,5 +32,7 @@ router.beforeEach(async (to) => {
       return '/login'
     }
   }
+  if (user.value?.setup_required && to.path !== '/setup') return '/setup'
+  if (to.path === '/setup') return can(['admin']) ? true : '/workbench'
   if (!navigation().some((n) => n.key === to.path.split('/')[1])) return '/workbench'
 })

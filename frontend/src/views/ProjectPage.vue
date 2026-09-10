@@ -172,7 +172,7 @@ onMounted(load)
           @changed="load" /></template><template #reconciliations><ResourcePanel resource="reconciliations" title="项目对账" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template><template #payments><ResourcePanel resource="payments" title="项目收付流水" :allow-create="false" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane v-if="money()" label="成本与预算" name="cost" lazy>
         <ModuleTabs :parent-tab="tab" v-if="tab === 'cost'" :tabs="costTabs" :storage-key="`project-${id}-cost`">
-          <template #budget><BudgetPanel :project-id="id" :revision="revision" :status="project.status" /></template>
+          <template #budget><BudgetPanel :project-id="id" :revision="revision" :status="project.status" :can-manage="project.can_manage" /></template>
           <template #actual><section class="panel cost-panel" aria-label="项目成本">
             <h2>实际成本 <span class="muted">CNY 含税经营口径</span></h2>
             <div class="cost-grid"><div v-for="(label, key) in { materials: '材料', labor: '人工', expenses: '费用', purchase_return_variance: '退货价差', total: '合计' }" :key="key">

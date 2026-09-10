@@ -1,3 +1,6 @@
+import unicodedata
+
+from django.db.models.functions import Lower, Trim
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
@@ -12,6 +15,29 @@ from .common import (
     save,
     text,
 )
+
+
+def normalized(value):
+    return ' '.join(unicodedata.normalize('NFKC', value).split())
+
+
+def duplicates(data, exclude=None):
+    name = normalized(str(data.get('name', '')))
+    if not name:
+        return []
+    candidates = (
+        Item.objects.annotate(clean_name=Lower(Trim('name'))).filter(clean_name=name.lower()).exclude(pk=exclude)
+    )
+    keys = ('specification', 'brand', 'unit', 'part_type')
+    return [
+        item
+        for item in candidates
+        if all(
+            normalized(getattr(item, key)).casefold()
+            == normalized(str(data.get(key, '件' if key == 'unit' else ''))).casefold()
+            for key in keys
+        )
+    ]
 
 
 def masterdata(actor, key, model, data, object_id=None):
@@ -31,6 +57,8 @@ def masterdata(actor, key, model, data, object_id=None):
     )
     if model is Item and not object_id:
         allowed.add('code')
+    if model is Item:
+        allowed.add('duplicate_reason')
 
     def execute(user):
         fields(data, allowed)
@@ -61,7 +89,7 @@ def masterdata(actor, key, model, data, object_id=None):
                 raise ValidationError({'payment_term': '采购账期仅适用于供应商。'})
             for field, value in values.items():
                 setattr(obj, field, value)
-        for field in allowed - {'is_active', 'code', 'payment_term', 'payment_days'}:
+        for field in allowed - {'is_active', 'code', 'payment_term', 'payment_days', 'duplicate_reason'}:
             if field in data or (not object_id and field in {'name', 'kind'}):
                 setattr(
                     obj,
@@ -77,8 +105,28 @@ def masterdata(actor, key, model, data, object_id=None):
             if not isinstance(data['is_active'], bool):
                 raise ValidationError({'is_active': '必须为布尔值。'})
             obj.is_active = data['is_active']
+        duplicate_reason = ''
+        if model is Item:
+            # Same lock as custom code creation, including edits that could collide.
+            CodeRule.objects.select_for_update().get(key='item')
+            for field in ('name', 'specification', 'brand', 'unit'):
+                setattr(obj, field, normalized(getattr(obj, field)))
+            repeated = duplicates(
+                {field: getattr(obj, field) for field in ('name', 'specification', 'brand', 'unit', 'part_type')},
+                obj.pk,
+            )
+            if repeated:
+                duplicate_reason = text(data, 'duplicate_reason', default='')
+                if not duplicate_reason:
+                    raise ValidationError(
+                        {
+                            'duplicate_reason': f'名称、规格、品牌、单位和类别与现有物料 {", ".join(item.code for item in repeated[:10])} 相同。请优先复用；确需独立编码请说明差异原因。'
+                        }
+                    )
         save(obj, user)
-        return audit(user, f'{model._meta.model_name}.save', obj, fields=sorted(data))
+        return audit(
+            user, f'{model._meta.model_name}.save', obj, fields=sorted(data), duplicate_reason=duplicate_reason
+        )
 
     return perform(
         actor=actor,

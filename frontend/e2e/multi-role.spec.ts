@@ -1,4 +1,5 @@
 import { test, expect, login } from './fixtures'
+import { selectRoles } from './role-helpers'
 
 test('管理员分配采购兼仓库，保存回显并即时撤销采购权限', async ({ page }, info) => {
   const username = `dual${Date.now()}`, password = 'Multi-role-QA-only-2026-password'
@@ -12,7 +13,8 @@ test('管理员分配采购兼仓库，保存回显并即时撤销采购权限',
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('用户名', { exact: true }).fill(username)
   await dialog.getByLabel('姓名', { exact: true }).fill('采购兼仓库')
-  await dialog.getByLabel('角色', { exact: true }).selectOption(['purchaser', 'warehouse'])
+  await selectRoles(dialog, ['purchaser', 'warehouse'])
+  await expect(dialog.getByRole('status')).toContainText('新增：采购员、仓管')
   await dialog.getByLabel('密码', { exact: true }).fill(password)
   const created = page.waitForResponse(r => r.url().endsWith('/auth/users/') && r.request().method() === 'POST')
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
@@ -29,7 +31,7 @@ test('管理员分配采购兼仓库，保存回显并即时撤销采购权限',
   await expect(row).toContainText('采购员、仓管')
   await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
-  expect(await dialog.getByLabel('角色', { exact: true }).evaluate(el => Array.from((el as HTMLSelectElement).selectedOptions).map(o => o.value).sort())).toEqual(['purchaser', 'warehouse'])
+  expect(await dialog.getByRole('group', { name: '角色', exact: true }).locator('input:checked').evaluateAll(els => els.map(el => (el as HTMLInputElement).value).sort())).toEqual(['purchaser', 'warehouse'])
   await page.screenshot({ path: info.outputPath('multiple-roles.png'), fullPage: true, animations: 'disabled' })
   await login(page, username, password)
   const nav = page.getByRole('navigation', { name: '主导航', includeHidden: true })

@@ -1,5 +1,27 @@
 # 精简实施与验收证据
 
+## 首次安装快速向导（2026-09-10）
+
+- 新安装由 `init_system` 将首次新建公司标记为待配置；0006前向迁移对现有公司默认关闭向导，不重置账号、编号或业务数据。管理员首次登录自动进入 `/erp/setup`，按管理员密码、公司、可选人员兼岗、编号、确认五步启用；已完成系统从设置“启用指南”查看业务入口。
+- 复用原 Company、UserSerializer 和编号配置服务；单事务保存，失败不留人员/规则/回执。公司行锁阻止重复初始化，已完成后新请求拒绝；先前打开的公司编辑页重新锁定读取，不能恢复旧初始化状态。密码不写浏览器持久存储、审计或回执，完成后旧JWT及初始密码失效。向导不伪造基础资料、期初库存或订单。
+- 后端完整入口 `bash scripts/precheck-tests.sh --all`：226项通过（平台49、业务153、并发24），Ruff、Django检查、迁移一致性通过。日志 `/private/tmp/erp-setup-backend-final.log`。新增验证权限、原子回滚、重复提交、旧密码/令牌撤销、默认配置、旧安装保持及过时公司编辑保护。
+- 前端 lint/typecheck、36项单测、build通过。两个全新Docker项目分别在18364桌面、18365手机视口完成真实五步向导，添加采购兼仓管、修改物料前缀、新密码登录、进入基础资料和采购/库存均通过；日志 `/private/tmp/erp-setup-final-desktop.log`、`/private/tmp/erp-setup-final-mobile.log`。已查看桌面公司资料及移动确认截图，输出目录 `/private/tmp/erp-setup-final-desktop/`、`/private/tmp/erp-setup-final-mobile/`。
+- 最后公司编辑保护更新后，在原18360隔离安装验证登录、模块页签、兼岗撤权、导航、分页、设置及已完成指南：16项通过，2项新安装专项按设计跳过（上述新库独立验收，不重置现有安装）；日志 `/private/tmp/erp-setup-existing-browser.log`。运行142个源码/构建文件与当前本地一致，`/private/tmp/erp-setup-runtime.json`；部署日志 `/private/tmp/erp-setup-existing-install.log`。
+- Docker与原生安装提示及README补充向导步骤。原生安装脚本7项测试通过，日志 `/private/tmp/erp-setup-native-tests.log`；本轮未在macOS/Linux/Windows分别重做全套原生安装，不把浏览器手机视口称为真机验证。
+- 本轮临时安装容器与网络已回收，保留数据库卷，不清库；18360继续提供已有数据的验收页面。未提交、推送或发布版本。
+
+## 经营管控评审改进（2026-09-10）
+
+- 功能分支 `codex/operational-hardening`。范围及操作入口见 [OPERATIONAL_HARDENING.md](OPERATIONAL_HARDENING.md)，包含审批身份隔离、按动作判断的兼岗范围、业务锁账、合同签署版本及整套打印、供应商月度核对、采购质保、物料防重、异常处理入口和经营关注。
+- 事实仍只有原采购、收退货、工时、费用与收付款。合同版本保存不可变证据；月度对账引用原应付，其他事实变化使授权失效；质保只关联原批次与费用，不额外增加库存或成本流水。跨单预付款不自动抵扣。
+- 后端完整入口 `bash scripts/precheck-tests.sh --all`：218项通过（平台41、业务153、并发24），Ruff、Django检查及迁移一致性通过。日志 `/private/tmp/erp-hardening-backend-verified.log`。包括兼任财务不会扩大经理审批范围、本人审批阻断、管理员例外留痕、锁账及重开、合同历史、月度分次付款额度、物料防重及质保原始事实关联。
+- 前端 lint、typecheck、36项单测及build通过；构建无体积超限警告。日志 `/private/tmp/erp-hardening-build-verified.log`。CLI运维测试3项通过（归档完整性/时效、异地复制成功及失败状态、阻止重叠任务），执行入口 `python3 -m unittest discover -s scripts/tests -p test_ops_check.py`。
+- 运行环境明确为 `http://127.0.0.1:18360`、Compose项目 `atm-erp-ota-ui-20260909`；使用显式隔离管理员测试凭据。最终镜像138个运行文件与源码/构建产物哈希一致，证据 `/private/tmp/erp-hardening-runtime-verified.json`，部署日志 `/private/tmp/erp-hardening-install-verified.log`。
+- 最终桌面/移动端34项浏览器回归全部通过（9.1分钟），日志 `/private/tmp/erp-hardening-e2e-verified.log`；覆盖七角色完整业务链、兼岗分配及撤权、合同版本归档、月结、对账、经营关注、分页布局和导入导出。本轮结果对应收紧兼岗范围和排除打印通知后的最终运行镜像。
+- 合同整套打印样张为一页正文加一页附件；长明细附件自动分页。已检查最终PDF文字及两页渲染，保留一年质保和收货地址，不含系统生成说明、保存提示或导航信息。样张目录 `/private/tmp/erp-hardening-e2e-verified/`，渲染 `/private/tmp/erp-hardening-contract-verified-1.png`、`/private/tmp/erp-hardening-contract-verified-2.png`。浏览器移动视口验证不代表手机真机或物理打印机验收。
+- 通过 `scripts/backup.py` 对上述隔离数据做一致性备份，在全新项目 `atm-erp-hardening-restore-20260910`、新卷及18361端口恢复，沿用空库保护。37张表行数、106个附件SHA256逐项相同；恢复项目已停止，保留卷及备份。证据 `/private/tmp/erp-hardening-source-state.json`、`/private/tmp/erp-hardening-restored-state.json`；备份 `/private/tmp/erp-hardening-restore-backup.zip`，日志 `/private/tmp/erp-hardening-backup.log` 与 `/private/tmp/erp-hardening-restore.log`。
+- 企业实际项目、参与人员、生产备份目录和告警接收方式由用户明确表示后续补充。生产调度、真实告警送达和员工现场签认未实施；待填签认表及调度接入命令见 [OPERATIONS_AND_PILOT.md](OPERATIONS_AND_PILOT.md)。代码未因此伪造企业验收结论。
+
 ## 固定岗位兼任与权限合并（2026-09-10）
 
 - 用户管理支持 roles 多选，保留七种固定角色。迁移 0004 增加兼岗数组，已有主角色及业务负责人不变；旧 role 写请求兼容单角色替换。用户列表、个人信息、人员目录提供角色集合，创建/变更审计记录集合。

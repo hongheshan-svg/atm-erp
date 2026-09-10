@@ -18,19 +18,28 @@ def health(request):
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
-        fields = ['id', 'name', 'address', 'phone']
-        read_only_fields = ['id']
+        fields = ['id', 'name', 'address', 'phone', 'locked_through', 'period_revision']
+        read_only_fields = ['id', 'locked_through', 'period_revision']
 
 
 class CompanyView(PermissionMixin, mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     queryset = Company.objects.filter(pk=1)
     serializer_class = CompanySerializer
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+
+    @action(detail=True, methods=['post'], url_path='period-lock')
+    def period_lock(self, request, pk=None):
+        from .periods import configure
+
+        self.get_object()
+        return Response(configure(request.user, request.headers.get('Idempotency-Key'), request.data))
 
     def perform_update(self, serializer):
         from django.db import transaction
 
         with transaction.atomic():
+            # A company edit opened before setup/period changes must not restore stale state.
+            serializer.instance = Company.objects.select_for_update().get(pk=serializer.instance.pk)
             company = serializer.save()
             AuditLog.objects.create(
                 actor=self.request.user,

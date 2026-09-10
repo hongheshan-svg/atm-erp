@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.core.permissions import MONEY_READERS, has_role
+from apps.core.permissions import MANAGERS, MONEY_READERS, has_role, project_allowed
 
 from .models import (
     BOMLine,
@@ -59,6 +59,11 @@ class PartnerSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
+    can_manage = serializers.SerializerMethodField()
+
+    def get_can_manage(self, obj):
+        return project_allowed(self.context['request'].user, obj, MANAGERS)
+
     quote_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     contract_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     contract_date = serializers.DateField(read_only=True)
@@ -69,6 +74,7 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = [
+            'can_manage',
             'id',
             'code',
             'name',
@@ -143,6 +149,11 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
 
 
 class PurchaseSerializer(serializers.ModelSerializer):
+    can_manage = serializers.SerializerMethodField()
+
+    def get_can_manage(self, obj):
+        return project_allowed(self.context['request'].user, obj.project, MANAGERS)
+
     lines = PurchaseLineSerializer(many=True, read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
@@ -159,6 +170,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
         fields = [
+            'can_manage',
             'id',
             'code',
             'project',

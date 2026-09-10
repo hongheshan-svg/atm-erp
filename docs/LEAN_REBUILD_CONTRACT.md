@@ -1,5 +1,19 @@
 # 精简版接口契约
 
+## 本轮经营管控补充（优先于旧描述）
+
+- manager 的项目范围为负责或参与项目；admin/purchaser/warehouse/finance 兼岗按岗位保持全局作业范围。报表独立授权仍为只读，返回 `can_open` 标记可进入原项目的行。
+- 项目和采购返回 `can_manage`；按具体动作的岗位集合判断范围，兼任财务或仓库不会将全局读取权扩展为经理的全局审批权。
+- 普通采购批准允许 `reason`，创建人或最后提交人不能自批。管理员自批须原因并记 `self_approval`；预付款确认使用相同人员隔离约束。
+- `POST /api/core/company/1/period-lock/`：`locked_through`（日期或null）、`expected_revision`、`reason`；仅管理员，幂等及版本校验，读接口返回截止日/版本。资金、工时、收货补录及旧款项变动执行期间检查，修改截止与进行中的写入互斥。
+- `purchases/{id}/contract-preview/?version=current|N`：当前资料或历史归档，默认最新归档；返回 `snapshot_hash/archived_version/signed_document/versions`。`archive-contract/` POST `expected_snapshot/document/delivery_address/reason/confirmed=true`，仅采购权限、批准后可归档，附件须属于本采购合同，主体资料须完整，版本不可覆盖。
+- `reconciliations/supplier-monthly/` GET `supplier/month` 返回期初、收退货、净付款、期末及快照哈希；POST 同参数加 `expected_snapshot/counterparty_balance/reason`，财务确认零差异并按原应付生成授权，返回 `reconciliations/requires_advance_review`。有预付负余额时记录核对但不自动抵扣或核准新增付款。Reconciliation 的 `settlement_month` 非空时余额口径为该月收退货净额减已付，核准额度同时受当前可结算额约束。
+- `items/similar/?name=` 提供相似物料；同名/规格/品牌/单位/类别的独立编码须 `duplicate_reason`，记录审计；自定义编码保持原唯一约束。
+- `purchases/{id}/warranty/` GET 原收货批次与事项历史；POST 新增 `receipt/date/quantity/description`，处理 `case/expected_updated_at/status/response/replacement?/returned?/expense?`。更换须真实同物料同供应商收货，退货关联原批次，费用须同项目费用且金额可读岗位才可关联。
+- `reports/?view=cash30|aging|late_purchase|stale_stock&page=&page_size=` 为全公司固定只读关注明细，独立于项目筛选；沿用报表授权。冲突响应可带 `actions[{label,path}]` 指向原单。
+
+功能与验收边界见 [OPERATIONAL_HARDENING.md](OPERATIONAL_HARDENING.md)。
+
 根路径 `/api/business/`；需要 Bearer JWT。列表采用 `count/next/previous/results`，默认 20、最大 200 条，使用 `page` 和 `page_size`。业务写入为 JSON 对象；除基础资料 PATCH 外均为 POST。所有业务写入提供 `Idempotency-Key`，相同键和相同数据回放一次结果；数据改变必须换键，每次回放重新授权。
 
 日期 YYYY-MM-DD；金额两位小数、数量三位小数的十进制字符串。错误：400 输入校验、403 无权限、404 不存在或不在范围、409 状态/并发冲突。界面展示服务端原因，不自行算账作为事实。
@@ -13,6 +27,10 @@
 - 物料/往来单位与采购由采购权限新增；销售/项目/任务/交付由经理权限新增；期初仅管理员；领料由仓库权限；费用和收付款由财务权限；工时保留本人任务和项目范围。采购同一分组号合为一张草稿，组内单据信息必须一致。销售/采购不自动审批签约；应收应付由原合同采购产生；退款、冲销、盘点、更正仍从原记录操作。预览不产生持久业务记录、审计或编号计数变更。
 
 ## 平台接口
+
+`GET /api/core/setup/` 仅管理员读取首次配置状态、现有公司和编号规则；`me` 返回管理员的 `setup_required`。仅首次 `init_system` 新建公司时标记待配置，旧安装迁移默认不要求重做。
+
+`POST /api/core/setup/` 提供 Idempotency-Key，提交 display_name、old_password、new_password、company{name,address,phone}、team（可空，最多50位，复用用户字段）、codes（仅变更规则，id及原configure完整字段）、confirmed=true。公司、管理员密码、人员、规则在同一事务提交；同公司锁阻止重复初始化，完成后其他新请求409。密码只做校验及哈希存储，不进入审计/回执；旧JWT撤销，重新登录。向导不创建业务台账、示例库存或订单。
 
 账号支持兼任多个固定角色：用户管理接受非空、无重复的 `roles` 数组，仅允许现有七种角色；`me`、人员目录和用户列表返回 `roles`。旧 `role` 字段兼容单角色请求，提交该字段且未提交 roles 时替换为单角色。已有账号保留原角色，新增兼岗字段默认为空，不变更历史审计或业务负责人。
 

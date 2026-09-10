@@ -13,6 +13,7 @@ OPERATION_ROLES = PURCHASE_READERS | {'member'}
 ALL_ROLES = OPERATION_ROLES | {'sales_manager'}
 SALES = MANAGERS | {'sales_manager'}
 SALES_READERS = MONEY_READERS | {'sales_manager'}
+GLOBAL_PROJECT_ROLES = {'admin', 'purchaser', 'warehouse', 'finance'}
 
 
 def sales_for(user, queryset):
@@ -49,20 +50,24 @@ def require_reports(user):
         raise PermissionDenied('未获得总经理报表授权。')
 
 
-def projects_for(user, queryset):
-    require_role(user, OPERATION_ROLES)
-    if not has_role(user, OPERATION_ROLES - {'member'}):
+def projects_for(user, queryset, allowed=OPERATION_ROLES):
+    require_role(user, allowed & OPERATION_ROLES)
+    if not has_role(user, GLOBAL_PROJECT_ROLES & allowed):
         return queryset.filter(Q(members=user) | Q(manager=user)).distinct()
     return queryset
 
 
-def require_project(user, project):
-    require_role(user, OPERATION_ROLES)
-    if (
-        not has_role(user, OPERATION_ROLES - {'member'})
-        and project.manager_id != user.pk
-        and not project.members.filter(pk=user.pk).exists()
-    ):
+def project_allowed(user, project, allowed=OPERATION_ROLES):
+    return has_role(user, allowed & OPERATION_ROLES) and (
+        has_role(user, GLOBAL_PROJECT_ROLES & allowed)
+        or project.manager_id == user.pk
+        or project.members.filter(pk=user.pk).exists()
+    )
+
+
+def require_project(user, project, allowed=OPERATION_ROLES):
+    require_role(user, allowed & OPERATION_ROLES)
+    if not project_allowed(user, project, allowed):
         raise PermissionDenied('无权访问此项目。')
 
 

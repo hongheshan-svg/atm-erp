@@ -1,3 +1,4 @@
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.permissions import (
@@ -38,6 +39,12 @@ class ItemView(MasterView):
     serializer_class = ItemSerializer
     filterset_fields = ['is_active', 'brand', 'part_type']
     search_fields = ['code', 'name', 'specification', 'brand']
+
+    @action(detail=False, methods=['get'])
+    def similar(self, request):
+        name = masterdata.normalized(request.query_params.get('name', ''))[:150]
+        items = Item.objects.filter(name__icontains=name).order_by('code')[:10] if name else []
+        return Response(self.get_serializer(items, many=True).data)
 
 
 class PartnerView(MasterView):

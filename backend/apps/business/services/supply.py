@@ -6,10 +6,11 @@ from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.api import Conflict
-from apps.core.models import CodeRule
+from apps.core.models import AuditLog, CodeRule
 from apps.core.permissions import MANAGERS, PURCHASERS, WAREHOUSE, has_role
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
+from .approval import independent_approval
 from .bom import demand, incoming, issued
 from .common import (
     ZERO,
@@ -142,11 +143,18 @@ def approve(actor, key, purchase_id, data, *, override=False):
     def execute(user, purchase):
         from .budgets import purchase_check
 
-        fields(data, {'reason', 'expected_snapshot', 'confirmed'} if override else set())
+        fields(data, {'reason', 'expected_snapshot', 'confirmed'} if override else {'reason'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'submitted'})
         report = purchase_check(purchase)
-        reason = ''
+        reason = text(data, 'reason', default='')
+        submitter = (
+            AuditLog.objects.filter(operation='purchase.submit', resource=f'purchaseorder:{purchase.pk}')
+            .order_by('-id')
+            .values_list('actor_id', flat=True)
+            .first()
+        )
+        self_approval = independent_approval(user, {purchase.created_by_id, submitter}, reason)
         if override:
             reason = text(data, 'reason')
             if data.get('confirmed') is not True:
@@ -174,7 +182,15 @@ def approve(actor, key, purchase_id, data, *, override=False):
         )
         purchase.status = 'approved'
         save(purchase, user)
-        return audit(user, 'purchase.approve', purchase, over_budget=override, reason=reason, budget_check=report)
+        return audit(
+            user,
+            'purchase.approve',
+            purchase,
+            over_budget=override,
+            reason=reason,
+            self_approval=self_approval,
+            budget_check=report,
+        )
 
     operation = 'purchase.approve_over_budget' if override else 'purchase.approve'
     return purchase_action(actor, key, operation, purchase_id, data, MANAGERS, execute)

@@ -41,3 +41,4 @@ Invoke-Docker @compose config --quiet
 if (-not $SkipBuild) { Invoke-Docker @compose build app }
 Invoke-Docker @compose up -d --wait --wait-timeout 180
 Write-Host "安装完成。管理员 admin 的首次密码位于 $EnvFile 的 LEAN_ADMIN_PASSWORD。"
+Write-Host '访问配置端口的 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。'

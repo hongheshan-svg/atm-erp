@@ -51,6 +51,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
       t('brand', '品牌', true),
       select('part_type', '物料类别', choices({ standard: '标准件', custom: '非标件' }), true),
       { key: 'unit', label: '单位', initial: '件' },
+      { ...t('duplicate_reason', '相同物料独立编码原因', true), hint: '名称、规格、品牌、单位和类别完全相同时必填；优先使用现有编码。' },
     ]
   if (resource === 'partners')
     fields = [

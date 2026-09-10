@@ -1,4 +1,5 @@
 import { test, expect, login, observePage, type Page, type Locator } from './fixtures'
+import { selectRoles } from './role-helpers'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
@@ -39,7 +40,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
     await page.getByRole('button', { name: '新增用户', exact: true }).click()
     await fill(page, '用户名', `${role}review${suffix}`)
     await fill(page, '姓名', `${role}review${suffix}`)
-    await dialog(page).getByLabel('角色', { exact: true }).selectOption(role)
+    await selectRoles(dialog(page), [role])
     await fill(page, '密码', password)
     await save(page)
     const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: info.project.use.viewport, isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch })

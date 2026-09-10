@@ -1,21 +1,32 @@
 """Printable purchase agreement projected from the current order, without a second ledger."""
 
+import hashlib
+import json
+
+from django.core.serializers.json import DjangoJSONEncoder
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
+from apps.core.api import Conflict
 from apps.core.models import Company
-from apps.core.permissions import MONEY_READERS, PURCHASERS, require_role
+from apps.core.permissions import MONEY_READERS, PURCHASERS, require_project, require_role
 
-from .common import ZERO, rounded
-from .supply import total
+from ..models import Document, PurchaseContractVersion
+from .common import ZERO, audit, fields, lookup, rounded, save, state, text
+from .contract_clauses import CLAUSES
+from .supply import purchase_action, total
 
 
 def preview(actor, purchase):
     require_role(actor, MONEY_READERS | PURCHASERS)
+    require_project(actor, purchase.project)
     company = Company.objects.first()
     supplier = purchase.supplier
     lines = list(purchase.lines.all())
     cancelled = sum((rounded(line.cancelled_quantity * line.unit_price) for line in lines), ZERO)
     return {
+        'template_version': 1,
+        'clauses': CLAUSES,
         'id': purchase.pk,
         'code': purchase.code,
         'status': purchase.status,
@@ -61,3 +72,48 @@ def preview(actor, purchase):
             for index, line in enumerate(lines, 1)
         ],
     }
+
+
+def fingerprint(data):
+    return hashlib.sha256(
+        json.dumps(data, cls=DjangoJSONEncoder, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
+
+
+def archive(actor, key, purchase_id, data):
+    def execute(user, purchase):
+        fields(data, {'expected_snapshot', 'document', 'delivery_address', 'reason', 'confirmed'})
+        state(purchase, {'approved', 'partial', 'received'})
+        current = preview(user, purchase)
+        if data.get('expected_snapshot') != fingerprint(current):
+            raise Conflict('采购或主体资料已变化，请刷新合同后重新确认签署版本。')
+        if data.get('confirmed') is not True:
+            raise ValidationError({'confirmed': '请确认上传的签署文件与当前正文及附件一致。'})
+        for party in ('buyer', 'supplier'):
+            if not all(current[party].get(field, '').strip() for field in ('name', 'address', 'phone')):
+                raise ValidationError('归档前请补齐双方名称、地址、电话，并重新核对合同。')
+        doc = lookup(Document, data.get('document'), 'document', purchase=purchase, category='contract')
+        current['delivery_address'] = text(data, 'delivery_address', maximum=250)
+        latest = purchase.contract_versions.order_by('-version').first()
+        version = save(
+            PurchaseContractVersion(
+                purchase=purchase,
+                version=latest.version + 1 if latest else 1,
+                snapshot=json.loads(json.dumps(current, cls=DjangoJSONEncoder)),
+                document=doc,
+                reason=text(data, 'reason'),
+            ),
+            user,
+        )
+        return audit(
+            user,
+            'purchase.contract_archive',
+            version,
+            purchase=purchase.pk,
+            version=version.version,
+            document=doc.pk,
+            sha256=doc.sha256,
+            reason=version.reason,
+        )
+
+    return purchase_action(actor, key, 'purchase.contract_archive', purchase_id, data, PURCHASERS, execute)

@@ -60,10 +60,14 @@ export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (resource === 'purchases') {
     a.push('查看明细', '处理记录')
+    if (['approved', 'partial', 'received'].includes(r.status)) {
+      a.push('质保记录')
+      if (buyer() || warehouse()) a.push('登记采购质保', '处理采购质保')
+    }
     if (buyer() || money()) a.push('附件')
     if (buyer() || money()) a.push('预览采购合同')
     if (buyer() && r.status === 'draft') a.push('修改采购', '提交采购')
-    if (manager() && r.status === 'submitted') a.push('批准采购', '退回修改')
+    if (manager() && r.can_manage !== false && r.status === 'submitted') a.push('批准采购', '退回修改')
     if (warehouse() && ['approved', 'partial'].includes(r.status)) a.push('收货')
     if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('更新到货计划')
     if (warehouse() && r.lines?.some((l: Row) => Number(l.pending_quantity) > 0)) a.push('隔离品合格入库', '隔离品退回供应商')
@@ -73,6 +77,14 @@ export function actionNames(resource: string, r: Row): string[] {
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (['质保记录', '登记采购质保', '处理采购质保'].includes(name)) {
+    const path = `/business/purchases/${r.id}/warranty/`, info = await read(path)
+    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases }, fields: [rows('cases', '质保记录', [t('id', '编号'), t('item', '物料'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('status', '状态'), t('response', '供应商响应与处理'), t('warranty_end', '一年质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
+    if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${x.quantity} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: '逐批按合格收货日起一年提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。' } }
+    const moves = await all('/business/moves/', { project: r.project })
+    const expenses = money() ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
+    return { title: name, path, fields: [select('case', '质保事项', info.cases.filter((x: Row) => ['待响应', '维修中'].includes(x.status)).map((x: Row) => ({ value: x.id, label: `${x.id} · ${x.item} · ${x.description}` }))), select('status', '处理结果', [{ value: 'repairing', label: '维修中' }, { value: 'replaced', label: '已更换' }, { value: 'closed', label: '已关闭' }]), { key: 'response', label: '供应商响应、责任与处理说明', type: 'textarea' }, select('replacement', '补换货收货流水', moves.filter(x => x.kind === 'receipt').map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${x.quantity}` })), true), select('returned', '原批次退货流水', moves.filter(x => x.kind === 'purchase_return').map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${x.quantity}` })), true), ...(money() ? [select('expense', '关联已登记费用', expenses.map(x => ({ value: x.id, label: `${x.title} · ${x.amount}` })), true)] : [])], prepare: values => ({ ...values, expected_updated_at: info.cases.find((x: Row) => x.id === Number(values.case))?.updated_at }) }
+  }
   if (name === '更新到货计划') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
     return { title: name, path: `${endpoint(resource)}${r.id}/delivery-plan/`, fields: [reason, { ...rows('lines', '未完成明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, date('due_date', '承诺到货日期')]), readonly: true }], initial: { lines: detail.lines.filter((l: Row) => Number(decimalDifference(l.quantity, l.received_quantity, l.cancelled_quantity)) > 0).map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, due_date: l.due_date })) }), notice: { type: 'info', text: '更新供应商承诺到货日期并留记录，不改变原应付期限。' } }
@@ -92,7 +104,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       prepare: data => ({ reason: data.reason, confirmed: data.confirmed, expected_snapshot: check.snapshot }),
     }
     return {
-      title: name, path: `/business/purchases/${r.id}/approve/`, fields: [],
+      title: name, path: `/business/purchases/${r.id}/approve/`, fields: [{ ...reason, optional: true, hint: '申请人不可自行审批；管理员例外处理本人申请时必填。' }],
       notice: { type: check.configured ? 'info' : 'warning', text: check.configured ? `预算检查通过。${summary}` : `项目未设置预算，本次批准不进行预算拦截。${summary}` },
     }
   }

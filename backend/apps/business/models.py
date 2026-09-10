@@ -16,6 +16,39 @@ def quantity(**kwargs):
     return models.DecimalField(max_digits=18, decimal_places=3, default=0, **kwargs)
 
 
+class PurchaseContractVersion(ImmutableLedger):
+    purchase = models.ForeignKey('PurchaseOrder', models.PROTECT, related_name='contract_versions')
+    version = models.PositiveIntegerField()
+    snapshot = models.JSONField()
+    document = models.ForeignKey('Document', models.PROTECT, related_name='purchase_contract_versions')
+    reason = models.CharField(max_length=500)
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_purchase_contract_version'
+        constraints = [
+            models.UniqueConstraint(fields=['purchase', 'version'], name='lean_purchase_contract_version_unique')
+        ]
+
+
+class PurchaseWarranty(BaseModel):
+    receipt = models.ForeignKey('StockMove', models.PROTECT, related_name='warranty_cases')
+    date = models.DateField()
+    quantity = quantity()
+    description = models.CharField(max_length=500)
+    status = models.CharField(
+        max_length=20,
+        default='open',
+        choices=[('open', '待响应'), ('repairing', '维修中'), ('replaced', '已更换'), ('closed', '已关闭')],
+    )
+    response = models.CharField(max_length=500, blank=True)
+    replacement = models.ForeignKey('StockMove', models.PROTECT, null=True, blank=True, related_name='+')
+    returned = models.ForeignKey('StockMove', models.PROTECT, null=True, blank=True, related_name='+')
+    expense = models.ForeignKey('Entry', models.PROTECT, null=True, blank=True, related_name='+')
+
+    class Meta(BaseModel.Meta):
+        db_table = 'lean_purchase_warranty'
+
+
 class PaymentTerm(models.TextChoices):
     MANUAL = 'manual', '指定付款日期'
     CASH = 'cash', '现付（合格收货日）'
@@ -384,6 +417,7 @@ class PaymentEvidence(ImmutableLedger):
 
 
 class Reconciliation(LedgerModel):
+    settlement_month = models.CharField(max_length=7, blank=True)
     code = models.CharField(max_length=30, unique=True)
     entry = models.ForeignKey(Entry, models.PROTECT, related_name='reconciliations')
     kind = models.CharField(

@@ -7,6 +7,7 @@ import type { Row } from '../types'
 import ListPagination from '../components/ListPagination.vue'
 import TransferTools from '../components/TransferTools.vue'
 import { pageSize } from '../pagination'
+import ReportAttention from '../components/ReportAttention.vue'
 
 const data = ref<Row | null>(null)
 const loading = ref(false)
@@ -58,6 +59,7 @@ watch(pageSize, () => load())
     <div><p class="eyebrow">经营全景 / 项目累计</p><h1>经营报表</h1><p class="muted">从合同、成本和收付款看经营进度，定位需要跟进的项目。</p></div>
     <div class="toolbar"><TransferTools resource="reports" path="/business/reports/" export-path="/business/reports/" :params="exportFilters" /><el-button :loading="loading" @click="load(data?.page || 1)">刷新</el-button></div>
   </header>
+  <ReportAttention />
   <section class="panel report-filters">
     <form @submit.prevent="filter">
       <label>项目<input v-model="search" aria-label="搜索项目" placeholder="项目名称或编号" maxlength="150" /></label>
@@ -81,14 +83,14 @@ watch(pageSize, () => load())
     <section class="panel" aria-label="项目经营明细">
       <header class="panel-heading"><h2>项目经营明细 <span class="record-count">{{ data.count }}</span></h2><small class="muted">更新于 {{ new Date(data.generated_at).toLocaleString('zh-CN') }}</small></header>
       <el-table :data="data.results" :max-height="560" stripe empty-text="没有符合筛选条件的项目">
-        <el-table-column label="项目" min-width="190" fixed><template #default="{ row }"><router-link :to="`/projects/${row.id}`">{{ row.name }}</router-link><small class="report-code">{{ row.code }} · {{ row.manager }}</small></template></el-table-column>
+        <el-table-column label="项目" min-width="190" fixed><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="`/projects/${row.id}`">{{ row.name }}</component><small class="report-code">{{ row.code }} · {{ row.manager }}</small></template></el-table-column>
         <el-table-column label="状态" min-width="85"><template #default="{ row }">{{ labels[row.status] }}</template></el-table-column>
         <el-table-column label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>
         <el-table-column label="预算" min-width="110" align="right"><template #default="{ row }">{{ row.budget === null ? '未设置' : money(row.budget) }}</template></el-table-column>
-        <el-table-column label="实际成本" min-width="115" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</router-link></template></el-table-column>
-        <el-table-column label="在途采购" min-width="115" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'purchases' } }">{{ money(row.committed_cost) }}</router-link></template></el-table-column>
+        <el-table-column label="实际成本" min-width="115" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</component></template></el-table-column>
+        <el-table-column label="在途采购" min-width="115" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'purchases' } }">{{ money(row.committed_cost) }}</component></template></el-table-column>
 
-        <el-table-column label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><router-link :to="{ path: `/projects/${row.id}`, query: { tab: 'finance', section: 'entries' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</router-link></template></el-table-column>
+        <el-table-column label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'finance', section: 'entries' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</component></template></el-table-column>
         <el-table-column label="关注" width="85"><template #default="{ row }">{{ row.over_budget ? '超预算' : row.overdue ? '逾期' : row.unbudgeted ? '未设预算' : '—' }}</template></el-table-column>
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
       </el-table>

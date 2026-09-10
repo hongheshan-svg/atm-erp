@@ -249,6 +249,7 @@ class InitializationTests(TestCase):
             call_command('init_system', stdout=io.StringIO())
         user = User.objects.get(username='admin')
         first_hash = user.password
+        self.assertTrue(Company.objects.get(pk=1).setup_required)
         self.assertTrue(user.check_password('Fresh-Install-Tests-782'))
         self.assertEqual(CodeRule.generate_code('project'), 'PRJ000001')
         with patch.dict('os.environ', {'ADMIN_PASSWORD': 'Another-Install-Tests-899'}):

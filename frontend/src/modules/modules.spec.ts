@@ -17,7 +17,7 @@ describe('模块边界', () => {
     user.value = { id: 7, roles: ['sales_manager', 'finance'] }
     expect(actionNames('sales', { status: 'quoted', manager: 8 })).not.toContain('签约')
     expect(actionNames('sales', { status: 'quoted', manager: 7 })).toContain('签约')
-    expect(userFields.find(f => f.key === 'roles')?.type).toBe('multi')
+    expect(userFields.find(f => f.key === 'roles')?.type).toBe('checks')
   })
   it('销售经理的签约交接与菜单不继承项目管理权限', async () => {
     user.value = { id: 7, role: 'sales_manager' }
@@ -129,7 +129,7 @@ describe('模块边界', () => {
 
   it('设置与基础资料编辑保持各自字段，用户密码可留空', async () => {
     const item = await actionCommand('items', { id: 1 }, '编辑')
-    expect(item.fields.map(f => f.key)).toEqual(['name', 'specification', 'brand', 'part_type', 'unit', 'is_active'])
+    expect(item.fields.map(f => f.key)).toEqual(['name', 'specification', 'brand', 'part_type', 'unit', 'duplicate_reason', 'is_active'])
     const account = await actionCommand('users', { id: 2 }, '编辑')
     expect(account.fields.find(f => f.key === 'password')?.optional).toBe(true)
     expect(account.fields.filter(f => f.key === 'is_active')).toHaveLength(1)

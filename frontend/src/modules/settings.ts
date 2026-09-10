@@ -3,7 +3,7 @@ import { select } from './shared'
 export const userFields: Field[] = [
   t('username', '用户名'),
   t('display_name', '姓名'),
-  { key: 'roles', label: '角色', type: 'multi', initial: ['member'], hint: '可兼任多个岗位；电脑按住 Ctrl / Command 多选。权限按业务合并，报表需单独授权。',
+  { key: 'roles', label: '角色', type: 'checks', initial: ['member'], hint: '勾选可兼任的岗位，至少选择一个。权限按业务合并，报表需单独授权；本人申请仍需他人审批。',
     options: choices({
       admin: '管理员',
       manager: '项目经理',
@@ -36,7 +36,7 @@ export const columns: Record<string, Column[]> = {
     C('management_reports', '总经理报表权限'),
     C('is_active', '启用'),
   ],
-  company: [C('name', '公司名称'), C('address', '地址'), C('phone', '电话')],
+  company: [C('name', '公司名称'), C('address', '地址'), C('phone', '电话'), { key: 'locked_through', label: '业务锁账至', format: r => r.locked_through || '未锁账' }],
   codes: [
     { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位' }[String(r.key)] || r.key) },
     C('prefix', '前缀'), { key: 'date_format', label: '日期格式', format: r => r.date_format || '无日期' }, C('padding', '流水位数'),
@@ -69,9 +69,17 @@ export async function createCommand(resource: string, projectId?: number): Promi
 export function actionNames(resource: string, _r: Row): string[] {
   const a: string[] = []
   if (['users', 'company', 'codes'].includes(resource) && can(['admin'])) a.push('编辑')
+  if (resource === 'company' && can(['admin'])) a.push('锁账与重开')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (resource === 'company' && name === '锁账与重开') return {
+    title: name, path: `${endpoint(resource)}${r.id}/period-lock/`,
+    fields: [{ key: 'locked_through', label: '锁账截止日期', type: 'date', optional: true, hint: '截止日及以前禁止补录。调早日期可重开部分期间，清空则全部重开。' }, t('reason', '锁账或重开原因')],
+    initial: { locked_through: r.locked_through || '' },
+    prepare: data => ({ ...data, locked_through: data.locked_through || null, expected_revision: r.period_revision }),
+    notice: { type: 'warning', text: '锁账前请完成收退货、工时、费用及资金核对并备份。变更会记录操作者、前后日期和原因；此功能不替代法定会计结账。' },
+  }
   if (name === '编辑' && resource === 'codes') return {
     title: '编辑编号规则', path: `${endpoint(resource)}${r.id}/configure/`,
     fields: [t('prefix', '前缀'), select('date_format', '日期格式', choices({ none: '无日期', YYYY: '年', YYYYMM: '年月', YYYYMMDD: '年月日' })),

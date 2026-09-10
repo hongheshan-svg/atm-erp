@@ -16,7 +16,7 @@ class Command(BaseCommand):
     def handle(self, **options):
         check_schema()
         with transaction.atomic():
-            Company.objects.get_or_create(pk=1)
+            Company.objects.get_or_create(pk=1, defaults={'setup_required': True})
             Company.objects.select_for_update().get(pk=1)
             for key, prefix in [
                 ('project', 'PRJ'),
