@@ -1,10 +1,12 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
-from apps.business.models import BankRecord, Document, Entry
+from apps.business.models import BankRecord, Document, Entry, Task
 from apps.business.services.finance import balance
 
 from .test_commercial_chain import TODAY, BusinessFixtures
@@ -14,6 +16,27 @@ class SystemReliabilityTests(BusinessFixtures, TestCase):
     def setUp(self):
         self.setup_business()
         self.project = self.active_project(amount='100')
+
+    def test_workbench_paging_counts_and_role_scope(self):
+        today = timezone.localdate()
+        for index in range(12):
+            Task.objects.create(
+                project=self.project,
+                assignee=self.users['manager'],
+                title=f'Task {index}',
+                due_date=today - timedelta(days=1) if index < 7 else today,
+            )
+        url = '/api/business/workbench/'
+        response = self.clients['manager'].get(url, {'page_size': 5, 'bucket': 'tasks', 'tasks_page': 2})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.data), {'tasks'})
+        bucket = response.data['tasks']
+        self.assertEqual((bucket['count'], bucket['page'], len(bucket['results'])), (12, 2, 5))
+        self.assertEqual((bucket['overdue_count'], bucket['today_count']), (7, 5))
+        self.assertEqual(self.clients['manager'].get(url, {'bucket': 'bank_records'}).data, {})
+        self.assertEqual(self.clients['member'].get(url, {'bucket': 'tasks'}).data['tasks']['count'], 0)
+        for params in ({'page_size': 0}, {'page_size': 21}, {'page_size': 'x'}, {'bucket': 'unknown'}):
+            self.assertEqual(self.clients['manager'].get(url, params).status_code, 400)
 
     def test_forecast_allows_budget_check_and_both_approval_paths(self):
         self.post(

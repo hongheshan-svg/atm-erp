@@ -1,5 +1,5 @@
 from django.core.paginator import Paginator
-from django.db.models import DecimalField, F, Q, Sum, Value
+from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -24,20 +24,52 @@ from .payment_terms import due_entries, with_sources
 
 def summary(request):
     user = request.user
+    selected_bucket = request.query_params.get('bucket')
+    allowed = {
+        'sales',
+        'tasks',
+        'approvals',
+        'receipts',
+        'drafts',
+        'settlements',
+        'overdue_purchases',
+        'prepayments',
+        'reconciliations',
+        'bank_records',
+    }
+    if selected_bucket and selected_bucket not in allowed:
+        raise ValidationError('未知待办分类。')
+    try:
+        page_size = int(request.query_params.get('page_size', '20'))
+    except (TypeError, ValueError):
+        raise ValidationError('待办每页数量必须为 1 至 20。')
+    if not 1 <= page_size <= 20:
+        raise ValidationError('待办每页数量必须为 1 至 20。')
 
     def bucket(queryset, serializer, name):
+        if selected_bucket and selected_bucket != name:
+            return None
         try:
             page = int(request.query_params.get(f'{name}_page', '1'))
         except (TypeError, ValueError):
             raise ValidationError('待办页码必须为正整数。')
         if page < 1:
             raise ValidationError('待办页码必须为正整数。')
-        selected = Paginator(queryset, 20).get_page(page)
-        return {
+        selected = Paginator(queryset, page_size).get_page(page)
+        data = {
             'page': selected.number,
+            'page_size': page_size,
             'count': selected.paginator.count,
             'results': serializer(selected.object_list, many=True, context={'request': request}).data,
         }
+        if name == 'tasks':
+            data.update(
+                queryset.aggregate(
+                    overdue_count=Count('pk', filter=Q(due_date__lt=timezone.localdate())),
+                    today_count=Count('pk', filter=Q(due_date=timezone.localdate())),
+                )
+            )
+        return data
 
     result = {}
     if has_role(user, {'sales_manager'}):
@@ -49,10 +81,11 @@ def summary(request):
         )
         result['sales'] = bucket(sales.exclude(status='cancelled'), SalesSerializer, 'sales')
     if not has_role(user, OPERATION_ROLES):
-        return result
+        return {key: value for key, value in result.items() if value is not None}
     projects = projects_for(user, Project.objects.all())
     tasks = (
         Task.objects.filter(project__in=projects, assignee=user, status='open')
+        .select_related('project', 'assignee')
         .exclude(project__status__in=['closed', 'cancelled'])
         .order_by(F('due_date').asc(nulls_last=True), 'pk')
     )
@@ -127,4 +160,4 @@ def summary(request):
             )
             if banks.exists():
                 result['bank_records'] = bucket(banks, BankSerializer, 'bank_records')
-    return result
+    return {key: value for key, value in result.items() if value is not None}

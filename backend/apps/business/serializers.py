@@ -277,12 +277,14 @@ class EntrySerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     assignee_name = serializers.CharField(source='assignee.display_name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
 
     class Meta:
         model = Task
         fields = [
             'id',
             'project',
+            'project_name',
             'delivery',
             'kind',
             'title',
