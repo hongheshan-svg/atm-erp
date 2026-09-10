@@ -148,19 +148,25 @@ def main():
         run('up', '-d', '--wait', '--wait-timeout', '120', 'postgres', 'redis')
         if sql("SELECT count(*) FROM pg_tables WHERE schemaname='public'") != '0':
             parser.error('目标数据库非空，拒绝覆盖。请使用全新独立项目与新卷。')
-        run(
-            'run',
-            '--rm',
-            '-T',
-            '--no-deps',
-            '--pull',
-            'never',
-            '--entrypoint',
-            'sh',
-            'app',
-            '-c',
-            'test -z "$(ls -A /app/uploads)"',
-        )
+        archive_digest = digest(archive)
+        # Extraction and disk-space failures must occur before pg_restore commits.
+        # The helper permits an exact, verified retry while the database is empty.
+        with uploads.open('rb') as stream:
+            run(
+                'run',
+                '--rm',
+                '-T',
+                '--no-deps',
+                '--pull',
+                'never',
+                '--entrypoint',
+                'python',
+                'app',
+                '/restore_uploads.py',
+                'prepare',
+                archive_digest,
+                stdin=stream,
+            )
         with dump.open('rb') as stream:
             run(
                 'exec',
@@ -177,23 +183,20 @@ def main():
                 '--single-transaction',
                 stdin=stream,
             )
-        with uploads.open('rb') as stream:
-            run(
-                'run',
-                '--rm',
-                '-T',
-                '--no-deps',
-                '--pull',
-                'never',
-                '--entrypoint',
-                'tar',
-                'app',
-                '-C',
-                '/app/uploads',
-                '-xf',
-                '-',
-                stdin=stream,
-            )
+        run(
+            'run',
+            '--rm',
+            '-T',
+            '--no-deps',
+            '--pull',
+            'never',
+            '--entrypoint',
+            'python',
+            'app',
+            '/restore_uploads.py',
+            'finish',
+            archive_digest,
+        )
         run('up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '180', 'app')
         print('恢复完成。账户密码保持备份时的值，环境密钥使用目标配置。')
 

@@ -58,6 +58,10 @@ class NativeInstallTests(unittest.TestCase):
         self.assertIn("location / { return 404; }", result)
         self.assertNotIn("uploads", result)
         self.assertIn("proxy_pass http://127.0.0.1:18001", result)
+        self.assertIn('proxy_set_header X-Forwarded-For $remote_addr;', result)
+        self.assertNotIn('$proxy_add_x_forwarded_for', result)
+        docker_config = (Path(__file__).parents[2] / 'docker/app/nginx.conf').read_text()
+        self.assertIn('proxy_set_header X-Forwarded-For $remote_addr;', docker_config)
         with self.assertRaises(ValueError):
             native.quote_path(self.root / '$bad')
 

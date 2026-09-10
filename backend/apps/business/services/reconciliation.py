@@ -11,7 +11,7 @@ from apps.core.api import Conflict
 from apps.core.models import CodeRule
 from apps.core.permissions import FINANCE, MANAGERS, require_role
 
-from ..models import Document, Entry, Reconciliation, StockMove
+from ..models import Document, Entry, Reconciliation
 from .approval import independent_approval
 from .common import ZERO, audit, fields, lookup, number, project_action, rounded, save, text
 
@@ -21,14 +21,33 @@ def signed_number(value, key):
     return number(value[1:] if negative else value, key) * (-1 if negative else 1)
 
 
+def with_snapshot_sources(queryset):
+    return queryset.select_related(
+        'entry__project__customer', 'entry__project__sale', 'entry__purchase__supplier', 'confirmed_by'
+    ).prefetch_related(
+        'payments',
+        'entry__payments',
+        'entry__purchase__lines__item',
+        'entry__purchase__lines__stockmove_set',
+        'entry__project__deliveries',
+    )
+
+
+def values(records, *fields):
+    def value(record, field):
+        for part in field.split('__'):
+            record = getattr(record, part)
+        return record
+
+    return [{field: value(row, field) for field in fields} for row in sorted(records, key=lambda r: r.pk)]
+
+
 def snapshot(statement):
     entry = statement.entry
-    history = entry.payments.all()
-    if statement.pk:
-        history = history.exclude(reconciliation_id=statement.pk)
-    payments = list(
-        history.order_by('pk').values('id', 'amount', 'reversal_of', 'date', 'reason', 'method', 'account', 'reference')
-    )
+    history = [p for p in entry.payments.all() if not statement.pk or p.reconciliation_id != statement.pk]
+    payments = values(history, 'id', 'amount', 'reversal_of_id', 'date', 'reason', 'method', 'account', 'reference')
+    for payment in payments:
+        payment['reversal_of'] = payment.pop('reversal_of_id')
     baseline_paid = sum((p['amount'] for p in payments), ZERO)
     remaining = entry.amount - entry.credit_amount - baseline_paid
     data = {
@@ -64,23 +83,26 @@ def snapshot(statement):
             'payment_term': purchase.payment_term,
             'payment_days': purchase.payment_days,
         }
-        data['lines'] = list(
-            purchase.lines.order_by('pk').values(
-                'id',
-                'item__code',
-                'item__name',
-                'quantity',
-                'unit_price',
-                'received_quantity',
-                'returned_quantity',
-                'cancelled_quantity',
-                'pending_quantity',
-            )
+        data['lines'] = values(
+            purchase.lines.all(),
+            'id',
+            'item__code',
+            'item__name',
+            'quantity',
+            'unit_price',
+            'received_quantity',
+            'returned_quantity',
+            'cancelled_quantity',
+            'pending_quantity',
         )
-        moves = list(
-            StockMove.objects.filter(purchase_line__purchase=purchase)
-            .order_by('pk')
-            .values('id', 'kind', 'quantity', 'value', 'supplier_credit', 'received_date')
+        moves = values(
+            [move for line in purchase.lines.all() for move in line.stockmove_set.all()],
+            'id',
+            'kind',
+            'quantity',
+            'value',
+            'supplier_credit',
+            'received_date',
         )
         data['stock_moves'] = moves
         received_value = sum(
@@ -116,16 +138,14 @@ def snapshot(statement):
             if sale
             else None
         )
-        data['deliveries'] = list(
-            entry.project.deliveries.order_by('pk').values('code', 'quantity', 'shipped_date', 'accepted_date')
-        )
+        data['deliveries'] = values(entry.project.deliveries.all(), 'code', 'quantity', 'shipped_date', 'accepted_date')
     data['eligible'] = rounded(eligible)
     return json.loads(json.dumps(data, cls=DjangoJSONEncoder))
 
 
 def used(statement):
     # A reversal must not resurrect an old authorization; it requires a new check.
-    return sum((abs(p.amount) for p in statement.payments.filter(reversal_of__isnull=True)), ZERO)
+    return sum((abs(p.amount) for p in statement.payments.all() if p.reversal_of_id is None), ZERO)
 
 
 def current(statement):

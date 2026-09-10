@@ -119,3 +119,16 @@ class UpgradeTests(TestCase):
     def test_semantic_versions_and_request_confirmation(self):
         self.assertGreater(version('v1.10.0'), version('v1.9.0'))
         self.assertEqual(self.client.post('/api/core/upgrade/', {'target': 'v9.0.0'}, format='json').status_code, 400)
+
+    def test_progress_keeps_runner_connected_only_with_valid_claim(self):
+        self.poll()
+        self.queue()
+        job = self.poll().data['job']
+        cache.delete('ota.runner')
+        payload = {'action': 'report', 'id': job['id'], 'claim': 'wrong', 'status': 'downloading', 'detail': '构建镜像'}
+        url = '/api/core/upgrade/agent/'
+        self.assertEqual(self.client.post(url, payload, format='json', HTTP_X_OTA_TOKEN=TOKEN).status_code, 403)
+        self.assertIsNone(cache.get('ota.runner'))
+        payload['claim'] = job['claim']
+        self.assertEqual(self.client.post(url, payload, format='json', HTTP_X_OTA_TOKEN=TOKEN).status_code, 200)
+        self.assertEqual(self.client.get('/api/core/upgrade/').data['runner']['id'], 'c' * 32)

@@ -44,6 +44,29 @@ def cash_amount(payment):
     return payment.amount if payment.entry.kind == 'receivable' else -payment.amount
 
 
+def check_review(bank):
+    if bank.needs_review:
+        raise Conflict('此银行流水缺少对方户名，请先核实户名并记录依据。')
+
+
+def review(actor, key, bank_id, data):
+    def execute(user):
+        fields(data, {'counterparty', 'reason'})
+        bank = BankRecord.objects.select_for_update().get(pk=bank_id)
+        if not bank.needs_review or bank.void_reason:
+            raise Conflict('仅可核实待核实且未作废的银行流水。')
+        name = text(data, 'counterparty', maximum=150)
+        if name == '原流水未提供户名（待核实）':
+            raise Conflict('请填写核实后的实际户名。')
+        reason = text(data, 'reason')
+        bank.counterparty = name
+        bank.needs_review = False
+        save(bank, user)
+        return audit(user, 'bank.review', bank, counterparty=name, reason=reason)
+
+    return bank_action(actor, key, 'bank.review', {'id': bank_id, 'data': data}, execute)
+
+
 def bank_action(actor, key, operation, payload, execute):
     return perform(
         actor=actor,
@@ -108,6 +131,8 @@ def return_unclaimed(actor, key, bank_id, data, *, reverse=False):
                 raise Conflict('相关项目已结项，请先重新打开。')
             amount = -original.amount
         else:
+            check_review(source)
+            check_review(returned)
             amount = number(data.get('amount'), 'amount', positive=True)
             if source.void_reason or returned.void_reason or source.amount <= 0 or returned.amount >= 0:
                 raise Conflict('请选择原银行收入及实际退回的银行支出记录。')
@@ -145,6 +170,7 @@ def void(actor, key, bank_id, data):
 
 
 def match_record(user, bank, payment, reason):
+    check_review(bank)
     if bank.void_reason or payment.reversal_of_id or Payment.objects.filter(reversal_of=payment).exists():
         raise Conflict('已作废银行记录或已冲销流水不能匹配。')
     if bank.project_id and bank.project_id != payment.entry.project_id:
@@ -170,6 +196,7 @@ def match(actor, key, bank_id, data, *, allocate=False):
         fields(data, {'entry', 'amount', 'reason', 'reconciliation'} if allocate else {'payment', 'reason'})
         Entry.objects.select_for_update().get(pk=entry.pk)
         bank = BankRecord.objects.select_for_update().get(pk=bank_id)
+        check_review(bank)
         reason = text(data, 'reason')
         if allocate:
             if bank.amount <= 0 or bank.void_reason:

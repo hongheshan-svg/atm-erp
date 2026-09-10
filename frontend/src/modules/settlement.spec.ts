@@ -51,3 +51,11 @@ it('已核对或支出银行记录不提供认领到账操作', () => {
   expect(actionNames('bank-records', { ...row, amount: '-500', remaining_amount: '500' })).not.toContain('认领到账')
   expect(actionNames('bank-records', { ...row, remaining_amount: '100' })).toContain('关联未认领款退回')
 })
+
+it('缺失户名必须核实后才能认领、匹配或关联退回', () => {
+  const row = { amount: '500', remaining_amount: '500', needs_review: true, matches: [], returns: [] }
+  const names = actionNames('bank-records', row)
+  expect(names).toContain('核实对方户名')
+  for (const action of ['认领到账', '匹配已有收付款', '关联未认领款退回']) expect(names).not.toContain(action)
+  expect(actionNames('bank-records', { ...row, needs_review: false })).toContain('认领到账')
+})

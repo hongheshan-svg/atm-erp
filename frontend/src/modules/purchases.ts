@@ -13,7 +13,6 @@ export const purchaseFields = (c: Catalog): Field[] => [
   rows('lines', '采购明细', [item(c), qty, price, { ...date('due_date', '明细交期'), optional: true }]),
 ]
 import { all, read } from '../api'
-import { catalog } from '../catalog'
 import { manager } from '../session'
 import { money } from '../session'
 import { decimalDifference } from '../forms'
@@ -45,10 +44,15 @@ export function createLabel(resource: string) {
   return ({ purchases: buyer() && '新建采购' } as Record<string, string | boolean>)[resource] || ''
 }
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
-  const c = await catalog(['projects', 'partners', 'items'])
+  const c: Catalog = { projects: [], partners: [], items: [], users: [] }
   let fields: Field[] = []
   let path = endpoint(resource)
   if (resource === 'purchases') fields = purchaseFields(c)
+  for (const field of fields) {
+    if (field.key === 'project') { field.remotePath = '/business/projects/'; field.remoteFilter = r => !['draft', 'quoted', 'closed', 'cancelled'].includes(r.status) }
+    if (field.key === 'supplier') { field.remotePath = '/business/partners/'; field.remoteParams = { is_active: true }; field.remoteFilter = r => r.kind !== 'customer' }
+    if (field.key === 'lines') field.fields = field.fields!.map(f => f.key === 'item' ? { ...f, remotePath: '/business/items/', remoteParams: { is_active: true } } : f)
+  }
   return {
     title: String(createLabel(resource)),
     path,
@@ -148,20 +152,18 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         ...(name === '隔离品退回供应商' ? [] : [{ key: 'location', label: '库位', initial: '主仓' }]),
         ...(name === '隔离品退回供应商' ? [] : [date('received_date', '实际合格收货日期')]),
         reason,
-        rows('lines', '本次收货', [
-          select(
-            'line',
-            '采购物料',
-            detail.lines.map((l: Row) => ({ value: l.id, label: `${l.item_name} · ${l.assembly_unit || '未分单元'}` })),
-          ),
+        { ...rows('lines', '本次收货', [
+          { key: 'line', label: '明细ID', hidden: true },
+          { key: 'item_label', label: '采购物料', readonly: true, displayOnly: true },
           qty,
           ...(name === '收货' ? [{ key: 'pending_quantity', label: '不合格隔离数量', initial: '0' }] : []),
-        ]),
+        ]), readonly: true },
       ]
       initial = {
         lines: detail.lines
           .map((l: Row) => ({
             line: l.id,
+            item_label: `${l.item_name} · ${l.assembly_unit || '未分单元'}`,
             quantity: name === '收货' ? decimalDifference(l.quantity, l.received_quantity, l.cancelled_quantity, l.pending_quantity || '0') : l.pending_quantity,
             ...(name === '收货' ? { pending_quantity: '0' } : {}),
           }))
@@ -172,22 +174,21 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   return { title: name, path, fields, initial, method, readonly }
 }
 export async function shortageCommand(projectId: number, selectedBomLines?: number[]): Promise<Command> {
-  const c = await catalog(['projects', 'items', 'partners'])
   const demand = await read(`/business/projects/${projectId}/demand/`)
   const lines = demand.lines.filter((r: Row) => Number(r.shortage) > 0 && r.is_active !== false && (selectedBomLines === undefined || selectedBomLines.includes(r.bom_line)))
   if (selectedBomLines && lines.length !== new Set(selectedBomLines).size) throw new Error('所选 BOM 的缺口或物料状态已变化，请刷新后重新勾选。')
   if (!lines.length) throw new Error('当前没有缺料。')
-  const fields = purchaseFields(c).filter((f) => f.key !== 'project')
+  const fields = (await createCommand('purchases', projectId)).fields.filter((f) => f.key !== 'project')
   const detail = fields.find(f => f.key === 'lines')!
   detail.readonly = true
-  detail.fields = detail.fields!.map(f => f.key === 'item' ? { ...f, readonly: true, options: f.options?.filter(o => lines.some((r: Row) => r.item === o.value)) } : f)
+  detail.fields = detail.fields!.flatMap(f => f.key === 'item' ? [{ key: 'item', label: '物料ID', hidden: true }, { key: 'item_label', label: '物料', readonly: true, displayOnly: true }] : [f])
   return {
     title: '按缺料采购',
     path: '/business/purchases/',
     fields,
     notice: { type: 'info', text: `已选 ${lines.length} 项 BOM；数量可调小。保存时重新校验缺口，采购草稿仍需提交审批。` },
     initial: {
-      lines: lines.map((r: Row) => ({ item: r.item, bom_line: r.bom_line, quantity: r.shortage, unit_price: '' })),
+      lines: lines.map((r: Row) => ({ item: r.item, item_label: r.item_name || r.name || r.item, bom_line: r.bom_line, quantity: r.shortage, unit_price: '' })),
     },
     prepare: (data) => ({
       ...data,

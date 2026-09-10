@@ -27,6 +27,8 @@ TARGETS = {
         'apps.business.tests.test_review_remediation',
         'apps.business.tests.test_operational_review',
         'apps.business.tests.test_reconciliation',
+        'apps.business.tests.test_bank_import',
+        'apps.business.tests.test_system_reliability',
         'apps.business.tests.test_payment_terms',
         'apps.business.tests.test_hardening',
     ),

@@ -1,3 +1,5 @@
+from ipaddress import ip_address
+
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
@@ -27,6 +29,18 @@ class LoginThrottle(SimpleRateThrottle):
 
     def get_cache_key(self, request, view):
         return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+    def get_ident(self, request):
+        peer = request.META.get('REMOTE_ADDR', '')
+        # Both supported Daphne launchers bind loopback. Their Nginx ingress
+        # overwrites XFF with its socket peer; never trust a direct remote caller.
+        if peer in {'127.0.0.1', '::1'}:
+            forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '').strip()
+            try:
+                return str(ip_address(forwarded))
+            except ValueError:
+                pass
+        return peer
 
 
 class LoginView(TokenObtainPairView):

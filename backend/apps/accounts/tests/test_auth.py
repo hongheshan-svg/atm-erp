@@ -9,6 +9,41 @@ PASSWORD = 'Test-Accounts-Only-982'
 
 
 class AuthenticationTests(TestCase):
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_forwarding_headers_cannot_rotate_direct_client_throttle(self):
+        for i in range(12):
+            response = self.client.post(
+                '/api/auth/login/',
+                {'username': 'missing', 'password': 'wrong'},
+                REMOTE_ADDR='198.51.100.10',
+                HTTP_X_FORWARDED_FOR=f'203.0.113.{i}',
+                HTTP_X_REAL_IP=f'203.0.113.{i}',
+            )
+            self.assertEqual(response.status_code, 401 if i < 10 else 429)
+
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_trusted_proxy_uses_single_canonical_address_and_rejects_chains(self):
+        from rest_framework.test import APIRequestFactory
+
+        from apps.accounts.api import LoginThrottle
+
+        factory = APIRequestFactory()
+        throttle = LoginThrottle()
+        for value in ['not-an-ip', '203.0.113.1, 203.0.113.2', '', '::ffff:192.0.2.1, bad']:
+            self.assertEqual(
+                throttle.get_ident(factory.get('/', REMOTE_ADDR='127.0.0.1', HTTP_X_FORWARDED_FOR=value)), '127.0.0.1'
+            )
+        self.assertEqual(
+            throttle.get_ident(factory.get('/', REMOTE_ADDR='127.0.0.1', HTTP_X_FORWARDED_FOR='2001:0db8::1')),
+            '2001:db8::1',
+        )
+        for address in ['203.0.113.1', '203.0.113.2']:
+            for i in range(11):
+                response = self.client.post(
+                    '/api/auth/refresh/', {'refresh': 'invalid'}, REMOTE_ADDR='127.0.0.1', HTTP_X_FORWARDED_FOR=address
+                )
+                self.assertEqual(response.status_code, 401 if i < 10 else 429)
+
     def setUp(self):
         cache.clear()
         Company.objects.create(pk=1)

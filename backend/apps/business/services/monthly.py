@@ -12,7 +12,7 @@ from apps.core.api import Conflict
 from apps.core.models import AuditLog
 from apps.core.permissions import FINANCE, MONEY_READERS, projects_for, require_role
 
-from ..models import Entry, Project, PurchaseOrder, StockMove
+from ..models import Entry, Project, PurchaseOrder
 from .common import ZERO, fields, identity, text
 from .purchase_contract import fingerprint
 
@@ -30,7 +30,7 @@ def bounds(month):
 def entry_totals(entry, month, *, excluded_statement=None):
     start, end = bounds(month)
     opening, received, returned, paid = ZERO, ZERO, ZERO, ZERO
-    for move in StockMove.objects.filter(purchase_line__purchase_id=entry.purchase_id):
+    for move in (move for line in entry.purchase.lines.all() for move in line.stockmove_set.all()):
         day = move.received_date or timezone.localdate(move.created_at)
         amount = (
             move.value if move.kind == 'receipt' else -move.supplier_credit if move.kind == 'purchase_return' else ZERO
@@ -42,10 +42,9 @@ def entry_totals(entry, month, *, excluded_statement=None):
                 received += amount
             else:
                 returned -= amount
-    payments = entry.payments.all()
-    if excluded_statement:
-        payments = payments.exclude(reconciliation_id=excluded_statement)
-    for payment in payments:
+    for payment in entry.payments.all():
+        if excluded_statement and payment.reconciliation_id == excluded_statement:
+            continue
         if payment.date < start:
             opening -= payment.amount
         elif payment.date <= end:
@@ -72,6 +71,7 @@ def summary(user, supplier, month):
     entries = (
         Entry.objects.filter(purchase__supplier_id=supplier, project__in=projects_for(user, Project.objects.all()))
         .select_related('purchase__supplier', 'project')
+        .prefetch_related('payments', 'purchase__lines__stockmove_set')
         .order_by('project_id', 'id')
     )
     if entries.count() > 200:

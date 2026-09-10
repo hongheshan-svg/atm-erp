@@ -116,7 +116,7 @@ def analysis(project, additional=ZERO, *, actuals=None, committed=None, purchase
         'over_budget': bool(warnings),
         'forecast_revision': project.forecast_revision,
         'remaining_materials': str(project.remaining_materials) if project.remaining_materials is not None else None,
-        'forecast_at': project.forecast_at,
+        'forecast_at': project.forecast_at.isoformat() if project.forecast_at else None,
         'forecast_by': project.forecast_by.display_name if project.forecast_by_id else None,
         'forecast_stale': project.forecast_at is None
         or (timezone.now() - project.forecast_at).days >= 30
