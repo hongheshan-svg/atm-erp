@@ -145,7 +145,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await save(purchaser)
   await purchaser.goto('/erp/workbench')
   await purchaser.getByRole('heading', { name: '采购明细逾期', exact: true }).waitFor()
-  await purchaser.getByRole('link').filter({ hasText: order.code }).click()
+  await purchaser.getByRole('region', { name: '采购明细逾期', exact: true }).getByRole('link').filter({ hasText: order.code }).click()
   await expect(dialog(purchaser).getByRole('heading', { name: '查看明细', exact: true })).toBeVisible()
   await dialog(purchaser).getByRole('button', { name: '关闭', exact: true }).click()
   await warehouse.goto(`/erp/projects/${id}?tab=purchases`)
