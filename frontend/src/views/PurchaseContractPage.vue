@@ -52,17 +52,21 @@ async function archive() {
 <template>
   <section class="purchase-contract-page" v-loading="loading">
     <div class="contract-toolbar">
-      <router-link :to="{ path: '/purchases', query: { resource: 'purchases', focus: String(route.params.id) } }">返回采购单</router-link>
-      <div><el-button :disabled="loading" @click="load">刷新预览</el-button><el-button :disabled="!data || loading" @click="appendix = !appendix">{{ appendix ? '查看合同正文' : '查看完整附件' }}</el-button><el-button type="primary" :disabled="!data || loading" @click="print">打印 / 另存为 PDF</el-button></div>
+      <div><router-link :to="{ path: '/purchases', query: { resource: 'purchases', focus: String(route.params.id) } }">返回采购单</router-link><h1>采购合同预览</h1></div>
+      <el-button :disabled="loading" @click="load">刷新预览</el-button>
     </div>
     <el-alert v-if="error" type="error" :title="error" :closable="false" />
-    <div v-if="data" class="contract-toolbar">
+    <div class="contract-workspace">
+    <aside v-if="data" class="contract-toolbar contract-actions" aria-label="合同版本与打印">
+      <el-button type="primary" :disabled="loading" @click="print">打印 / 另存为 PDF</el-button>
+      <el-button :disabled="loading" @click="appendix = !appendix">{{ appendix ? '查看合同正文' : '查看完整附件' }}</el-button>
       <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
       <label><input v-model="packagePrint" type="checkbox"> 正文与完整附件一起打印</label>
       <el-button v-if="buyer() && !data.draft && !data.archived_version && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">归档签署版本</el-button>
       <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : '当前采购资料预览，尚未归档签署版本' }}</span>
-    </div>
-    <p class="contract-help">正文按单页 A4 排版，完整附件允许分页；勾选整套打印可一次输出正文与附件。签署文件请从采购附件查看，归档前需补齐双方资料并核对收货地址。</p>
+      <p class="contract-help">正文按单页 A4 排版，完整附件允许分页；勾选整套打印可一次输出正文与附件。签署文件请从采购附件查看，归档前需补齐双方资料并核对收货地址。</p>
+    </aside>
+    <div class="contract-pages">
     <template v-if="data"><article v-for="sheet in (packagePrint ? [false, true] : [appendix])" :key="String(sheet)" class="contract-paper" :class="{ 'contract-appendix': sheet }" aria-label="采购合同预览">
       <h1>采购合同<span v-if="data.draft">（草稿 · 未批准）</span><span v-else-if="data.status === 'cancelled'">（已取消）</span></h1>
       <p v-if="sheet" class="contract-state">附件：完整采购明细、主体资料及补充约定</p>
@@ -88,12 +92,25 @@ async function archive() {
       <h2>{{ sheet ? '二' : '五' }}、补充约定</h2><p class="contract-note">{{ data.note ? (sheet ? data.note : brief(data.note, 90)) : '无；其他事项由双方另行书面确认。' }}</p>
       <div class="contract-signatures"><section><p>甲方签字 / 盖章：________________</p><p>签署日期：________________</p></section><section><p>乙方签字 / 盖章：________________</p><p>签署日期：________________</p></section></div>
     </article></template>
+    </div></div>
     <ActionDialog :command="command" @close="command = null" @saved="selectedVersion = ''; load()" />
   </section>
 </template>
 <style>
 .contract-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.contract-toolbar > div:last-child { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.contract-toolbar .el-button + .el-button { margin-left:0; }
+.contract-toolbar label { display:flex; align-items:center; gap:8px; font-size:13px; }
+.contract-toolbar label select { width:260px; max-width:100%; }
 .contract-help { color:#667085; line-height:1.7; }
+.contract-workspace { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:24px; align-items:start; }
+.contract-pages { min-width:0; grid-column:1; grid-row:1; }
+.contract-actions { grid-column:2; grid-row:1; position:sticky; top:18px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; padding:20px; border:1px solid #e2e8f0; border-radius:8px; background:white; font-size:13px; }
+.contract-actions > .el-button { width:100%; min-height:42px; }
+.contract-actions label { flex-wrap:wrap; }
+.contract-actions .contract-help { margin-bottom:0; font-size:12px; }
+.contract-pages .contract-paper { margin-top:0; }
+@media screen and (max-width:1100px) { .contract-workspace { display:flex; flex-direction:column; }.contract-actions { position:static; width:100%; }.contract-pages { width:100%; } }
 .contract-paper { box-sizing:border-box; max-width:210mm; margin:20px auto; padding:16mm 12mm; background:white; color:#182230; box-shadow:0 4px 24px #16283a12; font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
 .contract-paper h1 { text-align:center; font-size:24px; margin:0 0 10px; }.contract-paper h1 span { display:block; font-size:12px; }
 .contract-paper h2 { font-size:13px; margin:10px 0 4px; }.contract-paper p { margin:3px 0; }
@@ -103,6 +120,7 @@ async function archive() {
 .contract-total { text-align:right; font-weight:700; }.contract-note { white-space:pre-wrap; }.contract-signatures { margin-top:18px; }
 @media screen and (max-width:700px) { .contract-paper { padding:20px 12px; }.contract-meta,.contract-parties,.contract-signatures { grid-template-columns:1fr; gap:8px; }.contract-paper table { min-width:650px; } }
 @media print {
+  .contract-workspace { display:block; }.contract-actions { display:none !important; }
   @page { size:A4; margin:12mm; }
   body:has(.purchase-contract-page) .el-message,
   body:has(.purchase-contract-page) .el-notification,

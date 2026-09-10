@@ -12,6 +12,7 @@ import BOMDemand from '../components/BOMDemand.vue'
 import BudgetPanel from '../components/BudgetPanel.vue'
 import ActionDialog from '../components/ActionDialog.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { revealActiveTab } from '../utils/tabs'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
@@ -67,7 +68,7 @@ onMounted(load)
         <p class="eyebrow">{{ project.code }}</p>
         <h1>{{ project.name }}</h1>
         <p class="muted">
-          {{ project.customer_name }} · {{ project.manager_name }} · {{ display(project.status) }}
+          {{ project.customer_name }} · {{ project.manager_name }} <StatusBadge :value="project.status" :text="display(project.status)" />
         </p>
       </div>
       <div class="toolbar">
@@ -191,3 +192,11 @@ onMounted(load)
     ><ActionDialog :command="command" @close="command = null" @saved="load"
   /></template>
 </template>
+<style scoped>
+.project-summary { gap: 0; border: 1px solid var(--surface-border); border-radius: 8px; overflow: hidden; background: #fff; padding: 18px 0; }
+.project-summary > div { border: 0; border-right: 1px solid var(--surface-border); border-radius: 0; box-shadow: none; padding: 0 22px; }
+.project-summary > div:last-child { border-right: 0; }
+.project-summary strong { font-size: 20px; margin-top: 8px; }
+.requirements { max-height: 150px; overflow: auto; background: #fff; border-left: 3px solid #b5ccf3; line-height: 1.7; }
+@media (max-width: 760px) { .project-summary { row-gap: 20px; } .project-summary > div { padding: 0 16px; } }
+</style>

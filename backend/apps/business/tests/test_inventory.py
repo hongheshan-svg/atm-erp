@@ -8,6 +8,27 @@ from .test_commercial_chain import BusinessFixtures
 
 
 class InventoryTests(BusinessFixtures, TestCase):
+    def test_stock_search_and_material_filters_preserve_money_permissions(self):
+        self.item.specification = '750W'
+        self.item.brand = '伺服品牌'
+        self.item.part_type = 'standard'
+        self.item.save()
+        stock = self.open_stock()
+        response = self.clients['warehouse'].get(
+            '/api/business/stocks/',
+            {'search': '750W', 'item__brand': '伺服品牌', 'item__part_type': 'standard', 'location': stock.location},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        row = response.data['results'][0]
+        self.assertEqual(row['specification'], '750W')
+        self.assertEqual(row['brand'], '伺服品牌')
+        self.assertEqual(row['unit'], self.item.unit)
+        self.assertNotIn('value', row)
+        self.assertEqual(
+            self.clients['warehouse'].get('/api/business/stocks/', {'item__part_type': 'custom'}).data['count'], 0
+        )
+
     def setUp(self):
         self.setup_business()
         self.project = self.active_project()

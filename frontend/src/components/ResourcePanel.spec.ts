@@ -6,6 +6,7 @@ import { user } from '../session'
 import { read } from '../api'
 import { pageSize, setPageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
+import TransferTools from './TransferTools.vue'
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: vi.fn() }) }))
 
 vi.mock('../api', () => ({
@@ -16,6 +17,21 @@ vi.mock('../api', () => ({
 }))
 
 describe('列表创建入口', () => {
+  it('状态筛选从第一页查询，分页和导出沿用同一筛选', async () => {
+    user.value = { role: 'admin' }
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    await flushPromises()
+    wrapper.findComponent(ListPagination).vm.$emit('change', 3)
+    await flushPromises()
+    await wrapper.findAll('.resource-status-tabs button').find(button => button.text() === '已报价')!.trigger('click')
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/sales/', { status: 'quoted', page: 1, page_size: pageSize.value, search: '' })
+    expect(wrapper.findComponent(TransferTools).props('params')).toEqual({ status: 'quoted', search: '' })
+    wrapper.findComponent(ListPagination).vm.$emit('change', 2)
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/sales/', { status: 'quoted', page: 2, page_size: pageSize.value, search: '' })
+    wrapper.unmount()
+  })
   it('改变统一每页数量回到第一页并持久化，翻页请求保留数量', async () => {
     const values = new Map<string, string>()
     vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) })

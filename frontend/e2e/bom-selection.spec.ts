@@ -7,7 +7,8 @@ async function read(page: Page, path: string) {
   return response.json()
 }
 async function importRows(page: Page, title: string, content: string) {
-  await page.getByRole('region', { name: title, exact: true }).getByRole('button', { name: '导入', exact: true }).click()
+  await expect(page.getByRole('region', { name: title, exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '导入', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
   await dialog.locator('input[type=file]').setInputFiles({ name: 'rows.csv', mimeType: 'text/csv', buffer: Buffer.from(content) })
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeEnabled()

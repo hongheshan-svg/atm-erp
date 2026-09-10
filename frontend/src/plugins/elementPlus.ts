@@ -7,6 +7,7 @@ import {
   ElDropdownItem,
   ElDropdownMenu,
   ElIcon,
+  ElLoading,
   ElPagination,
   ElTable,
   ElTableColumn,
@@ -16,6 +17,7 @@ import {
 } from 'element-plus'
 
 export function installElementPlus(app: App) {
+  app.use(ElLoading)
   for (const component of [
     ElAlert,
     ElButton,

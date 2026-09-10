@@ -83,13 +83,14 @@ function choose(keys: string[]) {
 }
 async function load() {
   const current = ++generation
+  const firstLoad = !initialized.value
   loading.value = true; busy.value = {}; errors.value = {}; error.value = ''
   try {
     const result = await read('/business/workbench/', { page_size: 5 })
     if (current !== generation) return
     work.value = result; highlights.value = result; day.value = today(); initialized.value = true
     updated.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    if (!result[filter.value]) filter.value = 'all'
+    if (firstLoad || (filter.value !== 'all' && !filter.value.split(',').some(key => result[key]))) filter.value = Object.keys(labels).find(key => result[key]?.count) || Object.keys(result)[0] || 'all'
   } catch (e) { if (current === generation) error.value = message(e) }
   finally { if (current === generation) loading.value = false }
 }
@@ -114,11 +115,17 @@ onBeforeUnmount(() => { generation++ })
     <div v-if="!initialized && loading" class="panel" role="status" aria-label="正在加载工作台"><el-skeleton :rows="8" animated /></div>
     <template v-if="initialized">
       <section v-if="metrics.length" class="work-overview" aria-label="待办概览"><button v-for="metric in metrics" :key="metric.label" class="work-metric" :class="metric.value ? `tone-${metric.tone}` : ''" @click="choose(metric.keys)"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.note }}</small><el-icon aria-hidden="true"><ArrowRight /></el-icon></button></section>
-      <section class="panel work-priority" aria-labelledby="priority-heading">
+      <div class="work-focus-grid"><section class="panel work-priority" aria-labelledby="priority-heading">
         <header><div><p class="eyebrow">先处理这些</p><h2 id="priority-heading">优先处理</h2></div><span class="muted">从各分类首页选取，最多 5 项</span></header>
-        <router-link v-for="item in priority" :key="`${item.key}-${item.row.id}`" :to="target(item.key, item.row)" class="work-priority-item"><span class="work-status" :class="`tone-${item.tone}`">{{ item.text }}</span><div><strong>{{ title(item.key, item.row) }}</strong><p>{{ labels[item.key] }} · {{ detail(item.key, item.row) }}</p></div><el-icon aria-hidden="true"><ArrowRight /></el-icon></router-link>
-        <p v-if="!priority.length" class="work-calm"><el-icon aria-hidden="true"><CircleCheck /></el-icon>当前分类首页暂无紧急事项，可继续查看下方待办。</p>
+        <el-table :data="priority" :max-height="300" empty-text="当前分类首页暂无紧急事项" class="priority-table">
+          <el-table-column label="事项 / 关联项目" min-width="200"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)">{{ title(item.key, item.row) }}</router-link><small class="record-secondary">{{ item.row.project_name || item.row.supplier_name || item.row.customer_name || '—' }}</small></template></el-table-column>
+          <el-table-column label="类型" min-width="110"><template #default="{ row: item }">{{ labels[item.key] }}</template></el-table-column>
+          <el-table-column label="期限" width="110"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
+          <el-table-column label="状态" width="95"><template #default="{ row: item }"><span class="work-status" :class="`tone-${item.tone}`">{{ item.text }}</span></template></el-table-column>
+          <el-table-column label="操作" width="60" fixed="right"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)" :aria-label="`处理${title(item.key, item.row)}`">处理</router-link></template></el-table-column>
+        </el-table>
       </section>
+      <aside class="panel work-category-summary" aria-label="分类入口"><h2>分类待办</h2><button v-for="key in groups.filter(key => count(key) || showEmpty)" :key="key" :aria-pressed="filter === key" @click="choose([key])"><el-icon aria-hidden="true"><component :is="icons[key as keyof typeof icons]" /></el-icon><span><strong>{{ labels[key] }}</strong><small>{{ notes[key] }}</small></span><b>{{ count(key) }}</b><el-icon aria-hidden="true"><ArrowRight /></el-icon></button><p v-if="!groups.some(key => count(key))" class="muted">当前没有待处理事项。</p></aside></div>
       <section id="workbench-categories" aria-label="分类待办">
         <header class="work-section-heading"><div><h2>分类待办</h2><p class="muted">每类展示 5 条，按需翻页或进入完整列表。</p></div><label v-if="emptyGroups.length" class="work-empty-toggle"><el-switch v-model="showEmpty" aria-label="显示空分类" /><span>显示空分类（{{ emptyGroups.length }}）</span></label></header>
         <div class="work-filters" aria-label="选择待办分类"><button :aria-pressed="filter === 'all'" @click="filter = 'all'">全部</button><button v-for="key in groups" :key="key" :aria-pressed="filter === key" @click="filter = key">{{ labels[key] }} <span>{{ count(key) }}</span></button></div>
@@ -139,20 +146,31 @@ onBeforeUnmount(() => { generation++ })
 </template>
 <style scoped>
 .work-refresh { display: flex; align-items: center; gap: 14px; color: #596b82; font-size: 12px; }
+.work-focus-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(290px, 1fr); gap: 18px; align-items: start; }
+.work-category-summary { max-height: 330px; overflow-y: auto; }
+.work-category-summary > button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; margin-top: 8px; border: 1px solid #e8edf4; border-radius: 6px; background: #fff; color: #25364d; text-align: left; cursor: pointer; }
+.work-category-summary > button[aria-pressed='true'] { border-color: #b9d1fc; background: #f4f8ff; }
+.work-category-summary button > span { min-width: 0; flex: 1; }
+.work-category-summary strong { font-size: 14px; }
+.work-category-summary small { display: block; font-size: 12px; margin-top: 5px; line-height: 1.4; }
+.work-category-summary b { color: #2563eb; font-size: 18px; }
+.work-category-summary button > .el-icon { color: #2563eb; }
+.workbench-grid { grid-template-columns: minmax(0, 1fr); }
 .work-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.work-metric { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px; background: white; border: 1px solid var(--surface-border); border-radius: 12px; color: #3b526e; cursor: pointer; text-align: left; }
+.work-metric { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 20px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; color: #3b526e; cursor: pointer; text-align: left; }
 .work-metric strong { font-size: 32px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.work-metric small { color: #596b82; font-size: 12px; }
+.work-metric small { color: #596b82; font-size: 11px; }
 .work-metric > .el-icon { position: absolute; right: 20px; top: 22px; }
 .work-metric:hover { border-color: #7fa4db; background: #fafcff; }
 .workbench-page :is(button, a):focus-visible { outline: 3px solid #245fc7; outline-offset: 3px; }
 .work-priority { padding: 0; overflow: hidden; }
+.priority-table { border-radius: 0; }
 .work-priority > header, .work-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.work-priority > header { padding: 20px 24px; border-bottom: 1px solid #e3e9f1; }
+.work-priority > header { padding: 16px 20px; border-bottom: 1px solid #e3e9f1; }
 .work-priority h2, .work-section-heading h2 { margin: 0; font-size: 18px; }
-.work-priority .eyebrow { margin-top: 0; margin-bottom: 6px; }
+.work-priority .eyebrow { display: none; }
 .work-priority > header > span { font-size: 12px; }
-.work-priority-item { display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #edf0f4; color: #25364d; }
+.work-priority-item { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid #edf0f4; color: #25364d; }
 .work-priority-item:hover { background: #f6f9fe; }
 .work-priority-item > div { flex: 1; min-width: 0; }
 .work-priority-item strong { font-size: 14px; overflow-wrap: anywhere; }
@@ -164,7 +182,7 @@ onBeforeUnmount(() => { generation++ })
 .work-status.tone-danger { background: #fff0ef; color: #ad3434; }
 .work-status.tone-warning { background: #fff6e6; color: #87520c; }
 .work-calm { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: #596b82; font-size: 13px; margin: 0; }
-.work-section-heading { margin: 26px 0 16px; }
+.work-section-heading { margin: 8px 0 12px; }
 .work-section-heading p { font-size: 13px; margin-bottom: 0; }
 .work-empty-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #596b82; }
 .work-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
@@ -172,11 +190,11 @@ onBeforeUnmount(() => { generation++ })
 .work-filters button[aria-pressed='true'] { background: #edf3ff; border-color: #245fc7; color: #245fc7; }
 .work-filters span { margin-left: 5px; font-variant-numeric: tabular-nums; }
 .workbench-grid { align-items: start; }
-.work-card-heading { padding: 20px; }
+.work-card-heading { padding: 14px 20px; }
 .work-card-heading > div { min-width: 0; }
 .work-card-heading p, .work-item > span { color: #596b82; }
 .work-card-count { font-size: 24px; }
-.work-item { padding: 16px 20px; color: #25364d; overflow-wrap: anywhere; }
+.work-item { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, 2fr) auto; align-items: center; gap: 18px; padding: 14px 20px; color: #25364d; overflow-wrap: anywhere; }
 .work-item-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .work-amount { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: #245b88; }
 .work-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 20px; font-size: 12px; color: #596b82; }
@@ -194,5 +212,7 @@ onBeforeUnmount(() => { generation++ })
   .work-priority-item { gap: 10px; }
   .work-refresh { flex-wrap: wrap; gap: 8px; }
   .work-item-heading { flex-wrap: wrap; }
+  .work-item { grid-template-columns: 1fr; gap: 7px; }
 }
+@media (max-width: 1100px) { .work-focus-grid { grid-template-columns: minmax(0, 1fr); } .work-category-summary { max-height: 260px; } }
 </style>

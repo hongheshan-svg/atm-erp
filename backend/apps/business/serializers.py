@@ -193,10 +193,27 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('value',)
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
+    specification = serializers.CharField(source='item.specification', read_only=True)
+    brand = serializers.CharField(source='item.brand', read_only=True)
+    part_type = serializers.CharField(source='item.part_type', read_only=True)
+    unit = serializers.CharField(source='item.unit', read_only=True)
 
     class Meta:
         model = Stock
-        fields = ['id', 'item', 'item_code', 'item_name', 'location', 'quantity', 'value', 'updated_at']
+        fields = [
+            'id',
+            'item',
+            'item_code',
+            'item_name',
+            'specification',
+            'brand',
+            'part_type',
+            'unit',
+            'location',
+            'quantity',
+            'value',
+            'updated_at',
+        ]
 
 
 class MoveSerializer(MoneyFilter, serializers.ModelSerializer):

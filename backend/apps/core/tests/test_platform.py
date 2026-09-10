@@ -18,6 +18,22 @@ from apps.core.schema_guard import check_schema
 
 
 class PlatformTests(TestCase):
+    def test_user_search_filters_include_secondary_roles_without_widening_access(self):
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(self.actor)
+        dual = User.objects.create_user(
+            username='ui_dual', display_name='采购兼仓库', role='purchaser', additional_roles=['warehouse']
+        )
+        User.objects.create_user(username='ui_disabled', display_name='停用仓管', role='warehouse', is_active=False)
+        result = client.get('/api/auth/users/', {'role': 'warehouse', 'is_active': 'true', 'search': '采购兼仓库'})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual([row['id'] for row in result.data['results']], [dual.pk])
+        self.assertEqual(client.get('/api/auth/users/', {'role': 'unknown'}).status_code, 400)
+        client.force_authenticate(dual)
+        self.assertEqual(client.get('/api/auth/users/', {'search': 'ui_'}).status_code, 403)
+
     def test_removed_additional_role_cannot_replay_receipt(self):
         self.actor.role = 'member'
         self.actor.additional_roles = ['admin']

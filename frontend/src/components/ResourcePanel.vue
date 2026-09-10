@@ -20,6 +20,10 @@ import AttachmentDialog from './AttachmentDialog.vue'
 import { pageSize } from '../pagination'
 import { useRoute, useRouter } from 'vue-router'
 import { user, operations } from '../session'
+import StatusBadge from './StatusBadge.vue'
+import RecordContext from './RecordContext.vue'
+import { resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
+import { labels } from '../modules/shared'
 const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
@@ -40,7 +44,21 @@ const appliedSearch = ref(search.value)
 const loading = ref(false)
 const error = ref('')
 const command = ref<Command | null>(null)
+const actionBusy = ref(false)
+const filterValue = ref('')
+const enabledFilter = ref(''), locationFilter = ref(''), brandFilter = ref('')
+const appliedExtra = ref<Row>({})
+const unsettled = ref(false)
+const filterConfig = computed(() => resourceFilters[props.resource])
+const filterParams = computed(() => ({
+  ...(filterConfig.value && filterValue.value ? { [filterConfig.value.key]: filterValue.value } : {}),
+  ...appliedExtra.value,
+}))
+const sidePanel = computed(() => sidePanelResources.includes(props.resource))
+const selectedId = ref<number | null>(null)
+const selectedRow = ref<Row | null>(null)
 const active = inject<Ref<boolean>>('panelActive', computed(() => true))
+const toolbarTarget = inject<Ref<HTMLElement | null>>('moduleToolbar', ref(null))
 const preparing = ref(false)
 let commandGeneration = 0
 let dirty = true
@@ -48,7 +66,9 @@ onBeforeUnmount(() => { generation++; commandGeneration++ })
 const attachmentRow = ref<Row | null>(null)
 let generation = 0
 let focused = ''
-const shownColumns = computed(() => columns[props.resource]?.filter(col => !props.projectId || col.key !== 'project_name'))
+const combinedKey = computed(() => ({ sales: 'code', projects: 'name', users: 'display_name', entries: 'title' }[props.resource]))
+const secondaryKey = computed(() => ({ sales: 'name', projects: 'code', users: 'username', entries: 'project_name' }[props.resource]))
+const shownColumns = computed(() => columns[props.resource]?.filter(col => (!props.projectId || col.key !== 'project_name') && col.key !== secondaryKey.value))
 function primaryAction(row: Row) {
   const actions = actionNames(props.resource, row)
   return ['批准采购', '收货', '提交采购', '登记收付款', '完成任务', '查看明细', '查看收付流水'].find(name => actions.includes(name))
@@ -75,6 +95,7 @@ async function load() {
   try {
     const result = await read(endpoint(props.resource), {
       ...props.params,
+      ...filterParams.value,
       page: page.value,
       page_size: pageSize.value,
       search: appliedSearch.value,
@@ -117,6 +138,9 @@ watch([() => route.query.focus, () => route.query.resource], () => {
   if (route.query.resource === props.resource && route.query.focus) void load()
 })
 async function create() {
+  if (actionBusy.value) return
+  selectedId.value = null
+  selectedRow.value = null
   const current = ++commandGeneration
   preparing.value = true
   try {
@@ -127,6 +151,9 @@ async function create() {
   } finally { if (current === commandGeneration) preparing.value = false }
 }
 async function action(row: Row, name: string) {
+  if (actionBusy.value) return
+  selectedId.value = row.id
+  selectedRow.value = row
   const current = ++commandGeneration
   preparing.value = true
   try {
@@ -160,6 +187,12 @@ function saved() {
   emit('changed')
 }
 function searchRecords() {
+  appliedExtra.value = {
+    ...(enabledFilter.value && ['users', 'items', 'partners'].includes(props.resource) ? { is_active: enabledFilter.value } : {}),
+    ...(locationFilter.value && props.resource === 'stocks' ? { location: locationFilter.value } : {}),
+    ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand' : 'brand']: brandFilter.value } : {}),
+    ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
+  }
   appliedSearch.value = search.value
   sessionStorage.setItem(searchKey(), appliedSearch.value)
   page.value = 1
@@ -169,39 +202,65 @@ function closeCommand() {
   commandGeneration++
   preparing.value = false
   command.value = null
+  selectedId.value = null
+  selectedRow.value = null
   focused = ''
   if (route.query.resource === props.resource && route.query.focus) {
     const { focus: _focus, resource: _resource, ...query } = route.query
     void router.replace({ query })
   }
 }
+function changeFilter(value: string) {
+  if (actionBusy.value) return
+  filterValue.value = value
+  page.value = 1
+  void load()
+}
+function inspect(row: Row) {
+  if (actionBusy.value) return
+  const names = actionNames(props.resource, row)
+  const view = names.find(name => ['查看明细', '查看收付流水', '查看对账明细', '查看银行明细'].includes(name))
+  if (view && props.resource !== 'entries') return action(row, view)
+  if (['users', 'items', 'partners', 'company', 'codes'].includes(props.resource) && names.includes('编辑')) return action(row, '编辑')
+  selectedId.value = row.id
+  selectedRow.value = row
+  command.value = { title: `${props.title}详情`, path: '', readonly: true, subject: row.code || row.name || row.title,
+    initial: Object.fromEntries((columns[props.resource] || []).map(col => [col.key, col.format ? col.format(row) : cell(row, col.key)])),
+    fields: (columns[props.resource] || []).map(col => ({ key: col.key, label: col.label, wide: props.resource === 'audit' && col.key === 'detail' })),
+    actions: names.map(label => ({ label, run: () => action(row, label) })),
+  }
+}
 </script>
 <template>
-  <section class="panel" :aria-label="title">
+  <div class="resource-workspace" :class="{ 'with-detail': sidePanel && command }">
+  <section class="panel resource-list" :aria-label="title">
     <header class="panel-heading">
       <h2>
         {{ title }} <span class="record-count">{{ count }}</span>
       </h2>
-      <div class="toolbar">
+      <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
         <BOMPurchasePicker v-if="resource === 'purchases'" :project-id="projectId" @saved="saved" />
-        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
-        <form
-          v-if="['sales', 'projects', 'purchases', 'items', 'partners'].includes(resource)"
-          @submit.prevent="searchRecords"
-        >
-          <input
-            v-model="search"
-            type="search"
-            :aria-label="`搜索${title}`"
-            placeholder="输入名称搜索"
-          /><el-button native-type="submit">搜索</el-button>
-        </form>
+        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button @click="load">刷新</el-button
         ><el-button v-if="createLabel(resource) && allowCreate !== false" type="primary" @click="create">{{
           createLabel(resource)
         }}</el-button>
-      </div>
+      </div></Teleport>
     </header>
+    <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" :aria-label="filterConfig.label">
+      <button :aria-pressed="!filterValue" :disabled="actionBusy" @click="changeFilter('')">全部 <span v-if="!filterValue" class="record-count">{{ count }}</span></button>
+      <button v-for="(label, value) in filterConfig.options" :key="value" :aria-pressed="filterValue === value" :disabled="actionBusy" @click="changeFilter(value)">{{ label }}</button>
+    </div>
+    <form v-if="searchableResources.includes(resource)" class="resource-search" @submit.prevent="searchRecords">
+      <input v-model="search" type="search" :aria-label="`搜索${title}`" placeholder="输入名称、编号或关键词" />
+      <select v-if="resource === 'users' && filterConfig" v-model="filterValue" aria-label="筛选用户角色" @change="searchRecords"><option value="">全部角色</option><option v-for="(label, value) in filterConfig.options" :key="value" :value="value">{{ label }}</option></select>
+      <select v-if="['users', 'items', 'partners'].includes(resource)" v-model="enabledFilter" aria-label="筛选启用状态" @change="searchRecords"><option value="">全部状态</option><option value="true">启用</option><option value="false">停用</option></select>
+      <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位" />
+      <input v-if="['stocks', 'items'].includes(resource)" v-model="brandFilter" aria-label="筛选品牌名称" placeholder="品牌（完整名称）" />
+      <label v-if="resource === 'entries'" class="inline-check"><input v-model="unsettled" type="checkbox" @change="searchRecords" />仅看未结</label>
+      <el-button native-type="submit" :loading="loading">搜索</el-button>
+      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; searchRecords()">重置</el-button>
+    </form>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
     <el-table
@@ -210,15 +269,16 @@ function closeCommand() {
       :max-height="560"
       stripe
       row-key="id"
+      :row-class-name="({ row }: { row: Row }) => row.id === selectedId ? 'selected-record' : ''"
       empty-text="暂无记录"
       style="width: 100%"
     >
       <el-table-column
         v-for="col in shownColumns"
         :key="col.key"
-        :label="col.label"
+        :label="col.key === combinedKey ? `${col.label} / ${columns[resource]?.find(c => c.key === secondaryKey)?.label}` : col.label"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="col.key === 'title' || col.key === 'name' ? 180 : 125"
+        :min-width="col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : ['status', 'is_active'].includes(col.key) ? 100 : 125"
         show-overflow-tooltip
       >
         <template #default="{ row }"
@@ -226,7 +286,11 @@ function closeCommand() {
             row.name
           }}</router-link
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
-          ><span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
+          ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" />
+          <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
+          <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
+          <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
+          <span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="col.key === combinedKey && secondaryKey" class="record-secondary">{{ row[secondaryKey] }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" width="150"
@@ -250,7 +314,8 @@ function closeCommand() {
       >
     </el-table>
     <ListPagination :page="page" :total="count" @change="page = $event; load()" />
-    <ActionDialog :command="command" @close="closeCommand" @saved="saved" />
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
   </section>
+  <ActionDialog :command="command" :inline="sidePanel" @busy="actionBusy = $event" @close="closeCommand" @saved="saved"><template #context><RecordContext v-if="selectedRow && (['stocks', 'entries'].includes(resource) || (['sales', 'purchases'].includes(resource) && actionNames(resource, selectedRow).includes('附件')))" :resource="resource" :record="selectedRow" @attachments="action(selectedRow!, '附件')" /></template></ActionDialog>
+  </div>
 </template>

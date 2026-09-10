@@ -1,4 +1,4 @@
-from django.db.models import DecimalField, Exists, OuterRef, Sum, Value
+from django.db.models import DecimalField, Exists, F, OuterRef, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -36,6 +36,13 @@ class EntryView(ReadView):
     )
     serializer_class = EntrySerializer
     filterset_fields = ['project', 'kind', 'cancelled']
+    search_fields = ['title', 'project__name', 'project__code']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.query_params.get('unsettled') == 'true':
+            queryset = queryset.exclude(amount=F('credit_amount') + F('net_paid'))
+        return queryset
 
     @action(detail=False, methods=['post'])
     def expense(self, request):

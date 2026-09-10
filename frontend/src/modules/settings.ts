@@ -27,6 +27,12 @@ import type { Column } from '../types'
 import { t } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
+const auditObjects: Record<string, string> = { sale: '销售', project: '项目', purchase: '采购', purchaseorder: '采购单', task: '任务', bom: 'BOM', document: '附件', stock: '库存', payment: '收付款', entry: '款项', reconciliation: '对账', user: '用户', company: '公司', code: '编号' }
+const auditActions: Record<string, string> = { create: '新增', update: '修改', delete: '删除', quote: '报价', sign: '签约', submit: '提交', approve: '批准', reject: '退回', receive: '收货', cancel: '取消', complete: '完成', revise: '变更', upload: '上传', download: '下载', confirm: '确认', void: '冲销' }
+function auditOperation(operation: string) {
+  const [object, action] = operation.split('.')
+  return auditObjects[object!] && auditActions[action!] ? `${auditObjects[object!]} · ${auditActions[action!]}` : operation
+}
 export const columns: Record<string, Column[]> = {
   users: [
     C('username', '用户名'),
@@ -38,16 +44,16 @@ export const columns: Record<string, Column[]> = {
   ],
   company: [C('name', '公司名称'), C('address', '地址'), C('phone', '电话'), { key: 'locked_through', label: '业务锁账至', format: r => r.locked_through || '未锁账' }],
   codes: [
-    { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位' }[String(r.key)] || r.key) },
+    { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单' }[String(r.key)] || r.key) },
     C('prefix', '前缀'), { key: 'date_format', label: '日期格式', format: r => r.date_format || '无日期' }, C('padding', '流水位数'),
     { key: 'reset_cycle', label: '重置周期', format: r => ({ never: '不重置', year: '每年', month: '每月', day: '每天' }[String(r.reset_cycle)] || r.reset_cycle) }, C('counter', '当前序号'),
   ],
   audit: [
-    C('actor', '操作人'),
-    C('operation', '操作'),
+    { key: 'actor', label: '操作人', format: r => r.actor ? `用户 #${r.actor}` : '系统' },
+    { key: 'operation', label: '操作', format: r => auditOperation(r.operation) },
     C('resource', '对象'),
     C('detail', '详情'),
-    C('created_at', '时间'),
+    { key: 'created_at', label: '时间', format: r => new Date(r.created_at).toLocaleString('zh-CN', { hour12: false }) },
   ],
 }
 export function createLabel(resource: string) {

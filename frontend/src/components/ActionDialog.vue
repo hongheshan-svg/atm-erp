@@ -1,20 +1,50 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElDialog, ElMessage } from 'element-plus'
+import { Close } from '@element-plus/icons-vue'
 import type { Command, Row } from '../types'
 import { defaults, payload, validateFields } from '../forms'
 import { industryCommand } from '../industry-forms'
 import { read, write } from '../api'
 import { message, recoveryActions } from '../utils/request'
 import FormFields from './FormFields.vue'
-const props = defineProps<{ command: Command | null }>()
+import StatusBadge from './StatusBadge.vue'
+const props = defineProps<{ command: Command | null; inline?: boolean }>()
 const command = computed(() => props.command ? industryCommand(props.command) : null)
-const emit = defineEmits<{ close: []; saved: [result: Row] }>()
+const emit = defineEmits<{ close: []; saved: [result: Row]; busy: [value: boolean] }>()
 const data = ref<Row>({})
 const busy = ref(false)
+watch(busy, value => emit('busy', value))
+const panelHeading = ref<HTMLElement>()
+const panelHeight = ref('calc(100dvh - 36px)')
+function fitPanel() {
+  const panel = panelHeading.value?.parentElement?.parentElement
+  if (props.inline && panel) panelHeight.value = `${Math.max(280, window.innerHeight - Math.max(18, panel.getBoundingClientRect().top) - 18)}px`
+}
+onMounted(() => {
+  window.addEventListener('resize', fitPanel)
+  window.addEventListener('scroll', fitPanel, true)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', fitPanel)
+  window.removeEventListener('scroll', fitPanel, true)
+})
+let returnFocus: HTMLElement | null = null
+watch(() => props.command, async (value, old) => {
+  if (!props.inline) return
+  if (value) {
+    if (!old) returnFocus = document.activeElement as HTMLElement
+    await nextTick()
+    const panel = panelHeading.value?.parentElement?.parentElement
+    if (panel && panel.getBoundingClientRect().top > window.innerHeight - 360) panel.scrollIntoView({ block: 'start' })
+    fitPanel()
+    panelHeading.value?.focus({ preventScroll: true })
+  } else if (returnFocus?.isConnected) returnFocus.focus()
+})
 const error = ref('')
 const recovery = ref<{ label: string; path: string }[]>([])
 const preview = ref<Row | null>(null)
+const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
 const similarItems = ref<Row[]>([])
 watch(() => [props.command?.path, data.value.name], async (_, __, onCleanup) => {
   similarItems.value = []
@@ -98,8 +128,14 @@ async function submit() {
 }
 </script>
 <template>
-  <el-dialog
-    class="action-dialog"
+  <component
+    :is="inline ? 'section' : ElDialog"
+    v-if="!inline || command"
+    :class="inline ? 'detail-pane' : 'action-dialog'"
+    :style="inline ? { maxHeight: panelHeight } : undefined"
+    :role="inline ? 'dialog' : undefined"
+    :aria-modal="inline ? 'false' : undefined"
+    :aria-label="command?.title"
     :model-value="Boolean(command)"
     :title="command?.title"
     width="min(760px, 94vw)"
@@ -111,13 +147,15 @@ async function submit() {
     "
     destroy-on-close
   >
+    <header v-if="inline" class="detail-pane-heading"><h2 ref="panelHeading" tabindex="-1">{{ command?.title }}</h2><el-button :icon="Close" text :disabled="busy" aria-label="关闭详情" @click="emit('close')" /></header>
     <form v-if="command" class="action-form" @submit.prevent="submit">
       <div ref="fieldsContainer" class="action-fields">
-      <p v-if="command.subject"><strong>当前单据：{{ command.subject }}</strong></p>
+      <div v-if="command.subject" class="record-headline"><strong>{{ command.subject }}</strong><StatusBadge v-if="command.initial?.status" :value="command.initial.status" /></div>
       <el-alert v-if="command.notice" :title="command.notice.text" :type="command.notice.type" :closable="false" show-icon />
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
       <p v-for="action in recovery" :key="action.path"><router-link :to="action.path" @click="emit('close')">{{ action.label }}</router-link></p>
       <FormFields v-model="data" :fields="command.fields" :disabled="busy || command.readonly" :readonly="command.readonly" />
+      <slot v-if="command.readonly" name="context" />
       <section v-if="similarItems.length" aria-label="相似物料">
         <p>发现相似物料，请核对后优先复用现有编码：</p>
         <p v-for="item in similarItems" :key="item.id"><router-link :to="{ path: '/masterdata', query: { section: 'items', resource: 'items', focus: item.id } }" @click="emit('close')">{{ item.code }} · {{ item.name }} · {{ item.specification }} · {{ item.brand }} · {{ item.unit }}</router-link></p>
@@ -132,12 +170,12 @@ async function submit() {
       </div>
       <div class="dialog-footer">
         <el-button v-if="command.previewPath" :disabled="busy" @click="previewChange">预览变更影响</el-button>
-        <el-button v-for="action in command.actions" :key="action.label" :disabled="busy" @click="action.run">{{ action.label }}</el-button>
+        <el-button v-for="action in command.actions" :key="action.label" :type="action.label === primary ? 'primary' : undefined" :disabled="busy" @click="action.run">{{ action.label }}</el-button>
         <el-button :disabled="busy" @click="emit('close')">{{ command.readonly ? '关闭' : '取消' }}</el-button
         ><el-button v-if="!command.readonly" type="primary" native-type="submit" :loading="busy"
           >保存</el-button
         >
       </div>
     </form>
-  </el-dialog>
+  </component>
 </template>
