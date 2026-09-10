@@ -1,76 +1,136 @@
-name: Lean ERP
-on: [push, pull_request]
+name: Lean ERP CI
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Run one suite, full validation, or a custom combination'
+        type: choice
+        options: [full, fast, browser, ota, installers, custom]
+        default: full
+      browser_projects:
+        description: Browser viewports
+        type: choice
+        options: [both, desktop, mobile]
+        default: both
+      fast:
+        description: 'Custom: fast checks'
+        type: boolean
+        default: true
+      browser:
+        description: 'Custom: browsers'
+        type: boolean
+        default: false
+      ota:
+        description: 'Custom: OTA'
+        type: boolean
+        default: false
+      installers:
+        description: 'Custom: installers'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      suite:
+        type: string
+        default: full
+      browser_projects:
+        type: string
+        default: both
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || inputs.ref || github.ref }}-${{ inputs.suite || 'auto' }}
+  cancel-in-progress: true
 jobs:
-  ota-upgrade:
+  plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      fast: ${{ steps.select.outputs.fast }}
+      browser: ${{ steps.select.outputs.browser }}
+      ota: ${{ steps.select.outputs.ota }}
+      installers: ${{ steps.select.outputs.installers }}
+      full: ${{ steps.select.outputs.full }}
+      tree: ${{ steps.select.outputs.tree }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - run: npm ci && npm run build
-        working-directory: frontend
-      - run: python scripts/tests/ota_smoke.py
-      - run: bash scripts/tests/native-ota-smoke.sh
-  windows-installer:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - shell: pwsh
-        run: ./scripts/tests/install.ps1
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash scripts/precheck-tests.sh --all
-      - run: python3 -m unittest discover -s scripts/tests -p test_ops_check.py
-      - run: python3 -m unittest discover -s scripts/tests -p test_ota_runner.py
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run: {working-directory: frontend}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
-      - run: npm ci
-      - run: npm run lint && npm run typecheck && npm run test && npm run build
-  browser:
-    runs-on: ubuntu-latest
-    env:
-      LEAN_PROJECT_NAME: lean-ci
-      LEAN_HTTP_PORT: '18320'
-      LEAN_ENVIRONMENT: development
-      LEAN_ADMIN_PASSWORD: Lean-CI-only-password-2026
-      E2E_BASE_URL: http://127.0.0.1:18320
-      E2E_ADMIN_PASSWORD: Lean-CI-only-password-2026
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
-      - run: npm ci && npx playwright install --with-deps chromium
-        working-directory: frontend
-      - run: bash install.sh
-      - name: Complete first-install wizard
-        run: npm run test:e2e -- e2e/setup.spec.ts --project=desktop --grep '全新安装' --output=test-results-first-install
-        working-directory: frontend
-        env:
-          E2E_FIRST_INSTALL: '1'
-          E2E_SETUP_NEW_PASSWORD: Lean-CI-ready-password-2026
-      - run: npm run test:e2e
-        working-directory: frontend
-        env:
-          E2E_ADMIN_PASSWORD: Lean-CI-ready-password-2026
-      - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: browser-evidence
-          path: |
-            frontend/test-results
-            frontend/test-results-first-install
-          retention-days: 7
-      - if: always()
-        run: docker compose --env-file .env.lean down -v
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+      - run: python3 -m unittest discover -s scripts/tests -p test_ci_workflows.py
+      - uses: actions/cache@v4
+        id: lint-cache
+        with:
+          path: ${{ runner.temp }}/actionlint-bin
+          key: actionlint-1.7.7-${{ runner.os }}-${{ runner.arch }}
+      - uses: actions/setup-go@v5
+        if: steps.lint-cache.outputs.cache-hit != 'true'
+        with: {go-version: '1.24', cache: false}
+      - if: steps.lint-cache.outputs.cache-hit != 'true'
+        run: GOBIN="$RUNNER_TEMP/actionlint-bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - run: '"$RUNNER_TEMP/actionlint-bin/actionlint"'
+      - id: select
+        env:
+          SUITE: ${{ github.event_name == 'pull_request' && 'auto' || inputs.suite }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          PROJECTS: ${{ inputs.browser_projects || 'both' }}
+          CUSTOM_FAST: ${{ inputs.fast }}
+          CUSTOM_BROWSER: ${{ inputs.browser }}
+          CUSTOM_OTA: ${{ inputs.ota }}
+          CUSTOM_INSTALLERS: ${{ inputs.installers }}
+        run: python3 scripts/ci/select_suites.py --suite "$SUITE" --base "$BASE" --projects "$PROJECTS"
+  fast:
+    needs: plan
+    if: needs.plan.outputs.fast == 'true'
+    uses: ./.github/workflows/ci-fast.yml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
+  browser:
+    needs: [plan, fast]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.browser == 'true' && (needs.fast.result == 'success' || needs.fast.result == 'skipped') }}
+    uses: ./.github/workflows/ci-browser.yml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
+      projects: ${{ inputs.browser_projects || 'both' }}
+  ota:
+    needs: [plan, fast]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ota == 'true' && (needs.fast.result == 'success' || needs.fast.result == 'skipped') }}
+    uses: ./.github/workflows/ci-ota.yml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
+  installers:
+    needs: [plan, fast]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.installers == 'true' && (needs.fast.result == 'success' || needs.fast.result == 'skipped') }}
+    uses: ./.github/workflows/release-installers.yml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
+  gate:
+    name: CI gate
+    if: always()
+    needs: [plan, fast, browser, ota, installers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          jobs = json.loads(os.environ['RESULTS'])
+          assert jobs['plan']['result'] == 'success', 'Selection failed'
+          for name in ('fast', 'browser', 'ota', 'installers'):
+              expected = 'success' if jobs['plan']['outputs'][name] == 'true' else 'skipped'
+              assert jobs[name]['result'] == expected, (name, jobs[name]['result'], expected)
+          PY
+  full-validation:
+    name: Full validation (${{ needs.plan.outputs.tree }})
+    needs: [plan, gate]
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo 'All suites and both browser viewports passed for this Git tree.'
