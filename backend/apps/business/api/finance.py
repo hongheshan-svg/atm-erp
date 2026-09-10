@@ -1,4 +1,4 @@
-from django.db.models import DecimalField, Sum, Value
+from django.db.models import DecimalField, Exists, OuterRef, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +9,7 @@ from apps.core.permissions import (
 )
 
 from ..models import (
+    BankMatch,
     Entry,
     Payment,
 )
@@ -17,6 +18,7 @@ from ..serializers import (
     PaymentSerializer,
 )
 from ..services import finance
+from ..services.payment_terms import with_sources
 from .common import ReadView, key
 
 
@@ -24,7 +26,7 @@ class EntryView(ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
     queryset = (
-        Entry.objects.select_related('project')
+        with_sources(Entry.objects.select_related('project'))
         .annotate(
             net_paid=Coalesce(
                 Sum('payments__amount'), Value(0), output_field=DecimalField(max_digits=18, decimal_places=2)
@@ -55,8 +57,14 @@ class EntryView(ReadView):
 class PaymentView(ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
-    queryset = Payment.objects.select_related('entry', 'reversal', 'document').prefetch_related(
-        'evidence__document', 'evidence__created_by'
+    queryset = (
+        Payment.objects.select_related('entry', 'reversal', 'document')
+        .annotate(
+            bank_matched=Exists(
+                BankMatch.objects.filter(payment=OuterRef('pk'), reversal_of__isnull=True, reversal__isnull=True)
+            )
+        )
+        .prefetch_related('evidence__document', 'evidence__created_by')
     )
     serializer_class = PaymentSerializer
     filterset_fields = ['entry', 'entry__project']

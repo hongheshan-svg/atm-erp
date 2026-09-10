@@ -92,6 +92,7 @@ export const labels: Record<string, string> = {
   purchaser: '采购员',
   warehouse: '仓管',
   finance: '财务',
+  reconciliation: '对账单',
   member: '成员',
   drawing: '图纸',
   contract: '合同',

@@ -13,6 +13,7 @@ export const router = createRouter({
     { path: '/projects', component: () => import('./views/ProjectsPage.vue') },
     { path: '/bom', component: () => import('./views/BOMPage.vue') },
     { path: '/purchases', component: () => import('./views/PurchasesPage.vue') },
+    { path: '/purchases/:id/contract', component: () => import('./views/PurchaseContractPage.vue') },
     { path: '/inventory', component: () => import('./views/InventoryPage.vue') },
     { path: '/finance', component: () => import('./views/FinancePage.vue') },
     { path: '/masterdata', component: () => import('./views/MasterdataPage.vue') },

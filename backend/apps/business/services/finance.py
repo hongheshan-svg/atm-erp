@@ -32,7 +32,7 @@ def pay(actor, key, entry_id, data, *, refund=False):
     operation = 'entry.refund' if refund else 'entry.pay'
 
     def execute(user, entry):
-        fields(data, {'amount', 'date', 'reason', 'method', 'account', 'reference', 'document'})
+        fields(data, {'amount', 'date', 'reason', 'method', 'account', 'reference', 'document', 'reconciliation'})
         # Cancelled projects must remain able to settle refunds; closed projects must reopen first.
         if entry.project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开。')
@@ -44,6 +44,9 @@ def pay(actor, key, entry_id, data, *, refund=False):
             amount = -amount
         elif remaining <= 0 or amount > remaining:
             raise Conflict('付款超过当前未结余额。')
+        from .reconciliation import authorize_payment
+
+        statement = authorize_payment(entry, data, amount, refund)
         method = text(data, 'method', default='', maximum=20)
         if method not in {'', 'bank', 'cash', 'other'}:
             from rest_framework.exceptions import ValidationError
@@ -57,6 +60,7 @@ def pay(actor, key, entry_id, data, *, refund=False):
         payment = save(
             Payment(
                 entry=entry,
+                reconciliation=statement,
                 amount=amount,
                 date=day(data, 'date'),
                 reason=text(data, 'reason'),
@@ -101,6 +105,8 @@ def reverse(actor, key, payment_id, data):
         source = get_object_or_404(Payment.objects.select_for_update(), pk=original.pk, entry=entry)
         if source.reversal_of_id or Payment.objects.filter(reversal_of=source).exists():
             raise Conflict('此流水不能再次冲销。')
+        if source.bank_matches.filter(reversal_of__isnull=True, reversal__isnull=True).exists():
+            raise Conflict('该流水已与银行记录核对，请先撤销银行匹配，再冲销原流水。')
         if paid(entry) - source.amount < 0:
             raise Conflict('冲销会使净付款为负，请先处理关联退款。')
         payment = save(

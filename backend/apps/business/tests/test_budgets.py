@@ -90,7 +90,11 @@ class BudgetTests(BusinessFixtures, TestCase):
         line = purchase.lines.get()
         self.assertEqual(self.report()['committed_total'], '500.00')
         entry = Entry.objects.get(purchase=purchase)
-        self.post('finance', f'entries/{entry.pk}/pay/', {'amount': '500', 'date': TODAY, 'reason': '预付'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '500', 'date': TODAY, 'reason': '预付', **self.reconciliation_data(entry, prepayment=True)},
+        )
         self.assertEqual(self.report()['committed_total'], '500.00')
         self.post(
             'warehouse',

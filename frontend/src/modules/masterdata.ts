@@ -9,6 +9,7 @@ import { buyer } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
 import { can } from '../session'
+import { termFields, termLabel } from './payment-terms'
 export const columns: Record<string, Column[]> = {
   items: [
     C('code', '编码'),
@@ -25,6 +26,7 @@ export const columns: Record<string, Column[]> = {
     C('kind', '类型'),
     C('contact', '联系人'),
     C('phone', '电话'),
+    { key: 'payment_term', label: '采购账期', format: r => r.kind === 'customer' ? '—' : termLabel(r) },
     C('is_active', '启用'),
   ],
 }
@@ -61,6 +63,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
       t('contact', '联系人', true),
       t('phone', '电话', true),
       t('address', '地址', true),
+      ...(!can(['sales_manager']) ? termFields() : []),
     ]
   return {
     title: String(createLabel(resource)),

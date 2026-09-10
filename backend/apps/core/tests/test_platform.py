@@ -200,6 +200,7 @@ class InitializationTests(TestCase):
             call_command('init_system', stdout=io.StringIO())
         user.refresh_from_db()
         self.assertEqual(user.password, first_hash)
-        self.assertEqual(CodeRule.objects.count(), 6)
+        self.assertEqual(CodeRule.objects.count(), 7)
+        self.assertEqual(CodeRule.objects.get(key='reconciliation').prefix, 'DZ')
         self.assertEqual(CodeRule.objects.get(key='project').counter, 1)
         self.assertEqual(AuditLog.objects.count(), 1)

@@ -25,7 +25,9 @@ def masterdata(actor, key, model, data, object_id=None):
                 raise PermissionDenied('销售经理只能维护纯客户资料。')
 
     allowed = {'name', 'is_active'} | (
-        {'specification', 'unit', 'brand', 'part_type'} if model is Item else {'kind', 'contact', 'phone', 'address'}
+        {'specification', 'unit', 'brand', 'part_type'}
+        if model is Item
+        else {'kind', 'contact', 'phone', 'address', 'payment_term', 'payment_days'}
     )
     if model is Item and not object_id:
         allowed.add('code')
@@ -51,7 +53,15 @@ def masterdata(actor, key, model, data, object_id=None):
             if custom and Item.all_objects.filter(code=custom).exists():
                 raise ValidationError({'code': '物料编码已使用，包括停用或已删除记录。'})
             obj.code = custom or CodeRule.generate_code('item' if model is Item else 'partner')
-        for field in allowed - {'is_active', 'code'}:
+        if model is Partner:
+            from .payment_terms import terms
+
+            values = terms(data, obj)
+            if data.get('kind', obj.kind) == 'customer' and values['payment_term'] != 'manual':
+                raise ValidationError({'payment_term': '采购账期仅适用于供应商。'})
+            for field, value in values.items():
+                setattr(obj, field, value)
+        for field in allowed - {'is_active', 'code', 'payment_term', 'payment_days'}:
             if field in data or (not object_id and field in {'name', 'kind'}):
                 setattr(
                     obj,

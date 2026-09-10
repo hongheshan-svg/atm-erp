@@ -1,4 +1,5 @@
 import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator } from './fixtures'
+import { confirmSettlement } from './settlement-helpers'
 const password = 'Lean-QA-2026-password'
 const day = (offset = 0) => {
   const d = new Date()
@@ -194,6 +195,7 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await save(manager)
   await manager.goto('/erp/purchases')
   await finance.goto('/erp/finance')
+  await confirmSettlement(finance, manager, row(finance, po.code, '应收应付与费用'), true)
   await action(finance, row(finance, po.code, '应收应付与费用'), '登记收付款')
   await reason(finance)
   await save(finance)
@@ -209,6 +211,7 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await expect(finance.getByRole('menuitem', { name: '补录凭证', exact: true })).toBeVisible()
   await finance.keyboard.press('Escape')
   await finance.getByRole('tab', { name: '应收应付与费用', exact: true }).click()
+  await confirmSettlement(finance, manager, row(finance, po.code, '应收应付与费用'), true)
   await action(finance, row(finance, po.code, '应收应付与费用'), '登记收付款')
   await reason(finance, '重新登记付款')
   await save(finance)
@@ -225,6 +228,7 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await reason(purchaser)
   await save(purchaser)
   await finance.reload()
+  await confirmSettlement(finance, finance, row(finance, po.code, '应收应付与费用'))
   await action(finance, row(finance, po.code, '应收应付与费用'), '退款')
   await reason(finance)
   await save(finance)
@@ -381,6 +385,7 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
       .filter({ hasText: names.project })
       .filter({ hasText: entry.title })
       .first()
+    if (entry.purchase) await confirmSettlement(finance, finance, target)
     await action(finance, target, '登记收付款')
     await reason(finance)
     await save(finance)

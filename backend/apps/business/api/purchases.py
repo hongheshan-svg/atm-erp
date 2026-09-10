@@ -28,6 +28,12 @@ class PurchaseView(ReadView):
     filterset_fields = ['project', 'supplier', 'status']
     search_fields = ['code', 'supplier__name', 'project__name']
 
+    @action(detail=True, methods=['get'], url_path='contract-preview')
+    def contract_preview(self, request, pk=None):
+        from ..services.purchase_contract import preview
+
+        return Response(preview(request.user, self.get_object()))
+
     def create(self, request):
         return Response(supply.create_purchase(request.user, key(request), request.data), status=201)
 

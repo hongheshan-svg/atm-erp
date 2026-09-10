@@ -8,6 +8,7 @@ from .api.inventory import MoveView, StockView
 from .api.masterdata import ItemView, PartnerView
 from .api.projects import ProjectView
 from .api.purchases import PurchaseView
+from .api.reconciliation import BankMatchView, BankView, ReconciliationView
 from .attachments import DocumentView
 from .reports import ReportsView
 from .sales import SalesView
@@ -24,6 +25,9 @@ router.register('stocks', StockView)
 router.register('moves', MoveView)
 router.register('entries', EntryView)
 router.register('payments', PaymentView)
+router.register('reconciliations', ReconciliationView)
+router.register('bank-records', BankView)
+router.register('bank-matches', BankMatchView)
 router.register('tasks', TaskView)
 router.register('deliveries', DeliveryView)
 router.register('time', TimeView)

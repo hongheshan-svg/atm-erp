@@ -41,7 +41,15 @@ SCHEMAS = {
     ),
     'partners': (
         PURCHASERS | {'sales_manager'},
-        [('名称', 'name'), ('类型', 'kind'), ('联系人', 'contact'), ('电话', 'phone'), ('地址', 'address')],
+        [
+            ('名称', 'name'),
+            ('类型', 'kind'),
+            ('联系人', 'contact'),
+            ('电话', 'phone'),
+            ('地址', 'address'),
+            ('采购账期', 'payment_term'),
+            ('自定义月结天数', 'payment_days'),
+        ],
     ),
     'sales': (SALES, DETAIL),
     'projects': (MANAGERS, DETAIL + [('成员账号（分号分隔）', 'members')]),
@@ -58,6 +66,8 @@ SCHEMAS = {
             ('含税单价', 'unit_price'),
             ('明细交期', 'line_due_date'),
             ('付款到期日', 'payment_due_date'),
+            ('采购账期', 'payment_term'),
+            ('自定义月结天数', 'payment_days'),
         ],
     ),
     'tasks': (
@@ -93,6 +103,7 @@ SCHEMAS = {
             ('账户标识', 'account'),
             ('银行流水号', 'reference'),
             ('凭证ID', 'document'),
+            ('对账单ID', 'reconciliation'),
         ],
     ),
     'time': (
@@ -117,14 +128,14 @@ SCHEMAS = {
 }
 NOTES = {
     'items': '新增物料；编码留空自动生成，不覆盖现有物料。类别填写 standard（标准件）或 custom（非标件），可留空。',
-    'partners': '新增往来单位；类型填写 customer（客户）、supplier（供应商）或 both（两者）。',
+    'partners': '新增往来单位；类型填写 customer（客户）、supplier（供应商）或 both（两者）。采购账期可填 manual/cash/month30/month60/month90/month120/custom；custom另填0到365天，纯客户只用manual。',
     'sales': '新增销售草稿，后续在销售页面报价和签约。',
     'projects': '新增执行项目；已签约销售请通过销售签约生成项目，避免重复。',
-    'purchases': '同一分组号的行合并为一张采购草稿；项目、供应商、交期及说明必须一致，后续仍需提交和审批。',
+    'purchases': '同一分组号的行合并为一张采购草稿；项目、供应商、交期、账期及说明必须一致。采购账期留空沿用供应商，或填manual/cash/month30/month60/month90/month120/custom；custom另填天数。自动账期不能同时填付款到期日；月结按每批合格收货当月月底加天数。仍需提交审批。',
     'tasks': '新增任务；阶段填写 design（设计）、assembly（装配）或 test（调试）。',
     'stocks': '录入期初库存，仅允许尚无流水的物料与库位；已有库存使用盘点操作。',
     'entries': '录入项目费用；合同应收和采购应付继续由原单据生成。',
-    'payments': '对现有款项登记正常收付款，金额为正数；退款和冲销仍使用原记录操作。',
+    'payments': '对现有款项登记正常收付款，金额为正数；采购付款必须填写已确认的对账单ID，客户收款可留空；退款和冲销仍使用原记录操作。',
     'time': '登记任务工时，仍校验任务、人员和项目权限。',
     'deliveries': '登记项目发货，仍校验生产阶段和剩余交付数量。',
     'moves': '登记项目领料，仍校验库存、任务与 BOM；退料和退货使用原流水操作。',
@@ -198,10 +209,14 @@ def parse(actor, resource, upload):
     records = []
     headers = [label for label, _ in columns]
     legacy = (
-        headers[:4]
-        if resource in {'items', 'payments'}
-        else [headers[:8], headers[:9]]
+        [headers[:4], headers[:8]]
+        if resource == 'payments'
+        else headers[:4]
+        if resource == 'items'
+        else [headers[:8], headers[:9], headers[:10]]
         if resource == 'purchases'
+        else headers[:5]
+        if resource == 'partners'
         else None
     )
     for index, row in enumerate(read_file(upload, headers, legacy), 2):

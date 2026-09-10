@@ -6,6 +6,7 @@ import * as finance from './modules/finance'
 import * as masterdata from './modules/masterdata'
 import * as settings from './modules/settings'
 import * as documents from './modules/documents'
+import * as settlement from './modules/settlement'
 import { salesColumns, salesActions, salesCommand } from './modules/sales'
 import { manager, can } from './session'
 import type { Command, Row, Column } from './types'
@@ -14,7 +15,7 @@ export { bomCommand } from './modules/bom'
 export { shortageCommand } from './modules/purchases'
 import { buyer, warehouse, finance as financeRole } from './modules/shared'
 export const permission = { buyer, warehouse, finance: financeRole }
-const modules = { projects, bom, purchases, inventory, finance, masterdata, settings, documents }
+const modules = { projects, bom, purchases, inventory, finance, masterdata, settings, documents, settlement }
 const owners: Record<string, keyof typeof modules> = {
   projects: 'projects',
   tasks: 'projects',
@@ -26,6 +27,8 @@ const owners: Record<string, keyof typeof modules> = {
   moves: 'inventory',
   entries: 'finance',
   payments: 'finance',
+  reconciliations: 'settlement',
+  'bank-records': 'settlement',
   items: 'masterdata',
   partners: 'masterdata',
   users: 'settings',
@@ -49,6 +52,7 @@ export const columns: Record<string, Column[]> = {
   ...masterdata.columns,
   ...settings.columns,
   ...documents.columns,
+  ...settlement.columns,
 }
 export function createLabel(resource: string) {
   return resource === 'sales'

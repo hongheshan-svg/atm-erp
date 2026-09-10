@@ -15,4 +15,5 @@
 - 后端检查：bash scripts/precheck-tests.sh --all（独立 PostgreSQL）；也可 python run_all_tests.py --stage checks/platform/business/concurrency。测试目标只维护在 scripts/ci/backend_test_matrix.py，不复制名单。
 - 前端检查在 frontend：npm ci、npm run lint、npm run typecheck、npm run test、npm run build、npm run test:e2e。浏览器必须显式指定隔离测试 URL 和管理员密码，不读取生产配置。
 - 使用 feature branch，不直接提交 main；保留用户未提交改动。使用 apply_patch 修改源码，按实际行为补测试。
+- 发布说明使用 docs/releases/TEMPLATE.md，在最下方保留 Installation 与 Documentation 区块，替换实际 tag 并核对附件名称。当前 Docker 安装包本地构建镜像，不编造 GHCR docker pull 地址；完整安装说明继续保留在 README。
 - 历史 docs/superpowers、审计报告与旧部署文档仅作参考，不是现行要求。

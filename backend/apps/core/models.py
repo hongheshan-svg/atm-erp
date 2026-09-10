@@ -146,6 +146,7 @@ class CodeRule(models.Model):
                     'delivery': 'Delivery',
                     'item': 'Item',
                     'partner': 'Partner',
+                    'reconciliation': 'Reconciliation',
                 }[key],
             )
             while True:
