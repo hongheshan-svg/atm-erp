@@ -240,6 +240,18 @@ class AgentView(APIView):
             ):
                 raise Conflict('升级步骤不可跳过或回退。')
             previous_status = job.status
+            # A long build reports progress instead of polling for another job.
+            # Refresh presence only after the job claim has been authenticated.
+            cache.set(
+                'ota.runner',
+                {
+                    'id': job.asset['_runner_id'],
+                    'mode': job.mode,
+                    'platform': job.platform,
+                    'seen': timezone.now().timestamp(),
+                },
+                60,
+            )
             job.status = status
             job.detail = str(data.get('detail', ''))[:500]
             job.backup = str(data.get('backup', job.backup))[:500]

@@ -20,6 +20,53 @@ class RunnerTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.folder = Path(self.temp.name)
 
+    def test_running_container_version_wins_over_newer_checkout(self):
+        runner = object.__new__(ota.Runner)
+        runner.mode, runner.url, runner.root, runner.config = 'docker', 'http://localhost', self.folder, self.folder / '.env'
+        version_file = self.folder / 'backend/apps/core/version.py'
+        version_file.parent.mkdir(parents=True)
+        version_file.write_text("VERSION = '1.7.1'")
+        with patch.object(ota.urllib.request, 'urlopen', return_value=io.BytesIO(b'{"version":"1.7.0"}')), \
+                patch.object(ota.subprocess, 'check_output', return_value='1.7.0\n'):
+            self.assertEqual(runner.running_version(), (1, 7, 0))
+
+    def test_mismatched_docker_and_web_target_fails_closed(self):
+        runner = object.__new__(ota.Runner)
+        runner.mode, runner.url, runner.root, runner.config = 'docker', 'http://localhost', self.folder, self.folder / '.env'
+        with patch.object(ota.urllib.request, 'urlopen', return_value=io.BytesIO(b'{"version":"1.7.0"}')), \
+                patch.object(ota.subprocess, 'check_output', return_value='1.7.2\n'):
+            with self.assertRaisesRegex(ValueError, '不一致'):
+                runner.running_version()
+
+    def test_preflight_failure_does_not_claim_a_backup_exists(self):
+        runner = object.__new__(ota.Runner)
+        runner.directory, runner.path, runner.state = self.folder, self.folder / 'state.json', {'pending': []}
+        reports = []
+        with patch.object(runner, 'running_version', return_value=(1, 7, 1)), \
+                patch.object(runner, 'report', side_effect=lambda *args: reports.append(args)):
+            runner.execute({'id': 9, 'target': 'v1.7.1'})
+        self.assertEqual(reports[-1][1], 'failed')
+        self.assertIn('尚未生成完整备份', reports[-1][2])
+        self.assertEqual(reports[-1][3], '')
+
+    def test_download_reports_actual_bytes(self):
+        import hashlib
+        content = b'hello'
+        progress = []
+        with patch.object(ota.urllib.request, 'urlopen', return_value=io.BytesIO(content)):
+            ota.download({'url': 'https://github.com/test', 'sha256': hashlib.sha256(content).hexdigest(), 'size': 5},
+                         self.folder / 'package.zip', lambda *args: progress.append(args))
+        self.assertEqual(progress[-1], (5, 5))
+
+    def test_long_build_emits_progress_while_process_is_running(self):
+        runner = object.__new__(ota.Runner)
+        progress = []
+        with patch.object(ota.subprocess, 'Popen') as popen:
+            process = popen.return_value.__enter__.return_value
+            process.wait.side_effect = [ota.subprocess.TimeoutExpired('build', 5), 0]
+            runner.command(['docker', 'build'], io.StringIO(), progress=progress.append)
+        self.assertEqual(len(progress), 1)
+
     def test_extract_rejects_traversal_and_symlinks(self):
         for name in ('../outside', '/absolute', 'root/../../outside', 'root/C:stream'):
             archive = self.folder / 'bad.zip'

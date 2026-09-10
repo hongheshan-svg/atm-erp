@@ -15,6 +15,19 @@ const mount = () => shallowMount(SystemUpgrade, { global: { stubs: {
 afterEach(() => { vi.clearAllMocks(); user.value = null })
 
 describe('系统版本与升级', () => {
+  it('显示当前步骤、构建耗时与关闭窗口后的升级状态', async () => {
+    vi.mocked(read).mockResolvedValue({ ...base, job: { id: 1, target: 'v1.7.1', status: 'downloading', detail: '正在构建 Docker 镜像 · 已运行 30 秒', created_at: new Date(Date.now() - 30000).toISOString() } })
+    user.value = { role: 'admin' }
+    const wrapper = mount()
+    await flushPromises()
+    expect(wrapper.find('.system-upgrade-entry').text()).toContain('升级进行中')
+    await wrapper.find('.system-upgrade-entry').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[aria-current="step"]').text()).toContain('下载、校验与构建')
+    expect(wrapper.text()).toContain('已运行 30 秒')
+    expect(wrapper.text()).toContain('关闭窗口后仍会继续升级')
+    wrapper.unmount()
+  })
   it('非管理员没有入口，也不读取版本管理接口', async () => {
     user.value = { role: 'member' }
     const wrapper = mount()
