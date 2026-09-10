@@ -48,6 +48,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   const supplier = await save(page, '/partners/')
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '新建采购', exact: true }).click()
+  await dialog(page).getByLabel('交期', { exact: true }).fill('2026-12-31')
   await select(page, '项目', name)
   await select(page, '供应商', name + '供应商')
   await select(page, '物料', name + '物料')

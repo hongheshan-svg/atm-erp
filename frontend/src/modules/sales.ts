@@ -137,6 +137,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         ],
       },
     ],
-    initial: { milestones: [{ title: '合同款', amount: row.quote_amount, due_date: today() }] },
+    initial: { milestones: [{ title: '合同款', amount: row.quote_amount, due_date: '' }] },
+    notice: { type: 'info', text: '按签署合同拆分预付款、发货款、验收款及质保尾款，节点合计须等于报价金额；填写合同约定的收款日期，签约后自动建立执行项目。' },
   }
 }

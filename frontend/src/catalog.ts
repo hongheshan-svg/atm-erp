@@ -24,5 +24,5 @@ export async function catalog(
 export const options = (rows: Row[]): Option[] =>
   rows.map((r) => ({
     value: r.id,
-    label: [r.code, r.name || r.display_name || r.username].filter(Boolean).join(' · '),
+    label: [r.code, r.name || r.display_name || r.username, r.specification, r.brand, r.unit].filter(Boolean).join(' · '),
   }))

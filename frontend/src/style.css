@@ -378,7 +378,13 @@ button:focus-visible {
 }
 .field small {
   font-size: 12px;
+  color: #667085;
+  line-height: 1.6;
 }
+.field-wide { grid-column: 1 / -1; }
+.field textarea { resize: vertical; min-height: 96px; line-height: 1.7; }
+.line-number { color: #3564a5; font-size: 12px; font-weight: 600; margin: 0 0 12px; }
+.form-hint { color: #667085; font-size: 12px; line-height: 1.6; }
 .row-list {
   grid-column: 1/-1;
   border: 1px solid #e0e6ef;

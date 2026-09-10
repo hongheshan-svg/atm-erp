@@ -2,11 +2,13 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { Command, Row } from '../types'
-import { defaults, payload } from '../forms'
+import { defaults, payload, validateFields } from '../forms'
+import { industryCommand } from '../industry-forms'
 import { read, write } from '../api'
 import { message, recoveryActions } from '../utils/request'
 import FormFields from './FormFields.vue'
 const props = defineProps<{ command: Command | null }>()
+const command = computed(() => props.command ? industryCommand(props.command) : null)
 const emit = defineEmits<{ close: []; saved: [result: Row] }>()
 const data = ref<Row>({})
 const busy = ref(false)
@@ -35,11 +37,12 @@ const roleChange = computed(() => {
   return `新增：${names(after.filter(v => !before.includes(v)))}；移除：${names(before.filter(v => !after.includes(v)))}。保存后按新岗位授权；管理员可管理全系统，财务可读取金额并记账，采购/仓管可跨项目作业，项目经理限负责或参与项目，销售经理限本人销售。移除岗位不会删除原业务记录。`
 })
 async function previewChange() {
-  const c = props.command
+  const c = command.value
   if (!c?.previewPath || busy.value) return
   busy.value = true
   error.value = ''
   try {
+    validateFields(c.fields, data.value)
     const body = payload(c.fields, data.value)
     preview.value = await write(c.previewPath, c.prepare ? c.prepare(body) : body, crypto.randomUUID())
   } catch (e) { error.value = message(e) } finally { busy.value = false }
@@ -48,7 +51,7 @@ const fieldsContainer = ref<HTMLElement>()
 let key = ''
 let signature = ''
 watch(
-  () => props.command,
+  () => command.value,
   (c) => {
     if (c) {
       preview.value = null
@@ -62,12 +65,13 @@ watch(
   { immediate: true },
 )
 async function submit() {
-  const c = props.command
+  const c = command.value
   if (!c || c.readonly || busy.value) return
   busy.value = true
   error.value = ''
   recovery.value = []
   try {
+    validateFields(c.fields, data.value)
     let body = payload(c.fields, data.value)
     if (roleChange.value && !data.value.roles?.length) throw new Error('至少选择一个角色。')
     if (c.prepare) body = c.prepare(body)

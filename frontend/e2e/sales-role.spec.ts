@@ -80,6 +80,7 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await action('签约')
   await expect(dialog().getByLabel('项目负责人', { exact: true }).locator('option').filter({ hasText: username })).toHaveCount(0)
   await choose('项目负责人', '管理员')
+  await dialog().getByLabel('期限', { exact: true }).fill('2026-12-31')
   await save()
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const doc = await page.request.get(`/api/business/documents/${documentId}/`, { headers: { Authorization: `Bearer ${token}` } })

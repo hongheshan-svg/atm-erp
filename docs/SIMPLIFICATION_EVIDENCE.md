@@ -337,6 +337,15 @@
 - 当前部署已应用 `0009_document_owners` 前向迁移，保留已有数据与文件；部署日志 `/private/tmp/erp-order-attachments-deploy-final.log`。未发布新 tag。
 - 自适应修复后的最终桌面/移动端专项 4 项全部通过，含真实角色上传下载、签约关联、采购合同与项目汇总、补充协议及凭证流程；弹窗边界和下载按钮视口断言通过。日志 `/private/tmp/erp-order-attachments-browser-final.log`；已查看最终桌面销售及窄屏采购截图，保存到当前任务 visualizations 目录。
 
+## 自动化设备行业表单优化（2026-09-10）
+
+- 销售、项目、物料、BOM、采购、库存、任务工时、交付售后、预算、收付款、对账、附件和设置表单共用行业提示；具体口径见 `docs/AUTOMATION_FORM_GUIDE.md`。技术需求、图纸版本、验收和付款依据仍写入原字段，不新增派生台账或权限。
+- 增加全明细输入检查，区分整机整数、材料三位小数、金额和工时两位小数、银行及退款对账负数。保留十进制字符串，包含分页外明细、收货全隔离、工时归零、只读字段与重复提交回归。项目负责人按七角色集合过滤；物料选择显示规格、品牌及单位。
+- 计划日期不默认今天，实际发生与合格收货日期保留当天默认；销售收款节点要求明确期限。行业例子仅作为提示，不自动写入业务数据。多行说明占整行，明细显示行号，添加后切到新行所在页。
+- `npm ci`、lint、typecheck、59 项前端测试及构建通过；日志 `/private/tmp/erp-industry-npm-ci.log`、`/private/tmp/erp-industry-unit-final.log`、`/private/tmp/erp-industry-build-final.log`。后端完整入口通过 245 项（平台 52、业务 169、并发 24），日志 `/private/tmp/erp-industry-backend.log`。
+- 显式指定隔离地址 `http://127.0.0.1:18360` 和测试口令，桌面、移动端各 19 项通过，均包含七角色完整链路；各跳过 1 项仅适用全新安装的向导测试，未重置现有安装。日志 `/private/tmp/erp-industry-browser.log`、`/private/tmp/erp-industry-mobile.log`。首次安装由 GitHub 浏览器工作流在新环境单独验证。
+- 最终使用原安装脚本更新测试运行环境，日志 `/private/tmp/erp-industry-deploy-verified.log`；保留数据库、附件和账户。最终双端表单专项 2 项通过，日志 `/private/tmp/erp-industry-form-stable.log`，已查看同目录下桌面和移动端截图，确认多行输入与固定操作区布局。截图结束弹窗过渡动画后生成，避免把动画中的半透明画面当作最终状态。浏览器验证为桌面与移动视口，未声称手机真机键盘验收；未打发布 tag。
+
 ## 模块页面拆分验证（2026-09-09）
 
 - 设置、基础资料、库存、收付款和项目详情内的堆叠模块改为独立页签；预算与成本从项目概览移入专用入口。仍复用原接口、权限与派生数据，不新增业务台账。

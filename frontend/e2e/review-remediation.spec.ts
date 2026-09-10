@@ -75,6 +75,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(manager, '原因 / 说明', '确认方案')
   await save(manager)
   await action(manager, row(manager, name), '签约')
+  await fill(manager, '期限', '2026-12-31')
   await save(manager)
   const sales = (await read(manager, `sales/?search=${name}`)).results[0]
   const id = sales.project
@@ -99,6 +100,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await purchaser.getByRole('button', { name: '填写采购单（1 项）', exact: true }).click()
   await choose(purchaser, '供应商', `supplier${suffix}`)
   await fill(purchaser, '付款到期日', '2026-12-31')
+  await fill(purchaser, '交期', '2026-12-31')
   await fill(purchaser, '含税单价（元）', '100')
   await save(purchaser)
   const order = (await read(purchaser, `purchases/?project=${id}`)).results[0]

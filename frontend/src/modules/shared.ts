@@ -12,7 +12,7 @@ export const date = (key = 'date', label = '日期', optional = false): Field =>
   key,
   label,
   type: 'date',
-  initial: today(),
+  initial: ['date', 'received_date'].includes(key) ? today() : '',
   optional,
 })
 export const select = (key: string, label: string, opts: Option[], optional = false): Field => ({

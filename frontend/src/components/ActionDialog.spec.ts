@@ -30,6 +30,21 @@ afterEach(() => {
 })
 
 describe('业务表单失败与重试', () => {
+  it('非法金额保留输入且不发送请求，改正后可以提交', async () => {
+    const wrapper = open()
+    await wrapper.get('input').setValue('1e3')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(write).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('科学计数法')
+    expect((wrapper.get('input').element as HTMLInputElement).value).toBe('1e3')
+    await wrapper.get('input').setValue('1000.00')
+    vi.mocked(write).mockResolvedValue({ id: 11 })
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(write).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
   it('网络失败保留输入，相同数据重试沿用操作标识，修改数据后换标识', async () => {
     vi.mocked(write).mockRejectedValue(new Error('网络中断'))
     const wrapper = open()

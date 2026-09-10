@@ -87,7 +87,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
           </template>
           <template v-else-if="step === 1">
             <p>这些资料将用于采购合同，请填写实际信息。</p>
-            <label class="field"><span>公司名称</span><input v-model="form.company.name" required maxlength="150" autocomplete="organization" /></label>
+            <label class="field"><span>公司名称</span><input v-model="form.company.name" aria-label="公司名称" required maxlength="150" autocomplete="organization" placeholder="营业执照上的完整公司名称" /><small>用于采购合同主体，请与正式签署资料一致。</small></label>
             <label class="field"><span>公司地址</span><input v-model="form.company.address" required maxlength="250" autocomplete="street-address" /></label>
             <label class="field"><span>联系电话</span><input v-model="form.company.phone" required maxlength="50" autocomplete="tel" /></label>
           </template>
@@ -100,7 +100,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
               <label class="field"><span>登录密码</span><input v-model="person.password" required type="password" minlength="12" autocomplete="new-password" /></label>
               <fieldset class="role-checks"><legend>岗位（可多选）</legend><label v-for="(name, role) in roleNames" :key="role"><input v-model="person.roles" type="checkbox" :value="role" @change="person.management_reports = person.roles.includes('manager') && person.management_reports" />{{ name }}</label></fieldset>
               <label v-if="person.roles.includes('manager')"><input v-model="person.management_reports" type="checkbox" />总经理经营报表授权</label>
-              <label class="field"><span>小时成本（元）</span><input v-model="person.hourly_cost" required type="number" min="0" step="0.01" /></label>
+              <label class="field"><span>小时成本（元）</span><input v-model="person.hourly_cost" aria-label="小时成本（元）" required type="number" min="0" step="0.01" /><small>用于机械、电气、软件、装配及调试任务的人工成本核算；按企业统一口径填写。</small></label>
               <el-button type="danger" plain @click="team.splice(i, 1)">移除此人员</el-button>
             </section>
             <el-button :disabled="team.length >= 50" @click="addMember">添加人员</el-button>

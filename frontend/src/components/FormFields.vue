@@ -13,16 +13,18 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
   <div class="fields">
     <template v-for="field in fields" :key="field.key">
       <fieldset v-if="field.type === 'rows'" class="row-list">
-        <legend>{{ field.label }}</legend>
+        <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
+        <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
         <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>
           <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" min-width="140" show-overflow-tooltip />
         </el-table>
         <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields">
+          <p class="line-number">第 {{ i + 1 }} 行</p>
           <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" />
           <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
         <div v-if="!readonly && model[field.key]?.length > 20"><button type="button" :disabled="start(field.key) === 0" @click="pages[field.key] = start(field.key) / 20 - 1">上一页明细</button> {{ start(field.key) + 1 }}–{{ Math.min(start(field.key) + 20, model[field.key].length) }} / {{ model[field.key].length }} <button type="button" :disabled="start(field.key) + 20 >= model[field.key].length" @click="pages[field.key] = start(field.key) / 20 + 1">下一页明细</button></div>
-        <el-button v-if="!disabled && !field.readonly" @click="model[field.key].push(defaults(field.fields!))">添加行</el-button>
+        <el-button v-if="!disabled && !field.readonly" @click="model[field.key].push(defaults(field.fields!)); pages[field.key] = Math.floor((model[field.key].length - 1) / 20)">添加行</el-button>
       </fieldset>
       <fieldset v-else-if="field.type === 'checks' && !field.hidden" class="role-checks" :disabled="disabled || field.readonly">
         <legend>{{ field.label }}</legend>
@@ -31,7 +33,7 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
         </label>
         <small v-if="field.hint">{{ field.hint }}</small>
       </fieldset>
-      <label v-else-if="!field.hidden" class="field">
+      <label v-else-if="!field.hidden" class="field" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
         <span>{{ field.label }}<small v-if="field.optional">（选填）</small></span>
         <RemoteSelect v-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <select
@@ -58,7 +60,7 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
           :aria-label="field.label"
           v-else-if="field.type === 'file'"
           type="file"
-          :disabled="disabled"
+          :disabled="disabled || field.readonly"
           :required="!field.optional"
           @change="model[field.key] = ($event.target as HTMLInputElement).files?.[0]"
         />
@@ -66,7 +68,9 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
           :aria-label="field.label"
           v-else-if="field.type === 'textarea'"
           v-model="model[field.key]"
-          :disabled="disabled"
+          :disabled="disabled || field.readonly"
+          :placeholder="field.placeholder"
+          rows="4"
           :required="!field.optional"
         />
         <input
@@ -77,6 +81,8 @@ const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[
           :disabled="disabled || field.readonly"
           :required="!field.optional"
           :autocomplete="field.type === 'password' ? 'new-password' : 'off'"
+          :placeholder="field.placeholder"
+          :inputmode="field.numeric ? (field.numeric.signed ? 'text' : field.numeric.scale ? 'decimal' : 'numeric') : undefined"
         />
         <small v-if="field.hint">{{ field.hint }}</small>
       </label>
