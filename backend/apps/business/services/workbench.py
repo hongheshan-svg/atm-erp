@@ -4,7 +4,17 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.core.permissions import FINANCE, MANAGERS, MONEY_READERS, PURCHASERS, WAREHOUSE, projects_for, role
+from apps.core.permissions import (
+    FINANCE,
+    MANAGERS,
+    MONEY_READERS,
+    OPERATION_ROLES,
+    PURCHASERS,
+    WAREHOUSE,
+    has_role,
+    projects_for,
+    sales_for,
+)
 
 from ..models import Entry, Project, PurchaseOrder, Task
 from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
@@ -29,34 +39,39 @@ def summary(request):
             'results': serializer(selected.object_list, many=True, context={'request': request}).data,
         }
 
-    if role(user) == 'sales_manager':
+    result = {}
+    if has_role(user, {'sales_manager'}):
         from ..models import SalesOrder
         from ..sales import SalesSerializer
 
-        sales = SalesOrder.objects.filter(manager=user).select_related('project', 'customer', 'manager').order_by('-id')
-        return {'sales': bucket(sales.exclude(status='cancelled'), SalesSerializer, 'sales')}
+        sales = (
+            sales_for(user, SalesOrder.objects.all()).select_related('project', 'customer', 'manager').order_by('-id')
+        )
+        result['sales'] = bucket(sales.exclude(status='cancelled'), SalesSerializer, 'sales')
+    if not has_role(user, OPERATION_ROLES):
+        return result
     projects = projects_for(user, Project.objects.all())
     tasks = (
         Task.objects.filter(project__in=projects, assignee=user, status='open')
         .exclude(project__status__in=['closed', 'cancelled'])
         .order_by(F('due_date').asc(nulls_last=True), 'pk')
     )
-    result = {'tasks': bucket(tasks, TaskSerializer, 'tasks')}
+    result['tasks'] = bucket(tasks, TaskSerializer, 'tasks')
     purchases = (
         PurchaseOrder.objects.filter(project__in=projects)
         .select_related('project', 'supplier')
         .prefetch_related('lines__item', 'lines__bom_line')
         .order_by('due_date', 'pk')
     )
-    if role(user) in MANAGERS:
+    if has_role(user, MANAGERS):
         result['approvals'] = bucket(purchases.filter(status='submitted'), PurchaseSerializer, 'approvals')
-    if role(user) in WAREHOUSE:
+    if has_role(user, WAREHOUSE):
         result['receipts'] = bucket(
             purchases.filter(status__in=['approved', 'partial']), PurchaseSerializer, 'receipts'
         )
-    if role(user) in PURCHASERS:
+    if has_role(user, PURCHASERS):
         result['drafts'] = bucket(purchases.filter(status='draft', created_by=user), PurchaseSerializer, 'drafts')
-    if role(user) in PURCHASERS | WAREHOUSE:
+    if has_role(user, PURCHASERS | WAREHOUSE):
         overdue = (
             purchases.filter(status__in=['approved', 'partial'])
             .filter(
@@ -68,7 +83,7 @@ def summary(request):
         )
         if overdue.exists():
             result['overdue_purchases'] = bucket(overdue, PurchaseSerializer, 'overdue_purchases')
-    if role(user) in MONEY_READERS:
+    if has_role(user, MONEY_READERS):
         amount = DecimalField(max_digits=18, decimal_places=2)
         entries = with_sources(
             Entry.objects.filter(project__in=projects)
@@ -86,7 +101,7 @@ def summary(request):
         ]
         entries = entries.filter(pk__in=eligible_ids)
         result['settlements'] = bucket(entries, EntrySerializer, 'settlements')
-    if role(user) in FINANCE | MANAGERS:
+    if has_role(user, FINANCE | MANAGERS):
         from ..api.reconciliation import BankSerializer, ReconciliationSerializer
         from ..models import BankRecord, Reconciliation
         from .banking import with_remaining
@@ -96,11 +111,11 @@ def summary(request):
             .select_related('entry__project', 'entry__purchase__supplier', 'confirmed_by')
             .order_by('id')
         )
-        if role(user) in MANAGERS:
+        if has_role(user, MANAGERS):
             prepayments = pending.filter(kind='prepayment')
             if prepayments.exists():
                 result['prepayments'] = bucket(prepayments, ReconciliationSerializer, 'prepayments')
-        if role(user) in FINANCE:
+        if has_role(user, FINANCE):
             statements = pending.exclude(kind='prepayment')
             if statements.exists():
                 result['reconciliations'] = bucket(statements, ReconciliationSerializer, 'reconciliations')

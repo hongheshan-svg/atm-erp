@@ -1,6 +1,6 @@
 import { all, read, download } from '../api'
 import { options } from '../catalog'
-import { can, manager, user } from '../session'
+import { can, manager, user, salesOnly, hasRoles } from '../session'
 import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
 import { display } from './shared'
@@ -19,7 +19,7 @@ export function salesActions(row: Row): string[] {
   return actions.length ? [...actions, '附件'] : actions
 }
 function salesBusinessActions(row: Row): string[] {
-  if (can(['sales_manager'])) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
+  if (salesOnly() && row.manager === user.value?.id) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
   if (!can(['admin', 'manager', 'finance'])) return []
   if (row.status === 'signed') return ['查看明细', '补充协议记录', ...(manager() ? ['签订补充协议'] : [])]
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
@@ -82,7 +82,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
           type: 'select',
           options: options(partners.filter((p) => p.kind !== 'supplier')),
         },
-        { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => can(['sales_manager']) ? u.id === user.value?.id : ['admin', 'manager', 'sales_manager'].includes(u.role))) },
+        { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
         { key: 'requirements', label: '需求说明', type: 'textarea', optional: true },
         { key: 'due_date', label: '计划交期', type: 'date', optional: true },
         { key: 'equipment_quantity', label: '设备数量', initial: 1 },
@@ -114,8 +114,8 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
               key: 'manager',
               label: '项目负责人',
               type: 'select' as const,
-              options: options(users.filter(u => ['admin', 'manager'].includes(u.role))),
-              initial: can(['sales_manager']) ? undefined : row.manager,
+              options: options(users.filter(u => hasRoles(u, ['admin', 'manager']))),
+              initial: salesOnly() ? undefined : row.manager,
             },
             {
               key: 'members',

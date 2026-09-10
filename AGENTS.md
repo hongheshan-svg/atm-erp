@@ -4,7 +4,7 @@
 
 - Django REST Framework 后端，Vue 3 + TypeScript + Element Plus 前端，PostgreSQL 15 + Redis 7。
 - 本地 app 仅 core/accounts/business。只支持独立新数据库，schema guard 拒绝旧表、旧迁移和回滚；禁止清库或绕过保护。
-- 固定 admin/manager/sales_manager/purchaser/warehouse/finance/member 七角色，无 Role 表、权限树或可配置工作流。销售经理只操作本人负责的销售单，签约单独指定项目经理，通过销售进度接口只读交付及应收回款；不开放采购、库存、完整项目或成本、财务记账。通过 core.permissions/PermissionMixin 授权，成员项目范围与敏感金额过滤不可省略。
+- 固定 admin/manager/sales_manager/purchaser/warehouse/finance/member 七角色，允许一个账号兼任多个角色，无 Role 表、权限树或可配置工作流。权限按业务取各岗位的并集，通过 core.permissions.has_role/PermissionMixin 授权，不按主角色判权。仅销售经理权限时只操作本人销售单；兼任采购不扩大销售范围，兼任成员只开放参与项目，兼任财务可按财务权限读取销售但不能修改他人销售。签约指定具备 manager/admin 的项目经理。成员项目范围、敏感金额过滤、已有按人员身份的审批约束与总经理报表独立授权不可省略。
 - 经营报表为固定只读页面，管理员默认可看；总经理沿用 manager 角色并由管理员显式设置 management_reports 授权，默认关闭，不向所有项目经理开放。
 - BaseModel 提供审计和软删除；业务查询用 objects，删除用 soft_delete。金额流水不能物理删除，纠错保留原记录。
 - 编号用 CodeRule.generate_code；采购、库存、收付款必须事务加锁与服务端校验，重复提交用 ActionReceipt，不信任前端金额。

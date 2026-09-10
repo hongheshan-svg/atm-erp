@@ -9,7 +9,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.accounts.models import User
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import ALL_ROLES, MANAGERS, require_project, role
+from apps.core.permissions import ALL_ROLES, MANAGERS, has_role, require_project
 
 from ..models import Delivery, Entry, Task, TimeEntry
 from .bom import issued
@@ -92,7 +92,7 @@ def task_action(actor, key, operation, task_id, data, roles, execute):
 def complete_task(actor, key, task_id, data):
     def execute(user, project, task):
         fields(data, {'reason'})
-        if role(user) not in MANAGERS and task.assignee_id != user.pk:
+        if not has_role(user, MANAGERS) and task.assignee_id != user.pk:
             raise PermissionDenied('只能完成分配给自己的任务。')
         state(task, {'open'})
         if task.kind == 'acceptance':
@@ -113,7 +113,7 @@ def log_time(actor, key, task_id, data):
         fields(data, {'user', 'date', 'hours', 'reason'})
         state(task, {'open', 'done'})
         person_id = identity(data.get('user', user.pk), 'user')
-        if role(user) not in MANAGERS and (person_id != user.pk or task.assignee_id != user.pk):
+        if not has_role(user, MANAGERS) and (person_id != user.pk or task.assignee_id != user.pk):
             raise PermissionDenied('只能为自己的任务登记本人工时。')
         # The project lock serializes its tasks; the person lock covers other projects too.
         person = get_object_or_404(User.objects.select_for_update(), pk=person_id, is_active=True)
@@ -147,7 +147,7 @@ def amend_time(actor, key, entry_id, data):
 
     def execute(user, project, task):
         fields(data, {'hours', 'date', 'reason'})
-        if role(user) not in MANAGERS and original.user_id != user.pk:
+        if not has_role(user, MANAGERS) and original.user_id != user.pk:
             raise PermissionDenied('只能更正本人工时。')
         person = User.objects.select_for_update().get(pk=original.user_id)
         source = get_object_or_404(TimeEntry.objects.select_for_update(), pk=original.pk, task=task)

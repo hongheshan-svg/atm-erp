@@ -18,6 +18,61 @@ from apps.core.schema_guard import check_schema
 
 
 class PlatformTests(TestCase):
+    def test_removed_additional_role_cannot_replay_receipt(self):
+        self.actor.role = 'member'
+        self.actor.additional_roles = ['admin']
+        self.actor.save()
+        self.action(key='dual-admin')
+        User.objects.filter(pk=self.actor.pk).update(additional_roles=[])
+        with self.assertRaises(PermissionDenied):
+            self.action(key='dual-admin')
+        self.assertEqual(ActionReceipt.objects.count(), 1)
+        self.assertEqual(CodeRule.objects.get(key='project').counter, 1)
+
+    def test_multiple_roles_api_validation_audit_and_last_admin(self):
+        from rest_framework.test import APIClient
+
+        from apps.core.permissions import roles
+
+        Company.objects.get_or_create(pk=1, defaults={'name': '测试公司'})
+        client = APIClient()
+        client.force_authenticate(self.actor)
+        url = f'/api/auth/users/{self.actor.pk}/'
+        for selected in [[], ['unknown'], ['admin', 'admin']]:
+            self.assertEqual(client.patch(url, {'roles': selected}, format='json').status_code, 400)
+        result = client.patch(url, {'roles': ['purchaser', 'admin']}, format='json')
+        self.assertEqual(result.status_code, 200, result.data)
+        self.actor.refresh_from_db()
+        self.assertEqual(roles(self.actor), {'purchaser', 'admin'})
+        self.assertEqual(set(client.get('/api/auth/me/').data['roles']), {'purchaser', 'admin'})
+        self.assertEqual(client.patch(url, {'roles': ['purchaser']}, format='json').status_code, 400)
+        self.assertEqual(client.patch(url, {'is_active': False}, format='json').status_code, 400)
+        log = AuditLog.objects.filter(operation='user.update').last()
+        self.assertEqual(log.detail['roles']['after'], ['admin', 'purchaser'])
+        self.assertEqual(client.get('/api/auth/users/').status_code, 200)
+
+    def test_multiple_roles_reports_and_legacy_replacement(self):
+        from rest_framework.test import APIClient
+
+        from apps.core.permissions import require_reports, roles
+
+        Company.objects.get_or_create(pk=1, defaults={'name': '测试公司'})
+        client = APIClient()
+        client.force_authenticate(self.actor)
+        target = User.objects.create_user(username='dual', role='purchaser')
+        url = f'/api/auth/users/{target.pk}/'
+        result = client.patch(url, {'roles': ['finance', 'manager'], 'management_reports': True}, format='json')
+        self.assertEqual(result.status_code, 200, result.data)
+        target.refresh_from_db()
+        require_reports(target)
+        self.assertEqual(client.patch(url, {'roles': ['finance']}, format='json').status_code, 400)
+        result = client.patch(url, {'role': 'member', 'management_reports': False}, format='json')
+        self.assertEqual(result.status_code, 200, result.data)
+        target.refresh_from_db()
+        self.assertEqual(roles(target), {'member'})
+        with self.assertRaises(PermissionDenied):
+            require_reports(target)
+
     def test_number_configuration_endpoint_rejects_nonadmin_and_counter_writes(self):
         from rest_framework.test import APIClient
 

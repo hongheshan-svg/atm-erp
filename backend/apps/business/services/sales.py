@@ -6,7 +6,7 @@ from apps.accounts.models import User
 from apps.core.actions import perform
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import SALES, require_role, require_sale, role
+from apps.core.permissions import MANAGERS, SALES, has_role, require_role, require_sale
 
 from ..models import Partner, Project, SalesOrder
 from . import finance, projects
@@ -17,7 +17,7 @@ DETAIL_FIELDS = {'name', 'customer', 'manager', 'requirements', 'due_date', 'equ
 
 def detail_values(data):
     manager = lookup(User, data.get('manager'), 'manager', is_active=True)
-    if role(manager) not in SALES:
+    if not has_role(manager, SALES):
         raise ValidationError({'manager': '销售负责人必须是管理员、项目经理或销售经理。'})
     return {
         'name': text(data, 'name', maximum=150),
@@ -45,13 +45,13 @@ def detail_snapshot(sale):
 def create(actor, key, data):
     def authorize(user):
         require_role(user, SALES)
-        if role(user) == 'sales_manager' and identity(data.get('manager')) != user.pk:
+        if not has_role(user, MANAGERS) and identity(data.get('manager')) != user.pk:
             raise PermissionDenied('销售经理只能为自己建立销售单。')
 
     def execute(user):
         fields(data, DETAIL_FIELDS)
         values = detail_values(data)
-        if role(user) == 'sales_manager' and values['manager'].pk != user.pk:
+        if not has_role(user, MANAGERS) and values['manager'].pk != user.pk:
             raise ValidationError({'manager': '销售经理只能为自己建立销售单。'})
         sale = save(
             SalesOrder(
@@ -117,7 +117,7 @@ def edit(actor, key, sale_id, data):
             raise Conflict('销售单已更新，请刷新后重新编辑。')
         before = detail_snapshot(sale)
         values = detail_values({**before, **{key: value for key, value in data.items() if key in DETAIL_FIELDS}})
-        if role(user) == 'sales_manager' and values['manager'].pk != user.pk:
+        if not has_role(user, MANAGERS) and values['manager'].pk != user.pk:
             raise ValidationError({'manager': '销售单转交须由管理员或项目经理操作。'})
         for field, value in values.items():
             setattr(sale, field, value)

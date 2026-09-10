@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.core.permissions import MONEY_READERS, role
+from apps.core.permissions import MONEY_READERS, has_role
 
 from .models import (
     BOMLine,
@@ -28,7 +28,7 @@ class MoneyFilter:
 
     def to_representation(self, instance):
         result = super().to_representation(instance)
-        if role(self.context['request'].user) not in self.money_roles:
+        if not has_role(self.context['request'].user, self.money_roles):
             for field in self.sensitive_fields:
                 result.pop(field, None)
         return result

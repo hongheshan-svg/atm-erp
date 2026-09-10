@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElCheckbox } from 'element-plus'
 import { read, write } from '../api'
-import { user } from '../session'
+import { can } from '../session'
 import { message } from '../utils/request'
 import type { Row } from '../types'
 
@@ -14,7 +14,7 @@ const error = ref('')
 const confirmed = ref(false)
 const requestKey = ref(crypto.randomUUID())
 let timer: ReturnType<typeof setInterval> | undefined
-const admin = computed(() => user.value?.role === 'admin')
+const admin = computed(() => can(['admin']))
 const active = computed(() => ['queued', 'downloading', 'backing_up', 'installing', 'verifying'].includes(state.value.job?.status))
 const labels: Record<string, string> = { queued: '等待执行', downloading: '下载与校验', backing_up: '备份数据', installing: '安装新版本', verifying: '验证并启动', succeeded: '升级完成', failed: '升级失败' }
 async function refresh(check = false) {

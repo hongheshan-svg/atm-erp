@@ -4,7 +4,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.accounts.models import User
 from apps.core.api import Conflict
-from apps.core.permissions import MANAGERS, role
+from apps.core.permissions import MANAGERS, OPERATION_ROLES, has_role
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine
 from .bom import incoming, issued
@@ -46,7 +46,7 @@ def edit_project(actor, key, project_id, data):
             )
         if 'manager' in data:
             manager = lookup(User, data['manager'], 'manager', is_active=True)
-            if role(manager) not in MANAGERS:
+            if not has_role(manager, MANAGERS):
                 raise ValidationError({'manager': '负责人必须为启用的管理员或项目经理。'})
             project.manager = manager
         if 'members' in data:
@@ -56,10 +56,12 @@ def edit_project(actor, key, project_id, data):
             members = list(User.objects.filter(pk__in=ids, is_active=True))
             if len(members) != len(ids):
                 raise ValidationError({'members': '包含不存在或已停用的用户。'})
-            stranded = project.tasks.filter(
-                status='open', assignee__role='member', assignee__is_superuser=False
-            ).exclude(assignee_id__in=ids | {project.manager_id})
-            if stranded.exists():
+            stranded = (
+                project.tasks.filter(status='open')
+                .exclude(assignee_id__in=ids | {project.manager_id})
+                .select_related('assignee')
+            )
+            if any(not has_role(task.assignee, OPERATION_ROLES - {'member'}) for task in stranded):
                 raise Conflict('移除的成员还有未完成任务，请先重新分配或取消任务。')
             project.members.set(members)
         for field, maximum in [('name', 150), ('requirements', 20000)]:

@@ -12,7 +12,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.core.models import AuditLog, Company
-from apps.core.permissions import ADMIN, PermissionMixin, require_role, role
+from apps.core.permissions import ADMIN, PermissionMixin, has_role, require_role, role, roles
 
 from .models import User
 
@@ -51,6 +51,7 @@ def profile(user):
         'username': user.username,
         'display_name': user.display_name,
         'role': role(user),
+        'roles': sorted(roles(user)),
         'management_reports': user.management_reports,
     }
 
@@ -82,7 +83,7 @@ class DirectoryView(APIView):
     def get(self, request):
         return Response(
             [
-                {'id': u.pk, 'display_name': u.display_name or u.username, 'role': role(u)}
+                {'id': u.pk, 'display_name': u.display_name or u.username, 'role': role(u), 'roles': sorted(roles(u))}
                 for u in User.objects.filter(is_active=True)
             ]
         )
@@ -90,6 +91,18 @@ class DirectoryView(APIView):
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    roles = serializers.ListField(
+        child=serializers.ChoiceField(choices=User.Role.choices),
+        required=False,
+        allow_empty=False,
+        max_length=7,
+        write_only=True,
+    )
+
+    def to_representation(self, instance):
+        result = super().to_representation(instance)
+        result['roles'] = sorted(roles(instance))
+        return result
 
     class Meta:
         model = User
@@ -98,6 +111,7 @@ class UserSerializer(serializers.ModelSerializer):
             'username',
             'display_name',
             'role',
+            'roles',
             'hourly_cost',
             'is_active',
             'password',
@@ -107,9 +121,22 @@ class UserSerializer(serializers.ModelSerializer):
         extra_kwargs = {'hourly_cost': {'min_value': 0}}
 
     def validate(self, attrs):
+        selected = attrs.pop('roles', None)
+        if selected is not None:
+            if len(selected) != len(set(selected)):
+                raise ValidationError({'roles': '角色不能重复。'})
+            if 'role' in attrs and attrs['role'] not in selected:
+                raise ValidationError({'roles': '角色字段与角色列表不一致。'})
+            attrs['role'] = selected[0]
+            attrs['additional_roles'] = selected[1:]
+        elif 'role' in attrs:
+            attrs['additional_roles'] = []
         report_access = attrs.get('management_reports', self.instance.management_reports if self.instance else False)
-        target_role = attrs.get('role', self.instance.role if self.instance else 'member')
-        if report_access and target_role != 'manager':
+        target_roles = {
+            attrs.get('role', self.instance.role if self.instance else 'member'),
+            *attrs.get('additional_roles', self.instance.additional_roles if self.instance else []),
+        }
+        if report_access and 'manager' not in target_roles:
             raise ValidationError({'management_reports': '总经理报表授权仅用于经理角色账号；管理员默认可查看。'})
         if not self.instance and 'password' not in attrs:
             raise ValidationError({'password': '新增用户必须设置密码。'})
@@ -133,7 +160,7 @@ class UserSerializer(serializers.ModelSerializer):
             setattr(instance, key, value)
         if 'role' in validated_data:
             instance.is_superuser = False
-            instance.is_staff = instance.role == 'admin'
+            instance.is_staff = has_role(instance, ADMIN)
         if password is not None:
             instance.set_password(password)
         instance.save()
@@ -161,7 +188,7 @@ class UserView(
                 actor=self.request.user,
                 operation='user.create',
                 resource=f'user:{user.pk}',
-                detail={'management_reports': user.management_reports},
+                detail={'management_reports': user.management_reports, 'roles': sorted(roles(user))},
             )
 
     def _lock_admin(self):
@@ -176,17 +203,19 @@ class UserView(
             serializer = self.get_serializer(user, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-            removing_admin = (not data.get('is_active', user.is_active)) or data.get('role', role(user)) != 'admin'
-            if user.is_active and role(user) == 'admin' and removing_admin:
+            target_roles = {data.get('role', role(user)), *data.get('additional_roles', user.additional_roles)}
+            removing_admin = (not data.get('is_active', user.is_active)) or 'admin' not in target_roles
+            if user.is_active and has_role(user, ADMIN) and removing_admin:
                 other_admin = (
                     User.objects.filter(is_active=True)
-                    .filter(Q(role='admin') | Q(is_superuser=True))
+                    .filter(Q(role='admin') | Q(additional_roles__contains=['admin']) | Q(is_superuser=True))
                     .exclude(pk=user.pk)
                     .exists()
                 )
                 if not other_admin:
                     raise ValidationError('至少保留一位启用的管理员。')
             previous_reports = user.management_reports
+            previous_roles = sorted(roles(user))
             serializer.save()
             AuditLog.objects.create(
                 actor=request.user,
@@ -195,6 +224,7 @@ class UserView(
                 detail={
                     'fields': sorted(k for k in data if k != 'password'),
                     'management_reports': {'before': previous_reports, 'after': user.management_reports},
+                    'roles': {'before': previous_roles, 'after': sorted(roles(user))},
                 },
             )
             return Response(serializer.data)

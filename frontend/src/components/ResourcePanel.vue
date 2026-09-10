@@ -19,7 +19,7 @@ import BOMPurchasePicker from './BOMPurchasePicker.vue'
 import AttachmentDialog from './AttachmentDialog.vue'
 import { pageSize } from '../pagination'
 import { useRoute, useRouter } from 'vue-router'
-import { user } from '../session'
+import { user, operations } from '../session'
 const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
@@ -205,7 +205,7 @@ function closeCommand() {
           ><router-link v-if="resource === 'projects' && col.key === 'name'" :to="`/projects/${row.id}`">{{
             row.name
           }}</router-link
-          ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && user?.role !== 'sales_manager'" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
+          ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
           ><span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>

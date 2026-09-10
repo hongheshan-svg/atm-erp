@@ -11,6 +11,55 @@ from .test_commercial_chain import TODAY, BusinessFixtures
 
 
 class SalesTests(BusinessFixtures, TestCase):
+    def test_sales_member_cannot_be_removed_with_open_work(self):
+        from apps.business.models import Task
+
+        actor = self.users['sales_manager']
+        actor.additional_roles = ['member']
+        actor.save()
+        project = self.active_project()
+        project.members.add(actor)
+        Task.objects.create(project=project, title='兼岗设计任务', kind='design', assignee=actor)
+        self.post('manager', f'projects/{project.pk}/edit/', {'members': [], 'reason': '移除兼岗成员'}, status=409)
+        self.assertTrue(project.members.filter(pk=actor.pk).exists())
+
+    def test_sales_purchaser_roles_union_without_sales_scope_leak(self):
+        actor = self.users['sales_manager']
+        actor.additional_roles = ['purchaser']
+        actor.save()
+        own = self.sales_manager_order()
+        other = self.sale()
+        client = self.clients['sales_manager']
+        self.assertEqual(client.get('/api/business/sales/').data['count'], 1)
+        self.assertEqual(client.get(f'/api/business/sales/{other.pk}/').status_code, 404)
+        self.assertEqual(client.get('/api/business/purchases/').status_code, 200)
+        self.assertEqual(client.get('/api/business/entries/').status_code, 403)
+        self.post('sales_manager', 'partners/', {'name': '兼岗供应商', 'kind': 'supplier'}, status=201)
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '100', 'reason': '兼岗报价'})
+        work = client.get('/api/business/workbench/').data
+        self.assertIn('sales', work)
+        self.assertIn('drafts', work)
+        actor.additional_roles = []
+        actor.save()
+        self.assertEqual(client.get('/api/business/purchases/').status_code, 403)
+
+    def test_sales_member_project_scope_and_finance_write_scope(self):
+        actor = self.users['sales_manager']
+        actor.additional_roles = ['member']
+        actor.save()
+        project = self.active_project()
+        client = self.clients['sales_manager']
+        self.assertEqual(client.get(f'/api/business/projects/{project.pk}/').status_code, 404)
+        project.members.add(actor)
+        response = client.get(f'/api/business/projects/{project.pk}/')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn('contract_amount', response.data)
+        other = self.sale()
+        actor.additional_roles = ['finance']
+        actor.save()
+        self.assertEqual(client.get(f'/api/business/sales/{other.pk}/').status_code, 200)
+        self.post('sales_manager', f'sales/{other.pk}/quote/', {'amount': '100', 'reason': '越权'}, status=403)
+
     def sales_manager_order(self):
         data = {'name': '销售经理订单', 'customer': self.customer.pk, 'manager': self.users['sales_manager'].pk}
         return self.post('sales_manager', 'sales/', data, status=201)['id']

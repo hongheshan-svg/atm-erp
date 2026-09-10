@@ -29,7 +29,9 @@ class AuthenticationTests(TestCase):
             response = self.client.get('/api/auth/me/')
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data['role'], role)
-            self.assertEqual(set(response.data), {'id', 'username', 'display_name', 'role', 'management_reports'})
+            self.assertEqual(
+                set(response.data), {'id', 'username', 'display_name', 'role', 'roles', 'management_reports'}
+            )
 
     def test_report_access_requires_explicit_admin_grant_and_revokes_immediately(self):
         self.login('admin')
@@ -52,7 +54,7 @@ class AuthenticationTests(TestCase):
             self.assertEqual(response.status_code, 200 if role == 'admin' else 403)
             directory = self.client.get('/api/auth/directory/')
             self.assertEqual(directory.status_code, 200)
-            self.assertTrue(all(set(row) == {'id', 'display_name', 'role'} for row in directory.data))
+        self.assertTrue(all(set(row) == {'id', 'display_name', 'role', 'roles'} for row in directory.data))
 
     def test_deactivated_user_loses_access_and_refresh(self):
         tokens = self.login('member')
