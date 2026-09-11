@@ -108,6 +108,7 @@ class SchemaVersion(models.Model):
 
 
 class CodeRule(models.Model):
+    product_counters = models.JSONField(default=dict, editable=False)
     key = models.CharField(max_length=30, unique=True)
     prefix = models.CharField(max_length=10)
     counter = models.PositiveBigIntegerField(default=0)
@@ -115,7 +116,7 @@ class CodeRule(models.Model):
         max_length=8,
         default='',
         blank=True,
-        choices=[('', '无日期'), ('YYYY', '年'), ('YYYYMM', '年月'), ('YYYYMMDD', '年月日')],
+        choices=[('', '无日期'), ('YY', '两位年'), ('YYYY', '年'), ('YYYYMM', '年月'), ('YYYYMMDD', '年月日')],
     )
     padding = models.PositiveSmallIntegerField(default=6)
     reset_cycle = models.CharField(
@@ -130,17 +131,33 @@ class CodeRule(models.Model):
         db_table = 'lean_code_rule'
 
     @classmethod
-    def generate_code(cls, key):
+    def generate_code(cls, key, *, product_category=''):
         from django.apps import apps
 
         with transaction.atomic():
             rule = cls.objects.select_for_update().get(key=key)
             stamp = timezone.localdate().strftime('%Y%m%d')
+            if product_category:
+                item_model = apps.get_model('business', 'Item')
+                if key != 'item' or product_category not in item_model.ProductCategory.values:
+                    raise ValidationError('无效的产品编码类别。')
+                prefix = product_category + (stamp[2:4] if product_category.startswith('1') else '99')
+                counter = rule.product_counters.get(prefix, 0)
+                while True:
+                    counter += 1
+                    if counter > 999999:
+                        raise ValidationError('此产品类别的六位流水号已耗尽。')
+                    code = f'{prefix}{counter:06d}'
+                    if not item_model.all_objects.filter(code=code).exists():
+                        break
+                rule.product_counters[prefix] = counter
+                rule.save(update_fields=['product_counters'])
+                return code
             period = stamp[: {'never': 0, 'year': 4, 'month': 6, 'day': 8}[rule.reset_cycle]]
             if rule.period != period:
                 rule.counter = 0
                 rule.period = period
-            date = stamp[: len(rule.date_format)]
+            date = stamp[2:4] if rule.date_format == 'YY' else stamp[: len(rule.date_format)]
             model = apps.get_model(
                 'business',
                 {
@@ -155,6 +172,14 @@ class CodeRule(models.Model):
             )
             while True:
                 rule.counter += 1
+                if (
+                    key == 'project'
+                    and rule.prefix == 'ATM'
+                    and rule.date_format == 'YY'
+                    and rule.padding == 2
+                    and rule.counter > 99
+                ):
+                    raise ValidationError('本年度项目序列号01–99已耗尽，请调整项目编号规则。')
                 if rule.counter > 9223372036854775807:
                     raise ValidationError('编号流水已耗尽，请调整规则。')
                 code = f'{rule.prefix}{date}{rule.counter:0{rule.padding}d}'

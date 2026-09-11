@@ -140,7 +140,18 @@ LABEL_OVERRIDES = {
     'moves': {'reason': '说明'},
 }
 ORDERS = {
-    'items': ['code', 'name', 'specification', 'brand', 'part_type', 'unit', 'duplicate_reason'],
+    'items': [
+        'code',
+        'name',
+        'specification',
+        'drawing_number',
+        'drawing_revision',
+        'product_category',
+        'brand',
+        'part_type',
+        'unit',
+        'duplicate_reason',
+    ],
     'partners': ['name', 'kind', 'contact', 'phone', 'payment_term', 'payment_days', 'address'],
     'projects': [
         'name',
@@ -170,8 +181,19 @@ ORDERS = {
     'moves': ['stock', 'quantity', 'reason', 'project', 'task'],
 }
 SCHEMAS = {}
+PREVIOUS_ITEM_COLUMNS = [
+    ('物料编码', 'code'),
+    ('物料名称', 'name'),
+    ('规格', 'specification'),
+    ('品牌', 'brand'),
+    ('物料类别', 'part_type'),
+    ('单位', 'unit'),
+    ('独立建码原因', 'duplicate_reason'),
+]
 for resource, (roles, old_columns) in LEGACY_SCHEMAS.items():
     labels = {key: LABEL_OVERRIDES.get(resource, {}).get(key, label) for label, key in old_columns}
+    if resource == 'items':
+        labels.update(drawing_number='图号', drawing_revision='图档版本', product_category='产品编码类别')
     SCHEMAS[resource] = (roles, [(labels[key], key) for key in ORDERS.get(resource, list(labels))])
 
 TABLE_KEYS = {
@@ -205,12 +227,25 @@ FIELD_HINTS = {
     'group': '仅用于将多行合并为一张采购草稿，不是采购编号；同组单据信息须一致。',
     'code': '可自定义，留空自动生成；不能覆盖已有编码。',
     'part_type': '填写标准件、非标件，或 standard/custom；可留空。',
+    'product_category': '有图：11机加、12钣金、13特殊工艺、19其它；无图：21标准件、22耗材辅料、23办公用品、29其它。可填写编码或完整中文类别；类别与标准/非标属性分别维护。',
+    'drawing_number': '有图产品必填图号；图号与型号/规格分别填写，历史图号可保留。',
+    'drawing_revision': '独立填写图档版本，不与品牌混用；升级新版本请新增物料编码。',
     'payment_term': '填写指定日期、现付、月结30天、月结60天、月结90天、月结120天、自定义月结；也兼容原英文值。',
     'payment_days': '仅自定义月结填写 0～365；月结按收货当月月底加天数。',
     'duplicate_reason': '相同物料独立建码时填写原因；不显示在物料主列表，保留审计。',
     'method': '填写银行转账、现金、其他（兼容 bank/cash/other）。',
 }
 ENUMS = {
+    'product_category': {
+        **{label: value for value, label in Item.ProductCategory.choices},
+        '机加': '11',
+        '机加件': '11',
+        '钣金': '12',
+        '特殊工艺': '13',
+        '标准件': '21',
+        '耗材辅料': '22',
+        '办公用品': '23',
+    },
     'method': {'银行转账': 'bank', '现金': 'cash', '其他': 'other'},
     'part_type': {'标准件': 'standard', '非标件': 'custom'},
     'payment_term': {
@@ -339,8 +374,12 @@ def parse(actor, resource, upload):
         if resource == 'partners'
         else []
     )
+    if resource == 'items':
+        legacy.append([label for label, _ in PREVIOUS_ITEM_COLUMNS])
     actual_headers, rows = read_file(upload, headers, legacy, return_headers=True)
     source_columns = columns if actual_headers == headers else old_columns[: len(actual_headers)]
+    if resource == 'items' and actual_headers == [label for label, _ in PREVIOUS_ITEM_COLUMNS]:
+        source_columns = PREVIOUS_ITEM_COLUMNS
     for index, row in enumerate(rows, 2):
         if not any(value not in (None, '') for value in row):
             continue

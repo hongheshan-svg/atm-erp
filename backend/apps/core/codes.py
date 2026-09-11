@@ -21,9 +21,14 @@ def configure(actor, key, rule_id, data):
         if not isinstance(prefix, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,10}', prefix):
             raise ValidationError({'prefix': '前缀需为 1 至 10 位字母、数字、下划线或短横线。'})
         date_format, cycle = data['date_format'], data['reset_cycle']
-        if date_format not in ('', 'YYYY', 'YYYYMM', 'YYYYMMDD') or cycle not in ('never', 'year', 'month', 'day'):
+        if date_format not in ('', 'YY', 'YYYY', 'YYYYMM', 'YYYYMMDD') or cycle not in (
+            'never',
+            'year',
+            'month',
+            'day',
+        ):
             raise ValidationError('无效的日期格式或重置周期。')
-        if len(date_format) < {'never': 0, 'year': 4, 'month': 6, 'day': 8}[cycle]:
+        if (4 if date_format == 'YY' else len(date_format)) < {'never': 0, 'year': 4, 'month': 6, 'day': 8}[cycle]:
             raise ValidationError('日期格式必须包含重置周期，例如按月重置至少包含年月。')
         if (
             isinstance(data['padding'], bool)

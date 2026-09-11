@@ -58,3 +58,19 @@ class ConcurrencyTests(TransactionTestCase):
         results = self.concurrent_codes(['a', 'b', 'c', 'd'])
         prefix = 'PRJ' + timezone.localdate().strftime('%Y%m%d')
         self.assertEqual({r['code'] for r in results}, {f'{prefix}{i:03d}' for i in range(1, 5)})
+
+    def test_product_category_counter_is_locked(self):
+        CodeRule.objects.create(key='item', prefix='MAT')
+        barrier = Barrier(4)
+
+        def generate(_):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=10)
+                return CodeRule.generate_code('item', product_category='21')
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            codes = list(pool.map(generate, range(4)))
+        self.assertEqual(set(codes), {f'2199{i:06d}' for i in range(1, 5)})

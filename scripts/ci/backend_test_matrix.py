@@ -24,6 +24,7 @@ TARGETS = {
         'apps.business.tests.test_reports',
         'apps.business.tests.test_transfers',
         'apps.business.tests.test_bom_selection',
+        'apps.business.tests.test_product_coding',
         'apps.business.tests.test_review_remediation',
         'apps.business.tests.test_operational_review',
         'apps.business.tests.test_reconciliation',

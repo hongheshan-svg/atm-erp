@@ -16,7 +16,7 @@ from ..models import (
 from ..serializers import (
     ProjectSerializer,
 )
-from ..services import bom, bom_import, budgets, corrections, execution, finance, projects
+from ..services import bom, bom_material_import, budgets, corrections, execution, finance, projects
 from .common import ReadView, key
 
 
@@ -141,14 +141,18 @@ class ProjectView(ReadView):
     def import_preview(self, request, pk=None):
         if set(request.data) != {'file'} or len(request.FILES.getlist('file')) != 1:
             raise ValidationError({'file': '请提交一个表格文件。'})
-        return Response(bom_import.preview(self.get_object(), request.FILES['file']))
+        return Response(bom_material_import.preview(request.user, self.get_object(), request.FILES['file']))
+
+    @action(detail=True, methods=['post'], url_path='bom-import-confirm')
+    def bom_import_confirm(self, request, pk=None):
+        return Response(bom_material_import.confirm(request.user, self.get_object(), request.data))
 
     @action(detail=False, methods=['get'], url_path='bom-template')
     def bom_template(self, request):
         require_role(request.user, MANAGERS)
         from ..services.tabular import document
 
-        return document('bom-template', bom_import.HEADERS, [], request.query_params.get('file_format', 'csv'))
+        return document('bom-template', bom_material_import.HEADERS, [], request.query_params.get('file_format', 'csv'))
 
     @action(detail=True, methods=['post'])
     def edit(self, request, pk=None):

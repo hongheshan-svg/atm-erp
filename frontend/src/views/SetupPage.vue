@@ -58,7 +58,7 @@ function next() {
 function example(rule: Row) {
   const now = new Date()
   const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
-  return `${rule.prefix}${date.slice(0, rule.date_format.length)}${String(Number(rule.counter) + 1).padStart(Math.min(10, Math.max(1, Number(rule.padding))), '0')}`
+  return `${rule.prefix}${rule.date_format === 'YY' ? date.slice(2, 4) : date.slice(0, rule.date_format.length)}${String(Number(rule.counter) + 1).padStart(Math.min(10, Math.max(1, Number(rule.padding))), '0')}`
 }
 async function finish() {
   error.value = ''
@@ -121,7 +121,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
             <section v-for="rule in rules" :key="rule.id" class="setup-rule"><h3>{{ codeNames[rule.key] }}</h3>
               <div class="setup-grid">
                 <label class="field"><span>{{ codeNames[rule.key] }}前缀</span><input v-model="rule.prefix" required pattern="[A-Za-z0-9_\-]{1,10}" maxlength="10" /></label>
-                <label class="field"><span>日期格式</span><select v-model="rule.date_format"><option value="">无日期</option><option value="YYYY">年</option><option value="YYYYMM">年月</option><option value="YYYYMMDD">年月日</option></select></label>
+                <label class="field"><span>日期格式</span><select v-model="rule.date_format"><option value="">无日期</option><option value="YY">两位年</option><option value="YYYY">年</option><option value="YYYYMM">年月</option><option value="YYYYMMDD">年月日</option></select></label>
                 <label class="field"><span>流水位数</span><input v-model.number="rule.padding" type="number" min="1" max="10" required /></label>
                 <label class="field"><span>重置周期</span><select v-model="rule.reset_cycle"><option value="never">不重置</option><option value="year">每年</option><option value="month">每月</option><option value="day">每天</option></select></label>
               </div><p class="muted">示例：{{ example(rule) }}（实际编号按服务器日期及已用流水生成）</p>

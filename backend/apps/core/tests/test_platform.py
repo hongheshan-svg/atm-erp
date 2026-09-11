@@ -267,7 +267,9 @@ class InitializationTests(TestCase):
         first_hash = user.password
         self.assertTrue(Company.objects.get(pk=1).setup_required)
         self.assertTrue(user.check_password('Fresh-Install-Tests-782'))
-        self.assertEqual(CodeRule.generate_code('project'), 'PRJ000001')
+        from django.utils import timezone
+
+        self.assertEqual(CodeRule.generate_code('project'), 'ATM' + timezone.localdate().strftime('%y') + '01')
         with patch.dict('os.environ', {'ADMIN_PASSWORD': 'Another-Install-Tests-899'}):
             call_command('init_system', stdout=io.StringIO())
         user.refresh_from_db()

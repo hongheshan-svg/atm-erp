@@ -88,10 +88,10 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '编辑' && resource === 'codes') return {
     title: '编辑编号规则', path: `${endpoint(resource)}${r.id}/configure/`,
-    fields: [t('prefix', '前缀'), select('date_format', '日期格式', choices({ none: '无日期', YYYY: '年', YYYYMM: '年月', YYYYMMDD: '年月日' })),
+    fields: [t('prefix', '前缀'), select('date_format', '日期格式', choices({ none: '无日期', YY: '两位年', YYYY: '年', YYYYMM: '年月', YYYYMMDD: '年月日' })),
       t('padding', '流水位数（1–10）'), select('reset_cycle', '重置周期', choices({ never: '不重置', year: '每年', month: '每月', day: '每天' })), t('reason', '修改原因')],
     initial: { ...r, date_format: r.date_format || 'none' }, prepare: data => ({ ...data, date_format: data.date_format === 'none' ? '' : data.date_format, expected_revision: r.revision }),
-    notice: { type: 'info', text: '仅影响新编号；格式为前缀＋日期＋流水号。日期须包含重置周期。修改规则不回退当前流水，周期切换后从 1 起；重复编号自动跳过，历史编码保持不变。' },
+    notice: { type: 'info', text: '项目规范：ATM＋两位年＋两位流水，按年重置。物料选择产品编码类别后按类别＋年份（无图固定99）＋六位流水生成，未分类才使用这里的普通规则。修改不改变历史编码或回退当前流水。' },
   }
   if (name !== '编辑' || !['users', 'company'].includes(resource)) throw new Error('不支持的设置操作。')
   const fields = resource === 'company'

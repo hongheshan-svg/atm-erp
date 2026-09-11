@@ -10,6 +10,7 @@ import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import { shortageCommand } from '../modules/purchases'
 import { pageSize } from '../pagination'
+import { productCategories } from '../product-categories'
 const props = defineProps<{ projectId: number; revision?: number; status?: string }>()
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
@@ -20,6 +21,10 @@ const templateFormat = ref('xlsx')
 const importColumns = [
   { key: 'item_code', label: '物料编码' }, { key: 'assembly_unit', label: '单元' },
   { key: 'quantity', label: '需求数量' }, { key: 'change_note', label: '变更说明' },
+  { key: 'required_date', label: '需求日期' }, { key: 'application_date', label: '申请日期' }, { key: 'applicant', label: '申请人' },
+  { key: 'material_action', label: '物料处理方式' },
+  { key: 'drawing_number', label: '图号' }, { key: 'drawing_revision', label: '图档版本' },
+  { key: 'product_category', label: '产品编码类别' }, { key: 'unit', label: '单位' },
 ]
 const command = ref<Command | null>(null)
 const search = ref(''), brand = ref(''), unit = ref(''), partType = ref(''), shortageOnly = ref(false)
@@ -111,6 +116,16 @@ async function importFile(event: Event) {
 function confirmImport() {
   if (!preview.value?.can_import) return
   const result = preview.value
+  if (result.token) {
+    command.value = {
+      title: '确认导入 BOM 与物料',
+      path: `/business/projects/${props.projectId}/bom-import-confirm/`,
+      fields: [],
+      notice: { type: 'info', text: result.note },
+      prepare: () => ({ token: result.token }),
+    }
+    return
+  }
   command.value = {
     title: '确认导入 BOM',
     path: `/business/projects/${props.projectId}/revise-bom/`,
@@ -123,6 +138,7 @@ function confirmImport() {
         quantity: r.quantity,
         change_note: r.change_note,
         assembly_unit: r.assembly_unit,
+        ...Object.fromEntries(['required_date', 'application_date', 'applicant'].filter(key => key in r).map(key => [key, r[key]])),
       })),
     }),
   }
@@ -156,7 +172,7 @@ function saved() {
       </div>
     </header>
     <p class="muted">库存为共享库存，不预留，当前可用不保证后续可领。同物料可分属多个单元；已领、在途及库存按行顺序分摊，非单元实际领用记录。</p>
-    <details v-if="manager()" class="import-help"><summary>导入模板填写说明</summary><p class="muted">模板按“物料编码、单元、需求数量、变更说明”填写。物料名称、规格、品牌、类别与单位从基础资料关联；已领、在途、可用库存和缺料由系统计算，不填写到模板。修改已有物料与单元时必须填写变更说明，旧版模板仍可导入。</p></details>
+    <details v-if="manager()" class="import-help"><summary>导入模板填写说明</summary><p class="muted">已有物料填写编码，后方物料资料可留空；填写时必须与已有资料一致。新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号，品牌与版本分别填写。完全相同物料自动复用，存在多个匹配时须明确编码；新编号只在确认后生成。需求、单元与申请信息按项目填写；修改已有BOM必须填写变更说明。已领、在途、库存、缺料由系统计算，旧版模板仍可使用。</p></details>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
       <template v-if="impact"><p>{{ impact.note }}</p><el-table :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></el-table><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template>
@@ -166,7 +182,7 @@ function saved() {
     <el-table :data="visibleLines" :max-height="560" empty-text="尚未维护 BOM"
       ><el-table-column v-if="canPurchase" label="选择" width="60" fixed><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row)" /></template></el-table-column><el-table-column prop="item_code" label="物料编码" min-width="145" /><el-table-column
         prop="item_name"
-        label="物料名称" min-width="160" /><el-table-column prop="specification" label="规格" min-width="140" /><el-table-column prop="brand" label="品牌" min-width="95" /><el-table-column label="物料类别" min-width="100"><template #default="{ row }">{{ ({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类' }}</template></el-table-column><el-table-column prop="assembly_unit" label="单元" min-width="110" /><el-table-column prop="quantity" label="需求数量" min-width="95" align="right" /><el-table-column prop="change_note" label="变更说明" min-width="150" /><el-table-column
+        label="物料名称" min-width="160" /><el-table-column prop="specification" label="规格" min-width="140" /><el-table-column prop="drawing_number" label="图号" min-width="150" /><el-table-column prop="drawing_revision" label="图档版本" min-width="90" /><el-table-column label="产品编码类别" min-width="125"><template #default="{ row }">{{ productCategories[row.product_category] || '未分类' }}</template></el-table-column><el-table-column prop="required_date" label="需求日期" min-width="110" /><el-table-column prop="application_date" label="申请日期" min-width="110" /><el-table-column prop="applicant" label="申请人" min-width="100" /><el-table-column prop="brand" label="品牌" min-width="95" /><el-table-column label="物料类别" min-width="100"><template #default="{ row }">{{ ({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类' }}</template></el-table-column><el-table-column prop="assembly_unit" label="单元" min-width="110" /><el-table-column prop="quantity" label="需求数量" min-width="95" align="right" /><el-table-column prop="change_note" label="变更说明" min-width="150" /><el-table-column
         prop="issued"
         label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column
         prop="available"

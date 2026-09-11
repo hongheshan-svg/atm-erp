@@ -28,7 +28,7 @@ def duplicates(data, exclude=None):
     candidates = (
         Item.objects.annotate(clean_name=Lower(Trim('name'))).filter(clean_name=name.lower()).exclude(pk=exclude)
     )
-    keys = ('specification', 'brand', 'unit', 'part_type')
+    keys = ('specification', 'brand', 'unit', 'part_type', 'product_category', 'drawing_number', 'drawing_revision')
     return [
         item
         for item in candidates
@@ -51,7 +51,7 @@ def masterdata(actor, key, model, data, object_id=None):
                 raise PermissionDenied('销售经理只能维护纯客户资料。')
 
     allowed = {'name', 'is_active'} | (
-        {'specification', 'unit', 'brand', 'part_type'}
+        {'specification', 'unit', 'brand', 'part_type', 'product_category', 'drawing_number', 'drawing_revision'}
         if model is Item
         else {'kind', 'contact', 'phone', 'address', 'payment_term', 'payment_days'}
     )
@@ -69,6 +69,24 @@ def masterdata(actor, key, model, data, object_id=None):
         ):
             raise ValidationError({'part_type': '请选择标准件或非标件，未分类可留空。'})
         obj = model.objects.select_for_update().get(pk=identity(object_id)) if object_id else model()
+        category = ''
+        if model is Item:
+            category = data.get('product_category', obj.product_category)
+            if category not in ('', *Item.ProductCategory.values):
+                raise ValidationError({'product_category': '请选择规范中的产品编码类别。'})
+            if (
+                object_id
+                and obj.product_category
+                and any(
+                    field in data and data[field] != getattr(obj, field)
+                    for field in ('product_category', 'specification', 'drawing_number', 'drawing_revision')
+                )
+            ):
+                raise ValidationError('已编码产品的类别、型号或图档版本不能覆盖；版本升级请新增物料编码并修订 BOM。')
+            if category and not text(data, 'specification', default=obj.specification, maximum=2000):
+                raise ValidationError({'specification': '规范要求所有产品填写型号/规格。'})
+            if category.startswith('1') and not text(data, 'drawing_number', default=obj.drawing_number, maximum=100):
+                raise ValidationError({'drawing_number': '有图产品必须填写图号。'})
         if not has_role(user, PURCHASERS) and (
             model is not Partner or data.get('kind', obj.kind) != 'customer' or (object_id and obj.kind != 'customer')
         ):
@@ -80,7 +98,9 @@ def masterdata(actor, key, model, data, object_id=None):
             custom = text(data, 'code', default='', maximum=30) if model is Item else ''
             if custom and Item.all_objects.filter(code=custom).exists():
                 raise ValidationError({'code': '物料编码已使用，包括停用或已删除记录。'})
-            obj.code = custom or CodeRule.generate_code('item' if model is Item else 'partner')
+            obj.code = custom or CodeRule.generate_code(
+                'item' if model is Item else 'partner', product_category=category
+            )
         if model is Partner:
             from .payment_terms import terms
 
@@ -109,10 +129,35 @@ def masterdata(actor, key, model, data, object_id=None):
         if model is Item:
             # Same lock as custom code creation, including edits that could collide.
             CodeRule.objects.select_for_update().get(key='item')
+            if (
+                obj.drawing_number
+                and Item.all_objects.filter(
+                    drawing_number__iexact=obj.drawing_number, drawing_revision__iexact=obj.drawing_revision
+                )
+                .exclude(pk=obj.pk)
+                .exists()
+            ):
+                raise ValidationError(
+                    {
+                        'drawing_number': '此图号及版本已由其他物料使用，包括历史停用记录；请复用该物料，图档升级需填写新版本并新建编码。'
+                    }
+                )
             for field in ('name', 'specification', 'brand', 'unit'):
                 setattr(obj, field, normalized(getattr(obj, field)))
             repeated = duplicates(
-                {field: getattr(obj, field) for field in ('name', 'specification', 'brand', 'unit', 'part_type')},
+                {
+                    field: getattr(obj, field)
+                    for field in (
+                        'name',
+                        'specification',
+                        'brand',
+                        'unit',
+                        'part_type',
+                        'product_category',
+                        'drawing_number',
+                        'drawing_revision',
+                    )
+                },
                 obj.pk,
             )
             if repeated:

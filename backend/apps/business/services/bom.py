@@ -12,6 +12,7 @@ from ..models import BOMLine, PurchaseLine, Stock, StockMove
 from .common import (
     ZERO,
     audit,
+    day,
     fields,
     identity,
     lock_items,
@@ -95,6 +96,12 @@ def demand(project):
                 'item_code': line.item.code,
                 'item_name': line.item.name,
                 'specification': line.item.specification,
+                'drawing_number': line.item.drawing_number,
+                'drawing_revision': line.item.drawing_revision,
+                'product_category': line.item.product_category,
+                'required_date': line.required_date.isoformat() if line.required_date else None,
+                'application_date': line.application_date.isoformat() if line.application_date else None,
+                'applicant': line.applicant,
                 'brand': line.item.brand,
                 'part_type': line.item.part_type,
                 'assembly_unit': line.assembly_unit,
@@ -212,7 +219,19 @@ def revise_bom(actor, key, project_id, data):
         planned = {}
         existing = list(BOMLine.objects.filter(project=project))
         for row in rows(data):
-            fields(row, {'item', 'quantity', 'change_note', 'assembly_unit', 'id'})
+            fields(
+                row,
+                {
+                    'item',
+                    'quantity',
+                    'change_note',
+                    'assembly_unit',
+                    'id',
+                    'required_date',
+                    'application_date',
+                    'applicant',
+                },
+            )
             item_id = identity(row.get('item'), 'item')
             matching = [line for line in existing if line.item_id == item_id]
             unit = (
@@ -272,6 +291,15 @@ def revise_bom(actor, key, project_id, data):
             line.quantity, line.change_note = qty, note
             before_unit = line.assembly_unit
             line.assembly_unit = unit
+            row = planned[(item_id, unit)]
+            before_request = {
+                field: str(getattr(line, field) or '') for field in ('required_date', 'application_date', 'applicant')
+            }
+            for field in ('required_date', 'application_date'):
+                if field in row:
+                    setattr(line, field, day(row, field, optional=True))
+            if 'applicant' in row:
+                line.applicant = text(row, 'applicant', default='', maximum=80)
             save(line, user)
             audit(
                 user,
@@ -282,6 +310,8 @@ def revise_bom(actor, key, project_id, data):
                 reason=note,
                 before_unit=before_unit,
                 after_unit=line.assembly_unit,
+                before_request=before_request,
+                after_request={field: str(getattr(line, field) or '') for field in before_request},
             )
         return {'id': project.pk, 'revision': revision(project)}
 

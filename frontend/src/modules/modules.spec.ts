@@ -139,7 +139,9 @@ describe('模块边界', () => {
 
   it('设置与基础资料编辑保持各自字段，用户密码可留空', async () => {
     const item = await actionCommand('items', { id: 1 }, '编辑')
-    expect(item.fields.map(f => f.key)).toEqual(['name', 'specification', 'brand', 'part_type', 'unit', 'duplicate_reason', 'is_active'])
+    expect(item.fields.map(f => f.key)).toEqual(['name', 'specification', 'drawing_number', 'drawing_revision', 'product_category', 'brand', 'part_type', 'unit', 'duplicate_reason', 'is_active'])
+    const coded = await actionCommand('items', { id: 1, product_category: '11' }, '编辑')
+    expect(coded.fields.filter(f => f.displayOnly).map(f => f.key)).toEqual(['specification', 'drawing_number', 'drawing_revision', 'product_category'])
     const account = await actionCommand('users', { id: 2 }, '编辑')
     expect(account.fields.find(f => f.key === 'password')?.optional).toBe(true)
     expect(account.fields.filter(f => f.key === 'is_active')).toHaveLength(1)

@@ -10,11 +10,14 @@ import { C } from './shared'
 import { endpoint } from './shared'
 import { can, customerOnly } from '../session'
 import { termFields, termLabel } from './payment-terms'
+import { productCategories } from '../product-categories'
 export const columns: Record<string, Column[]> = {
   items: [
     C('code', '物料编码'),
     C('name', '物料名称'),
     C('specification', '规格'),
+    C('drawing_number', '图号'), C('drawing_revision', '图档版本'),
+    { key: 'product_category', label: '产品编码类别', format: r => productCategories[r.product_category] || '未分类' },
     C('brand', '品牌'),
     { key: 'part_type', label: '物料类别', format: r => ({ standard: '标准件', custom: '非标件' }[String(r.part_type)] || '未分类') },
     C('unit', '单位'),
@@ -49,6 +52,9 @@ export async function createCommand(resource: string, projectId?: number): Promi
       t('code', '物料编码（留空自动生成）', true),
       t('name', '物料名称'),
       t('specification', '规格', true),
+      { ...t('drawing_number', '图号', true), hint: '有图产品必填；工程图示例 A26-E-05-P-000001，模具子图 ATM-T1-P-000001。历史图号可保留。' },
+      t('drawing_revision', '图档版本', true),
+      { ...select('product_category', '产品编码类别', choices(productCategories), true), hint: '选择类别后自动生成10位编码：有图使用当年年份，无图固定99，流水六位。未分类沿用普通编号规则；版本升级须新增物料。' },
       t('brand', '品牌', true),
       select('part_type', '物料类别', choices({ standard: '标准件', custom: '非标件' }), true),
       { key: 'unit', label: '单位', initial: '件' },
@@ -84,7 +90,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name !== '编辑' || !['items', 'partners'].includes(resource)) throw new Error('不支持的基础资料操作。')
   return {
     title: name, path: endpoint(resource) + r.id + '/', method: 'patch', initial: r,
-    fields: [...(await createCommand(resource)).fields.filter(f => f.key !== 'code'), { key: 'is_active', label: '启用', type: 'boolean' }],
+    fields: [...(await createCommand(resource)).fields.filter(f => f.key !== 'code').map(f => resource === 'items' && r.product_category && ['product_category', 'specification', 'drawing_number', 'drawing_revision'].includes(f.key) ? { ...f, readonly: true, displayOnly: true } : f), { key: 'is_active', label: '启用', type: 'boolean' }],
     prepare: data => resource === 'items' ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '' } : data,
   }
 }
