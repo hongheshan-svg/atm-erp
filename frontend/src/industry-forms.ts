@@ -4,7 +4,7 @@ import type { Command, Field } from './types'
 // Context-specific guidance belongs to the business operation, never to a new data store.
 const guidance: Record<string, Partial<Field>> = {
   requirements: { type: 'textarea', wide: true, placeholder: '加工产品与样件：\n工艺 / 节拍 / 精度：\n工位与设备范围：\n电源、气源及现场接口：\n验收标准与交付资料：', hint: '填写双方已确认的指标；未确认项注明待确认。技术协议、布局图及版本文件从单据附件上传。' },
-  specification: { placeholder: '标准件：完整订货型号；非标件：图号 / 版本、材质、尺寸及表面处理', hint: '影响采购、加工和替换的关键规格应写完整；图纸放附件，避免只写“按图加工”。' },
+  specification: { placeholder: '完整订货型号、材质、尺寸及表面处理', hint: '产品型号/规格与图号、图档版本分别填写；品牌不用于存放版本。选择产品编码类别后型号/规格必填。' },
   brand: { placeholder: '填写指定品牌；未指定可留空', hint: '标准件按确认品牌填写，替代品牌需先确认；不要用供应商名称代替品牌。' },
   part_type: { hint: '标准件用于外购选型件；非标件用于按图加工件。分类会用于 BOM 筛选采购。' },
   unit: { placeholder: '如 件、套、米、千克', hint: '库存、BOM、采购共用此计量单位；包装数量须先换算，系统不自动做单位换算。' },

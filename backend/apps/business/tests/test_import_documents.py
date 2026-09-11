@@ -11,6 +11,7 @@ from openpyxl import Workbook
 from rest_framework.exceptions import ValidationError
 
 from apps.business.models import BOMLine, Document, SalesOrder
+from apps.business.services.bom_material_import import HEADERS
 from apps.core.models import ActionReceipt
 
 from .test_commercial_chain import BusinessFixtures
@@ -99,14 +100,17 @@ class ImportTests(BusinessFixtures, TestCase):
         self.preview(f'物料编码,数量,变更说明\n{self.item.code},2,\n'.encode(), role='member', status=403)
         response = self.clients['manager'].get('/api/business/projects/bom-template/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content.decode('utf-8-sig').strip(), '物料编码,单元,需求数量,变更说明')
+        self.assertEqual(response.content.decode('utf-8-sig').strip(), ','.join(HEADERS))
 
     def test_new_bom_template_order_and_readable_preview(self):
         from openpyxl import load_workbook
 
         response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'xlsx'})
         book = load_workbook(io.BytesIO(response.content))
-        self.assertEqual([cell.value for cell in book.active[1]], ['物料编码', '单元', '需求数量', '变更说明'])
+        self.assertEqual(
+            [cell.value for cell in book.active[1]],
+            HEADERS,
+        )
         book.active.append([self.item.code, '装配单元', '2.125', '初版'])
         content = io.BytesIO()
         book.save(content)

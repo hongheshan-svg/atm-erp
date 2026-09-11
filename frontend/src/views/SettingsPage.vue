@@ -41,7 +41,7 @@ function password() {
     </section></template>
     <template #users><ResourcePanel v-if="can(['admin'])" resource="users" title="用户管理" /></template>
     <template #company><ResourcePanel v-if="can(['admin'])" resource="company" title="公司资料" /></template>
-    <template #codes><ResourcePanel v-if="can(['admin'])" resource="codes" title="编号规则" /></template>
+    <template #codes><p class="muted">产品编码规范：有图 11机加 / 12钣金 / 13特殊工艺 / 19其它，后接两位年份与六位流水；无图 21标准件 / 22耗材辅料 / 23办公用品 / 29其它，年份固定99。选择产品编码类别后按此规则生成，未分类物料沿用下方普通规则；手填编码和历史编号保留。新安装项目默认 ATM＋两位年＋两位流水。</p><ResourcePanel v-if="can(['admin'])" resource="codes" title="编号规则" /></template>
     <template #audit><ResourcePanel v-if="can(['admin'])" resource="audit" title="操作审计" /></template>
   </ModuleTabs>
   <ActionDialog :command="command" @close="command = null" @saved="logout" />

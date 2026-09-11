@@ -10,6 +10,7 @@ import type { Row, Command } from '../types'
 import { pageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
 import ActionDialog from './ActionDialog.vue'
+import { productCategories } from '../product-categories'
 
 const props = withDefaults(defineProps<{ projectId?: number; label?: string }>(), { label: '从 BOM 多选下单' })
 const emit = defineEmits<{ saved: [] }>()
@@ -21,6 +22,7 @@ const search = ref('')
 const brands = ref<string[]>([])
 const units = ref<string[]>([])
 const types = ref<string[]>([])
+const categories = ref<string[]>([])
 const page = ref(1)
 const busy = ref(false)
 const error = ref('')
@@ -31,11 +33,12 @@ const filtered = computed(() => lines.value.filter(r =>
   (!brands.value.length || brands.value.includes(r.brand || '')) &&
   (!units.value.length || units.value.includes(r.assembly_unit || '')) &&
   (!types.value.length || types.value.includes(r.part_type || '')) &&
-  [r.item_code, r.item_name, r.specification].join(' ').toLowerCase().includes(search.value.trim().toLowerCase()),
+  (!categories.value.length || categories.value.includes(r.product_category || '')) &&
+  [r.item_code, r.item_name, r.specification, r.drawing_number].join(' ').toLowerCase().includes(search.value.trim().toLowerCase()),
 ))
 const visible = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 const eligible = (row: Row) => Number(row.shortage) > 0 && row.is_active !== false
-watch([search, brands, units, types, pageSize], () => { page.value = 1 }, { deep: true })
+watch([search, brands, units, types, categories, pageSize], () => { page.value = 1 }, { deep: true })
 function toggle(id: number) {
   selected.value = selected.value.includes(id) ? selected.value.filter(v => v !== id) : [...selected.value, id]
 }
@@ -56,6 +59,7 @@ async function load() {
 }
 async function changeProject() {
   selected.value = []; brands.value = []; units.value = []; types.value = []; search.value = ''
+  categories.value = []
   await load()
 }
 async function open() {
@@ -82,6 +86,7 @@ function saved() { selected.value = []; emit('saved') }
   <el-button v-if="buyer()" :disabled="busy" @click="open">{{ label }}</el-button>
   <el-dialog v-model="opened" class="transfer-dialog" title="选择 BOM 下单" width="min(1150px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
     <div class="bom-purchase-filters">
+      <label>产品编码类别<ElSelect v-model="categories" multiple clearable aria-label="筛选产品编码类别" placeholder="全部产品类别" :disabled="busy"><ElOption v-for="v in options('product_category')" :key="v" :label="productCategories[v] || '未分类'" :value="v" /></ElSelect></label>
       <label v-if="!projectId">项目<RemoteSelect :model-value="project" @update:model-value="project = $event ? Number($event) : undefined; changeProject()" path="/business/projects/" label="采购项目" :disabled="busy" :accept="p => ['active', 'delivering', 'warranty'].includes(p.status)" /></label>
       <label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称或规格" :disabled="busy" /></label>
       <label>品牌<ElSelect v-model="brands" multiple clearable filterable aria-label="筛选品牌" placeholder="全部品牌" :disabled="busy"><ElOption v-for="v in options('brand')" :key="v" :label="v || '未填写'" :value="v" /></ElSelect></label>
@@ -95,6 +100,7 @@ function saved() { selected.value = []; emit('saved') }
       <el-table-column label="选择" width="65" fixed><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row.bom_line)" /></template></el-table-column>
       <el-table-column prop="item_code" label="物料编码" min-width="140" /><el-table-column prop="item_name" label="物料" min-width="150" /><el-table-column prop="specification" label="规格" min-width="140" /><el-table-column prop="brand" label="品牌" min-width="100" /><el-table-column prop="assembly_unit" label="单元" min-width="120" /><el-table-column label="类别" min-width="100"><template #default="{ row }">{{ typeName(row.part_type) }}</template></el-table-column>
       <el-table-column prop="quantity" label="BOM需求" width="100" /><el-table-column prop="incoming" label="已下单未收" width="115" /><el-table-column prop="available" label="可用库存" width="100" /><el-table-column prop="shortage" label="缺口" width="100" fixed="right" />
+      <el-table-column prop="drawing_number" label="图号" min-width="150" /><el-table-column prop="drawing_revision" label="图档版本" min-width="90" /><el-table-column prop="required_date" label="需求日期" min-width="110" /><el-table-column label="产品编码类别" min-width="125"><template #default="{ row }">{{ productCategories[row.product_category] || '未分类' }}</template></el-table-column>
     </el-table>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <template #footer><el-button :disabled="busy" @click="opened = false">取消</el-button><el-button type="primary" :loading="busy" :disabled="!selected.length" @click="generate">填写采购单（{{ selected.length }} 项）</el-button></template>

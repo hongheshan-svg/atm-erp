@@ -1,5 +1,13 @@
 # 精简版接口契约
 
+## 产品编码与 BOM 申请信息（2026-09-11）
+
+`projects/bom-template/` 返回15列BOM模板，兼容旧三/四/七列。`projects/{id}/import-preview/` 接受空编码及物料信息，按完整物料身份复用或预演新建；不持久化物料、编号计数或业务记录。新模板返回签名token，`projects/{id}/bom-import-confirm/` POST `{token}`，绑定当前用户、项目和BOM版本，30分钟有效；锁内重新解析物料并原子保存BOM，以token派生幂等键。既有编码的补填资料不得覆盖主数据，多个相同候选要求显式编码。旧模板继续使用原BOM修订确认。
+
+物料新增 product_category（11/12/13/19/21/22/23/29，可空兼容旧记录）、drawing_number、drawing_revision；specification为型号/规格，品牌独立。选择类别自动按两位类别＋年份（无图固定99）＋六位流水生成，仍允许手填唯一编码。有图要求图号，分类产品要求型号/规格；同图号同版本不得重复建码，分类产品的版本身份字段禁止覆盖。CodeRule产品计数沿用事务锁，普通编号新增 YY 日期格式；新安装项目默认 ATMYY＋两位流水，每年重置，已有规则不自动覆盖。
+
+BOM写入/读取新增 required_date、application_date（可空日期）、applicant（80字符纸面申请人）；demand、BOM列表和导出关联返回物料图号、版本、产品类别。日期和申请人仍受BOM版本校验并记录审计；旧模板不修改新字段。模板字段、原表归属及兼容说明见 [BOM_PRODUCT_CODING.md](BOM_PRODUCT_CODING.md)。不增加新的可编辑采购/库存/资金派生账。
+
 ## 本轮经营管控补充（优先于旧描述）
 
 - manager 的项目范围为负责或参与项目；admin/purchaser/warehouse/finance 兼岗按岗位保持全局作业范围。报表独立授权仍为只读，返回 `can_open` 标记可进入原项目的行。

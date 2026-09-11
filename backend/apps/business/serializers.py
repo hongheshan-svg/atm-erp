@@ -37,7 +37,20 @@ class MoneyFilter:
 class ItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Item
-        fields = ['id', 'code', 'name', 'specification', 'brand', 'part_type', 'unit', 'is_active', 'updated_at']
+        fields = [
+            'id',
+            'code',
+            'name',
+            'specification',
+            'drawing_number',
+            'drawing_revision',
+            'product_category',
+            'brand',
+            'part_type',
+            'unit',
+            'is_active',
+            'updated_at',
+        ]
 
 
 class PartnerSerializer(serializers.ModelSerializer):
@@ -98,6 +111,10 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
 
 
 class BOMSerializer(serializers.ModelSerializer):
+    specification = serializers.CharField(source='item.specification', read_only=True)
+    drawing_number = serializers.CharField(source='item.drawing_number', read_only=True)
+    drawing_revision = serializers.CharField(source='item.drawing_revision', read_only=True)
+    product_category = serializers.CharField(source='item.product_category', read_only=True)
     brand = serializers.CharField(source='item.brand', read_only=True)
     part_type = serializers.CharField(source='item.part_type', read_only=True)
     item_code = serializers.CharField(source='item.code', read_only=True)
@@ -107,6 +124,13 @@ class BOMSerializer(serializers.ModelSerializer):
     class Meta:
         model = BOMLine
         fields = [
+            'specification',
+            'drawing_number',
+            'drawing_revision',
+            'product_category',
+            'required_date',
+            'application_date',
+            'applicant',
             'id',
             'project',
             'item',

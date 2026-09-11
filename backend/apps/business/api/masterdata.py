@@ -37,8 +37,8 @@ class MasterView(ReadView):
 class ItemView(MasterView):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
-    filterset_fields = ['is_active', 'brand', 'part_type']
-    search_fields = ['code', 'name', 'specification', 'brand']
+    filterset_fields = ['is_active', 'brand', 'part_type', 'product_category']
+    search_fields = ['code', 'name', 'specification', 'brand', 'drawing_number']
 
     @action(detail=False, methods=['get'])
     def similar(self, request):

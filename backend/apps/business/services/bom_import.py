@@ -2,6 +2,7 @@ import csv
 import io
 import re
 import zipfile
+from datetime import date, datetime
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
 
@@ -15,16 +16,17 @@ from rest_framework.exceptions import ValidationError
 
 from ..models import BOMLine, Item, PurchaseLine
 from .bom import incoming, issued, revision
-from .common import number, state
+from .common import day, number, state
 
 MAX_BYTES = 5 * 1024 * 1024
 LEGACY_HEADERS = ['物料编码', '数量', '变更说明', '单元']
-HEADERS = ['物料编码', '单元', '需求数量', '变更说明']
+PREVIOUS_HEADERS = ['物料编码', '单元', '需求数量', '变更说明']
+HEADERS = PREVIOUS_HEADERS + ['需求日期', '申请日期', '申请人']
 
 
 def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False):
     if headers is None:
-        legacy_headers = [LEGACY_HEADERS, LEGACY_HEADERS[:3]]
+        legacy_headers = [PREVIOUS_HEADERS, LEGACY_HEADERS, LEGACY_HEADERS[:3]]
     headers = HEADERS if headers is None else headers
     if upload is None or not hasattr(upload, 'read'):
         raise ValidationError({'file': '请选择 CSV 或 XLSX 文件。'})
@@ -134,8 +136,8 @@ def preview(project, upload):
     state(project, {'draft', 'quoted', 'active', 'delivering'})
     expected_revision = revision(project)
     headers, raw = read_file(upload, return_headers=True)
-    if headers == HEADERS:
-        raw = [[row[0], row[2], row[3], row[1]] for row in raw]
+    if headers in (HEADERS, PREVIOUS_HEADERS):
+        raw = [[row[0], row[2], row[3], row[1], *row[4:]] for row in raw]
     codes = {str(row[0]).strip() for row in raw if row and row[0] is not None}
     items = {item.code: item for item in Item.objects.filter(code__in=codes, is_active=True)}
     existing = list(BOMLine.objects.filter(project=project))
@@ -163,6 +165,19 @@ def preview(project, upload):
                 raise ValidationError('同一文件中的物料编码和单元不能重复。')
             seen.add(row_key)
             qty = number(values[1], '数量', 3, positive=True)
+            details = {}
+            if headers == HEADERS:
+                for field, value in zip(('required_date', 'application_date'), row[4:6], strict=True):
+                    if isinstance(value, datetime):
+                        value = value.date().isoformat()
+                    elif isinstance(value, date):
+                        value = value.isoformat()
+                    details[field] = day({field: value}, field, optional=True)
+                    if details[field]:
+                        details[field] = details[field].isoformat()
+                details['applicant'] = str(row[6] or '').strip()
+                if len(details['applicant']) > 80:
+                    raise ValidationError('申请人不能超过80字符。')
             if len(assembly_unit) > 100:
                 raise ValidationError('单元不能超过100字符。')
             if len(note) > 500 or (row_key in current and not note):
@@ -178,12 +193,16 @@ def preview(project, upload):
                     raise ValidationError('单元用量不能小于该行在途采购数量。')
             lines.append(
                 {
+                    **details,
                     'row': row_number,
                     'item': item.pk,
                     'item_code': code,
                     'item_name': item.name,
                     'brand': item.brand,
                     'specification': item.specification,
+                    'drawing_number': item.drawing_number,
+                    'drawing_revision': item.drawing_revision,
+                    'product_category': item.product_category,
                     'unit': item.unit,
                     'part_type': item.part_type,
                     'quantity': str(qty),

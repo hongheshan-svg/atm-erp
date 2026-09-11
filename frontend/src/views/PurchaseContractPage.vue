@@ -15,7 +15,7 @@ const summarized = computed(() => {
   const d = data.value
   if (!d) return false
   const text = [d.buyer.name, d.buyer.address, d.supplier.name, d.supplier.address, d.supplier.contact, d.project, d.note].map(value => brief(value)).join('')
-  return d.lines.length > 1 || text.length > 200 || d.lines.some((line: Row) => `${line.code}${line.name}${line.specification}${line.brand}${line.unit}`.length > 85)
+  return d.lines.length > 1 || text.length > 200 || d.lines.some((line: Row) => `${line.code}${line.name}${line.specification}${line.drawing_number || ''}${line.drawing_revision || ''}${line.brand}${line.unit}`.length > 85)
 })
 function brief(value: unknown, limit = 70) { const text = String(value || '________________').replace(/\s+/g, ' '); return text.length > limit ? '详见同编号合同附件' : text }
 const payment = computed(() => {
@@ -80,7 +80,7 @@ async function archive() {
       <p v-if="data.delivery_address">收货地址：{{ sheet ? data.delivery_address : brief(data.delivery_address, 60) }}</p>
       <h2>一、采购明细（CNY 人民币，含税）</h2>
       <p v-if="summarized && !sheet">共 {{ data.lines.length }} 项物料，编码、名称、规格、品牌、数量、单价及逐项交期详见同编号合同附件。</p>
-      <div v-else class="contract-table-wrap"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td>{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td>{{ line.specification || '—' }}<br>{{ line.brand }}</td><td>{{ line.unit }}</td><td>{{ line.quantity }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ line.cancelled_quantity }}</small></td><td>{{ line.unit_price }}</td><td>{{ line.amount }}</td><td>{{ line.due_date }}</td></tr></tbody></table></div>
+      <div v-else class="contract-table-wrap"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td>{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td>{{ line.specification || '—' }}<template v-if="line.drawing_number"><br>图号：{{ line.drawing_number }} {{ line.drawing_revision }}</template><br>{{ line.brand }}</td><td>{{ line.unit }}</td><td>{{ line.quantity }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ line.cancelled_quantity }}</small></td><td>{{ line.unit_price }}</td><td>{{ line.amount }}</td><td>{{ line.due_date }}</td></tr></tbody></table></div>
       <p class="contract-total">订单原含税合计：人民币 ¥ {{ data.total }}</p>
       <template v-if="!sheet">
         <h2>二、交付与结算</h2><p>订单交期：{{ data.due_date }}；逐项交期以明细为准。乙方负责适运包装并交至甲方书面指定地点，运输及包装费用含于合同价，另有书面约定除外。</p><p>{{ payment }} 乙方按约提供合法有效发票；甲方按约支付无争议到期款项。</p>

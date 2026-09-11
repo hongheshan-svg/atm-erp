@@ -19,7 +19,7 @@ class Command(BaseCommand):
             Company.objects.get_or_create(pk=1, defaults={'setup_required': True})
             Company.objects.select_for_update().get(pk=1)
             for key, prefix in [
-                ('project', 'PRJ'),
+                ('project', 'ATM'),
                 ('sale', 'SO'),
                 ('purchase', 'PO'),
                 ('delivery', 'DEL'),
@@ -27,7 +27,10 @@ class Command(BaseCommand):
                 ('partner', 'PTY'),
                 ('reconciliation', 'DZ'),
             ]:
-                CodeRule.objects.get_or_create(key=key, defaults={'prefix': prefix})
+                defaults = {'prefix': prefix}
+                if key == 'project':
+                    defaults.update(date_format='YY', padding=2, reset_cycle='year')
+                CodeRule.objects.get_or_create(key=key, defaults=defaults)
             if not User.objects.exists():
                 password = os.environ.get('ADMIN_PASSWORD', '')
                 user = User(username='admin', display_name='管理员', role='admin', is_staff=True, is_superuser=True)

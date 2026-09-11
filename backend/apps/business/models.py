@@ -60,13 +60,26 @@ class PaymentTerm(models.TextChoices):
 
 
 class Item(BaseModel):
+    class ProductCategory(models.TextChoices):
+        MACHINED = '11', '有图·机加'
+        SHEET_METAL = '12', '有图·钣金'
+        SPECIAL = '13', '有图·特殊工艺'
+        DRAWING_OTHER = '19', '有图·其它'
+        STANDARD = '21', '无图·标准件'
+        CONSUMABLE = '22', '无图·耗材辅料'
+        OFFICE = '23', '无图·办公用品'
+        OTHER = '29', '无图·其它'
+
     class PartType(models.TextChoices):
         STANDARD = 'standard', '标准件'
         CUSTOM = 'custom', '非标件'
 
     code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=150)
-    specification = models.CharField(max_length=250, blank=True)
+    specification = models.CharField(max_length=2000, blank=True)
+    product_category = models.CharField(max_length=2, choices=ProductCategory.choices, blank=True, default='')
+    drawing_number = models.CharField(max_length=100, blank=True, default='')
+    drawing_revision = models.CharField(max_length=30, blank=True, default='')
     brand = models.CharField(max_length=80, blank=True)
     part_type = models.CharField(max_length=20, choices=PartType.choices, blank=True, default='')
     unit = models.CharField(max_length=20, default='件')
@@ -205,6 +218,9 @@ class ContractAmendment(ImmutableLedger):
 
 
 class BOMLine(BaseModel):
+    required_date = models.DateField(null=True, blank=True)
+    application_date = models.DateField(null=True, blank=True)
+    applicant = models.CharField(max_length=80, blank=True, default='')
     project = models.ForeignKey(Project, models.PROTECT, related_name='bom_lines')
     item = models.ForeignKey(Item, models.PROTECT)
     quantity = quantity(validators=[MinValueValidator(Decimal('0.001'))])
