@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import plistlib
 from pathlib import Path
@@ -40,6 +41,16 @@ class ServiceTests(unittest.TestCase):
         for stamp in (time.time() - 60, time.time() + 60):
             service.private_json(self.state / 'heartbeat.json', {'seen': stamp})
             self.assertFalse(service.fresh(self.state))
+
+    def test_install_chinese_output_on_windows_redirected_console(self):
+        buffer = io.BytesIO()
+        stream = io.TextIOWrapper(buffer, encoding='cp1252')
+        self.addCleanup(stream.close)
+        def register(directory):
+            service.private_json(directory / 'heartbeat.json', {'seen': time.time()})
+        with patch.object(service, 'register', side_effect=register), patch.object(service.sys, 'stdout', stream):
+            service.install('docker', self.root, self.config, directory=self.state)
+        self.assertIn('执行器已自动启动并连接', buffer.getvalue().decode('utf-8'))
 
     def test_missing_token_does_not_register_service(self):
         self.config.write_text('LEAN_HTTP_PORT=18360\n')

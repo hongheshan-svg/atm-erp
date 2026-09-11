@@ -123,7 +123,14 @@ def register(directory):
         raise ValueError('不支持的宿主机平台')
 
 
+def utf8_output():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+
+
 def install(mode, root, config, url=None, directory=None):
+    utf8_output()
     from ota_runner import config_values
     root, config = root.resolve(), config.resolve()
     values = config_values(config, mode)
@@ -186,6 +193,7 @@ def supervise(directory):
 
 
 def main():
+    utf8_output()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['install', 'supervise'])
     parser.add_argument('--mode', choices=['docker', 'native'])
