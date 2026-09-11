@@ -20,8 +20,8 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click()
   const csvTemplate = await csvDownload
   const header = (await readFile((await csvTemplate.path())!, 'utf8')).replace(/^\uFEFF/, '').trim()
-  expect(header).toBe('物料编码,物料名称,规格,品牌,物料类别,单位,独立建码原因')
-  const csv = header + '\n' + Array.from({ length: 12 }, (_, i) => `${prefix}-${i},导入验收${prefix.slice(6)}-${i},规格A,品牌B,标准件,台,`).join('\n')
+  expect(header).toBe('物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因')
+  const csv = header + '\n' + Array.from({ length: 12 }, (_, i) => `${prefix}-${i},导入验收${prefix.slice(6)}-${i},规格A,,,21,品牌B,标准件,台,`).join('\n')
   await dialog.locator('input[type=file]').setInputFiles({ name: 'items.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
   await expect(dialog.getByText('共 12 条，确认时再次校验', { exact: false })).toBeVisible()
   const previewTable = dialog.locator('.el-table').last()
