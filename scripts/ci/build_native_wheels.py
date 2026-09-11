@@ -1,13 +1,13 @@
 """Resolve binary-only CPython 3.11 dependencies on CI, never on user machines."""
 import argparse
-from email.parser import BytesParser
 import hashlib
 import json
-from pathlib import Path
-import subprocess
 import shutil
+import subprocess
 import sys
 import zipfile
+from email.parser import BytesParser
+from pathlib import Path
 
 TARGETS = {
     'linux': {'x86_64': ['manylinux_2_28_x86_64', 'manylinux2014_x86_64'],
