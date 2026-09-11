@@ -46,7 +46,9 @@ def verify(folder, tag, commit):
                 raise ValueError('Installer mode is missing')
             if mode := manifest.get('mode'):
                 if mode == 'docker':
-                    if not re.fullmatch(r'ghcr\.io/hongheshan-svg/atm-erp@sha256:[a-f0-9]{64}', manifest.get('docker_image', '')):
+                    if not re.fullmatch(
+                        r'ghcr\.io/hongheshan-svg/atm-erp@sha256:[a-f0-9]{64}', manifest.get('docker_image', '')
+                    ):
                         raise ValueError('Docker release must pin its CI-built image')
                     if set(manifest.get('docker_archives', {})) != {'amd64', 'arm64'}:
                         raise ValueError('Both Docker architectures are required')

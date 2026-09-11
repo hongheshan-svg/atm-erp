@@ -1,4 +1,5 @@
 """Exercise the exact offline install command on each native CI platform."""
+
 import argparse
 import json
 import shutil
@@ -22,4 +23,11 @@ if __name__ == '__main__':
         python = root / 'venv' / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
         subprocess.run([str(python), '-m', 'pip', 'install', *native_dependencies(root)], check=True)
         subprocess.run([str(python), '-m', 'pip', 'check'], check=True)
-        subprocess.run([str(python), '-c', 'import django, daphne, psycopg2, redis, cryptography; print("Offline native runtime verified")'], check=True)
+        subprocess.run(
+            [
+                str(python),
+                '-c',
+                'import django, daphne, psycopg2, redis, cryptography; print("Offline native runtime verified")',
+            ],
+            check=True,
+        )
