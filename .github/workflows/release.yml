@@ -140,6 +140,7 @@ jobs:
           retention-days: 3
   package:
     needs: [preflight, images, native-wheels]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.images.result == 'success' && needs.native-wheels.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
