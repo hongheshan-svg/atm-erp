@@ -41,7 +41,7 @@ def main():
     current = ROOT
 
     def command(root, action):
-        return [sys.executable, str(root / 'scripts/native_install.py'), action, '--config', str(config)]
+        return [sys.executable, str(root / 'scripts/native_install.py'), action, '--config', str(config), '--no-ota']
 
     def shell(code):
         subprocess.run([str(native.python_path(task / 'data')), str(current / 'backend/manage.py'), 'shell', '-c', code],
@@ -78,7 +78,9 @@ def main():
             "from django.db import migrations, models\nclass Migration(migrations.Migration):\n"
             f"    dependencies = [('core', '{latest.stem}')]\n"
             "    operations = [migrations.AddField(model_name='company', name='ota_test_marker', field=models.CharField(max_length=40, default='native-ota'))]\n")
-        (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'native', 'platform': 'linux'}))
+        subprocess.run([sys.executable, str(ROOT / 'scripts/ci/build_native_wheels.py'), '--platform', 'linux', '--output', str(task / 'wheels')], check=True, stdout=log, stderr=log)
+        shutil.copytree(task / 'wheels/linux', stage / 'wheelhouse')
+        (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'native', 'platform': 'linux', 'native_prebuilt': True}))
         archive = task / 'fixture.zip'
         with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
             for source in stage.rglob('*'):

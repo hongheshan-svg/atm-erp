@@ -83,9 +83,20 @@ class ReleaseEvidenceTests(unittest.TestCase):
                                     'version': 'v2.0.0',
                                     'source_commit': 'commit',
                                     'installer_commit': 'commit',
+                                    'mode': mode,
+                                    'docker_image': 'ghcr.io/hongheshan-svg/atm-erp@sha256:' + 'a' * 64,
+                                    'docker_archives': {arch: {'sha256': hashlib.sha256(b'image').hexdigest()} for arch in ('amd64', 'arm64')},
+                                    'native_prebuilt': True,
+                                    'native_architectures': ['x86_64'],
                                 }
                             ),
                         )
+                        if mode == 'docker':
+                            for arch in ('amd64', 'arm64'):
+                                archive.writestr(path.stem + '/images/' + arch + '.tar.gz', b'image')
+                        else:
+                            archive.writestr(path.stem + '/wheelhouse/x86_64/SHA256.json', json.dumps({'requirements.lock': hashlib.sha256(b'lock').hexdigest()}))
+                            archive.writestr(path.stem + '/wheelhouse/x86_64/requirements.lock', b'lock')
                     lines.append(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name)
             (folder / 'atm-erp-v2.0.0-SHA256SUMS.txt').write_text('\n'.join(lines) + '\n')
             self.assertEqual(len(verify(folder, 'v2.0.0', 'commit')), 7)

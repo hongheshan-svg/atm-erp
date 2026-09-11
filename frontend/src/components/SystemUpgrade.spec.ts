@@ -12,9 +12,43 @@ const mount = () => shallowMount(SystemUpgrade, { global: { stubs: {
   ElButton: { props: ['disabled'], template: '<button :disabled="disabled"><slot /></button>' },
   ElAlert: { props: ['title'], template: '<p>{{title}}<slot /></p>' },
 } } })
-afterEach(() => { vi.clearAllMocks(); user.value = null })
+afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); user.value = null })
 
 describe('系统版本与升级', () => {
+  it('断连时不把缓存心跳显示为已连接，详细步骤默认折叠', async () => {
+    vi.useFakeTimers()
+    vi.mocked(read).mockResolvedValue({ ...base, runner: { mode: 'docker', platform: 'macos' }, job: { status: 'downloading', target: 'v1.8.0', detail: '正在构建', created_at: new Date().toISOString() } })
+    user.value = { role: 'admin' }
+    const wrapper = mount()
+    await flushPromises()
+    await wrapper.find('.system-upgrade-entry').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.upgrade-stage-details').attributes('open')).toBeUndefined()
+    vi.mocked(read).mockRejectedValue(new Error('offline'))
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    expect(wrapper.text()).toContain('正在重新连接')
+    expect(wrapper.text()).toContain('上次收到的状态')
+    expect(wrapper.text()).not.toContain('执行器已连接')
+    expect(wrapper.text()).not.toContain('原系统保持运行')
+    wrapper.unmount()
+  })
+  it('后台服务恢复后自动更新连接状态，无需用户重新检查', async () => {
+    vi.useFakeTimers()
+    vi.mocked(read).mockResolvedValue(base)
+    user.value = { role: 'admin' }
+    const wrapper = mount()
+    await flushPromises()
+    await wrapper.find('.system-upgrade-entry').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('宿主机升级执行器未连接')
+    vi.mocked(read).mockResolvedValue({ ...base, runner: { mode: 'docker', platform: 'macos' } })
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    expect(wrapper.text()).toContain('执行器已连接：macos / Docker')
+    expect(wrapper.text()).not.toContain('宿主机升级执行器未连接')
+    wrapper.unmount()
+  })
   it('显示当前步骤、构建耗时与关闭窗口后的升级状态', async () => {
     vi.mocked(read).mockResolvedValue({ ...base, job: { id: 1, target: 'v1.7.1', status: 'downloading', detail: '正在构建 Docker 镜像 · 已运行 30 秒', created_at: new Date(Date.now() - 30000).toISOString() } })
     user.value = { role: 'admin' }
@@ -23,7 +57,7 @@ describe('系统版本与升级', () => {
     expect(wrapper.find('.system-upgrade-entry').text()).toContain('升级进行中')
     await wrapper.find('.system-upgrade-entry').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[aria-current="step"]').text()).toContain('下载、校验与构建')
+    expect(wrapper.find('[aria-current="step"]').text()).toContain('下载并校验')
     expect(wrapper.text()).toContain('已运行 30 秒')
     expect(wrapper.text()).toContain('关闭窗口后仍会继续升级')
     wrapper.unmount()

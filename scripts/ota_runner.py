@@ -133,6 +133,17 @@ def unpack(archive, destination, target, mode, host_platform):
         if len(roots) != 1:
             raise ValueError('Package must contain one root directory')
         bundle.extractall(destination)
+        # The service uses umask 077 for credentials and backups. Source files
+        # copied into a non-root container must still be readable there.
+        # The private parent directory continues to protect the host workspace.
+        for entry in entries:
+            extracted = destination / entry.filename
+            if extracted.is_file():
+                extracted.chmod(0o755 if entry.external_attr >> 16 & 0o111 else 0o644)
+            for parent in [extracted] if extracted.is_dir() else extracted.parents:
+                if parent == destination:
+                    break
+                parent.chmod(0o755)
     root = destination / roots.pop()
     manifest = json.loads((root / 'INSTALL-MANIFEST.json').read_text(encoding='utf-8'))
     if any(manifest.get(key) != value for key, value in (
@@ -212,7 +223,8 @@ class Runner:
             pass  # During application downtime, reports remain durably queued.
 
     def command(self, argv, log, progress=None, **kwargs):
-        kwargs.setdefault('env', {key: value for key, value in os.environ.items() if not key.startswith(('LEAN_', 'COMPOSE_'))})
+        kwargs.setdefault('env', {**{key: value for key, value in os.environ.items() if not key.startswith(('LEAN_', 'COMPOSE_'))},
+                                  'ATM_ERP_OTA_MANAGED': '1'})
         kwargs.setdefault('timeout', 1800)
         args = [str(arg) for arg in argv]
         if progress is None:
@@ -314,15 +326,16 @@ class Runner:
                 self.report(job, 'downloading', '下载完成，正在验证并解压安装包')
                 target = unpack(archive, folder / 'release', job['target'], self.mode, PLATFORM)
                 if self.mode == 'docker':
-                    phase = '构建 Docker 镜像'
+                    phase = '准备发布镜像'
                     new_config = folder / '.env.lean'
                     contents = self.config.read_text(encoding='utf-8')
-                    contents = re.sub(r'^LEAN_IMAGE=.*\n?', '', contents, flags=re.M)
-                    new_config.write_text(contents.rstrip() + f"\nLEAN_IMAGE=atm-erp-lean:ota-{job['target']}-{asset['sha256'][:12]}\n", encoding='utf-8')
+                    new_config.write_text(contents, encoding='utf-8')
                     os.chmod(new_config, 0o600)
-                    self.report(job, 'downloading', '正在构建 Docker 镜像，原系统保持运行')
-                    self.command([*self.compose(target, new_config), 'build', 'app'], log,
-                                 progress=lambda seconds: self.report(job, 'downloading', f'正在构建 Docker 镜像 · 已运行 {seconds} 秒，原系统保持运行'))
+                    if not json.loads((target / 'INSTALL-MANIFEST.json').read_text()).get('docker_image'):
+                        raise ValueError('目标发布包没有预构建镜像，请选择新版发布包；不会本地编译')
+                    self.report(job, 'downloading', '正在获取 GitHub 已构建镜像，原系统保持运行')
+                    self.command([sys.executable, target / 'scripts/release_install.py', '--root', target, '--config', new_config], log,
+                                 progress=lambda seconds: self.report(job, 'downloading', f'正在获取已构建镜像 · 已运行 {seconds} 秒，原系统保持运行'))
                 else:
                     if not shutil.which('pg_dump'):
                         raise ValueError('pg_dump is required before stopping a native application')
@@ -350,6 +363,7 @@ class Runner:
                 else:
                     self.command(self.native(target, 'install'), log)
                     subprocess.Popen([str(arg) for arg in self.native(target, 'start')], stdout=log, stderr=log,
+                                     env={**os.environ, 'ATM_ERP_OTA_MANAGED': '1'},
                                      **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
                 phase = '验证新版本'
                 self.report(job, 'verifying', '正在验证新版本健康状态', str(backup))
@@ -379,6 +393,7 @@ class Runner:
                             self.command([*self.compose(), 'start', '--wait', 'app'], log)
                         else:
                             subprocess.Popen([str(arg) for arg in self.native(self.root, 'start')], stdout=log, stderr=log,
+                                             env={**os.environ, 'ATM_ERP_OTA_MANAGED': '1'},
                                              **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
                     except Exception:
                         pass
@@ -404,6 +419,7 @@ class Runner:
                 try:
                     self.flush()
                     job = self.api({'action': 'poll', 'mode': self.mode, 'platform': PLATFORM, 'runner_id': self.state['runner_id']}).get('job')
+                    atomic_json(self.directory / 'heartbeat.json', {'seen': time.time()})
                     if job:
                         if job.get('recovered'):
                             self.report(job, 'failed', '检测到执行器上次中断的任务，已停止自动重试。请核对宿主机日志及备份后重新发起。', job.get('backup', ''))

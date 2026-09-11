@@ -41,7 +41,7 @@ def main():
     for iteration in range(2):
         # A repeat installation must retain account identity/password and data.
         subprocess.run([*command, "install", "--config", str(config_path)], check=True)
-        process = subprocess.Popen([*command, "start", "--config", str(config_path)])
+        process = subprocess.Popen([*command, "start", "--config", str(config_path), "--no-ota"])
         try:
             for _ in range(90):
                 if process.poll() is not None:

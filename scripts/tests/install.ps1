@@ -7,16 +7,16 @@ function global:docker {
   $global:LASTEXITCODE = 0
 }
 try {
-  & (Join-Path $root 'install.ps1') -EnvFile $testFile -SkipBuild
+  & (Join-Path $root 'install.ps1') -EnvFile $testFile -SkipBuild -NoOta
   $before = [IO.File]::ReadAllText($testFile)
   if ($before -notmatch 'LEAN_IMAGE=atm-erp-lean:local') { throw 'Image setting was not persisted' }
   if ($before -notmatch 'LEAN_ENVIRONMENT=production') { throw 'Fresh installs must default to production login throttling' }
   if ($before -notmatch 'LEAN_ADMIN_PASSWORD=Lean-[a-f0-9]{48}') { throw 'Initial password is missing' }
   if ($global:DockerCalls.Exists([Predicate[string]]{ param($value) $value -match ' build app$' })) { throw 'SkipBuild still built the image' }
-  & (Join-Path $root 'install.ps1') -EnvFile $testFile
+  & (Join-Path $root 'install.ps1') -EnvFile $testFile -NoOta
   if ($before -ne [IO.File]::ReadAllText($testFile)) { throw 'Repeated install replaced configuration or credentials' }
   if (-not $global:DockerCalls.Exists([Predicate[string]]{ param($value) $value -match ' build app$' })) { throw 'Build command was not dispatched' }
-  if (-not $global:DockerCalls.Exists([Predicate[string]]{ param($value) $value -match ' up -d --wait --wait-timeout 180$' })) { throw 'Health-gated startup was not dispatched' }
+  if (-not $global:DockerCalls.Exists([Predicate[string]]{ param($value) $value -match ' up -d --no-build --wait --wait-timeout 180$' })) { throw 'Health-gated startup was not dispatched' }
   Write-Host 'PowerShell installer dispatch and configuration preservation passed.'
 } finally {
   Remove-Item $testFile -ErrorAction SilentlyContinue

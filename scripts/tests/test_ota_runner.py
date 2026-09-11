@@ -2,6 +2,7 @@ import importlib.util
 import argparse
 import io
 import json
+import os
 from pathlib import Path
 import stat
 import tempfile
@@ -15,6 +16,15 @@ SPEC.loader.exec_module(ota)
 
 
 class RunnerTests(unittest.TestCase):
+    def test_native_upgrade_keeps_legacy_cli_and_marks_managed_child(self):
+        runner = object.__new__(ota.Runner)
+        runner.config = Path('/config.json')
+        args = runner.native(Path('/release'), 'install')
+        self.assertNotIn('--no-ota', args)
+        with patch.object(ota.subprocess, 'run') as run:
+            runner.command(args, io.StringIO())
+        self.assertEqual(run.call_args.kwargs['env']['ATM_ERP_OTA_MANAGED'], '1')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -80,6 +90,28 @@ class RunnerTests(unittest.TestCase):
             bundle.writestr(entry, '/etc/passwd')
         with self.assertRaises(ValueError):
             ota.unpack(archive, self.folder / 'out', 'v2.0.0', 'docker', 'linux')
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX source permissions')
+    def test_private_daemon_umask_does_not_make_image_source_unreadable(self):
+        archive = self.folder / 'package.zip'
+        content = {'INSTALL-MANIFEST.json': json.dumps({'version': 'v2.0.0', 'mode': 'docker', 'platform': 'linux'}),
+                   'backend/apps/core/version.py': "VERSION = '2.0.0'", 'backend/manage.py': '',
+                   'frontend/dist/index.html': '', 'scripts/native_install.py': '', 'scripts/backup.py': '',
+                   'docker-compose.yml': '', 'docker/app/entrypoint.sh': '#!/bin/sh\n'}
+        with zipfile.ZipFile(archive, 'w') as bundle:
+            for name, value in content.items():
+                bundle.writestr('root/' + name, value)
+        destination = self.folder / 'private'
+        mask = os.umask(0o077)
+        try:
+            root = ota.unpack(archive, destination, 'v2.0.0', 'docker', 'linux')
+        finally:
+            os.umask(mask)
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o700)
+        for name in content:
+            path = root / name
+            self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o755)
 
     def test_download_rejects_hash_mismatch(self):
         with patch.object(ota.urllib.request, 'urlopen', return_value=io.BytesIO(b'bad')):

@@ -4,6 +4,8 @@
 **/.env.*
 **/node_modules
 **/dist
+!frontend/dist
+!frontend/dist/**
 **/uploads
 **/media
 **/logs

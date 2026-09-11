@@ -49,11 +49,102 @@ jobs:
     with:
       ref: ${{ needs.preflight.outputs.commit }}
       suite: full
-  package:
+  images:
     needs: [preflight, validate]
     if: ${{ !cancelled() && needs.preflight.result == 'success' && ((needs.preflight.outputs.validate == 'true' && needs.validate.result == 'success') || (needs.preflight.outputs.validate == 'false' && needs.validate.result == 'skipped')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-latest}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ needs.preflight.outputs.commit }}'}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ghcr.io/hongheshan-svg/atm-erp:${{ needs.preflight.outputs.tag }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/hongheshan-svg/atm-erp
+            org.opencontainers.image.revision=${{ needs.preflight.outputs.commit }}
+          cache-from: type=gha,scope=release-${{ matrix.arch }}
+          cache-to: type=gha,scope=release-${{ matrix.arch }},mode=max
+      - env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+          ARCH: ${{ matrix.arch }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          mkdir images
+          image="ghcr.io/hongheshan-svg/atm-erp:$TAG-$ARCH"
+          docker pull "ghcr.io/hongheshan-svg/atm-erp@$DIGEST"
+          docker tag "ghcr.io/hongheshan-svg/atm-erp@$DIGEST" "$image"
+          test "$(docker run --rm --entrypoint python "$image" -c 'from apps.core.version import VERSION; print(VERSION)')" = "${TAG#v}"
+          docker save "$image" | gzip -1 > "images/$ARCH.tar.gz"
+          docker image inspect "$image" --format '{{.Id}}' > "images/$ARCH.id"
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          arch=os.environ['ARCH']; root=pathlib.Path('images')
+          path=root/(arch+'.tar.gz')
+          record={'sha256':hashlib.file_digest(path.open('rb'),'sha256').hexdigest(), 'image_id':(root/(arch+'.id')).read_text().strip(), 'digest':os.environ['DIGEST']}
+          (root/(arch+'.json')).write_text(json.dumps(record))
+          (root/(arch+'.id')).unlink()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-images-${{ matrix.arch }}
+          path: images/
+          compression-level: 0
+          retention-days: 3
+  native-wheels:
+    needs: preflight
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - {platform: linux, runner: ubuntu-latest}
+          - {platform: macos, runner: macos-latest}
+          - {platform: windows, runner: windows-latest}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ needs.preflight.outputs.commit }}'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python scripts/ci/build_native_wheels.py --platform "$PLATFORM" --output wheels
+        shell: bash
+        env: {PLATFORM: '${{ matrix.platform }}'}
+      - run: python scripts/ci/verify_native_wheels.py --wheels "wheels/$PLATFORM"
+        shell: bash
+        env: {PLATFORM: '${{ matrix.platform }}'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-wheels-${{ matrix.platform }}
+          path: wheels/
+          compression-level: 0
+          retention-days: 3
+  package:
+    needs: [preflight, images, native-wheels]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,10 +154,21 @@ jobs:
         with: {python-version: '3.11'}
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - uses: actions/download-artifact@v4
+        with: {pattern: 'release-images-*', path: artifacts/images, merge-multiple: true}
+      - uses: actions/download-artifact@v4
+        with: {pattern: 'release-wheels-*', path: artifacts/wheels, merge-multiple: true}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - env:
           TAG: ${{ needs.preflight.outputs.tag }}
         run: |
-          python scripts/package_release.py "$TAG" --output dist/releases
+          python scripts/ci/assemble_images.py --tag "$TAG" --folder artifacts/images
+          python scripts/package_release.py "$TAG" --output dist/releases --artifacts artifacts
           python -m scripts.ci.publish_release --tag "$TAG" --folder dist/releases
       - uses: actions/upload-artifact@v4
         with:
