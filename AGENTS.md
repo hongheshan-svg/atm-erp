@@ -10,11 +10,11 @@
 - 编号用 CodeRule.generate_code；采购、库存、收付款必须事务加锁与服务端校验，重复提交用 ActionReceipt，不信任前端金额。
 - 金额为 CNY 含税经营口径，不替代法定会计账。一个事实一处维护；见 docs/SIMPLIFICATION_EVIDENCE.md 三条复用规则。
 - 前端统一走 src/utils/request.ts 和 src/api；页面不直接 import axios。主路径 /erp/，业务 API /api/business/。附件只走鉴权下载。
-- 全新安装用 install.sh/install.ps1，默认独立 atm-erp-lean 项目和新卷，服务仅 postgres/redis/app；app 只运行 Daphne、Nginx，无 Celery、WebSocket、docker.sock。按用户新增要求，OTA 使用可选宿主机执行器 scripts/ota_runner.py；仅管理员发起固定仓库正式版升级，执行器校验 SHA256、先备份后迁移，不回退或清空数据库。
+- 全新安装用 install.sh/install.ps1，默认独立 atm-erp-lean 项目和新卷，服务仅 postgres/redis/app；app 只运行 Daphne、Nginx，无 Celery、WebSocket、docker.sock。按用户新增要求，安装器默认通过 scripts/ota_service.py 自动注册、启动并保活宿主机执行器 scripts/ota_runner.py，确认真实心跳；仅隔离 CI 可显式跳过服务注册。仅管理员发起固定仓库正式版升级，执行器校验 SHA256、先备份后迁移，不回退或清空数据库。
 - 本地开发配置 LEAN_ENVIRONMENT=development 关闭登录限流；发布部署必须使用 production（默认值），恢复原10次/分钟限制，不能把开发配置直接沿用到发布环境。DEBUG 不随开发标记开启。
 - 后端检查：bash scripts/precheck-tests.sh --all（独立 PostgreSQL）；也可 python run_all_tests.py --stage checks/platform/business/concurrency。测试目标只维护在 scripts/ci/backend_test_matrix.py，不复制名单。
 - 前端检查在 frontend：npm ci、npm run lint、npm run typecheck、npm run test、npm run build、npm run test:e2e。浏览器必须显式指定隔离测试 URL 和管理员密码，不读取生产配置。
 - 使用 feature branch，不直接提交 main；保留用户未提交改动。使用 apply_patch 修改源码，按实际行为补测试。
-- 发布说明使用 docs/releases/TEMPLATE.md，在最下方保留 Installation 与 Documentation 区块，替换实际 tag 并核对附件名称。当前 Docker 安装包本地构建镜像，不编造 GHCR docker pull 地址；完整安装说明继续保留在 README。
+- 发布说明使用 docs/releases/TEMPLATE.md，在最下方保留 Installation 与 Documentation 区块，替换实际 tag 并核对附件名称。按用户新增要求，GitHub 预构建 Docker amd64/arm64 镜像，安装器仅拉取固定 digest 或校验导入随包镜像，不回退本地构建；原生包携带 CI 预编译 wheelhouse 离线安装依赖，不现场编译。不编造公开可用的 GHCR 地址，完整安装说明保留在 README。
 - 日常发布默认只递增补丁号（如 1.0.0 → 1.0.1）；除非用户明确指定，不自行提升主版本号或次版本号。以后端、前端和 tag 一致的版本发布，并在完整 CI 通过、合并 main 后打 tag。
 - 历史 docs/superpowers、审计报告与旧部署文档仅作参考，不是现行要求。

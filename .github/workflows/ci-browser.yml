@@ -56,7 +56,7 @@ jobs:
           tags: lean-ci-browser:local
           cache-from: type=gha,scope=browser-app
           cache-to: type=gha,scope=browser-app,mode=max
-      - run: bash install.sh --skip-build
+      - run: bash install.sh --skip-build --no-ota
       - name: First-install wizard
         run: npm run test:e2e -- e2e/setup.spec.ts --project="$PROJECT" --grep '全新安装' --output=test-results-first-install
         working-directory: frontend

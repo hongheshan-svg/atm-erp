@@ -169,7 +169,12 @@ def install(config, data):
     python = python_path(data)
     if not python.exists():
         run([sys.executable, "-m", "venv", data / "venv"])
-    run([python, "-m", "pip", "install", "-r", ROOT / "backend/requirements.txt"])
+    if (ROOT / 'INSTALL-MANIFEST.json').exists():
+        from release_install import native_dependencies
+        dependencies = native_dependencies(ROOT)
+    else:
+        dependencies = ['--only-binary=:all:', '-r', ROOT / 'backend/requirements.txt']
+    run([python, '-m', 'pip', 'install', *dependencies])
     env = environment(config, data)
     check_services(python, env)
     # The project's migrate command enforces the independent-database/schema guard.
@@ -182,7 +187,7 @@ def install(config, data):
     print("访问 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。")
 
 
-def start(config, data):
+def start(config, data, config_path=None, no_ota=False):
     python = python_path(data)
     if not python.exists() or not (data / "nginx.conf").exists():
         raise ValueError("请先执行 install")
@@ -232,6 +237,9 @@ def start(config, data):
                     time.sleep(1)
             else:
                 raise RuntimeError("服务未就绪，请查看 DATA_DIR/logs")
+            if not no_ota and not os.environ.get('ATM_ERP_OTA_MANAGED'):
+                from ota_service import install as install_ota
+                install_ota('native', ROOT, config_path or ROOT / 'native-config.json', url)
             print(f"已启动 {url}/erp/；按 Ctrl+C 停止。", flush=True)
             while all(child.poll() is None for child in children):
                 heartbeat()
@@ -287,6 +295,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("configure", "install", "start", "stop", "check"))
     parser.add_argument("--config", type=Path, default=ROOT / "native-config.json")
+    parser.add_argument('--no-ota', action='store_true', help='仅隔离测试：不注册宿主机升级服务')
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 11):
         parser.error("请使用 Python 3.11")
@@ -301,11 +310,15 @@ def main():
             check_services(python_path(data), environment(config, data))
             print("PostgreSQL / Redis 连接正常。")
         elif args.action == "install":
+            if not config.get('OTA_AGENT_TOKEN'):
+                config['OTA_AGENT_TOKEN'] = secrets.token_hex(32)
+                with args.config.open('w', encoding='utf-8') as stream:
+                    json.dump(config, stream, ensure_ascii=False, indent=2)
             install(config, data)
         elif args.action == "stop":
             stop(config, data)
         else:
-            start(config, data)
+            start(config, data, args.config, args.no_ota)
     except (ValueError, OSError, subprocess.CalledProcessError, RuntimeError) as exc:
         print(f"操作失败：{exc}", file=sys.stderr)
         sys.exit(1)

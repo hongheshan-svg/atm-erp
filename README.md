@@ -61,7 +61,7 @@ Get-FileHash .\atm-erp-v1.6.0-windows-native.zip -Algorithm SHA256
 
 ### Docker 安装
 
-启动 Docker，确认使用 Linux 容器与 Compose v2。安装过程需要访问 Docker 镜像仓库、npm 和 PyPI。解压安装包，进入解压目录后执行：
+启动 Docker，确认使用 Linux 容器与 Compose v2，并准备宿主机 Python 3.11（用于自动管理升级服务，可用 PYTHON 环境变量指定路径）。从 v1.8.1 起，正式 Docker 包携带 GitHub 预构建的 amd64/arm64 镜像，安装器校验 SHA256 后直接导入并锁定镜像身份，不执行 docker build、npm 或 pip。仅 PostgreSQL/Redis 首次拉取需要访问镜像仓库。解压安装包，进入目录执行：
 
 ```bash
 # macOS / Linux
@@ -93,7 +93,7 @@ bash install.sh
 | Linux | Python 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
 | Windows | Python 3.11 x64（含 py 启动器）、Windows Nginx，PowerShell | PostgreSQL 15；Redis 7 使用已有可连接服务（例如独立 Linux 服务器） |
 
-Windows 包不包含、不冒充提供官方 Windows Redis 7 服务。需要全套本机管理的数据服务时使用 Docker 包。原生安装器不会安装操作系统软件、创建数据库用户、开启防火墙或注册开机自启。发布包已有前端产物，无需 Node.js；从 Git 源码运行则先用 Node.js 22 执行 `cd frontend && npm ci && npm run build`。
+Windows 包不包含、不冒充提供官方 Windows Redis 7 服务。需要全套本机管理的数据服务时使用 Docker 包。原生安装器不会安装操作系统软件、创建数据库用户或开启防火墙；应用仍由 start 启动，宿主机升级执行器自动注册后台服务。发布包已有前端产物，无需 Node.js；从 Git 源码运行则先用 Node.js 22 执行 `cd frontend && npm ci && npm run build`。
 
 #### 1. 准备独立数据库
 
@@ -136,7 +136,7 @@ bash install-native.sh start
 .\install-native.ps1 start
 ```
 
-安装会创建独立 Python 虚拟环境、下载锁定依赖、检查 PostgreSQL/Redis 连接、执行原版 schema guard/迁移及初始化、配置 Nginx。任何失败立即退出，不清库、不绕过保护。首次管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；已有账户保持不变。
+安装会创建独立 Python 虚拟环境，从发布包的 wheelhouse 校验并离线安装全部锁定依赖，检查 PostgreSQL/Redis 连接、执行 schema guard/迁移及初始化、配置 Nginx，不下载源码依赖或现场编译。包内预编译依赖支持 Linux x86_64/aarch64（glibc 2.28+）、macOS Intel 12+ / Apple Silicon 14+、Windows x64；其他宿主机优先使用 Docker。仍需事先准备 Python 3.11、Nginx、PostgreSQL 15 与 Redis 7。任何失败立即退出，不清库、不绕过保护。首次管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；已有账户保持不变。
 
 看到“已启动”后访问 http://127.0.0.1:8080/erp/。启动器前台监控两个子进程；终端需保持打开，Ctrl+C 同时停止 Daphne 与 Nginx。进程异常退出时启动器非零退出。日志在 DATA_DIR/logs，诊断依赖连接用 `check`。需要开机自启时，由运维用本平台服务管理器运行相同 `start` 命令，工作目录设为解压目录，使用非管理员专用账户，保持配置私有。
 
@@ -205,7 +205,7 @@ python3 scripts/backup.py restore --env-file .env.restore --archive backups/erp-
 
 原生升级：先停止应用，备份 PostgreSQL（pg_dump 自定义格式）、DATA_DIR/uploads 附件及私有配置。新目录解压新版本，沿用原 native-config.json 和 DATA_DIR，执行 install，再 start。
 
-Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 重建应用并前向迁移。
+Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 导入已构建镜像、重建应用容器并前向迁移，不在本机编译。
 
 禁止将已升级的数据库交给旧版本运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
 
@@ -213,9 +213,9 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 
 ### 在线升级（OTA）
 
-管理员通过页面左上角“版本与升级”检查正式版本。启用宿主机执行器后，可发起“备份并升级”；执行器校验安装包 SHA256，备份成功才迁移，完成后核对运行版本。不支持降级，迁移失败后不会自动回退数据库。
+管理员通过页面左上角“版本与升级”检查正式版本。安装器默认自动注册并启动宿主机升级服务，确认真实连接后才提示安装完成，无需另外启动执行器。可在页面发起“备份并升级”；执行器校验安装包 SHA256，备份成功才迁移，完成后核对运行版本。不支持降级，迁移失败后不会自动回退数据库。
 
-执行器安装、三平台启动命令、密钥配置和故障处理见 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。应用容器不挂载 Docker socket。
+宿主机需 Python 3.11。Linux 使用 systemd（普通用户启用 linger），macOS 使用当前用户 LaunchAgent，Windows 使用当前用户计划任务；后两者随用户登录启动，与 Docker Desktop 的用户会话一致。原生启动器也会自动接入该独立服务，升级停机时执行器继续运行。旧版安装重新运行新版安装器即可接入，现有数据库和账户保留。恢复与日志排查见 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。应用容器不挂载 Docker socket。
 
 首次上线和升级后，应检查登录、角色权限、附件下载及备份恢复，不能仅以健康页作为业务验收结果。
 

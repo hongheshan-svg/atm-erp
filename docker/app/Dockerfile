@@ -1,9 +1,15 @@
-FROM node:22-alpine AS frontend
+ARG FRONTEND_MODE=build
+FROM node:22-alpine AS frontend-build
 WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
+
+FROM scratch AS frontend-prebuilt
+COPY frontend/dist/ /frontend/dist/
+
+FROM frontend-${FRONTEND_MODE} AS frontend
 
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

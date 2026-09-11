@@ -19,7 +19,7 @@ def git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
 
 
-def build(tag, output):
+def build(tag, output, artifacts):
     if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
         raise ValueError("Only stable semantic version tags may be packaged")
     commit = git("rev-parse", f"{tag}^{{}}")
@@ -48,20 +48,33 @@ def build(tag, output):
             shutil.copyfile(ROOT / relative, destination)
         for mode in ("native", "docker"):
             for platform in ("macos", "linux", "windows"):
+                for folder in ('wheelhouse', 'images'):
+                    shutil.rmtree(source / folder, ignore_errors=True)
                 name = f"atm-erp-{tag}-{platform}-{mode}"
                 manifest = {
                     "version": tag, "source_commit": commit, "installer_commit": installer_commit,
                     "platform": platform, "mode": mode,
-                    "architecture": "host-native dependencies (x86_64 or arm64 where available)",
+                    "architecture": "amd64/arm64 Docker; native wheelhouse architectures listed below",
                     "offline": False, "overlay_files": list(OVERLAY),
                     "note": "Original tag business code; supplementary installers, no tag rewrite.",
                 }
+                if mode == 'docker':
+                    images = json.loads((artifacts / 'images/manifest.json').read_text())
+                    manifest.update(docker_image=images['docker_image'], docker_archives=images['docker_archives'])
+                    shutil.copytree(artifacts / 'images', source / 'images')
+                    # A release package physically has no build directive.
+                    compose = (source / 'docker-compose.yml').read_text()
+                    compose = compose.replace('    build:\n      context: .\n      dockerfile: docker/app/Dockerfile\n', '')
+                    (source / 'docker-compose.yml').write_text(compose)
+                else:
+                    shutil.copytree(artifacts / 'wheels' / platform, source / 'wheelhouse')
+                    manifest.update(native_prebuilt=True, native_architectures=sorted(p.name for p in (source / 'wheelhouse').iterdir()))
                 (source / "INSTALL-MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
                 command = (".\\install-native.ps1 configure" if platform == "windows" else "bash install-native.sh configure") if mode == "native" else (".\\install.ps1" if platform == "windows" else "bash install.sh")
                 (source / "INSTALL-START-HERE.txt").write_text(
                     f"Lean ERP {tag} / {platform} / {mode}\n\n"
                     f"先阅读 README.md 的安装说明，安装前置依赖。\n入口：{command}\n"
-                    "这是联网安装包，不内置 Python、数据库、Nginx 或 Docker 镜像。\n"
+                    "包含 CI 预构建镜像或原生依赖，无需本地编译。仍需对应宿主机运行环境。\n"
                     "业务源码保持原 tag；安装器补充版本见 INSTALL-MANIFEST.json。\n",
                     encoding="utf-8")
                 with zipfile.ZipFile(output / (name + ".zip"), "w", zipfile.ZIP_DEFLATED) as bundle:
@@ -78,5 +91,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tag")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument('--artifacts', type=Path, required=True)
     args = parser.parse_args()
-    build(args.tag, args.output.resolve())
+    build(args.tag, args.output.resolve(), args.artifacts.resolve())

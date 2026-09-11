@@ -41,6 +41,33 @@ def verify(folder, tag, commit):
                 or manifest['installer_commit'] != commit
             ):
                 raise ValueError('Installer provenance differs from tag')
+            prefix = path.stem + '/'
+            if manifest.get('mode') not in ('native', 'docker'):
+                raise ValueError('Installer mode is missing')
+            if mode := manifest.get('mode'):
+                if mode == 'docker':
+                    if not re.fullmatch(
+                        r'ghcr\.io/hongheshan-svg/atm-erp@sha256:[a-f0-9]{64}', manifest.get('docker_image', '')
+                    ):
+                        raise ValueError('Docker release must pin its CI-built image')
+                    if set(manifest.get('docker_archives', {})) != {'amd64', 'arm64'}:
+                        raise ValueError('Both Docker architectures are required')
+                    for arch, record in manifest['docker_archives'].items():
+                        with archive.open(prefix + 'images/' + arch + '.tar.gz') as stream:
+                            if hashlib.file_digest(stream, 'sha256').hexdigest() != record['sha256']:
+                                raise ValueError('Bundled image digest differs')
+                elif mode == 'native':
+                    if not manifest.get('native_prebuilt') or not manifest.get('native_architectures'):
+                        raise ValueError('Native release must include precompiled dependencies')
+                    for arch in manifest['native_architectures']:
+                        wheel_prefix = prefix + 'wheelhouse/' + arch + '/'
+                        hashes = json.loads(archive.read(wheel_prefix + 'SHA256.json'))
+                        for file, digest in hashes.items():
+                            with archive.open(wheel_prefix + file) as stream:
+                                if hashlib.file_digest(stream, 'sha256').hexdigest() != digest:
+                                    raise ValueError('Native dependency digest differs')
+            if path.stat().st_size > 500_000_000:
+                raise ValueError('Package exceeds the OTA download size guard')
     return {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
         for path in [*(folder / name for name in names), checksum]

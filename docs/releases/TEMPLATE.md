@@ -10,7 +10,7 @@
 
 ### Docker
 
-下载下方对应平台的 `atm-erp-{{TAG}}-<platform>-docker.zip`，解压并进入目录。需先安装 Docker Engine / Docker Desktop（Linux 容器）和 Compose v2。
+下载下方对应平台的 `atm-erp-{{TAG}}-<platform>-docker.zip`，解压并进入目录。包内包含 GitHub 预构建的 amd64/arm64 镜像，校验后直接安装，不在本机构建。需先安装 Docker Engine / Docker Desktop（Linux 容器）、Compose v2 和宿主机 Python 3.11。
 
 ```bash
 # macOS / Linux
@@ -24,7 +24,7 @@ bash install.sh
 
 ### One-line install (Linux · Docker)
 
-在空目录执行，需已安装 Docker、Compose v2、curl 和 unzip：
+在空目录执行，需已安装 Docker、Compose v2、Python 3.11、curl 和 unzip：
 
 ```bash
 curl -fL https://github.com/hongheshan-svg/atm-erp/releases/download/{{TAG}}/atm-erp-{{TAG}}-linux-docker.zip -o atm-erp-{{TAG}}-linux-docker.zip && unzip atm-erp-{{TAG}}-linux-docker.zip && (cd atm-erp-{{TAG}}-linux-docker && bash install.sh)
@@ -37,7 +37,7 @@ curl -fL https://github.com/hongheshan-svg/atm-erp/releases/download/{{TAG}}/atm
 从下方 **Assets** 下载适合平台的安装包：
 
 - 平台：`macos` / `linux` / `windows`。
-- 安装方式：`docker` / `native`；原生安装步骤见 Installation Guide。
+- 安装方式：`docker` / `native`；原生包包含预编译依赖，运行环境与安装步骤见 Installation Guide。
 - SHA256 校验清单：`atm-erp-{{TAG}}-SHA256SUMS.txt`。
 
 ## 📚 Documentation

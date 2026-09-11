@@ -1,5 +1,31 @@
 # 精简实施与验收证据
 
+## v1.8.1 GitHub 预构建发布（2026-09-11）
+
+- Docker 发布流水线在 amd64/arm64 runner 构建、检查运行版本、推送固定仓库并生成镜像归档。正式包移除 Compose build 配置，固定镜像 digest、归档 SHA256 与 image ID；安装与 OTA 只导入/拉取，不回退本地编译。随包归档不要求安装用户登录 GHCR。
+- Linux、macOS、Windows 原生依赖分别在对应系统解析并下载二进制 wheel，覆盖 Linux x86_64/aarch64、macOS Intel/Apple Silicon、Windows x64；原生安装校验包内哈希并使用完整锁定清单离线安装。仍需 Python 3.11、Nginx 与数据库运行环境，不冒充包含操作系统运行时。
+- Docker 隔离 OTA 演练通过，日志 `/private/tmp/erp-181-docker-ota.log`，测试先由发布侧构建并移除镜像，再要求执行器从归档导入；使用 umask 077 并验证备份、数据保留及升级日志无构建命令。macOS 原生离线依赖安装与 pip check 通过，日志 `/private/tmp/erp-181-native-offline.log`。
+- 执行器/服务 25 项、预构建安装 6 项、工作流 9 项检查通过。前端 lint、typecheck、62 项单测与 build 通过，构建日志 `/private/tmp/erp-181-frontend.log`。完整三平台、双端浏览器与 OTA 的发布结论以本次 PR / Release 全套 CI 为准。
+- 合并此前自动宿主机服务、私有解压权限与进度说明修复，保留既有权限、数据库、备份和失败审计。本版按补丁递增为 v1.8.1，无新增数据库迁移；发布前不得把尚未公开验证的 GHCR 地址描述为匿名可拉取。
+
+## OTA 权限故障与进度显示修复（2026-09-11）
+
+- 用户实际升级到 v1.8.0 时，后台服务 umask 077 使 ZIP 解压源码成为 600/700；Docker COPY 保留权限，非 root 应用无法读取 entrypoint。备份成功后新容器重启失败；前端断连继续显示缓存心跳和旧构建进度，造成矛盾提示。
+- 解压仅把安装源码标准化为文件 644/可执行文件 755、目录 755；私有父目录、配置、备份仍为私有权限。新增 umask 077 回归，并让 Docker 完整演练也使用真实后台服务 umask，避免原先测试直接实例化 Runner 时漏测。
+- 当前 18360 应用使用同一 v1.8.0 代码前向恢复，健康接口返回 version=1.8.0；未回退、清库或改写失败任务。完整备份与任务日志保留于宿主机私有状态目录 job-1-20260910T235116，执行器持续管理路径已切换至恢复安装。
+- 进度界面只突出一个状态，步骤和备份折叠；断连不显示缓存“已连接”，明确上次更新时间和旧进度，不推断仍在构建或正在重启。当前版本等于失败任务目标时明确显示服务已恢复并保留失败记录。
+- OTA 构建复用已经过安装包 SHA256 校验的 frontend/dist，使用 FRONTEND_MODE=prebuilt，跳过宿主机上的重复 npm 安装和编译；源码开发构建仍默认完整编译。
+- 执行器/服务 25 项测试通过，日志 `/private/tmp/erp-ota-progress-unit.log`；前端升级组件 6 项及构建通过。真实 umask 下 Docker 隔离升级、迁移及数据保留通过，日志 `/private/tmp/erp-ota-umask-smoke.log`。本地修复镜像及启动日志 `/private/tmp/erp-ota-progress-image.log`、`/private/tmp/erp-ota-progress-start.log`。浏览器已验证 v1.8.0 页面与恢复说明；源码修复未发布新版本。
+
+## 默认自动连接宿主机升级服务（2026-09-11）
+
+- 根据用户要求，Docker 安装器及原生 start 默认注册独立宿主机升级服务，确认真实心跳后才提示就绪。macOS LaunchAgent、Linux systemd、Windows 计划任务负责自动启动与恢复；服务身份按部署区分，重复安装复用在线服务，未完成升级不被覆盖。
+- 继续使用原 `ota_runner.py`、固定仓库、管理员权限、SHA256、备份和前向迁移。不往 app 挂载 Docker socket，不增加业务表或伪造在线状态。原生升级子进程携带管理标记，兼容旧安装器 CLI，避免停机期间重复注册执行器。
+- 当前隔离 ERP `http://127.0.0.1:18360` 已配置持久服务目录 `/Users/zhengshan/.local/share/atm-erp-ota/current-18360`，使用私有配置副本；没有发起版本升级。实际页面显示“执行器已连接：macos / Docker”。分别终止执行器与整个宿主机服务后，均自动恢复新进程、相同执行器身份和真实心跳。
+- 执行器及服务测试 24 项通过，日志 `/private/tmp/erp-auto-ota-unit.log`；原生安装器 7 项、工作流检查 9 项通过。前端 lint、typecheck、升级组件 5 项与 build 通过，构建日志 `/private/tmp/erp-auto-ota-ui-build.log`。
+- Docker 隔离升级演练通过，日志 `/private/tmp/erp-auto-ota-docker.log`；最终原生隔离升级演练通过，日志 `/private/tmp/erp-auto-ota-native-final.log`。检查备份、迁移、数据保留与运行版本；本机默认网段耗尽时为演练显式指定独立临时网段，不删除现有环境。
+- 三平台服务配置测试已加入 Installer validation。Linux/Windows 的服务注册参数与配置生成有自动测试，本轮未在这两个系统真实注册服务或模拟重启；macOS 已实测服务恢复，未模拟整机重启。macOS/Windows 服务随安装用户登录运行，Linux 用户服务启用 linger。源码改动尚未提交或发布，不修改既有 v1.8.0 安装包。
+
 ## 概念图 UI 完整实施（2026-09-10）
 
 - 覆盖 14 类主页面、设置/基础资料/库存/财务/项目子页签，以及真实表单、详情、附件、合同和首次安装。统一导航、工具栏、状态标签、分页、侧边详情与移动布局；审计详情只读展开，不引入新的业务操作。

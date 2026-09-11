@@ -1,6 +1,7 @@
 """Isolated Docker OTA rehearsal. v9.0.0 is a local fixture, never published."""
 import argparse
 import hashlib
+import gzip
 import importlib.util
 import json
 import os
@@ -46,7 +47,11 @@ def main():
         command([*compose, 'exec', '-T', 'app', 'python', 'manage.py', 'shell', '-c', code])
 
     try:
-        command(['bash', ROOT / 'install.sh', '--env-file', env_file])
+        if os.environ.get('LEAN_OTA_TEST_SUBNET'):
+            command(['docker', 'network', 'create', '--subnet', os.environ['LEAN_OTA_TEST_SUBNET'],
+                     '--label', 'com.docker.compose.network=default', '--label', 'com.docker.compose.project=' + project,
+                     project + '_default'])
+        command(['bash', ROOT / 'install.sh', '--env-file', env_file, '--no-ota'])
         shell("from apps.core.models import Company; Company.objects.filter(pk=1).update(name='OTA 保留数据测试')")
         stage = task / 'fixture'
         stage.mkdir()
@@ -70,7 +75,25 @@ def main():
             "class Migration(migrations.Migration):\n"
             f"    dependencies = [('core', '{latest.stem}')]\n"
             "    operations = [migrations.AddField(model_name='company', name='ota_test_marker', field=models.CharField(max_length=40, default='ota-smoke-marker'))]\n")
-        (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'docker', 'platform': ota.PLATFORM}))
+        # Simulate the CI build before publishing: the executor may only load it.
+        for path in stage.rglob('*'):
+            path.chmod(0o755 if path.is_dir() else 0o644)
+        command(['docker', 'build', '--build-arg', 'FRONTEND_MODE=prebuilt', '-t', project + ':prebuilt', '-f', stage / 'docker/app/Dockerfile', stage])
+        images = stage / 'images'
+        images.mkdir()
+        arch = subprocess.check_output(['docker', 'info', '--format', '{{.Architecture}}'], text=True).strip()
+        arch = {'aarch64': 'arm64', 'x86_64': 'amd64'}.get(arch, arch)
+        tar = task / 'image.tar'
+        command(['docker', 'save', '-o', tar, project + ':prebuilt'])
+        compressed = images / (arch + '.tar.gz')
+        with tar.open('rb') as src, gzip.open(compressed, 'wb', compresslevel=1) as dst:
+            shutil.copyfileobj(src, dst)
+        image_id = subprocess.check_output(['docker', 'image', 'inspect', project + ':prebuilt', '--format', '{{.Id}}'], text=True).strip()
+        # Remove it to prove the upgrade imports the published bytes, not a cached image.
+        command(['docker', 'image', 'rm', project + ':prebuilt'])
+        (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'docker', 'platform': ota.PLATFORM,
+            'docker_image': 'ghcr.io/hongheshan-svg/atm-erp@sha256:' + 'a' * 64,
+            'docker_archives': {arch: {'sha256': ota.file_hash(compressed), 'image_id': image_id}}}))
         archive = task / 'fixture.zip'
         with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
             for source in stage.rglob('*'):
@@ -103,6 +126,8 @@ def main():
         with original(urllib.request.Request(url + '/api/core/upgrade/', headers={'Authorization': 'Bearer ' + access})) as response:
             state = json.load(response)
         assert state['job']['status'] == 'succeeded', state
+        upgrade_log = next((task / 'state').glob('job-*/upgrade.log')).read_text()
+        assert 'Built ' not in upgrade_log and 'npm ci' not in upgrade_log, upgrade_log
         backup = Path(state['job']['backup']) / 'database-and-uploads.zip'
         with zipfile.ZipFile(backup) as bundle:
             manifest = json.loads(bundle.read('manifest.json'))
@@ -122,4 +147,7 @@ def main():
 
 
 if __name__ == '__main__':
+    # Match the real host daemon's private umask; otherwise image permissions
+    # bugs can be hidden by the test process's usual 022 default.
+    os.umask(0o077)
     main()
