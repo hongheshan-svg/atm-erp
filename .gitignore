@@ -72,10 +72,6 @@ logs/
 # Uploads
 uploads/
 
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
 # Coverage
 htmlcov/
 .coverage

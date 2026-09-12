@@ -44,7 +44,7 @@ export function industryCommand(command: Command): Command {
     if (key === 'address') extra = { ...extra, wide: true, placeholder: '完整省市区、街道及厂区 / 楼栋', hint: '用于合同主体资料；采购实际收货地址在签署版本归档时另行确认。' }
     if (key === 'username') extra = { ...extra, placeholder: '如 zhangsan、lisi，按公司账号规范填写', hint: '一人一个账号；兼任岗位请在同一账号多选角色，便于操作追溯。' }
     if (key === 'members') extra.hint = '选择参与机械、电气、软件、装配及调试的实际人员；后续任务仍需指定执行人。'
-    if (key === 'name' && (sales || projects)) extra.placeholder = '如 客户简称 · 产品型号 · 自动装配检测线'
+    if (key === 'name' && (sales || projects)) extra = { ...extra, placeholder: '按销售合同中的设备 / 产线名称原文填写', hint: sales ? '合同未签署时可填写暂定名称，签约前按合同确认；签约生成项目沿用此名称，不拼接客户、型号或编号。' : '设备名称以销售合同为准，项目编号另行自动生成；独立项目无合同时在需求说明中注明名称待确认。' }
     if (key === 'name' && path.startsWith('/business/items/')) extra.placeholder = '如 伺服电机、光电传感器、定位治具底板'
     if (key === 'name' && path.startsWith('/business/partners/')) extra.hint = '使用合同及开票的完整单位名称，避免同一往来单位重复建档。'
     if (key === 'code' && path.startsWith('/business/items/')) extra = { ...extra, placeholder: '填写公司物料编码；留空自动生成', hint: '支持自定义编码，保留前导零；同一规格优先复用已有物料。' }

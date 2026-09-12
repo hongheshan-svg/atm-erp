@@ -1,6 +1,6 @@
 # Repository Guidance: Lean ERP
 
-面向约 50 人非标自动化公司，只保留工作台、经营报表、销售、项目、BOM、采购、库存、收付款、基础资料和设置。范围以 docs/CORE_ERP_SCOPE.md 为准，接口以 docs/LEAN_REBUILD_CONTRACT.md 为准；不要重新引入已删除扩展。
+面向约 50 人非标自动化公司，只保留工作台、经营报表、销售、项目、BOM、采购、库存、收付款、基础资料和设置；不要重新引入已删除扩展。范围变化查 docs/CORE_ERP_SCOPE.md，接口/字段/业务动作变化查 docs/LEAN_REBUILD_CONTRACT.md 对应章节，模块边界变化查 docs/MODULE_BOUNDARIES.md。引用文档不等于每次全文阅读；已加载且未变化的内容不重复读取。
 
 - Django REST Framework 后端，Vue 3 + TypeScript + Element Plus 前端，PostgreSQL 15 + Redis 7。
 - 本地 app 仅 core/accounts/business。只支持独立新数据库，schema guard 拒绝旧表、旧迁移和回滚；禁止清库或绕过保护。
@@ -12,8 +12,11 @@
 - 前端统一走 src/utils/request.ts 和 src/api；页面不直接 import axios。主路径 /erp/，业务 API /api/business/。附件只走鉴权下载。
 - 全新安装用 install.sh/install.ps1，默认独立 atm-erp-lean 项目和新卷，服务仅 postgres/redis/app；app 只运行 Daphne、Nginx，无 Celery、WebSocket、docker.sock。按用户新增要求，安装器默认通过 scripts/ota_service.py 自动注册、启动并保活宿主机执行器 scripts/ota_runner.py，确认真实心跳；仅隔离 CI 可显式跳过服务注册。仅管理员发起固定仓库正式版升级，执行器校验 SHA256、先备份后迁移，不回退或清空数据库。
 - 本地开发配置 LEAN_ENVIRONMENT=development 关闭登录限流；发布部署必须使用 production（默认值），恢复原10次/分钟限制，不能把开发配置直接沿用到发布环境。DEBUG 不随开发标记开启。
-- 后端检查：bash scripts/precheck-tests.sh --all（独立 PostgreSQL）；也可 python run_all_tests.py --stage checks/platform/business/concurrency。测试目标只维护在 scripts/ci/backend_test_matrix.py，不复制名单。
-- 前端检查在 frontend：npm ci、npm run lint、npm run typecheck、npm run test、npm run build、npm run test:e2e。浏览器必须显式指定隔离测试 URL 和管理员密码，不读取生产配置。
+- 后端局部变更按影响选择 python run_all_tests.py --stage checks/platform/business/concurrency；发布、全系统验收或广泛业务变更执行 bash scripts/precheck-tests.sh --all（独立 PostgreSQL）。测试目标只维护在 scripts/ci/backend_test_matrix.py，不复制名单。纯文档改动检查内容一致性及链接，不无条件运行业务测试。
+- 前端在 frontend 按影响运行 npm run lint、typecheck、test、build 及相关 test:e2e；全系统验收运行全部。npm ci 用于依赖缺失、锁文件变化、依赖异常或干净CI环境。浏览器必须显式指定隔离测试 URL 和管理员密码，不读取生产配置。同一源码、依赖、配置和目标镜像的成功证据可复用；新变更、失败或未解决风险才重跑相应检查，发布CI复用由 scripts/ci/release_gate.py 核验。
+- 已授权且目标明确的隔离测试可连续执行、修复并复验，无需逐步确认；实现任务完成所需启动、检查和修复后再交付，不在初版后自行暂停。不得扩大到生产、其他部署或外部消息，不绕过沙箱审批。某项验证受阻时继续独立工作并说明未覆盖项，不能声称通过或越过发布门禁。供用户检查的预览站点也须完成安装器的升级服务注册和真实心跳验证，不视作可跳过服务的隔离CI。
+- ERP业务验证使用 skills/lean-erp-validation/SKILL.md；旧架构技能不适用。全局同名技能仅作定位入口，业务规则只在仓库版维护。纯文案、静态样式和只读说明不触发业务验证技能；其他专用技能仅在任务确实需要时使用，不因出现URL、文件名或技术关键词就加载。
+- 用户明确要求先审阅方案时，停在审阅边界；已选定方案或已授权实现时，不重复请求同一确认。必要信息缺失时先完成不依赖它的工作，只询问仍然阻塞的事项。规则说明和测试结果如有差异应如实报告，不以修改说明代替修复行为。
 - 使用 feature branch，不直接提交 main；保留用户未提交改动。使用 apply_patch 修改源码，按实际行为补测试。
 - 发布说明使用 docs/releases/TEMPLATE.md，在最下方保留 Installation 与 Documentation 区块，替换实际 tag 并核对附件名称。按用户新增要求，GitHub 预构建 Docker amd64/arm64 镜像，安装器仅拉取固定 digest 或校验导入随包镜像，不回退本地构建；原生包携带 CI 预编译 wheelhouse 离线安装依赖，不现场编译。不编造公开可用的 GHCR 地址，完整安装说明保留在 README。
 - 日常发布默认只递增补丁号（如 1.0.0 → 1.0.1）；除非用户明确指定，不自行提升主版本号或次版本号。以后端、前端和 tag 一致的版本发布，并在完整 CI 通过、合并 main 后打 tag。

@@ -2,6 +2,10 @@
 
 ## 产品编码与 BOM 申请信息（2026-09-11）
 
+设备名称以销售合同原文为准，销售签约生成项目沿用销售名称；不自动拼接型号或编号。设置的“应用项目规范”沿用 `codes/{id}/configure/` 提交固定 ATM/YY/2/year 配置及原版本/原因，不提交计数、不覆盖历史编号。原文件未定义型号格式，研发型号和图号仍由研发提供。
+
+用户已明确 Word 优先于 Excel：新项目采用 ATMYYNN，不以历史BOM中的AYYNN缩写定义新规则。历史编号不自动转换或建立同一项目映射。Excel空产品编号按规范分类建码，图号不作为物料编码；缺型号/规格与图号身份冲突需核对，不能推测补全。
+
 `projects/bom-template/` 返回15列BOM模板，兼容旧三/四/七列。`projects/{id}/import-preview/` 接受空编码及物料信息，按完整物料身份复用或预演新建；不持久化物料、编号计数或业务记录。新模板返回签名token，`projects/{id}/bom-import-confirm/` POST `{token}`，绑定当前用户、项目和BOM版本，30分钟有效；锁内重新解析物料并原子保存BOM，以token派生幂等键。既有编码的补填资料不得覆盖主数据，多个相同候选要求显式编码。旧模板继续使用原BOM修订确认。
 
 物料新增 product_category（11/12/13/19/21/22/23/29，可空兼容旧记录）、drawing_number、drawing_revision；specification为型号/规格，品牌独立。选择类别自动按两位类别＋年份（无图固定99）＋六位流水生成，仍允许手填唯一编码。有图要求图号，分类产品要求型号/规格；同图号同版本不得重复建码，分类产品的版本身份字段禁止覆盖。CodeRule产品计数沿用事务锁，普通编号新增 YY 日期格式；新安装项目默认 ATMYY＋两位流水，每年重置，已有规则不自动覆盖。
@@ -64,7 +68,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 `/api/core/company/` GET、`company/1/` 管理员 PATCH name/address/phone；`codes/`、`audit/` 管理员可读。`/api/health/` 返回 schema 版本。
 
-`/api/core/codes/{id}/configure/` 管理员 POST，提供 Idempotency-Key，完整提交 prefix/date_format/padding/reset_cycle/reason/expected_revision。前缀为 1–10 位字母、数字、短横线或下划线；日期可为空或 YYYY/YYYYMM/YYYYMMDD；流水补零位数 1–10，超出位数自然增长；周期 never/year/month/day，日期必须覆盖重置周期。生成格式为前缀＋服务器本地日期＋流水；修改配置不回退现有序号，仅周期切换时从 1 起，已存在编码（含软删除）自动跳过。规则版本过期拒绝，修改原因及前后配置留审计；不允许编辑计数器、用途或历史业务编号。
+`/api/core/codes/{id}/configure/` 管理员 POST，提供 Idempotency-Key，完整提交 prefix/date_format/padding/reset_cycle/reason/expected_revision。前缀为 1–10 位字母、数字、短横线或下划线；日期可为空或 YY/YYYY/YYYYMM/YYYYMMDD；普通流水补零位数 1–10，超出位数自然增长；项目采用ATM/YY/2规范时序号上限99，满额拒绝取号；周期 never/year/month/day，日期必须覆盖重置周期。生成格式为前缀＋服务器本地日期＋流水；修改配置不回退现有序号，配置保存不重置计数；后续取号遇到新的重置周期才从1起，已存在编码（含软删除）自动跳过。规则版本过期拒绝，修改原因及前后配置留审计；不允许编辑计数器、用途或历史业务编号。
 
 ## 销售
 
