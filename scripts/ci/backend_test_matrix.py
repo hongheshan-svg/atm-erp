@@ -32,6 +32,7 @@ TARGETS = {
         'apps.business.tests.test_system_reliability',
         'apps.business.tests.test_payment_terms',
         'apps.business.tests.test_hardening',
+        'apps.business.tests.test_production_roles',
     ),
     'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
 }

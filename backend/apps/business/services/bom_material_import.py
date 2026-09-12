@@ -13,7 +13,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import MANAGERS
+from apps.core.permissions import BOM_WRITERS, require_project
 
 from ..models import Item
 from . import bom, bom_import, masterdata
@@ -102,6 +102,7 @@ def resolve(actor, project, records, expected):
 
 
 def preview(actor, project, upload):
+    require_project(actor, project, BOM_WRITERS)
     headers, records = bom_import.read_file(
         upload,
         HEADERS,
@@ -133,7 +134,7 @@ def preview(actor, project, upload):
                 'bom.import.preview',
                 project.pk,
                 {},
-                MANAGERS,
+                BOM_WRITERS,
                 lambda user, locked: resolve(user, locked, records, expected),
             )
             transaction.set_rollback(True)
@@ -187,6 +188,6 @@ def confirm(actor, project, data):
         'bom.import.confirm',
         project.pk,
         data,
-        MANAGERS,
+        BOM_WRITERS,
         execute,
     )

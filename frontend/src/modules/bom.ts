@@ -1,6 +1,6 @@
 import { read } from '../api'
 import { catalog } from '../catalog'
-import { manager } from '../session'
+import { bomEditor } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
@@ -41,9 +41,9 @@ export async function createCommand(resource: string, projectId?: number): Promi
     initial: projectId ? { project: projectId } : {},
   }
 }
-export function actionNames(resource: string, _r: Row): string[] {
+export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
-  if (resource === 'bom' && manager()) a.push('移除')
+  if (resource === 'bom' && bomEditor(r)) a.push('移除')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {

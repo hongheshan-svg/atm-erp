@@ -1,6 +1,7 @@
+import { roleLabels } from './session'
 // Only expose filters implemented by the corresponding list API.
 export const resourceFilters: Record<string, { key: string; label: string; options: Record<string, string> }> = {
-  users: { key: 'role', label: '用户角色', options: { admin: '管理员', manager: '项目经理', sales_manager: '销售经理', purchaser: '采购员', warehouse: '仓管', finance: '财务', member: '成员' } },
+  users: { key: 'role', label: '用户角色', options: roleLabels },
   stocks: { key: 'item__part_type', label: '物料类别', options: { standard: '标准件', custom: '非标件' } },
   sales: { key: 'status', label: '销售状态', options: { draft: '草稿', quoted: '已报价', signed: '已签约', cancelled: '已取消' } },
   projects: { key: 'status', label: '项目状态', options: { active: '执行中', delivering: '交付中', warranty: '已验收', closed: '已结项', cancelled: '已取消' } },

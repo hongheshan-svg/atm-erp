@@ -12,6 +12,7 @@ import BOMDemand from '../components/BOMDemand.vue'
       v-if="projectId"
       :project-id="projectId"
       :status="projects.find((p) => p.id === projectId)?.status"
+      :can-edit-bom="projects.find((p) => p.id === projectId)?.can_edit_bom"
       :revision="revision"
       @changed="refresh"
     />

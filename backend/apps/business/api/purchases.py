@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from apps.core.models import AuditLog
 from apps.core.permissions import (
     MONEY_READERS,
+    PURCHASE_APPROVERS,
     PURCHASE_READERS,
     require_role,
 )
@@ -144,8 +145,8 @@ class PurchaseView(ReadView):
 
     @action(detail=True, methods=['get'], url_path='budget-check')
     def budget_check(self, request, pk=None):
-        require_role(request.user, MONEY_READERS)
-        return Response(budgets.purchase_check(self.get_object()))
+        require_role(request.user, MONEY_READERS | PURCHASE_APPROVERS)
+        return Response(budgets.purchase_visibility(request.user, budgets.purchase_check(self.get_object())))
 
     @action(detail=True, methods=['post'], url_path='approve-over-budget')
     def approve_over_budget(self, request, pk=None):

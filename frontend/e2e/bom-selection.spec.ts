@@ -20,7 +20,7 @@ async function importRows(page: Page, title: string, content: string) {
   return response.json()
 }
 
-test('采购按品牌单元类别组合多选，跨页保留勾选且只生成所选BOM行', async ({ page }, info) => {
+test('BOM 同屏采购跨页筛选保留草稿编辑，按准确含税金额保存所选明细', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const tag = `BOM${Date.now()}`
   await page.goto('/erp/masterdata?section=partners')
@@ -47,7 +47,11 @@ test('采购按品牌单元类别组合多选，跨页保留勾选且只生成�
   expect(demand.lines[0].applicant).toBe('设计员')
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
-  const picker = page.getByRole('dialog', { name: '选择 BOM 下单', exact: true })
+  const picker = page.getByRole('region', { name: 'BOM 勾选采购', exact: true })
+  const order = picker.getByRole('region', { name: '采购草稿', exact: true })
+  await expect(picker).toBeVisible()
+  await expect(order).toBeVisible()
+  await expect(order.getByRole('button', { name: '保存采购草稿', exact: true })).toBeDisabled()
   await picker.getByLabel('采购项目').selectOption(String(projectId))
   async function filter(label: string, value: string) {
     const input = picker.getByRole('combobox', { name: label, exact: true })
@@ -61,28 +65,60 @@ test('采购按品牌单元类别组合多选，跨页保留勾选且只生成�
   await filter('筛选单元', '上料单元')
   await filter('筛选类别', '标准件')
   await filter('筛选产品编码类别', '无图·标准件')
-  await expect(picker.getByRole('status')).toContainText('筛选结果 12 项')
+  await expect(picker.getByRole('status', { name: 'BOM 选择状态', exact: true })).toContainText('筛选结果 12 项')
   await picker.getByRole('checkbox', { name: `选择 ${tag}-0`, exact: true }).check()
+  await order.getByLabel('供应商', { exact: true }).selectOption(String(partnerRow.id))
+  await order.getByLabel('交期', { exact: true }).fill('2026-09-30')
+  await order.getByLabel('结算方式', { exact: true }).selectOption('month30')
+  await expect(order).toContainText(/收货.*当月月底/)
+  await expect(order).toContainText(/30\s*天/)
+  await expect(order.getByLabel('采购数量', { exact: true })).toHaveCount(1)
+  await order.getByLabel('采购数量', { exact: true }).fill('0.333')
+  await order.getByLabel('含税单价（元）', { exact: true }).fill('10.01')
   await picker.locator('.list-pagination').getByRole('button', { name: '下一页', exact: true }).click()
   await picker.getByRole('checkbox', { name: `选择 ${tag}-10`, exact: true }).check()
+  await order.getByLabel('含税单价（元）', { exact: true }).nth(1).fill('20.02')
   await filter('筛选品牌', '品牌B')
   await filter('筛选单元', '检测单元')
   await filter('筛选类别', '非标件')
   await filter('筛选产品编码类别', '有图·机加')
-  await expect(picker.getByRole('status')).toContainText('已选 2 项 · 筛选结果 13 项')
+  await expect(picker.getByRole('status', { name: 'BOM 选择状态', exact: true })).toContainText('已选 2 项 · 筛选结果 13 项')
   await picker.locator('.list-pagination').getByRole('button', { name: '下一页', exact: true }).click()
   await picker.getByRole('checkbox', { name: `选择 ${tag}-12`, exact: true }).check()
-  await page.screenshot({ path: info.outputPath('bom-selection.png'), animations: 'disabled' })
-  await picker.getByRole('button', { name: '填写采购单（3 项）', exact: true }).click()
-  const order = page.getByRole('dialog', { name: '按缺料采购', exact: true })
-  await order.getByLabel('供应商', { exact: true }).selectOption(String(partnerRow.id))
-  await order.getByLabel('交期', { exact: true }).fill('2026-09-30')
-  for (const field of await order.getByLabel('含税单价（元）', { exact: true }).all()) await field.fill('10')
+  await order.getByLabel('含税单价（元）', { exact: true }).nth(2).fill('30.03')
+  await expect(picker.getByRole('status', { name: 'BOM 选择状态', exact: true })).toContainText('已选 3 项 · 筛选结果 13 项')
+  await expect(order.getByLabel('采购数量', { exact: true })).toHaveCount(3)
+  await expect(order.getByLabel('采购数量', { exact: true }).first()).toHaveValue('0.333')
+  await expect(order.getByLabel('含税单价（元）', { exact: true }).first()).toHaveValue('10.01')
+  await expect(order.getByLabel('含税单价（元）', { exact: true }).nth(1)).toHaveValue('20.02')
+  await expect(order.getByLabel('供应商', { exact: true })).toHaveValue(String(partnerRow.id))
+  await expect(order.getByLabel('交期', { exact: true })).toHaveValue('2026-09-30')
+  await expect(order.getByLabel('结算方式', { exact: true })).toHaveValue('month30')
+  // 每行先按分四舍五入：0.333 × 10.01 = 3.33，再加 20.02 和 30.03。
+  await expect(order).toContainText(/3\.33/)
+  await expect(order).toContainText(/53\.38/)
+  await page.screenshot({ path: info.outputPath(`bom-purchase-workspace-${info.project.name}.png`), animations: 'disabled' })
   const pending = page.waitForResponse(r => r.url().endsWith('/api/business/purchases/') && r.request().method() === 'POST')
-  await order.getByRole('button', { name: '保存', exact: true }).click()
+  await order.getByRole('button', { name: '保存采购草稿', exact: true }).click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(201)
   const purchase = await read(page, `purchases/${(await response.json()).id}/`)
   expect(purchase.lines.map((r: { item: number }) => r.item).sort()).toEqual([0, 10, 12].map(i => items.results[i].id).sort())
   expect(purchase.status).toBe('draft')
+  expect(purchase.payment_term).toBe('month30')
+  expect(purchase.payment_days).toBe(30)
+  expect(purchase.due_date).toBe('2026-09-30')
+  const expectedLines = [
+    { index: 0, quantity: '0.333', unit_price: '10.01' },
+    { index: 10, quantity: '1.000', unit_price: '20.02' },
+    { index: 12, quantity: '1.000', unit_price: '30.03' },
+  ]
+  for (const expected of expectedLines) {
+    const item = items.results[expected.index].id
+    const bomLine = demand.lines.find((line: { item: number }) => line.item === item)
+    expect(purchase.lines.find((line: { item: number }) => line.item === item)).toMatchObject({
+      item, bom_line: bomLine.bom_line, quantity: expected.quantity,
+      unit_price: expected.unit_price, due_date: '2026-09-30',
+    })
+  }
 })

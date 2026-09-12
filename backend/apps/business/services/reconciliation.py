@@ -184,7 +184,9 @@ def create(actor, key, data):
             bounds(month)
             if kind != 'settlement' or not source.purchase_id:
                 raise ValidationError('月度核对仅适用于采购普通结算。')
-        if kind not in {'settlement', 'prepayment', 'refund'} or (kind == 'prepayment' and not source.purchase_id):
+        if not isinstance(kind, str) or kind not in {'settlement', 'prepayment', 'refund'}:
+            raise ValidationError({'kind': '请选择普通结算、预付款核准或退款对账。'})
+        if kind == 'prepayment' and not source.purchase_id:
             raise ValidationError({'kind': '预付款核准仅适用于采购应付。'})
         doc = lookup(Document, data['document'], 'document') if data.get('document') else None
         if doc and doc.project_id and doc.category not in {'contract', 'receipt'}:

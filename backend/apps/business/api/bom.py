@@ -17,7 +17,7 @@ from .common import ReadView, key
 
 
 class BOMView(ReadView):
-    queryset = BOMLine.objects.select_related('item', 'project')
+    queryset = BOMLine.objects.select_related('item', 'project').prefetch_related('project__members')
     serializer_class = BOMSerializer
     filterset_fields = ['project', 'item']
 

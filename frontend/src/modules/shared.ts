@@ -1,5 +1,5 @@
 import { options } from '../catalog'
-import { can } from '../session'
+import { can, purchasing, roleLabels } from '../session'
 import { today } from '../forms'
 import type { Catalog } from '../catalog'
 import type { Field } from '../types'
@@ -33,7 +33,7 @@ export const rows = (key: string, label: string, fields: Field[]): Field => ({
 export const reason = t('reason', '原因 / 说明')
 export const qty = t('quantity', '数量')
 export const price = t('unit_price', '含税单价（元）')
-export const buyer = () => can(['admin', 'manager', 'purchaser'])
+export const buyer = purchasing
 export const warehouse = () => can(['admin', 'warehouse'])
 export const finance = () => can(['admin', 'finance'])
 export const C = (key: string, label: string): Column => ({ key, label })
@@ -86,14 +86,8 @@ export const labels: Record<string, string> = {
   customer: '客户',
   supplier: '供应商',
   both: '客户及供应商',
-  admin: '管理员',
-  manager: '项目经理',
-  sales_manager: '销售经理',
-  purchaser: '采购员',
-  warehouse: '仓管',
-  finance: '财务',
+  ...roleLabels,
   reconciliation: '对账单',
-  member: '成员',
   drawing: '图纸',
   contract: '合同',
   delivery: '交付',

@@ -15,14 +15,14 @@ const busy = ref<Record<string, boolean>>({}), errors = ref<Record<string, strin
 const filter = ref('all'), showEmpty = ref(false), day = ref(today())
 let generation = 0
 const sequences: Record<string, number> = {}
-const icons = { sales: Document, tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
+const icons = { sales: Document, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
 const labels: Record<string, string> = {
-  tasks: '我的待办', overdue_purchases: '采购明细逾期', approvals: '待批准采购', prepayments: '待核准预付款',
+  tasks: '我的待办', production_tasks: '生产与售后派工', overdue_purchases: '采购明细逾期', approvals: '待批准采购', prepayments: '待核准预付款',
   settlements: '到期收付 / 待退款', reconciliations: '待确认业务对账', bank_records: '银行待认领 / 匹配',
   receipts: '待收货', drafts: '采购草稿', sales: '我的销售订单',
 }
 const notes: Record<string, string> = {
-  tasks: '按计划推进项目任务', overdue_purchases: '跟进超出承诺交期的未到货物料', approvals: '确认采购，衔接后续执行',
+  tasks: '按计划推进项目任务', production_tasks: '参与项目的装配、调试、安装与售后任务，安排人员并跟进完成', overdue_purchases: '跟进超出承诺交期的未到货物料', approvals: '确认采购，衔接后续执行',
   prepayments: '按合同条款核准预付款', settlements: '处理到期款项与退款', reconciliations: '核对差异，确认可结算额度',
   bank_records: '核实户名和用途后认领或匹配', receipts: '核对到货，及时更新库存', drafts: '完善采购明细后提交', sales: '跟进报价、签约、交付和回款',
 }
@@ -33,6 +33,7 @@ const count = (key: string) => work.value[key]?.count || 0
 const metrics = computed(() => [
   ...(work.value.tasks || work.value.overdue_purchases ? [{ label: '逾期待处理', value: (work.value.tasks?.overdue_count || 0) + count('overdue_purchases'), note: '逾期任务 + 逾期采购单', keys: ['tasks', 'overdue_purchases'], tone: 'danger' }] : []),
   ...(work.value.tasks ? [{ label: '今日到期任务', value: work.value.tasks.today_count || 0, note: '我的任务 · 今日截止', keys: ['tasks'], tone: 'primary' }] : []),
+  ...(work.value.production_tasks ? [{ label: '生产任务逾期', value: work.value.production_tasks.overdue_count || 0, note: '参与项目 · 装配 / 调试 / 安装 / 售后', keys: ['production_tasks'], tone: 'danger' }] : []),
   ...(work.value.approvals || work.value.prepayments ? [{ label: '等待审批', value: count('approvals') + count('prepayments'), note: '采购批准 + 预付款核准', keys: ['approvals', 'prepayments'], tone: 'warning' }] : []),
   ...(work.value.bank_records ? [{ label: '银行待处理', value: count('bank_records'), note: '待认领 / 匹配的流水', keys: ['bank_records'], tone: 'primary' }] : []),
 ])
@@ -40,18 +41,18 @@ function collection(key: string) {
   if (key === 'bank_records') return { path: '/finance', query: { section: 'bank', project: 'all' } }
   if (['prepayments', 'reconciliations'].includes(key)) return { path: '/finance', query: { section: 'reconciliations', project: 'all' } }
   if (key === 'settlements') return { path: '/finance', query: { section: 'entries', project: 'all' } }
-  return { path: key === 'sales' ? '/sales' : key === 'tasks' ? '/projects' : '/purchases' }
+  return { path: key === 'sales' ? '/sales' : ['tasks', 'production_tasks'].includes(key) ? '/projects' : '/purchases' }
 }
 function target(key: string, row: Row) {
   if (key === 'bank_records') return { path: '/finance', query: { section: 'bank', project: 'all', resource: 'bank-records', focus: row.id } }
   if (['prepayments', 'reconciliations'].includes(key)) return { path: '/finance', query: { section: 'reconciliations', project: 'all', resource: 'reconciliations', focus: row.id } }
   if (key === 'sales') return { path: '/sales', query: { search: row.code } }
-  const resource = key === 'tasks' ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
+  const resource = ['tasks', 'production_tasks'].includes(key) ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
   if (!row.project) return { ...collection(key), query: { ...collection(key).query, resource, focus: row.id } }
   return { path: `/projects/${row.project}`, query: { tab: resource === 'tasks' ? 'tasks' : resource === 'entries' ? 'finance' : 'purchases', resource, focus: row.id } }
 }
 function due(key: string, row: Row): string {
-  if (!['tasks', 'receipts', 'overdue_purchases', 'settlements'].includes(key)) return ''
+  if (!['tasks', 'production_tasks', 'receipts', 'overdue_purchases', 'settlements'].includes(key)) return ''
   if (key === 'settlements' && Number(row.balance) < 0) return ''
   return row.next_delivery_date || row.due_date || ''
 }
@@ -64,6 +65,7 @@ function urgency(key: string, row: Row) {
   return { text: '', tone: '', rank: 4 }
 }
 const priority = computed(() => Object.entries(highlights.value).flatMap(([key, bucket]) => bucket.results.map(row => ({ key, row, ...urgency(key, row) })))
+  .filter((item, index, all) => !['tasks', 'production_tasks'].includes(item.key) || all.findIndex(other => ['tasks', 'production_tasks'].includes(other.key) && other.row.id === item.row.id) === index)
   .filter(item => item.rank < 4 && item.key !== 'receipts')
   .sort((a, b) => a.rank - b.rank || due(a.key, a.row).localeCompare(due(b.key, b.row))).slice(0, 5))
 function title(key: string, row: Row) { return key === 'bank_records' ? row.counterparty || '待核实户名' : row.title || row.code || row.reference || '待处理事项' }

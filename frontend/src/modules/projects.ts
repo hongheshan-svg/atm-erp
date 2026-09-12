@@ -11,9 +11,9 @@ export const projectFields = (c: Catalog): Field[] => [
   { ...qty, key: 'equipment_quantity', label: '设备数量', initial: 1 },
   { key: 'warranty_months', label: '质保月数', initial: 12 },
 ]
-export const taskFields = (c: Catalog): Field[] => [
+export const taskFields = (c: Catalog, canDesign = manager()): Field[] => [
   project(c),
-  select('kind', '阶段', choices({ design: '设计', assembly: '装配', test: '调试' })),
+  select('kind', '阶段', choices(canDesign ? { design: '设计', assembly: '装配', test: '调试' } : { assembly: '装配', test: '调试' })),
   t('title', '任务名称'),
   t('description', '说明', true),
   person(c),
@@ -22,7 +22,7 @@ export const taskFields = (c: Catalog): Field[] => [
 import { all, read } from '../api'
 import { catalog } from '../catalog'
 import { options } from '../catalog'
-import { manager, hasRoles } from '../session'
+import { manager, hasRoles, production, productionProject, taskManager, timeAmender, serviceRegistrar } from '../session'
 import { user } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -72,7 +72,7 @@ export const columns: Record<string, Column[]> = {
 export function createLabel(resource: string) {
   return (
     (
-      { projects: manager() && '新建项目', tasks: manager() && '新建任务' } as Record<
+      { projects: manager() && '新建项目', tasks: (manager() || production()) && '新建任务' } as Record<
         string,
         string | boolean
       >
@@ -84,12 +84,19 @@ export async function createCommand(resource: string, projectId?: number): Promi
   let fields: Field[] = []
   let path = endpoint(resource)
   if (resource === 'projects') fields = projectFields(c)
-  if (resource === 'tasks') fields = taskFields(c)
+  if (resource === 'tasks') {
+    c.projects = c.projects.filter(productionProject)
+    const selectedProject = c.projects.find(p => p.id === projectId)
+    if (projectId && !selectedProject) throw new Error('没有当前项目的生产派工权限，请刷新项目后重试。')
+    const canDesign = manager() && (selectedProject ? selectedProject.can_manage !== false : c.projects.every(p => p.can_manage !== false))
+    fields = taskFields(c, canDesign).map(field => field.key === 'project' && projectId ? { ...field, readonly: true } : field)
+  }
   return {
     title: String(createLabel(resource)),
     path,
     fields,
     initial: projectId ? { project: projectId } : {},
+    ...(resource === 'tasks' && projectId ? { prepare: (data: Row) => ({ ...data, project: projectId }) } : {}),
   }
 }
 export function actionNames(resource: string, r: Row): string[] {
@@ -100,26 +107,26 @@ export function actionNames(resource: string, r: Row): string[] {
       if (!['closed', 'cancelled'].includes(r.status)) a.push('编辑项目')
       if (['draft', 'quoted', 'active'].includes(r.status)) a.push('取消项目')
       if (['active', 'delivering'].includes(r.status)) a.push('发货')
-      if (['delivering', 'warranty'].includes(r.status)) a.push('登记售后')
       if (r.status === 'warranty') a.push('结项')
       if (['closed', 'cancelled'].includes(r.status)) a.push('重新打开')
     }
+    if (serviceRegistrar(r) && ['delivering', 'warranty'].includes(r.status)) a.push('登记售后')
   }
   if (resource === 'tasks') {
-    if ((manager() || r.assignee === user.value?.id) && ['open', 'done'].includes(r.status)) {
+    if ((taskManager(r) || r.assignee === user.value?.id) && ['open', 'done'].includes(r.status)) {
       a.push('登记工时')
       if (r.status === 'open' && r.kind !== 'acceptance') a.push('完成任务')
     }
-    if (manager()) {
+    if (taskManager(r)) {
       if (r.status === 'open') a.push('重新分配')
-      if (r.status === 'open' && !['install', 'acceptance'].includes(r.kind)) a.push('取消任务')
-      if (r.status !== 'open' && r.kind !== 'acceptance') a.push('重开任务')
+      if (!['install', 'acceptance'].includes(r.kind) && (r.can_cancel ?? (manager() && r.status === 'open'))) a.push('取消任务')
+      if (r.kind !== 'acceptance' && (r.can_reopen ?? (manager() && r.status !== 'open'))) a.push('重开任务')
     }
   }
   if (resource === 'deliveries' && manager() && !r.accepted_date) a.push('验收')
   if (
     resource === 'time' &&
-    (manager() || r.user === user.value?.id) &&
+    timeAmender(r) &&
     !r.reversal_of &&
     !r.reversed_by &&
     Number(r.hours) > 0
@@ -177,7 +184,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ]
     initial = { quantity: '1', installer: r.manager, acceptor: r.manager, materials: [] }
   }
-  if (name === '登记售后')
+  if (name === '登记售后') {
+    const managesProject = manager() && r.can_manage !== false
     fields = [
       select(
         'delivery',
@@ -191,16 +199,22 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       t('description', '说明', true),
       person(c),
       date('due_date', '期限', true),
-      {
+      ...(managesProject ? [{
         key: 'fee',
         label: '收费金额（元）',
         initial: '0',
         hint: '质保内免费，质保外需登记正数费用。',
-      },
+      }] : []),
     ]
+    if (!managesProject) return {
+      title: name, path, fields,
+      notice: { type: 'info', text: '生产经理仅登记质保内免费售后。质保外或收费事项请由项目经理确认创建，再安排执行人员。' },
+      prepare: data => ({ ...data, fee: '0' }),
+    }
+  }
   if (name === '验收') fields = [date(), reason]
   if (name === '登记工时') {
-    fields = [date(), t('hours', '工时'), reason, ...(manager() ? [person(c, 'user', '人员')] : [])]
+    fields = [date(), t('hours', '工时'), reason, ...(taskManager(r) ? [person(c, 'user', '人员')] : [])]
     initial = { user: r.assignee }
   }
   if (name === '更正工时') {

@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
-import { money, can } from '../session'
+import { money, purchaseReader, productionProject } from '../session'
 import { actionNames, actionCommand, display } from '../business'
 import { message } from '../utils/request'
 import type { Row, Command } from '../types'
@@ -29,7 +29,7 @@ const tabsRef = ref<TabsInstance>()
 async function revealTab() {
   await revealActiveTab(() => tabsRef.value)
 }
-const allowedTabs = ['tasks', 'bom', ...(can(['admin', 'manager', 'purchaser', 'warehouse', 'finance']) ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
+const allowedTabs = ['tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
 const initialTab = String(route.query.tab || sessionStorage.getItem(`project-tab-${id}`) || 'tasks')
 const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
 const overview = ref(sessionStorage.getItem('project-overview') !== 'collapsed')
@@ -41,6 +41,7 @@ watch(tab, value => { if (value === 'cost') void load() })
 const error = ref('')
 const command = ref<Command | null>(null)
 async function load() {
+  error.value = ''
   try {
     project.value = await read(`/business/projects/${id}/`)
     if (money() && tab.value === 'cost') cost.value = await read(`/business/projects/${id}/cost/`)
@@ -114,7 +115,7 @@ onMounted(load)
         ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ResourcePanel
           resource="tasks"
           title="项目任务"
-          :allow-create="['active', 'delivering'].includes(project.status)"
+          :allow-create="['active', 'delivering'].includes(project.status) && productionProject(project)"
           :project-id="id"
           :params="{ project: id }"
           :revision="revision"
@@ -128,6 +129,7 @@ onMounted(load)
         ><ModuleTabs :parent-tab="tab" v-if="tab === 'bom'" :tabs="bomTabs" :storage-key="`project-${id}-bom`"><template #demand><BOMDemand
           :project-id="id"
           :status="project.status"
+          :can-edit-bom="project.can_edit_bom"
           :revision="revision"
           @changed="load" /></template><template #lines><ResourcePanel
           resource="bom"
@@ -136,7 +138,7 @@ onMounted(load)
           :revision="revision"
           @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane
-        v-if="can(['admin', 'manager', 'purchaser', 'warehouse', 'finance'])"
+        v-if="purchaseReader()"
         label="采购"
         name="purchases"
         lazy

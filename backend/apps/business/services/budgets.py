@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
-from apps.core.permissions import MANAGERS
+from apps.core.permissions import MANAGERS, MONEY_READERS, has_role
 
 from ..models import Entry, PurchaseLine
 from .common import ZERO, audit, fields, number, project_action, rounded, save, state, text
@@ -180,3 +180,22 @@ def purchase_check(purchase):
     report['purchase'] = purchase.pk
     report['snapshot'] = hashlib.sha256(json.dumps(report, sort_keys=True).encode()).hexdigest()
     return report
+
+
+def purchase_visibility(user, report):
+    if has_role(user, MONEY_READERS):
+        return report
+    materials = next(row for row in report['rows'] if row['key'] == 'materials')
+    warnings = [warning for warning in report['warnings'] if warning.startswith(('材料占用', '累计采购净额'))]
+    if len(warnings) < len(report['warnings']):
+        warnings.append('项目存在其他预算超额，请与项目负责人确认后再批准本次采购')
+    return {
+        'scope': 'purchasing',
+        **{
+            key: report[key]
+            for key in ('configured', 'over_budget', 'snapshot', 'purchase', 'purchase_amount', 'purchase_net')
+        },
+        'materials_budget': materials['budget'],
+        'materials_occupied': materials['occupied'],
+        'warnings': warnings,
+    }

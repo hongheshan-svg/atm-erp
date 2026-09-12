@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { all, read } from '../api'
 import { actionCommand, actionNames, createCommand } from '../business'
 import { user } from '../session'
-import { shortageCommand } from './purchases'
 import { navigation } from '../navigation'
 import { userFields } from './settings'
 
@@ -31,20 +30,6 @@ describe('模块边界', () => {
     expect(sign.fields.find(f => f.key === 'manager')?.initial).toBeUndefined()
     expect(actionNames('sales', { status: 'signed', manager: 7 })).toEqual(['查看明细', '交付与回款', '附件'])
     expect(actionNames('purchases', { status: 'submitted' })).not.toContain('批准采购')
-  })
-  it('相同物料跨单元下单仍保留每个 BOM 行，不按物料覆盖关联', async () => {
-    vi.mocked(read).mockResolvedValue({ lines: [{ bom_line: 11, item: 1, shortage: '2' }, { bom_line: 12, item: 1, shortage: '3' }] })
-    const command = await shortageCommand(9, [11, 12])
-    expect(command.prepare?.({ lines: [{ item: 1, quantity: '2', unit_price: '10' }, { item: 1, quantity: '3', unit_price: '10' }] }).lines.map((l: { bom_line: number }) => l.bom_line)).toEqual([11, 12])
-  })
-  it('BOM 采购只带入勾选项，缺口变化后拒绝沿用选择', async () => {
-    vi.mocked(all).mockResolvedValue([])
-    vi.mocked(read).mockResolvedValue({ lines: [{ bom_line: 11, item: 1, shortage: '2' }, { bom_line: 12, item: 2, shortage: '3' }] })
-    const command = await shortageCommand(9, [12])
-    expect(command.initial?.lines).toEqual([{ item: 2, item_label: 2, bom_line: 12, quantity: '3', unit_price: '' }])
-    expect(command.prepare?.({ lines: [{ item: 2, quantity: '1', unit_price: '10' }] }).lines[0].bom_line).toBe(12)
-    vi.mocked(read).mockResolvedValue({ lines: [{ bom_line: 12, item: 2, shortage: '0' }] })
-    await expect(shortageCommand(9, [12])).rejects.toThrow('状态已变化')
   })
   it('编码规则带版本且无日期可提交，物料仅新建时可手工编码', async () => {
     user.value = { role: 'admin' }
@@ -87,6 +72,30 @@ describe('模块边界', () => {
     const normal = await actionCommand('purchases', { id: 8 }, '批准采购')
     expect(normal.path).toBe('/business/purchases/8/approve/')
     expect(normal.notice?.text).toContain('未设置预算')
+  })
+
+  it('采购经理仅使用采购预算摘要，普通与超预算审批不请求项目成本', async () => {
+    user.value = { id: 8, roles: ['purchase_manager'] }
+    const summary = { scope: 'purchasing', over_budget: true, configured: true, warnings: ['材料预算超额'], purchase_amount: '400', materials_occupied: '600', materials_budget: '500', purchase_net: '600', snapshot: 'procurement-snapshot' }
+    vi.mocked(read).mockResolvedValue(summary)
+    const command = await actionCommand('purchases', { id: 8, status: 'submitted', can_approve: true }, '批准采购')
+    expect(read).toHaveBeenCalledExactlyOnceWith('/business/purchases/8/budget-check/')
+    expect(command.notice?.text).toContain('材料占用 ¥600')
+    expect(command.notice?.text).toContain('材料预算 ¥500')
+    expect(command.notice?.text).not.toContain('实际＋在途')
+    expect(command.notice?.text).not.toContain('undefined')
+    expect(command.prepare?.({ reason: '确认供应商交期', confirmed: true })).toEqual({ reason: '确认供应商交期', confirmed: true, expected_snapshot: 'procurement-snapshot' })
+    vi.mocked(read).mockResolvedValue({ ...summary, over_budget: false, warnings: [] })
+    const normal = await actionCommand('purchases', { id: 8, can_approve: true }, '批准采购')
+    expect(normal.path).toBe('/business/purchases/8/approve/')
+    expect(normal.notice?.text).toContain('预算检查通过')
+    expect(vi.mocked(read).mock.calls.every(([path]) => path === '/business/purchases/8/budget-check/')).toBe(true)
+  })
+
+  it('工程师项目附件仅开放技术分类，不提供合同或财务凭据', async () => {
+    user.value = { id: 8, roles: ['electrical_engineer'] }
+    const command = await createCommand('documents', 1)
+    expect(command.fields.find(field => field.key === 'category')?.options?.map(option => option.value)).toEqual(['drawing', 'delivery', 'other'])
   })
 
   it('冲销后保留流水，但不再提供重复冲销和工时更正', () => {

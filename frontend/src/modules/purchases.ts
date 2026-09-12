@@ -13,7 +13,7 @@ export const purchaseFields = (c: Catalog): Field[] => [
   rows('lines', '采购明细', [item(c), qty, price, { ...date('due_date', '明细交期'), optional: true }]),
 ]
 import { all, read } from '../api'
-import { manager } from '../session'
+import { purchaseApprover } from '../session'
 import { money } from '../session'
 import { decimalDifference } from '../forms'
 import type { Command } from '../types'
@@ -71,7 +71,7 @@ export function actionNames(resource: string, r: Row): string[] {
     if (buyer() || money()) a.push('附件')
     if (buyer() || money()) a.push('预览采购合同')
     if (buyer() && r.status === 'draft') a.push('修改采购', '提交采购')
-    if (manager() && r.can_manage !== false && r.status === 'submitted') a.push('批准采购', '退回修改')
+    if (purchaseApprover(r) && r.status === 'submitted') a.push('批准采购', '退回修改')
     if (warehouse() && ['approved', 'partial'].includes(r.status)) a.push('收货')
     if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('更新到货计划')
     if (warehouse() && r.lines?.some((l: Row) => Number(l.pending_quantity) > 0)) a.push('隔离品合格入库', '隔离品退回供应商')
@@ -100,7 +100,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '批准采购') {
     const check = await read(`/business/purchases/${r.id}/budget-check/`)
-    const summary = `本单 ¥${check.purchase_amount}；批准后实际＋在途 ¥${check.occupied_total}；累计采购净额 ¥${check.purchase_net}。`
+    const summary = check.scope === 'purchasing'
+      ? `本单 ¥${check.purchase_amount}；材料占用 ¥${check.materials_occupied}；累计采购净额 ¥${check.purchase_net}${check.configured ? `；材料预算 ¥${check.materials_budget}` : ''}。`
+      : `本单 ¥${check.purchase_amount}；批准后实际＋在途 ¥${check.occupied_total}；累计采购净额 ¥${check.purchase_net}。`
     if (check.over_budget) return {
       title: '超预算采购审批', path: `/business/purchases/${r.id}/approve-over-budget/`,
       notice: { type: 'warning', text: `${check.warnings.join('；')}。${summary}` },
@@ -172,32 +174,4 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     }
   }
   return { title: name, path, fields, initial, method, readonly }
-}
-export async function shortageCommand(projectId: number, selectedBomLines?: number[]): Promise<Command> {
-  const demand = await read(`/business/projects/${projectId}/demand/`)
-  const lines = demand.lines.filter((r: Row) => Number(r.shortage) > 0 && r.is_active !== false && (selectedBomLines === undefined || selectedBomLines.includes(r.bom_line)))
-  if (selectedBomLines && lines.length !== new Set(selectedBomLines).size) throw new Error('所选 BOM 的缺口或物料状态已变化，请刷新后重新勾选。')
-  if (!lines.length) throw new Error('当前没有缺料。')
-  const fields = (await createCommand('purchases', projectId)).fields.filter((f) => f.key !== 'project')
-  const detail = fields.find(f => f.key === 'lines')!
-  detail.readonly = true
-  detail.fields = detail.fields!.flatMap(f => f.key === 'item' ? [{ key: 'item', label: '物料ID', hidden: true }, { key: 'item_label', label: '物料', readonly: true, displayOnly: true }] : [f])
-  return {
-    title: '按缺料采购',
-    path: '/business/purchases/',
-    fields,
-    notice: { type: 'info', text: `已选 ${lines.length} 项 BOM；数量可调小。保存时重新校验缺口，采购草稿仍需提交审批。` },
-    initial: {
-      lines: lines.map((r: Row) => ({ item: r.item, item_label: r.item_name || r.name || r.item, bom_line: r.bom_line, quantity: r.shortage, unit_price: '' })),
-    },
-    prepare: (data) => ({
-      ...data,
-      project: projectId,
-      from_demand: true,
-      lines: data.lines.map((r: Row, index: number) => ({
-        ...r,
-        bom_line: lines[index]?.bom_line,
-      })),
-    }),
-  }
 }

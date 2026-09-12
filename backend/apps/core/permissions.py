@@ -4,16 +4,22 @@ from rest_framework.permissions import BasePermission
 
 ADMIN = {'admin'}
 MANAGERS = {'admin', 'manager'}
-PURCHASERS = {'admin', 'manager', 'purchaser'}
+PRODUCTION_MANAGERS = MANAGERS | {'production_manager'}
+PRODUCTION_TASK_KINDS = ('assembly', 'test', 'install', 'service')
+ENGINEERS = {'mechanical_engineer', 'electrical_engineer'}
+BOM_WRITERS = MANAGERS | ENGINEERS
+PURCHASE_APPROVERS = MANAGERS | {'purchase_manager'}
+PURCHASERS = PURCHASE_APPROVERS | {'purchaser'}
+ITEM_WRITERS = PURCHASERS | ENGINEERS
 WAREHOUSE = {'admin', 'warehouse'}
 FINANCE = {'admin', 'finance'}
 MONEY_READERS = {'admin', 'manager', 'finance'}
-PURCHASE_READERS = {'admin', 'manager', 'purchaser', 'warehouse', 'finance'}
-OPERATION_ROLES = PURCHASE_READERS | {'member'}
+PURCHASE_READERS = PURCHASERS | WAREHOUSE | FINANCE
+OPERATION_ROLES = PURCHASE_READERS | {'member', 'production_manager'} | ENGINEERS
 ALL_ROLES = OPERATION_ROLES | {'sales_manager'}
 SALES = MANAGERS | {'sales_manager'}
 SALES_READERS = MONEY_READERS | {'sales_manager'}
-GLOBAL_PROJECT_ROLES = {'admin', 'purchaser', 'warehouse', 'finance'}
+GLOBAL_PROJECT_ROLES = {'admin', 'purchaser', 'purchase_manager', 'warehouse', 'finance'}
 
 
 def sales_for(user, queryset):
@@ -69,6 +75,14 @@ def require_project(user, project, allowed=OPERATION_ROLES):
     require_role(user, allowed & OPERATION_ROLES)
     if not project_allowed(user, project, allowed):
         raise PermissionDenied('无权访问此项目。')
+
+
+def task_management_roles(kind):
+    return PRODUCTION_MANAGERS if kind in PRODUCTION_TASK_KINDS else MANAGERS
+
+
+def can_manage_task(user, task):
+    return project_allowed(user, task.project, task_management_roles(task.kind))
 
 
 class RolePermission(BasePermission):

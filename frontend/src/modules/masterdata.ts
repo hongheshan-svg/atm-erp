@@ -8,7 +8,7 @@ import { choices } from './shared'
 import { buyer } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
-import { can, customerOnly } from '../session'
+import { materialEditor, partnerEditor, customerOnly } from '../session'
 import { termFields, termLabel } from './payment-terms'
 import { productCategories } from '../product-categories'
 export const columns: Record<string, Column[]> = {
@@ -37,7 +37,7 @@ export const columns: Record<string, Column[]> = {
 export function createLabel(resource: string) {
   return (
     (
-      { items: buyer() && '新增物料', partners: (buyer() || can(['sales_manager'])) && '新增往来单位' } as Record<
+      { items: materialEditor() && '新增物料', partners: partnerEditor() && '新增往来单位' } as Record<
         string,
         string | boolean
       >
@@ -82,7 +82,8 @@ export async function createCommand(resource: string, projectId?: number): Promi
 }
 export function actionNames(resource: string, _r: Row): string[] {
   const a: string[] = []
-  if (['items', 'partners'].includes(resource) && buyer()) a.push('编辑')
+  if (resource === 'items' && materialEditor()) a.push('编辑')
+  if (resource === 'partners' && buyer()) a.push('编辑')
   if (resource === 'partners' && customerOnly() && _r.kind === 'customer') a.push('编辑')
   return a
 }

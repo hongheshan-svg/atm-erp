@@ -64,7 +64,7 @@ const roleChange = computed(() => {
   const before: string[] = props.command?.initial?.roles ?? (props.command?.initial?.role ? [props.command.initial.role] : [])
   const after: string[] = data.value.roles ?? []
   const names = (values: string[]) => values.map(v => field.options?.find(o => o.value === v)?.label || v).join('、') || '无'
-  return `新增：${names(after.filter(v => !before.includes(v)))}；移除：${names(before.filter(v => !after.includes(v)))}。保存后按新岗位授权；管理员可管理全系统，财务可读取金额并记账，采购/仓管可跨项目作业，项目经理限负责或参与项目，销售经理限本人销售。移除岗位不会删除原业务记录。`
+  return `新增：${names(after.filter(v => !before.includes(v)))}；移除：${names(before.filter(v => !after.includes(v)))}。保存后按新岗位授权；管理员可管理全系统，财务可读取金额并记账，采购/仓管可跨项目作业，项目经理限负责或参与项目，销售经理限本人销售。机械/电气工程师与生产经理限参与项目，生产经理负责生产及售后派工，不获得成本或财务权限。移除岗位不会删除原业务记录。`
 })
 async function previewChange() {
   const c = command.value

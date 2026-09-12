@@ -9,7 +9,15 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.accounts.models import User
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import ALL_ROLES, MANAGERS, project_allowed, require_project
+from apps.core.permissions import (
+    ALL_ROLES,
+    MANAGERS,
+    PRODUCTION_MANAGERS,
+    can_manage_task,
+    project_allowed,
+    require_project,
+    task_management_roles,
+)
 
 from ..models import Delivery, Entry, Task, TimeEntry
 from .bom import issued
@@ -75,25 +83,43 @@ def create_task(actor, key, data):
         )
         return audit(user, 'task.create', task)
 
-    return project_action(actor, key, 'task.create', data.get('project'), data, MANAGERS, execute)
+    return project_action(
+        actor, key, 'task.create', data.get('project'), data, task_management_roles(data.get('kind')), execute
+    )
 
 
-def task_action(actor, key, operation, task_id, data, roles, execute):
+def task_action(actor, key, operation, task_id, data, roles, execute, *, authorize_task=None):
     source = lookup(Task, task_id)
+
+    def authorize(user, project):
+        if authorize_task:
+            task = get_object_or_404(Task.objects.select_for_update(), pk=source.pk, project=project)
+            authorize_task(user, task)
 
     def perform(user, project):
         task = get_object_or_404(Task.objects.select_for_update(), pk=source.pk, project=project)
         state(project, OPEN_PROJECT)
         return execute(user, project, task)
 
-    return project_action(actor, key, operation, source.project_id, {'task': source.pk, 'data': data}, roles, perform)
+    return project_action(
+        actor,
+        key,
+        operation,
+        source.project_id,
+        {'task': source.pk, 'data': data},
+        roles,
+        perform,
+        authorize_action=authorize,
+    )
 
 
 def complete_task(actor, key, task_id, data):
+    def authorize(user, task):
+        if not can_manage_task(user, task) and task.assignee_id != user.pk:
+            raise PermissionDenied('只能完成分配给自己的任务，或管理范围内的生产与售后任务。')
+
     def execute(user, project, task):
         fields(data, {'reason'})
-        if not project_allowed(user, project, MANAGERS) and task.assignee_id != user.pk:
-            raise PermissionDenied('只能完成分配给自己的任务。')
         state(task, {'open'})
         if task.kind == 'acceptance':
             raise Conflict('验收必须从交付批次登记，不能直接完成验收任务。')
@@ -105,16 +131,19 @@ def complete_task(actor, key, task_id, data):
         save(task, user)
         return audit(user, 'task.complete', task, reason=reason)
 
-    return task_action(actor, key, 'task.complete', task_id, data, ALL_ROLES, execute)
+    return task_action(actor, key, 'task.complete', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
 
 
 def log_time(actor, key, task_id, data):
+    def authorize(user, task):
+        person_id = identity(data.get('user', user.pk), 'user')
+        if not can_manage_task(user, task) and (person_id != user.pk or task.assignee_id != user.pk):
+            raise PermissionDenied('只能为自己的任务登记本人工时，或登记管理范围内的生产与售后工时。')
+
     def execute(user, project, task):
         fields(data, {'user', 'date', 'hours', 'reason'})
         state(task, {'open', 'done'})
         person_id = identity(data.get('user', user.pk), 'user')
-        if not project_allowed(user, project, MANAGERS) and (person_id != user.pk or task.assignee_id != user.pk):
-            raise PermissionDenied('只能为自己的任务登记本人工时。')
         # The project lock serializes its tasks; the person lock covers other projects too.
         person = get_object_or_404(User.objects.select_for_update(), pk=person_id, is_active=True)
         require_project(person, project)
@@ -139,16 +168,18 @@ def log_time(actor, key, task_id, data):
         )
         return audit(user, 'time.create', entry)
 
-    return task_action(actor, key, 'time.create', task_id, data, ALL_ROLES, execute)
+    return task_action(actor, key, 'time.create', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
 
 
 def amend_time(actor, key, entry_id, data):
     original = lookup(TimeEntry, entry_id)
 
+    def authorize(user, task):
+        if not can_manage_task(user, task) and original.user_id != user.pk:
+            raise PermissionDenied('只能更正本人工时，或管理范围内的生产与售后工时。')
+
     def execute(user, project, task):
         fields(data, {'hours', 'date', 'reason'})
-        if not project_allowed(user, project, MANAGERS) and original.user_id != user.pk:
-            raise PermissionDenied('只能更正本人工时。')
         person = User.objects.select_for_update().get(pk=original.user_id)
         source = get_object_or_404(TimeEntry.objects.select_for_update(), pk=original.pk, task=task)
         if source.reversal_of_id or source.hours <= 0 or TimeEntry.objects.filter(reversal_of=source).exists():
@@ -202,7 +233,14 @@ def amend_time(actor, key, entry_id, data):
         return {'id': replacement.pk if replacement else reversal.pk}
 
     return task_action(
-        actor, key, 'time.amend', original.task_id, {'entry': original.pk, 'data': data}, ALL_ROLES, execute
+        actor,
+        key,
+        'time.amend',
+        original.task_id,
+        {'entry': original.pk, 'data': data},
+        ALL_ROLES,
+        execute,
+        authorize_task=authorize,
     )
 
 
@@ -334,6 +372,13 @@ def accept(actor, key, delivery_id, data):
 
 
 def service(actor, key, project_id, data):
+    def authorize(user, project):
+        if not project_allowed(user, project, MANAGERS):
+            delivery = lookup(Delivery, data.get('delivery'), 'delivery', project=project)
+            date = event_date(data)
+            if (delivery.warranty_until and date > delivery.warranty_until) or number(data.get('fee', 0), 'fee'):
+                raise PermissionDenied('收费及过保售后由项目经理确认费用后创建；生产经理负责后续派工和处理。')
+
     def execute(user, project):
         fields(data, {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee'})
         state(project, {'delivering', 'warranty'})
@@ -374,7 +419,16 @@ def service(actor, key, project_id, data):
             )
         return audit(user, 'service.create', task, delivery=delivery.pk, date=date.isoformat(), fee=str(fee))
 
-    return project_action(actor, key, 'service.create', project_id, data, MANAGERS, execute)
+    return project_action(
+        actor,
+        key,
+        'service.create',
+        project_id,
+        data,
+        PRODUCTION_MANAGERS,
+        execute,
+        authorize_action=authorize,
+    )
 
 
 def close(actor, key, project_id, data):

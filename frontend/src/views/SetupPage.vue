@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { read, write } from '../api'
-import { user, logout } from '../session'
+import { user, logout, roleLabels } from '../session'
 import { message } from '../utils/request'
 import type { Row } from '../types'
 import { Document } from '@element-plus/icons-vue'
@@ -28,7 +28,7 @@ const form = reactive({ display_name: user.value?.display_name || '', old_passwo
 const team = ref<Row[]>([])
 const rules = ref<Row[]>([])
 let originalRules: Row[] = []
-const roleNames: Record<string, string> = { admin: '管理员', manager: '项目经理', sales_manager: '销售经理', purchaser: '采购员', warehouse: '仓管', finance: '财务', member: '成员' }
+const roleNames = roleLabels
 const codeNames: Record<string, string> = { project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单' }
 const changedRules = computed(() => rules.value.filter((r, i) => ['prefix', 'date_format', 'padding', 'reset_cycle'].some(k => r[k] !== originalRules[i]?.[k])))
 async function load() {

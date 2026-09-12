@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { read, write, download } from '../api'
 import { bomCommand, permission } from '../business'
-import { manager } from '../session'
+import { bomEditor, purchaseReader } from '../session'
 import type { Row, Command } from '../types'
 import { message } from '../utils/request'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
-import { shortageCommand } from '../modules/purchases'
+import BOMPurchasePicker from './BOMPurchasePicker.vue'
 import { pageSize } from '../pagination'
 import { productCategories } from '../product-categories'
-const props = defineProps<{ projectId: number; revision?: number; status?: string }>()
+const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
 const preview = ref<Row | null>(null)
@@ -29,7 +29,21 @@ const importColumns = [
 const command = ref<Command | null>(null)
 const search = ref(''), brand = ref(''), unit = ref(''), partType = ref(''), shortageOnly = ref(false)
 const selected = ref<number[]>([])
+const pickingBom = ref(false)
+const moduleFocusedFlow = inject<Ref<boolean>>('moduleFocusedFlow', ref(false))
+watch(pickingBom, value => { moduleFocusedFlow.value = value })
+onBeforeUnmount(() => { moduleFocusedFlow.value = false })
+const purchaseTrigger = ref<{ $el: HTMLElement }>()
+const selectionTrigger = ref<{ $el: HTMLElement }>()
+let openedFromSelection = false
+async function closePurchase() {
+  pickingBom.value = false
+  await nextTick()
+  ;(openedFromSelection && selected.value.length ? selectionTrigger : purchaseTrigger).value?.$el.focus()
+}
+function savedPurchase() { void closePurchase(); saved() }
 const canPurchase = computed(() => permission.buyer() && ['active', 'delivering', 'warranty'].includes(props.status || ''))
+const canEdit = computed(() => bomEditor({ can_edit_bom: props.canEditBom }))
 const options = (key: string) => [...new Set<string>(demand.value.lines.map((line: Row) => String(line[key] || '')).filter(Boolean))].sort()
 const filtered = computed(() => demand.value.lines.filter((line: Row) =>
   (!brand.value || line.brand === brand.value) && (!unit.value || line.assembly_unit === unit.value) &&
@@ -38,16 +52,7 @@ const filtered = computed(() => demand.value.lines.filter((line: Row) =>
 ))
 const eligible = (line: Row) => Number(line.shortage) > 0 && line.is_active !== false
 function toggle(line: Row) { selected.value = selected.value.includes(line.bom_line) ? selected.value.filter(id => id !== line.bom_line) : [...selected.value, line.bom_line] }
-async function purchase() {
-  const projectId = props.projectId
-  busy.value = true; error.value = ''
-  try {
-    const next = await shortageCommand(projectId, selected.value)
-    if (props.projectId === projectId) command.value = next
-  }
-  catch (e) { if (props.projectId === projectId) error.value = message(e) }
-  finally { busy.value = false }
-}
+function purchase(event: MouseEvent) { openedFromSelection = (event.currentTarget as HTMLElement)?.textContent?.trim() === '按缺料采购'; pickingBom.value = true }
 const impact = ref<Row | null>(null)
 async function inspectImpact() {
   try { impact.value = await read(`/business/projects/${props.projectId}/bom-impact/`) } catch (e) { error.value = message(e) }
@@ -151,13 +156,15 @@ function saved() {
 }
 </script>
 <template>
-  <section class="panel" aria-label="BOM 缺料需求">
+  <BOMPurchasePicker v-if="pickingBom && canPurchase" :project-id="projectId" :initial-selection="selected" @close="closePurchase" @saved="savedPurchase" />
+  <section v-else class="panel" aria-label="BOM 缺料需求">
     <header class="panel-heading">
       <h2>BOM 与缺料</h2>
       <div class="toolbar">
+        <el-button v-if="canPurchase" ref="purchaseTrigger" :disabled="busy" @click="purchase">从 BOM 多选下单</el-button>
         <TransferTools resource="bom" path="/business/bom/" :params="{ project: projectId }" />
         <el-button @click="load">刷新需求</el-button
-        ><template v-if="manager() && ['draft', 'quoted', 'active', 'delivering'].includes(status || '')"
+        ><template v-if="canEdit && ['draft', 'quoted', 'active', 'delivering'].includes(status || '')"
           ><select v-model="templateFormat" aria-label="BOM 模板格式"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><el-button
             @click="
               download('/business/projects/bom-template/', `bom-template.${templateFormat}`, { file_format: templateFormat }).catch(
@@ -172,10 +179,10 @@ function saved() {
       </div>
     </header>
     <p class="muted">库存为共享库存，不预留，当前可用不保证后续可领。同物料可分属多个单元；已领、在途及库存按行顺序分摊，非单元实际领用记录。</p>
-    <details v-if="manager()" class="import-help"><summary>导入模板填写说明</summary><p class="muted">已有物料填写编码，后方物料资料可留空；填写时必须与已有资料一致。新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号，品牌与版本分别填写。完全相同物料自动复用，存在多个匹配时须明确编码；新编号只在确认后生成。需求、单元与申请信息按项目填写；修改已有BOM必须填写变更说明。已领、在途、库存、缺料由系统计算，旧版模板仍可使用。</p></details>
+    <details v-if="canEdit" class="import-help"><summary>导入模板填写说明</summary><p class="muted">已有物料填写编码，后方物料资料可留空；填写时必须与已有资料一致。新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号，品牌与版本分别填写。完全相同物料自动复用，存在多个匹配时须明确编码；新编号只在确认后生成。需求、单元与申请信息按项目填写；修改已有BOM必须填写变更说明。已领、在途、库存、缺料由系统计算，旧版模板仍可使用。</p></details>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
-      <template v-if="impact"><p>{{ impact.note }}</p><el-table :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></el-table><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template>
+      <template v-if="impact"><p>{{ impact.note }}</p><el-table :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></el-table><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
     </el-dialog>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
@@ -189,7 +196,7 @@ function saved() {
         label="可用库存" /><el-table-column prop="shortage" label="缺料"
     /></el-table>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
-    <footer v-if="canPurchase" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
+    <footer v-if="canPurchase" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
     <div v-if="preview" class="import-preview">
       <h3>导入预览</h3>
       <el-alert

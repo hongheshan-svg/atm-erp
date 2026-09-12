@@ -1,12 +1,19 @@
 from django.db.models import F, Sum
 from django.shortcuts import get_object_or_404
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.models import User
 from apps.core.api import Conflict
-from apps.core.permissions import GLOBAL_PROJECT_ROLES, MANAGERS, has_role
+from apps.core.permissions import (
+    BOM_WRITERS,
+    GLOBAL_PROJECT_ROLES,
+    MANAGERS,
+    has_role,
+    project_allowed,
+    task_management_roles,
+)
 
-from ..models import BOMLine, Entry, Partner, PurchaseLine
+from ..models import BOMLine, Entry, Partner, PurchaseLine, Task
 from .bom import incoming, issued
 from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
 from .execution import STAGES, assignee, task_action
@@ -148,6 +155,17 @@ def reopen_project(actor, key, project_id, data):
 
 
 def change_task(actor, key, task_id, data, operation):
+    source = lookup(Task, task_id)
+
+    def authorize(user, task):
+        if (
+            operation in {'cancel', 'reopen'}
+            and task.kind == 'service'
+            and not project_allowed(user, task.project, MANAGERS)
+            and Entry.objects.filter(task=task).exists()
+        ):
+            raise PermissionDenied('收费售后的取消与重开涉及账款，请由项目经理处理。')
+
     def execute(user, project, task):
         fields(data, {'reason', 'assignee'} if operation in {'assign', 'reopen'} else {'reason'})
         reason = text(data, 'reason')
@@ -187,7 +205,16 @@ def change_task(actor, key, task_id, data, operation):
         save(task, user)
         return audit(user, f'task.{operation}', task, reason=reason)
 
-    return task_action(actor, key, f'task.{operation}', task_id, data, MANAGERS, execute)
+    return task_action(
+        actor,
+        key,
+        f'task.{operation}',
+        task_id,
+        data,
+        task_management_roles(source.kind),
+        execute,
+        authorize_task=authorize,
+    )
 
 
 def remove_bom(actor, key, line_id, data):
@@ -218,5 +245,5 @@ def remove_bom(actor, key, line_id, data):
         return audit(user, 'bom.remove', line, reason=reason)
 
     return project_action(
-        actor, key, 'bom.remove', source.project_id, {'line': source.pk, 'data': data}, MANAGERS, execute
+        actor, key, 'bom.remove', source.project_id, {'line': source.pk, 'data': data}, BOM_WRITERS, execute
     )

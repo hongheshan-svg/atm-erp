@@ -5,7 +5,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
 from apps.core.models import CodeRule
-from apps.core.permissions import PURCHASERS, has_role, require_role
+from apps.core.permissions import ITEM_WRITERS, PURCHASERS, has_role, require_role
 
 from ..models import Item, Partner
 from .common import (
@@ -42,8 +42,8 @@ def duplicates(data, exclude=None):
 
 def masterdata(actor, key, model, data, object_id=None):
     def authorize(user):
-        require_role(user, PURCHASERS | ({'sales_manager'} if model is Partner else set()))
-        if not has_role(user, PURCHASERS):
+        require_role(user, ITEM_WRITERS if model is Item else PURCHASERS | {'sales_manager'})
+        if model is Partner and not has_role(user, PURCHASERS):
             current = model.objects.select_for_update().get(pk=identity(object_id)) if object_id else None
             if data.get('kind', current.kind if current else None) != 'customer' or (
                 current and current.kind != 'customer'
@@ -87,8 +87,10 @@ def masterdata(actor, key, model, data, object_id=None):
                 raise ValidationError({'specification': '规范要求所有产品填写型号/规格。'})
             if category.startswith('1') and not text(data, 'drawing_number', default=obj.drawing_number, maximum=100):
                 raise ValidationError({'drawing_number': '有图产品必须填写图号。'})
-        if not has_role(user, PURCHASERS) and (
-            model is not Partner or data.get('kind', obj.kind) != 'customer' or (object_id and obj.kind != 'customer')
+        if (
+            model is Partner
+            and not has_role(user, PURCHASERS)
+            and (data.get('kind', obj.kind) != 'customer' or (object_id and obj.kind != 'customer'))
         ):
             raise PermissionDenied('销售经理只能维护纯客户资料，不能修改供应商或双用途往来单位。')
         if not object_id:

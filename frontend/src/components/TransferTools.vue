@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { download, read, write } from '../api'
-import { can } from '../session'
+import { canImportResource } from '../session'
 import { message } from '../utils/request'
 import type { Column, Row } from '../types'
 import ListPagination from './ListPagination.vue'
@@ -22,21 +22,15 @@ const mappings = computed(() => (layout.value?.columns || []).map((column: Row) 
   table: (props.tableColumns || []).filter(c => column.table_keys.includes(c.key)).map(c => c.label).join('、') || '单据明细 / 新增时填写',
 })))
 const generatedColumns = computed(() => (props.tableColumns || []).filter(c => !(layout.value?.columns || []).some((field: Row) => field.table_keys.includes(c.key))).map(c => c.label).join('、'))
-const roles: Record<string, string[]> = {
-  'bank-records': ['admin', 'finance'],
-  items: ['admin', 'manager', 'purchaser'], partners: ['admin', 'manager', 'purchaser', 'sales_manager'],
-  sales: ['admin', 'manager', 'sales_manager'], projects: ['admin', 'manager'], purchases: ['admin', 'manager', 'purchaser'],
-  tasks: ['admin', 'manager'], stocks: ['admin'], entries: ['admin', 'finance'], payments: ['admin', 'finance'],
-  time: ['admin', 'manager', 'purchaser', 'warehouse', 'finance', 'member'],
-  moves: ['admin', 'warehouse'], deliveries: ['admin', 'manager'],
-}
-const importable = computed(() => !!roles[props.resource] && can(roles[props.resource]!))
+const importable = computed(() => canImportResource(props.resource))
 const bankImport = computed(() => props.resource === 'bank-records')
 const visibleRows = computed(() => preview.value?.rows.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) || [])
 watch(pageSize, () => { page.value = 1 })
 watch(() => props.resource, () => { layout.value = null; preview.value = null; opened.value = false; error.value = ''; result.value = '' })
 async function openImport() {
   opened.value = true
+  preview.value = null
+  page.value = 1
   error.value = ''
   result.value = ''
   layout.value = null

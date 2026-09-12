@@ -65,3 +65,22 @@ it('ignores an old category response after a full refresh', async () => {
   expect(wrapper.text()).not.toContain('过期结果')
   wrapper.unmount()
 })
+
+it('生产任务独立显示并链接到任务，不重复列出本人和团队的同一逾期事项', async () => {
+  const shared = { id: 12, project: 1, title: '装配跟进', due_date: '2020-01-01' }
+  vi.mocked(read).mockResolvedValue({
+    tasks: { ...bucket([shared]), overdue_count: 1, today_count: 0 },
+    production_tasks: { ...bucket([shared, { id: 13, project: 2, title: '售后派工', due_date: '2020-01-02' }]), overdue_count: 2, today_count: 0 },
+  })
+  const wrapper = await render()
+  const card = wrapper.get('.work-card-production_tasks')
+  expect(card.text()).toContain('生产与售后派工')
+  expect(card.text()).toContain('售后派工')
+  expect(card.find('a.work-item').attributes('href')).toBe('/projects/1?tab=tasks&resource=tasks&focus=12')
+  expect(wrapper.get('[aria-label="查看全部生产与售后派工"]').attributes('href')).toBe('/projects')
+  expect(wrapper.get('.priority-table').findAll('.el-table__body-wrapper tbody tr')).toHaveLength(2)
+  expect(wrapper.get('.priority-table').findAll('[aria-label="处理装配跟进"]')).toHaveLength(1)
+  expect(wrapper.findAll('.work-metric').find(metric => metric.text().includes('生产任务逾期'))?.text()).toContain('2')
+  expect(wrapper.findAll('.work-metric').find(metric => metric.text().includes('逾期待处理'))?.text()).toContain('1')
+  wrapper.unmount()
+})

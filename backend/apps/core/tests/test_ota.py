@@ -49,7 +49,7 @@ class UpgradeTests(TestCase):
             )
 
     def test_permissions_apply_to_read_check_and_write(self):
-        for role in ('manager', 'purchaser', 'warehouse', 'finance', 'member'):
+        for role in set(User.Role.values) - {'admin'}:
             self.admin.role = role
             self.admin.save()
             self.assertEqual(self.client.get('/api/core/upgrade/?check=1').status_code, 403)

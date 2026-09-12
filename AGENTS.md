@@ -4,7 +4,7 @@
 
 - Django REST Framework 后端，Vue 3 + TypeScript + Element Plus 前端，PostgreSQL 15 + Redis 7。
 - 本地 app 仅 core/accounts/business。只支持独立新数据库，schema guard 拒绝旧表、旧迁移和回滚；禁止清库或绕过保护。
-- 固定 admin/manager/sales_manager/purchaser/warehouse/finance/member 七角色，允许一个账号兼任多个角色，无 Role 表、权限树或可配置工作流。权限按业务取各岗位的并集，通过 core.permissions.has_role/PermissionMixin 授权，不按主角色判权。仅销售经理权限时只操作本人销售单；兼任采购不扩大销售范围，兼任成员只开放参与项目，兼任财务可按财务权限读取销售但不能修改他人销售。签约指定具备 manager/admin 的项目经理。成员项目范围、敏感金额过滤、已有按人员身份的审批约束与总经理报表独立授权不可省略。
+- 按用户新增要求固定 admin/manager/sales_manager/purchaser/warehouse/finance/member/purchase_manager/mechanical_engineer/electrical_engineer/production_manager 十一角色，允许一个账号兼任多个角色，无 Role 表、权限树或可配置工作流。岗位职责见 docs/ROLE_RESPONSIBILITIES.md。权限按业务取各岗位的并集，通过 core.permissions.has_role/PermissionMixin 授权，不按主角色判权。采购经理可跨项目采购审批，但不自动获得项目管理或完整成本权限；工程师仅在参与项目维护 BOM 和技术资料。生产经理仅管理参与项目的装配、调试、安装和售后任务及团队工时，保内免费售后可创建，收费确认及涉及账款的取消/重开由项目经理处理；不自动获得设计派工、发货验收、预算、BOM写入或资金权限。兼任采购不扩大工程或生产写入范围。仅销售经理权限时只操作本人销售单；兼任采购不扩大销售范围，兼任成员只开放参与项目，兼任财务可按财务权限读取销售但不能修改他人销售。签约指定具备 manager/admin 的项目经理。成员项目范围、敏感金额过滤、已有按人员身份的审批约束与总经理报表独立授权不可省略。
 - 经营报表为固定只读页面，管理员默认可看；总经理沿用 manager 角色并由管理员显式设置 management_reports 授权，默认关闭，不向所有项目经理开放。
 - BaseModel 提供审计和软删除；业务查询用 objects，删除用 soft_delete。金额流水不能物理删除，纠错保留原记录。
 - 编号用 CodeRule.generate_code；采购、库存、收付款必须事务加锁与服务端校验，重复提交用 ActionReceipt，不信任前端金额。

@@ -4,9 +4,12 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.core.permissions import (
+    BOM_WRITERS,
     MANAGERS,
     MONEY_READERS,
+    PRODUCTION_MANAGERS,
     projects_for,
+    require_project,
     require_role,
 )
 
@@ -27,6 +30,13 @@ class ProjectView(ReadView):
     search_fields = ['code', 'name']
     filterset_fields = ['status', 'customer', 'manager']
 
+    def get_permissions(self):
+        if self.action in {'bom_change_preview', 'revise_bom', 'import_preview', 'bom_import_confirm'}:
+            self.write_roles = BOM_WRITERS
+        elif self.action == 'service':
+            self.write_roles = PRODUCTION_MANAGERS
+        return super().get_permissions()
+
     def get_queryset(self):
         return projects_for(self.request.user, super().get_queryset())
 
@@ -40,12 +50,13 @@ class ProjectView(ReadView):
 
     @action(detail=True, methods=['get'], url_path='bom-impact')
     def bom_impact(self, request, pk=None):
-        require_role(request.user, MANAGERS)
-        return Response(bom.impact(self.get_object()))
+        project = self.get_object()
+        require_project(request.user, project, BOM_WRITERS)
+        return Response(bom.impact(project))
 
     @action(detail=True, methods=['post'], url_path='bom-change-preview')
     def bom_change_preview(self, request, pk=None):
-        require_role(request.user, MANAGERS)
+        require_role(request.user, BOM_WRITERS)
         return Response(bom.preview_revision(request.user, self.get_object(), request.data))
 
     @action(detail=True, methods=['post'], url_path='revise-bom')
@@ -149,7 +160,7 @@ class ProjectView(ReadView):
 
     @action(detail=False, methods=['get'], url_path='bom-template')
     def bom_template(self, request):
-        require_role(request.user, MANAGERS)
+        require_role(request.user, BOM_WRITERS)
         from ..services.tabular import document
 
         return document('bom-template', bom_material_import.HEADERS, [], request.query_params.get('file_format', 'csv'))

@@ -193,9 +193,6 @@ h3 {
 .transfer-dialog { display: flex; flex-direction: column; max-height: 85dvh; }
 .transfer-dialog .el-dialog__body { overflow-y: auto; min-height: 0; }
 .transfer-dialog .el-dialog__header, .transfer-dialog .el-dialog__footer { flex-shrink: 0; }
-.bom-purchase-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
-.bom-purchase-filters > label { display: flex; flex-direction: column; gap: 6px; width: 200px; max-width: 100%; }
-.bom-purchase-filters .el-select { width: 100%; }
 .list-pagination > label { display: flex; align-items: center; gap: 8px; color: #78869a; font-size: 13px; white-space: nowrap; }
 .list-pagination select { width: 90px; min-height: 32px; padding: 5px 8px; }
 .list-pagination .el-pagination { margin: 0; padding: 0; flex-wrap: wrap; row-gap: 8px; }
