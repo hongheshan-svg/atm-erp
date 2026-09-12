@@ -57,6 +57,17 @@ describe('模块边界', () => {
     user.value = { role: 'manager' }
     expect(actionNames('codes', { id: 1 })).toEqual([])
   })
+  it('项目规范入口只向管理员开放，提交固定规则和原版本且不提交计数', async () => {
+    const row = { id: 1, key: 'project', revision: 3, counter: 40, prefix: 'PRJ' }
+    user.value = { role: 'admin' }
+    expect(actionNames('codes', row)).toContain('应用项目规范')
+    const command = await actionCommand('codes', row, '应用项目规范')
+    expect(command.prepare?.({ reason: '按公司规范', counter: 0, prefix: 'BAD' })).toEqual({ prefix: 'ATM', date_format: 'YY', padding: 2, reset_cycle: 'year', reason: '按公司规范', expected_revision: 3 })
+    expect(actionNames('codes', { ...row, prefix: 'ATM', date_format: 'YY', padding: 2, reset_cycle: 'year' })).not.toContain('应用项目规范')
+    expect(actionNames('codes', { ...row, key: 'item' })).not.toContain('应用项目规范')
+    user.value = { role: 'manager' }
+    expect(actionNames('codes', row)).not.toContain('应用项目规范')
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     user.value = { role: 'manager' }

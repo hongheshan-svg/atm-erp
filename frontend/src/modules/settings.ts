@@ -72,13 +72,20 @@ export async function createCommand(resource: string, projectId?: number): Promi
     initial: projectId ? { project: projectId } : {},
   }
 }
-export function actionNames(resource: string, _r: Row): string[] {
+export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (['users', 'company', 'codes'].includes(resource) && can(['admin'])) a.push('编辑')
+  if (resource === 'codes' && r.key === 'project' && can(['admin']) && !(r.prefix === 'ATM' && r.date_format === 'YY' && Number(r.padding) === 2 && r.reset_cycle === 'year')) a.push('应用项目规范')
   if (resource === 'company' && can(['admin'])) a.push('锁账与重开')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (resource === 'codes' && r.key === 'project' && name === '应用项目规范' && can(['admin'])) return {
+    title: '应用项目编号规范', path: `${endpoint(resource)}${r.id}/configure/`,
+    fields: [t('reason', '应用原因')],
+    prepare: data => ({ prefix: 'ATM', date_format: 'YY', padding: 2, reset_cycle: 'year', reason: data.reason, expected_revision: r.revision }),
+    notice: { type: 'warning', text: `设置为 ATM＋两位年＋两位流水，每年01–99。当前已用流水为 ${r.counter ?? 0}，不会重置或改写历史项目编号。当前序号达到99后，本年度将无法继续取号；请先核对实际项目数量。` },
+  }
   if (resource === 'company' && name === '锁账与重开') return {
     title: name, path: `${endpoint(resource)}${r.id}/period-lock/`,
     fields: [{ key: 'locked_through', label: '锁账截止日期', type: 'date', optional: true, hint: '截止日及以前禁止补录。调早日期可重开部分期间，清空则全部重开。' }, t('reason', '锁账或重开原因')],
