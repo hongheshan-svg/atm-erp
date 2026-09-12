@@ -4,22 +4,14 @@ export const userFields: Field[] = [
   t('username', '用户名'),
   t('display_name', '姓名'),
   { key: 'roles', label: '角色', type: 'checks', initial: ['member'], hint: '勾选可兼任的岗位，至少选择一个。权限按业务合并，报表需单独授权；本人申请仍需他人审批。',
-    options: choices({
-      admin: '管理员',
-      manager: '项目经理',
-      sales_manager: '销售经理',
-      purchaser: '采购员',
-      warehouse: '仓管',
-      finance: '财务',
-      member: '成员',
-    }),
+    options: choices(roleLabels),
   },
   { key: 'hourly_cost', label: '小时成本（元）', initial: '0.00' },
   { key: 'management_reports', label: '总经理报表权限（仅项目经理角色）', type: 'boolean', initial: false },
   { key: 'password', label: '密码', type: 'password' },
   { key: 'is_active', label: '启用', type: 'boolean' },
 ]
-import { can } from '../session'
+import { can, roleLabels } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
@@ -37,7 +29,7 @@ export const columns: Record<string, Column[]> = {
   users: [
     C('username', '用户名'),
     C('display_name', '姓名'),
-    { key: 'roles', label: '角色', format: r => (r.roles ?? [r.role]).map((role: string) => ({ admin: '管理员', manager: '项目经理', sales_manager: '销售经理', purchaser: '采购员', warehouse: '仓管', finance: '财务', member: '成员' }[role] || role)).join('、') },
+    { key: 'roles', label: '角色', format: r => (r.roles ?? [r.role]).map((role: string) => roleLabels[role] || role).join('、') },
     C('hourly_cost', '小时成本'),
     C('management_reports', '总经理报表权限'),
     C('is_active', '启用'),

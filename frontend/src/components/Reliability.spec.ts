@@ -8,18 +8,48 @@ import SupplierMonthly from './SupplierMonthly.vue'
 import FormFields from './FormFields.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import SalesPage from '../views/SalesPage.vue'
+import ProjectPage from '../views/ProjectPage.vue'
 import { actionCommand as purchaseAction, createCommand } from '../modules/purchases'
 import { actionCommand } from '../business'
 import { defaults, payload } from '../forms'
 import { read } from '../api'
 import { user } from '../session'
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, params: { id: '1' } }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
 vi.mock('../api', () => ({ read: vi.fn(), all: vi.fn().mockResolvedValue([{ id: 1, name: '甲', kind: 'supplier' }, { id: 2, name: '乙', kind: 'supplier' }]), write: vi.fn(), download: vi.fn() }))
 vi.mock('../business', () => ({ columns: {}, endpoint: (r: string) => `/business/${r}/`, display: String, createLabel: () => '', createCommand: vi.fn(), actionNames: () => [], actionCommand: vi.fn() }))
 beforeEach(() => { vi.clearAllMocks(); user.value = { role: 'admin' }; vi.mocked(read).mockResolvedValue({ count: 0, results: [] }) })
 const global = { plugins: [ElementPlus], stubs: { RouterLink: true, ElTable: { template: '<div />' } } }
 
 describe('审查问题回归', () => {
+  it('生产经理兼采购时任务创建仍取当前项目生产授权', async () => {
+    user.value = { id: 8, roles: ['production_manager', 'purchaser'] }
+    const project = { id: 1, name: '采购可读项目', status: 'active', can_manage_production: false }
+    vi.mocked(read).mockResolvedValueOnce(project)
+    const wrapper = shallowMount(ProjectPage, { global: { ...global, renderStubDefaultSlot: true, stubs: { ...global.stubs, ModuleTabs: { template: '<div><slot name="tasks" /></div>' } } } })
+    await flushPromises()
+    expect(wrapper.findComponent(ResourcePanel).props('allowCreate')).toBe(false)
+    vi.mocked(read).mockResolvedValueOnce({ ...project, can_manage_production: true })
+    await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '刷新')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(ResourcePanel).props('allowCreate')).toBe(true)
+    wrapper.unmount()
+  })
+  it('项目刷新失败后重试成功清除旧错误并显示最新数据', async () => {
+    vi.mocked(read).mockResolvedValueOnce({ id: 1, name: '原项目名称', status: 'active' })
+    const wrapper = shallowMount(ProjectPage, { global: { ...global, renderStubDefaultSlot: true, stubs: { ...global.stubs, ElAlert: { props: ['title'], template: '<p role="alert">{{ title }}</p>' } } } })
+    await flushPromises()
+    const refresh = () => wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '刷新')!
+    vi.mocked(read).mockRejectedValueOnce(new Error('临时连接失败'))
+    await refresh().trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('临时连接失败')
+    vi.mocked(read).mockResolvedValueOnce({ id: 1, name: '恢复后的项目', status: 'active' })
+    await refresh().trigger('click')
+    await flushPromises()
+    expect(wrapper.get('h1').text()).toBe('恢复后的项目')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('销售保存通过页面刷新负责人更新列表一次', async () => {
     const wrapper = mount(SalesPage, { global: { ...global, stubs: { ...global.stubs, ActionDialog: true, TransferTools: true, ListPagination: true } } })
     await flushPromises()

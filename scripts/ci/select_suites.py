@@ -1,4 +1,4 @@
-"""Conservative change routing; unknown executable changes select the full suite."""
+"""PRs use fast checks; full validation is explicitly requested for releases."""
 
 import argparse
 import json
@@ -20,43 +20,11 @@ def select(paths, suite='auto', custom=()):
         return {suite}
     if suite != 'auto':
         raise ValueError('Unknown suite')
-    selected = set()
     for path in paths:
-        if path.startswith(('.github/workflows/', 'scripts/ci/')) or path in (
-            'backend/apps/core/version.py',
-            'frontend/package.json',
-            'frontend/package-lock.json',
-            'run_all_tests.py',
-        ):
-            selected.update(SUITES)
-        elif path.startswith('backend/'):
-            selected.update(('fast', 'browser'))
-            if '/migrations/' in path or path.startswith(('backend/config/', 'backend/apps/core/')):
-                selected.add('ota')
-            if path.startswith('backend/requirements'):
-                selected.update(SUITES)
-        elif path.startswith('frontend/'):
-            selected.update(('fast', 'browser'))
-        elif (
-            path.startswith(
-                ('docker/', 'install', 'scripts/native', 'scripts/package', 'scripts/ota', 'scripts/backup')
-            )
-            or path == 'docker-compose.yml'
-        ):
-            selected.update(SUITES)
-        elif path.startswith('scripts/tests/'):
-            selected.add('fast')
-            if 'ota' in path:
-                selected.add('ota')
-            if 'native' in path or 'install' in path:
-                selected.add('installers')
-        elif path.startswith('scripts/'):
-            selected.update(SUITES)
-        elif path.startswith('docs/') or path.endswith('.md') or path in ('.gitignore', 'LICENSE', '.editorconfig'):
+        if path.startswith('docs/') or path.endswith('.md') or path in ('.gitignore', 'LICENSE', '.editorconfig'):
             continue
-        else:
-            selected.update(SUITES)
-    return selected
+        return {'fast'}
+    return set()
 
 
 def main():

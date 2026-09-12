@@ -112,7 +112,7 @@ def state(obj, allowed):
         raise Conflict('当前状态不允许此操作，请刷新后确认。')
 
 
-def project_action(actor, key, operation, project_id, data, roles, execute):
+def project_action(actor, key, operation, project_id, data, roles, execute, *, authorize_action=None):
     context = {}
 
     def authorize(current_actor):
@@ -121,6 +121,8 @@ def project_action(actor, key, operation, project_id, data, roles, execute):
         current_actor.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
         require_role(current_actor, roles)
         require_project(current_actor, project, roles)
+        if authorize_action:
+            authorize_action(current_actor, project)
         context['project'] = project
 
     return perform(

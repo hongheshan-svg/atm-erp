@@ -86,7 +86,7 @@ def record(actor, key, purchase_id, data):
             if case.status in {'closed', 'replaced'}:
                 raise Conflict('此质保事项已完成；再次故障请登记新的报修记录。')
             status = data.get('status')
-            if status not in {'repairing', 'replaced', 'closed'}:
+            if not isinstance(status, str) or status not in {'repairing', 'replaced', 'closed'}:
                 raise ValidationError({'status': '请选择维修中、已更换或已关闭。'})
             case.status, case.response = status, text(data, 'response')
             if data.get('replacement'):

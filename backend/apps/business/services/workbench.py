@@ -9,6 +9,9 @@ from apps.core.permissions import (
     MANAGERS,
     MONEY_READERS,
     OPERATION_ROLES,
+    PRODUCTION_MANAGERS,
+    PRODUCTION_TASK_KINDS,
+    PURCHASE_APPROVERS,
     PURCHASERS,
     WAREHOUSE,
     has_role,
@@ -28,6 +31,7 @@ def summary(request):
     allowed = {
         'sales',
         'tasks',
+        'production_tasks',
         'approvals',
         'receipts',
         'drafts',
@@ -62,7 +66,7 @@ def summary(request):
             'count': selected.paginator.count,
             'results': serializer(selected.object_list, many=True, context={'request': request}).data,
         }
-        if name == 'tasks':
+        if name in {'tasks', 'production_tasks'}:
             data.update(
                 queryset.aggregate(
                     overdue_count=Count('pk', filter=Q(due_date__lt=timezone.localdate())),
@@ -85,20 +89,36 @@ def summary(request):
     projects = projects_for(user, Project.objects.all())
     tasks = (
         Task.objects.filter(project__in=projects, assignee=user, status='open')
-        .select_related('project', 'assignee')
+        .select_related('project', 'assignee', 'delivery', 'entry')
+        .prefetch_related('project__members')
         .exclude(project__status__in=['closed', 'cancelled'])
         .order_by(F('due_date').asc(nulls_last=True), 'pk')
     )
     result['tasks'] = bucket(tasks, TaskSerializer, 'tasks')
+    if has_role(user, {'production_manager'}):
+        production_tasks = (
+            Task.objects.filter(
+                project__in=projects_for(user, Project.objects.all(), PRODUCTION_MANAGERS),
+                kind__in=PRODUCTION_TASK_KINDS,
+                status='open',
+            )
+            .exclude(project__status__in=['closed', 'cancelled'])
+            .select_related('project', 'assignee', 'delivery', 'entry')
+            .prefetch_related('project__members')
+            .order_by(F('due_date').asc(nulls_last=True), 'pk')
+        )
+        result['production_tasks'] = bucket(production_tasks, TaskSerializer, 'production_tasks')
     purchases = (
         PurchaseOrder.objects.filter(project__in=projects)
         .select_related('project', 'supplier')
         .prefetch_related('lines__item', 'lines__bom_line')
         .order_by('due_date', 'pk')
     )
-    if has_role(user, MANAGERS):
+    if has_role(user, PURCHASE_APPROVERS):
         result['approvals'] = bucket(
-            purchases.filter(status='submitted', project__in=projects_for(user, Project.objects.all(), MANAGERS)),
+            purchases.filter(
+                status='submitted', project__in=projects_for(user, Project.objects.all(), PURCHASE_APPROVERS)
+            ),
             PurchaseSerializer,
             'approvals',
         )

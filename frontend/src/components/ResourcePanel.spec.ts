@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { reactive } from 'vue'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import ResourcePanel from './ResourcePanel.vue'
@@ -7,7 +8,8 @@ import { read } from '../api'
 import { pageSize, setPageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ replace: vi.fn() }) }))
+const route = reactive<{ query: { search?: string } }>({ query: {} })
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace: vi.fn() }) }))
 
 vi.mock('../api', () => ({
   read: vi.fn().mockResolvedValue({ count: 0, results: [] }),
@@ -17,6 +19,27 @@ vi.mock('../api', () => ({
 }))
 
 describe('列表创建入口', () => {
+  beforeEach(() => { route.query = {}; sessionStorage.clear(); vi.clearAllMocks() })
+  it('工作台销售链接优先使用单号筛选，同页切换链接重新查询，分页保留已提交搜索', async () => {
+    user.value = { id: 8, role: 'sales_manager' }
+    sessionStorage.setItem('resource-search-8-sales-{}', '原来搜索')
+    route.query.search = 'SALE-ONE'
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    await flushPromises()
+    expect(wrapper.get('input[type="search"]').element).toHaveProperty('value', 'SALE-ONE')
+    expect(read).toHaveBeenLastCalledWith('/business/sales/', { page: 1, page_size: pageSize.value, search: 'SALE-ONE' })
+    route.query.search = 'SALE-TWO'
+    await flushPromises()
+    expect(wrapper.get('input[type="search"]').element).toHaveProperty('value', 'SALE-TWO')
+    expect(read).toHaveBeenLastCalledWith('/business/sales/', { page: 1, page_size: pageSize.value, search: 'SALE-TWO' })
+    await wrapper.get('input[type="search"]').setValue('手工筛选')
+    await wrapper.get('form').trigger('submit')
+    setPageSize(20)
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/sales/', { page: 1, page_size: 20, search: '手工筛选' })
+    wrapper.unmount()
+    setPageSize(10)
+  })
   it('状态筛选从第一页查询，分页和导出沿用同一筛选', async () => {
     user.value = { role: 'admin' }
     const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })

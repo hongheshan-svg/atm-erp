@@ -4,13 +4,24 @@ from datetime import date, datetime
 from uuid import uuid4
 
 from django.core import signing
+from django.core.exceptions import ValidationError as ModelValidationError
 from django.db import transaction
 from django.http import Http404
 from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.models import User
 from apps.core.actions import perform
-from apps.core.permissions import ADMIN, ALL_ROLES, FINANCE, MANAGERS, PURCHASERS, SALES, WAREHOUSE, require_role
+from apps.core.permissions import (
+    ADMIN,
+    ALL_ROLES,
+    FINANCE,
+    ITEM_WRITERS,
+    MANAGERS,
+    PURCHASERS,
+    SALES,
+    WAREHOUSE,
+    require_role,
+)
 
 from ..models import Item, Partner, Project
 from . import execution, finance, inventory, masterdata, projects, sales, supply
@@ -29,7 +40,7 @@ DETAIL = [
 ]
 LEGACY_SCHEMAS = {
     'items': (
-        PURCHASERS,
+        ITEM_WRITERS,
         [
             ('物料编码', 'code'),
             ('名称', 'name'),
@@ -440,10 +451,13 @@ def run(actor, resource, records, *, preview=False):
             try:
                 with transaction.atomic():
                     results.append(execute_row(actor, resource, record['data'], str(uuid4())))
-            except (APIException, Http404) as exc:
-                errors.append(
-                    {'row': record['row'], 'message': message(getattr(exc, 'detail', '记录不存在或无权访问。'))}
+            except (APIException, ModelValidationError, Http404) as exc:
+                detail = (
+                    (exc.message_dict if hasattr(exc, 'message_dict') else exc.messages)
+                    if isinstance(exc, ModelValidationError)
+                    else getattr(exc, 'detail', '记录不存在或无权访问。')
                 )
+                errors.append({'row': record['row'], 'message': message(detail)})
                 if not preview:
                     raise ValidationError({'rows': errors}) from exc
         if preview:

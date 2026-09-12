@@ -7,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.api import Conflict
 from apps.core.models import AuditLog, CodeRule
-from apps.core.permissions import MANAGERS, PURCHASERS, WAREHOUSE, has_role
+from apps.core.permissions import PURCHASE_APPROVERS, PURCHASERS, WAREHOUSE, has_role
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
 from .approval import independent_approval
@@ -64,7 +64,8 @@ def create_purchase(actor, key, data):
         for row in rows(data):
             fields(row, {'item', 'bom_line', 'quantity', 'unit_price', 'due_date'})
             item_id = identity(row.get('item'), 'item')
-            row_key = (item_id, row.get('bom_line'))
+            bom_id = identity(row['bom_line'], 'bom_line') if row.get('bom_line') is not None else None
+            row_key = (item_id, bom_id)
             if row_key in prepared:
                 raise ValidationError('同一采购单不能重复添加同一 BOM 行或未关联 BOM 的物料。')
             prepared[row_key] = row
@@ -141,7 +142,7 @@ def submit(actor, key, purchase_id, data):
 
 def approve(actor, key, purchase_id, data, *, override=False):
     def execute(user, purchase):
-        from .budgets import purchase_check
+        from .budgets import purchase_check, purchase_visibility
 
         fields(data, {'reason', 'expected_snapshot', 'confirmed'} if override else {'reason'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
@@ -168,7 +169,8 @@ def approve(actor, key, purchase_id, data, *, override=False):
             if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
                 raise PermissionDenied('预算调整人不能批准本项目超预算采购，请由其他经理审批；管理员例外必须填写原因。')
         elif report['over_budget']:
-            raise Conflict('；'.join(report['warnings']) + '。请重新打开审批，填写超预算批准原因。')
+            warnings = purchase_visibility(user, report)['warnings']
+            raise Conflict('；'.join(warnings) + '。请重新打开审批，填写超预算批准原因。')
         save(
             Entry(
                 project=purchase.project,
@@ -193,7 +195,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
         )
 
     operation = 'purchase.approve_over_budget' if override else 'purchase.approve'
-    return purchase_action(actor, key, operation, purchase_id, data, MANAGERS, execute)
+    return purchase_action(actor, key, operation, purchase_id, data, PURCHASE_APPROVERS, execute)
 
 
 def receive(actor, key, purchase_id, data, *, from_quarantine=False):
@@ -319,7 +321,7 @@ def reject(actor, key, purchase_id, data):
         save(purchase, user)
         return audit(user, 'purchase.reject', purchase, reason=reason)
 
-    return purchase_action(actor, key, 'purchase.reject', purchase_id, data, MANAGERS, execute)
+    return purchase_action(actor, key, 'purchase.reject', purchase_id, data, PURCHASE_APPROVERS, execute)
 
 
 def delivery_plan(actor, key, purchase_id, data):

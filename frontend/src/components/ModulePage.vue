@@ -23,6 +23,8 @@ watch(projectId, value => { if (value) sessionStorage.setItem(projectKey, String
 const revision = ref(0)
 const toolbarTarget = ref<HTMLElement | null>(null)
 provide('moduleToolbar', toolbarTarget)
+const focusedFlow = ref(false)
+provide('moduleFocusedFlow', focusedFlow)
 const error = ref('')
 async function loadProjects() {
   error.value = ''
@@ -38,7 +40,7 @@ function refresh() { revision.value++ }
 watch(projectId, loadProjects, { immediate: true })
 </script>
 <template>
-  <header class="page-heading">
+  <header v-show="!focusedFlow" class="page-heading">
     <div>
       <p class="eyebrow">业务管理 / {{ today() }}</p>
       <h1>{{ title }}</h1>
@@ -48,7 +50,7 @@ watch(projectId, loadProjects, { immediate: true })
   </header>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
   <label v-if="projectFilter" class="project-filter"
-    >项目筛选<RemoteSelect :model-value="projectId" @update:model-value="projectId = $event ? Number($event) : undefined" path="/business/projects/" label="项目筛选" /><small>{{ requireProject ? '请选择项目' : '未选择时显示全部项目' }}</small></label
+    >项目筛选<RemoteSelect :model-value="projectId" @update:model-value="projectId = $event ? Number($event) : undefined" path="/business/projects/" label="项目筛选" /><small>{{ projectId ? '仅显示所选项目' : requireProject ? '请选择项目' : '未选择时显示全部项目' }}</small></label
   >
   <slot :project-id="projectId" :projects="projects" :revision="revision" :refresh="refresh" />
 </template>

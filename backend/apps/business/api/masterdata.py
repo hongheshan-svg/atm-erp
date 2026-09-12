@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.permissions import (
+    ITEM_WRITERS,
     OPERATION_ROLES,
     PURCHASERS,
     has_role,
@@ -35,6 +36,7 @@ class MasterView(ReadView):
 
 
 class ItemView(MasterView):
+    write_roles = ITEM_WRITERS
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
     filterset_fields = ['is_active', 'brand', 'part_type', 'product_category']

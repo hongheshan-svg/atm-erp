@@ -6,7 +6,7 @@ from django.db.models import F, Sum
 from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
-from apps.core.permissions import MANAGERS
+from apps.core.permissions import BOM_WRITERS, require_project
 
 from ..models import BOMLine, PurchaseLine, Stock, StockMove
 from .common import (
@@ -124,6 +124,7 @@ def preview_revision(actor, project, data):
     from django.db import transaction
     from rest_framework.exceptions import APIException
 
+    require_project(actor, project, BOM_WRITERS)
     fields(data, {'expected_revision', 'lines'})
     before = impact(project)
     before_lines = {line.pk: line for line in project.bom_lines.all()}
@@ -315,4 +316,4 @@ def revise_bom(actor, key, project_id, data):
             )
         return {'id': project.pk, 'revision': revision(project)}
 
-    return project_action(actor, key, 'bom.revise', project_id, data, MANAGERS, execute)
+    return project_action(actor, key, 'bom.revise', project_id, data, BOM_WRITERS, execute)

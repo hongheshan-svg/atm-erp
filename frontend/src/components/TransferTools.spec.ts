@@ -36,6 +36,11 @@ describe('导入模板与预览', () => {
     const preview = tables[tables.length - 1]!
     expect(preview.findAll('.column-stub').map(c => c.attributes('label'))).toEqual(['文件行号', '分组号', '物料编码', '数量'])
     expect(wrapper.text()).toContain('文件 2 行明细合并为 1 张采购草稿')
+    await wrapper.findAll('el-button-stub').find(b => b.text() === '关闭')!.trigger('click')
+    await wrapper.findAll('el-button-stub').find(b => b.text() === '导入')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('文件 2 行明细')
+    expect(wrapper.findAll('el-button-stub').find(b => b.text() === '确认导入')!.attributes('disabled')).toBe('true')
     vi.mocked(write).mockRejectedValue(new Error('格式不正确'))
     await input.trigger('change')
     await flushPromises()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { read, download } from '../api'
-import { can } from '../session'
+import { can, purchasing } from '../session'
 import { display } from '../business'
 import { message } from '../utils/request'
 import { pageSize } from '../pagination'
@@ -12,7 +12,7 @@ import ListPagination from './ListPagination.vue'
 const props = defineProps<{ owner: 'sale' | 'purchase'; record: Row }>()
 const emit = defineEmits<{ close: [] }>()
 const title = computed(() => `${props.owner === 'sale' ? '销售' : '采购'}附件 · ${props.record.code}`)
-const writable = computed(() => props.record.status !== 'cancelled' && can(props.owner === 'sale' ? ['admin', 'manager', 'sales_manager'] : ['admin', 'manager', 'purchaser']))
+const writable = computed(() => props.record.status !== 'cancelled' && (props.owner === 'sale' ? can(['admin', 'manager', 'sales_manager']) : purchasing()))
 const records = ref<Row[]>([])
 const total = ref(0)
 const page = ref(1)

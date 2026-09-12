@@ -3,6 +3,7 @@ from django.test import TestCase
 
 from apps.business.models import BOMLine, Item, PurchaseLine, PurchaseOrder
 from apps.business.services import bom_import
+from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -53,6 +54,39 @@ class BOMSelectionTests(BusinessFixtures, TestCase):
         self.assertEqual(PurchaseOrder.objects.count(), 1)
         data['lines'][0]['bom_line'] = second.pk
         self.post('purchaser', 'purchases/', data, status=404)
+
+    def test_invalid_bom_reference_shape_does_not_change_existing_purchase(self):
+        bom = BOMLine.objects.create(project=self.project, item=self.item, quantity=10, assembly_unit='上料')
+        data = {
+            'project': self.project.pk,
+            'supplier': self.supplier.pk,
+            'due_date': TODAY,
+            'from_demand': True,
+            'lines': [{'item': self.item.pk, 'bom_line': str(bom.pk), 'quantity': '2', 'unit_price': '12.34'}],
+        }
+        created = self.post('purchaser', 'purchases/', data, status=201)
+        order = PurchaseOrder.objects.get(pk=created['id'])
+        self.assertEqual(order.status, 'draft')
+        self.assertEqual(order.lines.get().bom_line_id, bom.pk)
+        orders = list(PurchaseOrder.objects.values())
+        lines = list(PurchaseLine.objects.values())
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        counter = CodeRule.objects.get(key='purchase').counter
+        for reference in ([], {}):
+            with self.subTest(reference=reference):
+                result = self.post(
+                    'purchaser',
+                    'purchases/',
+                    {**data, 'lines': [{**data['lines'][0], 'bom_line': reference}]},
+                    status=400,
+                )
+                self.assertIn('bom_line', result)
+                self.assertEqual(list(PurchaseOrder.objects.values()), orders)
+                self.assertEqual(list(PurchaseLine.objects.values()), lines)
+                self.assertEqual(ActionReceipt.objects.count(), receipts)
+                self.assertEqual(AuditLog.objects.count(), audits)
+                self.assertEqual(CodeRule.objects.get(key='purchase').counter, counter)
 
     def test_bom_units_import_legacy_preservation_and_revision(self):
         raw = f'物料编码,数量,变更说明,单元\n{self.item.code},2,初版,上料单元\n'.encode()

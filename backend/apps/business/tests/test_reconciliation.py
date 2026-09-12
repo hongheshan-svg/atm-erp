@@ -5,6 +5,7 @@ from django.test import TestCase
 from apps.business.models import BankMatch, BankRecord, Entry, Payment, Reconciliation
 from apps.business.services import banking, finance
 from apps.core.api import Conflict
+from apps.core.models import ActionReceipt, AuditLog
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -100,6 +101,31 @@ class ReconciliationTests(BusinessFixtures, TestCase):
         self.assertTrue(detail['valid'])
         self.assertEqual(detail['remaining_amount'], '0.00')
         self.assertEqual(finance.balance(entry), 0)
+
+    def test_invalid_kind_shape_is_rejected_without_statement_or_receipt(self):
+        entry = self.project.entries.get(kind='receivable')
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        for kind in (['settlement'], {'value': 'settlement'}):
+            with self.subTest(kind=kind):
+                response = self.request(
+                    'finance',
+                    'reconciliations/',
+                    {
+                        'entry': entry.pk,
+                        'kind': kind,
+                        'counterparty_balance': '10000',
+                        'approved_amount': '10000',
+                        'reason': '异常类型校验',
+                    },
+                    400,
+                )
+                self.assertIn('kind', response)
+                self.assertFalse(Reconciliation.objects.exists())
+                self.assertEqual(ActionReceipt.objects.count(), receipts)
+                self.assertEqual(AuditLog.objects.count(), audits)
+                entry.refresh_from_db()
+                self.assertEqual(finance.balance(entry), 10000)
 
     def test_prepayment_requires_contract_basis_and_manager_confirmation(self):
         entry = self.purchase_entry(receive=False)
@@ -203,9 +229,26 @@ class ReconciliationTests(BusinessFixtures, TestCase):
             {'entry': entry.pk, 'amount': '100', 'reason': '支出不能认领成收入'},
             409,
         )
-        for role in ['manager', 'sales_manager', 'purchaser', 'warehouse', 'member']:
+        for role in [
+            'manager',
+            'sales_manager',
+            'purchaser',
+            'warehouse',
+            'member',
+            'purchase_manager',
+            'mechanical_engineer',
+            'electrical_engineer',
+        ]:
             self.assertEqual(self.clients[role].get('/api/business/bank-records/').status_code, 403)
-        for role in ['sales_manager', 'purchaser', 'warehouse', 'member']:
+        for role in [
+            'sales_manager',
+            'purchaser',
+            'warehouse',
+            'member',
+            'purchase_manager',
+            'mechanical_engineer',
+            'electrical_engineer',
+        ]:
             self.assertEqual(self.clients[role].get('/api/business/reconciliations/').status_code, 403)
         other = self.active_project()
         other_entry = other.entries.get()

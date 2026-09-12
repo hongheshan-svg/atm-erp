@@ -1,7 +1,17 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.core.permissions import MANAGERS, MONEY_READERS, has_role, project_allowed
+from apps.core.permissions import (
+    BOM_WRITERS,
+    MANAGERS,
+    MONEY_READERS,
+    PRODUCTION_MANAGERS,
+    PURCHASE_APPROVERS,
+    PURCHASERS,
+    can_manage_task,
+    has_role,
+    project_allowed,
+)
 
 from .models import (
     BOMLine,
@@ -73,9 +83,21 @@ class PartnerSerializer(serializers.ModelSerializer):
 
 class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
+    can_edit_bom = serializers.SerializerMethodField()
+    can_manage_production = serializers.SerializerMethodField()
+    can_register_service = serializers.SerializerMethodField()
+
+    def get_can_manage_production(self, obj):
+        return project_allowed(self.context['request'].user, obj, PRODUCTION_MANAGERS)
+
+    def get_can_register_service(self, obj):
+        return self.get_can_manage_production(obj) and obj.status in {'delivering', 'warranty'}
 
     def get_can_manage(self, obj):
         return project_allowed(self.context['request'].user, obj, MANAGERS)
+
+    def get_can_edit_bom(self, obj):
+        return project_allowed(self.context['request'].user, obj, BOM_WRITERS)
 
     quote_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     contract_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
@@ -88,6 +110,9 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
         model = Project
         fields = [
             'can_manage',
+            'can_edit_bom',
+            'can_manage_production',
+            'can_register_service',
             'id',
             'code',
             'name',
@@ -111,6 +136,11 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
 
 
 class BOMSerializer(serializers.ModelSerializer):
+    can_edit_bom = serializers.SerializerMethodField()
+
+    def get_can_edit_bom(self, obj):
+        return project_allowed(self.context['request'].user, obj.project, BOM_WRITERS)
+
     specification = serializers.CharField(source='item.specification', read_only=True)
     drawing_number = serializers.CharField(source='item.drawing_number', read_only=True)
     drawing_revision = serializers.CharField(source='item.drawing_revision', read_only=True)
@@ -124,6 +154,7 @@ class BOMSerializer(serializers.ModelSerializer):
     class Meta:
         model = BOMLine
         fields = [
+            'can_edit_bom',
             'specification',
             'drawing_number',
             'drawing_revision',
@@ -149,7 +180,7 @@ class BOMSerializer(serializers.ModelSerializer):
 class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
     assembly_unit = serializers.CharField(source='bom_line.assembly_unit', read_only=True, default='')
     sensitive_fields = ('unit_price',)
-    money_roles = MONEY_READERS | {'purchaser'}
+    money_roles = MONEY_READERS | PURCHASERS
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
 
@@ -174,9 +205,13 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
 
 class PurchaseSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
+    can_approve = serializers.SerializerMethodField()
 
     def get_can_manage(self, obj):
         return project_allowed(self.context['request'].user, obj.project, MANAGERS)
+
+    def get_can_approve(self, obj):
+        return project_allowed(self.context['request'].user, obj.project, PURCHASE_APPROVERS)
 
     lines = PurchaseLineSerializer(many=True, read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -195,6 +230,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
         model = PurchaseOrder
         fields = [
             'can_manage',
+            'can_approve',
             'id',
             'code',
             'project',
@@ -317,12 +353,50 @@ class EntrySerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    can_manage = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
+    can_reopen = serializers.SerializerMethodField()
     assignee_name = serializers.CharField(source='assignee.display_name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
+
+    def get_can_manage(self, obj):
+        return obj.project.status in {'active', 'delivering', 'warranty'} and can_manage_task(
+            self.context['request'].user, obj
+        )
+
+    def can_change_service(self, obj):
+        return (
+            obj.kind != 'service'
+            or not getattr(obj, 'entry', None)
+            or project_allowed(self.context['request'].user, obj.project, MANAGERS)
+        )
+
+    def get_can_cancel(self, obj):
+        return (
+            self.get_can_manage(obj)
+            and obj.status in {'open', 'done'}
+            and obj.kind not in {'install', 'acceptance'}
+            and self.can_change_service(obj)
+            and not (obj.kind in {'design', 'assembly', 'test'} and obj.project.deliveries.exists())
+        )
+
+    def get_can_reopen(self, obj):
+        if not (self.get_can_manage(obj) and obj.status in {'done', 'cancelled'} and self.can_change_service(obj)):
+            return False
+        if obj.kind == 'acceptance' or (obj.kind == 'install' and obj.delivery.accepted_date):
+            return False
+        stages = ('design', 'assembly', 'test')
+        return obj.kind not in stages or not (
+            obj.project.deliveries.exists()
+            or obj.project.tasks.filter(kind__in=stages[stages.index(obj.kind) + 1 :], status='done').exists()
+        )
 
     class Meta:
         model = Task
         fields = [
+            'can_manage',
+            'can_cancel',
+            'can_reopen',
             'id',
             'project',
             'project_name',
@@ -359,15 +433,27 @@ class DeliverySerializer(serializers.ModelSerializer):
 
 
 class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
+    can_amend = serializers.SerializerMethodField()
     reversed_by = serializers.IntegerField(source='reversal.pk', read_only=True, default=None)
     sensitive_fields = ('hourly_cost', 'cost')
     user_name = serializers.CharField(source='user.display_name', read_only=True)
     project = serializers.IntegerField(source='task.project_id', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
 
+    def get_can_amend(self, obj):
+        user = self.context['request'].user
+        return (
+            obj.task.project.status in {'active', 'delivering', 'warranty'}
+            and (obj.user_id == user.pk or can_manage_task(user, obj.task))
+            and obj.hours > 0
+            and not obj.reversal_of_id
+            and not getattr(obj, 'reversal', None)
+        )
+
     class Meta:
         model = TimeEntry
         fields = [
+            'can_amend',
             'id',
             'task',
             'task_title',

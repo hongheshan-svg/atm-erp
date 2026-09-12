@@ -26,7 +26,7 @@ test('全新安装通过五步向导配置公司人员编号并启用', async ({
   await page.getByLabel('用户名', { exact: true }).fill('setup-buyer')
   await page.getByLabel('姓名', { exact: true }).fill('采购兼仓管')
   await page.getByLabel('登录密码').fill('Setup-Team-Only-20260910-Password')
-  await page.getByLabel('成员', { exact: true }).uncheck()
+  await page.getByLabel('普通成员', { exact: true }).uncheck()
   await page.getByLabel('采购员', { exact: true }).check()
   await page.getByLabel('仓管', { exact: true }).check()
   await page.screenshot({ path: testInfo.outputPath('setup-team.png'), fullPage: true })

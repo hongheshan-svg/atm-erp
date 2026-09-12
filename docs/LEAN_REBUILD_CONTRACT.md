@@ -48,9 +48,20 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 `POST /api/core/setup/` 提供 Idempotency-Key，提交 display_name、old_password、new_password、company{name,address,phone}、team（可空，最多50位，复用用户字段）、codes（仅变更规则，id及原configure完整字段）、confirmed=true。公司、管理员密码、人员、规则在同一事务提交；同公司锁阻止重复初始化，完成后其他新请求409。密码只做校验及哈希存储，不进入审计/回执；旧JWT撤销，重新登录。向导不创建业务台账、示例库存或订单。
 
-账号支持兼任多个固定角色：用户管理接受非空、无重复的 `roles` 数组，仅允许现有七种角色；`me`、人员目录和用户列表返回 `roles`。旧 `role` 字段兼容单角色请求，提交该字段且未提交 roles 时替换为单角色。已有账号保留原角色，新增兼岗字段默认为空，不变更历史审计或业务负责人。
+账号支持兼任多个固定角色：用户管理接受非空、无重复的 `roles` 数组，最多十一项，仅允许现有十一种角色；`me`、人员目录和用户列表返回 `roles`。旧 `role` 字段兼容单角色请求，提交该字段且未提交 roles 时替换为单角色。已有账号保留原角色，新增兼岗字段默认为空，不变更历史审计或业务负责人。
 
 授权按业务角色集合合并，不通过主角色推断。销售读权限可合并财务读权限，但没有 admin/manager 时只能修改本人销售单；销售兼成员沿用项目成员范围。菜单、金额过滤、附件下载及幂等重放均检查有效角色。总经理报表仍需具备 manager 并显式授权，admin 默认允许；最后启用管理员保护也检查兼岗角色。用户修改审计保留角色集合前后值。兼岗不改变原有按操作人身份执行的审批限制。
+
+### 十一岗位职责扩展（2026-09-12）
+
+新增 `purchase_manager`、`mechanical_engineer`、`electrical_engineer`、`production_manager`，原七岗职责保留，完整分工见 [ROLE_RESPONSIBILITIES.md](ROLE_RESPONSIBILITIES.md)。下列职责扩展同步适用于下文对应接口的角色说明：
+
+- 采购经理加入采购读写及普通/超预算批准、退回、合同归档、供应商/物料维护和工作台待审批集合，可跨项目处理采购。本人申请不能审批，不获得项目管理、完整成本、销售、预付款核准、收付款或库存写入权限。
+- 机械/电气工程师可维护共享物料（含编码与表格导入），只对参与项目维护 BOM（含影响预览、增改删除、导入预览及确认）、上传/下载项目技术附件、完成本人任务和登记/更正本人工时。不能维护供应商或因工程岗位访问其他项目、采购合同、资金/成本、项目预算/派工/结项。两个工程岗位共用工程权限，无专业独占BOM行。
+- 项目与BOM行返回 `can_edit_bom`，采购返回 `can_approve`；按动作所需角色计算项目范围，不能用全局采购读取权限代替BOM编辑或项目管理权限。原 `can_manage` 保留项目管理含义。
+- `purchases/{id}/budget-check/` 对不具有完整金额读取权限的采购经理返回 `scope=purchasing/configured/over_budget/snapshot/purchase/purchase_amount/purchase_net/materials_budget/materials_occupied/warnings`。材料超额可显示金额，非材料超额仅提示项目负责人复核，不包含人工/费用/总预算/总成本。审批快照仍来自完整核算，普通批准失败提示同样裁剪；批准时服务器继续对全部预算、当前快照及人员分离检查，未放宽门槛。
+- 生产经理只在参与项目创建装配/调试任务，管理装配/调试/安装/售后派工、完成及团队工时。项目返回 `can_manage_production`、`can_register_service`；任务返回 `can_manage`、`can_cancel`、`can_reopen`；工时返回 `can_amend`，均按动作所需角色和项目范围计算。任务 `can_manage` 表示该任务的管理权限，不授予项目管理；项目原 `can_manage` 仍只表示项目管理。取消/重开还需符合阶段、交付与收费约束。角色撤销或移出项目后，幂等重放仍重新授权。
+- 账户前向迁移只扩充合法枚举与约束，不改变已有角色或数据，不新增 Role 表及权限树。首次安装团队、用户管理、角色筛选、目录、角色回显和多岗位授权均支持十一岗。
 
 `/api/auth/login/` 接收 username/password，返回 access/refresh；`refresh/` 接收 refresh；`me/` 返回 id、username、display_name、role、roles、management_reports；`directory/` 返回启用人员 id/display_name/role/roles 数组。`password/` 接收 old_password/new_password，修改后令牌撤销，重新登录。
 
@@ -99,7 +110,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 - `revise-bom/`：必填 expected_revision、lines[{item,quantity,change_note,assembly_unit?}]，单元为100字符内的设备功能单元名称，显式空值可清空，省略保留旧值。版本取自 demand 或导入预览，缺失/格式错误返回 400，过时返回 409；数量不小于已领与在途，已有行修改需说明；同一物料在同一单元只有一条有效 BOM，同物料允许跨单元；不增加多层BOM或独立单元表。修订可带行id以更改单元，替换物料需新增行。总量不得低于物料已领与在途，单行数量不得低于其关联未收采购。
 - `bom/{id}/remove/`：reason，仅无该行未收采购且其他单元总量足以覆盖物料已领与在途时可移除，保留软删除历史。
 - `projects/bom-template/` CSV 模板为物料编码/数量/变更说明/单元，兼容旧三列模板（保留旧单元）；`projects/{id}/import-preview/` multipart 单个 file（CSV/XLSX，5MB、1000 行上限）。返回 expected_revision/lines/errors/can_import。确认时仅将 item/quantity/change_note/assembly_unit 提交 revise-bom；禁止直接提交预览中的行号或展示字段。
-- 采购列表及项目BOM提供多选选料，品牌/单元/类别同一维度多值为或，维度之间为且；跨页及筛选变更保留勾选。无缺口或停用物料不能选择。生成采购表单时重新读取需求，仅带所选BOM行，随后通过原 purchases/ 的 from_demand/bom_line 校验保存，不能超额或重复占用缺口；订单仍为单供应商草稿，提交审批流程不变。
+- 采购列表及项目BOM共用左右同屏的选料与采购草稿界面，窄屏上下排列。品牌/单元/类别/产品编码类别同一维度多值为或，维度之间为且；跨页及筛选变更保留勾选、数量、价格与明细交期，切换项目清空草稿。无缺口或停用物料不能选择；刷新后失效行保留提示，须调整或主动移除，不能静默丢弃输入。明细按稳定 bom_line 关联，不按物料合并或按数组下标回填。数量三位小数、单价两位小数，前端逐行四舍五入到分后合计，仅作为预览，不提交派生金额。通过原 purchases/ 的 from_demand/bom_line 和幂等键保存，服务端在锁内重新校验缺口、状态和金额；不能超额或重复占用缺口，订单仍为单供应商草稿，提交审批流程不变。
 - `purchases/` POST：project/supplier/due_date/note/lines[{item,bom_line?,quantity,unit_price,due_date?}]/from_demand。按缺料采购必须关联 BOM 并在服务端重新检查缺口。
 - `purchases/{id}/submit/`、`approve/`：空对象。采购员提交，经理批准，批准生成唯一应付。
 - `purchases/{id}/budget-check/` GET：经理、管理员、财务读取待批准采购的批准后预算对比与 snapshot。`approve/` 在项目锁内重新核算；任一类别、总计实际＋在途超过预算，或累计采购净额超过材料预算，返回 409，不产生应付或防重复凭据。收货不释放累计采购额度，取消余量、供应商退货按应付冲减释放额度。
@@ -117,13 +128,13 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 ## 任务、交付、售后
 
-- `tasks/` POST：project/kind(design/assembly/test)/title/description/assignee/due_date；由经理创建。
-- `tasks/{id}/complete/`：reason，执行人或经理完成，阶段顺序校验。`assign/`：assignee/reason；`cancel/`、`reopen/`：reason，由经理操作。安装与验收任务不可随意取消。
-- `tasks/{id}/time/`：date/hours/reason/user?；本人登记，经理可代录。每日净工时≤24，按当时费率快照计成本。
+- `tasks/` POST：project/kind(design/assembly/test)/title/description/assignee/due_date；项目经理创建全部生产阶段任务，生产经理仅在参与项目创建assembly/test。批量任务导入仍限项目经理/管理员。
+- `tasks/{id}/complete/`：reason，执行人或有权任务管理者完成，保留设计→装配→调试阶段校验。`assign/`：assignee/reason；`cancel/`、`reopen/`：reason。生产经理仅管理assembly/test/install/service，验收仍必须从交付登记；安装不可取消，已验收安装及已交付生产阶段不可重开。
+- `tasks/{id}/time/`：date/hours/reason/user?；本人登记，项目经理可代录，生产经理仅代录参与项目生产/安装/售后任务工时及更正。每日净工时≤24，按当时费率快照计成本；生产经理响应隐藏hourly_cost/cost。
 - `time/{id}/amend/`：date/hours/reason，原人员或经理更正，hours=0 撤销。冲销+替代记录保留历史与原费率，重复更正拒绝。
 - `projects/{id}/ship/`：quantity/date/installer/acceptor/note，生产阶段完成且累计领料覆盖本批数量后才可发货，创建安装与验收任务。
 - `deliveries/{id}/accept/`：date/reason，经理确认安装完成后的验收；每批独立保修截止日。
-- `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee。质保截止日当天仍免费，期外收费必须为正数并生成应收。售后材料、工时纳入实际成本。
+- `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee。质保截止日当天仍免费，期外收费必须为正数并生成应收。生产经理仅可为参与项目已验收保内批次创建fee=0售后；过保或非零费用请求403，由项目经理确认。生产经理可派工和完成既有收费售后，但其取消/重开涉及账款，必须由项目经理操作。售后材料、工时纳入实际成本。
 
 ## 收付款与附件
 
@@ -133,7 +144,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 - `payments/` 与 `time/` 的 `reversed_by` 为关联冲销记录 id，未冲销为 null；与 `reversal_of` 一起供页面展示原记录、冲销记录及有效记录，后端仍独立校验重复操作。
 - `documents/` multipart POST project/category/file（20MB 上限）。分类 drawing/contract/receipt/delivery/other；合同经理上传，凭据财务上传；敏感分类仅金额可见角色读取。
 - `documents/{id}/download/`：鉴权下载，无公开 media 路由；返回附件流、private/no-store、nosniff。
-- `workbench/` GET：tasks 与按角色可见 approvals/receipts/drafts/settlements，每组 count 和前 20 条 results；数量统计为全量，已取消项目的待退款仍保留。
+- `workbench/` GET：tasks 与按角色可见 approvals/receipts/drafts/settlements，每组 count 和前 20 条 results；数量统计为全量，已取消项目的待退款仍保留。production_manager另有 `production_tasks` 组，查询生产管理范围项目的assembly/test/install/service未完成任务，支持相同bucket、分页、overdue_count/today_count；与本人tasks可能重叠，不相加统计。
 
 ## 评审整改补充契约
 

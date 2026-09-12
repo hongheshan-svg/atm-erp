@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 
 from apps.business.models import BOMLine, Item, Partner, Payment, Project, PurchaseOrder, SalesOrder, Stock, Task
 from apps.business.services import transfers
-from apps.core.models import ActionReceipt, CodeRule
+from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -177,6 +177,37 @@ class TransferTests(BusinessFixtures, TestCase):
         missing = self.preview('payments', [['999999', '1', TODAY, '不存在']])
         self.assertEqual(missing.status_code, 200)
         self.assertFalse(missing.data['can_import'])
+
+    def test_model_validation_errors_keep_file_rows_and_roll_back_preview(self):
+        counter = CodeRule.objects.get(key='partner').counter
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        template = self.clients['admin'].get('/api/business/partners/import-template/')
+        headers = next(csv.reader(io.StringIO(template.content.decode('utf-8-sig'))))
+        stream = io.StringIO()
+        writer = csv.DictWriter(stream, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(
+            [
+                {'往来单位': '错误类型一', '类型': 'unknown'},
+                {'往来单位': '有效但只预览', '类型': '供应商'},
+                {'往来单位': '错误类型二', '类型': 'client'},
+            ]
+        )
+        preview = self.clients['admin'].post(
+            '/api/business/partners/import-file/',
+            {'file': SimpleUploadedFile('partners.csv', stream.getvalue().encode())},
+            format='multipart',
+        )
+        self.assertEqual(preview.status_code, 200, preview.data)
+        self.assertFalse(preview.data['can_import'])
+        self.assertIsNone(preview.data['token'])
+        self.assertEqual([error['row'] for error in preview.data['errors']], [2, 4])
+        self.assertTrue(all('kind' in error['message'] for error in preview.data['errors']))
+        self.assertFalse(Partner.objects.filter(name__in=['错误类型一', '有效但只预览', '错误类型二']).exists())
+        self.assertEqual(CodeRule.objects.get(key='partner').counter, counter)
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.assertEqual(AuditLog.objects.count(), audits)
 
     def downloaded_preview(self, resource, rows, fmt='csv'):
         response = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': fmt})

@@ -23,7 +23,6 @@ async function save(p: Page) {
   await dialog(p).getByRole('button', { name: '保存', exact: true }).click()
   const r = await response
   expect(r.status(), await r.text()).toBeLessThan(300)
-  // Selection and purchase dialogs can overlap briefly during their leave transitions.
   await expect(p.locator('[role="dialog"]:visible')).toHaveCount(0)
 }
 async function action(p: Page, row: Locator, name: string) {
@@ -51,7 +50,28 @@ async function read(p: Page, path: string) {
 async function reason(p: Page, text = '验收测试') {
   await fill(p, '原因 / 说明', text)
 }
-test('七角色完成销售交接采购生产分批交付售后与结算', async ({ browser, page }, info) => {
+async function rejectSelfApproval(p: Page, purchase: { id: number; code: string }, overBudget: boolean, screenshotPath: string) {
+  const before = await read(p, `business/purchases/${purchase.id}/`)
+  const entries = await read(p, `business/entries/?project=${before.project}`)
+  await action(p, row(p, purchase.code), '批准采购')
+  if (overBudget) {
+    await fill(p, '超预算批准原因', '兼任项目经理与采购员仍不得批准本人采购')
+    await dialog(p).getByLabel('确认承担本次超预算采购', { exact: true }).check()
+  } else await reason(p, '验证本项目经理兼采购员不能批准本人采购')
+  const path = `/api/business/purchases/${purchase.id}/${overBudget ? 'approve-over-budget' : 'approve'}/`
+  expectHttpError(p, path, 403)
+  const response = p.waitForResponse(r => new URL(r.url()).pathname === path && r.request().method() === 'POST')
+  await dialog(p).getByRole('button', { name: '保存', exact: true }).click()
+  expect((await response).status()).toBe(403)
+  await expect(dialog(p).locator('.el-alert--error')).toContainText('申请人不能审批自己的单据')
+  expect(await read(p, `business/purchases/${purchase.id}/`)).toEqual(before)
+  expect(await read(p, `business/entries/?project=${before.project}`)).toEqual(entries)
+  await p.screenshot({ path: screenshotPath, animations: 'disabled' })
+  await dialog(p).getByRole('button', { name: '取消', exact: true }).click()
+}
+
+for (const combinedRoles of [false, true]) {
+test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至结项，双岗本人采购禁止自批' : '七角色完成销售交接采购生产分批交付售后与结算', async ({ browser, page }, info) => {
   test.setTimeout(300000)
   const adminPassword = process.env.E2E_ADMIN_PASSWORD
   expect(adminPassword, '必须显式提供隔离测试管理员密码').toBeTruthy()
@@ -60,7 +80,7 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
     item: '电机' + suffix,
     customer: '客户' + suffix,
     supplier: '供应商' + suffix,
-    project: '完整交付' + suffix,
+    project: (combinedRoles ? '项目采购双岗' : '完整交付') + suffix,
   }
   const roles = ['sales_manager', 'manager', 'purchaser', 'warehouse', 'finance', 'member']
   const people: Record<string, Page> = {}
@@ -70,13 +90,16 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await expect(page.getByRole('navigation', { includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(10)
   await page.goto('/erp/settings')
   for (const role of roles) {
+    const samePerson = combinedRoles && role === 'purchaser'
+    if (!samePerson) {
     await page.getByRole('button', { name: '新增用户', exact: true }).click()
     await fill(page, '用户名', role + suffix)
     await fill(page, '姓名', role + suffix)
-    await selectRoles(dialog(page), [role])
+    await selectRoles(dialog(page), combinedRoles && role === 'manager' ? ['manager', 'purchaser'] : [role])
     await fill(page, '小时成本（元）', role === 'member' ? '50' : '0')
     await fill(page, '密码', password)
     await save(page)
+    }
     const context = await browser.newContext({
       baseURL: info.project.use.baseURL,
       viewport: info.project.use.viewport,
@@ -87,9 +110,18 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
     p.setDefaultTimeout(15000)
     observePage(p, errors)
     people[role] = p
-    await login(p, role + suffix)
+    await login(p, (samePerson ? 'manager' : role) + suffix)
   }
   const { sales_manager: salesperson, manager, purchaser, warehouse, finance, member } = people
+  if (combinedRoles) {
+    const identity = await read(manager, 'auth/me/')
+    expect(identity.roles.slice().sort()).toEqual(['manager', 'purchaser'])
+    expect(identity.management_reports).toBe(false)
+    expect((await read(purchaser, 'auth/me/')).id).toBe(identity.id)
+    const nav = manager.getByRole('navigation', { name: '主导航', includeHidden: true })
+    for (const name of ['项目', '采购']) await expect(nav.getByRole('link', { name, exact: true, includeHidden: true })).toHaveCount(1)
+    await expect(nav.getByRole('link', { name: '经营报表', exact: true, includeHidden: true })).toHaveCount(0)
+  }
   await purchaser.goto('/erp/masterdata')
   await purchaser.getByRole('button', { name: '新增物料', exact: true }).click()
   await fill(purchaser, '物料名称', names.item)
@@ -173,15 +205,25 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await purchaser.getByRole('tab', { name: 'BOM', exact: true }).click()
   await purchaser.getByRole('button', { name: '全选筛选结果', exact: true }).click()
   await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
-  await choose(purchaser, '供应商', names.supplier)
-  await fill(purchaser, '交期', day())
-  await fill(purchaser, '含税单价（元）', '100')
-  await save(purchaser)
+  const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
+  const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
+  const supplierField = purchaseDraft.getByLabel('供应商', { exact: true })
+  const supplierOption = supplierField.locator('option').filter({ hasText: names.supplier }).last()
+  await expect(supplierOption).toBeAttached()
+  await supplierField.selectOption((await supplierOption.getAttribute('value'))!)
+  await purchaseDraft.getByLabel('交期', { exact: true }).fill(day())
+  await purchaseDraft.getByLabel('含税单价（元）', { exact: true }).fill('100')
+  const purchaseSaved = purchaser.waitForResponse(r => r.url().endsWith('/api/business/purchases/') && r.request().method() === 'POST')
+  await purchaseDraft.getByRole('button', { name: '保存采购草稿', exact: true }).click()
+  const purchaseResponse = await purchaseSaved
+  expect(purchaseResponse.status(), await purchaseResponse.text()).toBe(201)
+  await expect(purchaseWorkspace).not.toBeVisible()
   let purchases = (await read(purchaser, `business/purchases/?project=${id}`)).results
   const po = purchases[0]
   await purchaser.goto('/erp/purchases')
   await action(purchaser, row(purchaser, po.code), '提交采购')
   await save(purchaser)
+  if (combinedRoles) await rejectSelfApproval(purchaser, po, true, info.outputPath('self-approval-over-budget-denied.png'))
   await page.goto('/erp/purchases')
   await action(page, row(page, po.code), '批准采购')
   await expect(dialog(page).getByRole('heading', { name: '超预算采购审批' })).toBeVisible()
@@ -222,7 +264,10 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await save(finance)
   await warehouse.goto('/erp/purchases')
   await action(warehouse, row(warehouse, po.code), '查看明细')
-  await expect(dialog(warehouse).getByLabel('含税单价（元）')).toHaveCount(0)
+  await expect(dialog(warehouse).getByRole('columnheader', { name: '含税单价（元）', exact: true })).toHaveCount(0)
+  const warehousePurchase = await read(warehouse, `business/purchases/${po.id}/`)
+  expect(warehousePurchase.lines).toHaveLength(1)
+  for (const line of warehousePurchase.lines) expect(line).not.toHaveProperty('unit_price')
   await dialog(warehouse).getByRole('button', { name: '关闭', exact: true }).click()
   await action(warehouse, row(warehouse, po.code), '收货')
   await fill(warehouse, '数量', '3')
@@ -250,8 +295,11 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await action(purchaser, row(purchaser, po2.code), '提交采购')
   await save(purchaser)
   await manager.reload()
-  await action(manager, row(manager, po2.code), '批准采购')
-  await save(manager)
+  if (combinedRoles) await rejectSelfApproval(manager, po2, false, info.outputPath('self-approval-within-budget-denied.png'))
+  const secondApprover = combinedRoles ? page : manager
+  await secondApprover.goto('/erp/purchases')
+  await action(secondApprover, row(secondApprover, po2.code), '批准采购')
+  await save(secondApprover)
   await warehouse.reload()
   await action(warehouse, row(warehouse, po2.code), '收货')
   await reason(warehouse)
@@ -432,6 +480,30 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   await projectAction(manager, '重新打开')
   await reason(manager)
   await save(manager)
+  if (combinedRoles) {
+    await projectAction(manager, '结项')
+    await reason(manager, '双岗完整链复核通过后再次结项')
+    await save(manager)
+    const finalProject = await read(manager, `business/projects/${id}/`)
+    const finalEntries = (await read(finance, `business/entries/?project=${id}`)).results
+    expect(finalProject.status).toBe('closed')
+    expect(finalEntries).toHaveLength(5)
+    expect(finalEntries.every((entry: { balance: string }) => Number(entry.balance) === 0)).toBe(true)
+    await info.attach('manager-purchaser-chain-result', {
+      body: JSON.stringify({
+        identity: await read(manager, 'auth/me/'),
+        project: { id, code: finalProject.code, name: names.project, status: finalProject.status },
+        purchases: (await read(manager, `business/purchases/?project=${id}`)).results,
+        cost: await read(manager, `business/projects/${id}/cost/`),
+        costAnalysis: finalBudget,
+        entries: finalEntries,
+        salesProgress: progress,
+        selfApprovalDenied: ['over-budget', 'within-budget'],
+      }, null, 2), contentType: 'application/json',
+    })
+    await manager.getByRole('tab', { name: '成本与预算', exact: true }).click()
+    await expect(manager.getByRole('region', { name: '项目预算与成本管控' })).toBeVisible()
+  }
   await expect(manager.locator('.el-message')).toHaveCount(0)
   await manager.screenshot({ path: info.outputPath('completed-chain.png'), fullPage: true })
   await manager.setViewportSize({ width: 390, height: 844 })
@@ -439,3 +511,4 @@ test('七角色完成销售交接采购生产分批交付售后与结算', async
   expect(errors).toEqual([])
   for (const p of Object.values(people)) await p.context().close()
 })
+}

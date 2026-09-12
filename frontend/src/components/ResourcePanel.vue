@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, ref, watch, type Ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { read, download } from '../api'
 import {
@@ -23,7 +23,7 @@ import { user, operations } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
 import { resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
-import { labels } from '../modules/shared'
+import { buyer, labels } from '../modules/shared'
 const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
@@ -39,11 +39,19 @@ const records = ref<Row[]>([])
 const count = ref(0)
 const page = ref(1)
 const searchKey = () => `resource-search-${user.value?.id}-${props.resource}-${JSON.stringify(props.params || {})}`
-const search = ref((props.resource === 'sales' && typeof route.query.search === 'string' ? route.query.search : '') || sessionStorage.getItem(searchKey()) || '')
+const initialSearch = () => props.resource === 'sales' && typeof route.query.search === 'string' ? route.query.search : sessionStorage.getItem(searchKey()) || ''
+const search = ref(initialSearch())
 const appliedSearch = ref(search.value)
 const loading = ref(false)
 const error = ref('')
 const command = ref<Command | null>(null)
+const pickingBom = ref(false)
+const moduleFocusedFlow = inject<Ref<boolean>>('moduleFocusedFlow', ref(false))
+watch(pickingBom, value => { moduleFocusedFlow.value = value })
+onBeforeUnmount(() => { moduleFocusedFlow.value = false })
+const bomTrigger = ref<{ $el: HTMLElement }>()
+async function closeBom() { pickingBom.value = false; await nextTick(); bomTrigger.value?.$el.focus() }
+function savedBom() { void closeBom(); saved() }
 const actionBusy = ref(false)
 const filterValue = ref('')
 const enabledFilter = ref(''), locationFilter = ref(''), brandFilter = ref('')
@@ -122,16 +130,17 @@ async function load() {
   }
 }
 watch(
-  [() => props.resource, () => JSON.stringify(props.params || {}), () => pageSize.value],
+  [() => props.resource, () => JSON.stringify(props.params || {}), () => props.resource === 'sales' ? route.query.search : undefined],
   () => {
     page.value = 1
-    search.value = sessionStorage.getItem(searchKey()) || ''
+    search.value = initialSearch()
     appliedSearch.value = search.value
     focused = ''
     void load()
   },
   { immediate: true },
 )
+watch(pageSize, () => { page.value = 1; void load() })
 watch(() => props.revision, () => { void load() })
 watch(active, value => { if (value && dirty) void load() })
 watch([() => route.query.focus, () => route.query.resource], () => {
@@ -232,14 +241,15 @@ function inspect(row: Row) {
 }
 </script>
 <template>
-  <div class="resource-workspace" :class="{ 'with-detail': sidePanel && command }">
+  <BOMPurchasePicker v-if="pickingBom && resource === 'purchases'" :project-id="projectId" @close="closeBom" @saved="savedBom" />
+  <div v-else class="resource-workspace" :class="{ 'with-detail': sidePanel && command }">
   <section class="panel resource-list" :aria-label="title">
     <header class="panel-heading">
       <h2>
         {{ title }} <span class="record-count">{{ count }}</span>
       </h2>
       <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
-        <BOMPurchasePicker v-if="resource === 'purchases'" :project-id="projectId" @saved="saved" />
+        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" :disabled="actionBusy" @click="pickingBom = true">从 BOM 多选下单</el-button>
         <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button @click="load">刷新</el-button
         ><el-button v-if="createLabel(resource) && allowCreate !== false" type="primary" @click="create">{{

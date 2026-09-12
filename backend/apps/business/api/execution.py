@@ -21,7 +21,9 @@ from .common import ReadView, key
 
 
 class TaskView(ReadView):
-    queryset = Task.objects.select_related('assignee', 'project')
+    queryset = Task.objects.select_related('assignee', 'project', 'delivery', 'entry').prefetch_related(
+        'project__members'
+    )
     serializer_class = TaskSerializer
     filterset_fields = ['project', 'kind', 'status', 'assignee', 'delivery']
 
@@ -72,7 +74,9 @@ class DeliveryView(ReadView):
 
 
 class TimeView(ReadView):
-    queryset = TimeEntry.objects.select_related('user', 'task', 'reversal')
+    queryset = TimeEntry.objects.select_related('user', 'task__project', 'reversal').prefetch_related(
+        'task__project__members'
+    )
     serializer_class = TimeSerializer
     filterset_fields = ['task', 'task__project', 'user', 'date']
 

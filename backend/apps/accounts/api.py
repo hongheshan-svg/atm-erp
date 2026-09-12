@@ -110,7 +110,7 @@ class UserSerializer(serializers.ModelSerializer):
         child=serializers.ChoiceField(choices=User.Role.choices),
         required=False,
         allow_empty=False,
-        max_length=7,
+        max_length=len(User.Role),
         write_only=True,
     )
 

@@ -7,11 +7,15 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         ADMIN = 'admin', '管理员'
         MANAGER = 'manager', '项目经理'
+        PRODUCTION_MANAGER = 'production_manager', '生产经理'
         SALES_MANAGER = 'sales_manager', '销售经理'
-        PURCHASER = 'purchaser', '采购'
-        WAREHOUSE = 'warehouse', '仓库'
+        PURCHASE_MANAGER = 'purchase_manager', '采购经理'
+        PURCHASER = 'purchaser', '采购员'
+        WAREHOUSE = 'warehouse', '仓管'
         FINANCE = 'finance', '财务'
-        MEMBER = 'member', '成员'
+        MECHANICAL_ENGINEER = 'mechanical_engineer', '机械工程师'
+        ELECTRICAL_ENGINEER = 'electrical_engineer', '电气工程师'
+        MEMBER = 'member', '普通成员'
 
     groups = None
     user_permissions = None
@@ -28,7 +32,19 @@ class User(AbstractUser):
             models.CheckConstraint(condition=models.Q(hourly_cost__gte=0), name='lean_nonnegative_hourly_cost'),
             models.CheckConstraint(
                 condition=models.Q(
-                    role__in=['admin', 'manager', 'sales_manager', 'purchaser', 'warehouse', 'finance', 'member']
+                    role__in=[
+                        'admin',
+                        'manager',
+                        'production_manager',
+                        'sales_manager',
+                        'purchase_manager',
+                        'purchaser',
+                        'warehouse',
+                        'finance',
+                        'mechanical_engineer',
+                        'electrical_engineer',
+                        'member',
+                    ]
                 ),
                 name='lean_fixed_role',
             ),

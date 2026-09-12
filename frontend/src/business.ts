@@ -12,7 +12,6 @@ import { manager, can } from './session'
 import type { Command, Row, Column } from './types'
 export { endpoint, display, labels } from './modules/shared'
 export { bomCommand } from './modules/bom'
-export { shortageCommand } from './modules/purchases'
 import { buyer, warehouse, finance as financeRole } from './modules/shared'
 export const permission = { buyer, warehouse, finance: financeRole }
 const modules = { projects, bom, purchases, inventory, finance, masterdata, settings, documents, settlement }
