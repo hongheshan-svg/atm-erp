@@ -29,6 +29,8 @@ gh workflow run ci.yml --ref main -f suite=custom -F fast=true -F installers=tru
 
 子工作流独立运行用于诊断；发布凭据必须来自同一次Lean ERP CI全量通过，包括两端浏览器。只测桌面、部分组合或不同代码不能当作发布通过。
 
+本地发布预检使用 `bash scripts/precheck-tests.sh --all`，自动创建并清理独立 PostgreSQL。若 Docker 默认地址池耗尽，可在确认与现有网络不重叠后设置 `LEAN_TEST_SUBNET`（例如 `LEAN_TEST_SUBNET=10.239.84.0/24 bash scripts/precheck-tests.sh --all`）；该变量仅影响本次临时测试网络。
+
 ## 发布
 
 1. 用户要求打 tag 发版本时，在功能分支更新后端/前端版本及 `docs/releases/vX.Y.Z.md`，创建 PR；手动运行 `Lean ERP CI`，选择该分支、`suite=full` 和 `browser_projects=both`。版本文件变化本身只触发普通 PR 快速检查。
