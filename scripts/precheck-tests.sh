@@ -17,7 +17,9 @@ cleanup() {
 trap cleanup EXIT
 docker info >/dev/null
 docker build -q -t "$IMAGE" -f "$ROOT/scripts/ci/Dockerfile.tests" "$ROOT" >/dev/null
-docker network create "$RUN_ID" >/dev/null
+NETWORK_ARGS=()
+if [[ -n "${LEAN_TEST_SUBNET:-}" ]]; then NETWORK_ARGS+=(--subnet "$LEAN_TEST_SUBNET"); fi
+docker network create "${NETWORK_ARGS[@]}" "$RUN_ID" >/dev/null
 docker run -d --name "$RUN_ID-pg" --network "$RUN_ID" --tmpfs /var/lib/postgresql/data \
   -e POSTGRES_DB=lean_test_runner -e POSTGRES_USER=lean_test \
   -e POSTGRES_PASSWORD=isolated-test-only postgres:15-alpine >/dev/null
