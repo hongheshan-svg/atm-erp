@@ -14,13 +14,13 @@ from scripts.ci.select_suites import SUITES, select
 class RoutingTests(unittest.TestCase):
     def test_documentation_and_deleted_paths(self):
         self.assertEqual(select(['README.md', 'docs/old-guide.md']), set())
-        self.assertEqual(select(['frontend/src/removed.vue']), {'fast', 'browser'})
+        self.assertEqual(select(['frontend/src/removed.vue']), {'fast'})
 
     def test_backend_and_migration_changes(self):
-        self.assertEqual(select(['backend/apps/business/services/supply.py']), {'fast', 'browser'})
-        self.assertEqual(select(['backend/apps/business/migrations/0001_initial.py']), {'fast', 'browser', 'ota'})
+        self.assertEqual(select(['backend/apps/business/services/supply.py']), {'fast'})
+        self.assertEqual(select(['backend/apps/business/migrations/0001_initial.py']), {'fast'})
 
-    def test_release_and_unknown_changes_are_conservative(self):
+    def test_pr_changes_do_not_implicitly_run_full_validation(self):
         for path in (
             'backend/apps/core/version.py',
             'frontend/package-lock.json',
@@ -30,7 +30,11 @@ class RoutingTests(unittest.TestCase):
             'docker/app/Dockerfile',
             'unknown.file',
         ):
-            self.assertEqual(select([path]), set(SUITES), path)
+            self.assertEqual(select([path]), {'fast'}, path)
+
+    def test_explicit_full_validation_keeps_every_release_suite(self):
+        self.assertEqual(select([], 'full'), set(SUITES))
+        self.assertEqual(select(['README.md'], 'full'), set(SUITES))
 
     def test_custom_combination_and_standalone(self):
         self.assertEqual(select([], 'custom', ['browser', 'ota']), {'browser', 'ota'})
@@ -85,7 +89,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
                                     'installer_commit': 'commit',
                                     'mode': mode,
                                     'docker_image': 'ghcr.io/hongheshan-svg/atm-erp@sha256:' + 'a' * 64,
-                                    'docker_archives': {arch: {'sha256': hashlib.sha256(b'image').hexdigest()} for arch in ('amd64', 'arm64')},
+                                    'docker_archives': {
+                                        arch: {'sha256': hashlib.sha256(b'image').hexdigest()}
+                                        for arch in ('amd64', 'arm64')
+                                    },
                                     'native_prebuilt': True,
                                     'native_architectures': ['x86_64'],
                                 }
@@ -95,7 +102,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
                             for arch in ('amd64', 'arm64'):
                                 archive.writestr(path.stem + '/images/' + arch + '.tar.gz', b'image')
                         else:
-                            archive.writestr(path.stem + '/wheelhouse/x86_64/SHA256.json', json.dumps({'requirements.lock': hashlib.sha256(b'lock').hexdigest()}))
+                            archive.writestr(
+                                path.stem + '/wheelhouse/x86_64/SHA256.json',
+                                json.dumps({'requirements.lock': hashlib.sha256(b'lock').hexdigest()}),
+                            )
                             archive.writestr(path.stem + '/wheelhouse/x86_64/requirements.lock', b'lock')
                     lines.append(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name)
             (folder / 'atm-erp-v2.0.0-SHA256SUMS.txt').write_text('\n'.join(lines) + '\n')

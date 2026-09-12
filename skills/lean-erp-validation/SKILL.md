@@ -14,8 +14,8 @@ description: 修改 Lean ERP 业务写入、权限、金额、库存或跨角色
 
 ## 验证与完成
 
-- 后端测试目标唯一来源为 `scripts/ci/backend_test_matrix.py`；按影响选择 `python run_all_tests.py --stage checks/platform/business/concurrency`。发布、全系统验收或广泛业务变更执行 `bash scripts/precheck-tests.sh --all`（独立 PostgreSQL）；发布仍需完整 GitHub CI 通过、合并 main 后打 tag。
-- 前端按影响运行 lint、typecheck、test、build 和相关 e2e；完整验收运行全部。依赖缺失、锁文件变化、依赖异常或干净CI环境才需 `npm ci`。构建体积警告须调查，不能调高阈值冒充优化。
+- 后端测试目标唯一来源为 `scripts/ci/backend_test_matrix.py`；按影响选择 `python run_all_tests.py --stage checks/platform/business/concurrency`。仅打 tag 发版本时执行 `bash scripts/precheck-tests.sh --all`（独立 PostgreSQL）；发布仍需完整 GitHub CI 通过、合并 main 后打 tag。
+- 前端按影响运行 lint、typecheck、test、build 和相关 e2e；日常只跑受影响用例，打 tag 发版本时运行全部。依赖缺失、锁文件变化、依赖异常或干净CI环境才需 `npm ci`。构建体积警告须调查，不能调高阈值冒充优化。
 - 浏览器显式给出隔离安装的 `E2E_BASE_URL` 和 `E2E_ADMIN_PASSWORD`，不从生产配置推测。完整链路 `frontend/e2e/full-chain.spec.ts`；核对断言和实际业务结果，ORM夹具不能证明页面链可操作。
 - 同一源码、依赖、配置和目标镜像已有成功证据可复用；新变更、失败、环境变化或未解决风险才重跑相应检查。发布复用须由 `scripts/ci/release_gate.py` 核验。
 - 在已授权且目标明确的隔离环境完成实现、启动、检查、修复和受影响复验，不在初版后自行停止等确认；不扩展到生产、其他实例、外部消息或绕过权限审批。
