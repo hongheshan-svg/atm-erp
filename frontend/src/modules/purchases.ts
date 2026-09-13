@@ -159,7 +159,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           { key: 'item_label', label: '采购物料', readonly: true, displayOnly: true },
           qty,
           ...(name === '收货' ? [{ key: 'pending_quantity', label: '不合格隔离数量', initial: '0' }] : []),
-        ]), readonly: true },
+        ]), readonly: true, compact: true },
       ]
       initial = {
         lines: detail.lines

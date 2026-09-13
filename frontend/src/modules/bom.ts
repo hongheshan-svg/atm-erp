@@ -66,7 +66,7 @@ export async function bomCommand(projectId: number): Promise<Command> {
     title: '维护 BOM',
     path: `/business/projects/${projectId}/revise-bom/`,
     previewPath: `/business/projects/${projectId}/bom-change-preview/`,
-    fields: [rows('lines', 'BOM 明细', [{ key: 'id', label: 'BOM 行', hidden: true, optional: true }, item(c), qty, t('assembly_unit', '单元', true), { key: 'required_date', label: '需求日期', type: 'date', optional: true }, { key: 'application_date', label: '申请日期', type: 'date', optional: true }, t('applicant', '申请人', true), { ...t('change_note', '变更说明'), hint: 'ECN 请注明图档升级或新增及对应版本。' }])],
+    fields: [{ ...rows('lines', 'BOM 明细', [{ key: 'id', label: 'BOM 行', hidden: true, optional: true }, item(c), qty, t('assembly_unit', '单元', true), { key: 'required_date', label: '需求日期', type: 'date', optional: true }, { key: 'application_date', label: '申请日期', type: 'date', optional: true }, t('applicant', '申请人', true), { ...t('change_note', '变更说明'), hint: 'ECN 请注明图档升级或新增及对应版本。' }]), compact: true }],
     initial: {
       lines: demand.lines.map((r: Row) => ({
         id: r.bom_line,
