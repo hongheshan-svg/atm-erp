@@ -163,10 +163,10 @@ def export_rows(name, rows, file_format='csv', fields=None):
     for row in rows:
         if isinstance(row.get('lines'), list):
             parent = {key: value for key, value in row.items() if key != 'lines'}
-            for line in row['lines'] or [{}]:
-                flattened.append(
-                    {**parent, **{('line_id' if key == 'id' else key): value for key, value in line.items()}}
-                )
+            flattened.extend(
+                {**parent, **{('line_id' if key == 'id' else key): value for key, value in line.items()}}
+                for line in row['lines'] or [{}]
+            )
         else:
             flattened.append(row)
     rows = flattened

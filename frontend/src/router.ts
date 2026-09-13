@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { user, loadUser, can } from './session'
 import { navigation } from './navigation'
+import { localStore } from './utils/storage'
 export const router = createRouter({
   history: createWebHistory('/erp/'),
   routes: [
@@ -24,7 +25,7 @@ export const router = createRouter({
 })
 router.beforeEach(async (to) => {
   if (to.path === '/login') return
-  if (!localStorage.getItem('access_token')) return '/login'
+  if (!localStore.get('access_token')) return '/login'
   if (!user.value) {
     try {
       await loadUser()

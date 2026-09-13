@@ -14,6 +14,7 @@ import ActionDialog from '../components/ActionDialog.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { revealActiveTab } from '../utils/tabs'
+import { sessionStore } from '../utils/storage'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
 const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
@@ -30,11 +31,11 @@ async function revealTab() {
   await revealActiveTab(() => tabsRef.value)
 }
 const allowedTabs = ['tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
-const initialTab = String(route.query.tab || sessionStorage.getItem(`project-tab-${id}`) || 'tasks')
+const initialTab = String(route.query.tab || sessionStore.get(`project-tab-${id}`) || 'tasks')
 const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
-const overview = ref(sessionStorage.getItem('project-overview') !== 'collapsed')
-watch(overview, value => sessionStorage.setItem('project-overview', value ? 'expanded' : 'collapsed'))
-watch(tab, value => { sessionStorage.setItem(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
+const overview = ref(sessionStore.get('project-overview') !== 'collapsed')
+watch(overview, value => sessionStore.set('project-overview', value ? 'expanded' : 'collapsed'))
+watch(tab, value => { sessionStore.set(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
 watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value))) tab.value = String(value) })
 watch(tab, revealTab, { flush: 'post' })
 watch(tab, value => { if (value === 'cost') void load() })

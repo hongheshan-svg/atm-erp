@@ -4,6 +4,7 @@ import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { user } from '../session'
 import { revealActiveTab } from '../utils/tabs'
+import { sessionStore } from '../utils/storage'
 import TabContent from './TabContent.vue'
 
 const props = defineProps<{
@@ -22,7 +23,7 @@ function selected() {
   const resource = String(route.query.resource || '')
   const target = props.tabs.find(item => item.resources?.includes(resource))
   if (target) return target.key
-  const saved = sessionStorage.getItem(memoryKey.value)
+  const saved = sessionStore.get(memoryKey.value)
   return saved && valid(saved) ? saved : props.tabs[0]?.key || ''
 }
 const active = ref(selected())
@@ -33,7 +34,7 @@ function choose(value: string | number) {
   const key = String(value)
   if (!valid(key)) return
   active.value = key
-  sessionStorage.setItem(memoryKey.value, key)
+  sessionStore.set(memoryKey.value, key)
   const query: LocationQueryRaw = { ...route.query, ...(props.parentTab ? { tab: props.parentTab } : {}), section: key }
   // A user-selected module must not reopen a previous workbench action.
   delete query.resource
@@ -54,7 +55,7 @@ watch(() => [route.query.tab, route.query.section, route.query.resource, props.t
   if (props.parentTab && route.query.tab && route.query.tab !== props.parentTab) return
   active.value = selected()
   if (active.value) {
-    sessionStorage.setItem(memoryKey.value, active.value)
+    sessionStore.set(memoryKey.value, active.value)
     if (route.query.section !== active.value) void router.replace({ query: { ...route.query, section: active.value } })
   }
   void reveal()

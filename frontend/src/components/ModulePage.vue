@@ -5,6 +5,7 @@ import { user } from '../session'
 import { read } from '../api'
 import RemoteSelect from './RemoteSelect.vue'
 import { message } from '../utils/request'
+import { sessionStore } from '../utils/storage'
 import { today } from '../forms'
 import type { Row } from '../types'
 const props = defineProps<{ title: string; projectFilter?: boolean; requireProject?: boolean }>()
@@ -17,9 +18,9 @@ const descriptions: Record<string, string> = {
 const projects = ref<Row[]>([])
 const route = useRoute()
 const projectKey = `module-project-${user.value?.id}-${props.title}`
-const savedProject = Number(route.query.project || sessionStorage.getItem(projectKey))
+const savedProject = Number(route.query.project || sessionStore.get(projectKey))
 const projectId = ref<number | undefined>(Number.isSafeInteger(savedProject) && savedProject > 0 ? savedProject : undefined)
-watch(projectId, value => { if (value) sessionStorage.setItem(projectKey, String(value)); else sessionStorage.removeItem(projectKey) })
+watch(projectId, value => { if (value) sessionStore.set(projectKey, String(value)); else sessionStore.remove(projectKey) })
 const revision = ref(0)
 const toolbarTarget = ref<HTMLElement | null>(null)
 provide('moduleToolbar', toolbarTarget)

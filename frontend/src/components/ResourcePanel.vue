@@ -12,6 +12,7 @@ import {
   actionCommand,
 } from '../business'
 import { message } from '../utils/request'
+import { sessionStore } from '../utils/storage'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
@@ -39,7 +40,7 @@ const records = ref<Row[]>([])
 const count = ref(0)
 const page = ref(1)
 const searchKey = () => `resource-search-${user.value?.id}-${props.resource}-${JSON.stringify(props.params || {})}`
-const initialSearch = () => props.resource === 'sales' && typeof route.query.search === 'string' ? route.query.search : sessionStorage.getItem(searchKey()) || ''
+const initialSearch = () => props.resource === 'sales' && typeof route.query.search === 'string' ? route.query.search : sessionStore.get(searchKey()) || ''
 const search = ref(initialSearch())
 const appliedSearch = ref(search.value)
 const loading = ref(false)
@@ -203,7 +204,7 @@ function searchRecords() {
     ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
   }
   appliedSearch.value = search.value
-  sessionStorage.setItem(searchKey(), appliedSearch.value)
+  sessionStore.set(searchKey(), appliedSearch.value)
   page.value = 1
   void load()
 }
