@@ -30,6 +30,7 @@ const shortageOnly = ref(false), page = ref(1), loading = ref(false), saving = r
 const recovery = ref<{ label: string; path: string }[]>([])
 const heading = ref<HTMLElement>()
 const draftPane = ref<HTMLElement>()
+const materialsPane = ref<HTMLElement>()
 const draftHeight = ref('calc(100dvh - 40px)')
 function fitDraft() {
   if (draftPane.value) draftHeight.value = `${Math.max(440, window.innerHeight - Math.max(18, draftPane.value.getBoundingClientRect().top) - 20)}px`
@@ -83,6 +84,12 @@ function toggle(row: Row) {
 }
 function clearSelection() { selected.value = []; edits.value = {} }
 function selectFiltered() { filtered.value.filter(eligible).forEach(add) }
+function handleRowClick(row: Row, column?: { label?: string; type?: string }) {
+  if (disabled.value || column?.label === '选择' || column?.type === 'expand') return
+  toggle(row)
+}
+function jumpToDraft() { draftPane.value?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }
+function jumpToMaterials() { materialsPane.value?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }
 watch([search, brands, units, types, categories, shortageOnly, pageSize], () => { page.value = 1 }, { deep: true })
 watch(effectiveTerm, term => { if (term !== 'manual') form.value.payment_due_date = ''; if (term !== 'custom') form.value.payment_days = '' })
 let generation = 0, supplierGeneration = 0
@@ -171,7 +178,7 @@ async function save() {
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-for="action in recovery" :key="action.path"><router-link :to="action.path">{{ action.label }}</router-link></p>
     <div class="purchase-columns">
-      <section class="purchase-materials" aria-label="BOM 选料区">
+      <section ref="materialsPane" class="purchase-materials" aria-label="BOM 选料区">
         <header class="purchase-pane-heading"><h3>BOM 选料</h3></header>
         <div class="purchase-filters">
           <label class="material-search">搜索物料<div><el-icon><Search /></el-icon><input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号" :disabled="disabled" /></div></label>
@@ -180,8 +187,8 @@ async function save() {
           <label>类别<ElSelect v-model="types" multiple collapse-tags collapse-tags-tooltip clearable aria-label="筛选类别" placeholder="全部类别" :disabled="disabled"><ElOption v-for="value in options('part_type')" :key="value" :value="value" :label="typeName(value)" /></ElSelect></label>
         </div>
         <div class="purchase-filter-extras"><label class="inline-check"><input v-model="shortageOnly" type="checkbox" :disabled="disabled" />仅看缺料 <span class="record-count">{{ lines.filter(row => Number(row.shortage) > 0).length }}</span></label><label class="category-filter">产品编码类别<ElSelect v-model="categories" multiple collapse-tags clearable aria-label="筛选产品编码类别" placeholder="全部编码类别" :disabled="disabled"><ElOption v-for="value in options('product_category')" :key="value" :value="value" :label="productCategories[value] || '未分类'" /></ElSelect></label><el-button text :icon="Refresh" :disabled="disabled || !project" @click="load">刷新缺料</el-button></div>
-        <div class="purchase-selection"><span role="status" aria-label="BOM 选择状态">已选 <strong>{{ selected.length }}</strong> 项 · 筛选结果 {{ filtered.length }} 项</span><el-button text :disabled="disabled || !filtered.some(eligible)" @click="selectFiltered">全选筛选结果</el-button><el-button text :disabled="disabled || !selected.length" @click="clearSelection">清空选择</el-button></div>
-        <el-table v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'">
+        <div class="purchase-selection"><span role="status" aria-label="BOM 选择状态">已选 <strong>{{ selected.length }}</strong> 项 · 筛选结果 {{ filtered.length }} 项</span><el-button text :disabled="disabled || !filtered.some(eligible)" @click="selectFiltered">全选筛选结果</el-button><el-button text :disabled="disabled || !selected.length" @click="clearSelection">清空选择</el-button><el-button text class="mobile-jump" :disabled="!chosen.length" @click="jumpToDraft">采购草稿 ↓</el-button></div>
+        <el-table v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'" @row-click="handleRowClick">
           <el-table-column label="选择" width="48"><template #default="{ row }"><input class="material-checkbox" type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="disabled || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
           <el-table-column type="expand" width="32"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { specification: '规格', drawing_number: '图号', drawing_revision: '图档版本', required_date: '需求日期', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ row[field] || '—' }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div></dl></template></el-table-column>
           <el-table-column label="物料" min-width="160"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small class="material-code">{{ row.item_code }}</small><span class="material-kind">{{ typeName(row.part_type) }}</span><small v-if="row.is_active === false"> 已停用</small></template></el-table-column>
@@ -195,6 +202,7 @@ async function save() {
       <section ref="draftPane" class="purchase-draft" aria-label="采购草稿" :style="{ '--draft-height': draftHeight }">
         <header class="purchase-pane-heading">
           <div><h3>采购草稿 <small class="muted">已选 {{ chosen.length }} 项</small></h3></div>
+          <el-button text class="mobile-jump" @click="jumpToMaterials">← 返回选料</el-button>
         </header>
         <form @submit.prevent="save">
           <div class="draft-fields">
@@ -247,12 +255,13 @@ async function save() {
 .purchase-selection > span { margin-right: auto; }
 .purchase-selection strong { color: var(--el-color-primary); }
 .purchase-selection .el-button { margin: 0; padding: 6px; font-size: 12px; }
+.mobile-jump { display: none; }
 .material-checkbox { width: 17px; height: 17px; accent-color: var(--el-color-primary); cursor: pointer; }
 .material-checkbox:disabled { cursor: not-allowed; }
+.purchase-materials :deep(.el-table__row) { cursor: pointer; }
 .material-name { font-size: 13px; font-weight: 600; }
 .material-code { display: block; overflow-wrap: anywhere; line-height: 1.5; margin-top: 3px; font-size: 12px; }
 .material-kind { display: inline-block; font-size: 11px; line-height: 18px; padding: 0 5px; background: #f1f4f8; color: #617087; border-radius: 4px; margin-top: 4px; }
-.shortage-number { color: #b56913; font-variant-numeric: tabular-nums; }
 .purchase-materials :deep(.el-table .cell) { padding: 0 8px; }
 .purchase-materials :deep(.el-table__cell) { padding: 8px 0; }
 .purchase-materials :deep(.el-table .selected-bom-row) { --el-table-tr-bg-color: #edf4fe; }
@@ -302,6 +311,10 @@ async function save() {
   .draft-items { max-height: 420px; }
   .draft-item { grid-template-columns: minmax(0, 1fr); }
   .draft-price-row { margin-top: 8px; }
+  .mobile-jump { display: inline-flex; }
+  .material-checkbox { width: 22px; height: 22px; }
+  .purchase-materials :deep(.el-table__cell) { padding: 11px 0; }
+  .draft-price-row input { min-height: 40px; }
 }
 @media (max-width: 600px) {
   .purchase-heading { flex-wrap: wrap; }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, nextTick } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
@@ -252,6 +252,37 @@ describe('BOM 并排选料与采购草稿', () => {
     expect(write).toHaveBeenCalledTimes(2)
     expect(vi.mocked(write).mock.calls[1]).toEqual(first)
     expect(wrapper.emitted('saved')).toHaveLength(1)
+  })
+
+  it('点击物料行非勾选框区域可切换选中；勾选框冒泡点击和展开列点击不会重复触发切换', async () => {
+    const wrapper = await picker()
+    const checkbox = () => wrapper.findAll<HTMLInputElement>('input[aria-label="选择 2199000001"]')[0]!
+    await wrapper.findAll('.material-name')[0]!.trigger('click')
+    expect(checkbox().element.checked).toBe(true)
+    expect(wrapper.findAll('.draft-item')).toHaveLength(1)
+    await wrapper.findAll('.material-name')[0]!.trigger('click')
+    expect(checkbox().element.checked).toBe(false)
+    expect(wrapper.findAll('.draft-item')).toHaveLength(0)
+    await checkbox().setValue(true)
+    expect(wrapper.findAll('.draft-item')).toHaveLength(1)
+    checkbox().element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    expect(wrapper.findAll('.draft-item')).toHaveLength(1)
+    const expandCell = wrapper.findAll('tbody tr')[0]!.findAll('td')[1]!
+    await expandCell.trigger('click')
+    expect(wrapper.findAll('.draft-item')).toHaveLength(1)
+  })
+
+  it('移动端跳转按钮在选料区与采购草稿之间滚动', async () => {
+    const wrapper = await picker()
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await selectMotor(wrapper)
+    const draftJump = wrapper.findAll('button').find(value => value.text() === '采购草稿 ↓')!
+    await draftJump.trigger('click')
+    expect(scrollSpy).toHaveBeenCalledTimes(1)
+    const backJump = wrapper.findAll('button').find(value => value.text() === '← 返回选料')!
+    await backJump.trigger('click')
+    expect(scrollSpy).toHaveBeenCalledTimes(2)
   })
 
   it('采购权限取兼任岗位并集，失去采购岗位后已打开的表单也不能提交', async () => {

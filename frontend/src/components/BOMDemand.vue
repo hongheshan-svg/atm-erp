@@ -193,8 +193,8 @@ function saved() {
         prop="issued"
         label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column
         prop="available"
-        label="可用库存" /><el-table-column prop="shortage" label="缺料"
-    /></el-table>
+        label="可用库存" fixed="right" width="90" align="right" /><el-table-column label="缺料" fixed="right" width="80" align="right"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column
+    ></el-table>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <footer v-if="canPurchase" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
     <div v-if="preview" class="import-preview">

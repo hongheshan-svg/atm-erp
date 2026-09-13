@@ -1,4 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { localStore } from './storage'
 export const request = axios.create({ baseURL: '/api', timeout: 25000 })
 let epoch = 0
 let flight: Promise<void> | undefined
@@ -9,15 +10,15 @@ export function resetSession(access?: string, refresh?: string) {
     ['access_token', access],
     ['refresh_token', refresh],
   ]) {
-    if (value) localStorage.setItem(key!, value)
-    else localStorage.removeItem(key!)
+    if (value) localStore.set(key!, value)
+    else localStore.remove(key!)
   }
   window.dispatchEvent(new Event('erp-session'))
 }
 type Config = InternalAxiosRequestConfig & { epoch?: number; retried?: boolean }
 request.interceptors.request.use((config: Config) => {
   config.epoch = epoch
-  const token = localStorage.getItem('access_token')
+  const token = localStore.get('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -36,7 +37,7 @@ request.interceptors.response.use(
       config.url?.startsWith('/auth/login')
     )
       throw error
-    const refresh = localStorage.getItem('refresh_token')
+    const refresh = localStore.get('refresh_token')
     if (!refresh) {
       resetSession()
       throw error
@@ -47,7 +48,7 @@ request.interceptors.response.use(
         .post('/api/auth/refresh/', { refresh }, { timeout: 15000 })
         .then(({ data }) => {
           if (epoch !== started) throw new Error('登录状态已变化。')
-          localStorage.setItem('access_token', data.access)
+          localStore.set('access_token', data.access)
         })
         .catch((e) => {
           if (epoch === started && [400, 401, 403].includes(e.response?.status)) resetSession()

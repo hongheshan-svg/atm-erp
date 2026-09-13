@@ -67,6 +67,10 @@ small,
   color: #78869a;
   font-size: 13px;
 }
+.shortage-number {
+  color: #b56913;
+  font-variant-numeric: tabular-nums;
+}
 h1 {
   font-size: 26px;
   letter-spacing: -0.6px;
@@ -409,6 +413,18 @@ button:focus-visible {
 .line-fields > .el-button {
   margin-top: 10px;
 }
+.row-list-compact { padding: 10px 14px 14px; }
+.line-fields-compact {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px 10px;
+  padding: 10px 0;
+  margin-bottom: 0;
+}
+.line-fields-compact > .fields-inline { display: contents; }
+.line-fields-compact > .fields-inline > .field:first-child { grid-column: 1 / -1; }
+.line-fields-compact > .el-button { grid-column: 1 / -1; justify-self: start; margin-top: 0; }
 .dialog-footer {
   display: flex;
   gap: 8px;
