@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Fresh PostgreSQL per run; never reads application DB_* credentials.
 set -euo pipefail
+# Git Bash rewrites container-side paths such as `-w /repo` and `-v ...:/repo:ro` into
+# `C:/Program Files/Git/repo`, so docker rejects the run before any test starts. The
+# variable only affects MSYS; it is inert on Linux and macOS.
+export MSYS_NO_PATHCONV=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="${1:---all}"
 case "$STAGE" in
