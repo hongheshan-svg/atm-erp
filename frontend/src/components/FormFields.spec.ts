@@ -18,6 +18,23 @@ describe('明细表单编辑', () => {
     expect(data.lines[0]?.quantity).toBe('1')
   })
 
+  it('紧凑模式隐藏行号标题，仍可正常编辑与移除', async () => {
+    const data = { lines: [{ item_name: '伺服电机', quantity: '2' }] }
+    const wrapper = mount(FormFields, {
+      props: { modelValue: data, fields: [{ key: 'lines', label: '采购明细', type: 'rows', compact: true, fields: [
+        { key: 'item_name', label: '物料', readonly: true },
+        { key: 'quantity', label: '数量' },
+      ] }] },
+      global: { stubs: { ElButton: { template: '<button type="button"><slot /></button>' } } },
+    })
+    expect(wrapper.find('.line-fields-compact').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('第 1 行')
+    await wrapper.get('input[aria-label="数量"]').setValue('5')
+    expect(data.lines[0]?.quantity).toBe('5')
+    await wrapper.findAll('button').find(button => button.text() === '移除此行')!.trigger('click')
+    expect(data.lines).toHaveLength(0)
+  })
+
   it('只读说明不能编辑，银行金额键盘保留负号输入能力', () => {
     const wrapper = mount(FormFields, { props: { modelValue: { note: '已归档说明', amount: '-10' }, fields: [
       { key: 'note', label: '说明', type: 'textarea', readonly: true },

@@ -9,6 +9,7 @@ export type Field = {
   optional?: boolean
   initial?: any
   readonly?: boolean
+  compact?: boolean
   hidden?: boolean
   hint?: string
   placeholder?: string

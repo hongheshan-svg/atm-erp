@@ -3,7 +3,7 @@ import type { Field, Row } from '../types'
 import { defaults } from '../forms'
 import { reactive } from 'vue'
 import RemoteSelect from './RemoteSelect.vue'
-defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean }>()
+defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
 const model = defineModel<Row>({ required: true })
 const pages = reactive<Record<string, number>>({})
 const start = (key: string) => Math.min(pages[key] || 0, Math.max(0, Math.ceil((model.value[key]?.length || 0) / 20) - 1)) * 20
@@ -15,17 +15,17 @@ function readonlyValue(field: Field) {
 }
 </script>
 <template>
-  <div class="fields" :class="{ 'readonly-fields': readonly }">
+  <div class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
     <template v-for="field in fields" :key="field.key">
-      <fieldset v-if="field.type === 'rows'" class="row-list">
+      <fieldset v-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
         <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>
           <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" min-width="140" show-overflow-tooltip />
         </el-table>
-        <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields">
-          <p class="line-number">第 {{ i + 1 }} 行</p>
-          <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" />
+        <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields" :class="{ 'line-fields-compact': field.compact }">
+          <p v-if="!field.compact" class="line-number">第 {{ i + 1 }} 行</p>
+          <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" :compact="field.compact" />
           <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
         <div v-if="!readonly && model[field.key]?.length > 20"><button type="button" :disabled="start(field.key) === 0" @click="pages[field.key] = start(field.key) / 20 - 1">上一页明细</button> {{ start(field.key) + 1 }}–{{ Math.min(start(field.key) + 20, model[field.key].length) }} / {{ model[field.key].length }} <button type="button" :disabled="start(field.key) + 20 >= model[field.key].length" @click="pages[field.key] = start(field.key) / 20 + 1">下一页明细</button></div>
