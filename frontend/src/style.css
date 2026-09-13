@@ -717,6 +717,9 @@ button:focus-visible {
 .detail-pane .action-form { overflow: hidden; }
 .record-headline { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 20px; }
 .record-headline > strong { font-size: 20px; color: #152942; overflow-wrap: anywhere; }
+.record-headline + .record-flow { margin: -6px 0 22px; }
+.record-flow { padding: 14px 4px; border: 1px solid var(--surface-border); border-radius: 8px; background: #fbfcfe; }
+.project-flow { margin: 4px 0 18px; }
 .detail-pane .dialog-footer > .el-button--primary { order: -1; flex: 1 0 100%; }
 .mobile-row-summary { display: none; }
 .dialog-footer { flex-wrap: wrap; gap: 8px; }

@@ -24,6 +24,7 @@ import { user, operations } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
 import { resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
+import { flowFor } from '../flows'
 import { buyer, labels } from '../modules/shared'
 const route = useRoute()
 const router = useRouter()
@@ -122,7 +123,7 @@ async function load() {
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
       else if (props.resource === 'bank-records') await action(row, '查看银行明细')
-      else { command.value = { title: '待办详情', path: '', readonly: true, initial: row, fields: [{ key: 'title', label: '任务' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'due_date', label: '期限' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
+      else { command.value = { title: '待办详情', path: '', readonly: true, initial: row, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'due_date', label: '期限' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
     }
   } catch (e) {
     if (current === generation) error.value = message(e)
@@ -186,6 +187,7 @@ async function action(row: Row, name: string) {
       if (current !== commandGeneration) return
       if (next.readonly) next.actions = [...(next.actions || []), ...actionNames(props.resource, row).filter(label => label !== name).map(label => ({ label, run: () => action(row, label) }))]
       next.subject = row.code || row.title || row.reference || `#${row.id}`
+      next.flow = flowFor(props.resource, row)
       command.value = next
     }
   } catch (e) {
@@ -234,7 +236,7 @@ function inspect(row: Row) {
   if (['users', 'items', 'partners', 'company', 'codes'].includes(props.resource) && names.includes('编辑')) return action(row, '编辑')
   selectedId.value = row.id
   selectedRow.value = row
-  command.value = { title: `${props.title}详情`, path: '', readonly: true, subject: row.code || row.name || row.title,
+  command.value = { title: `${props.title}详情`, path: '', readonly: true, subject: row.code || row.name || row.title, flow: flowFor(props.resource, row),
     initial: Object.fromEntries((columns[props.resource] || []).map(col => [col.key, col.format ? col.format(row) : cell(row, col.key)])),
     fields: (columns[props.resource] || []).map(col => ({ key: col.key, label: col.label, wide: props.resource === 'audit' && col.key === 'detail' })),
     actions: names.map(label => ({ label, run: () => action(row, label) })),
