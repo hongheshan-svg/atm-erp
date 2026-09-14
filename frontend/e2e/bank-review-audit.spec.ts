@@ -142,13 +142,19 @@ test('财务原生银行导入缺失户名先核实，保留原凭据且重复�
   await row(page, bank.reference).getByRole('button', { name: '操作 ▾', exact: true }).click()
   await expect(page.getByRole('menuitem', { name: '核实对方户名', exact: true })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '认领到账', exact: true })).toBeVisible()
+  const claim = page.getByRole('menuitem', { name: '认领到账', exact: true })
   if (info.project.use.isMobile) {
     await page.getByRole('heading', { name: '收付款', exact: true }).tap()
   } else {
-    await page.getByRole('menuitem', { name: '认领到账', exact: true }).focus()
-    await page.getByRole('menuitem', { name: '认领到账', exact: true }).press('Escape')
+    // The dropdown registers its keyboard handling asynchronously, so a single Escape can land
+    // before anything is listening. Retry the keypress; dismissal itself is still asserted below.
+    await expect(async () => {
+      await claim.focus()
+      await claim.press('Escape')
+      await expect(claim).toHaveCount(0, { timeout: 1500 })
+    }).toPass({ timeout: 15000 })
   }
-  await expect(page.getByRole('menuitem', { name: '认领到账', exact: true })).toHaveCount(0)
+  await expect(claim).toHaveCount(0)
   const repeated = await preview(`renamed-${filename}`)
   expect(repeated.rows[0].status).toBe('已导入（跳过）')
   await confirm(0, 1)
