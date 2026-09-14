@@ -159,6 +159,9 @@ test('采购经理从工作台审核采购与超预算摘要，本人申请仍�
   }
   const first = await order(applicant, '10')
   await page.goto('/erp/workbench')
+  // The workbench opens on the first non-empty category in label order, so 待批准采购 is only
+  // selected by chance; pick it explicitly instead of depending on how much other work exists.
+  await page.getByRole('button', { name: /^待批准采购 \d+$/ }).click()
   const approvals = page.getByRole('region', { name: '待批准采购', exact: true })
   await expect(approvals).toBeVisible()
   const pages = Math.ceil((await api(page, 'business/workbench/?page_size=5')).approvals.count / 5)
