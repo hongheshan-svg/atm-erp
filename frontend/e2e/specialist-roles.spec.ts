@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { test, expect, login, observePage, expectHttpError, type Page, type Locator } from './fixtures'
+import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 const password = 'Specialist-role-QA-2026-only'
@@ -26,8 +26,7 @@ async function save(page: Page, path: string, status = 200) {
   return response.json()
 }
 async function action(page: Page, target: Locator, name: string) {
-  await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(page, target, name)
   await expect(d(page)).toBeVisible()
 }
 async function account(page: Page, role: string, label: string, suffix: string) {
@@ -160,6 +159,9 @@ test('采购经理从工作台审核采购与超预算摘要，本人申请仍�
   }
   const first = await order(applicant, '10')
   await page.goto('/erp/workbench')
+  // The workbench opens on the first non-empty category in label order, so 待批准采购 is only
+  // selected by chance; pick it explicitly instead of depending on how much other work exists.
+  await page.getByRole('button', { name: /^待批准采购 \d+$/ }).click()
   const approvals = page.getByRole('region', { name: '待批准采购', exact: true })
   await expect(approvals).toBeVisible()
   const pages = Math.ceil((await api(page, 'business/workbench/?page_size=5')).approvals.count / 5)

@@ -1,4 +1,4 @@
-import { test, expect, expectHttpError, login, type Page, type Locator } from './fixtures'
+import { test, expect, expectHttpError, login, type Page, type Locator, openRowAction } from './fixtures'
 
 const dialog = (p: Page) => p.getByRole('dialog')
 async function save(p: Page, path: string) {
@@ -16,8 +16,7 @@ async function choose(p: Page, label: string, text: string) {
   await field.selectOption(value!)
 }
 async function action(p: Page, row: Locator, name: string) {
-  await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await p.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(p, row, name)
   await expect(dialog(p)).toBeVisible()
 }
 async function read(p: Page, path: string) {

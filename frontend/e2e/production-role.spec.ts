@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { test, expect, login, observePage, expectHttpError, type Page, type Locator } from './fixtures'
+import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 const password = 'Production-role-QA-2026-only'
@@ -31,8 +31,7 @@ async function save(page: Page, path: string, status = 200) {
   return response.json()
 }
 async function action(page: Page, target: Locator, name: string) {
-  await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(page, target, name)
   await expect(dialog(page)).toBeVisible()
 }
 async function reason(page: Page, text: string) {

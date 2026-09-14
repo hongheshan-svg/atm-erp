@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { test, expect, login, expectHttpError } from './fixtures'
+import { test, expect, login, expectHttpError, openImport } from './fixtures'
 
 test('十二种批量导入入口的模板字段、页面映射和错误文件处理', async ({ page }, info) => {
   test.setTimeout(180000)
@@ -22,9 +22,9 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
   const evidence: Record<string, unknown>[] = []
   for (const [resource, route] of cases) {
     await page.goto(`/erp/${route}`)
-    await page.getByLabel('导入导出格式').selectOption('csv')
-    await page.getByRole('button', { name: '导入', exact: true }).click()
+    await openImport(page)
     const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+    await dialog.getByLabel('模板格式').selectOption('csv')
     await dialog.getByText('模板字段与页面列对应说明', { exact: true }).click()
     const fieldLabels = dialog.locator('.import-field-guide .el-table__body tr td:first-child')
     await expect(fieldLabels.first()).toBeVisible()
@@ -45,7 +45,7 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
     evidence.push({ resource, templateHeaders: labels, invalidHeaderRejected: true })
     await dialog.getByRole('button', { name: '关闭', exact: true }).click()
     await expect(dialog).toBeHidden()
-    await page.getByRole('button', { name: '导入', exact: true }).click()
+    await openImport(page)
     await expect(dialog.getByRole('alert')).toHaveCount(0)
     await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   }
@@ -55,14 +55,14 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
 test('关闭未确认的导入后重新打开，不应继续提交上次文件', async ({ page }) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   await page.goto('/erp/masterdata?section=items')
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await openImport(page)
   const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
   const code = `CANCEL${Date.now()}`
   await dialog.locator('input[type=file]').setInputFiles({ name: 'cancel.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因\n${code},取消导入验收,规格,,,21,品牌,标准件,台,`) })
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeEnabled()
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(dialog).toBeHidden()
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await openImport(page)
   await expect(dialog.getByRole('button', { name: '下载模板', exact: true })).toBeEnabled()
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeDisabled()
   await expect(dialog.getByText('共 1 条，确认时再次校验', { exact: false })).toHaveCount(0)
@@ -102,7 +102,7 @@ test('导入类型填错逐行提示，夹在错误行之间的有效记录也�
     const data: Record<string, string> = { name: `${name}-${index}`, kind, payment_term: 'manual' }
     return columns.map(c => data[c.key] || '').join(',')
   })
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await openImport(page)
   const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
   const pending = page.waitForResponse(r => r.url().endsWith('/partners/import-file/') && r.request().method() === 'POST')
   await dialog.locator('input[type=file]').setInputFiles({ name: 'invalid-kind.csv', mimeType: 'text/csv', buffer: Buffer.from([columns.map(c => c.label).join(','), ...lines].join('\n')) })

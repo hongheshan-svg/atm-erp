@@ -32,5 +32,14 @@ export type Command = {
   prepare?: (data: Row) => Row
   actions?: { label: string; run: () => void | Promise<void> }[]
   previewPath?: string
+  flow?: Flow | null
 }
 export type Column = { key: string; label: string; format?: (row: Row) => string }
+export type FlowNode = { key: string; label: string; hint?: string }
+export type Flow = {
+  label: string
+  nodes: FlowNode[]
+  // Index of the node the record currently sits on; -1 when the flow ended off the main chain.
+  current: number
+  aborted?: FlowNode
+}

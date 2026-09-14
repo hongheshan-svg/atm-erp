@@ -9,6 +9,7 @@ import { read, write } from '../api'
 import { message, recoveryActions } from '../utils/request'
 import FormFields from './FormFields.vue'
 import StatusBadge from './StatusBadge.vue'
+import ProcessSteps from './ProcessSteps.vue'
 const props = defineProps<{ command: Command | null; inline?: boolean }>()
 const command = computed(() => props.command ? industryCommand(props.command) : null)
 const emit = defineEmits<{ close: []; saved: [result: Row]; busy: [value: boolean] }>()
@@ -151,6 +152,7 @@ async function submit() {
     <form v-if="command" class="action-form" @submit.prevent="submit">
       <div ref="fieldsContainer" class="action-fields">
       <div v-if="command.subject" class="record-headline"><strong>{{ command.subject }}</strong><StatusBadge v-if="command.initial?.status" :value="command.initial.status" /></div>
+      <ProcessSteps v-if="command.flow" class="record-flow" :flow="command.flow" />
       <el-alert v-if="command.notice" :title="command.notice.text" :type="command.notice.type" :closable="false" show-icon />
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
       <p v-for="action in recovery" :key="action.path"><router-link :to="action.path" @click="emit('close')">{{ action.label }}</router-link></p>

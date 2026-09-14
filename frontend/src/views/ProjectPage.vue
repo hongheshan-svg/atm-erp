@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
@@ -13,8 +13,10 @@ import BudgetPanel from '../components/BudgetPanel.vue'
 import ActionDialog from '../components/ActionDialog.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import ProcessSteps from '../components/ProcessSteps.vue'
 import { revealActiveTab } from '../utils/tabs'
 import { sessionStore } from '../utils/storage'
+import { flowFor } from '../flows'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
 const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
@@ -40,6 +42,7 @@ watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value)))
 watch(tab, revealTab, { flush: 'post' })
 watch(tab, value => { if (value === 'cost') void load() })
 const error = ref('')
+const projectFlow = computed(() => flowFor('projects', project.value))
 const command = ref<Command | null>(null)
 async function load() {
   error.value = ''
@@ -54,7 +57,7 @@ async function load() {
 }
 async function act(name: string) {
   try {
-    command.value = await actionCommand('projects', project.value!, name)
+    command.value = { ...(await actionCommand('projects', project.value!, name)), flow: flowFor('projects', project.value) }
   } catch (e) {
     error.value = message(e)
   }
@@ -94,6 +97,7 @@ onMounted(load)
         >
       </div>
     </header>
+    <ProcessSteps v-if="projectFlow" class="panel project-flow" :flow="projectFlow" />
     <div v-show="overview">
     <section class="project-summary">
       <div>

@@ -1,4 +1,4 @@
-import { test, expect, login, observePage, type Page, type Locator } from './fixtures'
+import { test, expect, login, observePage, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 const dialog = (page: Page) => page.getByRole('dialog')
@@ -17,8 +17,7 @@ async function save(page: Page) {
   await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
 }
 async function action(page: Page, target: Locator, label: string) {
-  await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name: label, exact: true }).click()
+  await openRowAction(page, target, label)
   await expect(dialog(page)).toBeVisible()
 }
 async function read(page: Page, path: string) {

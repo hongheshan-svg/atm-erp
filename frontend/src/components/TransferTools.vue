@@ -42,12 +42,12 @@ async function openImport() {
     if (props.resource === resource) layout.value = data
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
-async function file(template = false) {
+async function file(template = false, chosen = format.value) {
   busy.value = true
   error.value = ''
   try {
     await download(template ? `${props.path}import-template/` : (props.exportPath || `${props.path}export/`),
-      `${props.resource}${template ? '-template' : ''}.${format.value}`, { ...(template ? {} : props.params), file_format: format.value })
+      `${props.resource}${template ? '-template' : ''}.${chosen}`, { ...(template ? {} : props.params), file_format: chosen })
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 async function upload(event: Event) {
@@ -80,9 +80,17 @@ async function confirm() {
 </script>
 <template>
   <div class="transfer-tools">
-    <select v-model="format" aria-label="导入导出格式" :disabled="busy"><option value="xlsx">Excel</option><option value="csv">CSV</option></select>
-    <el-button :loading="busy" @click="file()">导出</el-button>
-    <el-button v-if="importable" :disabled="busy" @click="openImport">导入</el-button>
+    <!-- Collapsed into one menu so the toolbar leads with the entries that create work. -->
+    <el-dropdown trigger="click" :persistent="false" @command="(name: string) => name === 'import' ? openImport() : file(false, name)">
+      <el-button :loading="busy">{{ importable ? '导入导出 ▾' : '导出 ▾' }}</el-button>
+      <template #dropdown
+        ><el-dropdown-menu
+          ><el-dropdown-item command="xlsx">导出 Excel</el-dropdown-item
+          ><el-dropdown-item command="csv">导出 CSV</el-dropdown-item
+          ><el-dropdown-item v-if="importable" command="import" divided>导入</el-dropdown-item
+        ></el-dropdown-menu></template
+      >
+    </el-dropdown>
     <span v-if="error && !opened" role="alert">{{ error }}</span>
     <el-dialog v-model="opened" class="transfer-dialog" title="批量导入" width="min(1100px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
       <p v-if="bankImport">上传工行 XLSX 或华夏 XLS 原始流水（含表头及汇总），单文件最多 1000 行、5 MB。完整保留个人往来和手续费，不自动核销或指定项目；缺失户名进入待核实，相同交易重复上传会跳过。没有唯一银行编号时生成导入标识，原始编号保留在明细中。预览按银行流水页面列展示；项目和未匹配金额由后续认领、匹配操作维护。</p>
@@ -95,7 +103,7 @@ async function confirm() {
         </details>
       </template>
       <el-button v-else-if="!bankImport" :loading="busy" @click="openImport">加载字段说明</el-button>
-      <div class="toolbar"><el-button v-if="!bankImport" :disabled="busy || !layout" @click="file(true)">下载模板</el-button><label class="file-button">选择文件并预览<input type="file" :accept="bankImport ? '.xls,.xlsx' : '.csv,.xlsx'" :disabled="busy || (!bankImport && !layout)" @change="upload" /></label></div>
+      <div class="toolbar"><select v-if="!bankImport" v-model="format" aria-label="模板格式" :disabled="busy"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><el-button v-if="!bankImport" :disabled="busy || !layout" @click="file(true)">下载模板</el-button><label class="file-button">选择文件并预览<input type="file" :accept="bankImport ? '.xls,.xlsx' : '.csv,.xlsx'" :disabled="busy || (!bankImport && !layout)" @change="upload" /></label></div>
       <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
       <el-alert v-if="result" :title="result" type="success" :closable="false" role="status" />
       <template v-if="preview">

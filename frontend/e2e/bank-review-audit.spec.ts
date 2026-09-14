@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { crc32 } from 'node:zlib'
-import { test, expect, login, expectHttpError, type Page } from './fixtures'
+import { test, expect, login, expectHttpError, type Page, openRowAction, openImport } from './fixtures'
 
 // A tiny uncompressed ZIP writer keeps this synthetic one-sheet XLSX fixture
 // dependency-free. No production code or real bank document is used.
@@ -39,8 +39,7 @@ function xlsx(rows: string[][]) {
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, reference: string) => page.locator('.el-table__body tr:visible').filter({ hasText: reference })
 async function action(page: Page, reference: string, name: string) {
-  await row(page, reference).getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(page, row(page, reference), name)
   await expect(dialog(page)).toBeVisible()
 }
 
@@ -76,7 +75,7 @@ test('财务原生银行导入缺失户名先核实，保留原凭据且重复�
   const beforeMatches = (await read('bank-matches/')).count
   await page.goto('/erp/finance?section=bank')
   async function preview(name: string) {
-    await page.getByRole('button', { name: '导入', exact: true }).click()
+    await openImport(page)
     const pending = page.waitForResponse(r => r.url().endsWith('/bank-records/import-file/') && r.request().method() === 'POST')
     await dialog(page).locator('input[type=file]').setInputFiles({ name, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer })
     const response = await pending
@@ -143,13 +142,19 @@ test('财务原生银行导入缺失户名先核实，保留原凭据且重复�
   await row(page, bank.reference).getByRole('button', { name: '操作 ▾', exact: true }).click()
   await expect(page.getByRole('menuitem', { name: '核实对方户名', exact: true })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '认领到账', exact: true })).toBeVisible()
+  const claim = page.getByRole('menuitem', { name: '认领到账', exact: true })
   if (info.project.use.isMobile) {
     await page.getByRole('heading', { name: '收付款', exact: true }).tap()
   } else {
-    await page.getByRole('menuitem', { name: '认领到账', exact: true }).focus()
-    await page.getByRole('menuitem', { name: '认领到账', exact: true }).press('Escape')
+    // The dropdown registers its keyboard handling asynchronously, so a single Escape can land
+    // before anything is listening. Retry the keypress; dismissal itself is still asserted below.
+    await expect(async () => {
+      await claim.focus()
+      await claim.press('Escape')
+      await expect(claim).toHaveCount(0, { timeout: 1500 })
+    }).toPass({ timeout: 15000 })
   }
-  await expect(page.getByRole('menuitem', { name: '认领到账', exact: true })).toHaveCount(0)
+  await expect(claim).toHaveCount(0)
   const repeated = await preview(`renamed-${filename}`)
   expect(repeated.rows[0].status).toBe('已导入（跳过）')
   await confirm(0, 1)

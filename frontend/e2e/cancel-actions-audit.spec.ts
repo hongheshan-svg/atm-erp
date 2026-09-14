@@ -1,4 +1,4 @@
-import { test, expect, login, type Page, type Locator } from './fixtures'
+import { test, expect, login, type Page, type Locator, openRowAction } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, value: string) => page.locator('.el-table__body tr:visible').filter({ hasText: value }).first()
@@ -19,8 +19,7 @@ async function api(page: Page) {
   }
 }
 async function action(page: Page, target: Locator, name: string) {
-  await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(page, target, name)
   await expect(dialog(page)).toBeVisible()
 }
 async function projectAction(page: Page, name: string) {

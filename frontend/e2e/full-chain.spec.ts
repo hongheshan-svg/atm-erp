@@ -1,4 +1,4 @@
-import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator } from './fixtures'
+import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
 import { selectRoles } from './role-helpers'
 const password = 'Lean-QA-2026-password'
@@ -26,8 +26,7 @@ async function save(p: Page) {
   await expect(p.locator('[role="dialog"]:visible')).toHaveCount(0)
 }
 async function action(p: Page, row: Locator, name: string) {
-  await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await p.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(p, row, name)
   await expect(dialog(p)).toBeVisible()
 }
 async function projectAction(p: Page, name: string) {
@@ -203,6 +202,8 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await save(manager)
   await purchaser.goto(`/erp/projects/${id}`)
   await purchaser.getByRole('tab', { name: 'BOM', exact: true }).click()
+  // Selecting before the demand rows land silently selects nothing, leaving 按缺料采购 disabled.
+  await expect(purchaser.locator('.el-table__body tr:visible').filter({ hasText: item.code })).toBeVisible()
   await purchaser.getByRole('button', { name: '全选筛选结果', exact: true }).click()
   await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
   const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })

@@ -24,7 +24,8 @@ describe('导入模板与预览', () => {
       props: { resource: 'purchases', path: '/business/purchases/', tableColumns: [{ key: 'code', label: '采购编号' }] },
       global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElDialog: { template: '<div><slot /><slot name="footer" /></div>' }, ElTableColumn: { template: '<div class="column-stub" />' } } },
     })
-    await wrapper.findAll('el-button-stub').find(b => b.text() === '导入')!.trigger('click')
+    const openImport = async () => wrapper.findComponent({ name: 'ElDropdown' }).vm.$emit('command', 'import')
+    await openImport()
     await flushPromises()
     expect(read).toHaveBeenCalledWith('/business/purchases/import-schema/')
     expect(wrapper.text()).toContain('采购编号 由系统生成')
@@ -37,7 +38,7 @@ describe('导入模板与预览', () => {
     expect(preview.findAll('.column-stub').map(c => c.attributes('label'))).toEqual(['文件行号', '分组号', '物料编码', '数量'])
     expect(wrapper.text()).toContain('文件 2 行明细合并为 1 张采购草稿')
     await wrapper.findAll('el-button-stub').find(b => b.text() === '关闭')!.trigger('click')
-    await wrapper.findAll('el-button-stub').find(b => b.text() === '导入')!.trigger('click')
+    await openImport()
     await flushPromises()
     expect(wrapper.text()).not.toContain('文件 2 行明细')
     expect(wrapper.findAll('el-button-stub').find(b => b.text() === '确认导入')!.attributes('disabled')).toBe('true')

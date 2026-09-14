@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
-import { test, expect, login, observePage, expectHttpError, type Page, type Locator } from './fixtures'
+import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
 
 // The period-lock case changes an installation-wide setting. Run this file with
 // the configured single worker, without another E2E process sharing the database.
@@ -53,8 +53,7 @@ async function project(page: Page, suffix: string, manager: number, members: num
 }
 
 async function action(page: Page, target: Locator, name: string) {
-  await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(page, target, name)
   await expect(dialog(page)).toBeVisible()
 }
 

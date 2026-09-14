@@ -557,7 +557,7 @@ button:focus-visible {
   border-radius: 8px;
 }
 .login-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   background: linear-gradient(130deg, #e5edf8, #f7f9fc);
@@ -604,7 +604,8 @@ button:focus-visible {
     max-height: none;
     overflow: visible;
   }
-  .brand small,
+  /* Scoped to the sidebar: its compact mobile nav has no room, but the login banner does. */
+  .sidebar .brand small,
   .sidebar-note {
     display: none;
   }
@@ -717,6 +718,12 @@ button:focus-visible {
 .detail-pane .action-form { overflow: hidden; }
 .record-headline { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 20px; }
 .record-headline > strong { font-size: 20px; color: #152942; overflow-wrap: anywhere; }
+.row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.action-group-label { padding: 7px 16px 3px; color: #8b98ab; font-size: 11px; letter-spacing: 0.4px; list-style: none; }
+.el-dropdown-menu__item + .action-group-label { border-top: 1px solid var(--surface-border); margin-top: 5px; padding-top: 9px; }
+.record-headline + .record-flow { margin: -6px 0 22px; }
+.record-flow { padding: 14px 4px; border: 1px solid var(--surface-border); border-radius: 8px; background: #fbfcfe; }
+.project-flow { margin: 4px 0 18px; }
 .detail-pane .dialog-footer > .el-button--primary { order: -1; flex: 1 0 100%; }
 .mobile-row-summary { display: none; }
 .dialog-footer { flex-wrap: wrap; gap: 8px; }
