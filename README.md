@@ -226,7 +226,8 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 - Docker 连接失败：确认 Docker 已启动，Windows/macOS 的 Docker Desktop 使用 Linux 容器模式。
 - 拉取或构建失败：检查镜像仓库、npm、PyPI 网络连接；本包不含离线镜像。
 - 端口被占用：修改 .env.lean 的 LEAN_HTTP_PORT 后重跑安装器。
-- 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。
+- 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。两者只改其一时安装器会在结尾提示：
+  只开放端口而未放行主机名，真实 IP 访问会被服务端拒绝（HTTP 400）；只放行主机名而未开放端口，局域网仍然连不上。
 - 密码见 .env.lean；重新安装不会重置已有用户密码。
 
 ### 原生安装
