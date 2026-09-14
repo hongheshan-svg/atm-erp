@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { read, write } from '../api'
 import { user, logout, roleLabels } from '../session'
-import { message } from '../utils/request'
+import { message, requestKey } from '../utils/request'
 import type { Row } from '../types'
 import { Document } from '@element-plus/icons-vue'
 import { version } from '../../package.json'
@@ -64,7 +64,7 @@ async function finish() {
   error.value = ''
   busy.value = true
   try {
-    await write('/core/setup/', { ...form, team: team.value, confirmed: confirmed.value, codes: changedRules.value.map(r => ({ id: r.id, prefix: r.prefix, date_format: r.date_format, padding: r.padding, reset_cycle: r.reset_cycle, expected_revision: r.revision, reason: '首次安装配置' })) }, crypto.randomUUID())
+    await write('/core/setup/', { ...form, team: team.value, confirmed: confirmed.value, codes: changedRules.value.map(r => ({ id: r.id, prefix: r.prefix, date_format: r.date_format, padding: r.padding, reset_cycle: r.reset_cycle, expected_revision: r.revision, reason: '首次安装配置' })) }, requestKey())
     required.value = false
     clearPasswords()
     await router.replace('/login?setup=complete')

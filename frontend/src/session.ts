@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { read, write } from './api'
-import { resetSession } from './utils/request'
+import { resetSession, requestKey } from './utils/request'
 import type { Row } from './types'
 export const user = ref<Row | null>(null)
 export const roleLabels: Record<string, string> = {
@@ -54,7 +54,7 @@ export async function loadUser() {
 }
 export async function login(username: string, password: string) {
   resetSession()
-  const tokens = await write('/auth/login/', { username, password }, crypto.randomUUID())
+  const tokens = await write('/auth/login/', { username, password }, requestKey())
   resetSession(tokens.access, tokens.refresh)
   await loadUser()
 }

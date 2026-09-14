@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { request, resetSession } from './request'
+import { request, requestKey, resetSession } from './request'
 
 const adapter = request.defaults.adapter
 function response(config: InternalAxiosRequestConfig, status = 200): AxiosResponse {
@@ -67,5 +67,38 @@ describe('JWT 会话与刷新', () => {
     expect(localStorage.getItem('refresh_token')).toBe('refresh-token')
     await expect(request.get('/business/projects/')).rejects.toBeTruthy()
     expect(localStorage.getItem('refresh_token')).toBeNull()
+  })
+})
+
+const uuidShape = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const realCrypto = globalThis.crypto
+
+describe('操作标识生成', () => {
+  // Restore explicitly instead of unstubAllGlobals, which would also drop the localStorage stub.
+  afterEach(() => { Object.defineProperty(globalThis, 'crypto', { value: realCrypto, configurable: true }) })
+  function withCrypto(value: unknown) {
+    Object.defineProperty(globalThis, 'crypto', { value, configurable: true })
+  }
+
+  it('安全上下文直接使用浏览器的 randomUUID', () => {
+    const randomUUID = vi.fn(() => '11111111-2222-4333-8444-555555555555')
+    withCrypto({ randomUUID, getRandomValues: realCrypto.getRandomValues.bind(realCrypto) })
+    expect(requestKey()).toBe('11111111-2222-4333-8444-555555555555')
+    expect(randomUUID).toHaveBeenCalledOnce()
+  })
+
+  // Plain HTTP on a LAN address is not a secure context, so randomUUID is missing there.
+  it('非安全上下文缺少 randomUUID 时仍生成合法且互不相同的标识', () => {
+    withCrypto({ getRandomValues: realCrypto.getRandomValues.bind(realCrypto) })
+    const keys = Array.from({ length: 200 }, () => requestKey())
+    for (const key of keys) expect(key).toMatch(uuidShape)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('连 getRandomValues 都没有时退回随机数，不抛异常', () => {
+    withCrypto(undefined)
+    const keys = Array.from({ length: 50 }, () => requestKey())
+    for (const key of keys) expect(key).toMatch(uuidShape)
+    expect(new Set(keys).size).toBe(keys.length)
   })
 })

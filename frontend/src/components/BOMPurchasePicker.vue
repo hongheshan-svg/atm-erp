@@ -8,7 +8,7 @@ import { purchaseFields } from '../modules/purchases'
 import { termLabel, termLabels } from '../modules/payment-terms'
 import { defaults, payload, validateFields } from '../forms'
 import { formatPurchaseAmount, purchaseLineCents, quantityValue } from '../bom-purchase'
-import { message, recoveryActions } from '../utils/request'
+import { message, recoveryActions, requestKey } from '../utils/request'
 import { pageSize } from '../pagination'
 import { productCategories } from '../product-categories'
 import type { Row } from '../types'
@@ -93,7 +93,7 @@ function jumpToMaterials() { materialsPane.value?.scrollIntoView({ block: 'start
 watch([search, brands, units, types, categories, shortageOnly, pageSize], () => { page.value = 1 }, { deep: true })
 watch(effectiveTerm, term => { if (term !== 'manual') form.value.payment_due_date = ''; if (term !== 'custom') form.value.payment_days = '' })
 let generation = 0, supplierGeneration = 0
-let key = crypto.randomUUID(), signature = ''
+let key = requestKey(), signature = ''
 async function load() {
   const current = ++generation, id = Number(project.value)
   error.value = ''; recovery.value = []
@@ -121,7 +121,7 @@ watch(() => form.value.supplier, async value => {
 watch(project, async () => {
   clearSelection(); lines.value = []; projectInfo.value = undefined
   search.value = ''; brands.value = []; units.value = []; types.value = []; categories.value = []; shortageOnly.value = false
-  form.value = freshForm(); key = crypto.randomUUID(); signature = ''
+  form.value = freshForm(); key = requestKey(); signature = ''
   await load()
 })
 watch(() => props.projectId, value => { project.value = value })
@@ -155,7 +155,7 @@ async function save() {
       lines: chosen.value.map(row => ({ item: row.item, bom_line: row.bom_line, quantity: row.quantity, unit_price: row.unit_price, ...(row.due_date ? { due_date: row.due_date } : {}) })),
     }
     const next = JSON.stringify(body)
-    if (signature && signature !== next) key = crypto.randomUUID()
+    if (signature && signature !== next) key = requestKey()
     signature = next
     saving.value = true
     const result = await write('/business/purchases/', body, key)
