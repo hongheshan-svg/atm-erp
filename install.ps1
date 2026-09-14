@@ -58,5 +58,6 @@ if (-not $NoOta) {
   Invoke-OtaPython (Join-Path $PSScriptRoot 'scripts/ota_service.py') install --mode docker --root $PSScriptRoot --config $EnvFile
 }
 Invoke-NetworkCheck (Join-Path $PSScriptRoot 'scripts/network_check.py') --config $EnvFile
-Write-Host "安装完成。管理员 admin 的首次密码位于 $EnvFile 的 LEAN_ADMIN_PASSWORD。"
+Write-Host "安装完成。管理员 admin 的初始密码位于 $EnvFile 的 LEAN_ADMIN_PASSWORD，完成安装向导修改密码后该值即失效。"
 Write-Host '访问配置端口的 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。'
+Write-Host "忘记管理员密码时重设：docker compose --env-file $EnvFile -f $(Join-Path $PSScriptRoot 'docker-compose.yml') exec app python manage.py changepassword admin"

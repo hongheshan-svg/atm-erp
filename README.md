@@ -73,7 +73,7 @@ bash install.sh
 .\install.ps1
 ```
 
-安装完成后打开 **http://127.0.0.1:8080/erp/**，用户名为 `admin`，首次密码在 `.env.lean` 的 `LEAN_ADMIN_PASSWORD`。登录后完成下方[首次启用](#首次启用)。重复安装不会重置已有账号密码。
+安装完成后打开 **http://127.0.0.1:8080/erp/**，用户名为 `admin`，全新安装的初始密码在 `.env.lean` 的 `LEAN_ADMIN_PASSWORD`。登录后完成下方[首次启用](#首次启用)；向导会要求修改初始密码，之后 `LEAN_ADMIN_PASSWORD` 不再可用，请使用向导中设置的新密码。重复安装不会重置已有账号密码。
 
 | 常用配置（`.env.lean`） | 用途 |
 | --- | --- |
@@ -136,7 +136,7 @@ bash install-native.sh start
 .\install-native.ps1 start
 ```
 
-安装会创建独立 Python 虚拟环境，从发布包的 wheelhouse 校验并离线安装全部锁定依赖，检查 PostgreSQL/Redis 连接、执行 schema guard/迁移及初始化、配置 Nginx，不下载源码依赖或现场编译。包内预编译依赖支持 Linux x86_64/aarch64（glibc 2.28+）、macOS Intel 12+ / Apple Silicon 14+、Windows x64；其他宿主机优先使用 Docker。仍需事先准备 Python 3.11、Nginx、PostgreSQL 15 与 Redis 7。任何失败立即退出，不清库、不绕过保护。首次管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；已有账户保持不变。
+安装会创建独立 Python 虚拟环境，从发布包的 wheelhouse 校验并离线安装全部锁定依赖，检查 PostgreSQL/Redis 连接、执行 schema guard/迁移及初始化、配置 Nginx，不下载源码依赖或现场编译。包内预编译依赖支持 Linux x86_64/aarch64（glibc 2.28+）、macOS Intel 12+ / Apple Silicon 14+、Windows x64；其他宿主机优先使用 Docker。仍需事先准备 Python 3.11、Nginx、PostgreSQL 15 与 Redis 7。任何失败立即退出，不清库、不绕过保护。全新安装的初始管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；完成安装向导修改密码后该值即失效，已有账户保持不变。
 
 看到“已启动”后访问 http://127.0.0.1:8080/erp/。启动器前台监控两个子进程；终端需保持打开，Ctrl+C 同时停止 Daphne 与 Nginx。进程异常退出时启动器非零退出。日志在 DATA_DIR/logs，诊断依赖连接用 `check`。需要开机自启时，由运维用本平台服务管理器运行相同 `start` 命令，工作目录设为解压目录，使用非管理员专用账户，保持配置私有。
 
@@ -228,7 +228,9 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 - 端口被占用：修改 .env.lean 的 LEAN_HTTP_PORT 后重跑安装器。
 - 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。两者只改其一时安装器会在结尾提示：
   只开放端口而未放行主机名，真实 IP 访问会被服务端拒绝（HTTP 400）；只放行主机名而未开放端口，局域网仍然连不上。
-- 密码见 .env.lean；重新安装不会重置已有用户密码。
+- 初始密码见 .env.lean 的 LEAN_ADMIN_PASSWORD，仅在完成安装向导前有效；向导要求修改初始密码，之后请使用新密码。重新安装不会重置已有用户密码。
+- 忘记管理员密码：Docker 用 `docker compose --env-file .env.lean -f docker-compose.yml exec app python manage.py changepassword admin`，
+  原生安装用 `bash install-native.sh reset-password`（Windows 为 `.\install-native.ps1 reset-password`）。
 
 ### 原生安装
 
