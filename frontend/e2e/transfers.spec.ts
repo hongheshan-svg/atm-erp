@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { test, expect, login } from './fixtures'
+import { test, expect, login, openImport } from './fixtures'
 
 test('真实表格预览后导入物料，按筛选导出全部结果和报表', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   await page.goto('/erp/masterdata')
   const panel = page.getByRole('region', { name: '物料', exact: true })
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await openImport(page)
   const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
   const templateEvent = page.waitForEvent('download')
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click()
@@ -14,8 +14,8 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   expect((await readFile((await template.path())!)).subarray(0, 2).toString()).toBe('PK')
   const prefix = `IMPORT${Date.now()}`
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
-  await page.getByLabel('导入导出格式').selectOption('csv')
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await openImport(page)
+  await dialog.getByLabel('模板格式').selectOption('csv')
   const csvDownload = page.waitForEvent('download')
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click()
   const csvTemplate = await csvDownload
@@ -40,15 +40,16 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   await expect(panel.locator('.el-table tbody tr').first()).toContainText('品牌B')
   await expect(panel.locator('.el-table tbody tr').first()).toContainText('标准件')
   await expect(panel.locator('.el-table tbody tr').first()).toContainText('台')
-  await page.getByLabel('导入导出格式').selectOption('csv')
   const exportedEvent = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByRole('button', { name: '导入导出 ▾', exact: true }).click()
+  await page.getByRole('menuitem', { name: '导出 CSV', exact: true }).click()
   const exported = await exportedEvent
   const content = await readFile((await exported.path())!, 'utf8')
   expect(content.match(new RegExp(prefix, 'g'))).toHaveLength(12)
   await page.goto('/erp/reports')
   const reportEvent = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出', exact: true }).click()
+  await page.getByRole('button', { name: '导出 ▾', exact: true }).click()
+  await page.getByRole('menuitem', { name: '导出 Excel', exact: true }).click()
   const report = await reportEvent
   expect(report.suggestedFilename()).toBe('reports.xlsx')
   expect((await readFile((await report.path())!)).subarray(0, 2).toString()).toBe('PK')

@@ -1,4 +1,4 @@
-import { test, expect, login, type Page } from './fixtures'
+import { test, expect, login, type Page, openImport } from './fixtures'
 
 async function read(page: Page, path: string) {
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
@@ -8,7 +8,7 @@ async function read(page: Page, path: string) {
 }
 async function importRows(page: Page, title: string, content: string) {
   await expect(page.getByRole('region', { name: title, exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '导入', exact: true }).click()
+  await openImport(page)
   const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
   await dialog.locator('input[type=file]').setInputFiles({ name: 'rows.csv', mimeType: 'text/csv', buffer: Buffer.from(content) })
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeEnabled()

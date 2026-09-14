@@ -64,7 +64,8 @@ async function inspect(page: Page, visited: Record<string, unknown>[]) {
     await search.fill('')
     await search.press('Enter')
   }
-  for (const refresh of await page.getByRole('button', { name: '刷新', exact: true }).all()) {
+  // Covers every refresh control: the list icon button, the project page, and BOM's 刷新需求.
+  for (const refresh of await page.getByRole('button', { name: /^刷新(列表|需求)?$/ }).all()) {
     await refresh.click()
     await expect(page.locator('.el-loading-mask:visible, .el-button.is-loading:visible')).toHaveCount(0)
   }

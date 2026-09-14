@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { crc32 } from 'node:zlib'
-import { test, expect, login, expectHttpError, type Page } from './fixtures'
+import { test, expect, login, expectHttpError, type Page, openRowAction, openImport } from './fixtures'
 
 // A tiny uncompressed ZIP writer keeps this synthetic one-sheet XLSX fixture
 // dependency-free. No production code or real bank document is used.
@@ -39,8 +39,7 @@ function xlsx(rows: string[][]) {
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, reference: string) => page.locator('.el-table__body tr:visible').filter({ hasText: reference })
 async function action(page: Page, reference: string, name: string) {
-  await row(page, reference).getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  await openRowAction(page, row(page, reference), name)
   await expect(dialog(page)).toBeVisible()
 }
 
@@ -76,7 +75,7 @@ test('财务原生银行导入缺失户名先核实，保留原凭据且重复�
   const beforeMatches = (await read('bank-matches/')).count
   await page.goto('/erp/finance?section=bank')
   async function preview(name: string) {
-    await page.getByRole('button', { name: '导入', exact: true }).click()
+    await openImport(page)
     const pending = page.waitForResponse(r => r.url().endsWith('/bank-records/import-file/') && r.request().method() === 'POST')
     await dialog(page).locator('input[type=file]').setInputFiles({ name, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer })
     const response = await pending

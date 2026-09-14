@@ -19,11 +19,13 @@ import TransferTools from './TransferTools.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
 import AttachmentDialog from './AttachmentDialog.vue'
 import { pageSize } from '../pagination'
+import { Refresh } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { user, operations } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
 import { resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
+import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
 import { buyer, labels } from '../modules/shared'
 const route = useRoute()
@@ -81,7 +83,14 @@ const secondaryKey = computed(() => ({ sales: 'name', projects: 'code', users: '
 const shownColumns = computed(() => columns[props.resource]?.filter(col => (!props.projectId || col.key !== 'project_name') && col.key !== secondaryKey.value))
 function primaryAction(row: Row) {
   const actions = actionNames(props.resource, row)
-  return ['批准采购', '收货', '提交采购', '登记收付款', '完成任务', '查看明细', '查看收付流水'].find(name => actions.includes(name))
+  return primaryActions.find(name => actions.includes(name))
+}
+// The menu never repeats the headline button, and only labels its groups when there is more than one.
+function menuGroups(row: Row) {
+  const rest = actionNames(props.resource, row).filter(name => name !== primaryAction(row))
+  return actionGroups
+    .map(group => ({ ...group, actions: rest.filter(name => actionGroup(name) === group.key) }))
+    .filter(group => group.actions.length)
 }
 const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
 function cell(row: Row, key: string) {
@@ -252,12 +261,13 @@ function inspect(row: Row) {
         {{ title }} <span class="record-count">{{ count }}</span>
       </h2>
       <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
-        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" :disabled="actionBusy" @click="pickingBom = true">从 BOM 多选下单</el-button>
-        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
-        <el-button @click="load">刷新</el-button
-        ><el-button v-if="createLabel(resource) && allowCreate !== false" type="primary" @click="create">{{
+        <!-- Leading with the entries that create work; BOM selection is the intended purchase path. -->
+        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="pickingBom = true">从 BOM 多选下单</el-button>
+        <el-button v-if="createLabel(resource) && allowCreate !== false" :type="resource === 'purchases' ? undefined : 'primary'" @click="create">{{
           createLabel(resource)
         }}</el-button>
+        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
+        <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
       </div></Teleport>
     </header>
     <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" :aria-label="filterConfig.label">
@@ -306,23 +316,28 @@ function inspect(row: Row) {
           <span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="col.key === combinedKey && secondaryKey" class="record-secondary">{{ row[secondaryKey] }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
-      <el-table-column label="操作" fixed="right" width="150"
+      <el-table-column label="操作" fixed="right" width="170"
         ><template #default="{ row }"
-          ><el-button v-if="primaryAction(row)" link type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ primaryAction(row) }}</el-button
-          ><el-dropdown
-            v-if="actionNames(resource, row).length"
-            trigger="click"
-            :persistent="false"
-            @command="(name: string) => action(row, String(name))"
-            ><el-button size="small">操作 ▾</el-button
-            ><template #dropdown
-              ><el-dropdown-menu
-                ><el-dropdown-item v-for="name in actionNames(resource, row)" :key="name" :command="name">{{
-                  name
-                }}</el-dropdown-item></el-dropdown-menu
-              ></template
-            ></el-dropdown
-          ><span v-else class="muted">—</span></template
+          ><div class="row-actions"
+            ><el-button v-if="primaryAction(row)" type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ primaryAction(row) }}</el-button
+            ><el-dropdown
+              v-if="menuGroups(row).length"
+              trigger="click"
+              :persistent="false"
+              @command="(name: string) => action(row, String(name))"
+              ><el-button size="small">操作 ▾</el-button
+              ><template #dropdown
+                ><el-dropdown-menu
+                  ><template v-for="group in menuGroups(row)" :key="group.key"
+                    ><li v-if="menuGroups(row).length > 1" class="action-group-label" role="presentation">{{ group.label }}</li
+                    ><el-dropdown-item v-for="name in group.actions" :key="name" :command="name">{{
+                      name
+                    }}</el-dropdown-item></template
+                  ></el-dropdown-menu
+                ></template
+              ></el-dropdown
+            ><span v-else-if="!primaryAction(row)" class="muted">—</span></div
+          ></template
         ></el-table-column
       >
     </el-table>

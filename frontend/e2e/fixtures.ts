@@ -1,5 +1,6 @@
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Locator, type Page } from '@playwright/test'
 import { setTimeout as pause } from 'node:timers/promises'
+import { primaryActions } from '../src/row-actions'
 
 const expectedHttpErrors = new WeakMap<Page, { url: string; status: number }[]>()
 
@@ -34,6 +35,28 @@ export async function login(page: Page, username: string, password: string) {
     stopExpecting()
   }
   throw new Error('服务器登录限流等待后仍未恢复。')
+}
+
+// A row's next step is a direct button and everything else lives in the 操作 menu, so callers
+// name the action and let this decide where it currently is.
+export async function openRowAction(page: Page, row: Locator, name: string) {
+  const menu = row.getByRole('button', { name: '操作 ▾', exact: true })
+  const direct = row.getByRole('button', { name, exact: true })
+  await expect(direct.or(menu).first()).toBeVisible()
+  // The same registry the list renders from decides where to look, so a save that reloads the row
+  // is waited out on the right control instead of by clicking the menu toggle in a retry loop.
+  if (primaryActions.includes(name)) {
+    await direct.click()
+    return
+  }
+  await menu.click()
+  await page.getByRole('menuitem', { name, exact: true }).click()
+}
+
+// Import lives behind the toolbar's 导入导出 menu; one place so a toolbar change is one edit.
+export async function openImport(page: Page) {
+  await page.getByRole('button', { name: '导入导出 ▾', exact: true }).click()
+  await page.getByRole('menuitem', { name: '导入', exact: true }).click()
 }
 
 export function observePage(page: Page, errors: string[]) {
