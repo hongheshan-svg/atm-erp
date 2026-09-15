@@ -28,7 +28,7 @@ def inspect(backup_dir, data_path, max_age_hours=26, min_free_gb=5, health_url=N
                         for block in iter(lambda: stream.read(1024 * 1024), b''):
                             digest.update(block)
                     if digest.hexdigest() != manifest['sha256'][name]:
-                        raise ValueError('checksum mismatch')
+                        raise ValueError('校验值不一致')
         except Exception:
             failures.append('最新归档不完整或校验值不匹配；保留现场并重新备份。')
     free_gb = shutil.disk_usage(data_path).free / (1024**3)
@@ -51,7 +51,7 @@ def inspect(backup_dir, data_path, max_age_hours=26, min_free_gb=5, health_url=N
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='只读运维检查：需显式指定目标，不自动探测生产配置')
     parser.add_argument('--backup-dir', type=Path, required=True)
     parser.add_argument('--data-path', type=Path, required=True)
     parser.add_argument('--health-url')

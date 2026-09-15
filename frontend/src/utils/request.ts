@@ -78,17 +78,40 @@ export function requestKey(): string {
   const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
+// axios 自带的描述和网关返回的 HTML 错误页都是英文，一律换成按错误类型给出的中文说明。
+const NETWORK_MESSAGES: Record<string, string> = {
+  ECONNABORTED: '请求超时，请检查网络后重试。',
+  ETIMEDOUT: '请求超时，请检查网络后重试。',
+  ERR_NETWORK: '无法连接服务器，请检查网络或确认服务是否已启动。',
+  ERR_CANCELED: '请求已取消。',
+}
+const STATUS_MESSAGES: Record<number, string> = {
+  401: '登录状态已失效，请重新登录。',
+  403: '没有执行该操作的权限。',
+  404: '请求的数据不存在或已被删除。',
+  413: '提交内容过大，请缩减后重试。',
+  429: '操作过于频繁，请稍后再试。',
+  500: '服务器处理失败，请稍后重试或联系管理员。',
+  502: '服务暂时不可用，请稍后重试。',
+  503: '服务暂时不可用，请稍后重试。',
+  504: '服务响应超时，请稍后重试。',
+}
 export function message(error: unknown): string {
-  const detail = axios.isAxiosError(error) ? error.response?.data?.detail || error.response?.data || error.message : error
   function flatten(value: any): string {
     if (value == null) return ''
-    if (typeof value === 'string') return value
+    // 响应体是错误页而不是接口返回时，原样展示只会得到一段英文 HTML。
+    if (typeof value === 'string') return value.trimStart().startsWith('<') ? '' : value
     if (value instanceof Error) return value.message
     if (Array.isArray(value)) return value.map(flatten).join('；')
     if (typeof value === 'object') return Object.values(value).map(flatten).join('；')
     return String(value)
   }
-  return flatten(detail) || '操作失败，请重试。'
+  if (!axios.isAxiosError(error)) return flatten(error) || '操作失败，请重试。'
+  const data = error.response?.data
+  const detail = flatten(data?.detail ?? data)
+  if (detail) return detail
+  if (!error.response) return NETWORK_MESSAGES[error.code ?? ''] || '网络异常，请检查连接后重试。'
+  return STATUS_MESSAGES[error.response.status] || `请求失败（HTTP ${error.response.status}）。`
 }
 export function recoveryActions(error: unknown): { label: string; path: string }[] {
   const actions = axios.isAxiosError(error) ? error.response?.data?.actions : []

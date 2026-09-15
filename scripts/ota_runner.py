@@ -23,6 +23,11 @@ import zipfile
 REPO = 'hongheshan-svg/atm-erp'
 PLATFORM = {'Darwin': 'macos', 'Linux': 'linux', 'Windows': 'windows'}.get(platform.system())
 LIMIT = 500_000_000
+# 失败原因直接展示在 ERP 升级面板上，异常类名对使用者没有意义，统一给出中文说明。
+CAUSES = {'CalledProcessError': '升级命令执行失败', 'TimeoutExpired': '升级命令执行超时',
+          'HTTPError': '访问 GitHub 发布失败', 'URLError': '网络连接失败',
+          'OSError': '文件或网络操作失败', 'PermissionError': '文件权限不足',
+          'JSONDecodeError': '返回内容不是有效数据', 'KeyError': '发布信息缺少必要字段'}
 
 
 def atomic_json(path, data):
@@ -68,7 +73,7 @@ def config_values(path, mode):
         if line.strip() and not line.lstrip().startswith('#'):
             key, sep, value = line.partition('=')
             if not sep:
-                raise ValueError('Invalid environment configuration')
+                raise ValueError('安装配置文件格式不正确')
             values[key.strip()] = value.strip().strip('"').strip("'")
     return values
 
@@ -76,25 +81,25 @@ def config_values(path, mode):
 def trusted_asset(job, mode, host_platform):
     tag = job['target']
     if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
-        raise ValueError('Invalid release version')
+        raise ValueError('发布版本号格式不正确')
     request = urllib.request.Request(f'https://api.github.com/repos/{REPO}/releases/tags/{tag}',
                                      headers={'User-Agent': 'Lean-ERP-host-upgrade'})
     with urllib.request.urlopen(request, timeout=20) as response:
         raw = response.read(2_000_001)
     if len(raw) > 2_000_000:
-        raise ValueError('Release metadata too large')
+        raise ValueError('发布信息过大，已停止解析')
     release = json.loads(raw)
     if release.get('tag_name') != tag or release.get('draft') or release.get('prerelease'):
-        raise ValueError('Not a published stable release')
+        raise ValueError('目标不是已发布的正式版本')
     name = f'atm-erp-{tag}-{host_platform}-{mode}.zip'
     asset = next((asset for asset in release['assets'] if asset['name'] == name), None)
     if not asset:
-        raise ValueError('No matching installation package')
+        raise ValueError('该发布没有匹配当前系统和部署方式的安装包')
     expected = f'https://github.com/{REPO}/releases/download/{tag}/{name}'
     digest = asset.get('digest') or ''
     if (asset.get('browser_download_url') != expected or not re.fullmatch(r'sha256:[a-f0-9]{64}', digest)
             or digest[7:] != job['asset']['sha256'] or not 0 < asset['size'] <= LIMIT):
-        raise ValueError('Release package changed or is not verifiable')
+        raise ValueError('发布安装包已变更或无法校验')
     return {'url': expected, 'sha256': digest[7:], 'size': asset['size'], 'name': name}
 
 
@@ -107,31 +112,31 @@ def download(asset, destination, progress=None):
         while chunk := response.read(1024 * 1024):
             size += len(chunk)
             if size > LIMIT or size > asset['size']:
-                raise ValueError('Package size exceeds release metadata')
+                raise ValueError('安装包大小超过发布信息，已中止下载')
             digest.update(chunk)
             output.write(chunk)
             if progress and (time.monotonic() - last_report >= 2 or size == asset['size']):
                 progress(size, asset['size'])
                 last_report = time.monotonic()
     if digest.hexdigest() != asset['sha256'] or size != asset['size']:
-        raise ValueError('Package SHA256 mismatch')
+        raise ValueError('安装包 SHA256 校验不一致')
 
 
 def unpack(archive, destination, target, mode, host_platform):
     with zipfile.ZipFile(archive) as bundle:
         entries = bundle.infolist()
         if len(entries) > 20000 or sum(entry.file_size for entry in entries) > 1_000_000_000:
-            raise ValueError('Unpacked package too large')
+            raise ValueError('安装包解压后体积过大')
         names = set()
         for entry in entries:
             path = PurePosixPath(entry.filename)
             if (path.is_absolute() or '..' in path.parts or '\\' in entry.filename or ':' in entry.filename
                     or stat.S_ISLNK(entry.external_attr >> 16) or entry.filename in names):
-                raise ValueError('Unsafe archive entry')
+                raise ValueError('安装包中存在不安全的文件条目')
             names.add(entry.filename)
         roots = {PurePosixPath(entry.filename).parts[0] for entry in entries}
         if len(roots) != 1:
-            raise ValueError('Package must contain one root directory')
+            raise ValueError('安装包必须只包含一个根目录')
         bundle.extractall(destination)
         # The service uses umask 077 for credentials and backups. Source files
         # copied into a non-root container must still be readable there.
@@ -148,15 +153,15 @@ def unpack(archive, destination, target, mode, host_platform):
     manifest = json.loads((root / 'INSTALL-MANIFEST.json').read_text(encoding='utf-8'))
     if any(manifest.get(key) != value for key, value in (
             ('version', target), ('mode', mode), ('platform', host_platform))):
-        raise ValueError('Package manifest does not match requested upgrade')
+        raise ValueError('安装包清单与本次升级请求不匹配')
     for relative in ('backend/manage.py', 'backend/apps/core/version.py', 'frontend/dist/index.html',
                      'scripts/native_install.py', 'scripts/backup.py', 'docker-compose.yml'):
         if not (root / relative).is_file():
-            raise ValueError('Package does not support managed upgrades')
+            raise ValueError('安装包不支持托管升级')
     # Never install a package labelled with a different runtime version.
     expected = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", (root / 'backend/apps/core/version.py').read_text())
     if not expected or expected.group(1) != target.lstrip('v'):
-        raise ValueError('Runtime version does not match release tag')
+        raise ValueError('安装包内的程序版本与发布标签不一致')
     return root
 
 
@@ -186,9 +191,9 @@ class Runner:
         url = urllib.parse.urlsplit(self.url)
         if (url.username or url.password or url.query or url.fragment or url.path
                 or (url.scheme != 'https' and not (url.scheme == 'http' and url.hostname in ('127.0.0.1', 'localhost', '::1')))):
-            raise ValueError('API URL must be HTTPS or local loopback HTTP, without a path or credentials')
+            raise ValueError('接口地址必须是 HTTPS 或本机回环 HTTP，且不能带路径或账号密码')
         if self.state.get('url', self.url) != self.url or self.state.get('mode', self.mode) != self.mode:
-            raise ValueError('State directory belongs to another deployment')
+            raise ValueError('该状态目录属于另一套部署')
         self.state.update(url=self.url, mode=self.mode)
         if os.name == 'nt':
             identity = subprocess.check_output(['whoami'], text=True).strip()
@@ -280,18 +285,18 @@ class Runner:
                       '-d', values['DB_NAME'], '-Fc', '--no-owner', '--no-acl', '-f', backup / 'database.dump'], log, env=env)
         uploads = Path(values['DATA_DIR']).expanduser().resolve() / 'uploads'
         if not uploads.is_dir():
-            raise ValueError('Uploads directory is missing; refusing an incomplete backup')
+            raise ValueError('附件目录不存在，拒绝生成不完整的备份')
         def walk(directory):
             # iterdir propagates permission errors; rglob may silently omit them.
             for path in directory.iterdir():
                 if path.is_symlink():
-                    raise ValueError('Uploads backup contains a symlink')
+                    raise ValueError('附件备份中存在符号链接')
                 if path.is_dir():
                     yield from walk(path)
                 elif path.is_file():
                     yield path
                 else:
-                    raise ValueError('Uploads backup contains a special file')
+                    raise ValueError('附件备份中存在特殊文件')
         with tarfile.open(backup / 'uploads.tar', 'w') as tar:
             for path in walk(uploads):
                 tar.add(path, arcname=path.relative_to(uploads).as_posix(), recursive=False)
@@ -338,10 +343,10 @@ class Runner:
                                  progress=lambda seconds: self.report(job, 'downloading', f'正在获取已构建镜像 · 已运行 {seconds} 秒，原系统保持运行'))
                 else:
                     if not shutil.which('pg_dump'):
-                        raise ValueError('pg_dump is required before stopping a native application')
+                        raise ValueError('停止原生部署前必须先安装 pg_dump')
                     client_version = subprocess.check_output(['pg_dump', '--version'], text=True)
                     if not re.search(r'PostgreSQL\) 15\.', client_version):
-                        raise ValueError('Use the PostgreSQL 15 pg_dump client for this database')
+                        raise ValueError('请改用 PostgreSQL 15 的 pg_dump 客户端备份该数据库')
                 phase = '备份数据'
                 self.report(job, 'backing_up', '正在停机并备份数据库与附件；完成前不显示可用备份位置')
                 if self.mode == 'docker':
@@ -377,14 +382,14 @@ class Runner:
                         pass
                     time.sleep(2)
                 else:
-                    raise RuntimeError('New version health check failed')
+                    raise RuntimeError('新版本健康检查未通过')
                 self.root = target
                 if self.mode == 'docker':
                     self.config = new_config
                 self.state.update(root=str(self.root), config=str(self.config))
                 self.report(job, 'succeeded', '新版本已启动，刷新页面即可使用', str(backup))
             except Exception as exc:
-                print(f'Upgrade failed: {type(exc).__name__}: {exc}', file=log, flush=True)
+                print(f'升级失败：{type(exc).__name__}: {exc}', file=log, flush=True)
                 # Before migrations, restart the unchanged source safely. After migrations,
                 # never point an old application at a possibly newer database schema.
                 if stopped and not migration_started:
@@ -397,7 +402,8 @@ class Runner:
                                              **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
                     except Exception:
                         pass
-                cause = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+                cause = (str(exc) if isinstance(exc, (ValueError, RuntimeError))
+                         else CAUSES.get(type(exc).__name__, f'未预期的错误（{type(exc).__name__}）'))
                 backup_note = '完整备份已保留。' if backup_complete else '尚未生成完整备份。'
                 safety_note = '迁移已开始，不会自动回退数据库。' if migration_started else '数据库迁移尚未开始。'
                 self.report(job, 'failed', f'{phase}失败：{cause} {backup_note}{safety_note} 日志：{folder / "upgrade.log"}',
@@ -436,7 +442,7 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8')
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='宿主机升级执行器：轮询 ERP 的升级任务并在宿主机上执行')
     parser.add_argument('--mode', choices=('docker', 'native'), required=True)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--config', type=Path, required=True)
@@ -445,7 +451,7 @@ def main():
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 11) or PLATFORM is None:
-        parser.error('Use Python 3.11 on macOS, Linux or Windows')
+        parser.error('请在 macOS、Linux 或 Windows 上使用 Python 3.11')
     os.umask(0o077)
     try:
         Runner(args).serve(args.once)

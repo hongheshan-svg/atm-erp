@@ -1,6 +1,6 @@
 param([string]$EnvFile = (Join-Path $PSScriptRoot '.env.lean'), [switch]$SkipBuild, [switch]$NoOta)
 $ErrorActionPreference = 'Stop'
-function Invoke-Docker { & docker @args; if ($LASTEXITCODE -ne 0) { throw "Docker failed: $LASTEXITCODE" } }
+function Invoke-Docker { & docker @args; if ($LASTEXITCODE -ne 0) { throw "Docker 命令执行失败，退出码 $LASTEXITCODE。" } }
 function Random-Hex([int]$Length) {
   $bytes = New-Object byte[] $Length
   $rng = [Security.Cryptography.RandomNumberGenerator]::Create()

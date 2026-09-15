@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { request, requestKey, resetSession } from './request'
+import { message, request, requestKey, resetSession } from './request'
 
 const adapter = request.defaults.adapter
 function response(config: InternalAxiosRequestConfig, status = 200): AxiosResponse {
@@ -100,5 +100,36 @@ describe('操作标识生成', () => {
     const keys = Array.from({ length: 50 }, () => requestKey())
     for (const key of keys) expect(key).toMatch(uuidShape)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('错误提示中文化', () => {
+  const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig
+  function failure(status: number, data: unknown) {
+    const result: AxiosResponse = { config, status, data, statusText: '', headers: new AxiosHeaders() }
+    return new AxiosError(`Request failed with status code ${status}`, 'ERR_BAD_RESPONSE', config, {}, result)
+  }
+
+  it('接口返回的提示原样展示', () => {
+    expect(message(failure(400, { detail: '目标版本不高于正在运行的版本。' }))).toBe('目标版本不高于正在运行的版本。')
+    expect(message(failure(400, { amount: ['金额不能为负。'], quantity: ['数量必须大于零。'] }))).toBe('金额不能为负。；数量必须大于零。')
+  })
+
+  it('连不上服务或超时改用中文说明，不显示 axios 的英文描述', () => {
+    expect(message(new AxiosError('Network Error', 'ERR_NETWORK'))).toBe('无法连接服务器，请检查网络或确认服务是否已启动。')
+    expect(message(new AxiosError('timeout of 25000ms exceeded', 'ECONNABORTED'))).toBe('请求超时，请检查网络后重试。')
+    expect(message(new AxiosError('unknown'))).toBe('网络异常，请检查连接后重试。')
+  })
+
+  // 网关返回的是英文 HTML 错误页，直接展示既看不懂又会把整段标记塞进提示条。
+  it('网关错误页按状态码给出中文提示', () => {
+    expect(message(failure(502, '<html><body>502 Bad Gateway</body></html>'))).toBe('服务暂时不可用，请稍后重试。')
+    expect(message(failure(403, ''))).toBe('没有执行该操作的权限。')
+    expect(message(failure(418, {}))).toBe('请求失败（HTTP 418）。')
+  })
+
+  it('非请求类错误保留原有消息', () => {
+    expect(message(new Error('登录状态已变化。'))).toBe('登录状态已变化。')
+    expect(message(null)).toBe('操作失败，请重试。')
   })
 })

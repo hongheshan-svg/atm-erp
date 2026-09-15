@@ -11,6 +11,9 @@ import urllib.request
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     parser.add_argument("--db-port", required=True)
@@ -45,7 +48,7 @@ def main():
         try:
             for _ in range(90):
                 if process.poll() is not None:
-                    raise RuntimeError("Native launcher exited before ready")
+                    raise RuntimeError("原生启动器在服务就绪前已退出")
                 try:
                     if request("/api/health/")[0] == 200:
                         break
@@ -53,7 +56,7 @@ def main():
                     pass
                 time.sleep(1)
             else:
-                raise RuntimeError("Native startup timeout")
+                raise RuntimeError("原生服务启动超时")
             status, body, headers = request("/erp/")
             assert status == 200 and b"<html" in body.lower()
             assets = list((root / "frontend/dist/assets").glob("*.js"))
@@ -68,8 +71,8 @@ def main():
             assert json.loads(body)["access"]
             if iteration == 1:
                 statuses = [request("/api/auth/login/", {**credentials, "password": "wrong"})[0] for _ in range(12)]
-                assert 429 in statuses, "Release login throttle must be enabled"
-            print(f"Native installation {iteration + 1}: login, assets, auth and upload protection passed", flush=True)
+                assert 429 in statuses, "发布环境必须启用登录限流"
+            print(f"第 {iteration + 1} 次原生安装：登录、静态资源、鉴权与附件保护均已通过", flush=True)
         finally:
             subprocess.run([*command, 'stop', '--config', str(config_path)], check=True)
             try:

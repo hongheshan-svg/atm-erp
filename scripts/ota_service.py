@@ -44,7 +44,7 @@ def unit(args, directory):
     # systemd interprets percent specifiers and C-style escapes even in quotes.
     def quote(value):
         return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$').replace('\n', '\\n').replace('\r', '\\r') + '"'
-    return ('[Unit]\nDescription=Lean ERP host upgrade executor\nAfter=network-online.target\n'
+    return ('[Unit]\nDescription=Lean ERP 宿主机升级执行器\nAfter=network-online.target\n'
             '[Service]\nType=simple\nExecStart=' + ' '.join(map(quote, args)) + '\n'
             'Restart=always\nRestartSec=10\nUMask=0077\n'
             '[Install]\nWantedBy=default.target\n')
@@ -194,7 +194,7 @@ def supervise(directory):
 
 def main():
     utf8_output()
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='为当前部署注册并保活宿主机升级执行器服务')
     parser.add_argument('action', choices=['install', 'supervise'])
     parser.add_argument('--mode', choices=['docker', 'native'])
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
@@ -209,7 +209,7 @@ def main():
         supervise(args.state_dir.resolve())
     else:
         if not args.config or not args.mode:
-            parser.error('install requires --mode and --config')
+            parser.error('执行 install 时必须同时提供 --mode 和 --config')
         install(args.mode, args.root, args.config, args.url, args.state_dir)
 
 

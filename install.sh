@@ -6,11 +6,11 @@ BUILD=true
 OTA=true
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env-file) ENV_FILE="${2:?Missing env file path}"; shift 2 ;;
+    --env-file) ENV_FILE="${2:?缺少配置文件路径}"; shift 2 ;;
     --skip-build) BUILD=false; shift ;;
     --no-ota) OTA=false; shift ;;
-    --help) echo 'Usage: install.sh [--env-file PATH] [--skip-build] [--no-ota (isolated CI only)]'; exit 0 ;;
-    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    --help) echo '用法：install.sh [--env-file 配置文件路径] [--skip-build 跳过构建] [--no-ota 仅隔离 CI：不注册升级服务]'; exit 0 ;;
+    *) echo "无法识别的参数：$1" >&2; exit 2 ;;
   esac
 done
 PYTHON_BIN="${PYTHON:-python3.11}"

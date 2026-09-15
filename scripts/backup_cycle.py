@@ -68,7 +68,7 @@ def cycle(env_file, backup_dir, offsite_dir, data_path, health_url, status_file)
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='执行一次完整备份流程，供宿主机计划任务调用；不会自动安装计划任务')
     for argument in (
         'env-file',
         'backup-dir',

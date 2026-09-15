@@ -20,7 +20,7 @@ def monitor(probe=healthy, sleep=time.sleep, terminate=None):
     while True:
         failures = 0 if probe() else failures + 1
         if failures >= 6:
-            print('Persistent health failure; restarting application container.', flush=True)
+            print('健康检查持续失败，正在重启应用容器。', flush=True)
             terminate()
             return
         sleep(10)

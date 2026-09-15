@@ -59,7 +59,7 @@ def main():
             except OSError:
                 time.sleep(1)
         else:
-            raise RuntimeError('Native application did not start')
+            raise RuntimeError('原生应用未能启动')
         shell("from apps.core.models import Company; Company.objects.filter(pk=1).update(name='原生 OTA 数据保留')")
         stage = task / 'fixture'
         stage.mkdir()
@@ -107,7 +107,7 @@ def main():
         backup = next((task / 'state').glob('job-*/backup'))
         for name, digest in json.loads((backup / 'manifest.json').read_text())['sha256'].items():
             assert ota.file_hash(backup / name) == digest
-        print('Native OTA passed: real Daphne/Nginx stop/start, PostgreSQL backup and forward migration, retained data, verified target version and completed job.', flush=True)
+        print('原生 OTA 通过：真实 Daphne/Nginx 停启、PostgreSQL 备份与前向迁移、数据保留、目标版本核验、任务完成。', flush=True)
     finally:
         subprocess.run(command(current, 'stop'), stdout=log, stderr=log, check=False)
         log.close()

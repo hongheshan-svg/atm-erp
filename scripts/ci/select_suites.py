@@ -14,12 +14,12 @@ def select(paths, suite='auto', custom=()):
         return set(SUITES)
     if suite == 'custom':
         if not set(custom) or set(custom) - set(SUITES):
-            raise ValueError('Select at least one known suite')
+            raise ValueError('请至少选择一个已知的测试套件')
         return set(custom)
     if suite in SUITES:
         return {suite}
     if suite != 'auto':
-        raise ValueError('Unknown suite')
+        raise ValueError('未知的测试套件')
     for path in paths:
         if path.startswith('docs/') or path.endswith('.md') or path in ('.gitignore', 'LICENSE', '.editorconfig'):
             continue
@@ -35,7 +35,7 @@ def main():
     parser.add_argument('--projects', choices=('both', 'desktop', 'mobile'), default='both')
     args = parser.parse_args()
     if args.suite == 'auto' and not args.base:
-        raise ValueError('Automatic selection requires the PR base commit')
+        raise ValueError('自动选择测试套件需要提供 PR 的基线提交')
     paths = (
         subprocess.check_output(
             ['git', 'diff', '--name-only', '-z', args.base, args.head],

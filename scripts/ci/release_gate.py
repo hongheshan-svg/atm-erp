@@ -30,22 +30,22 @@ def reusable_run(runs, repository, tree, jobs_for):
 
 def preflight(tag, repository, force=False):
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
-        raise ValueError('A stable vMAJOR.MINOR.PATCH tag is required')
+        raise ValueError('必须使用 v主版本.次版本.修订号 形式的正式 tag')
     commit = git('rev-parse', f'refs/tags/{tag}^{{commit}}')
     subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'origin/main'], check=True)
     version_file = git('show', f'{commit}:backend/apps/core/version.py')
     if version_file.strip() != f"VERSION = '{tag[1:]}'":
-        raise ValueError('Tag and backend version differ')
+        raise ValueError('tag 与后端版本号不一致')
     for name in ('frontend/package.json', 'frontend/package-lock.json'):
         if json.loads(git('show', f'{commit}:{name}'))['version'] != tag[1:]:
-            raise ValueError('Tag and frontend version differ')
+            raise ValueError('tag 与前端版本号不一致')
     notes = git('show', f'{commit}:docs/releases/{tag}.md')
     if '{{TAG}}' in notes or '## 📥 Installation' not in notes or '## 📚 Documentation' not in notes:
-        raise ValueError('Release notes must include actual installation and documentation sections')
+        raise ValueError('发布说明必须包含实际的 Installation 与 Documentation 区块')
     # Published releases and their immutable assets are never overwritten by this workflow.
     releases = api(f'repos/{repository}/releases?per_page=100')
     if any(r['tag_name'] == tag and not r['draft'] for r in releases):
-        raise ValueError('This version is already published; use a new tag')
+        raise ValueError('该版本已发布，请改用新的 tag')
     tree = git('rev-parse', f'{commit}^{{tree}}')
     run = None
     if not force:
@@ -74,7 +74,7 @@ def main():
     with Path(os.environ['GITHUB_OUTPUT']).open('a') as stream:
         stream.writelines(f'{key}={value}\n' for key, value in result.items())
     with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as stream:
-        stream.write('## Release preflight\n\n' + '\n'.join(f'- {k}: {v}' for k, v in result.items()) + '\n')
+        stream.write('## 发布预检\n\n' + '\n'.join(f'- {k}: {v}' for k, v in result.items()) + '\n')
     print(json.dumps(result))
 
 

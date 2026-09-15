@@ -133,4 +133,4 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - run: echo 'All suites and both browser viewports passed for this Git tree.'
+      - run: echo '当前 Git tree 的全部测试套件与两种浏览器视口均已通过。'

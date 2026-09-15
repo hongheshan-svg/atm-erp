@@ -10,7 +10,7 @@ STAGE="${1:---all}"
 case "$STAGE" in
   --all) STAGES=(checks platform business concurrency) ;;
   checks|platform|business|concurrency) STAGES=("$STAGE") ;;
-  *) echo 'Usage: precheck-tests.sh [--all|checks|platform|business|concurrency]' >&2; exit 2 ;;
+  *) echo '用法：precheck-tests.sh [--all|checks|platform|business|concurrency]' >&2; exit 2 ;;
 esac
 RUN_ID="atm-lean-test-$(date +%s)-$$"
 IMAGE="${LEAN_TEST_IMAGE:-atm-erp-lean-tests:current}"
@@ -36,7 +36,7 @@ for ((i=0; i<60; i++)); do
   fi
   sleep 1
 done
-if [[ "$ready" != true ]]; then echo 'Test PostgreSQL did not become ready' >&2; exit 1; fi
+if [[ "$ready" != true ]]; then echo '测试用 PostgreSQL 未在限定时间内就绪' >&2; exit 1; fi
 for stage in "${STAGES[@]}"; do
   docker run --rm --network "$RUN_ID" -v "$ROOT:/repo:ro" -w /repo \
     -e DJANGO_SETTINGS_MODULE=config.test_settings -e PYTHONDONTWRITEBYTECODE=1 \

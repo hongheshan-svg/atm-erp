@@ -21,11 +21,11 @@ def git(*args):
 
 def build(tag, output, artifacts):
     if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
-        raise ValueError("Only stable semantic version tags may be packaged")
+        raise ValueError("只能打包正式语义版本号的 tag")
     commit = git("rev-parse", f"{tag}^{{}}")
     installer_commit = git("rev-parse", "HEAD")
     if git("status", "--porcelain", "--", *OVERLAY, "scripts/package_release.py"):
-        raise ValueError("Commit installer sources before packaging for provenance")
+        raise ValueError("打包前请先提交安装器源码，保证发布来源可追溯")
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lean-release-") as temporary:
         temporary = Path(temporary)
@@ -38,7 +38,7 @@ def build(tag, output, artifacts):
             bundle.extractall(source, filter="data")
         npm = shutil.which("npm")
         if not npm:
-            raise ValueError("Node.js 22 / npm required to build release frontend")
+            raise ValueError("构建发布前端需要 Node.js 22 与 npm")
         for command in ([npm, "ci"], [npm, "run", "build"]):
             subprocess.run(command, cwd=source / "frontend", check=True)
         shutil.rmtree(source / "frontend/node_modules")
@@ -88,7 +88,7 @@ def build(tag, output, artifacts):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='打包指定 tag 的源码与显式声明的安装器附加文件')
     parser.add_argument("tag")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument('--artifacts', type=Path, required=True)

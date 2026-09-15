@@ -41,12 +41,12 @@ def release_info():
         with urllib.request.urlopen(request, timeout=8) as response:
             raw = response.read(2_000_001)
         if len(raw) > 2_000_000:
-            raise ValueError('response too large')
+            raise ValueError('返回内容过大')
         data = json.loads(raw)
         tag = data['tag_name']
         version(tag)
         if data.get('draft') or data.get('prerelease'):
-            raise ValueError('not a stable release')
+            raise ValueError('不是正式发布版本')
         assets = []
         for asset in data.get('assets', []):
             name = asset.get('name', '')

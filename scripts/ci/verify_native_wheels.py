@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -27,7 +28,9 @@ if __name__ == '__main__':
             [
                 str(python),
                 '-c',
-                'import django, daphne, psycopg2, redis, cryptography; print("Offline native runtime verified")',
+                'import django, daphne, psycopg2, redis, cryptography; print("离线原生运行依赖验证通过")',
             ],
             check=True,
+            # Windows 运行器的默认输出编码不是 UTF-8，显式指定后中文提示才能正常打印。
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
         )

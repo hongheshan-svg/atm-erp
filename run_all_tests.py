@@ -62,7 +62,7 @@ def commands(stage):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='按阶段运行测试；不会迁移、初始化或重置生产数据库')
     parser.add_argument(
         '--stage', choices=['checks', *TARGETS, 'backend', 'frontend', 'browser', 'all'], default='checks'
     )
@@ -74,7 +74,7 @@ def main():
         stages = ['checks', *TARGETS, 'frontend', 'browser']
     if not args.plan_only and any(stage in TARGETS for stage in stages):
         if not all(os.environ.get(key) for key in ('PG_TEST_HOST', 'PG_TEST_USER', 'PG_TEST_PASSWORD')):
-            parser.error('Backend tests require explicit PG_TEST_HOST, PG_TEST_USER and PG_TEST_PASSWORD.')
+            parser.error('后端测试必须显式提供 PG_TEST_HOST、PG_TEST_USER 和 PG_TEST_PASSWORD。')
     for stage in stages:
         for cwd, command in commands(stage):
             print(f'{stage}: {" ".join(command)}', flush=True)

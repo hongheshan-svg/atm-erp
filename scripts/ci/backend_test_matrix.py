@@ -47,10 +47,10 @@ def validate_coverage():
     duplicates = {target for target in registered if registered.count(target) > 1}
     if set(registered) != actual or duplicates:
         raise SystemExit(
-            f'Test registry mismatch: missing={actual - set(registered)}, stale={set(registered) - actual}, duplicate={duplicates}'
+            f'测试登记与实际用例不一致：缺少={actual - set(registered)}，多余={set(registered) - actual}，重复={duplicates}'
         )
     if not all(TARGETS.values()):
-        raise SystemExit('Each backend stage must contain explicit test targets.')
+        raise SystemExit('每个后端测试阶段都必须显式登记测试目标。')
 
 
 def build_matrix():

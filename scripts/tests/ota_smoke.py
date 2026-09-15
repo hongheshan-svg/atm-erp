@@ -137,7 +137,7 @@ def main():
         proof = subprocess.check_output([*new_compose, 'exec', '-T', 'app', 'python', 'manage.py', 'shell', '-c',
             "from apps.core.models import Company; c=Company.objects.get(pk=1); assert c.name=='OTA 保留数据测试'; assert c.ota_test_marker=='ota-smoke-marker'; print('DATA_AND_MIGRATION_OK')"], text=True)
         assert 'DATA_AND_MIGRATION_OK' in proof
-        print(f'OTA rehearsal passed: download hash, stop, backup hash, forward migration, retained company/admin, restart, target version, completed job. Evidence: {task}', flush=True)
+        print(f'OTA 演练通过：下载校验、停机、备份校验、前向迁移、公司与管理员数据保留、重启、目标版本、任务完成。证据：{task}', flush=True)
     finally:
         log.close()
         for path in (task / 'state').glob('job-*/upgrade.log'):

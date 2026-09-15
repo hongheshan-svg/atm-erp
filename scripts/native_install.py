@@ -293,7 +293,7 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='原生 Daphne/Nginx 安装与启动工具；数据库和 Redis 仍由使用者自行管理')
     parser.add_argument("action", choices=("configure", "install", "start", "stop", "check", "reset-password"))
     parser.add_argument("--config", type=Path, default=ROOT / "native-config.json")
     parser.add_argument("--user", default="admin", help="reset-password 要重设的用户名")

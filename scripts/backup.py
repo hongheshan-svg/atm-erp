@@ -31,7 +31,7 @@ def validate_uploads(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='备份数据库与附件；恢复只允许写入全新的空部署')
     parser.add_argument('operation', choices=['backup', 'restore'])
     parser.add_argument('--env-file', type=Path, default=ROOT / '.env.lean')
     parser.add_argument('--archive', type=Path, required=True)
