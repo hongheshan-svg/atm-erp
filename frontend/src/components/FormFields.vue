@@ -3,6 +3,8 @@ import type { Field, Row } from '../types'
 import { defaults } from '../forms'
 import { reactive } from 'vue'
 import RemoteSelect from './RemoteSelect.vue'
+import ProcessSteps from './ProcessSteps.vue'
+import { flowFor } from '../flows'
 defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
 const model = defineModel<Row>({ required: true })
 const pages = reactive<Record<string, number>>({})
@@ -21,7 +23,11 @@ function readonlyValue(field: Field) {
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
         <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>
-          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" min-width="140" show-overflow-tooltip />
+          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : 140" :show-overflow-tooltip="!column.flow"
+            ><template v-if="column.flow" #default="{ row }"
+              ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
+            ></el-table-column
+          >
         </el-table>
         <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields" :class="{ 'line-fields-compact': field.compact }">
           <p v-if="!field.compact" class="line-number">第 {{ i + 1 }} 行</p>

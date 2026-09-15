@@ -13,17 +13,17 @@ const data = () => ({
   bank_records: bucket([{ id: 1, counterparty: '测试客户', reference: 'BANK-1', amount: '200', remaining_amount: '100', date: '2026-09-10' }], 389),
   prepayments: bucket([{ id: 2, code: 'REC-2' }]),
 })
-async function render() {
+async function render(expectedCards: number) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
   const wrapper = mount(WorkbenchPage, { global: { plugins: [ElementPlus, router] } })
   await flushPromises()
-  expect(wrapper.findAll('.work-card')).toHaveLength(1)
-  await wrapper.find('.work-filters button').trigger('click')
+  // Every non-empty category is shown from the start; only empty ones stay collapsed.
+  expect(wrapper.findAll('.work-card')).toHaveLength(expectedCards)
   return wrapper
 }
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(read).mockResolvedValue(data()) })
 it('shows complete counts, bank details, collapsed empty categories and correct finance links', async () => {
-  const wrapper = await render()
+  const wrapper = await render(3)
   expect(read).toHaveBeenCalledWith('/business/workbench/', { page_size: 5 })
   expect(wrapper.find('.work-metric').text()).toContain('7')
   expect(wrapper.text()).toContain('389')
@@ -35,7 +35,7 @@ it('shows complete counts, bank details, collapsed empty categories and correct 
   wrapper.unmount()
 })
 it('updates only the paged category and retains other data on failure', async () => {
-  const wrapper = await render()
+  const wrapper = await render(3)
   vi.mocked(read).mockResolvedValueOnce({ bank_records: { ...bucket([{ id: 9, counterparty: '第二页', amount: 1, remaining_amount: 1 }], 389), page: 2 } })
   const pagination = wrapper.find('.work-card-bank_records').findComponent({ name: 'ElPagination' })
   pagination.vm.$emit('current-change', 2)
@@ -51,7 +51,7 @@ it('updates only the paged category and retains other data on failure', async ()
   wrapper.unmount()
 })
 it('ignores an old category response after a full refresh', async () => {
-  const wrapper = await render()
+  const wrapper = await render(3)
   let resolve!: (data: any) => void
   vi.mocked(read).mockReturnValueOnce(new Promise(r => { resolve = r }))
   wrapper.find('.work-card-bank_records').findComponent({ name: 'ElPagination' }).vm.$emit('current-change', 2)
@@ -72,7 +72,7 @@ it('生产任务独立显示并链接到任务，不重复列出本人和团队�
     tasks: { ...bucket([shared]), overdue_count: 1, today_count: 0 },
     production_tasks: { ...bucket([shared, { id: 13, project: 2, title: '售后派工', due_date: '2020-01-02' }]), overdue_count: 2, today_count: 0 },
   })
-  const wrapper = await render()
+  const wrapper = await render(2)
   const card = wrapper.get('.work-card-production_tasks')
   expect(card.text()).toContain('生产与售后派工')
   expect(card.text()).toContain('售后派工')

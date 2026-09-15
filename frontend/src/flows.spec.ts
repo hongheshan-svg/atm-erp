@@ -59,6 +59,15 @@ describe('业务流程节点定位', () => {
     expect(labels('payments', { reversal_of: 8 }).aborted).toBe('冲销记录')
   })
 
+  it('采购质保按接口返回的中文状态定位，维修与换货同属处理中', () => {
+    expect(labels('warranty', { status: '待响应' }).at).toBe('待响应')
+    expect(labels('warranty', { status: '维修中' }).at).toBe('处理中')
+    expect(labels('warranty', { status: '已更换' }).at).toBe('处理中')
+    expect(labels('warranty', { status: '已关闭' }).at).toBe('已关闭')
+    expect(labels('warranty', { status: '待响应' }).steps).toEqual(['待响应', '处理中', '已关闭'])
+    expect(flowFor('warranty', { status: '未知' })).toBeNull()
+  })
+
   it('没有流程的资源和未知状态不显示节点', () => {
     expect(flowFor('items', { id: 1 })).toBeNull()
     expect(flowFor('stocks', { id: 1 })).toBeNull()

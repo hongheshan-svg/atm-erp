@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Flow } from '../types'
-const props = defineProps<{ flow: Flow }>()
+// compact renders inside a table cell, where a full node chain would not fit.
+const props = defineProps<{ flow: Flow; compact?: boolean }>()
 const stopped = computed(() => Boolean(props.flow.aborted))
 function state(index: number) {
   if (stopped.value) return 'skipped'
@@ -15,7 +16,14 @@ const summary = computed(() =>
 )
 </script>
 <template>
-  <nav class="process-steps" :aria-label="summary">
+  <nav v-if="compact" class="process-compact" :aria-label="summary">
+    <span class="process-dots" aria-hidden="true"
+      ><i v-for="(item, index) in flow.nodes" :key="item.key" :class="`process-${state(index)}`" /><i
+        v-if="flow.aborted" class="process-aborted"
+    /></span>
+    <small>{{ flow.aborted ? flow.aborted.label : flow.nodes[flow.current]?.label }}</small>
+  </nav>
+  <nav v-else class="process-steps" :aria-label="summary">
     <ol>
       <li v-for="(item, index) in flow.nodes" :key="item.key" :class="`process-${state(index)}`" :aria-current="state(index) === 'current' ? 'step' : undefined">
         <span class="process-marker" aria-hidden="true">{{ state(index) === 'done' ? '✓' : index + 1 }}</span>
@@ -29,6 +37,14 @@ const summary = computed(() =>
   </nav>
 </template>
 <style scoped>
+.process-compact { display: inline-flex; align-items: center; gap: 7px; }
+.process-dots { display: inline-flex; gap: 3px; }
+.process-dots > i { width: 7px; height: 7px; border-radius: 50%; background: #dde4ee; }
+.process-dots > i.process-done { background: var(--el-color-primary); }
+.process-dots > i.process-current { background: var(--el-color-primary); box-shadow: 0 0 0 2px #dbe7ff; }
+.process-dots > i.process-aborted { background: #ba3146; }
+.process-compact small { font-size: 12px; color: #61718a; white-space: nowrap; }
+
 /* The node row measures itself: a narrow host (detail pane, phone) switches to the vertical rail
    below, so a wrapped row never leaves a connector pointing into empty space. */
 .process-steps { container-type: inline-size; }

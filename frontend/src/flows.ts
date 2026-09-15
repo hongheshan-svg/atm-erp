@@ -130,6 +130,16 @@ const definitions: Record<string, Definition> = {
     },
     locate: paymentStage,
   },
+  warranty: {
+    label: '采购质保流程',
+    nodes: [
+      node('open', '待响应', '已向供应商报修'),
+      node('handling', '处理中', '维修或换货'),
+      node('closed', '已关闭', '质保事项结束'),
+    ],
+    // The purchase warranty API returns the display label, not the raw status key.
+    locate: row => ({ 待响应: 'open', 维修中: 'handling', 已更换: 'handling', 已关闭: 'closed' })[String(row.status)] || '',
+  },
   tasks: {
     label: '任务流程',
     nodes: [node('open', '待完成', '已派工给执行人'), node('done', '已完成', '执行人确认完成')],

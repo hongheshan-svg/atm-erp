@@ -19,6 +19,8 @@ export type Field = {
   remotePath?: string
   remoteParams?: Row
   remoteFilter?: (row: Row) => boolean
+  // Renders the row's position in this flow instead of a plain value (read-only row tables).
+  flow?: string
 }
 export type Command = {
   title: string

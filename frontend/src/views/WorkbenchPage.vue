@@ -85,14 +85,15 @@ function choose(keys: string[]) {
 }
 async function load() {
   const current = ++generation
-  const firstLoad = !initialized.value
   loading.value = true; busy.value = {}; errors.value = {}; error.value = ''
   try {
     const result = await read('/business/workbench/', { page_size: 5 })
     if (current !== generation) return
     work.value = result; highlights.value = result; day.value = today(); initialized.value = true
     updated.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    if (firstLoad || (filter.value !== 'all' && !filter.value.split(',').some(key => result[key]))) filter.value = Object.keys(labels).find(key => result[key]?.count) || Object.keys(result)[0] || 'all'
+    // Opening on every non-empty category: auto-selecting the first one hid the rest, so a user
+    // with 15 approvals and 2 overdue purchases only saw the overdue ones.
+    if (filter.value !== 'all' && !filter.value.split(',').some(key => result[key])) filter.value = 'all'
   } catch (e) { if (current === generation) error.value = message(e) }
   finally { if (current === generation) loading.value = false }
 }
