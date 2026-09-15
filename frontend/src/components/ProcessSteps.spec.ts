@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import ProcessSteps from './ProcessSteps.vue'
 import { flowFor } from '../flows'
 
-const render = (resource: string, row: Record<string, unknown>) =>
-  mount(ProcessSteps, { props: { flow: flowFor(resource, row)! } })
+const render = (resource: string, row: Record<string, unknown>, compact = false) =>
+  mount(ProcessSteps, { props: { flow: flowFor(resource, row)!, compact } })
 
 describe('流程节点展示', () => {
   it('已过节点打勾，当前节点标记为进行中，后续节点保持待办', () => {
@@ -31,5 +31,15 @@ describe('流程节点展示', () => {
     const wrapper = render('deliveries', { shipped_date: '2026-09-12' })
     expect(wrapper.text()).toContain('设备出库发运')
     expect(wrapper.text()).toContain('质保期内响应售后')
+  })
+
+  it('紧凑形态用圆点加当前节点名，适配表格单元格', () => {
+    const wrapper = render('warranty', { status: '维修中' }, true)
+    expect(wrapper.find('.process-compact').exists()).toBe(true)
+    expect(wrapper.findAll('.process-dots > i')).toHaveLength(3)
+    expect(wrapper.findAll('.process-dots > i.process-done')).toHaveLength(1)
+    expect(wrapper.findAll('.process-dots > i.process-current')).toHaveLength(1)
+    expect(wrapper.get('small').text()).toBe('处理中')
+    expect(wrapper.get('nav').attributes('aria-label')).toBe('采购质保流程：第 2 / 3 步 处理中')
   })
 })

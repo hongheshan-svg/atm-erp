@@ -83,7 +83,7 @@ export function actionNames(resource: string, r: Row): string[] {
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
   if (['质保记录', '登记采购质保', '处理采购质保'].includes(name)) {
     const path = `/business/purchases/${r.id}/warranty/`, info = await read(path)
-    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases }, fields: [rows('cases', '质保记录', [t('id', '编号'), t('item', '物料'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('status', '状态'), t('response', '供应商响应与处理'), t('warranty_end', '一年质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
+    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases }, fields: [rows('cases', '质保记录', [t('item', '物料'), { ...t('status', '质保进度'), flow: 'warranty' }, t('id', '编号'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('response', '供应商响应与处理'), t('warranty_end', '一年质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
     if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${x.quantity} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: '逐批按合格收货日起一年提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。' } }
     const moves = await all('/business/moves/', { project: r.project })
     const expenses = money() ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
