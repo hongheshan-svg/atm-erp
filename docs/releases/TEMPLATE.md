@@ -30,7 +30,7 @@ bash install.sh
 curl -fL https://github.com/hongheshan-svg/atm-erp/releases/download/{{TAG}}/atm-erp-{{TAG}}-linux-docker.zip -o atm-erp-{{TAG}}-linux-docker.zip && unzip atm-erp-{{TAG}}-linux-docker.zip && (cd atm-erp-{{TAG}}-linux-docker && bash install.sh)
 ```
 
-安装后默认访问 `http://127.0.0.1:8080/erp/`，用户名 `admin`，首次密码见安装目录 `.env.lean` 中的 `LEAN_ADMIN_PASSWORD`。
+安装后默认访问 `http://127.0.0.1:8080/erp/`，用户名 `admin`，全新安装的初始密码见安装目录 `.env.lean` 中的 `LEAN_ADMIN_PASSWORD`。首次登录的安装向导会要求修改该密码，之后请使用向导中设置的新密码；忘记时按安装器结尾打印的命令重设。
 
 ### Manual download
 
