@@ -183,8 +183,9 @@ def install(config, data):
     shutil.copytree(ROOT / "frontend/dist", data / "www/erp", dirs_exist_ok=True)
     (data / "nginx.conf").write_text(nginx_config(config, data), encoding="utf-8")
     run([nginx, "-p", data.as_posix() + "/", "-c", "nginx.conf", "-t"])
-    print("安装完成。管理员 admin；首次密码见配置文件 ADMIN_PASSWORD。执行 start 启动。")
+    print("安装完成。管理员 admin；全新安装的初始密码见配置文件 ADMIN_PASSWORD，完成安装向导修改密码后该值即失效。执行 start 启动。")
     print("访问 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。")
+    print("忘记管理员密码时重设：install-native 的 reset-password（非默认配置追加 --config）。")
 
 
 def start(config, data, config_path=None, no_ota=False):
@@ -293,8 +294,9 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("configure", "install", "start", "stop", "check"))
+    parser.add_argument("action", choices=("configure", "install", "start", "stop", "check", "reset-password"))
     parser.add_argument("--config", type=Path, default=ROOT / "native-config.json")
+    parser.add_argument("--user", default="admin", help="reset-password 要重设的用户名")
     parser.add_argument('--no-ota', action='store_true', help='仅隔离测试：不注册宿主机升级服务')
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 11):
@@ -309,6 +311,10 @@ def main():
             nginx_path(config)
             check_services(python_path(data), environment(config, data))
             print("PostgreSQL / Redis 连接正常。")
+        elif args.action == "reset-password":
+            # The wizard invalidates ADMIN_PASSWORD, so recovery needs the installed venv and its settings.
+            run([python_path(data), "manage.py", "changepassword", args.user],
+                cwd=ROOT / "backend", env=environment(config, data))
         elif args.action == "install":
             if not config.get('OTA_AGENT_TOKEN'):
                 config['OTA_AGENT_TOKEN'] = secrets.token_hex(32)

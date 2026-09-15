@@ -1,5 +1,5 @@
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('configure','install','start','stop','check')][string]$Action,
+  [Parameter(Mandatory=$true)][ValidateSet('configure','install','start','stop','check','reset-password')][string]$Action,
   [string]$Config = (Join-Path $PSScriptRoot 'native-config.json')
 )
 $ErrorActionPreference = 'Stop'

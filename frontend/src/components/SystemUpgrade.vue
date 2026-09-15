@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElCheckbox } from 'element-plus'
 import { read, write } from '../api'
 import { can } from '../session'
-import { message } from '../utils/request'
+import { message, requestKey } from '../utils/request'
 import type { Row } from '../types'
 
 const emit = defineEmits<{ opened: [] }>()
@@ -12,7 +12,7 @@ const state = ref<Row>({})
 const busy = ref(false)
 const error = ref('')
 const confirmed = ref(false)
-const requestKey = ref(crypto.randomUUID())
+const upgradeKey = ref(requestKey())
 const disconnected = ref(false)
 const now = ref(Date.now())
 const lastSeen = ref(0)
@@ -51,9 +51,9 @@ async function upgrade() {
   busy.value = true
   error.value = ''
   try {
-    state.value.job = await write('/core/upgrade/', { target: state.value.release.version, confirmed: true }, requestKey.value)
+    state.value.job = await write('/core/upgrade/', { target: state.value.release.version, confirmed: true }, upgradeKey.value)
     confirmed.value = false
-    requestKey.value = crypto.randomUUID()
+    upgradeKey.value = requestKey()
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 watch([open, active], ([visible, running], [wasVisible]) => {

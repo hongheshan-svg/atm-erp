@@ -11,6 +11,10 @@ function Setting([string]$Name, [string]$Default) {
   $value = [Environment]::GetEnvironmentVariable($Name)
   if ($value) { return $value }; return $Default
 }
+function Invoke-NetworkCheck {
+  # Advisory only: never block the install when Python is unavailable.
+  try { if ($env:PYTHON) { & $env:PYTHON @args } else { & py -3.11 @args } } catch { }
+}
 function Invoke-OtaPython {
   if ($env:PYTHON) { & $env:PYTHON @args } else { & py -3.11 @args }
   if ($LASTEXITCODE -ne 0) { throw '升级执行器配置失败，请检查宿主机 Python 3.11 和服务日志。' }
@@ -53,5 +57,7 @@ Invoke-Docker @compose up -d --no-build --wait --wait-timeout 180
 if (-not $NoOta) {
   Invoke-OtaPython (Join-Path $PSScriptRoot 'scripts/ota_service.py') install --mode docker --root $PSScriptRoot --config $EnvFile
 }
-Write-Host "安装完成。管理员 admin 的首次密码位于 $EnvFile 的 LEAN_ADMIN_PASSWORD。"
+Invoke-NetworkCheck (Join-Path $PSScriptRoot 'scripts/network_check.py') --config $EnvFile
+Write-Host "安装完成。管理员 admin 的初始密码位于 $EnvFile 的 LEAN_ADMIN_PASSWORD，完成安装向导修改密码后该值即失效。"
 Write-Host '访问配置端口的 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。'
+Write-Host "忘记管理员密码时重设：docker compose --env-file $EnvFile -f $(Join-Path $PSScriptRoot 'docker-compose.yml') exec app python manage.py changepassword admin"

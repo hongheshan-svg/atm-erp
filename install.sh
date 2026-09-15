@@ -52,5 +52,8 @@ fi
 if [[ "$OTA" == true ]]; then
   "$PYTHON_BIN" "$ROOT/scripts/ota_service.py" install --mode docker --root "$ROOT" --config "$ENV_FILE"
 fi
-echo "安装完成。管理员用户名：admin；首次密码保存在 $ENV_FILE 的 LEAN_ADMIN_PASSWORD。"
+# Advisory only: a mismatch here is the difference between "connects" and "connects then 400s".
+"$PYTHON_BIN" "$ROOT/scripts/network_check.py" --config "$ENV_FILE" || true
+echo "安装完成。管理员用户名：admin；全新安装的初始密码保存在 $ENV_FILE 的 LEAN_ADMIN_PASSWORD，完成安装向导修改密码后该值即失效。"
 echo '使用配置中的端口访问 /erp/，首次登录自动进入快速安装向导：修改初始密码、填写公司、可选添加人员和调整编号，完成后即可使用。重复安装保留现有账户与数据。'
+echo "忘记管理员密码时重设：docker compose --env-file $ENV_FILE -f $ROOT/docker-compose.yml exec app python manage.py changepassword admin"

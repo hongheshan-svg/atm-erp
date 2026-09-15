@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { download, read, write } from '../api'
 import { canImportResource } from '../session'
-import { message } from '../utils/request'
+import { message, requestKey } from '../utils/request'
 import type { Column, Row } from '../types'
 import ListPagination from './ListPagination.vue'
 import { pageSize } from '../pagination'
@@ -62,7 +62,7 @@ async function upload(event: Event) {
   try {
     const data = new FormData()
     data.append('file', selected)
-    const response = await write(`${props.path}import-file/`, data, crypto.randomUUID())
+    const response = await write(`${props.path}import-file/`, data, requestKey())
     if (props.resource === resource) { preview.value = response; page.value = 1 }
   } catch (e) { if (props.resource === resource) error.value = message(e) } finally { busy.value = false; input.value = '' }
 }
@@ -71,7 +71,7 @@ async function confirm() {
   busy.value = true
   error.value = ''
   try {
-    const data = await write(`${props.path}import-confirm/`, { token: preview.value.token }, crypto.randomUUID())
+    const data = await write(`${props.path}import-confirm/`, { token: preview.value.token }, requestKey())
     result.value = `成功导入 ${data.count} 条记录${bankImport.value ? `，跳过已导入 ${data.skipped} 条` : ''}`
     preview.value = null
     emit('changed')

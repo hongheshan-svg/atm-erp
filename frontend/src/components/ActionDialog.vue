@@ -6,7 +6,7 @@ import type { Command, Row } from '../types'
 import { defaults, payload, validateFields } from '../forms'
 import { industryCommand } from '../industry-forms'
 import { read, write } from '../api'
-import { message, recoveryActions } from '../utils/request'
+import { message, recoveryActions, requestKey } from '../utils/request'
 import FormFields from './FormFields.vue'
 import StatusBadge from './StatusBadge.vue'
 import ProcessSteps from './ProcessSteps.vue'
@@ -75,7 +75,7 @@ async function previewChange() {
   try {
     validateFields(c.fields, data.value)
     const body = payload(c.fields, data.value)
-    preview.value = await write(c.previewPath, c.prepare ? c.prepare(body) : body, crypto.randomUUID())
+    preview.value = await write(c.previewPath, c.prepare ? c.prepare(body) : body, requestKey())
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 const fieldsContainer = ref<HTMLElement>()
@@ -89,7 +89,7 @@ watch(
       data.value = defaults(c.fields, JSON.parse(JSON.stringify(c.initial || {})))
       error.value = ''
       recovery.value = []
-      key = crypto.randomUUID()
+      key = requestKey()
       signature = ''
     }
   },
@@ -107,7 +107,7 @@ async function submit() {
     if (roleChange.value && !data.value.roles?.length) throw new Error('至少选择一个角色。')
     if (c.prepare) body = c.prepare(body)
     const next = JSON.stringify(body, (_k, v) => (v instanceof File ? [v.name, v.size, v.lastModified] : v))
-    if (signature && signature !== next) key = crypto.randomUUID()
+    if (signature && signature !== next) key = requestKey()
     signature = next
     let upload: FormData | undefined
     if (Object.values(body).some((v) => v instanceof File)) {

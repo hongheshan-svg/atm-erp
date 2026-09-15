@@ -4,7 +4,7 @@ import { read, write, download } from '../api'
 import { bomCommand, permission } from '../business'
 import { bomEditor, purchaseReader } from '../session'
 import type { Row, Command } from '../types'
-import { message } from '../utils/request'
+import { message, requestKey } from '../utils/request'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
@@ -108,7 +108,7 @@ async function importFile(event: Event) {
     const result = await write(
       `/business/projects/${importingProject}/import-preview/`,
       body,
-      crypto.randomUUID(),
+      requestKey(),
     )
     if (props.projectId === importingProject) preview.value = result
   } catch (e) {
