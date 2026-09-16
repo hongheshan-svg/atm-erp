@@ -217,9 +217,9 @@ function saved() {
 .bom-demand-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 16px 0; }
 .bom-demand-filters > label { display: grid; gap: 6px; font-size: 13px; min-width: 130px; }
 .bom-demand-filters .shortage-toggle { display: flex; align-items: center; min-height: 38px; }
-.import-help { color: #64748b; font-size: 13px; line-height: 1.7; }
+.import-help { color: var(--mute); font-size: 13px; line-height: 1.7; }
 .import-help summary { cursor: pointer; }
-.bom-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #f4f8ff; padding: 14px 18px; border: 1px solid #d8e5fa; border-radius: 8px; margin-top: 18px; z-index: 5; }
+.bom-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--brand-wash-2); padding: 14px 18px; border: 1px solid var(--brand-line); border-radius: 8px; margin-top: 18px; z-index: 5; }
 .bom-selection-bar > .el-button--primary { margin-left: auto; }
 @media (max-width: 760px) { .bom-demand-filters > label { flex: 1 1 140px; } }
 </style>

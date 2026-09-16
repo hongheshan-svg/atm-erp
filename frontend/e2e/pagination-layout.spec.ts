@@ -28,8 +28,17 @@ test('每页数量跨页面保存，长表格内部滚动且桌面侧栏背景�
   await page.goto('/erp/reports')
   await expect(page.getByRole('region', { name: '项目经营明细', exact: true }).getByLabel('每页显示条目', { exact: true })).toHaveValue('10')
   if (info.project.name === 'desktop') {
-    const layout = await page.locator('.shell').evaluate(el => ({ color: getComputedStyle(el).backgroundColor, height: el.getBoundingClientRect().height, documentHeight: document.documentElement.scrollHeight }))
-    expect(layout.color).toBe('rgb(20, 36, 58)')
+    // 侧栏底色取自 --side，比对 token 本身，换配色时这里不该跟着改。
+    const layout = await page.locator('.shell').evaluate(el => {
+      const probe = document.createElement('div')
+      probe.style.background = 'var(--side)'
+      el.append(probe)
+      const token = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return { color: getComputedStyle(el).backgroundColor, token, height: el.getBoundingClientRect().height, documentHeight: document.documentElement.scrollHeight }
+    })
+    expect(layout.token).not.toBe('rgba(0, 0, 0, 0)')
+    expect(layout.color).toBe(layout.token)
     expect(layout.height).toBeGreaterThanOrEqual(layout.documentHeight - 1)
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page.locator('.sidebar-navigation')).toBeInViewport({ ratio: 1 })

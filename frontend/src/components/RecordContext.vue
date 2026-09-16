@@ -45,8 +45,8 @@ onBeforeUnmount(() => { generation++ })
 .record-context header, .file-summary, .stock-history-row { display: flex; align-items: center; gap: 10px; }
 .record-context h3 { margin: 0; flex: 1; }
 .record-context header { margin-bottom: 14px; flex-wrap: wrap; }
-.file-summary, .stock-history-row { border: 1px solid #e8edf4; border-radius: 6px; padding: 10px; margin-top: 8px; font-size: 13px; }
+.file-summary, .stock-history-row { border: 1px solid var(--soft-line); border-radius: 6px; padding: 10px; margin-top: 8px; font-size: 13px; }
 .file-summary > span, .stock-history-row > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.file-summary > .el-icon { color: #2563eb; font-size: 20px; flex-shrink: 0; }
+.file-summary > .el-icon { color: var(--brand); font-size: 20px; flex-shrink: 0; }
 small { display: block; font-size: 11px; margin-top: 6px; }
 </style>

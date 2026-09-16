@@ -48,6 +48,6 @@ onBeforeUnmount(() => { generation++; selectedGeneration++ })
 .remote-select { display: grid; gap: 6px; min-width: 0; }
 .remote-select > span { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .remote-select input { flex: 1; width: 0; min-width: 0; }
-.remote-select button { flex-shrink: 0; white-space: nowrap; border: 1px solid #d8e1ee; border-radius: 6px; padding: 7px 10px; background: white; color: #3b526e; cursor: pointer; }
-.remote-select button:disabled { color: #9aa6b5; cursor: default; }
+.remote-select button { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--field-line); border-radius: 6px; padding: 7px 10px; background: white; color: var(--ink-2); cursor: pointer; }
+.remote-select button:disabled { color: var(--ink-7); cursor: default; }
 </style>

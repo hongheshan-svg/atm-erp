@@ -116,16 +116,16 @@ onBeforeUnmount(() => { refreshSequence++; if (timer) clearInterval(timer) })
 </template>
 <style scoped>
 .upgrade-steps { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
-.upgrade-steps > div { display: flex; align-items: center; gap: 7px; padding: 8px; border: 1px solid #dce3ed; border-radius: 8px; color: #596b82; font-size: 12px; }
-.upgrade-steps > div > span { display: grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; background: #e3e9f1; }
-.upgrade-hint, .upgrade-stage-details { color: #596b82; font-size: 13px; }
+.upgrade-steps > div { display: flex; align-items: center; gap: 7px; padding: 8px; border: 1px solid var(--field-line); border-radius: 8px; color: var(--ink-4); font-size: 12px; }
+.upgrade-steps > div > span { display: grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; background: var(--line); }
+.upgrade-hint, .upgrade-stage-details { color: var(--ink-4); font-size: 13px; }
 .upgrade-stage-details summary { cursor: pointer; }
-.upgrade-job { margin-top: 16px; padding: 16px; background: #f5f7fb; border: 1px solid #dce3ed; border-radius: 8px; }
+.upgrade-job { margin-top: 16px; padding: 16px; background: var(--subtle); border: 1px solid var(--field-line); border-radius: 8px; }
 .upgrade-job p { overflow-wrap: anywhere; }
-.upgrade-steps .current { color: #245fc7; border-color: #245fc7; background: #edf3ff; font-weight: 600; }
-.upgrade-steps .complete { color: #28684e; border-color: #91b7a6; }
+.upgrade-steps .current { color: var(--brand-ink); border-color: var(--brand-ink); background: var(--brand-wash); font-weight: 600; }
+.upgrade-steps .complete { color: var(--ok); border-color: var(--ok-line); }
 .upgrade-timing { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.upgrade-pulse { width: 10px; height: 10px; background: #245fc7; border-radius: 50%; animation: pulse 1.5s infinite; }
+.upgrade-pulse { width: 10px; height: 10px; background: var(--brand-ink); border-radius: 50%; animation: pulse 1.5s infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .upgrade-pulse { animation: none; } }
 @media (max-width: 480px) { .upgrade-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

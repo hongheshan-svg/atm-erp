@@ -14,9 +14,9 @@ const tone = computed(() => {
 <template><span class="status-badge" :class="`status-${tone}`">{{ text || display(value) }}</span></template>
 <style scoped>
 .status-badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 5px; font-size: 12px; line-height: 20px; font-weight: 500; white-space: nowrap; }
-.status-success { background: #e6f6f0; color: #087c70; }
-.status-primary { background: #eaf1ff; color: #2563eb; }
-.status-warning { background: #fff4da; color: #95600a; }
-.status-danger { background: #ffebee; color: #ba3146; }
-.status-neutral { background: #eef2f7; color: #61718a; }
+.status-success { background: var(--ok-wash); color: var(--ok); }
+.status-primary { background: var(--brand-wash); color: var(--brand); }
+.status-warning { background: var(--warn-wash); color: var(--warn); }
+.status-danger { background: var(--risk-wash); color: var(--risk); }
+.status-neutral { background: var(--line-2); color: var(--mute); }
 </style>

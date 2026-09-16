@@ -61,12 +61,12 @@ async function submit() {
 .login-page { grid-template-columns: minmax(380px, 47%) 1fr; background: #fff; }
 /* Capped to the screen so the decorative column can never make the page scroll; the illustration
    below absorbs whatever vertical space is left instead of dictating the page height. */
-.login-brand { background: #142a3e; color: #fff; align-self: stretch; max-height: 100dvh; padding: clamp(24px, 6vw, 86px); display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
+.login-brand { background: var(--side); color: #fff; align-self: stretch; max-height: 100dvh; padding: clamp(24px, 6vw, 86px); display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
 .login-brand .brand { padding: 0; font-size: 26px; margin-bottom: clamp(18px, 6vh, 64px); }
 .login-brand .brand-mark { width: 60px; height: 60px; font-size: 34px; }
 .login-brand h1 { font-size: clamp(26px, min(4.2vw, 7vh), 64px); line-height: 1.3; letter-spacing: 0; margin: 8px 0; }
-.login-brand h1 span { color: #a9cff8; }
-.login-brand > p { color: #bfd0e3; font-size: 18px; }
+.login-brand h1 span { color: var(--side-cur); }
+.login-brand > p { color: var(--side-text); font-size: 18px; }
 .login-brand img { display: block; flex: 1 1 auto; min-height: 0; width: calc(100% + 160px); height: auto; object-fit: contain; object-position: center bottom; margin: 16px -80px -20px; mix-blend-mode: lighten; mask-image: radial-gradient(ellipse 60% 60%, #000 60%, transparent 100%); }
 .login-card { width: min(460px, 80%); border: 0; padding: clamp(12px, 2vh, 24px) 0; border-radius: 0; box-shadow: none; }
 .login-card h1 { font-size: clamp(26px, min(3.3vw, 6vh), 50px); margin-top: clamp(8px, 2vh, 22px); }
@@ -75,11 +75,11 @@ async function submit() {
 /* 44px floor keeps the touch target usable however short the viewport gets. */
 .login-card input { min-height: clamp(44px, 6.5vh, 56px); }
 .login-card form > .el-button { height: clamp(44px, 6.5vh, 56px); font-size: 18px; }
-.login-help { margin-top: clamp(12px, 2.4vh, 22px); text-align: center; font-size: 13px; color: #64748b; line-height: 1.7; }
+.login-help { margin-top: clamp(12px, 2.4vh, 22px); text-align: center; font-size: 13px; color: var(--mute); line-height: 1.7; }
 .password-control { position: relative; display: block; }
 .password-control input { padding-right: 48px; }
 /* Centred rather than offset from the top so it stays put as the input height adapts. */
-.password-control button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; background: transparent; color: #64748b; cursor: pointer; }
+.password-control button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; background: transparent; color: var(--mute); cursor: pointer; }
 @media (max-width: 760px) {
   .login-page { display: flex; flex-direction: column; }
   /* Stacked layout has no illustration to absorb slack, so the banner itself scales with height. */
