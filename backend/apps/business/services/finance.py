@@ -1,11 +1,13 @@
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from apps.core.api import Conflict
 from apps.core.permissions import FINANCE
 
 from ..models import Document, Entry, Payment, PaymentEvidence, StockMove, TimeEntry
 from .common import ZERO, audit, day, fields, lookup, number, project_action, rounded, save, state, text
+from .payment_terms import due_amount
 
 
 def paid(entry):
@@ -16,6 +18,34 @@ def paid(entry):
 
 def balance(entry):
     return entry.amount - entry.credit_amount - paid(entry)
+
+
+BALANCE_KEYS = ['receivable', 'payable', 'overdue_receivable', 'overdue_payable', 'refund_out', 'refund_in']
+
+
+def split_balance(entry, today):
+    """One entry's outstanding balance as receivable/payable, its overdue part, or a refund owed.
+
+    经营报表按项目汇总、收付款页按当前筛选汇总，两处共用这一条规则，口径不会分叉。
+    """
+    remaining = balance(entry)
+    incoming = entry.kind == 'receivable'
+    key = 'receivable' if incoming else 'payable'
+    if remaining > ZERO:
+        return {key: remaining, 'overdue_' + key: due_amount(entry, today)}
+    if remaining < ZERO:
+        return {'refund_out' if incoming else 'refund_in': -remaining}
+    return {}
+
+
+def balances(entries):
+    """Outstanding totals for an already filtered entry queryset; the caller owns the scoping."""
+    today = timezone.localdate()
+    totals = dict.fromkeys(BALANCE_KEYS, ZERO)
+    for entry in entries:
+        for key, value in split_balance(entry, today).items():
+            totals[key] += value
+    return {key: str(rounded(value)) for key, value in totals.items()}
 
 
 def entry_action(actor, key, operation, entry_id, data, execute):

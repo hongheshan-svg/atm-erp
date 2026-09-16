@@ -108,10 +108,12 @@ describe('经营报表', () => {
     expect(cards[2].get('.report-risk').text()).toBe('682,000.00')
     expect(cards[3].get('.report-risk').text()).toBe('410,000.00')
     const watch = wrapper.get('[aria-label="经营关注"]')
-    for (const [label, amount] of [['已承诺采购', '880,000.00'], ['逾期待收款', '682,000.00'], ['逾期待付款', '410,000.00'], ['待退客户款', '50,000.00'], ['待收退款', '20,000.00']]) {
+    for (const [label, amount] of [['已承诺采购', '880,000.00'], ['待退客户款', '50,000.00'], ['待收退款', '20,000.00']]) {
       expect(watch.text()).toContain(`${label} ¥ ${amount}`)
     }
-    expect(watch.findAll('.report-risk')).toHaveLength(2)
+    // 逾期金额只出现在主卡说明里，汇总行不再重复
+    for (const label of ['逾期待收款', '逾期待付款']) expect(watch.text()).not.toContain(label)
+    expect(watch.findAll('.report-risk')).toHaveLength(0)
     expect(watch.text()).toContain('项目 2')
     expect(watch.text()).toContain('超预算 1')
     expect(watch.text()).toContain('交付逾期 1')
@@ -137,7 +139,7 @@ describe('经营报表', () => {
     await flushPromises()
     const columns = wrapper.findAll('.column')
     expect(columns).toHaveLength(7)
-    expect(columns.map(column => column.attributes('data-label') || '展开')).toEqual(['项目', '状态', '合同额', '实际成本', '待收 / 待付', '关注', '展开'])
+    expect(columns.map(column => column.attributes('data-label') || '展开')).toEqual(['项目', '状态', '合同额', '实际成本 / 预算', '待收 / 待付', '关注', '展开'])
     const cost = columns[3].findAll('.cell')
     expect(cost[0].text()).toContain('100,000.00')
     expect(cost[0].text()).toContain('材料预算 60,000.00 · 在途 20,000.00')

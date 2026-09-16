@@ -4,7 +4,7 @@ import { can, manager, user, salesOnly, hasRoles } from '../session'
 import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
 import { display } from './shared'
-// 列表按 1440px 可视宽度精简：name 作为 code 的副行渲染，实际表头为 5 列。
+// 列表按 1440px 可视宽度精简：执行项目作为销售单号的副行、客户作为销售名称的副行，实际表头为 4 列。
 // 合同编号可直接搜索、报价金额与合同编号都在「查看明细」中，故不再单独占列。
 export const salesColumns: Column[] = [
   { key: 'code', label: '销售单号' },

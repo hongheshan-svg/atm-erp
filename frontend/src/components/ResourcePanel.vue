@@ -82,13 +82,16 @@ let focused = ''
 // header so the table fits its container. A right-fixed action column overlaps whatever sits
 // under it and the body never scrolls horizontally, so an extra column would be unreachable.
 const merged: Record<string, Record<string, string>> = {
-  sales: { code: 'name' },
+  sales: { code: 'project_code', name: 'customer_name' },
   projects: { name: 'code' },
   users: { display_name: 'username' },
-  entries: { title: 'project_name', due_date: 'due_amount' },
+  entries: { title: 'kind', partner_name: 'project_name', due_date: 'due_amount', balance: 'paid_amount' },
   stocks: { item_name: 'item_code', specification: 'brand' },
 }
-const pairs = computed(() => merged[props.resource] || {})
+// 项目页里的列表已经限定了项目，副行不再重复项目名。
+const pairs = computed(() => Object.fromEntries(
+  Object.entries(merged[props.resource] || {}).filter(([, secondary]) => !props.projectId || secondary !== 'project_name'),
+))
 const combinedKey = computed(() => Object.keys(pairs.value)[0])
 const secondaryKeys = computed(() => new Set(Object.values(pairs.value)))
 const labelOf = (key: string) => columns[props.resource]?.find(c => c.key === key)?.label

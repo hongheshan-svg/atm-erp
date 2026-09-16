@@ -312,6 +312,25 @@ class EntrySerializer(serializers.ModelSerializer):
     due_date = serializers.SerializerMethodField()
     payment_schedule = serializers.SerializerMethodField()
     due_amount = serializers.SerializerMethodField()
+    partner_name = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+
+    def get_partner_name(self, obj):
+        if obj.purchase_id:
+            return obj.purchase.supplier.name
+        # 费用没有固定往来单位，应收的对方就是项目客户。
+        return obj.project.customer.name if obj.kind == 'receivable' else ''
+
+    def get_status(self, obj):
+        if obj.cancelled:
+            return 'cancelled'
+        remaining = balance(obj)
+        if remaining == 0:
+            return 'closed'
+        if remaining < 0:
+            return 'refund'
+        due = self.get_due_date(obj)
+        return 'overdue' if due and due < timezone.localdate() else 'open'
 
     def get_due_date(self, obj):
         return (
@@ -336,10 +355,12 @@ class EntrySerializer(serializers.ModelSerializer):
             'id',
             'project',
             'project_name',
+            'partner_name',
             'purchase',
             'task',
             'kind',
             'title',
+            'status',
             'amount',
             'credit_amount',
             'paid_amount',
