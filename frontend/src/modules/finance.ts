@@ -14,12 +14,13 @@ import { ledgerStatus } from './shared'
 import { all, download, read } from '../api'
 import { reconciliationCommand } from './settlement'
 export const columns: Record<string, Column[]> = {
+  // project_name 与 due_amount 由列表合并为副行；冲减属于纠错数据，改在「查看收付流水」中展示，
+  // 因此实际表头为 款项、类型、原金额、已结算、待结算、最近待付期限 六列。
   entries: [
     C('project_name', '项目'),
     C('title', '款项'),
     C('kind', '类型'),
     C('amount', '原金额'),
-    C('credit_amount', '冲减'),
     C('paid_amount', '已结算'),
     C('balance', '待结算'),
     C('due_date', '最近待付期限'), C('due_amount', '当前到期金额'),
@@ -86,7 +87,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const detail = await read(`/business/payments/${r.id}/`)
     return { title: name, path: '', readonly: true, initial: { lines: detail.evidence }, fields: [{ key: 'lines', label: '凭证记录', type: 'rows', fields: [t('name', '文件'), t('reason', '说明'), t('actor', '补录人'), t('date', '补录时间')] }], actions: detail.evidence.map((d: Row) => ({ label: `下载 ${d.name}`, run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } })) }
   }
-  if (name === '查看收付流水') return { title: name, path: '', readonly: true, initial: { lines: await all('/business/payments/', { entry: r.id }) }, fields: [{ key: 'lines', label: '收付流水', type: 'rows', fields: [t('id', '流水ID'), t('date', '日期'), t('amount', '金额'), t('method', '方式'), t('account', '账户'), t('reference', '银行流水号'), t('reason', '说明'), t('reversal_of', '冲销原记录'), t('document', '凭证ID')] }] }
+  if (name === '查看收付流水') return { title: name, path: '', readonly: true, initial: { credit_amount: r.credit_amount, lines: await all('/business/payments/', { entry: r.id }) }, fields: [
+    // 冲减不产生收付流水，列表不再单列展示，只在确有冲减时在此说明余额的来源。
+    ...(Number(r.credit_amount) ? [t('credit_amount', '冲减（取消费用或合同抵减，不产生流水）')] : []),
+    { key: 'lines', label: '收付流水', type: 'rows', fields: [t('id', '流水ID'), t('date', '日期'), t('amount', '金额'), t('method', '方式'), t('account', '账户'), t('reference', '银行流水号'), t('reason', '说明'), t('reversal_of', '冲销原记录'), t('document', '凭证ID')] },
+  ] }
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
   let initial: Row = {}

@@ -159,17 +159,15 @@ test('采购经理从工作台审核采购与超预算摘要，本人申请仍�
   }
   const first = await order(applicant, '10')
   await page.goto('/erp/workbench')
-  // The workbench opens on the first non-empty category in label order, so 待批准采购 is only
-  // selected by chance; pick it explicitly instead of depending on how much other work exists.
-  await page.getByRole('button', { name: /^待批准采购 \d+$/ }).click()
-  const approvals = page.getByRole('region', { name: '待批准采购', exact: true })
-  await expect(approvals).toBeVisible()
-  const pages = Math.ceil((await api(page, 'business/workbench/?page_size=5')).approvals.count / 5)
-  for (let index = 1; index < pages && !await approvals.getByRole('link').filter({ hasText: first.code }).count(); index++) {
-    await approvals.getByRole('button', { name: '下一页', exact: true }).click()
-    await expect(approvals.getByRole('status')).toContainText(`第 ${index + 1} 页`)
-  }
-  await approvals.getByRole('link').filter({ hasText: first.code }).click()
+  // 待批采购不再逐条列在工作台，分类入口只给计数；具体单据到采购列表里定位，
+  // 这样不依赖当时还有多少条其他待办。
+  const approvals = (await api(page, 'business/workbench/?page_size=5')).approvals.count
+  expect(approvals).toBeGreaterThan(0)
+  const entry = page.getByRole('link', { name: '查看全部待批准采购', exact: true })
+  await expect(entry).toContainText(String(approvals))
+  await entry.click()
+  await expect(page).toHaveURL(/\/erp\/purchases$/)
+  await action(page, row(page, first.code), '查看明细')
   await d(page).getByRole('button', { name: '批准采购', exact: true }).click()
   await expect(d(page).getByRole('alert')).toContainText('材料')
   await expect(d(page).getByRole('alert')).not.toContainText('777')

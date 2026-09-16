@@ -36,7 +36,7 @@ async function save(page: Page, suffix: string, reason: string) {
   await expect(dialog(page)).toBeHidden()
 }
 
-test('销售经理从工作台定位订单并取消草稿，保留原销售记录', async ({ page }, info) => {
+test('销售经理从工作台进入销售列表并取消草稿，保留原销售记录', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const admin = await api(page), suffix = `${Date.now()}-${info.project.name}`
   const password = 'Sales-cancel-audit-2026-only'
@@ -45,10 +45,11 @@ test('销售经理从工作台定位订单并取消草稿，保留原销售记�
   const created = await admin.post('business/sales/', { name: `取消验收销售${suffix}`, customer: customer.id, manager: person.id })
   const sale = await admin.get(`business/sales/${created.id}/`)
   await login(page, person.username, password)
-  await page.evaluate(({ id }) => sessionStorage.setItem(`resource-search-${id}-sales-{}`, '旧搜索不应覆盖工作台单号'), { id: person.id })
-  await page.getByRole('region', { name: '我的销售订单', exact: true }).locator('a.work-item').filter({ hasText: sale.code }).click()
-  await expect(page).toHaveURL(new RegExp(`/erp/sales\\?search=${sale.code}`))
-  await expect(page.getByRole('searchbox', { name: '搜索销售订单', exact: true })).toHaveValue(sale.code)
+  await page.evaluate(({ id }) => sessionStorage.setItem(`resource-search-${id}-sales-{}`, '旧搜索不应覆盖工作台入口'), { id: person.id })
+  // 工作台不再逐条列出销售单，只保留「其他待办」入口；进入时必须清掉上次的搜索词，否则点进来是空列表。
+  await page.getByRole('region', { name: '其他待办', exact: true }).getByRole('link', { name: '查看全部我的销售订单', exact: true }).click()
+  await expect(page).toHaveURL(/\/erp\/sales\?search=$/)
+  await expect(page.getByRole('searchbox', { name: '搜索销售订单', exact: true })).toHaveValue('')
   await expect(row(page, sale.name)).toBeVisible()
   await action(page, row(page, sale.name), '取消销售')
   await save(page, `/sales/${sale.id}/cancel/`, '客户暂停需求，保留原销售草稿')

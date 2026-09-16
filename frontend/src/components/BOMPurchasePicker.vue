@@ -27,6 +27,10 @@ const lines = ref<Row[]>([]), selected = ref<number[]>([])
 const edits = ref<Record<number, Row>>({})
 const search = ref(''), brands = ref<string[]>([]), units = ref<string[]>([]), types = ref<string[]>([]), categories = ref<string[]>([])
 const shortageOnly = ref(false), page = ref(1), loading = ref(false), saving = ref(false), error = ref('')
+const moreFilters = ref(false)
+const activeFilters = computed(() => brands.value.length + units.value.length + types.value.length + categories.value.length)
+// 结果被筛过却看不见条件会造成漏采，凡有生效的筛选项就默认展开「更多筛选」。
+watch(activeFilters, count => { if (count) moreFilters.value = true }, { immediate: true })
 const recovery = ref<{ label: string; path: string }[]>([])
 const heading = ref<HTMLElement>()
 const draftPane = ref<HTMLElement>()
@@ -121,6 +125,7 @@ watch(() => form.value.supplier, async value => {
 watch(project, async () => {
   clearSelection(); lines.value = []; projectInfo.value = undefined
   search.value = ''; brands.value = []; units.value = []; types.value = []; categories.value = []; shortageOnly.value = false
+  moreFilters.value = false
   form.value = freshForm(); key = requestKey(); signature = ''
   await load()
 })
@@ -182,11 +187,16 @@ async function save() {
         <header class="purchase-pane-heading"><h3>BOM 选料</h3></header>
         <div class="purchase-filters">
           <label class="material-search">搜索物料<div><el-icon><Search /></el-icon><input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号" :disabled="disabled" /></div></label>
+          <label class="inline-check"><input v-model="shortageOnly" type="checkbox" :disabled="disabled" />仅看缺料 <span class="record-count">{{ lines.filter(row => Number(row.shortage) > 0).length }}</span></label>
+          <el-button class="more-filters-toggle" :class="{ 'has-filters': activeFilters }" aria-controls="purchase-more-filters" :aria-expanded="moreFilters" :aria-label="activeFilters ? `更多筛选，已选 ${activeFilters} 个条件` : '更多筛选'" @click="moreFilters = !moreFilters">更多筛选<span v-if="activeFilters">&nbsp;·&nbsp;{{ activeFilters }}</span></el-button>
+          <el-button text :icon="Refresh" :disabled="disabled || !project" @click="load">刷新缺料</el-button>
+        </div>
+        <div v-show="moreFilters" id="purchase-more-filters" class="purchase-more-filters">
           <label>品牌<ElSelect v-model="brands" multiple collapse-tags collapse-tags-tooltip clearable filterable aria-label="筛选品牌" placeholder="全部品牌" :disabled="disabled"><ElOption v-for="value in options('brand')" :key="value" :value="value" :label="value || '未填写'" /></ElSelect></label>
           <label>单元<ElSelect v-model="units" multiple collapse-tags collapse-tags-tooltip clearable filterable aria-label="筛选单元" placeholder="全部单元" :disabled="disabled"><ElOption v-for="value in options('assembly_unit')" :key="value" :value="value" :label="value || '未填写'" /></ElSelect></label>
           <label>类别<ElSelect v-model="types" multiple collapse-tags collapse-tags-tooltip clearable aria-label="筛选类别" placeholder="全部类别" :disabled="disabled"><ElOption v-for="value in options('part_type')" :key="value" :value="value" :label="typeName(value)" /></ElSelect></label>
+          <label>产品编码类别<ElSelect v-model="categories" multiple collapse-tags clearable aria-label="筛选产品编码类别" placeholder="全部编码类别" :disabled="disabled"><ElOption v-for="value in options('product_category')" :key="value" :value="value" :label="productCategories[value] || '未分类'" /></ElSelect></label>
         </div>
-        <div class="purchase-filter-extras"><label class="inline-check"><input v-model="shortageOnly" type="checkbox" :disabled="disabled" />仅看缺料 <span class="record-count">{{ lines.filter(row => Number(row.shortage) > 0).length }}</span></label><label class="category-filter">产品编码类别<ElSelect v-model="categories" multiple collapse-tags clearable aria-label="筛选产品编码类别" placeholder="全部编码类别" :disabled="disabled"><ElOption v-for="value in options('product_category')" :key="value" :value="value" :label="productCategories[value] || '未分类'" /></ElSelect></label><el-button text :icon="Refresh" :disabled="disabled || !project" @click="load">刷新缺料</el-button></div>
         <div class="purchase-selection"><span role="status" aria-label="BOM 选择状态">已选 <strong>{{ selected.length }}</strong> 项 · 筛选结果 {{ filtered.length }} 项</span><el-button text :disabled="disabled || !filtered.some(eligible)" @click="selectFiltered">全选筛选结果</el-button><el-button text :disabled="disabled || !selected.length" @click="clearSelection">清空选择</el-button><el-button text class="mobile-jump" :disabled="!chosen.length" @click="jumpToDraft">采购草稿 ↓</el-button></div>
         <el-table v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'" @row-click="handleRowClick">
           <el-table-column label="选择" width="48"><template #default="{ row }"><input class="material-checkbox" type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="disabled || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
@@ -241,16 +251,18 @@ async function save() {
 .purchase-pane-heading h3 { margin: 0; font-size: 17px; }
 .purchase-pane-heading h3 small { margin-left: 6px; font-size: 12px; font-weight: 400; white-space: nowrap; }
 .purchase-materials { min-width: 0; }
-.purchase-filters { display: grid; grid-template-columns: minmax(140px, 1.5fr) repeat(3, minmax(105px, 1fr)); gap: 10px; padding: 8px 0 14px; }
-.purchase-filters label, .draft-fields label { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
+.purchase-filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px 14px; padding: 8px 0 12px; }
+.material-search, .purchase-more-filters label, .draft-fields label { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
+.material-search { flex: 1 1 220px; max-width: 340px; }
 .material-search > div { position: relative; }
-.material-search .el-icon { position: absolute; left: 10px; top: 12px; color: #78869a; }
+.material-search .el-icon { position: absolute; left: 10px; top: 12px; color: var(--ink-5); }
 .material-search input { padding-left: 30px; }
-.purchase-filters :deep(.el-select__wrapper) { min-height: 38px; }
-.purchase-filter-extras { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-bottom: 12px; }
-.category-filter { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.category-filter .el-select { width: 155px; }
-.purchase-filter-extras > .el-button { margin-left: auto; }
+.purchase-filters > .inline-check { padding-bottom: 9px; }
+.more-filters-toggle { margin-bottom: 2px; }
+.more-filters-toggle.has-filters { color: var(--el-color-primary); border-color: var(--el-color-primary); }
+.purchase-filters > .el-button:last-child { margin-left: auto; }
+.purchase-more-filters { display: grid; grid-template-columns: repeat(4, minmax(105px, 1fr)); gap: 10px; padding: 2px 0 12px; }
+.purchase-more-filters :deep(.el-select__wrapper) { min-height: 38px; }
 .purchase-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 4px 0 10px; font-size: 12px; border-bottom: 1px solid var(--surface-border); }
 .purchase-selection > span { margin-right: auto; }
 .purchase-selection strong { color: var(--el-color-primary); }
@@ -261,12 +273,12 @@ async function save() {
 .purchase-materials :deep(.el-table__row) { cursor: pointer; }
 .material-name { font-size: 13px; font-weight: 600; }
 .material-code { display: block; overflow-wrap: anywhere; line-height: 1.5; margin-top: 3px; font-size: 12px; }
-.material-kind { display: inline-block; font-size: 11px; line-height: 18px; padding: 0 5px; background: #f1f4f8; color: #617087; border-radius: 4px; margin-top: 4px; }
+.material-kind { display: inline-block; font-size: 11px; line-height: 18px; padding: 0 5px; background: var(--subtle); color: var(--ink-4); border-radius: 4px; margin-top: 4px; }
 .purchase-materials :deep(.el-table .cell) { padding: 0 8px; }
 .purchase-materials :deep(.el-table__cell) { padding: 8px 0; }
-.purchase-materials :deep(.el-table .selected-bom-row) { --el-table-tr-bg-color: #edf4fe; }
+.purchase-materials :deep(.el-table .selected-bom-row) { --el-table-tr-bg-color: var(--brand-wash); }
 .material-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 4px 20px; font-size: 12px; }
-.material-details dt { color: #78869a; }
+.material-details dt { color: var(--ink-5); }
 .material-details dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .purchase-stock-note { line-height: 1.65; font-size: 12px; }
 .purchase-stock-note .el-icon { vertical-align: -2px; margin-right: 4px; }
@@ -278,12 +290,12 @@ async function save() {
 .draft-field-row { display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; }
 .required, .draft-line-error { color: var(--el-color-danger); }
 .required { display: contents; }
-.draft-extra { font-size: 12px; color: #63748b; }
+.draft-extra { font-size: 12px; color: var(--mute); }
 .draft-extra summary { cursor: pointer; }
 .draft-extra[open] { max-height: 180px; overflow: auto; }
 .draft-extra label { margin: 10px 0; }
 .draft-items { overflow-y: auto; min-height: 90px; max-height: 370px; margin-top: 16px; border-top: 1px solid var(--surface-border); }
-.draft-empty { padding: 24px 0; line-height: 1.7; color: #78869a; font-size: 13px; }
+.draft-empty { padding: 24px 0; line-height: 1.7; color: var(--ink-5); font-size: 13px; }
 .draft-item { display: grid; grid-template-columns: minmax(70px, .85fr) minmax(228px, 2.5fr); align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--surface-border); }
 .draft-item-title { display: flex; justify-content: space-between; align-items: center; position: relative; padding-right: 16px; }
 .draft-item-title > div { min-width: 0; }
@@ -291,7 +303,7 @@ async function save() {
 .draft-item-title small { display: block; font-size: 11px; line-height: 1.5; margin-top: 4px; overflow-wrap: anywhere; }
 .draft-item-title .el-button { position: absolute; right: -3px; top: -4px; padding: 2px; height: 24px; }
 .draft-price-row { display: grid; grid-template-columns: minmax(52px, .75fr) minmax(72px, 1fr) minmax(65px, 1fr); gap: 8px; align-items: end; }
-.draft-price-row label { display: grid; gap: 5px; color: #63748b; font-size: 11px; }
+.draft-price-row label { display: grid; gap: 5px; color: var(--mute); font-size: 11px; }
 .draft-price-row label > span { display: flex; gap: 4px; align-items: center; }
 .draft-price-row input { min-width: 0; min-height: 32px; padding: 6px; text-align: right; font-variant-numeric: tabular-nums; }
 .draft-price-row > div { display: grid; gap: 10px; text-align: right; padding-bottom: 8px; }
@@ -320,9 +332,9 @@ async function save() {
   .purchase-heading { flex-wrap: wrap; }
   .purchase-heading h2 { font-size: 20px; }
   .purchase-project { display: block; }
-  .purchase-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .purchase-filter-extras { gap: 8px; }
-  .category-filter { flex: 1 1 200px; }
+  .purchase-filters { gap: 10px; }
+  .material-search { flex-basis: 100%; max-width: none; }
+  .purchase-more-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .draft-field-row { grid-template-columns: minmax(0, 1fr); }
   .material-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

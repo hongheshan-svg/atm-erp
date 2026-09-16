@@ -23,14 +23,18 @@ const money = (value: string) => {
   const [integer, fraction = ''] = String(value).split('.')
   return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
 }
-const metrics = [
+const metrics: { key: string; label: string; note: string; overdue?: string }[] = [
   { key: 'contract_amount', label: '已签约合同额', note: '筛选项目累计合同金额' },
   { key: 'actual_cost', label: '实际成本', note: '材料、人工、费用及退货价差' },
-  { key: 'committed_cost', label: '已承诺采购', note: '已批准、尚未收货金额' },
-  { key: 'receivable', label: '待收款', note: '应收余额，不含待退客户款' },
-  { key: 'payable', label: '待付款', note: '采购与费用余额，不含待收退款' },
-  { key: 'overdue_receivable', label: '逾期待收款', note: '期限早于今天的未收余额' },
-  { key: 'overdue_payable', label: '逾期待付款', note: '期限早于今天的未付余额' },
+  { key: 'receivable', label: '待收款', note: '应收余额，不含待退客户款', overdue: 'overdue_receivable' },
+  { key: 'payable', label: '待付款', note: '采购与费用余额，不含待收退款', overdue: 'overdue_payable' },
+]
+const watchAmounts: { key: string; label: string; risk?: boolean }[] = [
+  { key: 'committed_cost', label: '已承诺采购' },
+  { key: 'overdue_receivable', label: '逾期待收款', risk: true },
+  { key: 'overdue_payable', label: '逾期待付款', risk: true },
+  { key: 'refund_out', label: '待退客户款' },
+  { key: 'refund_in', label: '待收退款' },
 ]
 async function load(page = 1) {
   const current = ++generation
@@ -67,18 +71,17 @@ watch(pageSize, () => load())
       <label>关注事项<select v-model="risk" aria-label="关注事项"><option value="">全部项目</option><option value="over_budget">超预算</option><option value="overdue">交付逾期</option><option value="unbudgeted">未设置预算</option></select></label>
       <el-button type="primary" native-type="submit" :loading="loading">查询</el-button>
     </form>
-    <p class="muted">CNY 含税经营口径；全部指标按当前筛选项目累计，不是期间收入或会计利润。合同额不等于已收款，未完成项目的实际成本不代表完工成本。</p>
   </section>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
   <p v-if="loading" role="status">正在汇总经营数据…</p>
   <template v-if="data">
     <div class="report-metrics">
-      <section v-for="metric in metrics" :key="metric.key" class="panel report-metric" :aria-label="metric.label"><span>{{ metric.label }}</span><strong>¥ {{ money(data.summary[metric.key]) }}</strong><small>{{ metric.note }}</small></section>
+      <section v-for="metric in metrics" :key="metric.key" class="panel report-metric" :aria-label="metric.label"><span>{{ metric.label }}</span><strong>¥ {{ money(data.summary[metric.key]) }}</strong><small>{{ metric.note }}<template v-if="metric.overdue">；其中逾期 <span class="report-risk">{{ money(data.summary[metric.overdue]) }}</span></template></small></section>
     </div>
     <section class="panel report-watch" aria-label="经营关注">
       <span>项目 <strong>{{ data.summary.projects }}</strong></span><span>执行 / 交付 / 质保 <strong>{{ data.summary.active_projects }}</strong></span>
       <el-button text @click="focusRisk('over_budget')">超预算 {{ data.summary.over_budget }}</el-button><el-button text @click="focusRisk('overdue')">交付逾期 {{ data.summary.overdue }}</el-button><el-button text @click="focusRisk('unbudgeted')">未设置预算 {{ data.summary.unbudgeted }}</el-button>
-      <span>待退客户款 ¥ {{ money(data.summary.refund_out) }}</span><span>待收退款 ¥ {{ money(data.summary.refund_in) }}</span>
+      <span v-for="amount in watchAmounts" :key="amount.key">{{ amount.label }} <strong :class="{ 'report-risk': amount.risk }">¥ {{ money(data.summary[amount.key]) }}</strong></span>
     </section>
     <section class="panel" aria-label="项目经营明细">
       <header class="panel-heading"><h2>项目经营明细 <span class="record-count">{{ data.count }}</span></h2><small class="muted">更新于 {{ new Date(data.generated_at).toLocaleString('zh-CN') }}</small></header>
@@ -86,16 +89,13 @@ watch(pageSize, () => load())
         <el-table-column label="项目" min-width="190" fixed><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="`/projects/${row.id}`">{{ row.name }}</component><small class="report-code">{{ row.code }} · {{ row.manager }}</small></template></el-table-column>
         <el-table-column label="状态" min-width="100"><template #default="{ row }"><StatusBadge :value="row.status" /></template></el-table-column>
         <el-table-column label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>
-        <el-table-column label="预算" min-width="110" align="right"><template #default="{ row }">{{ row.budget === null ? '未设置' : money(row.budget) }}</template></el-table-column>
-        <el-table-column label="实际成本" min-width="115" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</component></template></el-table-column>
-        <el-table-column label="在途采购" min-width="115" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'purchases' } }">{{ money(row.committed_cost) }}</component></template></el-table-column>
-
+        <el-table-column label="实际成本" min-width="190" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</component><small class="report-cost-note">{{ row.budget === null ? '未设置预算' : `材料预算 ${money(row.budget)}` }} · 在途 <component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'purchases' } }">{{ money(row.committed_cost) }}</component></small></template></el-table-column>
         <el-table-column label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'finance', section: 'entries' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</component></template></el-table-column>
         <el-table-column label="关注" width="85"><template #default="{ row }">{{ row.over_budget ? '超预算' : row.overdue ? '逾期' : row.unbudgeted ? '未设预算' : '—' }}</template></el-table-column>
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
       </el-table>
       <ListPagination :page="data.page" :total="data.count" @change="load" />
-      <p class="muted">已承诺仅含未收货采购；人工和费用使用实际记录。采购净额超材料预算同样计入超预算项目。取消项目的待退款仍保留，退款与正向待收待付分别展示。</p>
+      <p class="muted report-basis">人民币含税经营口径；全部指标按当前筛选项目累计，不是期间收入或会计利润。合同额不等于已收款，未完成项目的实际成本不代表完工成本。已承诺采购仅含未收货采购，人工和费用使用实际记录，采购净额超材料预算同样计入超预算项目。取消项目的待退款仍保留，退款与正向待收待付分别展示。</p>
     </section>
   </template>
   <ReportAttention />
@@ -103,18 +103,22 @@ watch(pageSize, () => load())
 <style scoped>
 .report-detail { padding: 12px 24px; line-height: 1.8; }
 .report-filters { padding: 16px 20px; margin-bottom: 12px; }
-.report-filters > .muted { font-size: 11px; margin-bottom: 0; }
 .report-filters form { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
 .report-filters label { display: grid; flex: 1; gap: 8px; min-width: 180px; color: var(--muted); font-size: 13px; }
-.report-filters input, .report-filters select { padding: 10px 12px; border: 1px solid #d9e1ed; border-radius: 8px; background: white; color: #243b5a; }
+.report-filters input, .report-filters select { padding: 10px 12px; border: 1px solid var(--field-line); border-radius: 8px; background: white; color: var(--ink-2); }
 .report-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 12px 0; padding: 12px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; }
-.report-metric { display: grid; gap: 4px; margin: 0; padding: 10px 12px; }
-.report-metric strong { color: #2563eb; font-size: 23px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.report-metric small, .report-code { color: #7b8ba3; font-size: 12px; }
-.report-watch { display: flex; flex-wrap: wrap; gap: 20px; }
-.report-watch strong { color: #285ec1; margin-left: 4px; }
-.report-code, .report-warning { display: block; margin-top: 5px; }
-.report-warning { color: #b45309; }
+.report-metric { display: grid; gap: 6px; margin: 0; padding: 14px 16px; }
+.report-metric strong { color: var(--brand); font-size: 27px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.report-metric small, .report-code, .report-cost-note { color: var(--ink-6); font-size: 12px; }
+.report-metric small { line-height: 1.6; }
+.report-watch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; font-size: 12px; color: var(--muted); }
+.report-watch strong { color: var(--brand-ink); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.report-watch :deep(.el-button) { font-size: 12px; height: auto; padding: 2px 4px; }
+.report-risk, .report-watch strong.report-risk { color: var(--risk); }
+.report-basis { margin-bottom: 0; font-size: 11px; }
+.report-code, .report-warning, .report-cost-note { display: block; margin-top: 5px; }
+.report-cost-note { font-weight: 400; }
+.report-warning { color: var(--warn); }
 @media (max-width: 1000px) { .report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .report-filters label { min-width: 0; width: 100%; } .report-metric { padding: 16px; } .report-metric strong { font-size: 19px; } }
+@media (max-width: 560px) { .report-filters label { min-width: 0; width: 100%; } .report-metric { padding: 16px; } .report-metric strong { font-size: 21px; } }
 </style>

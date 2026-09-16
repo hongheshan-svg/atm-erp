@@ -45,7 +45,10 @@ async function inspect(page: Page, visited: Record<string, unknown>[]) {
   await expect(page.locator('.el-loading-mask:visible, .el-button.is-loading:visible')).toHaveCount(0)
   if (new URL(page.url()).pathname.endsWith('/reports')) {
     await expect(page.getByRole('region', { name: '项目经营明细', exact: true })).toBeVisible()
-    await expect(page.locator('.report-metric')).toHaveCount(7)
+    // 七项口径未减：四项作主指标卡，已承诺采购与两项逾期降级到「经营关注」汇总行
+    await expect(page.locator('.report-metric')).toHaveCount(4)
+    const watch = page.getByRole('region', { name: '经营关注', exact: true })
+    for (const label of ['已承诺采购', '逾期待收款', '逾期待付款', '待退客户款', '待收退款']) await expect(watch).toContainText(label)
   }
   await expect(page.locator('.el-alert--error:visible')).toHaveCount(0)
   const buttons = await page.getByRole('button').allTextContents()

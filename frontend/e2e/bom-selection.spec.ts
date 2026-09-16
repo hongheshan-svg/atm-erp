@@ -54,6 +54,9 @@ test('BOM 同屏采购跨页筛选保留草稿编辑，按准确含税金额保�
   await expect(order.getByRole('button', { name: '保存采购草稿', exact: true })).toBeDisabled()
   await picker.getByLabel('采购项目').selectOption(String(projectId))
   async function filter(label: string, value: string) {
+    // 四个次级筛选收进「更多筛选」，第一次使用要先展开；之后有生效条件会保持展开。
+    const more = picker.getByRole('button', { name: /^更多筛选/ })
+    if ((await more.getAttribute('aria-expanded')) === 'false') await more.click()
     const input = picker.getByRole('combobox', { name: label, exact: true })
     await expect(input).toBeEnabled()
     await input.focus()

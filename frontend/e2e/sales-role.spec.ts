@@ -93,5 +93,5 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await dialog().getByRole('button', { name: '关闭', exact: true }).click()
   await page.goto('/erp/purchases')
   await expect(page).toHaveURL(/workbench/)
-  await expect(page.getByRole('heading', { name: '我的销售订单', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '查看全部我的销售订单', exact: true })).toBeVisible()
 })

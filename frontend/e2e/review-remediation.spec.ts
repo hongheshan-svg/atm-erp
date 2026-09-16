@@ -154,8 +154,10 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(purchaser, '原因 / 说明', '记录供应商原承诺日期并跟进逾期')
   await save(purchaser)
   await purchaser.goto('/erp/workbench')
-  await purchaser.getByRole('heading', { name: '采购明细逾期', exact: true }).waitFor()
-  await purchaser.getByRole('region', { name: '采购明细逾期', exact: true }).getByRole('link').filter({ hasText: order.code }).click()
+  // 逾期采购排在「今天要处理的」最前面，分类块只剩计数入口。
+  await purchaser.getByRole('heading', { name: '今天要处理的', exact: true }).waitFor()
+  await expect(purchaser.getByRole('link', { name: '查看全部采购明细逾期', exact: true })).toBeVisible()
+  await purchaser.getByRole('region', { name: '今天要处理的', exact: true }).getByRole('link').filter({ hasText: order.code }).click()
   await expect(dialog(purchaser).getByRole('heading', { name: '查看明细', exact: true })).toBeVisible()
   await dialog(purchaser).getByRole('button', { name: '关闭', exact: true }).click()
   await warehouse.goto(`/erp/projects/${id}?tab=purchases`)
@@ -233,13 +235,15 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await expect(dialog(manager)).not.toBeVisible()
   await manager.getByRole('tab', { name: '收付款', exact: true }).click()
   await manager.getByRole('tab', { name: '项目收付流水', exact: true }).click()
-  await manager.getByRole('button', { name: '收起项目概览', exact: true }).click()
+  // 概览默认收起；先确认默认态，再展开一次，验证非默认选择能跨刷新保留。
+  await expect(manager.getByRole('button', { name: '展开项目概览', exact: true })).toBeVisible()
+  await manager.getByRole('button', { name: '展开项目概览', exact: true }).click()
   const [reloaded] = await Promise.all([
     manager.waitForResponse(r => new URL(r.url()).pathname === `/api/business/projects/${id}/` && r.request().method() === 'GET'),
     manager.reload(),
   ])
   expect(reloaded.status()).toBe(200)
-  await expect(manager.getByRole('button', { name: '展开项目概览', exact: true })).toBeVisible()
+  await expect(manager.getByRole('button', { name: '收起项目概览', exact: true })).toBeVisible()
   await expect(manager.getByRole('tab', { name: '收付款', exact: true })).toHaveAttribute('aria-selected', 'true')
   await manager.screenshot({ path: info.outputPath('project-tabs-after-reload.png'), fullPage: true, animations: 'disabled' })
   await expect(manager.getByRole('tab', { name: '收付款', exact: true })).toBeInViewport()
