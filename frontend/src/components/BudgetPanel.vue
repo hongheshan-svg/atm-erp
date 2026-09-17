@@ -80,5 +80,5 @@ function estimate() {
 .budget-totals { display: flex; flex-wrap: wrap; gap: 16px 28px; margin-top: 20px; font-size: 13px; }
 .budget-totals strong { margin-left: 8px; font-variant-numeric: tabular-nums; }
 .budget-basis { font-size: 12px; line-height: 1.8; margin-bottom: 0; }
-.budget-overrun { color: #b74333; font-weight: 600; }
+.budget-overrun { color: var(--risk); font-weight: 600; }
 </style>

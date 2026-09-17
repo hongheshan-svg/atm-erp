@@ -78,9 +78,24 @@ onBeforeUnmount(() => { generation++; commandGeneration++ })
 const attachmentRow = ref<Row | null>(null)
 let generation = 0
 let focused = ''
-const combinedKey = computed(() => ({ sales: 'code', projects: 'name', users: 'display_name', entries: 'title' }[props.resource]))
-const secondaryKey = computed(() => ({ sales: 'name', projects: 'code', users: 'username', entries: 'project_name' }[props.resource]))
-const shownColumns = computed(() => columns[props.resource]?.filter(col => (!props.projectId || col.key !== 'project_name') && col.key !== secondaryKey.value))
+// Columns merged as "main value + secondary line": the secondary column is dropped from the
+// header so the table fits its container. A right-fixed action column overlaps whatever sits
+// under it and the body never scrolls horizontally, so an extra column would be unreachable.
+const merged: Record<string, Record<string, string>> = {
+  sales: { code: 'project_code', name: 'customer_name' },
+  projects: { name: 'code' },
+  users: { display_name: 'username' },
+  entries: { title: 'kind', partner_name: 'project_name', due_date: 'due_amount', balance: 'paid_amount' },
+  stocks: { item_name: 'item_code', specification: 'brand' },
+}
+// 项目页里的列表已经限定了项目，副行不再重复项目名。
+const pairs = computed(() => Object.fromEntries(
+  Object.entries(merged[props.resource] || {}).filter(([, secondary]) => !props.projectId || secondary !== 'project_name'),
+))
+const combinedKey = computed(() => Object.keys(pairs.value)[0])
+const secondaryKeys = computed(() => new Set(Object.values(pairs.value)))
+const labelOf = (key: string) => columns[props.resource]?.find(c => c.key === key)?.label
+const shownColumns = computed(() => columns[props.resource]?.filter(col => (!props.projectId || col.key !== 'project_name') && !secondaryKeys.value.has(col.key)))
 function primaryAction(row: Row) {
   const actions = actionNames(props.resource, row)
   return primaryActions.find(name => actions.includes(name))
@@ -92,7 +107,7 @@ function menuGroups(row: Row) {
     .map(group => ({ ...group, actions: rest.filter(name => actionGroup(name) === group.key) }))
     .filter(group => group.actions.length)
 }
-const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
+const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'due_amount', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
 function cell(row: Row, key: string) {
   if (!moneyKeys.has(key) || row[key] == null) return display(row[key])
   const value = String(row[key])
@@ -299,7 +314,7 @@ function inspect(row: Row) {
       <el-table-column
         v-for="col in shownColumns"
         :key="col.key"
-        :label="col.key === combinedKey ? `${col.label} / ${columns[resource]?.find(c => c.key === secondaryKey)?.label}` : col.label"
+        :label="pairs[col.key] ? `${col.label} / ${labelOf(pairs[col.key])}` : col.label"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
         :min-width="col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : ['status', 'is_active'].includes(col.key) ? 100 : 125"
         show-overflow-tooltip
@@ -313,7 +328,7 @@ function inspect(row: Row) {
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
-          <span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="col.key === combinedKey && secondaryKey" class="record-secondary">{{ row[secondaryKey] }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
+          <span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" width="170"

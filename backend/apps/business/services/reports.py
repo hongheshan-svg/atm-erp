@@ -9,7 +9,7 @@ from rest_framework import serializers
 from ..models import Entry, Project
 from . import budgets, finance
 from .common import ZERO, rounded
-from .payment_terms import due_amount, with_sources
+from .payment_terms import with_sources
 
 
 class ReportFilters(serializers.Serializer):
@@ -32,20 +32,13 @@ def summary(params, *, export=False):
     projects = list(projects)
     ids = [project.pk for project in projects]
     actuals, commitments, purchases = finance.costs(ids), budgets.commitments(ids), budgets.purchase_totals(ids)
-    money_keys = ['receivable', 'payable', 'overdue_receivable', 'overdue_payable', 'refund_out', 'refund_in']
-    balances = {pk: dict.fromkeys(money_keys, ZERO) for pk in ids}
+    balances = {pk: dict.fromkeys(finance.BALANCE_KEYS, ZERO) for pk in ids}
     today = timezone.localdate()
     entries = with_sources(Entry.objects.filter(project_id__in=ids)).annotate(net_paid=Sum('payments__amount'))
     for entry in entries:
         entry.net_paid = entry.net_paid or ZERO
-        remaining = entry.amount - entry.credit_amount - entry.net_paid
-        incoming = entry.kind == 'receivable'
-        key = 'receivable' if incoming else 'payable'
-        if remaining > ZERO:
-            balances[entry.project_id][key] += remaining
-            balances[entry.project_id]['overdue_' + key] += due_amount(entry, today)
-        elif remaining < ZERO:
-            balances[entry.project_id]['refund_out' if incoming else 'refund_in'] -= remaining
+        for key, value in finance.split_balance(entry, today).items():
+            balances[entry.project_id][key] += value
     rows = []
     for project in projects:
         budget = budgets.analysis(
@@ -80,7 +73,7 @@ def summary(params, *, export=False):
         )
     totals = {
         key: str(rounded(sum((Decimal(row[key]) for row in rows), ZERO)))
-        for key in ['contract_amount', 'actual_cost', 'committed_cost', *money_keys]
+        for key in ['contract_amount', 'actual_cost', 'committed_cost', *finance.BALANCE_KEYS]
     }
     totals.update(
         projects=len(rows),

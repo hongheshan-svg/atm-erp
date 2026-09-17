@@ -73,5 +73,5 @@ watch(() => [route.query.tab, route.query.section, route.query.resource, props.t
 <style scoped>
 .module-tabs { min-width: 0; }
 .module-tabs :deep(.el-tabs__header) { margin-bottom: 20px; }
-.module-tabs :deep(.el-tabs__item:focus-visible) { outline: 2px solid #245cca; outline-offset: -3px; border-radius: 4px; }
+.module-tabs :deep(.el-tabs__item:focus-visible) { outline: 2px solid var(--brand); outline-offset: -3px; border-radius: 4px; }
 </style>

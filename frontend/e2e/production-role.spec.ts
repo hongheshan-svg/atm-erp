@@ -153,7 +153,9 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   expect(work.tasks.count).toBe(0)
   expect(work.production_tasks.results.map((task: { id: number }) => task.id)).toEqual(expect.arrayContaining([assembly.id, commissioning.id]))
   expect(work.production_tasks.results.map((task: { id: number }) => task.id)).not.toContain(outsideTask.id)
-  const queue = page.getByRole('region', { name: '生产与售后派工', exact: true })
+  // 工作台把当天到期的派工列进「今天要处理的」，分类块只剩计数入口。
+  await expect(page.getByRole('link', { name: '查看全部生产与售后派工', exact: true })).toBeVisible()
+  const queue = page.getByRole('region', { name: '今天要处理的', exact: true })
   await expect(queue).toBeVisible()
   await queue.getByRole('link').filter({ hasText: assemblyTitle }).click()
   await expect(page).toHaveURL(new RegExp(`/erp/projects/${current.id}\\?.*focus=${assembly.id}`))

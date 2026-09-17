@@ -6,6 +6,7 @@ import type { Field } from '../types'
 import type { Row } from '../types'
 import type { Column } from '../types'
 import { t } from './shared'
+import { display } from './shared'
 import { select } from './shared'
 import { reason } from './shared'
 import { qty } from './shared'
@@ -21,8 +22,7 @@ export const columns: Record<string, Column[]> = {
     C('specification', '规格'), C('brand', '品牌'),
     { key: 'part_type', label: '类别', format: row => (({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类') },
     C('location', '库位'),
-    C('quantity', '库存数量'),
-    C('unit', '单位'),
+    { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${row.quantity}${row.unit ? ` ${row.unit}` : ''}`) },
   ],
   moves: [
     C('item_name', '物料'),

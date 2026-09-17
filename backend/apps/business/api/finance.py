@@ -26,7 +26,7 @@ class EntryView(ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
     queryset = (
-        with_sources(Entry.objects.select_related('project'))
+        with_sources(Entry.objects.select_related('project__customer', 'purchase__supplier'))
         .annotate(
             net_paid=Coalesce(
                 Sum('payments__amount'), Value(0), output_field=DecimalField(max_digits=18, decimal_places=2)
@@ -43,6 +43,11 @@ class EntryView(ReadView):
         if self.request.query_params.get('unsettled') == 'true':
             queryset = queryset.exclude(amount=F('credit_amount') + F('net_paid'))
         return queryset
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        # 与列表同一套筛选和项目边界，页头卡片显示的就是当前这批款项的余额。
+        return Response(finance.balances(self.filter_queryset(self.get_queryset())))
 
     @action(detail=False, methods=['post'])
     def expense(self, request):

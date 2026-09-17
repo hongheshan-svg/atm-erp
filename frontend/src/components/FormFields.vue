@@ -102,8 +102,8 @@ function readonlyValue(field: Field) {
   </div>
 </template>
 <style scoped>
-.readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: #25364d; padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: #25364d; }
-.readonly-fields .field > span { color: #64748b; font-size: 12px; }
+.readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: var(--ink); padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: var(--ink); }
+.readonly-fields .field > span { color: var(--mute); font-size: 12px; }
 .readonly-fields .field { gap: 4px; }
 .readonly-fields .readonly-text { field-sizing: content; resize: none; line-height: 1.6; width: 100%; min-height: 26px; }
 </style>

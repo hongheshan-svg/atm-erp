@@ -14,15 +14,14 @@ import { ledgerStatus } from './shared'
 import { all, download, read } from '../api'
 import { reconciliationCommand } from './settlement'
 export const columns: Record<string, Column[]> = {
+  // 类型、项目、当前到期金额、已结算由列表合并为副行；原金额与冲减都在「查看收付流水」里，
+  // 因此实际表头为 款项、往来单位、到期日、待结算、状态 五列。
   entries: [
-    C('project_name', '项目'),
-    C('title', '款项'),
-    C('kind', '类型'),
-    C('amount', '原金额'),
-    C('credit_amount', '冲减'),
-    C('paid_amount', '已结算'),
-    C('balance', '待结算'),
-    C('due_date', '最近待付期限'), C('due_amount', '当前到期金额'),
+    C('title', '款项'), C('kind', '类型'),
+    C('partner_name', '往来单位'), C('project_name', '项目'),
+    C('due_date', '到期日'), C('due_amount', '当前到期金额'),
+    C('balance', '待结算'), C('paid_amount', '已结算'),
+    { key: 'status', label: '状态', format: row => (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期' } as Record<string, string>)[String(row.status)] || '未结') },
   ],
   payments: [
     C('entry_title', '款项'),
@@ -86,7 +85,13 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const detail = await read(`/business/payments/${r.id}/`)
     return { title: name, path: '', readonly: true, initial: { lines: detail.evidence }, fields: [{ key: 'lines', label: '凭证记录', type: 'rows', fields: [t('name', '文件'), t('reason', '说明'), t('actor', '补录人'), t('date', '补录时间')] }], actions: detail.evidence.map((d: Row) => ({ label: `下载 ${d.name}`, run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } })) }
   }
-  if (name === '查看收付流水') return { title: name, path: '', readonly: true, initial: { lines: await all('/business/payments/', { entry: r.id }) }, fields: [{ key: 'lines', label: '收付流水', type: 'rows', fields: [t('id', '流水ID'), t('date', '日期'), t('amount', '金额'), t('method', '方式'), t('account', '账户'), t('reference', '银行流水号'), t('reason', '说明'), t('reversal_of', '冲销原记录'), t('document', '凭证ID')] }] }
+  if (name === '查看收付流水') return { title: name, path: '', readonly: true, initial: { amount: r.amount, credit_amount: r.credit_amount, lines: await all('/business/payments/', { entry: r.id }) }, fields: [
+    // 余额的三个来源都在这里：原金额减冲减、再减下面的流水合计。列表只留待结算。
+    t('amount', '原金额'),
+    // 冲减不产生收付流水，列表不再单列展示，只在确有冲减时在此说明余额的来源。
+    ...(Number(r.credit_amount) ? [t('credit_amount', '冲减（取消费用或合同抵减，不产生流水）')] : []),
+    { key: 'lines', label: '收付流水', type: 'rows', fields: [t('id', '流水ID'), t('date', '日期'), t('amount', '金额'), t('method', '方式'), t('account', '账户'), t('reference', '银行流水号'), t('reason', '说明'), t('reversal_of', '冲销原记录'), t('document', '凭证ID')] },
+  ] }
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
   let initial: Row = {}

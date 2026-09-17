@@ -15,7 +15,7 @@ import ModuleTabs from '../components/ModuleTabs.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ProcessSteps from '../components/ProcessSteps.vue'
 import { revealActiveTab } from '../utils/tabs'
-import { sessionStore } from '../utils/storage'
+import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
@@ -35,14 +35,31 @@ async function revealTab() {
 const allowedTabs = ['tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
 const initialTab = String(route.query.tab || sessionStore.get(`project-tab-${id}`) || 'tasks')
 const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
-const overview = ref(sessionStore.get('project-overview') !== 'collapsed')
-watch(overview, value => sessionStore.set('project-overview', value ? 'expanded' : 'collapsed'))
+// 概览默认收起，任务 / BOM / 成本紧跟页头；展开过的用户在本机沿用自己的选择（storage 已内置 try/catch）。
+const overview = ref(localStore.get('project-overview') === 'expanded')
+watch(overview, value => localStore.set('project-overview', value ? 'expanded' : 'collapsed'))
+const requirementsOpen = ref(false)
 watch(tab, value => { sessionStore.set(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
 watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value))) tab.value = String(value) })
 watch(tab, revealTab, { flush: 'post' })
 watch(tab, value => { if (value === 'cost') void load() })
 const error = ref('')
 const projectFlow = computed(() => flowFor('projects', project.value))
+const amount = (value: unknown) => {
+  if (value == null || value === '') return '未设置'
+  const [integer, fraction = ''] = String(value).split('.')
+  return `¥${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
+}
+// 收起时的一行摘要；合同金额与四宫格一样只在 money() 通过时才拼进来。
+const brief = computed(() => {
+  const record = project.value
+  if (!record) return ''
+  return [
+    `${record.equipment_quantity} 台`,
+    `交期 ${record.due_date || '未设置'}`,
+    ...(money() ? [`合同 ${amount(record.contract_amount)}`] : []),
+  ].join(' · ')
+})
 const command = ref<Command | null>(null)
 async function load() {
   error.value = ''
@@ -97,6 +114,7 @@ onMounted(load)
         >
       </div>
     </header>
+    <p v-if="!overview" class="project-brief muted">{{ brief }}</p>
     <ProcessSteps v-if="projectFlow" class="panel project-flow" :flow="projectFlow" />
     <div v-show="overview">
     <section class="project-summary">
@@ -110,10 +128,20 @@ onMounted(load)
         <small>质保约定</small><strong>{{ project.warranty_months }} 个月</strong>
       </div>
       <div v-if="money()">
-        <small>合同金额</small><strong>¥ {{ project.contract_amount }}</strong>
+        <small>合同金额</small><strong>{{ amount(project.contract_amount) }}</strong>
       </div>
     </section>
-    <p v-if="project.requirements" class="requirements">{{ project.requirements }}</p>
+    <div v-if="project.requirements" class="requirements">
+      <p class="requirement-text" :class="{ 'requirement-clamped': !requirementsOpen }">{{ project.requirements }}</p>
+      <el-button
+        link
+        type="primary"
+        class="requirement-toggle"
+        :aria-expanded="requirementsOpen"
+        @click="requirementsOpen = !requirementsOpen"
+        >{{ requirementsOpen ? '收起' : '展开全文' }}</el-button
+      >
+    </div>
     </div>
     <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab"
       ><el-tab-pane label="任务与工时" name="tasks"
@@ -204,6 +232,11 @@ onMounted(load)
 .project-summary > div { border: 0; border-right: 1px solid var(--surface-border); border-radius: 0; box-shadow: none; padding: 0 22px; }
 .project-summary > div:last-child { border-right: 0; }
 .project-summary strong { font-size: 20px; margin-top: 8px; }
-.requirements { max-height: 150px; overflow: auto; background: #fff; border-left: 3px solid #b5ccf3; line-height: 1.7; }
+.project-brief { margin: -14px 0 16px; font-variant-numeric: tabular-nums; }
+.requirements { display: flex; align-items: flex-start; gap: 12px; background: #fff; border-left: 3px solid var(--brand-line); line-height: 1.7; }
+.requirement-text { flex: 1; min-width: 0; margin: 0; max-height: 150px; overflow: auto; }
+/* 默认只留一行：nowrap 让换行折成空格，省略号提示还有下文。 */
+.requirement-clamped { max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.requirement-toggle { flex: none; align-self: flex-start; }
 @media (max-width: 760px) { .project-summary { row-gap: 20px; } .project-summary > div { padding: 0 16px; } }
 </style>

@@ -28,6 +28,50 @@ class ReportTests(BusinessFixtures, TestCase):
         self.users['manager'].save()
         self.assertEqual(self.clients['manager'].get('/api/business/reports/').status_code, 200)
 
+    def test_entry_summary_shares_the_report_rule_and_the_entry_reader_boundary(self):
+        self.purchase(self.project)
+        Entry.objects.filter(project=self.project, kind='payable').update(
+            due_date=timezone.localdate() - timedelta(days=1)
+        )
+        report = self.report()['summary']
+        totals = self.clients['finance'].get('/api/business/entries/summary/')
+        self.assertEqual(totals.status_code, 200, totals.data)
+        for key in ['receivable', 'payable', 'overdue_receivable', 'overdue_payable', 'refund_out', 'refund_in']:
+            self.assertEqual(totals.data[key], report[key], key)
+        # 财务拿不到经营报表，收付款页头的余额卡片只能来自这个接口。
+        self.assertEqual(self.clients['finance'].get('/api/business/reports/').status_code, 403)
+        for role in ['purchaser', 'warehouse', 'member']:
+            self.assertEqual(self.clients[role].get('/api/business/entries/summary/').status_code, 403)
+        # 汇总跟着列表同一套筛选走，页头和表格看到的是同一批款项。
+        filtered = self.clients['finance'].get(
+            '/api/business/entries/summary/', {'project': self.project.pk, 'kind': 'payable'}
+        )
+        self.assertEqual(filtered.data['receivable'], '0.00')
+        self.assertEqual(filtered.data['payable'], report['payable'])
+
+    def test_entry_rows_carry_partner_and_settlement_status(self):
+        self.purchase(self.project)
+        Entry.objects.filter(project=self.project, kind='payable').update(
+            due_date=timezone.localdate() - timedelta(days=1)
+        )
+        rows = self.clients['finance'].get('/api/business/entries/', {'project': self.project.pk}).data['results']
+        payable = next(row for row in rows if row['kind'] == 'payable')
+        self.assertEqual(payable['partner_name'], self.supplier.name)
+        self.assertEqual(payable['status'], 'overdue')
+        receivable = next(row for row in rows if row['kind'] == 'receivable')
+        self.assertEqual(receivable['partner_name'], self.project.customer.name)
+        settled = Entry.objects.create(
+            project=self.project,
+            kind='expense',
+            title='已结清费用',
+            amount=10,
+            credit_amount=10,
+            due_date=timezone.localdate(),
+        )
+        detail = self.clients['finance'].get(f'/api/business/entries/{settled.pk}/').data
+        self.assertEqual(detail['status'], 'closed')
+        self.assertEqual(detail['partner_name'], '')
+
     def test_cost_commitments_balances_and_overdue_use_existing_facts(self):
         self.purchase(self.project)
         # Keep the payable due today: the shared fixture uses a fixed historical date.
