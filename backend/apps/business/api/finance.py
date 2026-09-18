@@ -79,7 +79,8 @@ class PaymentView(ImportableMixin, ReadView):
         .prefetch_related('evidence__document', 'evidence__created_by')
     )
     serializer_class = PaymentSerializer
-    filterset_fields = ['entry', 'entry__project']
+    # 银行匹配按结算方式和账户找候选流水；不开出来前端只能拉全量再过滤。
+    filterset_fields = ['entry', 'entry__project', 'method', 'account']
 
     @action(detail=True, methods=['post'], url_path='attach-evidence')
     def attach_evidence(self, request, pk=None):

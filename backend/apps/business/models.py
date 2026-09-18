@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.functions import Lower, Trim
 
 from apps.core.models import BaseModel, ImmutableLedger, LedgerModel
 
@@ -87,6 +88,12 @@ class Item(BaseModel):
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_item'
+        indexes = [
+            # 建料、改料和 BOM 物料导入的每一行都要按规范化名称、图号查重；
+            # 没有函数索引时这三处都是整表顺序扫描，导入 1000 行就扫 1000 次。
+            models.Index(Lower(Trim('name')), name='lean_item_name_key'),
+            models.Index(Lower('drawing_number'), Lower('drawing_revision'), name='lean_item_drawing_key'),
+        ]
 
 
 class Partner(BaseModel):
@@ -258,6 +265,11 @@ class PurchaseOrder(BaseModel):
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_purchase'
+        indexes = [
+            models.Index(
+                fields=['project', 'status'], condition=Q(is_deleted=False), name='lean_purchase_project_status'
+            )
+        ]
 
 
 class PurchaseLine(BaseModel):
@@ -354,6 +366,13 @@ class Task(BaseModel):
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_task'
+        indexes = [
+            # 工作台按「我参与的项目 + 我 + 待完成」取待办；阶段完工判定按项目 + 阶段取。
+            models.Index(
+                fields=['project', 'assignee', 'status'], condition=Q(is_deleted=False), name='lean_task_todo'
+            ),
+            models.Index(fields=['project', 'kind', 'status'], condition=Q(is_deleted=False), name='lean_task_stage'),
+        ]
 
 
 class StockMove(ImmutableLedger):
@@ -379,6 +398,11 @@ class StockMove(ImmutableLedger):
 
     class Meta(LedgerModel.Meta):
         db_table = 'lean_stock_move'
+        indexes = [
+            # 项目成本、已领量和缺料计算都按项目或库存加流水类型过滤。
+            models.Index(fields=['project', 'kind'], condition=Q(is_deleted=False), name='lean_move_project_kind'),
+            models.Index(fields=['stock', 'kind'], condition=Q(is_deleted=False), name='lean_move_stock_kind'),
+        ]
 
 
 class Entry(LedgerModel):
@@ -400,6 +424,11 @@ class Entry(LedgerModel):
 
     class Meta(LedgerModel.Meta):
         db_table = 'lean_entry'
+        indexes = [
+            models.Index(
+                fields=['project', 'kind', 'cancelled'], condition=Q(is_deleted=False), name='lean_entry_project_kind'
+            )
+        ]
         constraints = [
             models.CheckConstraint(condition=Q(amount__gte=0, credit_amount__gte=0), name='lean_entry_nonnegative'),
             models.CheckConstraint(condition=Q(credit_amount__lte=F('amount')), name='lean_entry_credit_limit'),
@@ -528,6 +557,8 @@ class TimeEntry(ImmutableLedger):
 
     class Meta(LedgerModel.Meta):
         db_table = 'lean_time_entry'
+        # 每次登记或更正工时都要汇总此人当天的净工时。
+        indexes = [models.Index(fields=['user', 'date'], condition=Q(is_deleted=False), name='lean_time_user_date')]
         constraints = [
             models.CheckConstraint(
                 condition=~Q(hours=0) & Q(hours__gte=-24, hours__lte=24, hourly_cost__gte=0),

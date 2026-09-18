@@ -26,6 +26,7 @@ class TaskView(ImportableMixin, ReadView):
     )
     serializer_class = TaskSerializer
     filterset_fields = ['project', 'kind', 'status', 'assignee', 'delivery']
+    search_fields = ['title', 'project__code', 'project__name', 'assignee__display_name']
 
     def get_queryset(self):
         return super().get_queryset().filter(project__in=projects_for(self.request.user, Project.objects.all()))

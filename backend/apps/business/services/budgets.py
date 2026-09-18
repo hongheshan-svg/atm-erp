@@ -52,12 +52,13 @@ def revise(actor, key, project_id, data):
 
 def commitments(project_ids):
     result = {pk: ZERO for pk in project_ids}
+    # 逐行累计取整必须留在 Python 里，但不需要把整条采购单和明细都实例化出来。
     for line in PurchaseLine.objects.filter(
         purchase__project_id__in=project_ids, purchase__status__in=['approved', 'partial']
-    ).select_related('purchase'):
-        result[line.purchase.project_id] += rounded(
-            (line.quantity - line.cancelled_quantity) * line.unit_price
-        ) - rounded(line.received_quantity * line.unit_price)
+    ).values('purchase__project_id', 'quantity', 'cancelled_quantity', 'received_quantity', 'unit_price'):
+        result[line['purchase__project_id']] += rounded(
+            (line['quantity'] - line['cancelled_quantity']) * line['unit_price']
+        ) - rounded(line['received_quantity'] * line['unit_price'])
     return result
 
 

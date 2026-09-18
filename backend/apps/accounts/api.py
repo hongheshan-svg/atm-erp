@@ -7,7 +7,7 @@ from django.db.models import Q
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
-from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -76,7 +76,15 @@ class MeView(APIView):
         return Response(profile(request.user))
 
 
+class PasswordThrottle(UserRateThrottle):
+    """改密码要先校验原密码；不限流等于给已登录会话一个无限次的口令猜测入口。"""
+
+    scope = 'password'
+
+
 class PasswordView(APIView):
+    throttle_classes = [PasswordThrottle]
+
     def post(self, request):
         if not isinstance(request.data, dict):
             raise ValidationError('请提交 JSON 对象。')

@@ -2,7 +2,7 @@ from django.http import FileResponse
 from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.core.permissions import ALL_ROLES
@@ -50,11 +50,23 @@ class DocumentSerializer(serializers.ModelSerializer):
             'download_url',
         ]
 
+    def to_representation(self, obj):
+        from apps.core.permissions import MANAGERS, project_allowed
+
+        result = super().to_representation(obj)
+        user = self.context['request'].user
+        owner = obj.sale if obj.sale_id else obj.purchase if obj.purchase_id else None
+        project = obj.project or (owner.project if owner else None)
+        result['can_remove'] = obj.created_by_id == user.pk or bool(
+            project and project.status != 'closed' and project_allowed(user, project, MANAGERS)
+        )
+        return result
+
 
 class DocumentView(ReadView):
     read_roles = ALL_ROLES
     write_roles = ALL_ROLES
-    queryset = Document.objects.select_related('sale', 'purchase')
+    queryset = Document.objects.select_related('project', 'sale__project', 'purchase__project')
     serializer_class = DocumentSerializer
     parser_classes = [MultiPartParser]
     filterset_fields = ['sale', 'purchase', 'category']
@@ -86,6 +98,10 @@ class DocumentView(ReadView):
             ),
             status=201,
         )
+
+    @action(detail=True, methods=['post'], parser_classes=[JSONParser])
+    def remove(self, request, pk=None):
+        return Response(documents.remove(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):

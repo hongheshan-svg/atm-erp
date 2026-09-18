@@ -31,7 +31,10 @@ def check_record(obj):
     elif name == 'stockmove':
         check_dates(obj.received_date or timezone.localdate())
     elif name == 'entry':
-        check_dates(timezone.localdate(obj.created_at) if obj.created_at else timezone.localdate())
+        # 款项按本次登记或冲减实际发生的日期判断，而不是原单的建单日。今天做的采购退货、
+        # 取消未收余量、取消费用和合同减额抵减只是顺带更新旧 Entry 的 credit_amount，
+        # 不该因为原单落在已锁期间被拒；对应的资金和收发货事实由 payment / stockmove 各自校验。
+        check_dates(timezone.localdate())
 
 
 def configure(actor, key, data):

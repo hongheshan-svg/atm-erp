@@ -261,6 +261,23 @@ class AuthenticationTests(TestCase):
         self.assertEqual(self.users['member'].password, before)
         self.assertFalse(AuditLog.objects.filter(operation='user.password').exists())
 
+    def test_password_endpoint_is_throttled_per_user(self):
+        # 改密要先校验原密码；不限流等于给已登录会话一个无限次的口令猜测入口。
+        from unittest.mock import patch
+
+        from apps.accounts.api import PasswordThrottle
+
+        self.login('member')
+        wrong = {'old_password': 'incorrect', 'new_password': 'Changed-Only-For-Tests-893'}
+        with patch.dict(PasswordThrottle.THROTTLE_RATES, {'password': '3/min'}):
+            for _ in range(3):
+                self.assertEqual(self.client.post('/api/auth/password/', wrong).status_code, 400)
+            self.assertEqual(self.client.post('/api/auth/password/', wrong).status_code, 429)
+            # 只挡改密，不连累本人的其他接口。
+            self.assertEqual(self.client.get('/api/auth/me/').status_code, 200)
+        self.users['member'].refresh_from_db()
+        self.assertTrue(self.users['member'].check_password(PASSWORD))
+
     def test_last_admin_cannot_be_demoted_or_deactivated(self):
         self.login()
         url = f'/api/auth/users/{self.users["admin"].pk}/'

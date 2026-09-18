@@ -39,7 +39,13 @@ class ItemView(MasterView):
     write_roles = ITEM_WRITERS
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
-    filterset_fields = ['is_active', 'brand', 'part_type', 'product_category']
+    # 品牌按关键词匹配：精确匹配要求输对完整品牌名，换个写法就只剩空列表。
+    filterset_fields = {
+        'is_active': ['exact'],
+        'brand': ['exact', 'icontains'],
+        'part_type': ['exact'],
+        'product_category': ['exact'],
+    }
     search_fields = ['code', 'name', 'specification', 'brand', 'drawing_number']
 
     @action(detail=False, methods=['get'])

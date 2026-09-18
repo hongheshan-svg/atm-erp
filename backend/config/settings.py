@@ -83,6 +83,7 @@ REST_FRAMEWORK = {
     # 不单独限，和其余接口一样走 user 兜底，防的是脚本失控而不是人工操作。
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',
+        'password': '10/min',
         'export': '12/min',
         'import': '30/min',
         'user': '600/min',

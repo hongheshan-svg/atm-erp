@@ -15,7 +15,6 @@ from apps.core.permissions import (
     PRODUCTION_MANAGERS,
     can_manage_task,
     project_allowed,
-    require_project,
     task_management_roles,
 )
 
@@ -63,10 +62,21 @@ def event_date(data, field='date'):
     return result
 
 
-def assignee(project, value):
-    user = lookup(User, value, 'assignee', is_active=True)
-    require_project(user, project)
+def participant(project, user, key='assignee'):
+    """校验被指派人是否属于该项目。
+
+    直接冒泡 require_project 的「无权访问此项目」会让操作者以为是自己权限不足，
+    实际被拒的是所选人员；这里按字段报错，说清是谁、该怎么办。
+    """
+    if not project_allowed(user, project):
+        raise ValidationError(
+            {key: f'{user.display_name or user.username} 不是该项目的负责人或成员，请先在项目中加入此人再指派。'}
+        )
     return user
+
+
+def assignee(project, value):
+    return participant(project, lookup(User, value, 'assignee', is_active=True))
 
 
 def completed_stage(project, kind):
@@ -160,7 +170,7 @@ def log_time(actor, key, task_id, data):
         person_id = identity(data.get('user', user.pk), 'user')
         # The project lock serializes its tasks; the person lock covers other projects too.
         person = get_object_or_404(User.objects.select_for_update(), pk=person_id, is_active=True)
-        require_project(person, project)
+        participant(project, person, 'user')
         date = event_date(data)
         if project.contract_date and date < project.contract_date:
             raise ValidationError({'date': '工时日期不能早于项目签约日期。'})
