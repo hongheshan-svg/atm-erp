@@ -178,7 +178,7 @@ function saved() {
         >
       </div>
     </header>
-    <p class="muted">库存为共享库存，不预留，当前可用不保证后续可领。同物料可分属多个单元；已领、在途及库存按行顺序分摊，非单元实际领用记录。</p>
+    <p class="muted">库存为共享库存，不预留，当前可用不保证后续可领：「其他项目待领」列出其他在执行项目对同一物料尚未领走的需求，可用库存同时被它们盯着时会标红，需要先和相关项目确认归属。同物料可分属多个单元；已领、在途及库存按行顺序分摊，非单元实际领用记录。</p>
     <details v-if="canEdit" class="import-help"><summary>导入模板填写说明</summary><p class="muted">已有物料填写编码，后方物料资料可留空；填写时必须与已有资料一致。新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号，品牌与版本分别填写。完全相同物料自动复用，存在多个匹配时须明确编码；新编号只在确认后生成。需求、单元与申请信息按项目填写；修改已有BOM必须填写变更说明。已领、在途、库存、缺料由系统计算，旧版模板仍可使用。</p></details>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
@@ -191,7 +191,7 @@ function saved() {
         prop="item_name"
         label="物料名称" min-width="160" /><el-table-column prop="specification" label="规格" min-width="140" /><el-table-column prop="drawing_number" label="图号" min-width="150" /><el-table-column prop="drawing_revision" label="图档版本" min-width="90" /><el-table-column label="产品编码类别" min-width="125"><template #default="{ row }">{{ productCategories[row.product_category] || '未分类' }}</template></el-table-column><el-table-column prop="required_date" label="需求日期" min-width="110" /><el-table-column prop="application_date" label="申请日期" min-width="110" /><el-table-column prop="applicant" label="申请人" min-width="100" /><el-table-column prop="brand" label="品牌" min-width="95" /><el-table-column label="物料类别" min-width="100"><template #default="{ row }">{{ ({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类' }}</template></el-table-column><el-table-column prop="assembly_unit" label="单元" min-width="110" /><el-table-column prop="quantity" label="需求数量" min-width="95" align="right" /><el-table-column prop="change_note" label="变更说明" min-width="150" /><el-table-column
         prop="issued"
-        label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column
+        label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column label="其他项目待领" min-width="115" align="right"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ row.other_demand }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column><el-table-column
         prop="available"
         label="可用库存" fixed="right" width="90" align="right" /><el-table-column label="缺料" fixed="right" width="80" align="right"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column
     ></el-table>

@@ -44,7 +44,7 @@ it('collapses the overview by default and keeps the flow bar plus a one-line sum
   expect(wrapper.find('.project-summary').isVisible()).toBe(false)
   // The flow bar is the status backbone and never collapses with the overview.
   expect(wrapper.find('.project-flow').isVisible()).toBe(true)
-  expect(wrapper.find('.project-brief').text()).toBe('12 台 · 交期 2026-12-20 · 合同 ¥2,860,000.00')
+  expect(wrapper.find('.project-brief').text()).toBe('12 台 · 交期 2026-12-20 · 合同 ¥ 2,860,000.00')
   wrapper.unmount()
 })
 it('remembers an expanded overview for the next visit', async () => {

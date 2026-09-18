@@ -3,7 +3,7 @@ import { options } from '../catalog'
 import { can, manager, user, salesOnly, hasRoles } from '../session'
 import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
-import { display } from './shared'
+import { customer, display } from './shared'
 // 列表按 1440px 可视宽度精简：执行项目作为销售单号的副行、客户作为销售名称的副行，实际表头为 4 列。
 // 合同编号可直接搜索、报价金额与合同编号都在「查看明细」中，故不再单独占列。
 export const salesColumns: Column[] = [
@@ -65,10 +65,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     ],
   }
   if (!row || action === '编辑销售') {
-    const [partners, users] = await Promise.all([
-      all('/business/partners/', { is_active: true }),
-      all('/auth/directory/'),
-    ])
+    const users = await all('/auth/directory/')
     return {
       title: row ? '编辑销售' : '新建销售',
       path: row ? `${path}${row.id}/edit/` : path,
@@ -76,12 +73,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       prepare: row ? data => ({ ...data, expected_updated_at: row.updated_at }) : undefined,
       fields: [
         { key: 'name', label: '销售名称' },
-        {
-          key: 'customer',
-          label: '客户',
-          type: 'select',
-          options: options(partners.filter((p) => p.kind !== 'supplier')),
-        },
+        customer(),
         { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
         { key: 'requirements', label: '需求说明', type: 'textarea', optional: true },
         { key: 'due_date', label: '计划交期', type: 'date', optional: true },

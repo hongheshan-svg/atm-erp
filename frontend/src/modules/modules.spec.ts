@@ -141,7 +141,11 @@ describe('模块边界', () => {
     })
     const create = await createCommand('sales')
     expect(create.path).toBe('/business/sales/')
-    expect(all).toHaveBeenCalledTimes(2)
+    // 只取人员名单；客户走 RemoteSelect 分页搜索，不再预载全量往来单位。
+    expect(all).toHaveBeenCalledExactlyOnceWith('/auth/directory/')
+    const customerField = create.fields.find(f => f.key === 'customer')!
+    expect(customerField.remotePath).toBe('/business/partners/')
+    expect(customerField.remoteFilter?.({ kind: 'supplier' })).toBe(false)
     const sign = await actionCommand('sales', { id: 7, manager: 2, quote_amount: '100' }, '签约')
     expect(sign.path).toBe('/business/sales/7/sign/')
     expect(sign.fields.map((f) => f.key)).toEqual(['date', 'contract_number', 'manager', 'members', 'milestones'])

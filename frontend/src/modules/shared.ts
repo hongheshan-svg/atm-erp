@@ -1,5 +1,5 @@
 import { options } from '../catalog'
-import { can, purchasing, roleLabels } from '../session'
+import { can, hasRoles, purchasing, roleLabels } from '../session'
 import { today } from '../forms'
 import type { Catalog } from '../catalog'
 import type { Field } from '../types'
@@ -37,17 +37,53 @@ export const buyer = purchasing
 export const warehouse = () => can(['admin', 'warehouse'])
 export const finance = () => can(['admin', 'finance'])
 export const C = (key: string, label: string): Column => ({ key, label })
-export const project = (c: Catalog): Field =>
-  select(
-    'project',
-    '项目',
-    options(
-      c.projects.filter((p) => !['draft', 'quoted', 'closed', 'cancelled'].includes(p.status)),
-    ),
+// 物料、项目、往来单位都会长到几千上万条，一次性灌进 <select> 既要几十个分页请求，
+// 也会把几万个 option 节点塞进 DOM；这三类一律走 RemoteSelect 的分页搜索。
+export const remote = (key: string, label: string, path: string, extra: Partial<Field> = {}): Field => ({
+  key,
+  label,
+  type: 'select',
+  remotePath: path,
+  ...extra,
+})
+export const project = (extra: Partial<Field> = {}): Field =>
+  remote('project', '项目', '/business/projects/', {
+    remoteFilter: (row) => !['draft', 'quoted', 'closed', 'cancelled'].includes(String(row.status)),
+    ...extra,
+  })
+export const item = (extra: Partial<Field> = {}): Field =>
+  remote('item', '物料', '/business/items/', { remoteParams: { is_active: true }, ...extra })
+export const customer = (key = 'customer', label = '客户', extra: Partial<Field> = {}): Field =>
+  remote(key, label, '/business/partners/', {
+    remoteParams: { is_active: true },
+    remoteFilter: (row) => row.kind !== 'supplier',
+    ...extra,
+  })
+
+// 和服务端 project_allowed 同一条规则：岗位在可执行范围内，且是负责人、成员或跨项目岗位。
+// 把不可能通过校验的人从下拉里去掉，否则选中后只会收到一句「不是该项目的成员」。
+const EXECUTION_ROLES = [
+  'admin',
+  'manager',
+  'purchase_manager',
+  'purchaser',
+  'warehouse',
+  'finance',
+  'member',
+  'production_manager',
+  'mechanical_engineer',
+  'electrical_engineer',
+]
+const GLOBAL_PROJECT_ROLES = ['admin', 'purchaser', 'purchase_manager', 'warehouse', 'finance']
+export function participants(users: Row[], scope?: Row | null): Row[] {
+  if (!scope) return users
+  const inside = new Set([scope.manager, ...(scope.members ?? [])])
+  return users.filter(
+    (u) => hasRoles(u, EXECUTION_ROLES) && (inside.has(u.id) || hasRoles(u, GLOBAL_PROJECT_ROLES)),
   )
-export const person = (c: Catalog, key = 'assignee', label = '执行人') =>
-  select(key, label, options(c.users))
-export const item = (c: Catalog) => select('item', '物料', options(c.items))
+}
+export const person = (c: Catalog, key = 'assignee', label = '执行人', scope?: Row | null) =>
+  select(key, label, options(participants(c.users, scope)))
 
 export function endpoint(resource: string) {
   return `${['users'].includes(resource) ? '/auth/' : ['company', 'codes', 'audit'].includes(resource) ? '/core/' : '/business/'}${resource}/`

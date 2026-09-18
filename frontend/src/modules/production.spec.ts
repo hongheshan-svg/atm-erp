@@ -1,18 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { all } from '../api'
+import { all, read } from '../api'
 import { actionCommand, actionNames, createCommand } from '../business'
 import { user } from '../session'
+import type { Row } from '../types'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), write: vi.fn() }))
 
+// 项目下拉改走 RemoteSelect 后，派工范围由 remoteFilter 判断，选定项目由详情接口取回。
+const projects: Record<number, Row> = {
+  1: { id: 1, name: '参与项目', status: 'active', can_manage_production: true, can_manage: false },
+  2: { id: 2, name: '采购可读项目', status: 'active', can_manage_production: false },
+  3: { id: 3, name: '缺少权限标记项目', status: 'active' },
+  4: { id: 4, name: '负责项目', status: 'active', can_manage: true, can_manage_production: true },
+}
 beforeEach(() => {
   vi.clearAllMocks()
   user.value = { id: 8, roles: ['production_manager', 'purchaser'] }
-  vi.mocked(all).mockImplementation(async path => path === '/business/projects/' ? [
-    { id: 1, name: '参与项目', can_manage_production: true, can_manage: false },
-    { id: 2, name: '采购可读项目', can_manage_production: false },
-    { id: 3, name: '缺少权限标记项目' },
-  ] : path === '/auth/directory/' ? [{ id: 9, display_name: '装配员' }] : [])
+  vi.mocked(read).mockImplementation(async path => projects[Number(path.split('/')[3])] ?? {})
+  vi.mocked(all).mockImplementation(async path => path === '/auth/directory/' ? [{ id: 9, display_name: '装配员' }] : [])
 })
 afterEach(() => { user.value = null })
 
@@ -20,15 +25,17 @@ describe('生产经理任务与售后权限', () => {
   it('新建仅列授权项目与装配调试阶段，兼职采购项目不能成为派工目标', async () => {
     const command = await createCommand('tasks', 1)
     expect(command.initial).toEqual({ project: 1 })
-    expect(command.fields.find(field => field.key === 'project')?.options?.map(option => option.value)).toEqual([1])
-    expect(command.fields.find(field => field.key === 'project')?.readonly).toBe(true)
+    const projectField = command.fields.find(field => field.key === 'project')!
+    expect(projectField.remotePath).toBe('/business/projects/')
+    expect([1, 2, 3].filter(id => projectField.remoteFilter!(projects[id]!))).toEqual([1])
+    expect(projectField.remoteFilter!({ ...projects[1]!, status: 'warranty' })).toBe(false)
+    expect(projectField.readonly).toBe(true)
     expect(command.prepare?.({ project: 2, kind: 'assembly' })).toEqual({ project: 1, kind: 'assembly' })
     expect(command.fields.find(field => field.key === 'kind')?.options?.map(option => option.value)).toEqual(['assembly', 'test'])
     await expect(createCommand('tasks', 2)).rejects.toThrow('没有当前项目的生产派工权限')
     user.value = { id: 8, roles: ['manager', 'production_manager'] }
     const limited = await createCommand('tasks', 1)
     expect(limited.fields.find(field => field.key === 'kind')?.options?.map(option => option.value)).toEqual(['assembly', 'test'])
-    vi.mocked(all).mockResolvedValue([{ id: 4, name: '负责项目', can_manage: true, can_manage_production: true }])
     const managerCommand = await createCommand('tasks', 4)
     expect(managerCommand.fields.find(field => field.key === 'kind')?.options?.map(option => option.value)).toEqual(['design', 'assembly', 'test'])
   })

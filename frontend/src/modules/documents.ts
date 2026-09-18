@@ -1,11 +1,10 @@
-import { catalog } from '../catalog'
-import { options } from '../catalog'
 import { manager } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
 import type { Column } from '../types'
 import { select } from './shared'
+import { remote } from './shared'
 import { choices } from './shared'
 import { reason } from './shared'
 import { finance } from './shared'
@@ -24,12 +23,11 @@ export function createLabel(resource: string) {
   return ({ documents: '上传附件' } as Record<string, string | boolean>)[resource] || ''
 }
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
-  const c = await catalog(['projects'])
   let fields: Field[] = []
   let path = endpoint(resource)
   if (resource === 'documents')
     fields = [
-      select('project', '项目', options(c.projects)),
+      remote('project', '项目', '/business/projects/', { remoteFilter: row => row.status !== 'closed' }),
       select(
         'category',
         '分类',
@@ -50,19 +48,22 @@ export async function createCommand(resource: string, projectId?: number): Promi
     initial: projectId ? { project: projectId } : {},
   }
 }
-export function actionNames(resource: string, _r: Row): string[] {
+export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (resource === 'documents') a.push('下载')
+  if (resource === 'documents' && r.can_remove) a.push('删除附件')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
-  let path = endpoint(resource) + r.id + '/'
-  let fields: Field[] = [reason]
-  let initial: Row = {}
-  let method: 'post' | 'patch' = 'post'
-  let readonly = false
-  const routes: Record<string, string> = {}
-  if (routes[name]) path += routes[name] + '/'
-
-  return { title: name, path, fields, initial, method, readonly }
+  if (name === '删除附件')
+    return {
+      title: name,
+      path: `${endpoint(resource)}${r.id}/remove/`,
+      fields: [{ ...reason, label: '删除原因', hint: '用于传错文件、传错分类或传错项目。' }],
+      notice: {
+        type: 'warning',
+        text: `将「${r.original_name}」移出附件列表。记录、文件本体和上传审计仍然保留；已作为收付款、对账或合同依据的附件不能删除。`,
+      },
+    }
+  return { title: name, path: endpoint(resource) + r.id + '/', fields: [reason] }
 }

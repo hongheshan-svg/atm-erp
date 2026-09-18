@@ -6,6 +6,7 @@ import { read } from '../api'
 import { today } from '../forms'
 import { user } from '../session'
 import { message } from '../utils/request'
+import { money } from '../utils/money'
 import type { Row } from '../types'
 type Bucket = { count: number; page: number; results: Row[]; overdue_count?: number; today_count?: number }
 const work = ref<Record<string, Bucket>>({})
@@ -44,7 +45,9 @@ function collection(key: string) {
   if (key === 'settlements') return { path: '/finance', query: { section: 'entries', project: 'all' } }
   // 销售列表会沿用本人上次的搜索词，工作台进来必须看到完整清单，所以显式清空。
   if (key === 'sales') return { path: '/sales', query: { search: '' } }
-  return { path: ['tasks', 'production_tasks'].includes(key) ? '/projects' : '/purchases' }
+  // 任务有自己的完整清单：以前这里只能落到项目列表，看自己的活还要逐个项目点进去。
+  if (['tasks', 'production_tasks'].includes(key)) return { path: '/projects', query: { section: 'tasks' } }
+  return { path: '/purchases' }
 }
 function target(key: string, row: Row) {
   if (key === 'bank_records') return { path: '/finance', query: { section: 'bank', project: 'all', resource: 'bank-records', focus: row.id } }
@@ -72,10 +75,10 @@ const priority = computed(() => Object.entries(work.value).flatMap(([key, bucket
   .filter(item => item.rank < 4 && item.key !== 'receipts')
   .sort((a, b) => a.rank - b.rank || due(a.key, a.row).localeCompare(due(b.key, b.row))).slice(0, 7))
 function title(key: string, row: Row) { return key === 'bank_records' ? row.counterparty || '待核实户名' : row.title || row.code || row.reference || '待处理事项' }
-const money = (value: unknown) => Number(value).toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' })
+
 function amount(key: string, row: Row) {
-  if (key === 'bank_records') return `${Number(row.amount) >= 0 ? '收入' : '支出'} · 待匹配 ${money(Math.abs(Number(row.remaining_amount)))}`
-  if (key === 'settlements' && row.balance != null) return `${Number(row.balance) < 0 ? '待退款' : row.kind === 'receivable' ? '待收' : '待付'} ${money(Math.abs(Number(row.balance)))}`
+  if (key === 'bank_records') return `${Number(row.amount) >= 0 ? '收入' : '支出'} · 待匹配 ${money(String(row.remaining_amount).replace(/^-/, ''), { currency: true })}`
+  if (key === 'settlements' && row.balance != null) return `${Number(row.balance) < 0 ? '待退款' : row.kind === 'receivable' ? '待收' : '待付'} ${money(String(row.balance).replace(/^-/, ''), { currency: true })}`
   return ''
 }
 function context(key: string, row: Row) {

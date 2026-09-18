@@ -1,9 +1,11 @@
 import type { Catalog } from '../catalog'
+import { customer } from './shared'
+import { participants } from './shared'
 import { project } from './shared'
 import { choices } from './shared'
 export const projectFields = (c: Catalog): Field[] => [
   t('name', '项目名称'),
-  select('customer', '客户', options(c.partners.filter((p) => p.kind !== 'supplier'))),
+  customer(),
   select('manager', '负责人', options(c.users.filter(u => hasRoles(u, ['admin', 'manager'])))),
   { key: 'members', label: '项目成员', type: 'multi', optional: true, options: options(c.users) },
   t('requirements', '需求说明', true),
@@ -11,12 +13,17 @@ export const projectFields = (c: Catalog): Field[] => [
   { ...qty, key: 'equipment_quantity', label: '设备数量', initial: 1 },
   { key: 'warranty_months', label: '质保月数', initial: 12 },
 ]
-export const taskFields = (c: Catalog, canDesign = manager()): Field[] => [
-  project(c),
+// 派工只能落在自己有生产管理权限、且仍在执行或交付中的项目上。
+const taskProject = (): Field =>
+  project({
+    remoteFilter: (row: Row) => ['active', 'delivering'].includes(String(row.status)) && productionProject(row),
+  })
+export const taskFields = (c: Catalog, canDesign = manager(), scope?: Row | null): Field[] => [
+  taskProject(),
   select('kind', '阶段', choices(canDesign ? { design: '设计', assembly: '装配', test: '调试' } : { assembly: '装配', test: '调试' })),
   t('title', '任务名称'),
   t('description', '说明', true),
-  person(c),
+  person(c, 'assignee', '执行人', scope),
   date('due_date', '期限', true),
 ]
 import { all, read } from '../api'
@@ -47,6 +54,7 @@ export const columns: Record<string, Column[]> = {
   ],
   tasks: [
     C('title', '任务名称'),
+    C('project_name', '项目'),
     C('kind', '阶段'),
     C('assignee_name', '执行人'),
     C('status', '状态'),
@@ -61,6 +69,7 @@ export const columns: Record<string, Column[]> = {
   ],
   time: [
     C('task_title', '任务'),
+    C('project_name', '项目'),
     C('user_name', '人员'),
     C('date', '日期'),
     C('hours', '工时'),
@@ -80,16 +89,16 @@ export function createLabel(resource: string) {
   )
 }
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
-  const c = await catalog(['projects', 'partners', 'users'])
+  // 人员名单很短，仍然一次取回；项目、客户和物料改走远程分页。
+  const c = await catalog(['users'])
   let fields: Field[] = []
-  let path = endpoint(resource)
+  const path = endpoint(resource)
   if (resource === 'projects') fields = projectFields(c)
   if (resource === 'tasks') {
-    c.projects = c.projects.filter(productionProject)
-    const selectedProject = c.projects.find(p => p.id === projectId)
-    if (projectId && !selectedProject) throw new Error('没有当前项目的生产派工权限，请刷新项目后重试。')
-    const canDesign = manager() && (selectedProject ? selectedProject.can_manage !== false : c.projects.every(p => p.can_manage !== false))
-    fields = taskFields(c, canDesign).map(field => field.key === 'project' && projectId ? { ...field, readonly: true } : field)
+    const scope = projectId ? await read(`/business/projects/${projectId}/`) : null
+    if (scope && !productionProject(scope)) throw new Error('没有当前项目的生产派工权限，请刷新项目后重试。')
+    const canDesign = manager() && (scope ? scope.can_manage !== false : true)
+    fields = taskFields(c, canDesign, scope).map(field => field.key === 'project' && projectId ? { ...field, readonly: true } : field)
   }
   return {
     title: String(createLabel(resource)),
@@ -140,7 +149,18 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const demand = await read(`/business/projects/${r.project}/demand/`)
     return { title: name, path: '', readonly: true, notice: { type: 'info', text: detail.material_requirements == null ? '历史批次沿用当时按设备数量比例交付的规则，未补造物料快照。' : '本批实际核对的配套数量；退料检查会保留已交付用量。' }, initial: { lines: (detail.material_requirements || []).map((line: Row) => ({ ...line, item_name: demand.lines.find((item: Row) => item.item === line.item)?.item_name || `物料${line.item}` })) }, fields: [{ key: 'lines', label: '配套物料', type: 'rows', fields: [t('item_name', '物料'), t('quantity', '配套数量')] }] }
   }
-  const c = await catalog(['projects', 'partners', 'users'])
+  // 只有真正要选人的操作才取人员名单；任务行只带项目 ID，缺成员名单时补读一次项目。
+  const needsPeople = ['编辑项目', '发货', '登记售后', '登记工时', '重新分配', '重开任务'].includes(name)
+  const c = needsPeople ? await catalog(['users']) : { projects: [], items: [], partners: [], users: [] }
+  const scope =
+    !needsPeople || name === '编辑项目'
+      ? null
+      : resource === 'projects'
+        ? r
+        : r.project
+          ? await read(`/business/projects/${r.project}/`)
+          : null
+  const inScope = (id: unknown) => participants(c.users, scope).some(u => u.id === id)
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
   let initial: Row = {}
@@ -177,8 +197,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     fields = [
       qty,
       date(),
-      person(c, 'installer', '安装人'),
-      person(c, 'acceptor', '验收负责人'),
+      person(c, 'installer', '安装人', scope),
+      person(c, 'acceptor', '验收负责人', scope),
       t('note', '说明', true),
       { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: [...new Map((await read(`/business/projects/${r.id}/demand/`)).lines.map((line: Row) => [line.item, { value: line.item, label: `${line.item_code} · ${line.item_name} · ${line.assembly_unit || '未分单元'}` }])).values()] as { value: number; label: string }[] }, qty] },
     ]
@@ -197,7 +217,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       date(),
       t('title', '售后事项'),
       t('description', '说明', true),
-      person(c),
+      person(c, 'assignee', '执行人', scope),
       date('due_date', '期限', true),
       ...(managesProject ? [{
         key: 'fee',
@@ -214,8 +234,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '验收') fields = [date(), reason]
   if (name === '登记工时') {
-    fields = [date(), t('hours', '工时'), reason, ...(taskManager(r) ? [person(c, 'user', '人员')] : [])]
-    initial = { user: r.assignee }
+    fields = [date(), t('hours', '工时'), reason, ...(taskManager(r) ? [person(c, 'user', '人员', scope)] : [])]
+    // 原执行人若已被移出项目，就不预选一个注定被服务端拒绝的人。
+    initial = { user: inScope(r.assignee) ? r.assignee : '' }
   }
   if (name === '更正工时') {
     fields = [
@@ -225,6 +246,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ]
     initial = r
   }
-  if (name === '重新分配') fields = [person(c), reason]
+  if (name === '重新分配') fields = [person(c, 'assignee', '执行人', scope), reason]
+  if (name === '重开任务') {
+    // 重开时必须确认执行人：原执行人可能已经被移出项目，沿用旧值只会在服务端被拒。
+    fields = [person(c, 'assignee', '执行人', scope), reason]
+    initial = { assignee: inScope(r.assignee) ? r.assignee : '' }
+  }
   return { title: name, path, fields, initial, method, readonly }
 }

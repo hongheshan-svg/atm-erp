@@ -1,5 +1,4 @@
 import { all } from '../api'
-import { catalog } from '../catalog'
 import { can } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -39,13 +38,12 @@ export function createLabel(resource: string) {
   )
 }
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
-  const c = await catalog(['projects', 'items'])
   let fields: Field[] = []
   let path = endpoint(resource)
   if (resource === 'stocks') {
     path += 'opening/'
     fields = [
-      item(c),
+      item(),
       { key: 'location', label: '库位', initial: '主仓' },
       qty,
       t('unit_cost', '单位成本（元）'),
@@ -69,7 +67,6 @@ export function actionNames(resource: string, r: Row): string[] {
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
-  const c = await catalog(['projects', 'items'])
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
   let initial: Row = {}
@@ -85,7 +82,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '领料') {
     path = '/business/stocks/issue/'
     fields = [
-      project(c),
+      project(),
       select(
         'task',
         '售后任务（生产领料留空）',

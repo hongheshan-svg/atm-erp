@@ -1,3 +1,5 @@
+import { money } from './utils/money'
+
 function scaledDecimal(value: unknown, scale: number, integerDigits: number): bigint | null {
   if (typeof value !== 'string' && typeof value !== 'number') return null
   // An unsafe numeric input may already have lost digits before reaching this parser.
@@ -24,7 +26,5 @@ export function purchaseLineCents(quantity: unknown, price: unknown): bigint | n
 export function formatPurchaseAmount(cents: bigint | null): string {
   if (cents == null) return '待填写'
   const amount = cents < 0n ? -cents : cents
-  const whole = (amount / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  const fraction = (amount % 100n).toString().padStart(2, '0')
-  return `${cents < 0n ? '-' : ''}${whole}.${fraction}`
+  return money(`${cents < 0n ? '-' : ''}${amount / 100n}.${String(amount % 100n).padStart(2, '0')}`)
 }

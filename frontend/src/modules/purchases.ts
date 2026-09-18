@@ -1,16 +1,20 @@
-import type { Catalog } from '../catalog'
 import { item } from './shared'
 import { project } from './shared'
+import { remote } from './shared'
 import { date } from './shared'
 import { termFields, termLabel } from './payment-terms'
-export const purchaseFields = (c: Catalog): Field[] => [
-  project(c),
-  select('supplier', '供应商', c.partners.filter(p => p.kind !== 'customer').map(p => ({ value: p.id, label: `${p.code} · ${p.name} · ${termLabel(p)}` }))),
+export const purchaseFields = (): Field[] => [
+  project(),
+  remote('supplier', '供应商', '/business/partners/', {
+    remoteParams: { is_active: true },
+    remoteFilter: p => p.kind !== 'customer',
+    remoteLabel: p => `${p.code} · ${p.name} · ${termLabel(p)}`,
+  }),
   date('due_date', '交期'),
   ...termFields(true),
   { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', hint: '仅指定日期账期填写；现付/月结请留空，实际到期明细在应收应付中查看。历史手工账期留空仍沿用订单交期。' },
   t('note', '说明', true),
-  rows('lines', '采购明细', [item(c), qty, price, { ...date('due_date', '明细交期'), optional: true }]),
+  rows('lines', '采购明细', [item(), qty, price, { ...date('due_date', '明细交期'), optional: true }]),
 ]
 import { all, read } from '../api'
 import { purchaseApprover } from '../session'
@@ -44,15 +48,8 @@ export function createLabel(resource: string) {
   return ({ purchases: buyer() && '新建采购' } as Record<string, string | boolean>)[resource] || ''
 }
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
-  const c: Catalog = { projects: [], partners: [], items: [], users: [] }
-  let fields: Field[] = []
-  let path = endpoint(resource)
-  if (resource === 'purchases') fields = purchaseFields(c)
-  for (const field of fields) {
-    if (field.key === 'project') { field.remotePath = '/business/projects/'; field.remoteFilter = r => !['draft', 'quoted', 'closed', 'cancelled'].includes(r.status) }
-    if (field.key === 'supplier') { field.remotePath = '/business/partners/'; field.remoteParams = { is_active: true }; field.remoteFilter = r => r.kind !== 'customer' }
-    if (field.key === 'lines') field.fields = field.fields!.map(f => f.key === 'item' ? { ...f, remotePath: '/business/items/', remoteParams: { is_active: true } } : f)
-  }
+  const fields: Field[] = resource === 'purchases' ? purchaseFields() : []
+  const path = endpoint(resource)
   return {
     title: String(createLabel(resource)),
     path,
