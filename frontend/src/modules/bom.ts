@@ -91,7 +91,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
 export async function bomCommand(projectId: number): Promise<Command> {
   const demand = await read(`/business/projects/${projectId}/demand/`)
   return {
-    title: '新增或修改 BOM 行',
+    title: '维护 BOM',
     path: `/business/projects/${projectId}/revise-bom/`,
     previewPath: `/business/projects/${projectId}/bom-change-preview/`,
     // 以前这里把整张 BOM 灌进表单，几百行的项目根本改不动，而服务端本来就只更新提交到的行。
