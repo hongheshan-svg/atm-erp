@@ -20,10 +20,10 @@ from ..serializers import (
     ProjectSerializer,
 )
 from ..services import bom, bom_material_import, budgets, corrections, execution, finance, projects
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
-class ProjectView(ReadView):
+class ProjectView(ImportableMixin, ReadView):
     queryset = Project.objects.select_related('customer', 'manager', 'sale').prefetch_related('members')
     serializer_class = ProjectSerializer
     write_roles = MANAGERS

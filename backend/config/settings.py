@@ -20,6 +20,8 @@ ALLOWED_HOSTS = [v.strip() for v in os.environ.get('ALLOWED_HOSTS', 'localhost,1
 INSTALLED_APPS = [
     'django.contrib.auth',
     'django.contrib.contenttypes',
+    # 认证只走 JWT，没装 SessionMiddleware。这个 app 保留是因为 schema_guard 会把
+    # 已有安装里的 django_session 表判为外来表而拒绝启动，移除它等于阻断升级。
     'django.contrib.sessions',
     'django.contrib.staticfiles',
     'rest_framework',
@@ -72,7 +74,13 @@ REST_FRAMEWORK = {
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
     ],
-    'DEFAULT_THROTTLE_RATES': {'login': '10/min'},
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    # login 保护口令爆破；transfer 限的是导出导入这类一次扫全表的重接口；
+    # user 只是个兜底上限，正常人工操作远够不到，防的是脚本失控。
+    'DEFAULT_THROTTLE_RATES': {'login': '10/min', 'transfer': '12/min', 'user': '600/min'},
     'EXCEPTION_HANDLER': 'apps.core.api.exception_handler',
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
 }
@@ -95,3 +103,16 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
+# Django 默认只把请求异常发给 ADMINS 邮件，没配邮件就等于丢弃 traceback。
+# 容器里 supervisord 收集 stderr，写到这里 docker logs 就能看到，不引入外部依赖。
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'plain': {'format': '[{asctime}] {levelname} {name}: {message}', 'style': '{'}},
+    'handlers': {'stderr': {'class': 'logging.StreamHandler', 'formatter': 'plain'}},
+    'loggers': {
+        'django': {'handlers': ['stderr'], 'level': 'INFO', 'propagate': False},
+        'django.request': {'handlers': ['stderr'], 'level': 'ERROR', 'propagate': False},
+        'apps': {'handlers': ['stderr'], 'level': 'INFO', 'propagate': False},
+    },
+}

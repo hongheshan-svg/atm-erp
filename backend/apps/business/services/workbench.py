@@ -22,6 +22,7 @@ from apps.core.permissions import (
 from ..models import Entry, Project, PurchaseOrder, Task
 from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
 from .common import ZERO
+from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
 
 
@@ -87,7 +88,7 @@ def summary(request):
     if not has_role(user, OPERATION_ROLES):
         return {key: value for key, value in result.items() if value is not None}
     projects = projects_for(user, Project.objects.all())
-    tasks = (
+    tasks = with_task_flags(
         Task.objects.filter(project__in=projects, assignee=user, status='open')
         .select_related('project', 'assignee', 'delivery', 'entry')
         .prefetch_related('project__members')
@@ -96,7 +97,7 @@ def summary(request):
     )
     result['tasks'] = bucket(tasks, TaskSerializer, 'tasks')
     if has_role(user, {'production_manager'}):
-        production_tasks = (
+        production_tasks = with_task_flags(
             Task.objects.filter(
                 project__in=projects_for(user, Project.objects.all(), PRODUCTION_MANAGERS),
                 kind__in=PRODUCTION_TASK_KINDS,

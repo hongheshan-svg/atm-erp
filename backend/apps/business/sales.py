@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from apps.core.permissions import SALES, SALES_READERS, sales_for
 
-from .api.common import ReadView, key
+from .api.common import ImportableMixin, ReadView, key
 from .models import SalesOrder
 from .services import amendments, finance, sales
 
@@ -41,7 +41,7 @@ class SalesSerializer(serializers.ModelSerializer):
         ]
 
 
-class SalesView(ReadView):
+class SalesView(ImportableMixin, ReadView):
     queryset = SalesOrder.objects.select_related('customer', 'manager', 'project')
     serializer_class = SalesSerializer
     read_roles = SALES_READERS

@@ -14,10 +14,10 @@ from ..serializers import (
     StockSerializer,
 )
 from ..services import inventory
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
-class StockView(ReadView):
+class StockView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     queryset = Stock.objects.select_related('item')
     serializer_class = StockSerializer
@@ -37,7 +37,7 @@ class StockView(ReadView):
         return Response(inventory.count(request.user, key(request), self.get_object().pk, request.data))
 
 
-class MoveView(ReadView):
+class MoveView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     queryset = StockMove.objects.select_related('stock__item')
     serializer_class = MoveSerializer
