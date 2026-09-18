@@ -21,10 +21,16 @@ def key(request):
     return request.headers.get('Idempotency-Key')
 
 
-class TransferThrottle(UserRateThrottle):
-    """导出一次最多扫两万行，导入要解析整张表；比常规接口贵得多，单独限。"""
+class ExportThrottle(UserRateThrottle):
+    """导出一次最多序列化两万行，是这里最贵的接口。"""
 
-    scope = 'transfer'
+    scope = 'export'
+
+
+class ImportThrottle(UserRateThrottle):
+    """解析上传表格和落库。放得比导出宽，因为「传错→改文件→重传」是正常节奏。"""
+
+    scope = 'import'
 
 
 class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
@@ -45,7 +51,7 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(**{f'{path}__in': projects_for(self.request.user, Project.objects.all())})
         return queryset
 
-    @action(detail=False, methods=['get'], url_path='export', throttle_classes=[TransferThrottle])
+    @action(detail=False, methods=['get'], url_path='export', throttle_classes=[ExportThrottle])
     def export(self, request):
         queryset = self.filter_queryset(self.get_queryset())
         if queryset.count() > tabular.MAX_EXPORT:
@@ -74,13 +80,13 @@ class ImportableMixin:
     也各自多出四条路由，除了返回 400 没有别的作用。
     """
 
-    @action(detail=False, methods=['get'], url_path='import-template', throttle_classes=[TransferThrottle])
+    @action(detail=False, methods=['get'], url_path='import-template')
     def import_template(self, request):
         return transfers.template(
             request.user, self.request.path.split('/')[-3], request.query_params.get('file_format', 'csv')
         )
 
-    @action(detail=False, methods=['get'], url_path='import-schema', throttle_classes=[TransferThrottle])
+    @action(detail=False, methods=['get'], url_path='import-schema')
     def import_schema(self, request):
         return Response(transfers.layout(request.user, request.path.split('/')[-3]))
 
@@ -89,14 +95,14 @@ class ImportableMixin:
         methods=['post'],
         url_path='import-file',
         parser_classes=[MultiPartParser],
-        throttle_classes=[TransferThrottle],
+        throttle_classes=[ImportThrottle],
     )
     def import_file(self, request):
         if set(request.data) != {'file'} or len(request.FILES.getlist('file')) != 1:
             raise ValidationError('请上传一个表格文件。')
         return Response(transfers.preview(request.user, request.path.split('/')[-3], request.FILES['file']))
 
-    @action(detail=False, methods=['post'], url_path='import-confirm', throttle_classes=[TransferThrottle])
+    @action(detail=False, methods=['post'], url_path='import-confirm', throttle_classes=[ImportThrottle])
     def import_confirm(self, request):
         if set(request.data) != {'token'}:
             raise ValidationError('请提交预览凭据。')

@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
-from apps.business.api.common import TransferThrottle
+from apps.business.api.common import ExportThrottle
 from apps.business.models import (
     BOMLine,
     Document,
@@ -37,18 +37,20 @@ class HardeningTests(BusinessFixtures, TestCase):
     def setUp(self):
         self.setup_business()
 
-    def test_export_is_throttled_separately_from_ordinary_reads(self):
-        # 导出一次最多扫两万行。override_settings 对 DRF 无效——THROTTLE_RATES 是导入时
-        # 绑定的类属性，所以直接改它。
+    def test_export_is_throttled_without_catching_cheap_reads(self):
+        # 导出一次最多扫两万行，单独限。override_settings 对 DRF 无效——THROTTLE_RATES
+        # 是导入时绑定的类属性，所以直接改它。
         cache.clear()
         self.addCleanup(cache.clear)
         client = self.clients['purchaser']
-        with patch.dict(TransferThrottle.THROTTLE_RATES, {'transfer': '3/min'}):
+        with patch.dict(ExportThrottle.THROTTLE_RATES, {'export': '3/min'}):
             for _ in range(3):
                 self.assertEqual(client.get('/api/business/items/export/').status_code, 200)
             self.assertEqual(client.get('/api/business/items/export/').status_code, 429)
-            # 限流按用户计，既不连累本人的普通列表，也不波及别人。
+            # 限流按用户计：不连累本人的普通列表，不波及别人，也不误伤只返回列定义的字段表。
             self.assertEqual(client.get('/api/business/items/').status_code, 200)
+            self.assertEqual(client.get('/api/business/items/import-schema/').status_code, 200)
+            self.assertEqual(client.get('/api/business/items/import-template/').status_code, 200)
             self.assertEqual(self.clients['warehouse'].get('/api/business/items/export/').status_code, 200)
 
     def test_import_routes_exist_only_where_the_resource_can_be_imported(self):

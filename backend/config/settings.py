@@ -78,9 +78,15 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.ScopedRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
-    # login 保护口令爆破；transfer 限的是导出导入这类一次扫全表的重接口；
-    # user 只是个兜底上限，正常人工操作远够不到，防的是脚本失控。
-    'DEFAULT_THROTTLE_RATES': {'login': '10/min', 'transfer': '12/min', 'user': '600/min'},
+    # 按真实开销分档：导出一次最多序列化两万行，最贵；导入要解析整张表格，但
+    # 「传错→改文件→重传」是正常节奏，放宽一些；取字段表和下模板只返回列定义，
+    # 不单独限，和其余接口一样走 user 兜底，防的是脚本失控而不是人工操作。
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '10/min',
+        'export': '12/min',
+        'import': '30/min',
+        'user': '600/min',
+    },
     'EXCEPTION_HANDLER': 'apps.core.api.exception_handler',
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
 }

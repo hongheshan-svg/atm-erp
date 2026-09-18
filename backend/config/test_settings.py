@@ -28,6 +28,7 @@ ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
 # 限流本身由 test_hardening 直接改 THROTTLE_RATES 验证。
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {  # noqa: F405
     **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],  # noqa: F405
-    'transfer': None,
+    'export': None,
+    'import': None,
     'user': None,
 }
