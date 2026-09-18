@@ -19,10 +19,10 @@ from ..serializers import (
 )
 from ..services import finance
 from ..services.payment_terms import with_sources
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
-class EntryView(ReadView):
+class EntryView(ImportableMixin, ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
     queryset = (
@@ -66,7 +66,7 @@ class EntryView(ReadView):
         return Response(finance.cancel_expense(request.user, key(request), self.get_object().pk, request.data))
 
 
-class PaymentView(ReadView):
+class PaymentView(ImportableMixin, ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
     queryset = (

@@ -24,3 +24,11 @@ if not all(DATABASES['default'][key] for key in ('USER', 'PASSWORD', 'HOST')):
 CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
+# 限流速率是生产策略。业务测试会连续打同一批接口，留着只会测出 429；
+# 限流本身由 test_hardening 直接改 THROTTLE_RATES 验证。
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {  # noqa: F405
+    **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],  # noqa: F405
+    'export': None,
+    'import': None,
+    'user': None,
+}

@@ -17,12 +17,12 @@ from ..serializers import (
     TimeSerializer,
 )
 from ..services import corrections, execution
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
-class TaskView(ReadView):
-    queryset = Task.objects.select_related('assignee', 'project', 'delivery', 'entry').prefetch_related(
-        'project__members'
+class TaskView(ImportableMixin, ReadView):
+    queryset = execution.with_task_flags(
+        Task.objects.select_related('assignee', 'project', 'delivery', 'entry').prefetch_related('project__members')
     )
     serializer_class = TaskSerializer
     filterset_fields = ['project', 'kind', 'status', 'assignee', 'delivery']
@@ -60,7 +60,7 @@ class TaskView(ReadView):
         )
 
 
-class DeliveryView(ReadView):
+class DeliveryView(ImportableMixin, ReadView):
     queryset = Delivery.objects.select_related('project')
     serializer_class = DeliverySerializer
     filterset_fields = ['project']
@@ -73,7 +73,7 @@ class DeliveryView(ReadView):
         return Response(execution.accept(request.user, key(request), self.get_object().pk, request.data))
 
 
-class TimeView(ReadView):
+class TimeView(ImportableMixin, ReadView):
     queryset = TimeEntry.objects.select_related('user', 'task__project', 'reversal').prefetch_related(
         'task__project__members'
     )

@@ -392,13 +392,28 @@ class TaskSerializer(serializers.ModelSerializer):
             or project_allowed(self.context['request'].user, obj.project, MANAGERS)
         )
 
+    def shipped(self, obj):
+        # 列表由 with_task_flags 注解好；单个实例（如动作返回值）没有注解时再退回查询。
+        if hasattr(obj, 'project_shipped'):
+            return obj.project_shipped
+        return obj.project.deliveries.exists()
+
+    def later_stage_done(self, obj):
+        stages = ('design', 'assembly', 'test')
+        remaining = stages[stages.index(obj.kind) + 1 :]
+        if not remaining:
+            return False
+        if hasattr(obj, 'project_assembly_done'):
+            return any(getattr(obj, f'project_{stage}_done') for stage in remaining)
+        return obj.project.tasks.filter(kind__in=remaining, status='done').exists()
+
     def get_can_cancel(self, obj):
         return (
             self.get_can_manage(obj)
             and obj.status in {'open', 'done'}
             and obj.kind not in {'install', 'acceptance'}
             and self.can_change_service(obj)
-            and not (obj.kind in {'design', 'assembly', 'test'} and obj.project.deliveries.exists())
+            and not (obj.kind in {'design', 'assembly', 'test'} and self.shipped(obj))
         )
 
     def get_can_reopen(self, obj):
@@ -407,10 +422,7 @@ class TaskSerializer(serializers.ModelSerializer):
         if obj.kind == 'acceptance' or (obj.kind == 'install' and obj.delivery.accepted_date):
             return False
         stages = ('design', 'assembly', 'test')
-        return obj.kind not in stages or not (
-            obj.project.deliveries.exists()
-            or obj.project.tasks.filter(kind__in=stages[stages.index(obj.kind) + 1 :], status='done').exists()
-        )
+        return obj.kind not in stages or not (self.shipped(obj) or self.later_stage_done(obj))
 
     class Meta:
         model = Task

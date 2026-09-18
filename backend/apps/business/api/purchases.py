@@ -16,10 +16,10 @@ from ..serializers import (
     PurchaseSerializer,
 )
 from ..services import budgets, supply
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
-class PurchaseView(ReadView):
+class PurchaseView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     write_roles = PURCHASE_READERS
     queryset = PurchaseOrder.objects.select_related('supplier', 'project').prefetch_related(

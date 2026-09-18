@@ -45,6 +45,13 @@ class LedgerModel(BaseModel):
     def soft_delete(self, actor):
         raise ValidationError('账目和流水不可删除，请通过冲销或更正保留历史。')
 
+    def save(self, *args, **kwargs):
+        # soft_delete 被禁用了，但直接置位再保存同样能让这条账目从所有余额里消失。
+        # 把「不可删除」从约定变成类型层面的约束，免得后续有人无意绕过。
+        if self.is_deleted:
+            raise ValidationError('账目和流水不可隐藏，请通过冲销或更正保留历史。')
+        return super().save(*args, **kwargs)
+
 
 class ImmutableQuerySet(ProtectedQuerySet):
     def update(self, **kwargs):

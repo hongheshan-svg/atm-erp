@@ -3,13 +3,17 @@ import io
 import tempfile
 import uuid
 from datetime import timedelta
+from unittest.mock import patch
 
+from django.core.cache import cache
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
+from apps.business.api.common import ExportThrottle
 from apps.business.models import (
     BOMLine,
     Document,
@@ -23,6 +27,7 @@ from apps.business.models import (
     Task,
     TimeEntry,
 )
+from apps.business.urls import router
 from apps.core.models import ActionReceipt, AuditLog, Company
 
 from .test_commercial_chain import BusinessFixtures
@@ -31,6 +36,60 @@ from .test_commercial_chain import BusinessFixtures
 class HardeningTests(BusinessFixtures, TestCase):
     def setUp(self):
         self.setup_business()
+
+    def test_export_is_throttled_without_catching_cheap_reads(self):
+        # 导出一次最多扫两万行，单独限。override_settings 对 DRF 无效——THROTTLE_RATES
+        # 是导入时绑定的类属性，所以直接改它。
+        cache.clear()
+        self.addCleanup(cache.clear)
+        client = self.clients['purchaser']
+        with patch.dict(ExportThrottle.THROTTLE_RATES, {'export': '3/min'}):
+            for _ in range(3):
+                self.assertEqual(client.get('/api/business/items/export/').status_code, 200)
+            self.assertEqual(client.get('/api/business/items/export/').status_code, 429)
+            # 限流按用户计：不连累本人的普通列表，不波及别人，也不误伤只返回列定义的字段表。
+            self.assertEqual(client.get('/api/business/items/').status_code, 200)
+            self.assertEqual(client.get('/api/business/items/import-schema/').status_code, 200)
+            self.assertEqual(client.get('/api/business/items/import-template/').status_code, 200)
+            self.assertEqual(self.clients['warehouse'].get('/api/business/items/export/').status_code, 200)
+
+    def test_import_routes_exist_only_where_the_resource_can_be_imported(self):
+        # 用不上表格导入的资源不该各自多出四条只会返回 400 的路由。
+        importable = {
+            'items',
+            'partners',
+            'projects',
+            'sales',
+            'purchases',
+            'tasks',
+            'stocks',
+            'moves',
+            'entries',
+            'payments',
+            'time',
+            'deliveries',
+        }
+        exposed = {
+            prefix
+            for prefix, viewset, _ in router.registry
+            if any(action.url_name == 'import-schema' for action in viewset.get_extra_actions())
+        }
+        self.assertEqual(exposed, importable)
+        self.assertEqual(
+            {prefix for prefix, _, _ in router.registry} - exposed,
+            {'bom', 'reconciliations', 'bank-records', 'bank-matches', 'documents'},
+        )
+
+    def test_ledger_rows_cannot_be_hidden_by_flipping_the_deleted_flag(self):
+        # soft_delete 已被禁用，但直接置位再保存同样能让这条账目从所有余额里消失。
+        entry = Entry.objects.filter(purchase=self.purchase(self.active_project())).first()
+        self.assertIsNotNone(entry)
+        entry.is_deleted = True
+        with self.assertRaises(DjangoValidationError):
+            entry.save()
+        entry.refresh_from_db()
+        self.assertFalse(entry.is_deleted)
+        self.assertTrue(Entry.objects.filter(pk=entry.pk).exists())
 
     def test_archived_contract_survives_masterdata_changes_and_preserves_versions(self):
         purchase = self.purchase(self.active_project())

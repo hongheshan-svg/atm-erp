@@ -1,7 +1,7 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Sum
+from django.db.models import Exists, OuterRef, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -40,6 +40,20 @@ from .finance import balance
 
 STAGES = ('design', 'assembly', 'test')
 OPEN_PROJECT = {'active', 'delivering', 'warranty'}
+
+
+def with_task_flags(queryset):
+    """Annotate the project facts TaskSerializer needs, so listing N tasks costs no extra query.
+
+    是否已发货、后续阶段是否完工，对同一项目的每行任务答案相同；不注解的话序列化每行都要反查一次。
+    """
+    return queryset.annotate(
+        project_shipped=Exists(Delivery.objects.filter(project=OuterRef('project_id'))),
+        project_assembly_done=Exists(
+            Task.objects.filter(project=OuterRef('project_id'), kind='assembly', status='done')
+        ),
+        project_test_done=Exists(Task.objects.filter(project=OuterRef('project_id'), kind='test', status='done')),
+    )
 
 
 def event_date(data, field='date'):

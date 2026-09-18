@@ -17,10 +17,10 @@ from ..serializers import (
     PartnerSerializer,
 )
 from ..services import masterdata
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
-class MasterView(ReadView):
+class MasterView(ImportableMixin, ReadView):
     write_roles = PURCHASERS
     filterset_fields = ['is_active']
     search_fields = ['code', 'name']
