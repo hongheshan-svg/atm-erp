@@ -19,6 +19,8 @@ export type Field = {
   remotePath?: string
   remoteParams?: Row
   remoteFilter?: (row: Row) => boolean
+  // 远程选项的标签；不给就用 catalog 的通用「编码 · 名称 · 规格」拼法。
+  remoteLabel?: (row: Row) => string
   // Renders the row's position in this flow instead of a plain value (read-only row tables).
   flow?: string
 }

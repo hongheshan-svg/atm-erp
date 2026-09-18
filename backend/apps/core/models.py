@@ -208,6 +208,8 @@ class AuditLog(models.Model):
     class Meta:
         db_table = 'lean_audit'
         ordering = ['-id']
+        # 采购审批要回查提交人、质保和处理记录要按单据回查；审计表增长最快，没有索引就是全表扫描。
+        indexes = [models.Index(fields=['resource', 'operation'], name='lean_audit_resource')]
 
 
 class ActionReceipt(models.Model):

@@ -77,6 +77,20 @@ def with_sources(queryset):
     return queryset.select_related('purchase').prefetch_related('purchase__lines__stockmove_set')
 
 
+def with_balances(queryset):
+    """带上净收付并在数据库里筛掉已结清的款项。
+
+    余额为零的款项既不产生到期批次也不进入余额汇总；不先筛掉的话，报表和关注视图
+    会把历史上每一张早已结清的单据都拉进内存，而且 paid() 缺少注解时每条还要再查一次。
+    """
+    money = DecimalField(max_digits=18, decimal_places=2)
+    return (
+        with_sources(queryset)
+        .annotate(net_paid=Coalesce(Sum('payments__amount'), Value(ZERO), output_field=money))
+        .exclude(amount=F('credit_amount') + F('net_paid'))
+    )
+
+
 def due_entries(queryset, today):
     """Filter maturity before pagination, using the same receipt/credit FIFO facts as schedule."""
     money = DecimalField(max_digits=18, decimal_places=2)

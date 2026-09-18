@@ -10,11 +10,14 @@ vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), download: vi.fn() }))
 beforeEach(() => { vi.resetAllMocks(); user.value = { id: 1, role: 'finance' }; vi.mocked(all).mockResolvedValue([]) })
 
 it('采购默认继承供应商账期，不偷偷提交当天作为指定付款日', () => {
-  const fields = purchaseFields({ projects: [], items: [], users: [], partners: [{ id: 1, kind: 'supplier', name: '供应商', code: 'S1', payment_term: 'month30' }] })
+  const fields = purchaseFields()
   const data = payload(fields, defaults(fields))
   expect(data).not.toHaveProperty('payment_due_date')
   expect(data).not.toHaveProperty('payment_term')
-  expect(fields.find(f => f.key === 'supplier')?.options?.[0]?.label).toContain('月结30天')
+  const supplier = fields.find(f => f.key === 'supplier')!
+  expect(supplier.remotePath).toBe('/business/partners/')
+  expect(supplier.remoteLabel?.({ id: 1, kind: 'supplier', name: '供应商', code: 'S1', payment_term: 'month30' })).toContain('月结30天')
+  expect(fields.find(f => f.key === 'project')?.remotePath).toBe('/business/projects/')
 })
 
 it('预付款由经理核准，普通对账由财务确认，银行入口仅财务管理', () => {

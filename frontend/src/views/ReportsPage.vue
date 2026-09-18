@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { read } from '../api'
 import { message } from '../utils/request'
+import { money } from '../utils/money'
 import { labels } from '../modules/shared'
 import type { Row } from '../types'
 import ListPagination from '../components/ListPagination.vue'
@@ -19,10 +20,6 @@ const risk = ref('')
 let applied = { search: '', status: '', risk: '' }
 const exportFilters = ref(applied)
 let generation = 0
-const money = (value: string) => {
-  const [integer, fraction = ''] = String(value).split('.')
-  return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
-}
 const metrics: { key: string; label: string; note: string; overdue?: string }[] = [
   { key: 'contract_amount', label: '已签约合同额', note: '筛选项目累计合同金额' },
   { key: 'actual_cost', label: '实际成本', note: '材料、人工、费用及退货价差' },
@@ -75,12 +72,12 @@ watch(pageSize, () => load())
   <p v-if="loading" role="status">正在汇总经营数据…</p>
   <template v-if="data">
     <div class="report-metrics">
-      <section v-for="metric in metrics" :key="metric.key" class="panel report-metric" :aria-label="metric.label"><span>{{ metric.label }}</span><strong>¥ {{ money(data.summary[metric.key]) }}</strong><small>{{ metric.note }}<template v-if="metric.overdue">；其中逾期 <span class="report-risk">{{ money(data.summary[metric.overdue]) }}</span></template></small></section>
+      <section v-for="metric in metrics" :key="metric.key" class="panel report-metric" :aria-label="metric.label"><span>{{ metric.label }}</span><strong>{{ money(data.summary[metric.key], { currency: true }) }}</strong><small>{{ metric.note }}<template v-if="metric.overdue">；其中逾期 <span class="report-risk">{{ money(data.summary[metric.overdue]) }}</span></template></small></section>
     </div>
     <section class="panel report-watch" aria-label="经营关注">
       <span>项目 <strong>{{ data.summary.projects }}</strong></span><span>执行 / 交付 / 质保 <strong>{{ data.summary.active_projects }}</strong></span>
       <el-button text @click="focusRisk('over_budget')">超预算 {{ data.summary.over_budget }}</el-button><el-button text @click="focusRisk('overdue')">交付逾期 {{ data.summary.overdue }}</el-button><el-button text @click="focusRisk('unbudgeted')">未设置预算 {{ data.summary.unbudgeted }}</el-button>
-      <span v-for="amount in watchAmounts" :key="amount.key">{{ amount.label }} <strong>¥ {{ money(data.summary[amount.key]) }}</strong></span>
+      <span v-for="amount in watchAmounts" :key="amount.key">{{ amount.label }} <strong>{{ money(data.summary[amount.key], { currency: true }) }}</strong></span>
     </section>
     <section class="panel" aria-label="项目经营明细">
       <header class="panel-heading"><h2>项目经营明细 <span class="record-count">{{ data.count }}</span></h2><small class="muted">更新于 {{ new Date(data.generated_at).toLocaleString('zh-CN') }}</small></header>

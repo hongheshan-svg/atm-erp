@@ -5,7 +5,7 @@ from pathlib import Path
 from django.core.files.base import ContentFile
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
 from apps.core.api import Conflict
@@ -19,6 +19,7 @@ from apps.core.permissions import (
     SALES,
     SALES_READERS,
     has_role,
+    project_allowed,
     projects_for,
     require_project,
     require_role,
@@ -26,7 +27,7 @@ from apps.core.permissions import (
 )
 
 from ..models import Document, Project, PurchaseOrder, SalesOrder
-from .common import audit, identity, project_action, save
+from .common import audit, fields, identity, project_action, save, text
 
 MAX_BYTES = 20 * 1024 * 1024
 MONEY_CATEGORIES = {'contract', 'receipt'}
@@ -145,3 +146,71 @@ def upload(actor, key, project_id, category, file, *, sale_id=None, purchase_id=
         for storage, path in written:
             storage.delete(path)
         raise
+
+
+def referenced(document):
+    """附件一旦被资金、对账或合同事实引用，就是这些记录的依据，不能再撤走。"""
+    from ..models import ContractAmendment, Payment, PaymentEvidence, PurchaseContractVersion, Reconciliation
+
+    for model, label in (
+        (Payment, '收付款流水'),
+        (PaymentEvidence, '补录的收付凭证'),
+        (Reconciliation, '对账单'),
+        (ContractAmendment, '补充协议'),
+        (PurchaseContractVersion, '归档的采购合同'),
+    ):
+        if model.objects.filter(document=document).exists():
+            return label
+    return ''
+
+
+def remove(actor, key, document_id, data):
+    """软删除误传的附件。
+
+    以前上传是单向的：传错文件、传错分类、传错项目都只能再传一份，两份并存。
+    这里保留记录和文件本体，只把它移出列表，并要求填写原因留审计。
+    """
+    source = get_object_or_404(Document.objects, pk=identity(document_id, 'document'))
+    context = {}
+
+    def authorize(user):
+        require_role(user, ALL_ROLES)
+        user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
+        document = get_object_or_404(Document.objects.select_for_update(), pk=source.pk)
+        project_id = document.project_id
+        if document.purchase_id:
+            purchase = get_object_or_404(PurchaseOrder.objects.select_for_update(), pk=document.purchase_id)
+            project_id = purchase.project_id
+        if document.sale_id:
+            sale = get_object_or_404(SalesOrder.objects.select_for_update(), pk=document.sale_id)
+            require_sale(user, sale)
+            project_id = sale.project_id
+        project = get_object_or_404(Project.objects.select_for_update(), pk=project_id) if project_id else None
+        if project is not None and not document.sale_id:
+            require_project(user, project, ALL_ROLES)
+        if document.created_by_id != user.pk and not (project is not None and project_allowed(user, project, MANAGERS)):
+            raise PermissionDenied('只能删除本人上传的附件；其他附件请由项目经理或管理员处理。')
+        context.update(document=document, project=project)
+
+    def execute(user):
+        fields(data, {'reason'})
+        document, project = context['document'], context['project']
+        if project is not None and project.status == 'closed':
+            raise Conflict('项目已结项，请先重新打开后再整理附件。')
+        used = referenced(document)
+        if used:
+            raise Conflict(f'此附件已作为{used}的依据，不能删除；请上传新版本并在原单据中说明。')
+        reason = text(data, 'reason')
+        document.soft_delete(user)
+        return audit(
+            user, 'document.remove', document, filename=document.original_name, sha256=document.sha256, reason=reason
+        )
+
+    return perform(
+        actor=actor,
+        key=key,
+        operation='document.remove',
+        payload={'document': source.pk, 'data': data},
+        authorize=authorize,
+        execute=execute,
+    )

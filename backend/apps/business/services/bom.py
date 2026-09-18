@@ -51,10 +51,44 @@ def revision(project):
     return hashlib.sha256(content.encode()).hexdigest()
 
 
+def competing_demand(project, item_ids):
+    """其他在执行项目对同一物料还没领走的需求量。
+
+    库存是共享的、不预留的，两个项目各自看到同一批库存都会算成「可用」，于是两边都不下单。
+    把冲突显式摆到缺料行上，采购员才有机会判断这批库存到底该归谁。
+    """
+    outstanding = {}
+    for row in (
+        BOMLine.objects.filter(item_id__in=item_ids, project__status__in=['active', 'delivering'])
+        .exclude(project=project)
+        .values('item_id', 'project_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        outstanding[(row['project_id'], row['item_id'])] = row['total']
+    for row in (
+        StockMove.objects.filter(stock__item_id__in=item_ids, kind__in=['issue', 'return'])
+        .exclude(task__kind='service')
+        .exclude(project=project)
+        .values('project_id', 'stock__item_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        key = (row['project_id'], row['stock__item_id'])
+        if key in outstanding:
+            outstanding[key] += row['total']
+    result = {}
+    for (_, item_id), quantity in outstanding.items():
+        if quantity > ZERO:
+            current = result.setdefault(item_id, {'quantity': ZERO, 'projects': 0})
+            current['quantity'] += quantity
+            current['projects'] += 1
+    return result
+
+
 def demand(project):
     result = []
     lines = list(BOMLine.objects.filter(project=project).select_related('item').order_by('item_id', 'pk'))
     item_ids = {line.item_id for line in lines}
+    competing = competing_demand(project, item_ids)
     remaining_used = {pk: ZERO for pk in item_ids}
     remaining_stock = {pk: ZERO for pk in item_ids}
     remaining_incoming = {pk: ZERO for pk in item_ids}
@@ -112,6 +146,8 @@ def demand(project):
                 'issued': str(used),
                 'incoming': str(ordered),
                 'available': str(available),
+                'other_demand': str(competing.get(line.item_id, {}).get('quantity', ZERO)),
+                'other_projects': competing.get(line.item_id, {}).get('projects', 0),
                 'shortage': str(max(ZERO, needed - ordered - available)),
             }
         )

@@ -33,6 +33,7 @@ TARGETS = {
         'apps.business.tests.test_payment_terms',
         'apps.business.tests.test_hardening',
         'apps.business.tests.test_production_roles',
+        'apps.business.tests.test_audit_fixes',
     ),
     'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
 }

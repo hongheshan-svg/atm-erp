@@ -29,8 +29,13 @@ class CompanyView(PermissionMixin, mixins.ListModelMixin, mixins.UpdateModelMixi
 
     @action(detail=True, methods=['post'], url_path='period-lock')
     def period_lock(self, request, pk=None):
+        from rest_framework.exceptions import ValidationError
+
         from .periods import configure
 
+        # 公司资料行还没建时，get_object() 只会给一个 404，看不出该去哪里补。
+        if not Company.objects.filter(pk=1).exists():
+            raise ValidationError('公司资料尚未初始化，请先在设置中完成公司资料后再锁账。')
         self.get_object()
         return Response(configure(request.user, request.headers.get('Idempotency-Key'), request.data))
 

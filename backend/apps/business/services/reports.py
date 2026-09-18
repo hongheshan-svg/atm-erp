@@ -2,14 +2,14 @@
 
 from decimal import Decimal
 
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers
 
 from ..models import Entry, Project
 from . import budgets, finance
 from .common import ZERO, rounded
-from .payment_terms import with_sources
+from .payment_terms import with_balances
 
 
 class ReportFilters(serializers.Serializer):
@@ -34,9 +34,7 @@ def summary(params, *, export=False):
     actuals, commitments, purchases = finance.costs(ids), budgets.commitments(ids), budgets.purchase_totals(ids)
     balances = {pk: dict.fromkeys(finance.BALANCE_KEYS, ZERO) for pk in ids}
     today = timezone.localdate()
-    entries = with_sources(Entry.objects.filter(project_id__in=ids)).annotate(net_paid=Sum('payments__amount'))
-    for entry in entries:
-        entry.net_paid = entry.net_paid or ZERO
+    for entry in with_balances(Entry.objects.filter(project_id__in=ids)):
         for key, value in finance.split_balance(entry, today).items():
             balances[entry.project_id][key] += value
     rows = []

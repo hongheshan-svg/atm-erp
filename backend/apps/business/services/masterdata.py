@@ -133,9 +133,11 @@ def masterdata(actor, key, model, data, object_id=None):
             CodeRule.objects.select_for_update().get(key='item')
             if (
                 obj.drawing_number
-                and Item.all_objects.filter(
-                    drawing_number__iexact=obj.drawing_number, drawing_revision__iexact=obj.drawing_revision
+                # 与 lean_item_drawing_key 函数索引同一套表达式；iexact 生成的 UPPER(col::text) 用不上索引。
+                and Item.all_objects.annotate(
+                    drawing_key=Lower('drawing_number'), revision_key=Lower('drawing_revision')
                 )
+                .filter(drawing_key=obj.drawing_number.lower(), revision_key=obj.drawing_revision.lower())
                 .exclude(pk=obj.pk)
                 .exists()
             ):

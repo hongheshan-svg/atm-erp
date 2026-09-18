@@ -37,7 +37,8 @@ it('三个指标合并全部风险提示，分类入口直达完整列表', asyn
   expect(metrics[0].element.tagName).toBe('DIV')
   const categories = wrapper.findAll('.work-category')
   expect(categories.every(entry => entry.element.tagName === 'A')).toBe(true)
-  expect(categories.map(entry => entry.attributes('href'))).toEqual(['/projects', '/purchases', '/finance?section=reconciliations&project=all', '/finance?section=bank&project=all'])
+  // 「我的待办」落到项目页的任务清单，不再只是一张项目列表。
+  expect(categories.map(entry => entry.attributes('href'))).toEqual(['/projects?section=tasks', '/purchases', '/finance?section=reconciliations&project=all', '/finance?section=bank&project=all'])
   const bank = wrapper.get('[aria-label="查看全部银行待认领 / 匹配"]')
   expect(bank.text()).toContain('银行待认领 / 匹配')
   expect(bank.text()).toContain('389')
@@ -96,7 +97,7 @@ it('生产任务链接到任务，不重复列出本人和团队的同一逾期�
   expect(rows(wrapper)).toHaveLength(2)
   expect(wrapper.get('.priority-table').findAll('[aria-label="处理装配跟进"]')).toHaveLength(1)
   expect(rows(wrapper)[0].findAll('a')[0].attributes('href')).toBe('/projects/1?tab=tasks&resource=tasks&focus=12')
-  expect(wrapper.get('[aria-label="查看全部生产与售后派工"]').attributes('href')).toBe('/projects')
+  expect(wrapper.get('[aria-label="查看全部生产与售后派工"]').attributes('href')).toBe('/projects?section=tasks')
   // 逾期任务 1 + 生产任务逾期 2 合并为一个指标
   expect(wrapper.findAll('.work-metric strong')[0].text()).toBe('3')
   wrapper.unmount()

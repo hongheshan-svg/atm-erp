@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ..models import Entry, PurchaseLine, Stock
-from .payment_terms import schedule, with_sources
+from .payment_terms import schedule, with_balances
 
 
 def projection(params):
@@ -14,7 +14,7 @@ def projection(params):
     today = timezone.localdate()
     rows = []
     if view in {'cash30', 'aging'}:
-        for entry in with_sources(Entry.objects.select_related('project')).prefetch_related('payments'):
+        for entry in with_balances(Entry.objects.select_related('project')):
             for part in schedule(entry):
                 due = part['due_date']
                 if (view == 'cash30' and today <= due <= today + timedelta(days=30)) or (

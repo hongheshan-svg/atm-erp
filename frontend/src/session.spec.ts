@@ -62,7 +62,7 @@ describe('固定岗位与权限并集', () => {
     expect(actionNames('tasks', { status: 'open', kind: 'design', assignee: 5 })).toEqual(['登记工时', '完成任务'])
     expect(actionNames('tasks', { status: 'open', kind: 'design', assignee: 9 })).toEqual([])
     expect(actionNames('projects', { status: 'active', can_manage: false })).toEqual([])
-    expect(actionNames('bom', { can_edit_bom: true })).toEqual(['移除'])
+    expect(actionNames('bom', { can_edit_bom: true })).toEqual(['修改此行', '移除'])
     expect(actionNames('bom', { can_edit_bom: false })).toEqual([])
     expect(actionNames('bom', {})).toEqual([])
     expect(canImportResource('items')).toBe(true)

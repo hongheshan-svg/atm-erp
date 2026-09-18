@@ -180,7 +180,8 @@ class BankView(ReadView):
     read_roles = write_roles = FINANCE
     queryset = bank_list(banking.with_remaining(BankRecord.objects.select_related('project'))).order_by('-id')
     serializer_class = BankSerializer
-    filterset_fields = ['project', 'needs_review']
+    # 「关联未认领款退回」要在同账户、同户名里找对应的银行支出；不开出来前端只能拉全量再过滤。
+    filterset_fields = ['project', 'needs_review', 'account', 'counterparty']
     search_fields = ['account', 'reference', 'counterparty']
 
     def create(self, request):

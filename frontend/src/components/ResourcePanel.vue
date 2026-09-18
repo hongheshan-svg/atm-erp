@@ -12,6 +12,7 @@ import {
   actionCommand,
 } from '../business'
 import { message } from '../utils/request'
+import { money } from '../utils/money'
 import { sessionStore } from '../utils/storage'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
@@ -86,6 +87,8 @@ const merged: Record<string, Record<string, string>> = {
   projects: { name: 'code' },
   users: { display_name: 'username' },
   entries: { title: 'kind', partner_name: 'project_name', due_date: 'due_amount', balance: 'paid_amount' },
+  tasks: { title: 'project_name' },
+  time: { task_title: 'project_name' },
   stocks: { item_name: 'item_code', specification: 'brand' },
 }
 // 项目页里的列表已经限定了项目，副行不再重复项目名。
@@ -110,10 +113,7 @@ function menuGroups(row: Row) {
 const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'due_amount', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
 function cell(row: Row, key: string) {
   if (!moneyKeys.has(key) || row[key] == null) return display(row[key])
-  const value = String(row[key])
-  const refund = key === 'balance' && value.startsWith('-')
-  const [integer, fraction = ''] = (refund ? value.slice(1) : value).split('.')
-  return `${refund ? '待退款 ' : ''}${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
+  return money(row[key], { refund: key === 'balance' })
 }
 function mobileSummary(row: Row) {
   if (props.resource === 'entries') return `待结算 ${cell(row, 'balance')} · ${display(row.kind)}`
@@ -141,8 +141,9 @@ async function load() {
     if (route.query.resource === props.resource && /^\d+$/.test(focus) && focused !== focus) {
       const row = await read(`${endpoint(props.resource)}${focus}/`)
       if (current !== generation) return
-      if (props.projectId && Number(row.project) !== props.projectId) return
+      // 先记下已处理的 focus：这条记录不属于当前项目时也不该在每次刷新、翻页时重新取一遍。
       focused = focus
+      if (props.projectId && Number(row.project) !== props.projectId) return
       if (props.resource === 'purchases') await action(row, '查看明细')
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
@@ -225,8 +226,9 @@ function saved() {
 function searchRecords() {
   appliedExtra.value = {
     ...(enabledFilter.value && ['users', 'items', 'partners'].includes(props.resource) ? { is_active: enabledFilter.value } : {}),
-    ...(locationFilter.value && props.resource === 'stocks' ? { location: locationFilter.value } : {}),
-    ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand' : 'brand']: brandFilter.value } : {}),
+    ...(locationFilter.value && props.resource === 'stocks' ? { location__icontains: locationFilter.value } : {}),
+    // 精确匹配要求输对完整品牌名，输「施耐德」而库里存的是「Schneider」就只会得到空列表。
+    ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand__icontains' : 'brand__icontains']: brandFilter.value } : {}),
     ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
   }
   appliedSearch.value = search.value
@@ -293,8 +295,8 @@ function inspect(row: Row) {
       <input v-model="search" type="search" :aria-label="`搜索${title}`" placeholder="输入名称、编号或关键词" />
       <select v-if="resource === 'users' && filterConfig" v-model="filterValue" aria-label="筛选用户角色" @change="searchRecords"><option value="">全部角色</option><option v-for="(label, value) in filterConfig.options" :key="value" :value="value">{{ label }}</option></select>
       <select v-if="['users', 'items', 'partners'].includes(resource)" v-model="enabledFilter" aria-label="筛选启用状态" @change="searchRecords"><option value="">全部状态</option><option value="true">启用</option><option value="false">停用</option></select>
-      <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位" />
-      <input v-if="['stocks', 'items'].includes(resource)" v-model="brandFilter" aria-label="筛选品牌名称" placeholder="品牌（完整名称）" />
+      <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位关键词" />
+      <input v-if="['stocks', 'items'].includes(resource)" v-model="brandFilter" aria-label="筛选品牌" placeholder="品牌关键词" />
       <label v-if="resource === 'entries'" class="inline-check"><input v-model="unsettled" type="checkbox" @change="searchRecords" />仅看未结</label>
       <el-button native-type="submit" :loading="loading">搜索</el-button>
       <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; searchRecords()">重置</el-button>

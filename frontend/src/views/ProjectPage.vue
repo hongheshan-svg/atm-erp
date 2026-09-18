@@ -6,6 +6,7 @@ import { read } from '../api'
 import { money, purchaseReader, productionProject } from '../session'
 import { actionNames, actionCommand, display } from '../business'
 import { message } from '../utils/request'
+import { money as formatMoney } from '../utils/money'
 import type { Row, Command } from '../types'
 import ResourcePanel from '../components/ResourcePanel.vue'
 import BOMDemand from '../components/BOMDemand.vue'
@@ -45,11 +46,7 @@ watch(tab, revealTab, { flush: 'post' })
 watch(tab, value => { if (value === 'cost') void load() })
 const error = ref('')
 const projectFlow = computed(() => flowFor('projects', project.value))
-const amount = (value: unknown) => {
-  if (value == null || value === '') return '未设置'
-  const [integer, fraction = ''] = String(value).split('.')
-  return `¥${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
-}
+const amount = (value: unknown) => formatMoney(value, { currency: true, placeholder: '未设置' })
 // 收起时的一行摘要；合同金额与四宫格一样只在 money() 通过时才拼进来。
 const brief = computed(() => {
   const record = project.value

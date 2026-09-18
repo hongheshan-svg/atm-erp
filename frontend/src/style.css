@@ -141,6 +141,11 @@ small,
   color: var(--warn);
   font-variant-numeric: tabular-nums;
 }
+/* 共享库存被其他在执行项目同时需要：数字本身没错，但不能按「归我」来算。 */
+.contested-number {
+  color: var(--risk);
+  font-variant-numeric: tabular-nums;
+}
 h1 {
   font-size: 26px;
   letter-spacing: -0.6px;

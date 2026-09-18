@@ -17,7 +17,7 @@ import ListPagination from './ListPagination.vue'
 
 const props = defineProps<{ projectId?: number; initialSelection?: number[] }>()
 const emit = defineEmits<{ saved: [result: Row]; close: [] }>()
-const fields = purchaseFields({ projects: [], partners: [], items: [], users: [] })
+const fields = purchaseFields()
 const freshForm = () => ({ ...defaults(fields), lines: [] })
 const form = ref<Row>(freshForm())
 const project = ref<number | string | undefined>(props.projectId)
@@ -200,14 +200,14 @@ async function save() {
         <div class="purchase-selection"><span role="status" aria-label="BOM 选择状态">已选 <strong>{{ selected.length }}</strong> 项 · 筛选结果 {{ filtered.length }} 项</span><el-button text :disabled="disabled || !filtered.some(eligible)" @click="selectFiltered">全选筛选结果</el-button><el-button text :disabled="disabled || !selected.length" @click="clearSelection">清空选择</el-button><el-button text class="mobile-jump" :disabled="!chosen.length" @click="jumpToDraft">采购草稿 ↓</el-button></div>
         <el-table v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'" @row-click="handleRowClick">
           <el-table-column label="选择" width="48"><template #default="{ row }"><input class="material-checkbox" type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="disabled || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
-          <el-table-column type="expand" width="32"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { specification: '规格', drawing_number: '图号', drawing_revision: '图档版本', required_date: '需求日期', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ row[field] || '—' }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div></dl></template></el-table-column>
+          <el-table-column type="expand" width="32"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { specification: '规格', drawing_number: '图号', drawing_revision: '图档版本', required_date: '需求日期', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ row[field] || '—' }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div><div><dt>其他项目待领</dt><dd>{{ Number(row.other_demand) > 0 ? `${row.other_demand} · ${row.other_projects} 个在执行项目` : '—' }}</dd></div></dl></template></el-table-column>
           <el-table-column label="物料" min-width="160"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small class="material-code">{{ row.item_code }}</small><span class="material-kind">{{ typeName(row.part_type) }}</span><small v-if="row.is_active === false"> 已停用</small></template></el-table-column>
           <el-table-column label="品牌 / 单元" min-width="110"><template #default="{ row }"><span>{{ row.brand || '—' }}</span><small class="material-code">{{ row.assembly_unit || '未分单元' }}</small></template></el-table-column>
-          <el-table-column prop="quantity" label="需求" min-width="62" align="right" /><el-table-column prop="available" label="库存" min-width="62" align="right" /><el-table-column prop="incoming" label="在途" min-width="62" align="right" />
+          <el-table-column prop="quantity" label="需求" min-width="62" align="right" /><el-table-column label="库存" min-width="62" align="right"><template #default="{ row }"><span :class="{ 'contested-number': Number(row.available) > 0 && Number(row.other_demand) > 0 }" :title="Number(row.other_demand) > 0 ? `其他 ${row.other_projects} 个在执行项目还需 ${row.other_demand}` : ''">{{ row.available }}</span></template></el-table-column><el-table-column prop="incoming" label="在途" min-width="62" align="right" />
           <el-table-column label="缺料" min-width="62" align="right"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column>
         </el-table>
         <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
-        <p class="purchase-stock-note muted"><el-icon><InfoFilled /></el-icon>库存共享，不预留；跨单元的已领、在途和库存为按行分摊，并非单元实际领用记录。</p>
+        <p class="purchase-stock-note muted"><el-icon><InfoFilled /></el-icon>库存共享，不预留：标红的库存同时被其他在执行项目的 BOM 盯着，展开可看具体数量。跨单元的已领、在途和库存为按行分摊，并非单元实际领用记录。</p>
       </section>
       <section ref="draftPane" class="purchase-draft" aria-label="采购草稿" :style="{ '--draft-height': draftHeight }">
         <header class="purchase-pane-heading">

@@ -1,4 +1,3 @@
-import { catalog } from '../catalog'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
@@ -39,13 +38,12 @@ export function createLabel(resource: string) {
   return ({ entries: finance() && '登记费用' } as Record<string, string | boolean>)[resource] || ''
 }
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
-  const c = await catalog(['projects'])
   let fields: Field[] = []
   let path = endpoint(resource)
   if (resource === 'entries') {
     path += 'expense/'
     fields = [
-      project(c),
+      project(),
       t('title', '费用名称'),
       t('amount', '金额（元）'),
       date('due_date', '期限'),

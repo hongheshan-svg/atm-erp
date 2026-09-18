@@ -4,12 +4,13 @@ import { read } from '../api'
 import { options } from '../catalog'
 import { message } from '../utils/request'
 import type { Row } from '../types'
-const props = defineProps<{ path: string; label: string; params?: Row; accept?: (row: Row) => boolean; disabled?: boolean; required?: boolean }>()
+const props = defineProps<{ path: string; label: string; params?: Row; accept?: (row: Row) => boolean; describe?: (row: Row) => string; disabled?: boolean; required?: boolean }>()
 const model = defineModel<string | number | undefined>()
 const search = ref(''), rows = ref<Row[]>([]), selected = ref<Row>(), page = ref(1), more = ref(false), busy = ref(false), error = ref('')
 let generation = 0
 let selectedGeneration = 0
-const choices = computed(() => options(selected.value && !rows.value.some(r => String(r.id) === String(selected.value?.id)) ? [selected.value, ...rows.value] : rows.value))
+const visible = computed(() => selected.value && !rows.value.some(r => String(r.id) === String(selected.value?.id)) ? [selected.value, ...rows.value] : rows.value)
+const choices = computed(() => props.describe ? visible.value.map(row => ({ value: row.id, label: props.describe!(row) })) : options(visible.value))
 async function load(next = 1) {
   const current = ++generation
   busy.value = true; error.value = ''

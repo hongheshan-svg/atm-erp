@@ -47,7 +47,7 @@ function readonlyValue(field: Field) {
       <label v-else-if="!field.hidden" class="field" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
         <span>{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></span>
         <textarea v-if="readonly" :value="readonlyValue(field)" :aria-label="field.label" readonly rows="1" class="readonly-text" />
-        <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
+        <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :describe="field.remoteLabel" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <select
           :aria-label="field.label"
           v-else-if="field.type === 'select' || field.type === 'multi'"

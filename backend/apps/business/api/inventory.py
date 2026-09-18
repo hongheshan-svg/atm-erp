@@ -21,7 +21,13 @@ class StockView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     queryset = Stock.objects.select_related('item')
     serializer_class = StockSerializer
-    filterset_fields = ['item', 'location', 'item__brand', 'item__part_type']
+    # 库位和品牌按关键词匹配；精确匹配要求把完整值输对，实际用起来只会得到空列表。
+    filterset_fields = {
+        'item': ['exact'],
+        'location': ['exact', 'icontains'],
+        'item__brand': ['exact', 'icontains'],
+        'item__part_type': ['exact'],
+    }
     search_fields = ['item__code', 'item__name', 'item__specification', 'item__brand']
 
     @action(detail=False, methods=['post'])

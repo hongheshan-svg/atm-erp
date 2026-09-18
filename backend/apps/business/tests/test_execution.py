@@ -406,7 +406,10 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         task = self.task(project)
         self.post('manager', f'tasks/{task.pk}/cancel/', {'reason': '暂缓'})
         self.post('manager', f'projects/{project.pk}/edit/', {'members': [], 'reason': '人员调离'})
-        self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '原成员已不在项目'}, status=403)
+        # 被拒的是原执行人而不是操作者，所以报错落在 assignee 字段上，而不是一句「无权访问此项目」。
+        denied = self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '原成员已不在项目'}, status=400)
+        self.assertIn('assignee', denied)
+        self.assertIn('不是该项目的负责人或成员', str(denied['assignee']))
         self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '经理接手', 'assignee': self.users['manager'].pk})
         task.refresh_from_db()
         self.assertEqual((task.status, task.assignee_id), ('open', self.users['manager'].pk))

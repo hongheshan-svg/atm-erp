@@ -29,6 +29,7 @@ from .models import (
     TimeEntry,
 )
 from .services import payment_terms
+from .services.common import ZERO
 from .services.finance import balance, paid
 
 
@@ -321,6 +322,12 @@ class EntrySerializer(serializers.ModelSerializer):
         # 费用没有固定往来单位，应收的对方就是项目客户。
         return obj.project.customer.name if obj.kind == 'receivable' else ''
 
+    def schedule(self, obj):
+        """状态、到期日、当前到期金额和到期明细都出自同一份账期拆分，每行只算一次。"""
+        if not hasattr(obj, '_payment_schedule'):
+            obj._payment_schedule = payment_terms.schedule(obj)
+        return obj._payment_schedule
+
     def get_status(self, obj):
         if obj.cancelled:
             return 'cancelled'
@@ -333,15 +340,17 @@ class EntrySerializer(serializers.ModelSerializer):
         return 'overdue' if due and due < timezone.localdate() else 'open'
 
     def get_due_date(self, obj):
-        return (
-            payment_terms.next_due(obj) if obj.purchase_id and obj.purchase.payment_term != 'manual' else obj.due_date
-        )
+        if not (obj.purchase_id and obj.purchase.payment_term != 'manual'):
+            return obj.due_date
+        rows = self.schedule(obj)
+        return rows[0]['due_date'] if rows else None
 
     def get_payment_schedule(self, obj):
-        return [{'due_date': row['due_date'], 'amount': str(row['amount'])} for row in payment_terms.schedule(obj)]
+        return [{'due_date': row['due_date'], 'amount': str(row['amount'])} for row in self.schedule(obj)]
 
     def get_due_amount(self, obj):
-        return str(payment_terms.due_amount(obj, timezone.localdate(), inclusive=True))
+        today = timezone.localdate()
+        return str(sum((row['amount'] for row in self.schedule(obj) if row['due_date'] <= today), ZERO))
 
     def get_paid_amount(self, obj):
         return str(paid(obj))
@@ -471,6 +480,7 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('hourly_cost', 'cost')
     user_name = serializers.CharField(source='user.display_name', read_only=True)
     project = serializers.IntegerField(source='task.project_id', read_only=True)
+    project_name = serializers.CharField(source='task.project.name', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
 
     def get_can_amend(self, obj):
@@ -491,6 +501,7 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
             'task',
             'task_title',
             'project',
+            'project_name',
             'user',
             'user_name',
             'date',

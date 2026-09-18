@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -21,9 +23,17 @@ def warranty_end(receipt):
 
 def listing(purchase):
     receipts = StockMove.objects.filter(purchase_line__purchase=purchase, kind='receipt').select_related('stock__item')
-    cases = PurchaseWarranty.objects.filter(receipt__purchase_line__purchase=purchase).select_related(
-        'receipt__stock__item'
+    cases = list(
+        PurchaseWarranty.objects.filter(receipt__purchase_line__purchase=purchase).select_related(
+            'receipt__stock__item'
+        )
     )
+    # 一次取回全部质保处理记录再按单据分组；逐条回查审计表会随质保单数量线性放大。
+    history = defaultdict(list)
+    for row in AuditLog.objects.filter(
+        resource__in=[f'purchasewarranty:{case.pk}' for case in cases], operation='purchase.warranty'
+    ).values('resource', 'created_at', 'actor_id', 'operation', 'detail'):
+        history[row.pop('resource')].append(row)
     return {
         'receipts': [
             {'id': r.pk, 'item': r.stock.item.name, 'quantity': str(r.quantity), 'warranty_end': warranty_end(r)}
@@ -45,11 +55,7 @@ def listing(purchase):
                 'updated_at': c.updated_at,
                 'warranty_end': warranty_end(c.receipt),
                 'within_warranty': c.date <= warranty_end(c.receipt),
-                'history': list(
-                    AuditLog.objects.filter(resource=f'purchasewarranty:{c.pk}').values(
-                        'created_at', 'actor_id', 'operation', 'detail'
-                    )
-                ),
+                'history': history[f'purchasewarranty:{c.pk}'],
             }
             for c in cases
         ],

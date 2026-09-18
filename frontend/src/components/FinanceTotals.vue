@@ -2,15 +2,12 @@
 import { ref, computed, watch } from 'vue'
 import { read } from '../api'
 import { message } from '../utils/request'
+import { money } from '../utils/money'
 import type { Row } from '../types'
 const props = defineProps<{ projectId?: number; revision?: number }>()
 const data = ref<Row | null>(null)
 const error = ref('')
 let generation = 0
-const money = (value: unknown) => {
-  const [integer, fraction = ''] = String(value ?? '0').split('.')
-  return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
-}
 const overdue = computed(() => {
   const row = data.value
   if (!row) return '0'
@@ -44,7 +41,7 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
   <div v-else-if="cards.length" class="finance-totals" aria-label="往来款项余额">
     <section v-for="card in cards" :key="card.key" class="panel finance-total" :aria-label="card.label">
       <span>{{ card.label }}</span>
-      <strong :class="{ 'finance-risk': card.risk && Number(card.value) }">¥ {{ money(card.value) }}</strong>
+      <strong :class="{ 'finance-risk': card.risk && Number(card.value) }">{{ money(card.value, { currency: true }) }}</strong>
       <small>{{ card.note }}</small>
     </section>
   </div>
