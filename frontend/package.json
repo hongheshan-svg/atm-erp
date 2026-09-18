@@ -1,6 +1,6 @@
 {
   "name": "atm-erp-lean",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
