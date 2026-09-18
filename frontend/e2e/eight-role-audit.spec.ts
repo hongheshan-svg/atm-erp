@@ -106,6 +106,7 @@ for (const identity of identities) {
         settings: identity.key === 'admin' ? 5 : 1,
         masterdata: identity.key === 'sales_manager' ? 1 : 2,
         inventory: 2,
+        projects: 3,
         finance: ['admin', 'finance'].includes(identity.key) ? 5 : 4,
       }
       // Assert expected tabs before enumerating: lazy rendering must not silently skip pages.
