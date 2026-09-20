@@ -290,14 +290,80 @@ class AuthenticationTests(TestCase):
 
     def test_user_create_and_password_validation(self):
         self.login()
-        response = self.client.post('/api/auth/users/', {'username': 'new', 'role': 'member', 'password': 'short'})
-        self.assertEqual(response.status_code, 400)
         response = self.client.post(
             '/api/auth/users/', {'username': 'new', 'role': 'member', 'password': PASSWORD, 'is_superuser': True}
         )
         self.assertEqual(response.status_code, 201, response.data)
         self.assertNotIn('password', response.data)
         self.assertFalse(User.objects.get(username='new').is_superuser)
+
+    def test_admin_can_assign_short_common_numeric_and_custom_passwords(self):
+        self.login()
+        for index, password in enumerate(('x', 'password', '123456', '  自定义密码  ', 'a' * 160)):
+            with self.subTest(index=index):
+                response = self.client.post(
+                    '/api/auth/users/',
+                    {
+                        'username': f'initial-{index}',
+                        'role': 'member',
+                        'password': password,
+                    },
+                )
+                self.assertEqual(response.status_code, 201, response.data)
+                target = User.objects.get(pk=response.data['id'])
+                self.assertTrue(target.check_password(password))
+                self.assertNotEqual(target.password, password)
+                self.assertNotIn('password', response.data)
+                response = self.client.patch(f'/api/auth/users/{target.pk}/', {'password': '1'})
+                self.assertEqual(response.status_code, 200, response.data)
+                target.refresh_from_db()
+                self.assertTrue(target.check_password('1'))
+                self.assertNotIn('password', response.data)
+        self.assertNotIn('password', str(list(AuditLog.objects.values_list('detail', flat=True))))
+
+    def test_admin_password_is_required_on_create_and_omitted_edit_preserves_it(self):
+        self.login()
+        for data in ({}, {'password': ''}, {'password': None}):
+            response = self.client.post('/api/auth/users/', {'username': 'missing-password', **data}, format='json')
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('密码', str(response.data))
+        target = self.users['member']
+        response = self.client.patch(f'/api/auth/users/{target.pk}/', {'display_name': '只改姓名'})
+        self.assertEqual(response.status_code, 200, response.data)
+        target.refresh_from_db()
+        self.assertTrue(target.check_password(PASSWORD))
+
+    def test_only_admin_can_create_or_reset_initial_passwords(self):
+        for name, actor in self.users.items():
+            if name == 'admin':
+                continue
+            self.client.force_authenticate(actor)
+            self.assertEqual(
+                self.client.post('/api/auth/users/', {'username': 'unauthorized', 'password': '1'}).status_code, 403
+            )
+            self.assertEqual(self.client.patch(f'/api/auth/users/{actor.pk}/', {'password': '1'}).status_code, 403)
+            actor.refresh_from_db()
+            self.assertTrue(actor.check_password(PASSWORD))
+
+    def test_self_service_password_errors_are_chinese_and_keep_strength_checks(self):
+        from django.utils.translation import override
+
+        self.login('member')
+        with override('en'):
+            response = self.client.post('/api/auth/password/', {'old_password': PASSWORD, 'new_password': '123456'})
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(
+            set(map(str, response.data)),
+            {
+                '密码至少需要 12 个字符。',
+                '这个密码太常见了，请换一个密码。',
+                '密码不能只包含数字。',
+            },
+        )
+        response = self.client.post('/api/auth/password/', {'old_password': PASSWORD, 'new_password': 'member'})
+        self.assertIn('密码不能与用户名、姓名等个人信息过于相似。', list(map(str, response.data)))
+        self.users['member'].refresh_from_db()
+        self.assertTrue(self.users['member'].check_password(PASSWORD))
 
     def test_public_uploads_and_removed_endpoints_do_not_exist(self):
         self.login()

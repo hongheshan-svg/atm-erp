@@ -17,7 +17,7 @@ GitHub **Actions → 对应工作流 → Run workflow** 选择分支：
 | Lean ERP CI | `suite=full/fast/browser/ota/installers`；`custom`时勾选多个任务 |
 | Fast checks | 仅后端、前端及运维/选择逻辑检查 |
 | Browser validation | `projects=desktop/mobile/both`；每端包含首次向导和完整业务链 |
-| OTA validation | Docker及原生备份、升级、迁移、数据保留演练 |
+| OTA validation | Docker classic/containerd 两种镜像存储及原生备份、升级、迁移、数据保留演练 |
 | Installer validation | 三平台安装器及当前版本Linux原生安装/重复安装 |
 | Release | 指定已存在的正式tag，验证后打包，可只建草稿或正式发布 |
 
@@ -28,6 +28,8 @@ gh workflow run ci.yml --ref main -f suite=custom -F fast=true -F installers=tru
 ```
 
 子工作流独立运行用于诊断；发布凭据必须来自同一次Lean ERP CI全量通过，包括两端浏览器。只测桌面、部分组合或不同代码不能当作发布通过。
+
+Docker OTA 演练固定使用归档 config 摘要模拟经典 CI 的 `image_id`，分别在 classic/containerd 存储验证导入；不能只用同一引擎的 `.Id` 导出再导入代替跨存储验证。安装器保留归档 SHA256 校验，只在归档内同一平台、同一镜像的 config/manifest/index 摘要间解析，不回退到可变标签或本地构建。
 
 本地发布预检使用 `bash scripts/precheck-tests.sh --all`，自动创建并清理独立 PostgreSQL。若 Docker 默认地址池耗尽，可在确认与现有网络不重叠后设置 `LEAN_TEST_SUBNET`（例如 `LEAN_TEST_SUBNET=10.239.84.0/24 bash scripts/precheck-tests.sh --all`）；该变量仅影响本次临时测试网络。
 

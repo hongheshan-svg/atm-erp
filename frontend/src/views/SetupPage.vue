@@ -7,6 +7,7 @@ import { message, requestKey } from '../utils/request'
 import type { Row } from '../types'
 import { Document } from '@element-plus/icons-vue'
 import { version } from '../../package.json'
+import InitialPasswordInput from '../components/InitialPasswordInput.vue'
 const router = useRouter()
 const steps = ['管理员账号', '公司资料', '人员与兼岗', '编号规则', '确认启用']
 const stepHelp = [
@@ -52,6 +53,7 @@ function next() {
   error.value = ''
   if (step.value === 0 && form.new_password !== repeatPassword.value) { error.value = '两次新密码不一致。'; return }
   if (step.value === 0 && form.new_password === form.old_password) { error.value = '新密码必须与初始密码不同。'; return }
+  if (step.value === 0 && form.new_password.length < 12) { error.value = '密码至少需要 12 个字符。'; return }
   if (step.value === 2 && team.value.some(r => !r.roles.length)) { error.value = '每位人员至少选择一个岗位。'; return }
   step.value++
 }
@@ -91,8 +93,8 @@ onBeforeRouteLeave(() => { clearPasswords() })
             <p>当前账号：{{ user?.username }}。请将安装器生成的初始密码换成自己的密码。</p>
             <label class="field"><span>管理员姓名</span><input v-model="form.display_name" required maxlength="80" autocomplete="name" /></label>
             <label class="field"><span>初始密码</span><input v-model="form.old_password" required type="password" autocomplete="current-password" /></label>
-            <label class="field"><span>新密码</span><input v-model="form.new_password" required type="password" minlength="12" autocomplete="new-password" /></label>
-            <label class="field"><span>确认新密码</span><input v-model="repeatPassword" required type="password" minlength="12" autocomplete="new-password" /></label>
+            <label class="field"><span>新密码</span><input v-model="form.new_password" required type="password" autocomplete="new-password" /></label>
+            <label class="field"><span>确认新密码</span><input v-model="repeatPassword" required type="password" autocomplete="new-password" /></label>
             <p class="muted">至少12位，避免常见密码和账号信息。填写内容仅保留在当前页面，刷新后密码需重新输入。</p>
           </template>
           <template v-else-if="step === 1">
@@ -107,7 +109,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
               <h3>人员 {{ i + 1 }}</h3>
               <label class="field"><span>用户名</span><input v-model="person.username" required maxlength="150" autocomplete="off" /></label>
               <label class="field"><span>姓名</span><input v-model="person.display_name" required maxlength="80" autocomplete="off" /></label>
-              <label class="field"><span>登录密码</span><input v-model="person.password" required type="password" minlength="12" autocomplete="new-password" /></label>
+              <label class="field"><span>登录密码</span><InitialPasswordInput v-model="person.password" label="登录密码" required :disabled="busy" /><small>可随机生成或自行设置，不限制长度和字符组合。请通知用户登录后在“设置 → 我的账户”修改密码。</small></label>
               <fieldset class="role-checks"><legend>岗位（可多选）</legend><label v-for="(name, role) in roleNames" :key="role"><input v-model="person.roles" type="checkbox" :value="role" @change="person.management_reports = person.roles.includes('manager') && person.management_reports" />{{ name }}</label></fieldset>
               <label v-if="person.roles.includes('manager')"><input v-model="person.management_reports" type="checkbox" />总经理经营报表授权</label>
               <label class="field"><span>小时成本（元）</span><input v-model="person.hourly_cost" aria-label="小时成本（元）" required type="number" min="0" step="0.01" /><small>用于机械、电气、软件、装配及调试任务的人工成本核算；按企业统一口径填写。</small></label>

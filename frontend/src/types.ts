@@ -16,6 +16,7 @@ export type Field = {
   wide?: boolean
   numeric?: { scale: number; signed?: boolean; min?: number; max?: number }
   displayOnly?: boolean
+  randomPassword?: boolean
   remotePath?: string
   remoteParams?: Row
   remoteFilter?: (row: Row) => boolean
