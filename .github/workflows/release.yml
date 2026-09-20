@@ -13,9 +13,13 @@ on:
         type: boolean
         default: false
       force_validation:
-        description: 'Run full validation even when matching evidence exists'
+        description: 'Rerun affected checks even when matching evidence exists'
         type: boolean
         default: false
+      validation_modules:
+        description: 'Affected modules for shared/unknown changes, comma separated; never implies full validation'
+        type: string
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -30,25 +34,31 @@ jobs:
       tag: ${{ steps.check.outputs.tag }}
       commit: ${{ steps.check.outputs.commit }}
       validate: ${{ steps.check.outputs.validate }}
+      base: ${{ steps.check.outputs.base }}
     steps:
       - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
       - id: check
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
           FORCE: ${{ inputs.force_validation }}
+          MODULES: ${{ inputs.validation_modules }}
         run: |
           args=()
           if [[ "$FORCE" == true ]]; then args+=(--force); fi
-          python3 scripts/ci/release_gate.py --tag "$TAG" "${args[@]}"
+          python3 -m scripts.ci.release_gate --tag "$TAG" --modules "$MODULES" "${args[@]}"
   validate:
     needs: preflight
     if: needs.preflight.outputs.validate == 'true'
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.preflight.outputs.commit }}
-      suite: full
+      suite: auto
+      base: ${{ needs.preflight.outputs.base }}
+      modules: ${{ inputs.validation_modules || '' }}
   images:
     needs: [preflight, validate]
     if: ${{ !cancelled() && needs.preflight.result == 'success' && ((needs.preflight.outputs.validate == 'true' && needs.validate.result == 'success') || (needs.preflight.outputs.validate == 'false' && needs.validate.result == 'skipped')) }}
@@ -125,7 +135,10 @@ jobs:
       - uses: actions/checkout@v4
         with: {ref: '${{ needs.preflight.outputs.commit }}'}
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - run: python scripts/ci/build_native_wheels.py --platform "$PLATFORM" --output wheels
         shell: bash
         env: {PLATFORM: '${{ matrix.platform }}'}

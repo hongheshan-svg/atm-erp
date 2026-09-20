@@ -38,6 +38,25 @@ TARGETS = {
     'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
 }
 
+# Module routing references the registry above; it is not a second target inventory.
+MODULE_TESTS = {
+    'sales': ('sales', 'commercial_chain', 'payment_terms'),
+    'projects': ('execution', 'budgets', 'production_roles', 'commercial_chain'),
+    'bom': ('bom_selection', 'import_documents', 'product_coding'),
+    'purchases': ('commercial_chain', 'inventory', 'budgets', 'payment_terms', 'review_remediation'),
+    'inventory': ('inventory', 'review_remediation'),
+    'finance': ('commercial_chain', 'reconciliation', 'bank_import', 'payment_terms'),
+    'masterdata': ('product_coding', 'import_documents', 'models'),
+    'accounts': ('auth', 'setup', 'platform'),
+    'reports': ('reports', 'workbench'),
+    'ota': ('ota',),
+}
+
+
+def module_targets(modules):
+    names = {name for module in modules for name in MODULE_TESTS[module]}
+    return sorted(target for group in TARGETS.values() for target in group if target.rsplit('.test_', 1)[-1] in names)
+
 
 def validate_coverage():
     actual = {

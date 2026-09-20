@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="$ROOT/.env.lean"
+ENV_FILE="$ROOT/.env"
+if [[ -f "$ROOT/.env.lean" && ! -f "$ENV_FILE" ]]; then ENV_FILE="$ROOT/.env.lean"; fi
 BUILD=true
-OTA=true
+OTA=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env-file) ENV_FILE="${2:?缺少配置文件路径}"; shift 2 ;;
     --skip-build) BUILD=false; shift ;;
     --no-ota) OTA=false; shift ;;
-    --help) echo '用法：install.sh [--env-file 配置文件路径] [--skip-build 跳过构建] [--no-ota 仅隔离 CI：不注册升级服务]'; exit 0 ;;
+    --with-ota) OTA=true; shift ;;
+    --help) echo '用法：install.sh [--env-file 配置文件路径] [--skip-build 跳过构建] [--with-ota 注册可选网页升级服务] [--no-ota 不注册升级服务]'; exit 0 ;;
     *) echo "无法识别的参数：$1" >&2; exit 2 ;;
   esac
 done
@@ -33,13 +35,16 @@ LEAN_ALLOWED_HOSTS=${LEAN_ALLOWED_HOSTS:-localhost,127.0.0.1}
 LEAN_ENVIRONMENT=${LEAN_ENVIRONMENT:-production}
 LEAN_DB_PASSWORD=$(openssl rand -hex 32)
 LEAN_SECRET_KEY=$(openssl rand -hex 32)
-LEAN_OTA_AGENT_TOKEN=$(openssl rand -hex 32)
+LEAN_OTA_AGENT_TOKEN=$(if [[ "$OTA" == true ]]; then openssl rand -hex 32; fi)
 LEAN_ADMIN_PASSWORD=Lean-$(openssl rand -hex 24)
 EOF
   )
 fi
-if ! grep -q '^LEAN_OTA_AGENT_TOKEN=.' "$ENV_FILE"; then
+if [[ "$OTA" == true ]] && ! grep -q '^LEAN_OTA_AGENT_TOKEN=.' "$ENV_FILE"; then
   printf '\nLEAN_OTA_AGENT_TOKEN=%s\n' "$(openssl rand -hex 32)" >> "$ENV_FILE"
+fi
+if [[ "$OTA" == true ]]; then
+  "$PYTHON_BIN" -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); lines=p.read_text().splitlines(); p.write_text("\n".join(x for x in lines if not x.startswith("LEAN_OTA_MODE="))+"\nLEAN_OTA_MODE=host\n")' "$ENV_FILE"
 fi
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT/docker-compose.yml")
 "${COMPOSE[@]}" config --quiet
@@ -56,4 +61,4 @@ fi
 "$PYTHON_BIN" "$ROOT/scripts/network_check.py" --config "$ENV_FILE" || true
 echo "安装完成。管理员用户名：admin；全新安装的初始密码保存在 $ENV_FILE 的 LEAN_ADMIN_PASSWORD，完成安装向导修改密码后该值即失效。"
 echo '使用配置中的端口访问 /erp/，首次登录自动进入快速安装向导：修改初始密码、填写公司、可选添加人员和调整编号，完成后即可使用。重复安装保留现有账户与数据。'
-echo "忘记管理员密码时重设：docker compose --env-file $ENV_FILE -f $ROOT/docker-compose.yml exec app python manage.py changepassword admin"
+echo "忘记管理员密码时重设：docker compose --env-file $ENV_FILE -f $ROOT/docker-compose.yml exec app python /opt/erp/container_runtime.py manage changepassword admin"

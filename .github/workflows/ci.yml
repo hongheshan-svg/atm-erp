@@ -6,8 +6,12 @@ on:
       suite:
         description: 'Run one suite, full validation, or a custom combination'
         type: choice
-        options: [full, fast, browser, ota, installers, custom]
-        default: full
+        options: [auto, fast, browser, ota, installers, custom, full]
+        default: auto
+      modules:
+        description: 'Shared/unknown changes: affected modules, comma separated (sales,projects,bom,purchases,inventory,finance,masterdata,accounts,reports,ota)'
+        type: string
+        default: ''
       browser_projects:
         description: Browser viewports
         type: choice
@@ -36,7 +40,13 @@ on:
         default: ''
       suite:
         type: string
-        default: full
+        default: auto
+      base:
+        type: string
+        default: ''
+      modules:
+        type: string
+        default: ''
       browser_projects:
         type: string
         default: both
@@ -56,6 +66,14 @@ jobs:
       installers: ${{ steps.select.outputs.installers }}
       full: ${{ steps.select.outputs.full }}
       tree: ${{ steps.select.outputs.tree }}
+      scoped: ${{ steps.select.outputs.scoped }}
+      fingerprint: ${{ steps.select.outputs.fingerprint }}
+      backend: ${{ steps.select.outputs.backend }}
+      frontend: ${{ steps.select.outputs.frontend }}
+      ops: ${{ steps.select.outputs.ops }}
+      backend_targets: ${{ steps.select.outputs.backend_targets }}
+      frontend_tests: ${{ steps.select.outputs.frontend_tests }}
+      browser_specs: ${{ steps.select.outputs.browser_specs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,35 +94,42 @@ jobs:
       - id: select
         env:
           SUITE: ${{ github.event_name == 'pull_request' && 'auto' || inputs.suite }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
+          MODULES: ${{ inputs.modules }}
           PROJECTS: ${{ inputs.browser_projects || 'both' }}
           CUSTOM_FAST: ${{ inputs.fast }}
           CUSTOM_BROWSER: ${{ inputs.browser }}
           CUSTOM_OTA: ${{ inputs.ota }}
           CUSTOM_INSTALLERS: ${{ inputs.installers }}
-        run: python3 scripts/ci/select_suites.py --suite "$SUITE" --base "$BASE" --projects "$PROJECTS"
+        run: python3 -m scripts.ci.select_suites --suite "$SUITE" --base "$BASE" --projects "$PROJECTS" --modules "$MODULES"
   fast:
     needs: plan
     if: needs.plan.outputs.fast == 'true'
     uses: ./.github/workflows/ci-fast.yml
     with:
       ref: ${{ inputs.ref || github.ref }}
+      backend: ${{ needs.plan.outputs.backend == 'true' }}
+      frontend: ${{ needs.plan.outputs.frontend == 'true' }}
+      ops: ${{ needs.plan.outputs.ops == 'true' }}
+      backend_targets: ${{ needs.plan.outputs.backend_targets }}
+      frontend_tests: ${{ needs.plan.outputs.frontend_tests }}
   browser:
-    needs: [plan, fast]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.browser == 'true' && (needs.fast.result == 'success' || needs.fast.result == 'skipped') }}
+    needs: plan
+    if: needs.plan.outputs.browser == 'true'
     uses: ./.github/workflows/ci-browser.yml
     with:
       ref: ${{ inputs.ref || github.ref }}
       projects: ${{ inputs.browser_projects || 'both' }}
+      specs: ${{ needs.plan.outputs.browser_specs }}
   ota:
-    needs: [plan, fast]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.ota == 'true' && (needs.fast.result == 'success' || needs.fast.result == 'skipped') }}
+    needs: plan
+    if: needs.plan.outputs.ota == 'true'
     uses: ./.github/workflows/ci-ota.yml
     with:
       ref: ${{ inputs.ref || github.ref }}
   installers:
-    needs: [plan, fast]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.installers == 'true' && (needs.fast.result == 'success' || needs.fast.result == 'skipped') }}
+    needs: plan
+    if: needs.plan.outputs.installers == 'true'
     uses: ./.github/workflows/release-installers.yml
     with:
       ref: ${{ inputs.ref || github.ref }}
@@ -134,3 +159,11 @@ jobs:
     timeout-minutes: 2
     steps:
       - run: echo '当前 Git tree 的全部测试套件与两种浏览器视口均已通过。'
+  scoped-validation:
+    name: Scoped validation (${{ needs.plan.outputs.tree }} ${{ needs.plan.outputs.fingerprint }})
+    needs: [plan, gate]
+    if: needs.plan.outputs.scoped == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo '当前 Git tree 的全部影响范围检查已通过；不表示全业务验收。'

@@ -1,12 +1,5 @@
 name: Browser validation
 on:
-  workflow_dispatch:
-    inputs:
-      projects:
-        description: Browser viewports
-        type: choice
-        options: [both, desktop, mobile]
-        default: both
   workflow_call:
     inputs:
       ref:
@@ -15,6 +8,9 @@ on:
       projects:
         type: string
         default: both
+      specs:
+        type: string
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -54,8 +50,8 @@ jobs:
           file: docker/app/Dockerfile
           load: true
           tags: lean-ci-browser:local
-          cache-from: type=gha,scope=browser-app
-          cache-to: type=gha,scope=browser-app,mode=max
+          cache-from: type=gha,scope=browser-app-${{ matrix.project }}
+          cache-to: type=gha,scope=browser-app-${{ matrix.project }},mode=max
       - run: bash install.sh --skip-build --no-ota
       - name: First-install wizard
         run: npm run test:e2e -- e2e/setup.spec.ts --project="$PROJECT" --grep '全新安装' --output=test-results-first-install
@@ -64,10 +60,10 @@ jobs:
           PROJECT: ${{ matrix.project }}
           E2E_FIRST_INSTALL: '1'
           E2E_SETUP_NEW_PASSWORD: Lean-CI-ready-password-2026
-      - run: npm run test:e2e -- --project="$PROJECT"
-        working-directory: frontend
+      - run: python3 -m scripts.ci.run_selected browser --project="$PROJECT"
         env:
           PROJECT: ${{ matrix.project }}
+          TEST_TARGETS: ${{ inputs.specs }}
           E2E_ADMIN_PASSWORD: Lean-CI-ready-password-2026
       - uses: actions/upload-artifact@v4
         if: always()
@@ -78,4 +74,6 @@ jobs:
             frontend/test-results-first-install
           retention-days: 7
       - if: always()
-        run: test ! -f .env.lean || docker compose --env-file .env.lean down -v
+        run: |
+          if [[ -f .env ]]; then docker compose --env-file .env down -v;
+          elif [[ -f .env.lean ]]; then docker compose --env-file .env.lean down -v; fi

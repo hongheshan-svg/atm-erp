@@ -1,28 +1,45 @@
 ---
 name: lean-erp-validation
-description: 修改 Lean ERP 业务写入、权限、金额、库存或跨角色操作链，以及验收这些行为时使用；纯文案、静态样式和只读说明不触发。
+description: 修改或验收当前 Lean ERP 的业务动作、权限、金额、库存和模块交互时，按影响选择模块级验证；纯文档、文案和静态样式不触发业务验收。
 ---
 
-# Lean ERP 业务变更验证
+# Lean ERP 按业务模块验证
 
-适用于当前 `core/accounts/business` 架构及其 Vue 前端的业务行为验证，包含账号兼岗、共享授权与幂等机制变更；不加载旧版分散业务 app 的验证技能。纯文档技能维护只检查说明与引用，不启动业务验收。
+适用于 core/accounts/business 架构。默认“模块测模块”：以本次改变的业务事实和动作划定范围，不因页面共用组件、属于同一 Django app 或存在远端上下游关系而运行全套。
 
-## 按任务读取
+## 先确定影响，不先启动测试
 
-- `docs/`、`backend/`、`frontend/`、`scripts/` 路径均相对仓库根目录；本技能的 Markdown 相对链接按技能文件所在目录解析。
-- 已加载且未变化的 AGENTS.md 不重复读取。范围变化查 `docs/CORE_ERP_SCOPE.md`；接口、字段和业务动作变化查 `docs/LEAN_REBUILD_CONTRACT.md` 对应章节；模块边界变化查 `docs/MODULE_BOUNDARIES.md`。
-- 涉及业务写入、金额、库存、权限、工程变更或预算时，读取 [业务检查](references/business-checks.md) 对应段落；完整业务验收读取全部。保留原约束，不复制测试目标清单。
-- 角色或数据范围变化先查 `docs/ROLE_RESPONSIBILITIES.md`，再读业务检查的“岗位与兼岗”；BOM 选料、导入、编码或采购交互变化读“BOM、物料与同屏采购”。按实际动作选择用例，不用管理员成功代替岗位验证。
+用一句话说明：**修改模块／改变的动作或结果／直接影响的关联模块／本次不测的范围**。这是执行范围说明，不是每步请求确认。
 
-## 验证与完成
+1. 从本次改动追到 API、服务写入和实际读取方，区分表单交互、业务规则、授权、共享基础能力或部署变更。不把工作区其他未提交改动自动纳入本次任务。
+2. 只有真实调用、共享规则或派生事实发生变化才扩展到关联模块；通常验证被调用动作和关键读取结果即可，不递归重跑整个销售到收款链路。夹具可提供未修改的上游状态，不必从登录、建客户、建销售重新走起。
+3. 按需读取 [模块业务检查](references/business-checks.md) 对应小节。业务边界以 docs/MODULE_BOUNDARIES.md、接口以 docs/LEAN_REBUILD_CONTRACT.md 相关章节为准；权限变化查 docs/ROLE_RESPONSIBILITIES.md。文档路径相对仓库根目录，技能 Markdown 链接相对本技能目录；已加载且未变化的不重复读。
 
-- 后端测试目标唯一来源为 `scripts/ci/backend_test_matrix.py`，新增测试模块只在此登记；在根目录用 `python run_all_tests.py --stage checks` 或选择 `platform`、`business`、`concurrency` 阶段，`--plan-only` 可先查看命令。执行数据库测试须显式配置独立 `PG_TEST_HOST/USER/PASSWORD`。仅打 tag 发版本时执行 `bash scripts/precheck-tests.sh --all`（独立 PostgreSQL）；发布仍需完整 GitHub CI 通过、合并 main 后打 tag。
-- 前端按影响运行 lint、typecheck、test、build 和相关 e2e；日常只跑受影响用例，打 tag 发版本时运行全部。依赖缺失、锁文件变化、依赖异常或干净CI环境才需 `npm ci`。构建体积警告须调查，不能调高阈值冒充优化。
-- 浏览器显式给出隔离安装的 `E2E_BASE_URL` 和 `E2E_ADMIN_PASSWORD`，不从生产配置推测。完整链路 `frontend/e2e/full-chain.spec.ts`；核对断言和实际业务结果，ORM夹具不能证明页面链可操作。
-- 前端命令在 `frontend/` 执行；例如 `npm run test -- src/components/BOMPurchasePicker.spec.ts`，或在设置上述隔离凭据后执行 `npm run test:e2e -- e2e/bom-purchase-layout.spec.ts --project=desktop`。交互布局变化按影响覆盖 desktop/mobile；完整发布覆盖两端全部用例。这些是定位示例，不是第二份测试矩阵。
-- 同一源码、依赖、配置和目标镜像已有成功证据可复用；新变更、失败、环境变化或未解决风险才重跑相应检查。发布复用须由 `scripts/ci/release_gate.py` 核验。
-- 在已授权且目标明确的隔离环境完成实现、启动、检查、修复和受影响复验，不在初版后自行停止等确认；不扩展到生产、其他实例、外部消息或绕过权限审批。
-- 源码、浏览器镜像和证据须对应；实际看过截图后才能声称视觉通过。某项验证受阻时继续独立的已授权工作，明确未覆盖项，不伪造通过、不绕过发布门禁。
-- 部署及供用户检查的预览站点使用安装流程，独立项目、新卷并确认真实升级执行器心跳；仅隔离CI可显式跳过服务注册。schema guard拒绝时不得清库或绕过。Docker 恢复用 `scripts/backup.py`，目标须独立且符合空库检查；原生部署按 `README.md` 配套备份 PostgreSQL、附件和配置，不套用 Compose 恢复脚本。
-- 安装器或 OTA 有变化时按影响检查 `scripts/tests/` 的对应测试与相关工作流；正式 Docker 包使用 CI 预构建镜像、校验后导入或锁定 digest，原生包使用已校验 wheelhouse 离线安装。不能以现场构建成功代替发布包验证，也不能用健康页代替执行器真实心跳。
-- 业务变更和正式验收在 `docs/SIMPLIFICATION_EVIDENCE.md` 记录结果及未覆盖项；纯说明/文案任务无需新增验收流水。局部通过不代表全系统完成，不为技能新增常驻服务。
+## 选择最小充分验证
+
+| 变化 | 默认验证范围 | 不自动扩展到 |
+| --- | --- | --- |
+| 文档、文案、静态样式 | 内容/链接；必要时受影响页面视觉检查 | 业务写入、数据库或全链测试 |
+| 模块表单、筛选、分页、选择器 | 相关组件用例；改变保存或页面交互时验证对应页面动作 | 无关模块全部页面 |
+| 单模块规则或状态动作 | 该动作的成功、拒绝、范围和数据后果 | 整个 business 阶段 |
+| 跨模块写入 | 发起动作、直接派生记录、失败事务回滚 | 所有后续业务链 |
+| 共享权限、金额、幂等、请求或控件 | 查实际受影响调用方，覆盖有差异的分支；说明扩展理由 | 仅凭“共享”二字启动全量 |
+| 安装、OTA、备份恢复 | 对应脚本/API/升级页面及必要隔离演练，查 [运维验证](references/operations-checks.md) | ERP 十个业务入口全量回归 |
+
+检查按变化选择，不机械要求每次四项齐全：业务写入核对记录、数量、金额及状态，不能只看 HTTP 200；授权核对允许岗位和最相关的越权岗位/项目范围，不默认轮跑十一角色；涉及金额、库存或锁才增加边界、重复提交和并发。拒绝操作应不留下相关半成品、编号副作用或幂等凭据。
+
+前端交互变化用受影响页面验证，跨层动作至少核实实际保存结果；拦截 API 的页面用例只能证明界面状态，不能替代后端权限和真实事务证据。布局变化按影响检查桌面/手机；实际查看截图后才声称视觉通过。
+
+## 定位与执行
+
+- 后端测试模块唯一登记在 scripts/ci/backend_test_matrix.py。先从矩阵定位，再查看测试类/方法，用 Django 标签选择相关模块或用例；不要把 platform/business 分组当作局部任务的默认范围，也不要在技能复制测试名单。新增后端测试模块登记矩阵。
+- 前端从受影响组件旁的 *.spec.ts、frontend/e2e/ 查找行为相关用例，指定文件，必要时用测试名过滤。综合用例文件包含目标场景不代表要运行其中所有无关链路；缺少覆盖时补针对性用例，而非用全量测试凑证据。
+- 后端示意：python manage.py test <从矩阵定位的模块或具体用例> --noinput。前端在 frontend/ 执行 npm run test -- <相关.spec.ts>，页面用 npm run test:e2e -- <相关.spec.ts> --grep <场景>。按影响补 lint、typecheck、build；npm ci 仅在依赖缺失、锁文件变化或干净 CI 等需要时使用。
+- 后端静态检查入口为 python run_all_tests.py --stage checks；--plan-only 可先查看命令。数据库测试显式配置独立 PG_TEST_HOST/USER/PASSWORD；浏览器显式配置隔离 E2E_BASE_URL 和 E2E_ADMIN_PASSWORD，不读取生产配置或绕过 schema guard。
+- 已授权且目标明确的隔离验证可连续执行、修复、复验；不扩展到生产、其他部署或外部消息。同一源码、依赖、配置及目标镜像的成功证据可复用；修复失败后重跑失败项及受影响项，不无理由重跑全部。
+
+## 完成边界
+
+报告改变的业务行为、实际验证范围和结果、未覆盖项。业务变更及正式验收按仓库约定记录到 docs/SIMPLIFICATION_EVIDENCE.md；纯文档/技能维护只检查内容与引用，不制造业务验收记录。某项受阻时继续独立工作，但不把局部通过称为全系统通过。
+
+只有用户明确要求“全业务流程测试”“全量验收”才执行全量入口（bash scripts/precheck-tests.sh --all 及完整页面链）；修改、提交、push、合并、打 tag 或修复共享代码本身都不代表该要求。发布先查 docs/CI_OPERATIONS.md；历史全量门禁与当前范围冲突时先说明并处理策略，不能擅自启动全量或绕过门禁；证据复用由 scripts/ci/release_gate.py 核验。

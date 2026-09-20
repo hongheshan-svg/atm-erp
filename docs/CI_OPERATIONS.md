@@ -1,53 +1,69 @@
 # GitHub 验证与发布操作
 
-## 自动运行
+## 默认按影响验证
 
-- 仅 PR 自动触发 `Lean ERP CI`，功能分支 push 不额外启动同一套任务；同 PR 新提交取消旧验证。合并 main 不重复跑，tag 只触发 Release。
-- 普通 PR 只自动运行快速检查；纯文档只检查工作流语法及选择逻辑。版本、迁移、安装器、依赖及未知文件变化也不自动触发全链条。日常按影响补跑针对性测试，全量浏览器、OTA 和三平台安装组合留到打 tag 发版本时运行。
-- `fast` 前后端并行；通过后启动选中的浏览器、OTA、安装器。桌面和手机使用两台独立 runner、数据库和新安装向导，并行跑各自完整业务链。
-- 每次都有 `CI gate`。选中的任务失败、取消或意外跳过，门禁失败。全量且两端通过时，产生 `Full validation (<Git tree>)` 供发布核对。
-- 后端使用service PostgreSQL和pip缓存，统一调用 `run_all_tests.py --stage backend`，目标只来自backend_test_matrix.py。浏览器缓存npm、Playwright、Docker构建层。安装器验证当前提交，不固定重打v1.0.0/v1.1.0。
+PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链。
 
-## 单独或组合运行
+计划由 scripts/ci/impact.py 生成：业务模块、后端测试目标、前端组件用例、浏览器 spec、OTA/安装器，以及计划指纹均进入 Summary。后端用例仍只登记在 scripts/ci/backend_test_matrix.py，模块映射在同文件引用登记项。纯 Markdown 修改只运行计划自检和工作流语法检查。
 
-GitHub **Actions → 对应工作流 → Run workflow** 选择分支：
+- 采购规则变更选择采购、库存/预算等直接关联测试和相关页面，不跑销售到收款全链。
+- OTA 变更选择升级接口、升级组件/页面及真实升级演练；不附带 ERP 全业务流程。
+- 共享/未知代码、依赖或迁移不能可靠自动归类时，计划明确失败并列出路径；手动指定 modules 或补充经过审阅的路径映射后再运行。不得通过空列表、忽略失败或默认全量来隐藏缺口。
+- 前端版本字段单独递增与依赖更新区别处理：纯版本变更执行前端检查；依赖变化仍需确认实际受影响模块。
+- 映射是可维护的影响策略，不保证发现任意新增耦合。接口增加新的调用方时同步更新映射及选择测试。
 
-| 工作流 | 用途 |
+## 并行、缓存与失败门禁
+
+计划通过后，fast、browser、OTA、installers 独立并行，不再让慢任务等待整套 fast。fast 内后端、前端、运维测试也分开，未涉及的类别不启动依赖和数据库。所选检查失败、取消或意外跳过均使 CI gate 失败；并行不是放宽门禁。
+
+依赖按锁文件缓存，浏览器按锁文件缓存 Chromium，Docker 使用构建层缓存。桌面/手机使用独立缓存 scope，避免两个 runner 争写同一缓存；容器内 OTA 新增 BuildKit 缓存。缓存只用于加速，不能代替测试通过凭据。发布的原生依赖增加 pip 缓存；多架构镜像和多平台 wheelhouse 保持并行。
+
+backend 不再默认执行整个 backend 阶段：先静态检查，再运行 JSON 目标列表。前端保留 lint/typecheck/build，仅执行选定单测。浏览器双视口并行、独立数据库；每端先完成首次安装向导以建立隔离账号，再执行指定 spec。空目标不会回退到全量，目标必须属于测试矩阵或实际 spec 路径，不经过 shell 拼接。
+
+## 手动入口
+
+统一使用 Actions → Lean ERP CI → Run workflow：
+
+| 参数 | 含义 |
 | --- | --- |
-| Lean ERP CI | `suite=full/fast/browser/ota/installers`；`custom`时勾选多个任务 |
-| Fast checks | 仅后端、前端及运维/选择逻辑检查 |
-| Browser validation | `projects=desktop/mobile/both`；每端包含首次向导和完整业务链 |
-| OTA validation | Docker classic/containerd 两种镜像存储及原生备份、升级、迁移、数据保留演练 |
-| Installer validation | 三平台安装器及当前版本Linux原生安装/重复安装 |
-| Release | 指定已存在的正式tag，验证后打包，可只建草稿或正式发布 |
+| suite=auto | 从比较基线计算影响范围；默认选项 |
+| modules | 共享变更的实际受影响模块，逗号分隔 |
+| suite=fast/browser/ota/installers | 仅运行该类诊断，不自动取得完整范围凭据 |
+| suite=custom | 选择多个类别；未覆盖计划全部要求时仅算局部诊断 |
+| browser_projects | both/desktop/mobile；单视口不给完整范围凭据 |
+| suite=full | 显式全量，包含完整业务链与双视口 |
+
+模块值：sales、projects、bom、purchases、inventory、finance、masterdata、accounts、reports、ota。PR 基线为目标分支提交；手动 auto 默认比较 HEAD 之前最近匹配的版本 tag，发布则比较前一正式 tag。未知基线或未知路径失败，不静默假定没有变更。
+
+示例（只选择实际受影响模块）：
 
 ```bash
-gh workflow run ci-browser.yml --ref main -f projects=desktop
-gh workflow run ci.yml --ref main -f suite=full -f browser_projects=both
-gh workflow run ci.yml --ref main -f suite=custom -F fast=true -F installers=true -F browser=false -F ota=false
+gh workflow run ci.yml --ref feature/example -f suite=auto -f modules=purchases,inventory
+gh workflow run ci.yml --ref feature/example -f suite=browser -f modules=ota -f browser_projects=mobile
+# 仅明确要求全量时
+gh workflow run ci.yml --ref feature/example -f suite=full -f browser_projects=both
 ```
 
-子工作流独立运行用于诊断；发布凭据必须来自同一次Lean ERP CI全量通过，包括两端浏览器。只测桌面、部分组合或不同代码不能当作发布通过。
+Fast checks 和 Browser validation 作为可复用子流程，由统一入口传入非歧义目标；不再提供无目标的独立手动入口。OTA/Installer 子流程仍可独立诊断，但不能单独作为发布凭据。
 
-Docker OTA 演练固定使用归档 config 摘要模拟经典 CI 的 `image_id`，分别在 classic/containerd 存储验证导入；不能只用同一引擎的 `.Id` 导出再导入代替跨存储验证。安装器保留归档 SHA256 校验，只在归档内同一平台、同一镜像的 config/manifest/index 摘要间解析，不回退到可变标签或本地构建。
+## 发布门禁与证据复用
 
-本地发布预检使用 `bash scripts/precheck-tests.sh --all`，自动创建并清理独立 PostgreSQL。若 Docker 默认地址池耗尽，可在确认与现有网络不重叠后设置 `LEAN_TEST_SUBNET`（例如 `LEAN_TEST_SUBNET=10.239.84.0/24 bash scripts/precheck-tests.sh --all`）；该变量仅影响本次临时测试网络。
-
-## 发布
-
-1. 用户要求打 tag 发版本时，在功能分支更新后端/前端版本及 `docs/releases/vX.Y.Z.md`，创建 PR；手动运行 `Lean ERP CI`，选择该分支、`suite=full` 和 `browser_projects=both`。版本文件变化本身只触发普通 PR 快速检查。
-2. 确认完整 CI（含 `Full validation`）全绿后合并 main，创建并推送正式 tag，自动触发 Release。普通功能 PR 仅要求所选检查通过，不视作发布验收。
-3. 检查tag在main历史中、版本一致、说明含Installation/Documentation；查找本仓库ci.yml成功运行中同一Git tree的全量记录。Squash只改提交标识、不改内容时可复用。
-4. 有匹配记录直接打包，没有则先跑全量；`force_validation=true`强制重验。查询错误会失败，不静默跳过。
-5. 从tag构建三平台 × native/docker六包及SHA256清单。发布job核对本地包来源及远端上传SHA256后公开，只有该job具备contents写权限。
-
-tag push会正式发布；手动运行默认 `publish=false`，仅上传草稿。公开版本拒绝覆盖，草稿重试可更新附件。发布按tag串行且不取消进行中的任务。
+1. 功能分支更新一致版本与发布说明，完成相应验证，合并 main 后打正式 tag。版本变更或 tag 发布本身不要求全业务测试。
+2. Release 检查 tag 在 main 历史、前后端版本一致、Installation/Documentation 区块、目标未公开发布，再计算前一正式 tag 到目标提交的完整变更范围。
+3. 优先复用本仓库成功 CI：Git tree 和影响计划指纹都必须一致，且必须存在成功的 Scoped validation 标记。既有同 tree 的 Full validation 也可覆盖；CI gate、单视口、局部诊断或不同计划不能冒充发布凭据。
+4. 没有匹配记录时运行该发布差异的 auto 计划，不自动 full。force_validation 只强制重跑影响范围。共享/未知变更需在手动 Release 的 validation_modules 指定范围；不修改已存在 tag 来绕过失败。
+5. wheelhouse 可与验证并行准备；全部选中检查通过后才进入镜像构建、最终打包和发布。三平台 native/docker 六包、双架构预构建镜像、离线 wheelhouse、来源及上传哈希检查保留。只有发布 job 具备 contents 写权限；公开版本拒绝覆盖，草稿可重试。
 
 ```bash
-# tag必须已存在且版本匹配，替换示例版本
-gh workflow run release.yml --ref main -f tag=vX.Y.Z -F publish=false
+gh workflow run release.yml --ref main -f tag=vX.Y.Z -F publish=false -f validation_modules=ota,accounts
 ```
 
-复用最多检查最近100个成功CI运行；没找到完整凭据就补跑。旧tag若不含新工作流/脚本，沿用 `scripts/package_release.py` 手动补包，不改写已发布tag。历史版本不再参与普通PR的安装验收。
+tag push 默认正式发布，手动默认草稿；发布按 tag 串行且不取消进行中任务。复用最多查询最近100次成功 CI，未找到就跑影响范围，查询错误直接失败。首次发布没有历史正式 tag 时需先明确基线，不能自动认定已验证。
 
-运行Summary显示选中任务、Git tree和复用run id。浏览器截图和trace按desktop/mobile分别保留7天，发布构建附件保留14天。部分任务跳过会明确显示，不能解读为全量通过。
+## OTA 与交付物覆盖边界
+
+Docker 旧宿主机升级保留 classic/containerd 两种镜像存储，使用归档 config 摘要验证兼容，不能只在同一引擎导出再导入。原生升级、三平台安装器和 Linux 重复安装仍独立验证。
+
+容器内 OTA 检查直接 Compose 启动及真实心跳、待重启持久化、程序校验、离线依赖、先备份后迁移、强杀进程恢复、新版本健康及重建保留。备份在独立空数据库实际还原。fixture-from-image 是本地发布/依赖夹具，不证明正式远端下载或另一架构；真实包可通过 native-package 参数检查相应依赖。基础运行时变化仍须遵循 docker/app/runtime-protocol.json，不静默强行迁移。
+
+Summary 和失败日志用于说明执行了什么，不把跳过项读成通过。浏览器截图/trace 保留7天，发布包保留14天。本轮工作流优化已通过 121 项本地 CI/安装运维脚本测试、修改的 CI Python 文件 Ruff 检查及 actionlint；没有执行全业务流程测试。尚未推送并运行 GitHub，不能声称远端全绿或给出未经测量的耗时降幅。

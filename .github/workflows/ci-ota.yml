@@ -12,6 +12,30 @@ concurrency:
   group: ota-${{ inputs.ref && github.run_id || github.ref }}
   cancel-in-progress: true
 jobs:
+  container-inplace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.ref || github.ref }}'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci --no-audit --no-fund && npm run build
+        working-directory: frontend
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app/Dockerfile
+          build-args: FRONTEND_MODE=prebuilt
+          load: true
+          tags: erp-inplace-ci
+          cache-from: type=gha,scope=ota-inplace
+          cache-to: type=gha,scope=ota-inplace,mode=max
+      - run: python scripts/tests/direct_compose_smoke.py --image erp-inplace-ci
+      - run: python scripts/tests/container_ota_smoke.py --image erp-inplace-ci --fixture-from-image
   upgrade:
     runs-on: ubuntu-latest
     timeout-minutes: 20

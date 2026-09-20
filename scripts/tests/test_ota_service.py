@@ -2,11 +2,11 @@ import importlib.util
 import io
 import json
 import plistlib
-from pathlib import Path
 import sys
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -17,6 +17,23 @@ SPEC.loader.exec_module(service)
 
 
 class ServiceTests(unittest.TestCase):
+    def test_linux_system_and_user_units_use_correct_boot_targets(self):
+        self.assertIn('WantedBy=multi-user.target', service.unit(['/python'], Path('/state'), system=True))
+        self.assertIn('WantedBy=default.target', service.unit(['/python'], Path('/state')))
+
+    def test_status_distinguishes_missing_files_and_stale_heartbeat_without_secrets(self):
+        self.state.mkdir()
+        service.private_json(self.state / 'service.json', {
+            'root': str(self.root), 'config': str(self.config), 'token_hash': 'private-value'})
+        service.private_json(self.state / 'state.json', {'root': str(self.root / 'missing')})
+        output = io.StringIO()
+        with patch.object(service.sys, 'stdout', output), patch.object(service.sys, 'platform', 'darwin'):
+            self.assertFalse(service.status(self.state))
+        self.assertIn('未收到有效心跳', output.getvalue())
+        self.assertIn('脚本存在：False', output.getvalue())
+        self.assertNotIn('private-value', output.getvalue())
+        self.assertNotIn('a' * 64, output.getvalue())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='erp ota service ')
         self.addCleanup(self.temp.cleanup)

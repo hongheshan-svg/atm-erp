@@ -4,19 +4,30 @@ import argparse
 import hashlib
 import json
 import re
-from pathlib import Path
 import shutil
 import subprocess
 import tarfile
 import tempfile
 import zipfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OVERLAY = ("scripts/native_install.py", "install-native.sh", "install-native.ps1", "docs/INSTALL_PLATFORMS.md")
+OVERLAY = ("scripts/native_install.py", "scripts/native_service.py", "install-native.sh", "install-native.ps1", "docs/INSTALL_PLATFORMS.md")
 
 
 def git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+
+
+def docker_compose(source, image):
+    """A downloaded release starts with Compose alone; no host Python bootstrap."""
+    if not re.fullmatch(r'ghcr\.io/hongheshan-svg/atm-erp@sha256:[a-f0-9]{64}', image):
+        raise ValueError('发布镜像必须是固定仓库的完整摘要')
+    compose = source.replace('    build:\n      context: .\n      dockerfile: docker/app/Dockerfile\n', '')
+    marker = '${LEAN_IMAGE:-atm-erp-lean:local}'
+    if marker not in compose:
+        raise ValueError('Compose 镜像占位符变化，拒绝生成未锁定的发布包')
+    return compose.replace(marker, '${LEAN_IMAGE:-' + image + '}')
 
 
 def build(tag, output, artifacts):
@@ -46,6 +57,7 @@ def build(tag, output, artifacts):
             destination = source / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, destination)
+        compose_template = (source / 'docker-compose.yml').read_text()
         for mode in ("native", "docker"):
             for platform in ("macos", "linux", "windows"):
                 for folder in ('wheelhouse', 'images'):
@@ -63,14 +75,16 @@ def build(tag, output, artifacts):
                     manifest.update(docker_image=images['docker_image'], docker_archives=images['docker_archives'])
                     shutil.copytree(artifacts / 'images', source / 'images')
                     # A release package physically has no build directive.
-                    compose = (source / 'docker-compose.yml').read_text()
-                    compose = compose.replace('    build:\n      context: .\n      dockerfile: docker/app/Dockerfile\n', '')
+                    compose = docker_compose(compose_template, images['docker_image'])
                     (source / 'docker-compose.yml').write_text(compose)
                 else:
                     shutil.copytree(artifacts / 'wheels' / platform, source / 'wheelhouse')
                     manifest.update(native_prebuilt=True, native_architectures=sorted(p.name for p in (source / 'wheelhouse').iterdir()))
+                    protocol = source / 'docker/app/runtime-protocol.json'
+                    if platform == 'linux' and protocol.exists():
+                        manifest['container_runtime'] = json.loads(protocol.read_text())['version']
                 (source / "INSTALL-MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-                command = (".\\install-native.ps1 configure" if platform == "windows" else "bash install-native.sh configure") if mode == "native" else (".\\install.ps1" if platform == "windows" else "bash install.sh")
+                command = (".\\install-native.ps1 configure" if platform == "windows" else "bash install-native.sh configure") if mode == "native" else '复制 .env.example 为 .env 并填写密钥，然后 docker compose up -d'
                 (source / "INSTALL-START-HERE.txt").write_text(
                     f"Lean ERP {tag} / {platform} / {mode}\n\n"
                     f"先阅读 README.md 的安装说明，安装前置依赖。\n入口：{command}\n"

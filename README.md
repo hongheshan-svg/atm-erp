@@ -34,7 +34,7 @@
 
 在[发布页面](https://github.com/hongheshan-svg/atm-erp/releases/latest)的 **Assets** 下载 `atm-erp-v版本号-平台-方式.zip`。平台为 `macos` / `linux` / `windows`，方式为 `docker` / `native`，每版共 6 个安装包。请选择对应附件，GitHub 自动生成的 **Source code** 压缩包不等同于安装包。
 
-这些是**联网安装包**，包含源码和预构建前端，不是离线镜像或桌面安装程序。Docker 镜像在本机构建，目前没有预制 GHCR 镜像拉取命令。包内 `INSTALL-MANIFEST.json` 记录源码和安装器来源；历史版本补包不改写原 tag。
+这些是正式安装包，包含源码和预构建前端。Docker 包携带预构建镜像归档，并在 Compose 中固定该版本的多架构镜像摘要；原生包携带预编译 wheelhouse。包内 `INSTALL-MANIFEST.json` 记录来源。以下直接 Compose 入口适用于包含 `.env.example` 和固定摘要的新版安装包；v1.8.8 及之前的包仍按各自说明使用安装器。
 
 > 全新部署必须使用独立数据库，不兼容早期非 Lean ERP 的表或迁移。系统发现旧表或回滚会拒绝启动；不要清库或绕过 schema guard。已有 Lean 数据库只能正常前向迁移。
 
@@ -61,29 +61,40 @@ Get-FileHash .\atm-erp-v1.6.0-windows-native.zip -Algorithm SHA256
 
 ### Docker 安装
 
-启动 Docker，确认使用 Linux 容器与 Compose v2，并准备宿主机 Python 3.11（用于自动管理升级服务，可用 PYTHON 环境变量指定路径）。从 v1.8.1 起，正式 Docker 包携带 GitHub 预构建的 amd64/arm64 镜像，安装器校验 SHA256 后直接导入并锁定镜像身份，不执行 docker build、npm 或 pip。仅 PostgreSQL/Redis 首次拉取需要访问镜像仓库。解压安装包，进入目录执行：
+启动 Docker，确认使用 Linux 容器与 Compose v2。全新部署解压正式 Docker 包后，复制 `.env.example` 为 `.env`，设置互不相同的随机 `LEAN_DB_PASSWORD`、`LEAN_SECRET_KEY`（至少32字符）、`LEAN_ADMIN_PASSWORD`（至少12字符，避免常见密码）。`LEAN_IMAGE` 留空沿用包内固定摘要。默认 `LEAN_OTA_MODE=container`，启动后自动接入网页升级，`LEAN_OTA_AGENT_TOKEN` 留空即可。**直接启动只需 Docker，不需要宿主机 Python、Node、安装脚本或 Docker socket。**
 
 ```bash
-# macOS / Linux
-bash install.sh
+# macOS / Linux，仅全新目录执行复制，不覆盖旧配置
+cp .env.example .env
+chmod 600 .env
+# 编辑 .env 并填写上述必填值后：
+docker compose up -d
+docker compose ps
+docker compose logs --tail 100 app
 ```
 
 ```powershell
-# Windows PowerShell，按组织脚本执行策略运行
-.\install.ps1
+# Windows PowerShell，复制前确认没有已有 .env
+Copy-Item .env.example .env
+# 编辑 .env 并填写上述必填值后：
+docker compose up -d
 ```
 
-安装完成后打开 **http://127.0.0.1:8080/erp/**，用户名为 `admin`，全新安装的初始密码在 `.env.lean` 的 `LEAN_ADMIN_PASSWORD`。登录后完成下方[首次启用](#首次启用)；向导会要求修改初始密码，之后 `LEAN_ADMIN_PASSWORD` 不再可用，请使用向导中设置的新密码。重复安装不会重置已有账号密码。
+镜像从发布仓库按摘要拉取，需能访问 GHCR；若需校验导入随包镜像，可使用兼容安装器 `bash install.sh` / `.\install.ps1`（需要 Python 3.11），它也可自动生成密钥，但默认不注册网页升级服务。不要在已有实例上重新生成配置。
 
-| 常用配置（`.env.lean`） | 用途 |
+安装完成后打开 **http://127.0.0.1:8080/erp/**，用户名为 `admin`，初始密码为 `.env` 中的 `LEAN_ADMIN_PASSWORD`。首次向导会要求修改密码；重复启动不会重置已有账户。
+
+| 常用配置（`.env`，旧安装为 `.env.lean`） | 用途 |
 | --- | --- |
 | `LEAN_HTTP_PORT` | 访问端口，默认 8080 |
 | `LEAN_BIND_ADDRESS`、`LEAN_ALLOWED_HOSTS` | 默认仅本机访问；局域网部署时显式配置 |
 | `LEAN_ENVIRONMENT` | 正式部署保持 `production`（默认） |
 
-修改配置后重新运行安装脚本使其生效；无需重新构建时可使用 `--skip-build`。保留配置和数据卷，同时部署多个环境须分别设置 `LEAN_PROJECT_NAME`、`LEAN_IMAGE`、`LEAN_HTTP_PORT`，不能共用数据卷。
+修改配置后执行 `docker compose up -d`。已有 `.env.lean` 的部署必须显式使用 `docker compose --env-file .env.lean up -d`，不要新建 `.env` 丢失原项目名或密钥；兼容安装器优先使用已有 `.env`，否则沿用 `.env.lean`。保留配置和数据卷，多实例须分别设置项目名和端口。升级前备份，不能把本命令当成自动备份流程。
 
 ### 原生安装
+
+Docker 编排、原生配置字段和 Linux 升级服务诊断见 [部署配置说明](deploy/README.md)。原生沿用 JSON 私有配置，示例不能直接覆盖已有密钥或数据目录。
 
 应用直接运行 Python/Daphne 和 Nginx，无需 Docker。前置依赖由管理员预先准备：
 
@@ -93,7 +104,7 @@ bash install.sh
 | Linux | Python 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
 | Windows | Python 3.11 x64（含 py 启动器）、Windows Nginx，PowerShell | PostgreSQL 15；Redis 7 使用已有可连接服务（例如独立 Linux 服务器） |
 
-Windows 包不包含、不冒充提供官方 Windows Redis 7 服务。需要全套本机管理的数据服务时使用 Docker 包。原生安装器不会安装操作系统软件、创建数据库用户或开启防火墙；应用仍由 start 启动，宿主机升级执行器自动注册后台服务。发布包已有前端产物，无需 Node.js；从 Git 源码运行则先用 Node.js 22 执行 `cd frontend && npm ci && npm run build`。
+Windows 包不包含官方 Windows Redis 7 服务。需要全套本机数据服务时使用 Docker 包。原生安装器不会安装操作系统软件、创建数据库用户或开启防火墙；Linux 推荐通过下方 systemd 入口托管应用，网页升级服务单独选择启用。发布包已有前端产物，无需 Node.js；从 Git 源码运行则先用 Node.js 22 执行 `cd frontend && npm ci && npm run build`。
 
 #### 1. 准备独立数据库
 
@@ -125,8 +136,12 @@ DATA_DIR 为虚拟环境、附件、前端、日志与 Nginx 配置的绝对路�
 #### 3. 安装并启动
 
 ```bash
-# macOS / Linux
+# Linux：安装后注册开机启动和失败重启；用同一专用部署账户执行
 bash install-native.sh install
+bash install-native.sh service-install
+bash install-native.sh service-status
+# macOS：前台运行
+# bash install-native.sh install
 bash install-native.sh start
 ```
 
@@ -138,7 +153,9 @@ bash install-native.sh start
 
 安装会创建独立 Python 虚拟环境，从发布包的 wheelhouse 校验并离线安装全部锁定依赖，检查 PostgreSQL/Redis 连接、执行 schema guard/迁移及初始化、配置 Nginx，不下载源码依赖或现场编译。包内预编译依赖支持 Linux x86_64/aarch64（glibc 2.28+）、macOS Intel 12+ / Apple Silicon 14+、Windows x64；其他宿主机优先使用 Docker。仍需事先准备 Python 3.11、Nginx、PostgreSQL 15 与 Redis 7。任何失败立即退出，不清库、不绕过保护。全新安装的初始管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；完成安装向导修改密码后该值即失效，已有账户保持不变。
 
-看到“已启动”后访问 http://127.0.0.1:8080/erp/。启动器前台监控两个子进程；终端需保持打开，Ctrl+C 同时停止 Daphne 与 Nginx。进程异常退出时启动器非零退出。日志在 DATA_DIR/logs，诊断依赖连接用 `check`。需要开机自启时，由运维用本平台服务管理器运行相同 `start` 命令，工作目录设为解压目录，使用非管理员专用账户，保持配置私有。
+Linux `service-install` 注册并启动 systemd 应用服务：普通用户使用用户服务及 linger，root 使用系统服务。先保证该账户拥有安装目录、DATA_DIR、Nginx 及数据库访问权限；推荐专用非管理员账户。之后 `start` / `stop` 管理已注册服务，`service-status` 查看状态，终端关闭不停止服务。应用升级成功安装后更新持久启动入口，系统重启不会回到旧版本目录。切换现有前台实例前先 `stop`，不要同时启动两套进程。
+
+macOS / Windows 仍前台运行，Ctrl+C 停止 Daphne 与 Nginx；本次未增加这两种系统的应用服务管理。应用日志在 DATA_DIR/logs，Linux 启动器日志另见 journal；`check` 检查依赖连接。服务启动后确认 `/erp/` 可用，不能只以 unit 已注册认定应用健康。
 
 可用 `--config /absolute/path/config.json`（sh）或 `-Config C:/path/config.json`（PowerShell）指定持久配置；可通过 PYTHON 环境变量指定 Python 3.11 可执行文件。
 
@@ -213,9 +230,11 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 
 ### 在线升级（OTA）
 
-管理员通过页面左上角“版本与升级”检查正式版本。安装器默认自动注册并启动宿主机升级服务，确认真实连接后才提示安装完成，无需另外启动执行器。可在页面发起“备份并升级”；执行器校验安装包 SHA256，备份成功才迁移，完成后核对运行版本。不支持降级，迁移失败后不会自动回退数据库。
+管理员通过页面左上角“版本与升级”检查正式版本。**新版 Docker 配置后直接 up，网页升级默认可用**；必须看到“容器内升级已就绪”的真实心跳。参考 sub2api 在容器内更新程序，不替换宿主机镜像，不挂 Docker socket；内部令牌由启动器派生，无需手填。“立即更新”下载固定仓库且 SHA256 校验通过、声明 container_runtime=1 的 Linux 原生程序包，用预编译 wheelhouse 离线创建独立虚拟环境，此时业务继续运行。准备完成后显示“重启服务”；管理员确认停机后才完整备份数据库、附件、私有配置，再迁移、切换程序及前端。页面自动重连，仅在任务成功且目标运行版本确认后倒计时刷新，不以超时当作成功。
 
-宿主机需 Python 3.11。Linux 使用 systemd（普通用户启用 linger），macOS 使用当前用户 LaunchAgent，Windows 使用当前用户计划任务；后两者随用户登录启动，与 Docker Desktop 的用户会话一致。原生启动器也会自动接入该独立服务，升级停机时执行器继续运行。旧版安装重新运行新版安装器即可接入，现有数据库和账户保留。恢复与日志排查见 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。应用容器不挂载 Docker socket。
+程序、依赖、任务日志和备份持久化到 `lean_runtime` 卷。容器重建继续使用已升级程序；更高版本基础镜像允许前向更新，旧镜像不会覆盖较新的持久化版本。禁止删除 runtime 卷或执行 down -v。网页升级不更新 Python、Nginx、操作系统或稳定启动器，这些变化须手动更换基础镜像；不兼容程序包在停机前拒绝。迁移阶段失败/中断会阻止旧程序启动，不能删除维护标记或降级绕过保护。
+
+旧版必须先沿用原配置/项目名/数据卷更新到包含容器 OTA 的镜像；旧宿主机执行器应停止，避免日志反复报模式冲突。仅保留旧方案时显式 `LEAN_OTA_MODE=host`，兼容安装器 `--with-ota` / `-WithOta` 会设置该模式并注册宿主机服务（需 Python 3.11）。原生部署仍在私有 JSON 设置 OTA_AGENT_TOKEN 后接入宿主机服务。恢复格式及排查见 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。
 
 首次上线和升级后，应检查登录、角色权限、附件下载及备份恢复，不能仅以健康页作为业务验收结果。
 
@@ -229,7 +248,7 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 - 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。两者只改其一时安装器会在结尾提示：
   只开放端口而未放行主机名，真实 IP 访问会被服务端拒绝（HTTP 400）；只放行主机名而未开放端口，局域网仍然连不上。
 - 初始密码见 .env.lean 的 LEAN_ADMIN_PASSWORD，仅在完成安装向导前有效；向导要求修改初始密码，之后请使用新密码。重新安装不会重置已有用户密码。
-- 忘记管理员密码：Docker 用 `docker compose --env-file .env.lean -f docker-compose.yml exec app python manage.py changepassword admin`，
+- 忘记管理员密码：新版 Docker 用 `docker compose --env-file .env.lean -f docker-compose.yml exec app python /opt/erp/container_runtime.py manage changepassword admin`（自动选中 OTA 后的实际程序），
   原生安装用 `bash install-native.sh reset-password`（Windows 为 `.\install-native.ps1 reset-password`）。
 
 ### 原生安装

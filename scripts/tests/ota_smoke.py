@@ -32,7 +32,7 @@ def main():
     token = secrets.token_hex(32)
     values = {'LEAN_PROJECT_NAME': project, 'LEAN_IMAGE': project + ':initial', 'LEAN_HTTP_PORT': str(args.port),
               'LEAN_BIND_ADDRESS': '127.0.0.1', 'LEAN_ALLOWED_HOSTS': 'localhost,127.0.0.1',
-              'LEAN_ENVIRONMENT': 'production', 'LEAN_DB_PASSWORD': secrets.token_hex(32),
+              'LEAN_ENVIRONMENT': 'production', 'LEAN_OTA_MODE': 'host', 'LEAN_DB_PASSWORD': secrets.token_hex(32),
               'LEAN_SECRET_KEY': secrets.token_hex(32), 'LEAN_ADMIN_PASSWORD': password, 'LEAN_OTA_AGENT_TOKEN': token}
     env_file.write_text(''.join(f'{key}={value}\n' for key, value in values.items()))
     os.chmod(env_file, 0o600)

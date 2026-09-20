@@ -23,7 +23,7 @@
 
 ## 安装与配置
 
-- 全新安装用 install.sh/install.ps1，默认独立 atm-erp-lean 项目和新卷，服务仅 postgres/redis/app；app 只运行 Daphne、Nginx，无 Celery、WebSocket、docker.sock。按用户新增要求，安装器默认通过 scripts/ota_service.py 自动注册、启动并保活宿主机执行器 scripts/ota_runner.py，确认真实心跳；仅隔离 CI 可显式跳过服务注册。仅管理员发起固定仓库正式版升级，执行器校验 SHA256、先备份后迁移，不回退或清空数据库。
+- 按用户最新要求参考 sub2api：正式 Docker 包配置 `.env` 后直接 `docker compose up -d`，默认同时启用容器内 OTA，无需宿主机 Python、执行器或 docker.sock；旧 `.env.lean` 显式沿用，不新建项目或覆盖密钥。服务仅 postgres/redis/app；程序、离线依赖及备份在 lean_runtime 卷持久化，禁止删除。仅接受 container_runtime 兼容协议的 Linux 原生程序包，不在现场编译；基础运行时变化须更换镜像。旧宿主机模式显式 LEAN_OTA_MODE=host，与容器执行器互斥。Linux 原生仍由 install-native 的 configure/install/service-install 接入 systemd，其他平台前台 start。升级必须确认真实心跳，限管理员、固定仓库、SHA256、先完整备份后前向迁移；迁移失败阻止旧程序启动，不回退或清空数据库。
 - Docker 开发配置 `LEAN_ENVIRONMENT=development`，直接运行后端用 `APP_ENVIRONMENT=development`，关闭登录限流；发布部署必须使用 production（默认值），恢复原10次/分钟限制，不能把开发配置直接沿用到发布环境。DEBUG 不随开发标记开启。密钥和账号配置不提交 Git。
 
 ## 开发与测试
@@ -31,10 +31,10 @@
 - 后端在 `backend/` 安装 `requirements-dev.txt`，显式配置 `SECRET_KEY`、`DB_*`、`REDIS_URL`、`ADMIN_PASSWORD`，针对独立新库执行 `python manage.py migrate`、`python manage.py init_system`；本地启动用 `python manage.py runserver 127.0.0.1:18301`。初始化不重置已有密码。
 - 前端在 `frontend/` 执行 `npm run dev`，默认 `127.0.0.1:18310/erp/`，API 代理默认 `127.0.0.1:18301`，可用 `VITE_API_BASE_URL` 指定后端。
 - 后端 Django 测试放在 `backend/apps/*/tests/test_*.py`，新增模块登记到测试矩阵；Vitest 用例为 `frontend/src/**/*.spec.ts`，Playwright 用例在 `frontend/e2e/*.spec.ts`。按行为覆盖成功、拒绝、范围与回滚，不设虚构的覆盖率门槛。
-- 全链条验证仅在用户要求打 tag 发版本时执行；普通提交、push 和合并 main 不自动触发全量，按影响补做针对性检查。发布仍须完整验证通过，不能以普通 PR 绿灯代替。
-- 后端局部变更在根目录运行 `python run_all_tests.py --stage checks`（Ruff、Django 检查、迁移检查）或选择 `platform`、`business`、`concurrency` 阶段；测试显式提供独立 `PG_TEST_HOST/USER/PASSWORD`。用 `--plan-only` 查看命令而不执行。仅打 tag 发版本时执行 `bash scripts/precheck-tests.sh --all`（独立 PostgreSQL）。测试目标只维护在 `scripts/ci/backend_test_matrix.py`，不复制名单。纯文档改动检查内容一致性及链接，不无条件运行业务测试。
-- 前端在 frontend 按影响运行 npm run lint、typecheck、test、build 及相关 test:e2e；日常只跑受影响用例，打 tag 发版本时运行全部。npm ci 用于依赖缺失、锁文件变化、依赖异常或干净CI环境。浏览器必须显式指定隔离测试 URL 和管理员密码，不读取生产配置。同一源码、依赖、配置和目标镜像的成功证据可复用；新变更、失败或未解决风险才重跑相应检查，发布CI复用由 scripts/ci/release_gate.py 核验。
-- 已授权且目标明确的隔离测试可连续执行、修复并复验，无需逐步确认；实现任务完成所需启动、检查和修复后再交付，不在初版后自行暂停。不得扩大到生产、其他部署或外部消息，不绕过沙箱审批。某项验证受阻时继续独立工作并说明未覆盖项，不能声称通过或越过发布门禁。供用户检查的预览站点也须完成安装器的升级服务注册和真实心跳验证，不视作可跳过服务的隔离CI。
+- 默认改到哪个模块就测试哪个模块，包含直接受影响的接口、权限和上下游回归，不扩展成全业务流程。只有用户明确要求“全业务流程测试”“全量验收”等才执行全量；普通修改、提交、push、合并 main 或“打 tag 发版本”本身均不代表要求全量。
+- 后端按影响从 `scripts/ci/backend_test_matrix.py` 定位测试模块，使用 Django 测试标签选择相关模块或用例；需要静态检查时运行 `python run_all_tests.py --stage checks`（Ruff、Django 检查、迁移检查）。测试显式提供独立 `PG_TEST_HOST/USER/PASSWORD`，用 `--plan-only` 查看阶段命令而不执行。仅明确要求全量时执行 `bash scripts/precheck-tests.sh --all`（独立 PostgreSQL），不为局部修改默认运行整个 business 阶段。测试目标只维护在矩阵中，不复制名单。纯文档改动只检查内容一致性及链接。
+- 前端在 frontend 按影响运行 lint、typecheck、build 及指定文件的 test、test:e2e；只跑受影响用例，明确要求全量时才运行全部。npm ci 用于依赖缺失、锁文件变化、依赖异常或干净CI环境。浏览器必须显式指定隔离测试 URL 和管理员密码，不读取生产配置。同一源码、依赖、配置和目标镜像的成功证据可复用；新变更、失败或未解决风险才重跑相应检查，发布CI复用由 scripts/ci/release_gate.py 核验。
+- 已授权且目标明确的隔离测试可连续执行、修复并复验，无需逐步确认；实现任务完成所需启动、检查和修复后再交付，不在初版后自行暂停。不得扩大到生产、其他部署或外部消息，不绕过沙箱审批。某项验证受阻时继续独立工作并说明未覆盖项，不能声称通过或越过发布门禁。预览可不启用网页升级；只有声明该能力可用时才必须完成执行器注册及真实心跳验证。
 
 ## Agent 与技能协作
 
@@ -45,6 +45,6 @@
 
 - 使用 feature branch，不直接提交 main；保留用户未提交改动。使用 apply_patch 修改源码，按实际行为补测试。提交沿用 `feat:`、`fix:`、`chore:`、`ci:` 等前缀，文档使用 `docs:`。PR 说明实际变化、影响与验证结果，关联已有问题；界面变化附实际截图，未覆盖检查明确列出。
 - 发布说明使用 docs/releases/TEMPLATE.md，在最下方保留 Installation 与 Documentation 区块，替换实际 tag 并核对附件名称。按用户新增要求，GitHub 预构建 Docker amd64/arm64 镜像，安装器仅拉取固定 digest 或校验导入随包镜像，不回退本地构建；原生包携带 CI 预编译 wheelhouse 离线安装依赖，不现场编译。不编造公开可用的 GHCR 地址，完整安装说明保留在 README。
-- 日常发布默认只递增补丁号（如 1.0.0 → 1.0.1）；除非用户明确指定，不自行提升主版本号或次版本号。以后端、前端和 tag 一致的版本发布，并在完整 CI 通过、合并 main 后打 tag。
-- 版本核对 `backend/apps/core/version.py`、`frontend/package.json` 及锁文件，不从 README 的旧版本横幅推断。CI 操作见 `docs/CI_OPERATIONS.md`；发布凭据须为同一 Git tree 的完整 `ci.yml` 成功记录（含 desktop/mobile），单项工作流和普通 PR 绿灯不能替代。
+- 日常发布默认只递增补丁号（如 1.0.0 → 1.0.1）；除非用户明确指定，不自行提升主版本号或次版本号。以后端、前端和 tag 一致的版本发布，在所需针对性检查通过、合并 main 后打 tag；发布不自动升级为全业务流程测试。
+- 版本核对 `backend/apps/core/version.py`、`frontend/package.json` 及锁文件，不从 README 的旧版本横幅推断。CI 操作见 `docs/CI_OPERATIONS.md`：PR 和发布默认按影响计划选择检查；发布复用须匹配 Git tree 与计划指纹，缺少凭据只补跑所需范围。共享或未知变更须明确 modules，不能静默漏测、绕过门禁或自动切成全量；Full validation 只用于显式全量，Scoped validation 不称为全业务验收。
 - 历史 docs/superpowers、审计报告与旧部署文档仅作参考，不是现行要求。
