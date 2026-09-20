@@ -4,6 +4,7 @@ import { defaults } from '../forms'
 import { reactive } from 'vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
+import InitialPasswordInput from './InitialPasswordInput.vue'
 import { flowFor } from '../flows'
 defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
 const model = defineModel<Row>({ required: true })
@@ -48,6 +49,7 @@ function readonlyValue(field: Field) {
         <span>{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></span>
         <textarea v-if="readonly" :value="readonlyValue(field)" :aria-label="field.label" readonly rows="1" class="readonly-text" />
         <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :describe="field.remoteLabel" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
+        <InitialPasswordInput v-else-if="field.type === 'password' && field.randomPassword" v-model="model[field.key]" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <select
           :aria-label="field.label"
           v-else-if="field.type === 'select' || field.type === 'multi'"

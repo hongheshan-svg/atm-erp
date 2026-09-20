@@ -2,7 +2,6 @@
 
 import json
 
-from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 from rest_framework import serializers
@@ -12,6 +11,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.api import UserSerializer
 from apps.accounts.models import User
+from apps.accounts.passwords import validate_password
 
 from .actions import perform
 from .api import Conflict

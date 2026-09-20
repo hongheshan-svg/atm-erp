@@ -1,7 +1,6 @@
 from ipaddress import ip_address
 
 from django.conf import settings
-from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, serializers, viewsets
@@ -17,6 +16,7 @@ from apps.core.models import AuditLog, Company
 from apps.core.permissions import ADMIN, PermissionMixin, has_role, require_role, role, roles
 
 from .models import User
+from .passwords import validate_password
 
 
 class LoginThrottle(SimpleRateThrottle):
@@ -113,7 +113,12 @@ class DirectoryView(APIView):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        trim_whitespace=False,
+        error_messages={'blank': '请填写密码。', 'null': '请填写密码。', 'invalid': '密码必须是文本。'},
+    )
     roles = serializers.ListField(
         child=serializers.ChoiceField(choices=User.Role.choices),
         required=False,
@@ -163,11 +168,8 @@ class UserSerializer(serializers.ModelSerializer):
             raise ValidationError({'management_reports': '总经理报表授权仅用于经理角色账号；管理员默认可查看。'})
         if not self.instance and 'password' not in attrs:
             raise ValidationError({'password': '新增用户必须设置密码。'})
-        if 'password' in attrs:
-            candidate = self.instance or User(
-                username=attrs.get('username', ''), display_name=attrs.get('display_name', '')
-            )
-            validate_password(attrs['password'], candidate)
+        # Admin-assigned initial/reset passwords have no strength restrictions.
+        # Self-service changes and the installer's own administrator stay validated.
         return attrs
 
     def create(self, validated_data):

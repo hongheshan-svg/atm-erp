@@ -1,14 +1,14 @@
-import importlib.util
 import argparse
+import importlib.util
 import io
 import json
 import os
-from pathlib import Path
 import stat
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location('ota_runner', Path(__file__).parents[1] / 'ota_runner.py')
 ota = importlib.util.module_from_spec(SPEC)
@@ -58,6 +58,32 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(reports[-1][1], 'failed')
         self.assertIn('尚未生成完整备份', reports[-1][2])
         self.assertEqual(reports[-1][3], '')
+
+    def test_image_preparation_failure_never_stops_app_or_starts_backup_and_migration(self):
+        runner = object.__new__(ota.Runner)
+        runner.directory, runner.path, runner.state = self.folder, self.folder / 'state.json', {'pending': []}
+        runner.mode, runner.root, runner.config = 'docker', self.folder / 'current', self.folder / '.env.lean'
+        runner.config.write_text('LEAN_IMAGE=original\nLEAN_DB_PASSWORD=keep\n')
+        target = self.folder / 'release'
+        target.mkdir()
+        (target / 'INSTALL-MANIFEST.json').write_text('{"docker_image":"prebuilt"}')
+        reports = []
+        with patch.object(runner, 'running_version', return_value=(1, 7, 1)), \
+                patch.object(ota, 'trusted_asset', return_value={}), patch.object(ota, 'download'), \
+                patch.object(ota, 'unpack', return_value=target), \
+                patch.object(runner, 'command', side_effect=ota.subprocess.CalledProcessError(1, 'release_install')) as command, \
+                patch.object(runner, 'report', side_effect=lambda *args: reports.append(args)):
+            runner.execute({'id': 10, 'target': 'v1.7.2'})
+        command.assert_called_once()
+        self.assertEqual(command.call_args.args[0][1], target / 'scripts/release_install.py')
+        self.assertEqual(reports[-1][1], 'failed')
+        self.assertIn('准备发布镜像失败', reports[-1][2])
+        self.assertIn('尚未生成完整备份', reports[-1][2])
+        self.assertIn('数据库迁移尚未开始', reports[-1][2])
+        self.assertEqual(reports[-1][3], '')
+        self.assertEqual(runner.config.read_text(), 'LEAN_IMAGE=original\nLEAN_DB_PASSWORD=keep\n')
+        self.assertEqual(runner.root, self.folder / 'current')
+        self.assertEqual(list(next(self.folder.glob('job-*/backup')).iterdir()), [])
 
     def test_download_reports_actual_bytes(self):
         import hashlib

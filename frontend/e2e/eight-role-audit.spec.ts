@@ -11,9 +11,13 @@ const identities = [
   { key: 'warehouse', roles: ['warehouse'], pages: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'settings'] },
   { key: 'finance', roles: ['finance'], pages: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'settings'] },
   { key: 'member', roles: ['member'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'settings'] },
+  { key: 'purchase_manager', roles: ['purchase_manager'], pages: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'settings'] },
+  { key: 'mechanical_engineer', roles: ['mechanical_engineer'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'settings'] },
+  { key: 'electrical_engineer', roles: ['electrical_engineer'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'settings'] },
+  { key: 'production_manager', roles: ['production_manager'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'settings'] },
 ]
 const accounts: Record<string, { id: number; username: string }> = {}
-const password = 'Eight-role-audit-only-2026'
+const password = 'Eleven-role-audit-only-2026'
 let projectId: number, otherProjectId: number
 
 test.beforeAll(async ({ request }) => {
@@ -25,7 +29,7 @@ test.beforeAll(async ({ request }) => {
   const suffix = Date.now()
   for (const identity of identities.slice(1)) {
     const response = await request.post('/api/auth/users/', { headers, data: {
-      username: `audit_${identity.key}_${suffix}`, display_name: `八岗验收${identity.key}`,
+      username: `audit_${identity.key}_${suffix}`, display_name: `岗位验收${identity.key}`,
       roles: identity.roles, password, management_reports: identity.key === 'general_manager',
     } })
     expect(response.status(), await response.text()).toBe(201)
@@ -36,8 +40,8 @@ test.beforeAll(async ({ request }) => {
     expect(response.status(), await response.text()).toBe(201)
     return (await response.json()).id as number
   }
-  const customer = await create('partners', { name: `八岗验收客户${suffix}`, kind: 'customer' })
-  projectId = await create('projects', { name: `八岗页面巡检${suffix}`, customer, manager: accounts.manager!.id, members: [accounts.member!.id, accounts.general_manager!.id] })
+  const customer = await create('partners', { name: `岗位验收客户${suffix}`, kind: 'customer' })
+  projectId = await create('projects', { name: `岗位页面巡检${suffix}`, customer, manager: accounts.manager!.id, members: ['member', 'general_manager', 'mechanical_engineer', 'electrical_engineer', 'production_manager'].map(key => accounts[key]!.id) })
   otherProjectId = await create('projects', { name: `成员不可见项目${suffix}`, customer, manager: accounts.admin!.id })
 })
 
@@ -91,7 +95,7 @@ async function inspect(page: Page, visited: Record<string, unknown>[]) {
 }
 
 for (const identity of identities) {
-  test(`八岗逐页巡检：${identity.key}`, async ({ page }, info) => {
+  test(`十一岗位逐页巡检：${identity.key}`, async ({ page }, info) => {
     test.setTimeout(240000)
     const visited: Record<string, unknown>[] = []
     await login(page, accounts[identity.key]!.username, identity.key === 'admin' ? process.env.E2E_ADMIN_PASSWORD! : password)
@@ -133,10 +137,10 @@ for (const identity of identities) {
     const reports = await page.request.get('/api/business/reports/', { headers })
     expect(reports.status()).toBe(['admin', 'general_manager'].includes(identity.key) ? 200 : 403)
     if (identity.pages.includes('projects')) {
-      const tabs = ['tasks', 'bom', 'deliveries', 'documents', ...(identity.key !== 'member' ? ['purchases'] : []), ...(['admin', 'manager', 'general_manager', 'finance'].includes(identity.key) ? ['finance', 'cost'] : [])]
+      const tabs = ['tasks', 'bom', 'deliveries', 'documents', ...(['admin', 'general_manager', 'manager', 'purchaser', 'purchase_manager', 'warehouse', 'finance'].includes(identity.key) ? ['purchases'] : []), ...(['admin', 'manager', 'general_manager', 'finance'].includes(identity.key) ? ['finance', 'cost'] : [])]
       for (const tab of tabs) {
         await page.goto(`/erp/projects/${projectId}?tab=${tab}`)
-        await expect(page.locator('h1')).toContainText('八岗页面巡检')
+        await expect(page.locator('h1')).toContainText('岗位页面巡检')
         const childTabs: Record<string, number> = { tasks: 2, bom: 2, deliveries: 2, finance: 3, cost: 2 }
         await expect(page.locator('.module-tabs').getByRole('tab')).toHaveCount(childTabs[tab] ?? 0)
         await inspect(page, visited)
@@ -149,7 +153,7 @@ for (const identity of identities) {
       const cost = await page.request.get(`/api/business/projects/${projectId}/cost/`, { headers })
       expect(cost.status()).toBe(['admin', 'manager', 'general_manager', 'finance'].includes(identity.key) ? 200 : 403)
     }
-    if (identity.key === 'member') {
+    if (['member', 'mechanical_engineer', 'electrical_engineer', 'production_manager'].includes(identity.key)) {
       const hidden = await page.request.get(`/api/business/projects/${otherProjectId}/`, { headers })
       expect(hidden.status()).toBe(404)
     }

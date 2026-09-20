@@ -1,19 +1,19 @@
 """Isolated Docker OTA rehearsal. v9.0.0 is a local fixture, never published."""
 import argparse
-import hashlib
 import gzip
+import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import secrets
 import shutil
 import subprocess
-import sys
+import tarfile
 import tempfile
 import urllib.request
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('ota', ROOT / 'scripts/ota_runner.py')
@@ -88,7 +88,11 @@ def main():
         compressed = images / (arch + '.tar.gz')
         with tar.open('rb') as src, gzip.open(compressed, 'wb', compresslevel=1) as dst:
             shutil.copyfileobj(src, dst)
-        image_id = subprocess.check_output(['docker', 'image', 'inspect', project + ':prebuilt', '--format', '{{.Id}}'], text=True).strip()
+        # Reproduce classic-CI -> containerd-host upgrades even when CI itself uses
+        # containerd. Same-store .Id round trips previously hid this product bug.
+        with tarfile.open(tar) as bundle:
+            entry = json.load(bundle.extractfile('manifest.json'))[0]
+            image_id = 'sha256:' + hashlib.sha256(bundle.extractfile(entry['Config']).read()).hexdigest()
         # Remove it to prove the upgrade imports the published bytes, not a cached image.
         command(['docker', 'image', 'rm', project + ':prebuilt'])
         (stage / 'INSTALL-MANIFEST.json').write_text(json.dumps({'version': 'v9.0.0', 'mode': 'docker', 'platform': ota.PLATFORM,

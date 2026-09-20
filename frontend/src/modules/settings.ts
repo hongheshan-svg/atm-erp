@@ -8,7 +8,7 @@ export const userFields: Field[] = [
   },
   { key: 'hourly_cost', label: '小时成本（元）', initial: '0.00' },
   { key: 'management_reports', label: '总经理报表权限（仅项目经理角色）', type: 'boolean', initial: false },
-  { key: 'password', label: '密码', type: 'password' },
+  { key: 'password', label: '密码', type: 'password', randomPassword: true, hint: '可随机生成或自行设置，不限制长度和字符组合。请通知用户登录后在“设置 → 我的账户”修改密码；编辑时留空则不修改。' },
   { key: 'is_active', label: '启用', type: 'boolean' },
 ]
 import { can, roleLabels } from '../session'

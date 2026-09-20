@@ -115,6 +115,19 @@ class SetupTests(TestCase):
         self.rule.refresh_from_db()
         self.assertEqual(self.rule.prefix, 'MAT')
 
+    def test_setup_team_accepts_admin_assigned_short_password(self):
+        self.data['team'][0]['password'] = '1'
+        self.assertEqual(self.submit().status_code, 200)
+        self.assertTrue(User.objects.get(username='buyer').check_password('1'))
+
+    def test_setup_admin_password_errors_are_chinese(self):
+        self.data['new_password'] = '123456'
+        response = self.submit()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('密码至少需要 12 个字符。', list(map(str, response.data)))
+        self.assertIn('密码不能只包含数字。', list(map(str, response.data)))
+        self.assertEqual(User.objects.count(), 1)
+
     def test_old_tokens_revoked_after_setup(self):
         self.client.force_authenticate(None)
         token = self.client.post('/api/auth/login/', {'username': 'admin', 'password': self.data['old_password']}).data

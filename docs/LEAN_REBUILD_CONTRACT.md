@@ -65,7 +65,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 `/api/auth/login/` 接收 username/password，返回 access/refresh；`refresh/` 接收 refresh；`me/` 返回 id、username、display_name、role、roles、management_reports；`directory/` 返回启用人员 id/display_name/role/roles 数组。`password/` 接收 old_password/new_password，修改后令牌撤销，重新登录。
 
-`/api/auth/users/` 管理员 GET/POST，`users/{id}/` GET/PATCH：username、display_name、roles（兼容旧 role）、hourly_cost、is_active、password、management_reports。新增必填密码，至少 12 位；不可移除最后管理员。management_reports 默认为 false，包含 manager 角色时允许设为 true；管理员自动可看经营报表。授权更正留审计，me 返回本人此开关，不接受用户自行更改。
+`/api/auth/users/` 管理员 GET/POST，`users/{id}/` GET/PATCH：username、display_name、roles（兼容旧 role）、hourly_cost、is_active、password、management_reports。新增必填非空密码；管理员创建/重设密码及首次向导添加人员不限制密码长度、常见密码或字符组合。页面支持本地安全随机生成20位初始密码，也可手动设置；编辑时不提交密码则保留原密码。密码不回显、不入日志/审计，仅哈希存储。用户后续在“设置 → 我的账户”自行改密，仍校验原密码与新密码强度（至少12位等），所有密码校验提示固定中文，不新增强制改密流程。不可移除最后管理员。management_reports 默认为 false，包含 manager 角色时允许设为 true；管理员自动可看经营报表。授权更正留审计，me 返回本人此开关，不接受用户自行更改。
 
 登录及令牌刷新沿用 LoginThrottle：APP_ENVIRONMENT=production（默认）为10次/分钟，development关闭限流，其他值拒绝启动。Compose/安装器通过 LEAN_ENVIRONMENT 设置该值，默认 production；发布时不得沿用 development 配置。DEBUG 独立且默认关闭。
 

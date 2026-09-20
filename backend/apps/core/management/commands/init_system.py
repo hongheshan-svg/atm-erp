@@ -1,11 +1,11 @@
 import os
 
-from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.accounts.models import User
+from apps.accounts.passwords import validate_password
 from apps.core.models import AuditLog, CodeRule, Company
 from apps.core.schema_guard import check_schema
 
