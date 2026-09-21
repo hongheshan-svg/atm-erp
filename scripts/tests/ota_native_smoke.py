@@ -2,16 +2,15 @@
 import argparse
 import importlib.util
 import json
-import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,7 +32,7 @@ def main():
     values = json.loads(config.read_text())
     values.update(DB_HOST='native-ota-pg', DB_PASSWORD='native-ota-isolated-only',
                   REDIS_URL='redis://native-ota-redis:6379/0', DATA_DIR=str(task / 'data'),
-                  HTTP_PORT=18495, APP_PORT=18496)
+                  HTTP_PORT=18495, APP_PORT=18496, OTA_AGENT_TOKEN='native-ota-isolated-token-' + 'a' * 40)
     config.write_text(json.dumps(values))
     log_path = task / 'native.log'
     log = log_path.open('a')

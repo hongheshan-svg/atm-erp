@@ -16,6 +16,19 @@ SPEC.loader.exec_module(ota)
 
 
 class RunnerTests(unittest.TestCase):
+    def test_connection_diagnostics_do_not_expose_response_or_token(self):
+        runner = object.__new__(ota.Runner)
+        runner.directory, runner.state, runner.mode = self.folder, {'runner_id': 'a' * 32}, 'docker'
+        for code in (401, 403, 404, 409, 503):
+            output = io.StringIO()
+            error = ota.urllib.error.HTTPError('http://localhost', code, 'secret-response', {}, None)
+            with patch.object(runner, 'flush'), patch.object(runner, 'api', side_effect=error), \
+                    patch.object(ota.sys, 'stdout', output):
+                runner.serve(once=True)
+            self.assertIn(f'HTTP {code}', output.getvalue())
+            self.assertNotIn('secret-response', output.getvalue())
+            self.assertFalse((self.folder / 'heartbeat.json').exists())
+
     def test_native_upgrade_keeps_legacy_cli_and_marks_managed_child(self):
         runner = object.__new__(ota.Runner)
         runner.config = Path('/config.json')

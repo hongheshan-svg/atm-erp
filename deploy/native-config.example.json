@@ -1,0 +1,18 @@
+{
+  "DB_HOST": "127.0.0.1",
+  "DB_PORT": "5432",
+  "DB_NAME": "atm_erp_lean",
+  "DB_USER": "atm_erp_lean",
+  "DB_PASSWORD": "CHANGE_ME",
+  "REDIS_URL": "redis://127.0.0.1:6379/0",
+  "SECRET_KEY": "",
+  "ADMIN_PASSWORD": "",
+  "OTA_AGENT_TOKEN": "",
+  "ALLOWED_HOSTS": "localhost,127.0.0.1",
+  "APP_ENVIRONMENT": "production",
+  "BIND_ADDRESS": "127.0.0.1",
+  "HTTP_PORT": 8080,
+  "APP_PORT": 18001,
+  "DATA_DIR": "/var/lib/atm-erp",
+  "NGINX_EXECUTABLE": "nginx"
+}

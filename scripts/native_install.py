@@ -5,7 +5,6 @@ import argparse
 import ipaddress
 import json
 import os
-from pathlib import Path
 import secrets
 import shutil
 import signal
@@ -14,6 +13,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,7 +30,7 @@ def create_config(path):
         "SECRET_KEY": secrets.token_hex(48),
         "ADMIN_PASSWORD": "Lean-" + secrets.token_hex(24),
         "ALLOWED_HOSTS": "localhost,127.0.0.1", "APP_ENVIRONMENT": "production",
-        "OTA_AGENT_TOKEN": secrets.token_hex(32),
+        "OTA_AGENT_TOKEN": "",
         "BIND_ADDRESS": "127.0.0.1", "HTTP_PORT": 8080, "APP_PORT": 18001,
         "DATA_DIR": str(ROOT / ".native"), "NGINX_EXECUTABLE": "nginx",
     }
@@ -238,7 +238,7 @@ def start(config, data, config_path=None, no_ota=False):
                     time.sleep(1)
             else:
                 raise RuntimeError("服务未就绪，请查看 DATA_DIR/logs")
-            if not no_ota and not os.environ.get('ATM_ERP_OTA_MANAGED'):
+            if config.get('OTA_AGENT_TOKEN') and not no_ota and not os.environ.get('ATM_ERP_OTA_MANAGED'):
                 from ota_service import install as install_ota
                 install_ota('native', ROOT, config_path or ROOT / 'native-config.json', url)
             print(f"已启动 {url}/erp/；按 Ctrl+C 停止。", flush=True)
@@ -294,10 +294,11 @@ def main():
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description='原生 Daphne/Nginx 安装与启动工具；数据库和 Redis 仍由使用者自行管理')
-    parser.add_argument("action", choices=("configure", "install", "start", "stop", "check", "reset-password"))
+    parser.add_argument("action", choices=("configure", "install", "start", "stop", "check", "reset-password", "service-install", "service-status"))
     parser.add_argument("--config", type=Path, default=ROOT / "native-config.json")
     parser.add_argument("--user", default="admin", help="reset-password 要重设的用户名")
-    parser.add_argument('--no-ota', action='store_true', help='仅隔离测试：不注册宿主机升级服务')
+    parser.add_argument('--no-ota', action='store_true', help='不注册可选宿主机升级服务')
+    parser.add_argument('--foreground', action='store_true', help='由服务管理器调用的前台运行模式')
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 11):
         parser.error("请使用 Python 3.11")
@@ -307,7 +308,14 @@ def main():
             print(f"配置已创建：{args.config}。请填写独立 PostgreSQL 数据库密码和 Redis 地址后执行 install。")
             return
         config, data = load_config(args.config)
-        if args.action == "check":
+        from native_service import control, managed, register, update
+        if args.action == 'service-install':
+            register(ROOT, args.config, data)
+        elif args.action == 'service-status':
+            control(data, 'status')
+        elif args.action in ('start', 'stop') and not args.foreground and managed(data):
+            control(data, args.action)
+        elif args.action == "check":
             nginx_path(config)
             check_services(python_path(data), environment(config, data))
             print("PostgreSQL / Redis 连接正常。")
@@ -316,11 +324,9 @@ def main():
             run([python_path(data), "manage.py", "changepassword", args.user],
                 cwd=ROOT / "backend", env=environment(config, data))
         elif args.action == "install":
-            if not config.get('OTA_AGENT_TOKEN'):
-                config['OTA_AGENT_TOKEN'] = secrets.token_hex(32)
-                with args.config.open('w', encoding='utf-8') as stream:
-                    json.dump(config, stream, ensure_ascii=False, indent=2)
             install(config, data)
+            if managed(data):
+                update(ROOT, args.config, data)
         elif args.action == "stop":
             stop(config, data)
         else:

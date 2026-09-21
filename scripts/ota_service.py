@@ -4,12 +4,12 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import plistlib
 import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 def command(args):
@@ -40,14 +40,14 @@ def service_args(directory):
     return [sys.executable, str(directory / 'ota_service.py'), 'supervise', '--state-dir', str(directory)]
 
 
-def unit(args, directory):
+def unit(args, directory, system=False):
     # systemd interprets percent specifiers and C-style escapes even in quotes.
     def quote(value):
         return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$').replace('\n', '\\n').replace('\r', '\\r') + '"'
     return ('[Unit]\nDescription=Lean ERP 宿主机升级执行器\nAfter=network-online.target\n'
             '[Service]\nType=simple\nExecStart=' + ' '.join(map(quote, args)) + '\n'
             'Restart=always\nRestartSec=10\nUMask=0077\n'
-            '[Install]\nWantedBy=default.target\n')
+            '[Install]\nWantedBy=' + ('multi-user.target' if system else 'default.target') + '\n')
 
 
 def register(directory):
@@ -72,7 +72,7 @@ def register(directory):
         system = os.getuid() == 0
         target = (Path('/etc/systemd/system') if system else Path.home() / '.config/systemd/user') / (name + '.service')
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(unit(args, directory), encoding='utf-8')
+        target.write_text(unit(args, directory, system=system), encoding='utf-8')
         ctl = ['systemctl'] + ([] if system else ['--user'])
         command([*ctl, 'daemon-reload'])
         command([*ctl, 'enable', '--now', target.name])
@@ -127,6 +127,32 @@ def utf8_output():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8', errors='replace')
+
+
+def status(directory):
+    """Read-only diagnosis; never print tokens or claim that a process is a heartbeat."""
+    directory = directory.resolve()
+    manifest = directory / 'service.json'
+    if not manifest.exists():
+        print('升级服务未安装：指定目录没有 service.json。')
+        return False
+    descriptor = json.loads(manifest.read_text())
+    state_file = directory / 'state.json'
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    root = Path(state.get('root', descriptor['root']))
+    config = Path(state.get('config', descriptor['config']))
+    connected = fresh(directory)
+    print('最近心跳：' + ('正常' if connected else '未收到有效心跳；不代表服务进程未启动'))
+    print('执行脚本：' + str(root / 'scripts/ota_runner.py'))
+    print('脚本存在：' + str((root / 'scripts/ota_runner.py').is_file()))
+    print('配置存在：' + str(config.is_file()))
+    print('未完成任务：' + ('有；请勿重装覆盖' if state.get('inflight') else '无'))
+    print('日志：' + str(directory / 'service.log'))
+    if sys.platform == 'linux':
+        name = 'com.atm-erp.ota.' + hashlib.sha256(str(directory).encode()).hexdigest()[:16] + '.service'
+        command_args = ['systemctl'] + ([] if os.getuid() == 0 else ['--user'])
+        subprocess.run([*command_args, '--no-pager', 'status', name], check=False)
+    return connected
 
 
 def install(mode, root, config, url=None, directory=None):
@@ -195,7 +221,7 @@ def supervise(directory):
 def main():
     utf8_output()
     parser = argparse.ArgumentParser(description='为当前部署注册并保活宿主机升级执行器服务')
-    parser.add_argument('action', choices=['install', 'supervise'])
+    parser.add_argument('action', choices=['install', 'supervise', 'status'])
     parser.add_argument('--mode', choices=['docker', 'native'])
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--config', type=Path)
@@ -205,6 +231,10 @@ def main():
     if sys.version_info[:2] != (3, 11):
         parser.error('安装器需要宿主机 Python 3.11')
     os.umask(0o077)
+    if args.action in ('supervise', 'status') and not args.state_dir:
+        parser.error('该操作必须指定 --state-dir')
+    if args.action == 'status':
+        raise SystemExit(0 if status(args.state_dir) else 1)
     if args.action == 'supervise':
         supervise(args.state_dir.resolve())
     else:

@@ -32,6 +32,7 @@ class NativeInstallTests(unittest.TestCase):
         if native.os.name != "nt":
             self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.config["APP_ENVIRONMENT"], "production")
+        self.assertEqual(self.config['OTA_AGENT_TOKEN'], '')
 
     def test_rejects_missing_password_development_and_invalid_ports(self):
         for key, value in (("DB_PASSWORD", "CHANGE_ME"), ("APP_ENVIRONMENT", "development"),

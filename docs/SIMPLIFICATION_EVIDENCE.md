@@ -1,5 +1,51 @@
 # 精简实施与验收证据
 
+## OTA 中断恢复与备份还原（2026-09-20）
+
+- 对照 [sub2api 官方更新服务](https://github.com/Wei-Shaw/sub2api/blob/main/backend/internal/service/update_service.go) 的临时目录清理及替换失败恢复策略，保留 ERP 数据库迁移的额外边界。修复仅 OTA 进程中断后业务保持停止、维护标记让 watchdog 长期跳过的问题：backup 阶段恢复原服务后再解除维护、上报失败；恢复启动失败保留状态重试。migrating/blocked 不启动旧程序；verifying 只启动已切换目标，补齐验证状态并核验健康。成功结果先持久化，再解除维护；重复恢复不倒退已结束任务。
+- 下载前与停机前增加空间估算；备份文件 fsync 后写完成清单，再进入迁移。正常升级成功删除该任务的可重新下载 package.zip，不自动删除当前程序、venv、日志或任何数据库备份；空间估算不保证其他进程不会继续占用磁盘，保留周期仍需管理员制定。
+- 相关 Python 测试89项、Ruff及 diff 检查通过。前端和业务接口未变，本次复用此前针对性证据，不启动全业务流程。新增用例覆盖恢复失败保留标记、迁移后禁启旧程序、新版本健康/不健康恢复、整容器启动保留验证状态、已确认成功的重复恢复与低磁盘拒绝。
+- 最终源码镜像 erp-ota-recovery-test:20260920（Linux arm64），随机隔离项目 erp-inplace-smoke-e468cc0c69：真实 SIGKILL 分别发生在业务停止后/备份开始前，以及迁移和版本切换完成后/新业务启动前；前者恢复原服务且未迁移，后者启动核验新版本并完成任务。随后将 dump 实际恢复到独立新建空数据库，核对公司与管理员；附件内容及哈希检查通过。再次重建容器后版本、登录、真实心跳通过。项目、新卷及临时还原库已清理，既有实例未操作。
+- 日志 /private/tmp/erp-ota-recovery-build.log、/private/tmp/erp-ota-recovery-final.log。仍使用本地 v9.0.0 发布发现及重打包依赖夹具，不冒充正式附件、amd64或用户 Linux 验收；未做宿主机真实断电/存储损坏试验，不宣称无人值守高可用，未发布。
+
+## OTA 前后端状态与 sub2api 对齐（2026-09-20）
+
+- 对照 sub2api 官方提交 7c700729c23187d31ed320f6b19c790e2f194826 的 VersionBadge：默认容器模式采用检查更新 → 下载准备 → 待重启 → 管理员重启 → 自动重连 → 确认成功后8秒刷新。前端增加专用类型化 API，进入页面即检查缓存版本；准备目标明确展示，不把待重启误报为安装成功。原生/旧 host 兼容流程保留，不声称这次改变了其执行方式。
+- 后端增加 ready/restarting、need_restart 及受管理员/幂等保护的 restart 接口；容器服务不能自行越过确认。等待状态持久化、占用唯一活动任务；下载不停止应用、不迁移，重启前重验来源版本及包哈希。保留固定仓库、完整备份和禁止数据库降级；重启前后的丢失响应不会回退状态或重复执行。当前运行版本变化时终止旧准备任务。
+- 针对性运维/兼容81项、独立 PostgreSQL 的升级 API 14项、前端组件18项通过；Ruff、局部ESLint、typecheck、build、diff检查通过。桌面/手机4项浏览器测试通过，包括下载、等待、确认、断连、恢复以及实际自动刷新；查看了待重启和成功截图。未执行全业务流程。
+- Linux arm64 本地镜像 erp-ota-aligned-test:20260920 的真实演练通过：随机项目 erp-inplace-smoke-279f4253fa 验证两阶段升级与完成后重建；erp-inplace-smoke-bccc3a37ad 进一步在 ready 时 force-recreate，旧版本继续运行且未生成备份，然后恢复任务、确认重启、真实备份/新字段迁移/版本切换，再次重建保留新版、账号及真实心跳。演练项目及其新卷均已清理，现有部署未操作。
+- 发布发现使用本地 v9.0.0 夹具，依赖由已安装测试镜像重打包，未验证正式 GitHub 附件或 amd64；不是发布包验收。日志 /private/tmp/erp-ota-align-build.log、/private/tmp/erp-ota-align-upgrade.log、/private/tmp/erp-ota-align-recreation.log；界面截图 frontend/test-results/system-upgrade-容器-OTA-*/container-ota-ready.png、container-ota-success.png。镜像内基础流程和当前前端分别验证；最终小范围提示文字随后由组件/浏览器/构建复验。未发布、未连接用户 Linux 机器。
+
+## Compose 默认容器内 OTA（2026-09-20）
+
+- 按用户最新要求采用 sub2api 的容器内程序更新方向，不挂 docker.sock、不安装宿主机执行器。默认 Compose 三服务不变，增加 lean_runtime 持久卷；内部进程自动认证及心跳。固定仓库发布包/SHA256、Linux 双架构离线 wheelhouse、container_runtime 协议校验后，停止 Daphne，备份 PostgreSQL/附件/配置，迁移和幂等初始化，原子切换程序与前端，验证目标版本。稳定启动器/系统依赖更新仍需换基础镜像。
+- 迁移中断/失败留下持久维护标记，启动器阻止旧代码启动；备份失败可启动未迁移的原版本。watchdog 不干扰维护窗口。旧 host 模式与 container 模式及缓存心跳互斥。管理命令通过当前版本入口，避免 OTA 后调用旧镜像代码。仓库指南、技能、接口/安装/运维说明与 CI 针对性任务已同步。
+- 运维/兼容回归77项、独立 PostgreSQL 升级接口12项、前端组件15项通过；桌面/手机浏览器4项通过且已查看截图，页面显示“容器内升级已就绪”，确认后可提交。typecheck、局部ESLint、Ruff、构建、actionlint、Shell语法、技能与 diff 检查通过。未跑全业务流程或启动远端CI。
+- 真容器验证使用本地 erp-container-ota-test:20260920（Linux arm64）：Compose-only 随机项目 erp-compose-smoke-a3769a22eb，18514端口，直接up/登录/真实内部心跳/重复up通过。最终升级演练随机项目 erp-inplace-smoke-811db798fe，18515端口，v9.0.0仅为本地夹具：下载SHA校验、离线venv安装、备份哈希与 pg_restore 可读性、附件内容、真实新增字段迁移、公司/账号保留、新版本健康均通过；force-recreate后版本、登录、真实心跳与新版管理命令检查通过。上述测试容器、网络和新卷已清理，现有部署未改动。
+- 本次远端 PyPI/GitHub 附件及新标签元数据连接超时；镜像构建使用已确认同为 trixie 的本地 Python/PostgreSQL15缓存，离线依赖夹具从测试镜像已安装包重打包。这验证实际容器机制，不冒充正式发布包/GHCR下载或amd64验收。真实发布依赖与基础标签仍需CI验证。日志 /private/tmp/erp-container-ota-build.log、/private/tmp/erp-inplace-compose.log、/private/tmp/erp-inplace-upgrade.log；截图 frontend/test-results/system-upgrade-默认容器-OTA-*/container-ota-ready.png。未发布，未接入用户Linux机器；旧安装需先更新到包含此运行时的镜像才能使用新方式。
+
+## 升级交互参考 sub2api（2026-09-20）
+
+- 参考官方 VersionBadge.vue 与 update_service.go 的版本提示、检查缓存、发布说明及恢复交互；ERP 保留管理员授权、独立执行器、SHA256、先备份后前向迁移，不移植二进制替换或数据库降级。检查缓存20分钟、手动强刷；失败保留上次说明但禁用升级，提交仍读取实时发布信息。
+- 网页新增当前/最新版本卡片、检查/发布时间、Docker/原生手动升级指引、成功且运行版本达标后的刷新入口。目标变化或断连清除确认，普通轮询不抹掉检查失败。历史失败按目标版本折叠，不篡改原记录。手机弹窗内部滚动，标题与操作区固定可见。
+- 独立临时 PostgreSQL 下 apps.core.tests.test_ota 的11项测试通过；SystemUpgrade 的14项组件测试、typecheck、局部ESLint、Ruff及前端构建通过。Playwright system-upgrade.spec.ts 桌面/手机2项通过，截图已查看，包含新版说明、历史折叠、手动部署切换、检查失败/重试及真实弹窗边界。
+- 浏览器仅使用127.0.0.1:18512隔离前端和拦截API夹具，不触发真实升级；截图在 frontend/test-results/system-upgrade-*/upgrade-available.png（本地忽略目录）。首次测试拦截规则误匹配前端模块，修正后通过；视觉检查发现传送弹窗的样式作用域问题，修正并复验。未执行全业务流程、真实版本切换、Linux执行器接入或发布，不能据此声称用户服务器已修复。
+
+## 统一部署入口（2026-09-20）
+
+- 按用户最新要求参考 sub2api：Docker 正式包的 Compose 由打包器注入同版真实多架构 digest，去除 build，新增无预设密钥的 .env.example。配置后直接 up，无宿主机 Python 依赖；兼容安装器仍可导入随包镜像，默认不接入 OTA，--with-ota / -WithOta 显式启用。旧 .env.lean 与已有密钥保留，不自动迁移数据卷。
+- 原生生成配置默认不启用 OTA。Linux 增加 service-install/service-status，应用由 systemd 管理，持久 launcher 随成功安装更新源码与配置路径；start/stop 路由到同账户服务，拒绝在前台实例未停止时另启服务。macOS/Windows 仍保留前台模式。未配置 OTA 的页面明确显示“网页一键升级未启用”，不再当作连接故障。
+- 本地部署/升级相关63项、CI选择/打包校验相关10项、升级面板11项测试通过；typecheck、局部ESLint、Ruff、构建、actionlint、Shell语法和diff检查通过。配置示例与生成字段一致。按最新技能只测受影响模块，未跑全业务流程或发布CI。
+- 真实 Compose-only 演练使用当前源码构建的本地镜像 erp-deploy-validation:20260920、随机独立项目 erp-compose-smoke-622dc7afdf 与18498端口：未运行安装器或宿主机执行器，up、重复up、登录和未启用OTA接口状态通过。该项目及其测试卷已清理，不影响已有部署。日志 /private/tmp/erp-deploy-build.log、/private/tmp/erp-direct-compose.log。
+- 该演练显式使用本地镜像，不冒充正式 GHCR 拉取验证；真实远端镜像检查未完成。原生 Linux 容器升级演练受 Debian 依赖下载阻塞而停止，未完成；systemd仅有单元测试，未验证真实Linux开机/故障恢复。未操作用户Linux服务器，未发布新版本。
+
+## 部署配置与升级诊断（2026-09-20）
+
+- 参考 sub2api 部署配置分区与服务管理方式，保留本项目 Compose、私有 JSON、固定镜像身份和备份/前向迁移约束。Compose 为三个服务增加有限日志轮换，应用启用 init；新增原生字段示例与部署说明，不修改已有配置、数据卷或密钥，不增加 YAML 运行依赖。
+- Linux 系统级执行器使用 multi-user.target，用户级仍使用 default.target；新增只读 status，区分真实心跳、脚本/配置缺失和未完成任务。执行器日志按 HTTP 状态区分认证、路径、任务冲突与连接问题，不输出响应正文或密钥。此项改善诊断，不证明用户 Linux 上的实际断连已恢复。
+- 当前版本达到或超过旧失败任务目标时，前端折叠为历史记录，不再显示本次失败，不改写数据库结果；尚未达到目标的失败继续显示。按数值比较版本，覆盖 1.8 与 1.10。
+- 升级服务/执行器30项、升级面板10项、typecheck、局部ESLint、Ruff、前端构建和 Compose 配置语法检查通过。仅针对修改模块验证，未跑全业务流程，未执行 Linux 实机重启/恢复或两端浏览器视觉验收，未部署到用户服务器。
+
 ## 管理员初始密码与中文提示（2026-09-20）
 
 - 按用户要求放宽管理员创建/重设用户密码和首次向导添加人员的初始密码：非空即可，允许短密码、常见密码、纯数字和自定义字符；保留仅管理员授权、哈希存储、写入字段不回显、密码不入审计、编辑留空不修改原密码。用户后续在“设置 → 我的账户”自行改密；不新增强制改密状态或数据库迁移。

@@ -1,5 +1,10 @@
-param([string]$EnvFile = (Join-Path $PSScriptRoot '.env.lean'), [switch]$SkipBuild, [switch]$NoOta)
+param([string]$EnvFile = '', [switch]$SkipBuild, [switch]$NoOta, [switch]$WithOta)
 $ErrorActionPreference = 'Stop'
+if (-not $EnvFile) {
+  $EnvFile = Join-Path $PSScriptRoot '.env'
+  if (-not (Test-Path $EnvFile) -and (Test-Path (Join-Path $PSScriptRoot '.env.lean'))) { $EnvFile = Join-Path $PSScriptRoot '.env.lean' }
+}
+$EnableOta = $WithOta -and -not $NoOta
 function Invoke-Docker { & docker @args; if ($LASTEXITCODE -ne 0) { throw "Docker 命令执行失败，退出码 $LASTEXITCODE。" } }
 function Random-Hex([int]$Length) {
   $bytes = New-Object byte[] $Length
@@ -19,7 +24,7 @@ function Invoke-OtaPython {
   if ($env:PYTHON) { & $env:PYTHON @args } else { & py -3.11 @args }
   if ($LASTEXITCODE -ne 0) { throw '升级执行器配置失败，请检查宿主机 Python 3.11 和服务日志。' }
 }
-if (-not $NoOta) { Invoke-OtaPython -c 'import sys; assert sys.version_info[:2] == (3, 11)' }
+if ($EnableOta) { Invoke-OtaPython -c 'import sys; assert sys.version_info[:2] == (3, 11)' }
 Invoke-Docker compose version
 Invoke-Docker info | Out-Null
 if (-not (Test-Path $EnvFile)) {
@@ -32,7 +37,7 @@ if (-not (Test-Path $EnvFile)) {
     "LEAN_ENVIRONMENT=$(Setting 'LEAN_ENVIRONMENT' 'production')"
     "LEAN_DB_PASSWORD=$(Random-Hex 32)"
     "LEAN_SECRET_KEY=$(Random-Hex 32)"
-    "LEAN_OTA_AGENT_TOKEN=$(Random-Hex 32)"
+    "LEAN_OTA_AGENT_TOKEN=$(if ($EnableOta) { Random-Hex 32 })"
     "LEAN_ADMIN_PASSWORD=Lean-$(Random-Hex 24)"
   ) -join "`n"
   $stream = [IO.File]::Open($EnvFile, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
@@ -45,19 +50,23 @@ if (-not (Test-Path $EnvFile)) {
     Set-Acl $EnvFile $acl
   }
 }
-if ([IO.File]::ReadAllText($EnvFile) -notmatch '(?m)^LEAN_OTA_AGENT_TOKEN=.+') {
+if ($EnableOta -and [IO.File]::ReadAllText($EnvFile) -notmatch '(?m)^LEAN_OTA_AGENT_TOKEN=.+') {
   [IO.File]::AppendAllText($EnvFile, "`nLEAN_OTA_AGENT_TOKEN=$(Random-Hex 32)`n", [Text.UTF8Encoding]::new($false))
 }
 $compose = @('compose', '--env-file', $EnvFile, '-f', (Join-Path $PSScriptRoot 'docker-compose.yml'))
+if ($EnableOta) {
+  $contents = [IO.File]::ReadAllText($EnvFile) -replace '(?m)^LEAN_OTA_MODE=.*\r?\n?', ''
+  [IO.File]::WriteAllText($EnvFile, $contents.TrimEnd() + "`nLEAN_OTA_MODE=host`n", [Text.UTF8Encoding]::new($false))
+}
 Invoke-Docker @compose config --quiet
 if (Test-Path (Join-Path $PSScriptRoot 'INSTALL-MANIFEST.json')) {
   Invoke-OtaPython (Join-Path $PSScriptRoot 'scripts/release_install.py') --root $PSScriptRoot --config $EnvFile
 } elseif (-not $SkipBuild) { Invoke-Docker @compose build app }
 Invoke-Docker @compose up -d --no-build --wait --wait-timeout 180
-if (-not $NoOta) {
+if ($EnableOta) {
   Invoke-OtaPython (Join-Path $PSScriptRoot 'scripts/ota_service.py') install --mode docker --root $PSScriptRoot --config $EnvFile
 }
 Invoke-NetworkCheck (Join-Path $PSScriptRoot 'scripts/network_check.py') --config $EnvFile
 Write-Host "安装完成。管理员 admin 的初始密码位于 $EnvFile 的 LEAN_ADMIN_PASSWORD，完成安装向导修改密码后该值即失效。"
 Write-Host '访问配置端口的 /erp/，首次登录自动进入快速安装向导，完成后使用新密码登录即可开单。'
-Write-Host "忘记管理员密码时重设：docker compose --env-file $EnvFile -f $(Join-Path $PSScriptRoot 'docker-compose.yml') exec app python manage.py changepassword admin"
+Write-Host "忘记管理员密码时重设：docker compose --env-file $EnvFile -f $(Join-Path $PSScriptRoot 'docker-compose.yml') exec app python /opt/erp/container_runtime.py manage changepassword admin"

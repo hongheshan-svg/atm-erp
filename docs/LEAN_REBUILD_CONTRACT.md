@@ -219,8 +219,9 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 ## ERP 版本检查与升级接口
 
-- 左上角“版本与升级”仅管理员可见。`GET /api/core/upgrade/` 返回当前版本、执行器连接状态及最近升级任务；`?check=1` 检查固定官方仓库的最新正式版本，网络失败返回可重试的 check_error。
+- 左上角“版本与升级”仅管理员可见。`GET /api/core/upgrade/` 返回当前版本、执行器连接状态及最近升级任务；`?check=1` 检查固定官方仓库的最新正式版本，复用20分钟缓存，`&force=1` 强制刷新。返回 checked_at（Unix秒）、cached 和 release.published_at；网络失败返回可重试的 check_error、available=false，可附24小时内保留的上次发布信息，不将缓存展示为已是最新版。普通进度轮询不请求 GitHub。
 - `POST /api/core/upgrade/` 接受 target、confirmed=true 和幂等键；后端重新校验管理员、最新版本、执行器及对应平台安装包 SHA256，事务内拒绝重复活动任务和降级。
-- `/api/core/upgrade/agent/` 仅接受独立宿主机令牌，用于领取和报告任务；令牌不能访问业务数据接口。执行器身份绑定任务，丢失响应或进程中断不得重复执行升级。
-- 状态依次为 queued/downloading/backing_up/installing/verifying/succeeded，异常为 failed。先校验发布包，停机备份，再前向迁移及检查目标版本健康；保留任务、审计和宿主机日志。迁移后失败不自动降级数据库。
-- Docker 和原生部署均由可选宿主机脚本执行，应用容器不挂 docker.sock；首次配置及恢复边界见 README 在线升级章节。
+- 默认 container 模式下载准备完成返回任务状态 ready、need_restart=true。`POST /api/core/upgrade/restart/` 接受 id、confirmed=true 和独立幂等键，重新校验管理员、同一执行器心跳、ready 状态和未变化的来源版本，事务内推进 restarting。执行器不得自行将 ready 推进 restarting；重复确认不重复执行。GET/job 响应统一包含 execution、need_restart，刷新页面可恢复待重启状态。
+- `/api/core/upgrade/agent/` 仅接受执行器令牌，用于领取和报告任务；令牌不能访问业务数据接口。GET 状态增加 execution（container/host）；poll 同样携带 execution，与服务配置不匹配则拒绝。容器模式使用 Linux/native 包，认证由启动器派生并传给内部进程，不向网页返回。执行器身份绑定任务，丢失响应或进程中断不得重复执行升级。
+- container 状态依次为 queued/downloading/ready/restarting/backing_up/installing/verifying/succeeded；兼容 host 不经过 ready/restarting，异常均为 failed。ready 仍是活动任务，不能并发准备其他版本，不停止当前业务或迁移。先校验发布包，管理员确认重启后停机备份，再前向迁移及检查目标版本健康；保留任务、审计和升级日志。迁移后失败不自动降级数据库。
+- Docker 默认容器内更新：程序、独立 venv、备份和任务日志持久化到 runtime 卷；Supervisor 只控制容器内业务进程，无 docker.sock。包须声明 container_runtime=1 并携带匹配架构的离线 wheelhouse；先预备依赖，再停机备份、迁移、切换目录并验证运行版本。迁移阶段中断阻止重启旧代码。原生及显式 host 模式保留宿主机脚本；首次配置及恢复边界见 README 在线升级章节。

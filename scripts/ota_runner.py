@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Opt-in host OTA runner. Never mount the Docker socket into the ERP app."""
 import argparse
-from contextlib import contextmanager
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
 import platform
 import re
 import secrets
@@ -16,9 +13,13 @@ import subprocess
 import sys
 import tarfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
 
 REPO = 'hongheshan-svg/atm-erp'
 PLATFORM = {'Darwin': 'macos', 'Linux': 'linux', 'Windows': 'windows'}.get(platform.system())
@@ -35,7 +36,15 @@ def atomic_json(path, data):
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w', encoding='utf-8') as stream:
         json.dump(data, stream, ensure_ascii=False, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
     temporary.replace(path)
+    if os.name != 'nt':
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def file_hash(path):
@@ -413,24 +422,40 @@ class Runner:
                 self.save()
         print(f"任务 {job['id']} 处理结束；日志：{folder / 'upgrade.log'}", flush=True)
 
+    def recover(self):
+        if self.state.get('inflight'):
+            if self.state.get('terminal') != self.state['inflight']['id']:
+                self.report(self.state['inflight'], 'failed', '执行器曾意外中断，请人工核对升级日志和备份；不会自动重复升级。')
+            self.state.pop('inflight')
+            self.save()
+
+    def dispatch(self, job):
+        if job.get('recovered'):
+            self.report(job, 'failed', '检测到执行器上次中断的任务，已停止自动重试。请核对升级日志及备份后重新发起。', job.get('backup', ''))
+        else:
+            self.execute(job)
+
     def serve(self, once=False):
         with exclusive(self.directory / 'runner.lock'):
-            if self.state.get('inflight'):
-                if self.state.get('terminal') != self.state['inflight']['id']:
-                    self.report(self.state['inflight'], 'failed', '执行器曾意外中断，请人工核对宿主机日志和备份；不会自动重复升级。')
-                self.state.pop('inflight')
-                self.save()
+            self.recover()
             print('OTA 执行器已启动；保持此进程运行，可在 ERP 左上角发起升级。', flush=True)
             while True:
                 try:
                     self.flush()
-                    job = self.api({'action': 'poll', 'mode': self.mode, 'platform': PLATFORM, 'runner_id': self.state['runner_id']}).get('job')
+                    job = self.api({'action': 'poll', 'mode': self.mode, 'platform': PLATFORM,
+                                    'execution': getattr(self, 'execution', 'host'),
+                                    'runner_id': self.state['runner_id']}).get('job')
                     atomic_json(self.directory / 'heartbeat.json', {'seen': time.time()})
                     if job:
-                        if job.get('recovered'):
-                            self.report(job, 'failed', '检测到执行器上次中断的任务，已停止自动重试。请核对宿主机日志及备份后重新发起。', job.get('backup', ''))
-                        else:
-                            self.execute(job)
+                        self.dispatch(job)
+                except urllib.error.HTTPError as exc:
+                    reason = {401: '认证被拒绝，请核对服务端与执行器密钥及反向代理认证',
+                              403: '认证或访问权限被拒绝，请核对密钥和代理配置',
+                              404: '执行器接口不存在，请核对地址、端口及代理路径',
+                              409: '执行器或任务状态冲突，请核对重复服务和待上报任务'}.get(exc.code, '服务端返回错误')
+                    print(f'执行器连接失败（HTTP {exc.code}）：{reason}；将重试。', flush=True)
+                except (ValueError, KeyError):
+                    print('执行器接口返回无效数据，请核对服务地址及代理配置；将重试。', flush=True)
                 except OSError:
                     print('暂时无法连接 ERP，将重试。', flush=True)
                 if once:

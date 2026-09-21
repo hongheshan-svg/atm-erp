@@ -1,10 +1,9 @@
 import importlib.util
 import io
-import json
-from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).parents[2]
@@ -57,6 +56,13 @@ class ReliabilityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 restore.prepare(root, io.BytesIO(raw.getvalue()), 'same-archive')
             self.assertEqual((root / 'private.txt').read_text(), 'keep')
+
+    def test_watchdog_does_not_interrupt_maintenance(self):
+        watchdog = load(ROOT / 'docker/app/watchdog.py')
+        probe = Mock(return_value=False)
+        with patch.object(watchdog.Path, 'exists', return_value=True), self.assertRaises(KeyboardInterrupt):
+            watchdog.monitor(probe=probe, sleep=Mock(side_effect=[None, KeyboardInterrupt()]))
+        probe.assert_not_called()
 
     def test_watchdog_tolerates_transient_failures_and_exits_on_six_consecutive_failures(self):
         watchdog = load(ROOT / 'docker/app/watchdog.py')
