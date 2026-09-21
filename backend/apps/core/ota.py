@@ -92,8 +92,15 @@ def job_data(job):
 
 def runner_state():
     state = cache.get('ota.runner')
-    return state if (state and state['seen'] > timezone.now().timestamp() - 45
-                     and state.get('execution', 'host') == settings.OTA_MODE) else None
+    return (
+        state
+        if (
+            state
+            and state['seen'] > timezone.now().timestamp() - 45
+            and state.get('execution', 'host') == settings.OTA_MODE
+        )
+        else None
+    )
 
 
 class UpgradeView(PermissionMixin, APIView):
@@ -147,8 +154,12 @@ class UpgradeView(PermissionMixin, APIView):
                 target=payload['target'],
                 mode=runner['mode'],
                 platform=runner['platform'],
-                asset={**asset, '_runner_id': runner['id'], '_execution': runner.get('execution', 'host'),
-                       '_source_version': VERSION},
+                asset={
+                    **asset,
+                    '_runner_id': runner['id'],
+                    '_execution': runner.get('execution', 'host'),
+                    '_source_version': VERSION,
+                },
                 created_by=actor,
                 updated_by=actor,
                 detail='等待升级服务下载并准备新版本',
@@ -178,16 +189,24 @@ class RestartView(PermissionMixin, APIView):
 
     def post(self, request):
         payload = request.data
-        if (not isinstance(payload, dict) or set(payload) != {'id', 'confirmed'}
-                or type(payload['id']) is not int or payload['confirmed'] is not True):
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {'id', 'confirmed'}
+            or type(payload['id']) is not int
+            or payload['confirmed'] is not True
+        ):
             raise ValidationError('请确认暂停业务操作，备份后重启升级。')
 
         def execute(actor):
             Company.objects.select_for_update().get(pk=1)
             job = UpgradeJob.objects.select_for_update().filter(pk=payload['id']).first()
             runner = runner_state()
-            if (not job or job.status != 'ready' or job.asset.get('_execution') != 'container'
-                    or settings.OTA_MODE != 'container'):
+            if (
+                not job
+                or job.status != 'ready'
+                or job.asset.get('_execution') != 'container'
+                or settings.OTA_MODE != 'container'
+            ):
                 raise Conflict('没有可重启生效的更新，请刷新升级状态。')
             if not runner or runner['id'] != job.asset.get('_runner_id'):
                 raise Conflict('升级服务未连接，请等待连接恢复后重试。')
@@ -196,13 +215,24 @@ class RestartView(PermissionMixin, APIView):
             job.status, job.detail = 'restarting', '已确认重启，等待备份并切换新版本'
             job.updated_by = actor
             job.save()
-            AuditLog.objects.create(actor=actor, operation='system.upgrade.restart',
-                                    resource=f'upgrade:{job.pk}', detail={'target': job.target})
+            AuditLog.objects.create(
+                actor=actor,
+                operation='system.upgrade.restart',
+                resource=f'upgrade:{job.pk}',
+                detail={'target': job.target},
+            )
             return job_data(job)
 
-        return Response(perform(actor=request.user, key=request.headers.get('Idempotency-Key'),
-                                operation='system.upgrade.restart', payload=payload,
-                                authorize=lambda actor: require_role(actor, ADMIN), execute=execute))
+        return Response(
+            perform(
+                actor=request.user,
+                key=request.headers.get('Idempotency-Key'),
+                operation='system.upgrade.restart',
+                payload=payload,
+                authorize=lambda actor: require_role(actor, ADMIN),
+                execute=execute,
+            )
+        )
 
 
 class AgentView(APIView):
@@ -235,8 +265,13 @@ class AgentView(APIView):
                 raise Conflict('已有其他执行器连接，请停止原执行器后重试。')
             cache.set(
                 'ota.runner',
-                {'id': runner_id, 'mode': mode, 'platform': platform, 'execution': execution,
-                 'seen': timezone.now().timestamp()},
+                {
+                    'id': runner_id,
+                    'mode': mode,
+                    'platform': platform,
+                    'execution': execution,
+                    'seen': timezone.now().timestamp(),
+                },
                 60,
             )
             with transaction.atomic():

@@ -89,8 +89,10 @@ class UpgradeTests(TestCase):
         cache.set(RELEASE_CACHE, {'release': self.info, 'checked_at': 9999999999}, 60)
         with patch('apps.core.ota.release_info', return_value={**self.info, 'version': 'v10.0.0'}):
             response = self.client.post(
-                '/api/core/upgrade/', {'target': 'v9.0.0', 'confirmed': True},
-                format='json', HTTP_IDEMPOTENCY_KEY='fresh-check',
+                '/api/core/upgrade/',
+                {'target': 'v9.0.0', 'confirmed': True},
+                format='json',
+                HTTP_IDEMPOTENCY_KEY='fresh-check',
             )
         self.assertEqual(response.status_code, 409)
         self.assertFalse(UpgradeJob.objects.exists())
@@ -108,10 +110,18 @@ class UpgradeTests(TestCase):
     @override_settings(OTA_MODE='container')
     def test_container_runner_rejects_host_and_selects_linux_program_package(self):
         self.assertEqual(self.poll().status_code, 409)
-        response = self.client.post('/api/core/upgrade/agent/', {
-            'action': 'poll', 'mode': 'native', 'platform': 'linux',
-            'execution': 'container', 'runner_id': 'd' * 32,
-        }, format='json', HTTP_X_OTA_TOKEN=TOKEN)
+        response = self.client.post(
+            '/api/core/upgrade/agent/',
+            {
+                'action': 'poll',
+                'mode': 'native',
+                'platform': 'linux',
+                'execution': 'container',
+                'runner_id': 'd' * 32,
+            },
+            format='json',
+            HTTP_X_OTA_TOKEN=TOKEN,
+        )
         self.assertEqual(response.status_code, 200)
         self.info['assets'][0]['name'] = 'atm-erp-v9.0.0-linux-native.zip'
         self.assertEqual(self.queue().status_code, 200)
@@ -179,10 +189,18 @@ class UpgradeTests(TestCase):
     @override_settings(OTA_MODE='container')
     def test_prepared_update_requires_admin_restart_and_preserves_backup_order(self):
         def poll():
-            return self.client.post('/api/core/upgrade/agent/', {
-                'action': 'poll', 'mode': 'native', 'platform': 'linux',
-                'execution': 'container', 'runner_id': 'd' * 32,
-            }, format='json', HTTP_X_OTA_TOKEN=TOKEN)
+            return self.client.post(
+                '/api/core/upgrade/agent/',
+                {
+                    'action': 'poll',
+                    'mode': 'native',
+                    'platform': 'linux',
+                    'execution': 'container',
+                    'runner_id': 'd' * 32,
+                },
+                format='json',
+                HTTP_X_OTA_TOKEN=TOKEN,
+            )
 
         poll()
         self.info['assets'][0]['name'] = 'atm-erp-v9.0.0-linux-native.zip'
@@ -190,13 +208,25 @@ class UpgradeTests(TestCase):
         job = poll().data['job']
 
         def report(status):
-            return self.client.post('/api/core/upgrade/agent/', {
-                'action': 'report', 'id': job['id'], 'claim': job['claim'], 'status': status,
-            }, format='json', HTTP_X_OTA_TOKEN=TOKEN)
+            return self.client.post(
+                '/api/core/upgrade/agent/',
+                {
+                    'action': 'report',
+                    'id': job['id'],
+                    'claim': job['claim'],
+                    'status': status,
+                },
+                format='json',
+                HTTP_X_OTA_TOKEN=TOKEN,
+            )
 
         def restart(key='restart', confirmed=True):
-            return self.client.post('/api/core/upgrade/restart/', {'id': job['id'], 'confirmed': confirmed},
-                                    format='json', HTTP_IDEMPOTENCY_KEY=key)
+            return self.client.post(
+                '/api/core/upgrade/restart/',
+                {'id': job['id'], 'confirmed': confirmed},
+                format='json',
+                HTTP_IDEMPOTENCY_KEY=key,
+            )
 
         self.assertEqual(restart().status_code, 409)
         self.assertEqual(report('backing_up').status_code, 409)
@@ -233,8 +263,12 @@ class UpgradeTests(TestCase):
         job = UpgradeJob.objects.get()
         job.status = 'ready'
         job.save()
-        response = self.client.post('/api/core/upgrade/restart/', {'id': job.pk, 'confirmed': True},
-                                    format='json', HTTP_IDEMPOTENCY_KEY='host-restart')
+        response = self.client.post(
+            '/api/core/upgrade/restart/',
+            {'id': job.pk, 'confirmed': True},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='host-restart',
+        )
         self.assertEqual(response.status_code, 409)
 
     def test_progress_keeps_runner_connected_only_with_valid_claim(self):
