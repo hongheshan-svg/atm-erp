@@ -14,6 +14,17 @@ ota = importlib.import_module('container_ota')
 
 
 class ContainerTests(unittest.TestCase):
+    def test_fixture_wheels_owned_by_host_packager(self):
+        from scripts.tests import container_ota_smoke as smoke
+        with patch.object(smoke.os, 'getuid', return_value=1001), \
+                patch.object(smoke.os, 'getgid', return_value=1002), \
+                patch.object(smoke.subprocess, 'run') as run:
+            smoke.export_fixture_wheels('isolated-test-image', Path('/isolated/wheels'))
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[argv.index('--user') + 1], '1001:1002')
+        self.assertEqual(argv[argv.index('--network') + 1], 'none')
+        self.assertTrue(run.call_args.kwargs['check'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

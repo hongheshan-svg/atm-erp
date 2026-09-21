@@ -67,6 +67,13 @@ def pack_fixture_wheels(output):
     }))
 
 
+def export_fixture_wheels(image, wheels):
+    # Linux bind mounts retain ownership; root + umask 077 hides wheels from the host packager.
+    subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--user', f'{os.getuid()}:{os.getgid()}',
+                    '--entrypoint', 'python', '-v', f'{Path(__file__).resolve()}:/fixture.py:ro',
+                    '-v', f'{wheels}:/out', image, '/fixture.py', '--pack-wheels', '/out'], check=True)
+
+
 def inside(prepare_only=False, resume=False, crash_before_backup=False, crash_verifying=False):
     sys.path[:0] = ['/opt/erp', '/app']
     import container_ota
@@ -111,6 +118,8 @@ def inside(prepare_only=False, resume=False, crash_before_backup=False, crash_ve
         if not resume:
             runner.execute(job)
         stored = UpgradeJob.objects.get(pk=job['id'])
+        if stored.status != 'ready':
+            print((runner.directory / f'job-{job["id"]}/upgrade.log').read_text())
         assert stored.status == 'ready', stored.detail
         assert not (runner.directory / f'job-{job["id"]}/backup').exists()
         assert not (runner.directory / 'active.json').exists()
@@ -264,9 +273,9 @@ def main():
         if args.fixture_from_image:
             wheels = stage / 'wheelhouse'
             wheels.mkdir()
-            subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--user', '0', '--entrypoint', 'python',
-                            '-v', f'{Path(__file__).resolve()}:/fixture.py:ro', '-v', f'{wheels}:/out',
-                            args.image, '/fixture.py', '--pack-wheels', '/out'], check=True)
+            export_fixture_wheels(args.image, wheels)
+            if not list(wheels.glob('*/requirements.lock')) or not list(wheels.glob('*/*.whl')):
+                raise RuntimeError('Fixture wheelhouse is empty or unreadable; refusing to package it')
         else:
             with zipfile.ZipFile(args.native_package) as package:
                 for name in package.namelist():
