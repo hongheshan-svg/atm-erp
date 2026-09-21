@@ -8,6 +8,8 @@ on:
         default: ''
 permissions:
   contents: read
+env:
+  PYTHONUTF8: '1'
 concurrency:
   group: installers-${{ inputs.ref && github.run_id || github.ref }}
   cancel-in-progress: true

@@ -34,6 +34,10 @@ jobs:
           tags: erp-inplace-ci
           cache-from: type=gha,scope=ota-inplace
           cache-to: type=gha,scope=ota-inplace,mode=max
+      - name: Prepare database and cache images for offline smoke
+        run: |
+          docker pull postgres:15-alpine
+          docker pull redis:7-alpine
       - run: python scripts/tests/direct_compose_smoke.py --image erp-inplace-ci
       - run: python scripts/tests/container_ota_smoke.py --image erp-inplace-ci --fixture-from-image
   upgrade:

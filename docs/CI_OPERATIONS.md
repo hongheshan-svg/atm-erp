@@ -66,4 +66,4 @@ Docker 旧宿主机升级保留 classic/containerd 两种镜像存储，使用�
 
 容器内 OTA 检查直接 Compose 启动及真实心跳、待重启持久化、程序校验、离线依赖、先备份后迁移、强杀进程恢复、新版本健康及重建保留。备份在独立空数据库实际还原。fixture-from-image 是本地发布/依赖夹具，不证明正式远端下载或另一架构；真实包可通过 native-package 参数检查相应依赖。基础运行时变化仍须遵循 docker/app/runtime-protocol.json，不静默强行迁移。
 
-Summary 和失败日志用于说明执行了什么，不把跳过项读成通过。浏览器截图/trace 保留7天，发布包保留14天。本轮工作流优化已通过 121 项本地 CI/安装运维脚本测试、修改的 CI Python 文件 Ruff 检查及 actionlint；没有执行全业务流程测试。尚未推送并运行 GitHub，不能声称远端全绿或给出未经测量的耗时降幅。
+Summary 和失败日志用于说明执行了什么，不把跳过项读成通过。浏览器截图/trace 保留7天，发布包保留14天。本轮工作流优化已通过 121 项本地 CI/安装运维脚本测试、修改的 CI Python 文件 Ruff 检查及 actionlint；没有执行全业务流程测试。远端验证与发布结果见 PR #80 及对应 Actions，不以本地通过推断远端全绿。Windows 脚本测试显式使用 UTF-8；离线容器演练提前拉取 PostgreSQL/Redis 基础镜像，不依赖 runner 的已有镜像缓存。
