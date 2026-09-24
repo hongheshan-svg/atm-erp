@@ -13,13 +13,9 @@ on:
         type: boolean
         default: false
       force_validation:
-        description: 'Rerun affected checks even when matching evidence exists'
+        description: 'Rerun full validation even when a Full validation of the same tree exists'
         type: boolean
         default: false
-      validation_modules:
-        description: 'Affected modules for shared/unknown changes, comma separated; never implies full validation'
-        type: string
-        default: ''
 permissions:
   contents: read
   actions: read
@@ -45,20 +41,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
           FORCE: ${{ inputs.force_validation }}
-          MODULES: ${{ inputs.validation_modules }}
         run: |
           args=()
           if [[ "$FORCE" == true ]]; then args+=(--force); fi
-          python3 -m scripts.ci.release_gate --tag "$TAG" --modules "$MODULES" "${args[@]}"
+          python3 -m scripts.ci.release_gate --tag "$TAG" "${args[@]}"
+  # 发版本必须全量：全部后端阶段与前端单测、完整业务链在内的全部浏览器用例（双视口）、OTA 与安装器。
   validate:
     needs: preflight
     if: needs.preflight.outputs.validate == 'true'
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.preflight.outputs.commit }}
-      suite: auto
+      suite: full
       base: ${{ needs.preflight.outputs.base }}
-      modules: ${{ inputs.validation_modules || '' }}
+      browser_projects: both
   images:
     needs: [preflight, validate]
     if: ${{ !cancelled() && needs.preflight.result == 'success' && ((needs.preflight.outputs.validate == 'true' && needs.validate.result == 'success') || (needs.preflight.outputs.validate == 'false' && needs.validate.result == 'skipped')) }}
