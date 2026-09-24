@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import subprocess
 import tempfile
 import unittest
@@ -230,6 +231,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertIn('browser_projects: both', validate)
         self.assertNotIn('validation_modules', workflow)
         self.assertNotIn('suite: auto', validate)
+
+    def test_validation_markers_follow_gate_even_when_suites_are_skipped(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        for job, output in (('full-validation', 'full'), ('scoped-validation', 'scoped')):
+            block = re.split(r'\n  (?! )', workflow.split(f'\n  {job}:\n', 1)[1], maxsplit=1)[0]
+            condition = next(line for line in block.splitlines() if line.strip().startswith('if:'))
+            # 未选中的套件会被跳过；默认 success() 会把标记连带跳过，必须显式依据 gate 结论。
+            self.assertIn('!cancelled()', condition, job)
+            self.assertIn("needs.gate.result == 'success'", condition, job)
+            self.assertIn(f"needs.plan.outputs.{output} == 'true'", condition, job)
+        self.assertIn('name: Full validation (${{ needs.plan.outputs.tree }})', workflow)
 
     def test_release_scope_is_full_even_for_shared_or_unknown_changes(self):
         def fake_git(*args):
