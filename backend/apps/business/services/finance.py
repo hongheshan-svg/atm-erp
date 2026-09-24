@@ -1,12 +1,13 @@
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
 from apps.core.permissions import FINANCE
 
 from ..models import Document, Entry, Payment, PaymentEvidence, StockMove, TimeEntry
-from .common import ZERO, audit, day, fields, lookup, number, project_action, rounded, save, state, text
+from .common import ZERO, audit, day, event_date, fields, lookup, number, project_action, rounded, save, state, text
 from .payment_terms import due_amount
 
 
@@ -79,8 +80,6 @@ def pay(actor, key, entry_id, data, *, refund=False):
         statement = authorize_payment(entry, data, amount, refund)
         method = text(data, 'method', default='', maximum=20)
         if method not in {'', 'bank', 'cash', 'other'}:
-            from rest_framework.exceptions import ValidationError
-
             raise ValidationError({'method': '请选择银行转账、现金或其他。'})
         document = (
             lookup(Document, data['document'], 'document', project=entry.project, category='receipt')
@@ -92,7 +91,7 @@ def pay(actor, key, entry_id, data, *, refund=False):
                 entry=entry,
                 reconciliation=statement,
                 amount=amount,
-                date=day(data, 'date'),
+                date=event_date(data),
                 reason=text(data, 'reason'),
                 method=method,
                 account=text(data, 'account', default='', maximum=100),
@@ -139,11 +138,14 @@ def reverse(actor, key, payment_id, data):
             raise Conflict('该流水已与银行记录核对，请先撤销银行匹配，再冲销原流水。')
         if paid(entry) - source.amount < 0:
             raise Conflict('冲销会使净付款为负，请先处理关联退款。')
+        date = event_date(data)
+        if date < source.date:
+            raise ValidationError({'date': '冲销日期不能早于原收付款日期。'})
         payment = save(
             Payment(
                 entry=entry,
                 amount=-source.amount,
-                date=day(data, 'date'),
+                date=date,
                 reason=text(data, 'reason'),
                 reversal_of=source,
             ),

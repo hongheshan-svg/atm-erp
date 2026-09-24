@@ -10,7 +10,8 @@ export const salesColumns: Column[] = [
   { key: 'code', label: '销售单号' },
   { key: 'name', label: '销售名称' },
   { key: 'customer_name', label: '客户' },
-  { key: 'status', label: '状态' },
+  // 取消项目不改写销售单的签约事实（重新打开要恢复原合同），列表按执行项目状态标注。
+  { key: 'status', label: '状态', format: row => row.status === 'signed' && row.project_status === 'cancelled' ? '已签约 · 项目已取消' : display(row.status) },
   { key: 'contract_amount', label: '合同金额' },
   { key: 'project_code', label: '执行项目' },
 ]

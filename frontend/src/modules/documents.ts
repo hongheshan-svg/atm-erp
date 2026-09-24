@@ -15,9 +15,16 @@ export const columns: Record<string, Column[]> = {
     C('original_name', '文件'),
     C('source', '来源'),
     C('category', '分类'),
-    C('size', '字节'),
+    { key: 'size', label: '大小', format: row => fileSize(row.size) },
     C('created_at', '上传时间'),
   ],
+}
+export function fileSize(bytes: unknown) {
+  const size = Number(bytes)
+  if (bytes == null || bytes === '' || !Number.isFinite(size)) return '—'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 export function createLabel(resource: string) {
   return ({ documents: '上传附件' } as Record<string, string | boolean>)[resource] || ''

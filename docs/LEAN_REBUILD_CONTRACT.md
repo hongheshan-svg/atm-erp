@@ -37,7 +37,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 - BOM 新模板列为物料编码、单元、需求数量、变更说明，支持CSV/XLSX下载，兼容原三列/四列模板；物料名称、规格及品牌在预览中只读关联，已领、在途、库存和缺料仍由业务计算。
 
 - 业务列表 `{resource}/export/?file_format=csv|xlsx` 使用原列表全部筛选结果，忽略分页，最多20000行；沿用 queryset 项目范围及序列化金额过滤。采购按明细展开。附件列表仅导出元数据，附件内容仍走独立鉴权下载。设置不属于业务表格导入范围。
-- `reports/?file_format=csv|xlsx` 导出全部筛选项目明细与合计，沿用管理员/总经理报表授权。金额为 CNY 含税经营口径；XLSX数值使用文本单元格保存，CSV保存原始十进制字符串，避免服务端转换损失精度。Excel读取CSV时应按文本导入编码/大金额列，以免软件自动转换前导零或长数字。危险公式前缀转义为文本。
+- `reports/?file_format=csv|xlsx` 导出全部筛选项目明细与合计，沿用管理员/总经理报表授权。金额为 CNY 含税经营口径；XLSX 的金额、数量列在不超过 15 位有效数字时写为数值单元格便于求和，超出的仍存文本以免 Excel 截断精度；编码、账号、流水号始终为文本。CSV保存原始十进制字符串。Excel读取CSV时应按文本导入编码/大金额列，以免软件自动转换前导零或长数字。危险公式前缀转义为文本；纯数字（含负号）不是公式，不加前缀。
 - items/partners/sales/projects/purchases/tasks/stocks/moves/entries/payments/time/deliveries 提供 `import-template/` GET（file_format同上）、`import-file/` POST multipart单个file、`import-confirm/` POST JSON `{token}`。CSV为UTF-8，XLSX仅一个工作表，禁止公式，文件5MB/1000行上限，严格使用模板列。关联使用编码或账号，标注ID的列从列表导出获取。
 - 预览返回 count/rows/errors/can_import/token/note，在事务内调用现有服务校验后回滚；错误按文件行号展示。确认凭据绑定用户/模块、30分钟有效，确认重新授权和校验，任一行失败则全部回滚。同一token的重试或并发确认使用同一ActionReceipt，返回同一结果；新文件应重新预览。
 - 物料/往来单位与采购由采购权限新增；销售/项目/任务/交付由经理权限新增；期初仅管理员；领料由仓库权限；费用和收付款由财务权限；工时保留本人任务和项目范围。采购同一分组号合为一张草稿，组内单据信息必须一致。销售/采购不自动审批签约；应收应付由原合同采购产生；退款、冲销、盘点、更正仍从原记录操作。预览不产生持久业务记录、审计或编号计数变更。
@@ -73,7 +73,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 `/api/business/reports/` GET，管理员或 management_reports=true 的 manager 可读，其余角色 403，每次请求核对当前授权。参数 search（项目名称/编号，最多150字符）、status（项目状态，留空全部）、risk（over_budget/overdue/unbudgeted，留空全部）、page（正整数）、page_size（1–200，接口默认20）。响应 summary/count/page/page_size/results/generated_at/filters；summary 汇总全部筛选结果，不仅当前页。前端统一默认每页10条，可选10/20/50/100并跨页面保存，调整大小回第一页。
 
-全部为当前筛选项目的累计经营口径，包含已结项和已取消项目（可用状态筛选排除）；已签约合同额不作为会计收入。实际成本与项目页共用批量投影，在途承诺、累计采购预算校验复用预算服务。未设预算与零预算区分；交付逾期仅统计计划日期早于今天且执行中/交付中的项目，质保阶段不再算交付逾期。待收待付按原单金额减抵减、减净收付款求余额，逾期为期限早于今天；正向余额和负向退款分别汇总，取消项目退款仍显示。费用属于待付款，付款不重复计成本，冲销按原负向流水抵消。报表无写接口、无独立台账、无期间收入/完工利润推算。
+全部为当前筛选项目的累计经营口径，包含已结项和已取消项目（可用状态筛选排除）；已取消项目的合同额计 0（销售单仍保留签约事实，重新打开后恢复），已签约合同额不作为会计收入。实际成本与项目页共用批量投影，在途承诺、累计采购预算校验复用预算服务。未设预算与零预算区分；交付逾期仅统计计划日期早于今天且执行中/交付中的项目，质保阶段不再算交付逾期。待收待付按原单金额减抵减、减净收付款求余额，逾期为期限早于今天，采购应付只计已合格收货部分（未到货货款不计到期或逾期）；正向余额和负向退款分别汇总，取消项目退款仍显示。费用属于待付款，付款不重复计成本，冲销按原负向流水抵消。报表无写接口、无独立台账、无期间收入/完工利润推算。
 
 ## 公司与编号
 
@@ -134,7 +134,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 - `time/{id}/amend/`：date/hours/reason，原人员或经理更正，hours=0 撤销。冲销+替代记录保留历史与原费率，重复更正拒绝。
 - `projects/{id}/ship/`：quantity/date/installer/acceptor/note，生产阶段完成且累计领料覆盖本批数量后才可发货，创建安装与验收任务。
 - `deliveries/{id}/accept/`：date/reason，经理确认安装完成后的验收；每批独立保修截止日。
-- `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee。质保截止日当天仍免费，期外收费必须为正数并生成应收。生产经理仅可为参与项目已验收保内批次创建fee=0售后；过保或非零费用请求403，由项目经理确认。生产经理可派工和完成既有收费售后，但其取消/重开涉及账款，必须由项目经理操作。售后材料、工时纳入实际成本。
+- `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee。质保截止日当天仍免费；期外收费为正数并生成应收，期外免费（fee=0）须由项目经理填写 free_reason 并记入审计，不生成应收。生产经理仅可为参与项目已验收保内批次创建fee=0售后；过保或非零费用请求403，由项目经理确认。生产经理可派工和完成既有收费售后，但其取消/重开涉及账款，必须由项目经理操作。售后材料、工时纳入实际成本。
 
 ## 收付款与附件
 
@@ -202,11 +202,11 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 采购单保存后通过 `GET /api/business/purchases/{id}/contract-preview/` 自动投影打印合同；仅 admin/manager/purchaser/finance 可读，warehouse/member/sales_manager 拒绝。合同沿用采购单编号，引用当前公司、供应商、物料、交期、账期和备注，金额由服务端按明细计算；草稿/未批准、已取消和取消余量明确标示，不伪造签署状态。前端采购操作“预览采购合同”打开 A4 页面，可打印或另存 PDF；签署文件上传原采购附件，预览不新增合同金额台账或公开下载地址。
 
-合同正文采用单页 A4 紧凑排版，包含交付结算、质量验收、每批验收合格起一年质保、维修更换费用、违约赔偿、不可抗力、保密及争议处理条款。多项或长明细在正文汇总，完整附件独立预览和打印，保留全部物料及长备注，附件允许分页；双方按同编号确认正文和附件。打印件不带系统生成说明、更新时间或系统订单状态，保留草稿/取消提示及业务条款。模板条款不自动新增采购售后台账，也不改变付款或收货服务规则。
+合同正文采用单页 A4 紧凑排版，包含交付结算、质量验收、每批验收合格起按采购单 warranty_months 计算的质保（默认 12 个月即一年）、维修更换费用、违约赔偿、不可抗力、保密及争议处理条款。多项或长明细在正文汇总，完整附件独立预览和打印，保留全部物料及长备注，附件允许分页；双方按同编号确认正文和附件。打印件不带系统生成说明、更新时间或系统订单状态，保留草稿/取消提示及业务条款。模板条款不自动新增采购售后台账，也不改变付款或收货服务规则。
 
 - Partner、PurchaseOrder 增加 payment_term（manual/cash/month30/month60/month90/month120/custom）及 payment_days；custom 为0～365自然日。供应商只提供新单默认值，采购创建时保存条款；草稿可改，提交后沿用原审批和退回流程，供应商改默认值不追改已有订单。
 - 月结＝每批实际合格收货日期的当月月底＋天数，不按下单日期、不按整单最后收货日，也不自动顺延工作日。cash＝合格收货日；隔离品合格入库才起算。receive/quality-accept 接受 received_date（缺省今天，不得晚于今天），存入不可变 StockMove；历史缺省日期仅在投影中回退为流水本地创建日。
-- 继续一单一应付，不新增可编辑应付分账。payment_schedule 从原收货金额、原批次退货 supplier_credit 和净 Payment 计算，退货冲原批次，净付款按先到期顺序抵扣。未收货部分没有自动到期日；API due_date 为最近未结到期日，due_amount 为今天及之前到期金额，报表逾期只计今天之前的未结分批金额。数据库原 Entry.due_date 仅作为旧手工期限事实保留。
+- 继续一单一应付，不新增可编辑应付分账。payment_schedule 从原收货金额、原批次退货 supplier_credit 和净 Payment 计算，退货冲原批次，净付款按先到期顺序抵扣。未收货部分没有自动到期日；指定日期（manual）账期同样只对已合格收货净额在原期限到期；API due_date 为最近未结到期日，due_amount 为今天及之前到期金额，报表逾期只计今天之前的未结分批金额。数据库原 Entry.due_date 仅作为旧手工期限事实保留。
 - manual 沿用独立 payment_due_date（留空兼容原交期）；自动账期不能同时填写指定付款日期。采购账期和 bank/cash/other 支付方式独立；到期投影不跳过对账或预付款核准，也不把未来到期付款一律禁止。
 - 采购模板12列（兼容8/9/10列），供应商模板7列（兼容5列），末尾追加采购账期和自定义月结天数；同一采购分组条款必须一致。列表、导出及对账快照保留条款，到期明细可在收付款页面查看。
 
@@ -225,3 +225,18 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 - `/api/core/upgrade/agent/` 仅接受执行器令牌，用于领取和报告任务；令牌不能访问业务数据接口。GET 状态增加 execution（container/host）；poll 同样携带 execution，与服务配置不匹配则拒绝。容器模式使用 Linux/native 包，认证由启动器派生并传给内部进程，不向网页返回。执行器身份绑定任务，丢失响应或进程中断不得重复执行升级。
 - container 状态依次为 queued/downloading/ready/restarting/backing_up/installing/verifying/succeeded；兼容 host 不经过 ready/restarting，异常均为 failed。ready 仍是活动任务，不能并发准备其他版本，不停止当前业务或迁移。先校验发布包，管理员确认重启后停机备份，再前向迁移及检查目标版本健康；保留任务、审计和升级日志。迁移后失败不自动降级数据库。
 - Docker 默认容器内更新：程序、独立 venv、备份和任务日志持久化到 runtime 卷；Supervisor 只控制容器内业务进程，无 docker.sock。包须声明 container_runtime=1 并携带匹配架构的离线 wheelhouse；先预备依赖，再停机备份、迁移、切换目录并验证运行版本。迁移阶段中断阻止重启旧代码。原生及显式 host 模式保留宿主机脚本；首次配置及恢复边界见 README 在线升级章节。
+
+## 审计整改补充（2026-09-25，优先于上述旧描述）
+
+- 经营报表：已取消项目合同额计 0；`sales/` 序列化增加只读 `project_status`，列表对已签约且项目已取消的销售单标注“项目已取消”。
+- 采购与 BOM：`purchases/` 新建及草稿 `edit/` 关联 `bom_line` 时，除物料总量外还按该 BOM 行校验：本次数量加上该行其他未完成在途不超过该行用量，不能借用同物料其他单元的数量。`demand/` 对历史数据中挂超单行的在途，把超出部分作为同物料共享在途分摊，不再丢弃。
+- 采购账期：manual 账期的 payment_schedule、due_amount、状态、报表逾期、工作台待结算和关注视图只计已合格收货净额；未收货部分仍计入待付款余额和在途承诺，但不到期。
+- 物料：已被 BOM、采购或库存引用（含历史）的物料，不能改写已有的 unit/specification/drawing_number/drawing_revision（大小写不同视为同值），原为空的可以补填；需要不同单位、规格或图档时新建编码。
+- 项目编辑：`projects/{id}/edit/` 审计记录所有可编辑字段的变更前后值（name/customer/manager/members/requirements/due_date/equipment_quantity/warranty_months），并把 name/customer/requirements/due_date/equipment_quantity/warranty_months 同步到关联销售单（审计 `sale_synced`）。
+- 日期：`entries/{id}/pay/`、`refund/` 及 `bank-records/` 的 date 不得晚于今天；`payments/{id}/reverse/` 的 date 不得晚于今天，也不得早于原收付款日期。
+- 领料：`stocks/issue/` 增加可选 `confirm_shared`（布尔）。本次领料后全库存低于其他执行中/交付中项目“已到货、未领用、仍在其 BOM 需求内”的数量时返回 409 并列出项目；确认挪用后放行，审计记录 `shared_from`。库存仍不预留。
+- 售后：`projects/{id}/service/` 增加可选 `free_reason`，见上文售后条款。
+- 采购质保：采购单增加 `warranty_months`（1–120，默认 12），新建及草稿修改可设；`warranty/` 按收货日加该月数计算质保截止并返回 `warranty_months`；`contract-preview/` 返回 `warranty_months`，质保条款按该月数生成，已归档版本快照不变。
+- 库位：库位统一全半角并合并多余空白。`receive/`、`quality-accept/` 增加可选 `new_location`（布尔），首次使用除“主仓”外的新库位必须为 true；`stocks/opening/` 由管理员在上线时建立库位，不需确认。`stocks/locations/` GET 返回已用库位列表，供表单候选。
+- 操作审计：`/api/core/audit/` 返回 `actor_name`，支持 `actor`、`operation`、`resource`、`date_from`、`date_to`（本地日期）筛选及 `search`（操作、对象、操作人账号或姓名）。
+- 部署：Docker 与原生安装的 nginx 在 server 级和 `/erp/index.html` location 同时下发 X-Frame-Options、X-Content-Type-Options、Referrer-Policy 与 Content-Security-Policy（仅同源脚本、禁止被嵌入）。

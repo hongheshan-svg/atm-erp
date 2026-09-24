@@ -97,6 +97,23 @@ def quote_path(path):
     return '"' + value + '"'
 
 
+CONTENT_SECURITY_POLICY = "; ".join((
+    "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:", "font-src 'self' data:", "connect-src 'self'", "object-src 'none'",
+    "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+))
+
+
+def security_headers(indent):
+    """location 里只要出现 add_header 就不再继承 server 级的 add_header，index.html 的 location 要整组重复。"""
+    return ("\n" + " " * indent).join((
+        "add_header X-Content-Type-Options nosniff always;",
+        "add_header X-Frame-Options DENY always;",
+        "add_header Referrer-Policy same-origin always;",
+        f'add_header Content-Security-Policy "{CONTENT_SECURITY_POLICY}" always;',
+    ))
+
+
 def nginx_config(config, data):
     public = quote_path(data / "www")
     return f'''worker_processes 1;
@@ -120,11 +137,13 @@ http {{
     listen {config['BIND_ADDRESS']}:{config['HTTP_PORT']};
     root {public};
     client_max_body_size 25m;
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-Frame-Options DENY always;
+    {security_headers(4)}
     location = / {{ return 302 /erp/; }}
     location = /erp {{ return 301 /erp/; }}
-    location = /erp/index.html {{ add_header Cache-Control 'no-cache'; }}
+    location = /erp/index.html {{
+      add_header Cache-Control 'no-cache';
+      {security_headers(6)}
+    }}
     location /erp/assets/ {{ try_files $uri =404; expires 1y; }}
     location /erp/ {{ try_files $uri $uri/ /erp/index.html; }}
     location /api/ {{

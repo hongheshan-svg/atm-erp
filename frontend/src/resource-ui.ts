@@ -12,5 +12,5 @@ export const resourceFilters: Record<string, { key: string; label: string; optio
   entries: { key: 'kind', label: '款项类型', options: { receivable: '应收', payable: '应付', expense: '费用' } },
   moves: { key: 'kind', label: '流水类型', options: { opening: '期初', receipt: '采购收货', issue: '项目领料', return: '项目退料', purchase_return: '采购退货', count: '盘点' } },
 }
-export const searchableResources = ['sales', 'projects', 'tasks', 'purchases', 'items', 'partners', 'documents', 'reconciliations', 'bank-records', 'users', 'stocks', 'entries']
+export const searchableResources = ['sales', 'projects', 'tasks', 'purchases', 'items', 'partners', 'documents', 'reconciliations', 'bank-records', 'users', 'stocks', 'entries', 'audit']
 export const sidePanelResources = ['sales', 'purchases', 'items', 'partners', 'users', 'company', 'codes', 'audit', 'stocks', 'tasks', 'deliveries', 'entries', 'reconciliations', 'bank-records', 'payments']

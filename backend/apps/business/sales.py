@@ -13,6 +13,7 @@ class SalesSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     manager_name = serializers.CharField(source='manager.display_name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True, default=None)
+    project_status = serializers.CharField(source='project.status', read_only=True, default=None)
 
     class Meta:
         model = SalesOrder
@@ -26,6 +27,7 @@ class SalesSerializer(serializers.ModelSerializer):
             'manager_name',
             'project',
             'project_code',
+            'project_status',
             'status',
             'requirements',
             'due_date',

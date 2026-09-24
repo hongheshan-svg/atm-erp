@@ -52,7 +52,7 @@ watch([() => props.owner, () => props.record.id, pageSize], () => { page.value =
     <div class="toolbar"><el-button :loading="loading" @click="load">刷新</el-button><el-button v-if="writable" type="primary" @click="upload">上传附件</el-button></div>
     <el-table :data="records" :aria-busy="loading" max-height="420">
       <el-table-column prop="original_name" label="文件" min-width="220" />
-      <el-table-column label="分类" min-width="80"><template #default="{ row }">{{ display(row.category) }}</template></el-table-column>
+      <el-table-column label="分类" min-width="80"><template #default="{ row }">{{ display(row.category, 'category') }}</template></el-table-column>
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB</template></el-table-column>
       <el-table-column label="上传时间" min-width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template></el-table-column>
       <el-table-column label="操作" width="80" fixed="right"><template #default="{ row }"><el-button size="small" @click="downloadFile(row)">下载</el-button></template></el-table-column>

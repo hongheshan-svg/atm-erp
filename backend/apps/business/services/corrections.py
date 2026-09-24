@@ -13,11 +13,41 @@ from apps.core.permissions import (
     task_management_roles,
 )
 
-from ..models import BOMLine, Entry, Partner, PurchaseLine, Task
+from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
 from .bom import incoming, issued
 from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
 from .execution import STAGES, assignee, task_action
 from .finance import balance
+
+
+def project_snapshot(project):
+    """项目编辑前后的完整可编辑字段，审计据此还原每一次修改。"""
+    return {
+        'name': project.name,
+        'customer': project.customer_id,
+        'manager': project.manager_id,
+        'members': sorted(project.members.values_list('pk', flat=True)),
+        'requirements': project.requirements,
+        'due_date': project.due_date.isoformat() if project.due_date else None,
+        'equipment_quantity': project.equipment_quantity,
+        'warranty_months': project.warranty_months,
+    }
+
+
+SHARED_SALE_FIELDS = ('name', 'customer_id', 'requirements', 'due_date', 'equipment_quantity', 'warranty_months')
+
+
+def sync_sale(user, project):
+    """签约时项目从销售单复制了这些字段；此后由项目维护，同步回销售单，避免两处显示不同的名称和交期。"""
+    sale = SalesOrder.objects.select_for_update().filter(project=project).first()
+    if sale is None:
+        return []
+    changed = [field for field in SHARED_SALE_FIELDS if getattr(sale, field) != getattr(project, field)]
+    for field in changed:
+        setattr(sale, field, getattr(project, field))
+    if changed:
+        save(sale, user)
+    return [field.removesuffix('_id') for field in changed]
 
 
 def edit_project(actor, key, project_id, data):
@@ -38,11 +68,7 @@ def edit_project(actor, key, project_id, data):
         )
         state(project, {'draft', 'quoted', 'active', 'delivering', 'warranty'})
         reason = text(data, 'reason')
-        before = {
-            'name': project.name,
-            'manager': project.manager_id,
-            'members': list(project.members.values_list('pk', flat=True)),
-        }
+        before = project_snapshot(project)
         if any(key in data for key in ('customer', 'equipment_quantity', 'warranty_months')) and (
             project.contract_date or project.deliveries.exists()
         ):
@@ -83,7 +109,19 @@ def edit_project(actor, key, project_id, data):
         if 'warranty_months' in data:
             project.warranty_months = integer(data, 'warranty_months', None, maximum=120)
         save(project, user)
-        return audit(user, 'project.edit', project, before=before, fields=sorted(data), reason=reason)
+        synced = sync_sale(user, project)
+        after = project_snapshot(project)
+        changed = sorted(field for field in before if before[field] != after[field])
+        return audit(
+            user,
+            'project.edit',
+            project,
+            before={field: before[field] for field in changed},
+            after={field: after[field] for field in changed},
+            fields=sorted(data),
+            sale_synced=synced,
+            reason=reason,
+        )
 
     return project_action(actor, key, 'project.edit', project_id, data, MANAGERS, execute)
 

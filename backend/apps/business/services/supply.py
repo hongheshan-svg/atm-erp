@@ -11,13 +11,15 @@ from apps.core.permissions import PURCHASE_APPROVERS, PURCHASERS, WAREHOUSE, has
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
 from .approval import independent_approval
-from .bom import demand, incoming, issued
+from .bom import check_line_limit, demand, incoming, issued
 from .common import (
     ZERO,
     audit,
     day,
     fields,
     identity,
+    integer,
+    location_value,
     lock_items,
     lock_stocks,
     lookup,
@@ -50,6 +52,7 @@ def create_purchase(actor, key, data):
                 'note',
                 'lines',
                 'from_demand',
+                'warranty_months',
             },
         )
         state(project, {'active', 'delivering', 'warranty'})
@@ -79,6 +82,7 @@ def create_purchase(actor, key, data):
                 due_date=day(data, 'due_date'),
                 payment_due_date=day(data, 'payment_due_date') if data.get('payment_due_date') else None,
                 note=text(data, 'note', default=''),
+                warranty_months=integer(data, 'warranty_months', 12, minimum=1, maximum=120),
                 **agreed,
             ),
             user,
@@ -91,6 +95,7 @@ def create_purchase(actor, key, data):
             bom = None
             if row.get('bom_line') is not None:
                 bom = lookup(BOMLine, row['bom_line'], 'bom_line', project=project, item_id=item_id)
+                check_line_limit(bom, qty)
                 needed = sum((line.quantity for line in BOMLine.objects.filter(project=project, item_id=item_id)), ZERO)
                 if qty > max(ZERO, needed - issued(project, item_id) - incoming(project, item_id)):
                     raise Conflict('采购数量超过当前 BOM 剩余需求，请刷新后重新确认。')
@@ -200,15 +205,13 @@ def approve(actor, key, purchase_id, data, *, override=False):
 
 def receive(actor, key, purchase_id, data, *, from_quarantine=False):
     def execute(user, purchase):
-        fields(data, {'location', 'lines', 'reason', 'received_date'})
+        fields(data, {'location', 'new_location', 'lines', 'reason', 'received_date'})
         received_date = day(data, 'received_date') if data.get('received_date') else timezone.localdate()
         if received_date > timezone.localdate():
             raise ValidationError({'received_date': '实际收货日期不能晚于今天。'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'approved', 'partial'})
-        location = text(data, 'location', default='主仓', maximum=80)
-        if not location:
-            raise ValidationError({'location': '库位不能为空。'})
+        location = location_value(data)
         reason = text(data, 'reason')
         lines = {line.pk: line for line in purchase.lines.select_for_update().order_by('item_id', 'pk')}
         selected = {}
@@ -369,6 +372,7 @@ def edit(actor, key, purchase_id, data):
                 'payment_days',
                 'note',
                 'lines',
+                'warranty_months',
             },
         )
         state(purchase.project, {'active', 'delivering', 'warranty'})
@@ -411,6 +415,7 @@ def edit(actor, key, purchase_id, data):
             )
             qty = number(row.get('quantity'), 'quantity', 3, positive=True)
             if line.bom_line_id:
+                check_line_limit(line.bom_line, qty, exclude_line=line.pk)
                 needed = sum(
                     (b.quantity for b in BOMLine.objects.filter(project=purchase.project, item_id=line.item_id)), ZERO
                 )
@@ -431,6 +436,8 @@ def edit(actor, key, purchase_id, data):
         if 'payment_due_date' in data:
             purchase.payment_due_date = day(data, 'payment_due_date') if data.get('payment_due_date') else None
         purchase.note = text(data, 'note', default='')
+        if 'warranty_months' in data:
+            purchase.warranty_months = integer(data, 'warranty_months', 12, minimum=1, maximum=120)
         number(total(purchase), 'total_amount')
         save(purchase, user)
         return audit(user, 'purchase.edit', purchase, before=before, after=data, reason=reason)

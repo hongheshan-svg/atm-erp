@@ -261,10 +261,17 @@ class PurchaseOrder(BaseModel):
     payment_due_date = models.DateField(null=True, blank=True)
     payment_term = models.CharField(max_length=20, choices=PaymentTerm.choices, default=PaymentTerm.MANUAL)
     payment_days = models.PositiveSmallIntegerField(default=30)
+    # 供应商质保月数，按每批合格收货日起算；默认一年，与采购合同质保条款同一来源。
+    warranty_months = models.PositiveSmallIntegerField(default=12)
     note = models.CharField(max_length=500, blank=True)
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_purchase'
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(warranty_months__gte=1, warranty_months__lte=120), name='lean_purchase_warranty_months'
+            )
+        ]
         indexes = [
             models.Index(
                 fields=['project', 'status'], condition=Q(is_deleted=False), name='lean_purchase_project_status'

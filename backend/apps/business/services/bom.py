@@ -34,6 +34,27 @@ def incoming(project, item_id):
     )
 
 
+def linked_incoming(bom_line, *, exclude_line=None):
+    """挂在这条 BOM 行上、尚未收货或取消的采购数量。"""
+    queryset = PurchaseLine.objects.filter(bom_line=bom_line, purchase__is_deleted=False).exclude(
+        purchase__status='cancelled'
+    )
+    if exclude_line is not None:
+        queryset = queryset.exclude(pk=exclude_line)
+    return (
+        queryset.aggregate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))['total'] or ZERO
+    )
+
+
+def check_line_limit(bom_line, quantity, *, exclude_line=None):
+    """多单元同物料时，采购必须落到实际需要它的那一行，不能借用其他单元的用量。"""
+    if quantity > bom_line.quantity - linked_incoming(bom_line, exclude_line=exclude_line):
+        raise Conflict(
+            f'采购数量超过该 BOM 行（{bom_line.assembly_unit or "未分单元"}）的剩余需求；'
+            '其他单元的用量请分别挂到对应 BOM 行。'
+        )
+
+
 def issued(project, item_id):
     return -(
         StockMove.objects.filter(project=project, stock__item_id=item_id, kind__in=['issue', 'return'])
@@ -84,6 +105,48 @@ def competing_demand(project, item_ids):
     return result
 
 
+def claimed_by_others(project, item_id):
+    """其他在执行项目为自己采购到货、还没领走且仍在其 BOM 需求内的数量，按项目列出。
+
+    库存不预留；这里只把「别人的到货」显式算出来，领料挪用时让仓管确认并留痕。
+    """
+    received = {
+        row['project_id']: row['total']
+        for row in StockMove.objects.filter(
+            stock__item_id=item_id,
+            kind__in=['receipt', 'purchase_return'],
+            project__status__in=['active', 'delivering'],
+        )
+        .exclude(project=project)
+        .values('project_id')
+        .annotate(total=Sum('quantity'))
+    }
+    if not received:
+        return {}
+    used = {
+        row['project_id']: -row['total']
+        for row in StockMove.objects.filter(
+            stock__item_id=item_id, kind__in=['issue', 'return'], project_id__in=list(received)
+        )
+        .exclude(task__kind='service')
+        .values('project_id')
+        .annotate(total=Sum('quantity'))
+    }
+    needed = {
+        row['project_id']: row['total']
+        for row in BOMLine.objects.filter(item_id=item_id, project_id__in=list(received))
+        .values('project_id')
+        .annotate(total=Sum('quantity'))
+    }
+    result = {}
+    for project_id, quantity in received.items():
+        taken = used.get(project_id, ZERO)
+        claim = min(quantity - taken, needed.get(project_id, ZERO) - taken)
+        if claim > ZERO:
+            result[project_id] = claim
+    return result
+
+
 def demand(project):
     result = []
     lines = list(BOMLine.objects.filter(project=project).select_related('item').order_by('item_id', 'pk'))
@@ -113,6 +176,11 @@ def demand(project):
             line_incoming[row['bom_line_id']] = row['total']
         else:
             remaining_incoming[row['item_id']] += row['total']
+    for line in lines:
+        # 按行校验之前的历史采购可能在某一行上挂超；多出的在途仍是同一物料，交给其他单元共享。
+        excess = line_incoming.get(line.pk, ZERO) - line.quantity
+        if excess > ZERO:
+            remaining_incoming[line.item_id] += excess
     for line in lines:
         assigned = min(line.quantity, line_incoming.get(line.pk, ZERO))
         used = min(line.quantity - assigned, remaining_used[line.item_id])
@@ -309,13 +377,7 @@ def revise_bom(actor, key, project_id, data):
                 seen_ids.add(current.pk)
             note = text(row, 'change_note', default='' if current is None else None)
             if current:
-                pending = (
-                    PurchaseLine.objects.filter(bom_line=current, purchase__is_deleted=False)
-                    .exclude(purchase__status='cancelled')
-                    .aggregate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))['total']
-                    or ZERO
-                )
-                if qty < pending:
+                if qty < linked_incoming(current):
                     raise Conflict('单元用量不能小于该 BOM 行在途采购，请先取消相关余量。')
             totals[item_id] = totals.get(item_id, ZERO) + qty - (current.quantity if current else ZERO)
             prepared.append((item_id, unit, qty, note, current))

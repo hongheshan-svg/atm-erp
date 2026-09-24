@@ -12,7 +12,7 @@ from apps.core.permissions import FINANCE, require_role
 
 from ..models import BankMatch, BankOffset, BankRecord, Entry, Payment, Project, Reconciliation
 from . import finance
-from .common import ZERO, audit, day, fields, lookup, number, project_action, save, text
+from .common import ZERO, audit, event_date, fields, lookup, number, project_action, save, text
 from .reconciliation import signed_number
 
 
@@ -92,7 +92,7 @@ def create(actor, key, data):
             BankRecord(
                 project=project,
                 amount=amount,
-                date=day(data, 'date'),
+                date=event_date(data),
                 account=text(data, 'account', maximum=100),
                 reference=text(data, 'reference', maximum=100),
                 counterparty=text(data, 'counterparty', maximum=150),

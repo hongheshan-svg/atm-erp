@@ -40,6 +40,36 @@ def duplicates(data, exclude=None):
     ]
 
 
+IDENTITY_FIELDS = {'unit': '单位', 'specification': '规格', 'drawing_number': '图号', 'drawing_revision': '图档版本'}
+
+
+def referenced(item):
+    """物料是否已被 BOM、采购或库存引用（含已移除的历史行）。"""
+    from ..models import BOMLine, PurchaseLine, Stock
+
+    return (
+        BOMLine.all_objects.filter(item=item).exists()
+        or PurchaseLine.all_objects.filter(item=item).exists()
+        or Stock.all_objects.filter(item=item).exists()
+    )
+
+
+def check_referenced_identity(item, data):
+    """已被业务引用的物料不能改写单位、规格和图档，否则历史数量和采购内容会被悄悄改义；空值允许补填。"""
+    changed = [
+        label
+        for field, label in IDENTITY_FIELDS.items()
+        if isinstance(data.get(field), str)
+        and normalized(getattr(item, field))
+        and normalized(data[field]).casefold() != normalized(getattr(item, field)).casefold()
+    ]
+    if changed and referenced(item):
+        raise ValidationError(
+            f'物料已被 BOM、采购或库存引用，不能改写已有的{"、".join(changed)}；'
+            '需要不同单位、规格或图档时请新建物料编码并修订 BOM。'
+        )
+
+
 def masterdata(actor, key, model, data, object_id=None):
     def authorize(user):
         require_role(user, ITEM_WRITERS if model is Item else PURCHASERS | {'sales_manager'})
@@ -83,6 +113,8 @@ def masterdata(actor, key, model, data, object_id=None):
                 )
             ):
                 raise ValidationError('已编码产品的类别、型号或图档版本不能覆盖；版本升级请新增物料编码并修订 BOM。')
+            if object_id:
+                check_referenced_identity(obj, data)
             if category and not text(data, 'specification', default=obj.specification, maximum=2000):
                 raise ValidationError({'specification': '规范要求所有产品填写型号/规格。'})
             if category.startswith('1') and not text(data, 'drawing_number', default=obj.drawing_number, maximum=100):

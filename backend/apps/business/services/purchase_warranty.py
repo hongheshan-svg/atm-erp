@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from dateutil.relativedelta import relativedelta
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -13,12 +14,9 @@ from .common import ZERO, audit, day, fields, lookup, number, save, text
 from .supply import purchase_action
 
 
-def warranty_end(receipt):
+def warranty_end(receipt, months):
     start = receipt.received_date or timezone.localdate(receipt.created_at)
-    try:
-        return start.replace(year=start.year + 1)
-    except ValueError:
-        return start.replace(year=start.year + 1, day=28)
+    return start + relativedelta(months=months)
 
 
 def listing(purchase):
@@ -35,8 +33,14 @@ def listing(purchase):
     ).values('resource', 'created_at', 'actor_id', 'operation', 'detail'):
         history[row.pop('resource')].append(row)
     return {
+        'warranty_months': purchase.warranty_months,
         'receipts': [
-            {'id': r.pk, 'item': r.stock.item.name, 'quantity': str(r.quantity), 'warranty_end': warranty_end(r)}
+            {
+                'id': r.pk,
+                'item': r.stock.item.name,
+                'quantity': str(r.quantity),
+                'warranty_end': warranty_end(r, purchase.warranty_months),
+            }
             for r in receipts
         ],
         'cases': [
@@ -53,8 +57,8 @@ def listing(purchase):
                 'returned': c.returned_id,
                 'expense': c.expense_id,
                 'updated_at': c.updated_at,
-                'warranty_end': warranty_end(c.receipt),
-                'within_warranty': c.date <= warranty_end(c.receipt),
+                'warranty_end': warranty_end(c.receipt, purchase.warranty_months),
+                'within_warranty': c.date <= warranty_end(c.receipt, purchase.warranty_months),
                 'history': history[f'purchasewarranty:{c.pk}'],
             }
             for c in cases

@@ -1,3 +1,4 @@
+import django_filters
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -73,12 +74,29 @@ class CodeView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class AuditSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+
+    def get_actor_name(self, obj):
+        return obj.actor.display_name or obj.actor.username
+
     class Meta:
         model = AuditLog
-        fields = ['id', 'actor', 'operation', 'resource', 'detail', 'created_at']
+        fields = ['id', 'actor', 'actor_name', 'operation', 'resource', 'detail', 'created_at']
+
+
+class AuditFilter(django_filters.FilterSet):
+    # 按本地日期筛选；created_at__date 在 USE_TZ 下按 Asia/Shanghai 取日期。
+    date_from = django_filters.DateFilter(field_name='created_at', lookup_expr='date__gte')
+    date_to = django_filters.DateFilter(field_name='created_at', lookup_expr='date__lte')
+
+    class Meta:
+        model = AuditLog
+        fields = ['actor', 'operation', 'resource']
 
 
 class AuditView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     read_roles = ADMIN
-    queryset = AuditLog.objects.all()
+    queryset = AuditLog.objects.select_related('actor')
     serializer_class = AuditSerializer
+    filterset_class = AuditFilter
+    search_fields = ['operation', 'resource', 'actor__username', 'actor__display_name']

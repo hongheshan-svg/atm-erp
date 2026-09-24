@@ -221,7 +221,7 @@ async function save() {
             <small>{{ termHint }}</small>
             <label v-if="effectiveTerm === 'custom'">自定义月结天数<input v-model="form.payment_days" aria-label="自定义月结天数" inputmode="numeric" placeholder="0～365，留空沿用供应商" :disabled="saving" /></label>
             <label v-if="effectiveTerm === 'manual'">付款到期日<input v-model="form.payment_due_date" aria-label="付款到期日" type="date" :disabled="saving" /></label>
-            <details class="draft-extra"><summary>备注与明细交期</summary><label>采购备注<textarea v-model="form.note" aria-label="采购备注" rows="2" :disabled="saving" placeholder="交付、包装等补充要求" /></label><label v-for="row in chosen" :key="row.bom_line">{{ row.item_name }} · {{ row.assembly_unit || '未分单元' }}<input v-model="row.due_date" type="date" aria-label="明细交期" :disabled="saving" /></label><small>明细交期留空时沿用订单交期。</small></details>
+            <details class="draft-extra"><summary>备注、质保与明细交期</summary><label>采购备注<textarea v-model="form.note" aria-label="采购备注" rows="2" :disabled="saving" placeholder="交付、包装等补充要求" /></label><label>供应商质保月数<input v-model="form.warranty_months" aria-label="供应商质保月数" inputmode="numeric" :disabled="saving" /><small>按每批合格收货日起算，写入采购合同；默认 12 个月。</small></label><label v-for="row in chosen" :key="row.bom_line">{{ row.item_name }} · {{ row.assembly_unit || '未分单元' }}<input v-model="row.due_date" type="date" aria-label="明细交期" :disabled="saving" /></label><small>明细交期留空时沿用订单交期。</small></details>
           </div>
           <div class="draft-items">
             <p v-if="!chosen.length" class="draft-empty">在 BOM 选料区勾选有缺料的物料，采购明细会显示在这里。</p>

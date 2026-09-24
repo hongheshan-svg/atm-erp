@@ -60,6 +60,7 @@ function savedBom() { void closeBom(); saved() }
 const actionBusy = ref(false)
 const filterValue = ref('')
 const enabledFilter = ref(''), locationFilter = ref(''), brandFilter = ref('')
+const dateFrom = ref(''), dateTo = ref('')
 const appliedExtra = ref<Row>({})
 const unsettled = ref(false)
 const filterConfig = computed(() => resourceFilters[props.resource])
@@ -112,7 +113,7 @@ function menuGroups(row: Row) {
 }
 const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'due_amount', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
 function cell(row: Row, key: string) {
-  if (!moneyKeys.has(key) || row[key] == null) return display(row[key])
+  if (!moneyKeys.has(key) || row[key] == null) return display(row[key], key)
   return money(row[key], { refund: key === 'balance' })
 }
 function mobileSummary(row: Row) {
@@ -230,6 +231,8 @@ function searchRecords() {
     // 精确匹配要求输对完整品牌名，输「施耐德」而库里存的是「Schneider」就只会得到空列表。
     ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand__icontains' : 'brand__icontains']: brandFilter.value } : {}),
     ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
+    ...(props.resource === 'audit' && dateFrom.value ? { date_from: dateFrom.value } : {}),
+    ...(props.resource === 'audit' && dateTo.value ? { date_to: dateTo.value } : {}),
   }
   appliedSearch.value = search.value
   sessionStore.set(searchKey(), appliedSearch.value)
@@ -298,8 +301,9 @@ function inspect(row: Row) {
       <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位关键词" />
       <input v-if="['stocks', 'items'].includes(resource)" v-model="brandFilter" aria-label="筛选品牌" placeholder="品牌关键词" />
       <label v-if="resource === 'entries'" class="inline-check"><input v-model="unsettled" type="checkbox" @change="searchRecords" />仅看未结</label>
+      <template v-if="resource === 'audit'"><input v-model="dateFrom" type="date" aria-label="开始日期" title="开始日期" /><input v-model="dateTo" type="date" aria-label="结束日期" title="结束日期" /></template>
       <el-button native-type="submit" :loading="loading">搜索</el-button>
-      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; searchRecords()">重置</el-button>
+      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; dateFrom = ''; dateTo = ''; searchRecords()">重置</el-button>
     </form>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>

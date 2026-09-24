@@ -24,6 +24,7 @@ from .common import (
     ZERO,
     audit,
     day,
+    event_date,
     fields,
     identity,
     integer,
@@ -53,13 +54,6 @@ def with_task_flags(queryset):
         ),
         project_test_done=Exists(Task.objects.filter(project=OuterRef('project_id'), kind='test', status='done')),
     )
-
-
-def event_date(data, field='date'):
-    result = day(data, field)
-    if result > timezone.localdate():
-        raise ValidationError({field: '实际业务日期不能晚于今天。'})
-    return result
 
 
 def participant(project, user, key='assignee'):
@@ -404,7 +398,7 @@ def service(actor, key, project_id, data):
                 raise PermissionDenied('收费及过保售后由项目经理确认费用后创建；生产经理负责后续派工和处理。')
 
     def execute(user, project):
-        fields(data, {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee'})
+        fields(data, {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee', 'free_reason'})
         state(project, {'delivering', 'warranty'})
         delivery = lookup(Delivery, data.get('delivery'), 'delivery', project=project)
         if not delivery.accepted_date or not delivery.warranty_until:
@@ -413,9 +407,13 @@ def service(actor, key, project_id, data):
         if date < delivery.accepted_date:
             raise ValidationError({'date': '售后日期不能早于验收日期。'})
         free = date <= delivery.warranty_until
-        fee = number(data.get('fee', 0 if free else None), 'fee', positive=not free)
+        fee = number(data.get('fee', 0 if free else None), 'fee')
         if free and fee:
             raise ValidationError({'fee': '质保内售后免费，不能生成收费应收。'})
+        # 过保后的商务赠送、延保等免费服务同样要能派工，但必须写明免费依据；授权已限定由项目经理登记。
+        free_reason = text(data, 'free_reason', default='', maximum=500)
+        if not free and not fee and not free_reason:
+            raise ValidationError({'free_reason': '过保售后免费时请填写免费原因，例如商务赠送或延保约定。'})
         task = save(
             Task(
                 project=project,
@@ -441,7 +439,15 @@ def service(actor, key, project_id, data):
                 ),
                 user,
             )
-        return audit(user, 'service.create', task, delivery=delivery.pk, date=date.isoformat(), fee=str(fee))
+        return audit(
+            user,
+            'service.create',
+            task,
+            delivery=delivery.pk,
+            date=date.isoformat(),
+            fee=str(fee),
+            free_reason=free_reason,
+        )
 
     return project_action(
         actor,

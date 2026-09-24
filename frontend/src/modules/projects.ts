@@ -143,6 +143,26 @@ export function actionNames(resource: string, r: Row): string[] {
     a.push('更正工时')
   return a
 }
+// 发货配套按物料合计校验，同一物料在多个单元出现时合并成一项，并列出全部单元和 BOM 合计，免得只看到其中一个单元。
+const thousandths = (value: unknown) => {
+  const [whole = '0', fraction = ''] = String(value ?? '0').split('.')
+  return BigInt(whole || '0') * 1000n + BigInt((fraction + '000').slice(0, 3))
+}
+export function shipMaterialOptions(lines: Row[]) {
+  type Material = { code: string; name: string; units: string[]; total: bigint }
+  const grouped = new Map<number, Material>()
+  for (const line of lines) {
+    const current: Material = grouped.get(line.item) ?? { code: line.item_code, name: line.item_name, units: [], total: 0n }
+    const unit = line.assembly_unit || '未分单元'
+    if (!current.units.includes(unit)) current.units.push(unit)
+    current.total += thousandths(line.quantity)
+    grouped.set(line.item, current)
+  }
+  return [...grouped].map(([value, row]) => ({
+    value,
+    label: `${row.code} · ${row.name} · ${row.units.join('、')} · BOM 合计 ${row.total / 1000n}.${String(row.total % 1000n).padStart(3, '0')}`,
+  }))
+}
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
   if (name === '查看配套清单') {
     const detail = await read(`/business/deliveries/${r.id}/`)
@@ -200,7 +220,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       person(c, 'installer', '安装人', scope),
       person(c, 'acceptor', '验收负责人', scope),
       t('note', '说明', true),
-      { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: [...new Map((await read(`/business/projects/${r.id}/demand/`)).lines.map((line: Row) => [line.item, { value: line.item, label: `${line.item_code} · ${line.item_name} · ${line.assembly_unit || '未分单元'}` }])).values()] as { value: number; label: string }[] }, qty] },
+      { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: shipMaterialOptions((await read(`/business/projects/${r.id}/demand/`)).lines) }, qty] },
     ]
     initial = { quantity: '1', installer: r.manager, acceptor: r.manager, materials: [] }
   }
@@ -223,7 +243,12 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         key: 'fee',
         label: '收费金额（元）',
         initial: '0',
-        hint: '质保内免费，质保外需登记正数费用。',
+        hint: '质保内免费；质保外收费填正数，免费则填 0 并写明免费原因。',
+      }, {
+        key: 'free_reason',
+        label: '过保免费原因',
+        optional: true,
+        hint: '仅质保外免费时必填，例如商务赠送、延保约定。',
       }] : []),
     ]
     if (!managesProject) return {

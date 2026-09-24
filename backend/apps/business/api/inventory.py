@@ -30,6 +30,11 @@ class StockView(ImportableMixin, ReadView):
     }
     search_fields = ['item__code', 'item__name', 'item__specification', 'item__brand']
 
+    @action(detail=False, methods=['get'])
+    def locations(self, request):
+        """已使用的库位，供收货和期初选择，避免同一库位手工录成多种写法。"""
+        return Response(sorted(set(Stock.objects.values_list('location', flat=True))))
+
     @action(detail=False, methods=['post'])
     def opening(self, request):
         return Response(inventory.opening(request.user, key(request), request.data))

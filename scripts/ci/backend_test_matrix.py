@@ -34,21 +34,29 @@ TARGETS = {
         'apps.business.tests.test_hardening',
         'apps.business.tests.test_production_roles',
         'apps.business.tests.test_audit_fixes',
+        'apps.business.tests.test_audit_remediation',
     ),
     'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
 }
 
 # Module routing references the registry above; it is not a second target inventory.
 MODULE_TESTS = {
-    'sales': ('sales', 'commercial_chain', 'payment_terms'),
-    'projects': ('execution', 'budgets', 'production_roles', 'commercial_chain'),
-    'bom': ('bom_selection', 'import_documents', 'product_coding'),
-    'purchases': ('commercial_chain', 'inventory', 'budgets', 'payment_terms', 'review_remediation'),
-    'inventory': ('inventory', 'review_remediation'),
-    'finance': ('commercial_chain', 'reconciliation', 'bank_import', 'payment_terms'),
-    'masterdata': ('product_coding', 'import_documents', 'models'),
-    'accounts': ('auth', 'setup', 'platform'),
-    'reports': ('reports', 'workbench'),
+    'sales': ('sales', 'commercial_chain', 'payment_terms', 'audit_remediation'),
+    'projects': ('execution', 'budgets', 'production_roles', 'commercial_chain', 'audit_remediation'),
+    'bom': ('bom_selection', 'import_documents', 'product_coding', 'audit_remediation'),
+    'purchases': (
+        'commercial_chain',
+        'inventory',
+        'budgets',
+        'payment_terms',
+        'review_remediation',
+        'audit_remediation',
+    ),
+    'inventory': ('inventory', 'review_remediation', 'audit_remediation'),
+    'finance': ('commercial_chain', 'reconciliation', 'bank_import', 'payment_terms', 'audit_remediation'),
+    'masterdata': ('product_coding', 'import_documents', 'models', 'audit_remediation'),
+    'accounts': ('auth', 'setup', 'platform', 'audit_remediation'),
+    'reports': ('reports', 'workbench', 'audit_remediation'),
     'ota': ('ota',),
 }
 

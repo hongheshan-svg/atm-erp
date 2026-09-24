@@ -1,4 +1,4 @@
-import { all } from '../api'
+import { all, read } from '../api'
 import { can } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -42,9 +42,10 @@ export async function createCommand(resource: string, projectId?: number): Promi
   let path = endpoint(resource)
   if (resource === 'stocks') {
     path += 'opening/'
+    const locations: string[] = await read('/business/stocks/locations/')
     fields = [
       item(),
-      { key: 'location', label: '库位', initial: '主仓' },
+      { key: 'location', label: '库位', initial: '主仓', suggestions: locations, hint: '期初可建立新库位；全角字符和多余空格会自动统一。' },
       qty,
       t('unit_cost', '单位成本（元）'),
       reason,
@@ -81,19 +82,24 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (routes[name]) path += routes[name] + '/'
   if (name === '领料') {
     path = '/business/stocks/issue/'
+    const tasks = await all('/business/tasks/', { kind: 'service', status: 'open' })
     fields = [
       project(),
-      select(
-        'task',
-        '售后任务（生产领料留空）',
-        (await all('/business/tasks/', { kind: 'service', status: 'open' })).map((r) => ({
-          value: r.id,
-          label: r.title,
-        })),
-        true,
-      ),
+      {
+        ...select('task', '售后任务（生产领料留空）', [], true),
+        // 只列所选项目的售后任务；别的项目的任务选了也会被服务端拒绝。
+        optionsFor: (data) => tasks.filter((task) => String(task.project) === String(data.project)).map((task) => ({ value: task.id, label: task.title })),
+      },
       qty,
       reason,
+      {
+        key: 'confirm_shared',
+        label: '确认占用其他项目到货',
+        type: 'boolean',
+        initial: false,
+        optional: true,
+        hint: '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。',
+      },
     ]
     prepare = (data) => ({ ...data, stock: r.id })
   }

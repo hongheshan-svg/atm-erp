@@ -77,6 +77,16 @@ def day(data, key, *, optional=False):
         raise ValidationError({key: '请填写有效日期 YYYY-MM-DD。'})
 
 
+def event_date(data, field='date'):
+    """已发生的业务事实日期，不能晚于今天。"""
+    from django.utils import timezone
+
+    result = day(data, field)
+    if result > timezone.localdate():
+        raise ValidationError({field: '实际业务日期不能晚于今天。'})
+    return result
+
+
 def rows(data, key='lines'):
     value = data.get(key)
     if not isinstance(value, list) or not 1 <= len(value) <= 1000 or not all(isinstance(row, dict) for row in value):
@@ -133,6 +143,34 @@ def project_action(actor, key, operation, project_id, data, roles, execute, *, a
         authorize=authorize,
         execute=lambda user: execute(user, context['project']),
     )
+
+
+DEFAULT_LOCATION = '主仓'
+
+
+def location_value(data, *, allow_new=False):
+    """库位统一全半角和空白；未用过的库位需显式确认，避免「主仓」「主仓 」「主仓库」拆成多条库存。"""
+    import unicodedata
+
+    raw = data.get('location', DEFAULT_LOCATION)
+    if not isinstance(raw, str):
+        raise ValidationError({'location': '请填写库位。'})
+    location = ' '.join(unicodedata.normalize('NFKC', raw).split())
+    if not location or len(location) > 80:
+        raise ValidationError({'location': '库位不能为空且不超过 80 字符。'})
+    confirmed = data.get('new_location', False)
+    if not isinstance(confirmed, bool):
+        raise ValidationError({'new_location': '必须为布尔值。'})
+    if (
+        not allow_new
+        and not confirmed
+        and location != DEFAULT_LOCATION
+        and not Stock.objects.filter(location=location).exists()
+    ):
+        raise ValidationError(
+            {'location': f'库位「{location}」尚未使用；请从已有库位选择，确需新建请勾选「新建库位」。'}
+        )
+    return location
 
 
 def lock_items(item_ids):

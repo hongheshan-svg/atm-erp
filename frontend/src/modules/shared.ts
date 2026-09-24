@@ -129,9 +129,17 @@ export const labels: Record<string, string> = {
   delivery: '交付',
   other: '其他',
 }
-export function display(value: any) {
+// 附件分类与库存流水共用 receipt 等取值，按列区分，避免「结算凭证」被显示成「采购收货」。
+export const categoryLabels: Record<string, string> = {
+  drawing: '图纸', contract: '合同', receipt: '结算凭证', delivery: '交付验收', other: '其他',
+}
+// 只有这些列存的是枚举值。用户名、名称、说明等自由文本即使恰好是 admin、test、other 也要原样显示。
+const ENUM_KEYS = new Set(['status', 'kind', 'method', 'role', 'project_status'])
+export function display(value: any, key?: string) {
   if (value == null || value === '') return '—'
-  if (typeof value === 'boolean') return value ? '启用' : '停用'
+  if (typeof value === 'boolean') return !key || key === 'is_active' ? (value ? '启用' : '停用') : value ? '是' : '否'
   if (typeof value === 'object') return JSON.stringify(value)
+  if (key === 'category') return categoryLabels[String(value)] || String(value)
+  if (key && !ENUM_KEYS.has(key)) return String(value)
   return labels[String(value)] || String(value)
 }

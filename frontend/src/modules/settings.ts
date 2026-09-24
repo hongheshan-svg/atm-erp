@@ -41,7 +41,7 @@ export const columns: Record<string, Column[]> = {
     { key: 'reset_cycle', label: '重置周期', format: r => ({ never: '不重置', year: '每年', month: '每月', day: '每天' }[String(r.reset_cycle)] || r.reset_cycle) }, C('counter', '当前序号'),
   ],
   audit: [
-    { key: 'actor', label: '操作人', format: r => r.actor ? `用户 #${r.actor}` : '系统' },
+    { key: 'actor', label: '操作人', format: r => r.actor_name || (r.actor ? `用户 #${r.actor}` : '系统') },
     { key: 'operation', label: '操作', format: r => auditOperation(r.operation) },
     C('resource', '对象'),
     C('detail', '详情'),
