@@ -301,4 +301,4 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 | Installer validation | 三平台安装器验证 |
 | Release | 已存在 tag 的验证、打包及草稿/正式发布 |
 
-PR 按变动选择任务，合并不重复启动全套验证。Release 仅复用代码内容完全一致的全量通过记录，否则先补跑验证。参数、命令和发布流程见 [CI 与发布操作指南](docs/CI_OPERATIONS.md)。
+PR 按变动选择任务，合并不重复启动全套验证。发版本必须全量验证：Release 仅复用代码内容完全一致的全量通过记录，否则先补跑全量验证。参数、命令和发布流程见 [CI 与发布操作指南](docs/CI_OPERATIONS.md)。

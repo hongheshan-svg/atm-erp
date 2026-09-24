@@ -48,17 +48,150 @@ MODULE_FILES = {
     'ota': ('ota', 'upgrade', 'SystemUpgrade'),
 }
 BROWSERS = {
-    'sales': ('sales-role',),
-    'projects': ('production-role', 'state-actions-audit'),
-    'bom': ('bom-selection', 'bom-purchase-layout'),
-    'purchases': ('payment-terms', 'review-remediation'),
-    'inventory': ('cancel-actions-audit',),
-    'finance': ('reconciliation', 'bank-review-audit'),
-    'masterdata': ('product-coding',),
-    'accounts': ('initial-password', 'settings', 'login'),
-    'reports': ('reports',),
-    'ota': ('system-upgrade',),
+    'sales': ('sales-role', 'attachments', 'industry-forms', 'import-surface-audit'),
+    'projects': (
+        'production-role',
+        'state-actions-audit',
+        'attachments',
+        'coding-rules',
+        'industry-forms',
+        'specialist-roles',
+        'import-surface-audit',
+    ),
+    'bom': ('bom-selection', 'bom-purchase-layout', 'specialist-roles'),
+    'purchases': (
+        'payment-terms',
+        'review-remediation',
+        'attachments',
+        'hardening-ui',
+        'specialist-roles',
+        'import-surface-audit',
+    ),
+    'inventory': ('cancel-actions-audit', 'import-surface-audit'),
+    'finance': ('reconciliation', 'bank-review-audit', 'import-surface-audit'),
+    'masterdata': ('product-coding', 'account-masterdata-audit', 'transfers', 'import-surface-audit'),
+    'accounts': (
+        'initial-password',
+        'settings',
+        'login',
+        'setup',
+        'account-masterdata-audit',
+        'eight-role-audit',
+        'multi-role',
+        'specialist-roles',
+        'coding-rules',
+        'navigation-dialog',
+    ),
+    'reports': ('reports', 'hardening-ui', 'transfers'),
+    'ota': ('system-upgrade', 'navigation-dialog'),
 }
+# 完整业务链只在显式 full（含发版本）时运行，不属于任何模块。
+FULL_ONLY_BROWSERS = ('full-chain',)
+BUSINESS = ('sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'accounts', 'reports')
+# 公共界面组件改动时额外运行的页面级用例：导航、页签、分页、各页面概览和各岗位逐页巡检。
+SHARED_UI_BROWSERS = ('navigation-dialog', 'module-tabs', 'pagination-layout', 'ui-concepts', 'eight-role-audit')
+# 经过审阅的共享路径映射：这些文件被多个模块直接调用，改动时运行所列模块的全部关联用例。
+# 按前缀匹配、先匹配先用；只在文件名未命中 MODULE_FILES 时使用。新增的未登记路径仍然失败，不静默漏测。
+SHARED_PATHS = (
+    (
+        (
+            'backend/apps/business/services/documents.py',
+            'backend/apps/business/attachments.py',
+            'frontend/src/components/AttachmentDialog.vue',
+            'frontend/src/modules/documents.ts',
+        ),
+        ('sales', 'purchases', 'projects', 'finance'),
+    ),
+    (
+        ('backend/apps/business/services/transfers.py', 'frontend/src/components/TransferTools.vue'),
+        ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports'),
+    ),
+    (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
+    (('frontend/src/industry-forms.ts',), ('sales', 'projects')),
+    (
+        ('frontend/src/utils/password.ts', 'backend/apps/core/views.py', 'backend/apps/core/setup.py'),
+        ('accounts',),
+    ),
+    (('backend/apps/core/codes.py',), ('accounts', 'masterdata', 'sales', 'projects', 'purchases')),
+    (('backend/apps/core/schema_guard.py', 'backend/apps/core/management/'), ('accounts', 'ota')),
+    (
+        (
+            'backend/apps/__init__.py',
+            'backend/apps/business/__init__.py',
+            'backend/apps/business/api/__init__.py',
+            'backend/apps/business/services/__init__.py',
+            'backend/apps/core/__init__.py',
+            'backend/apps/business/migrations/',
+            'backend/apps/core/migrations/',
+            'backend/apps/business/models.py',
+            'backend/apps/business/serializers.py',
+            'backend/apps/business/urls.py',
+            'backend/apps/business/api/common.py',
+            'backend/apps/business/services/common.py',
+            'backend/apps/business/services/tabular.py',
+            'backend/apps/core/actions.py',
+            'backend/apps/core/api.py',
+            'backend/apps/core/models.py',
+            'backend/apps/core/periods.py',
+            'backend/apps/core/permissions.py',
+            'backend/config/',
+            'backend/manage.py',
+            'backend/requirements',
+        ),
+        BUSINESS,
+    ),
+    (
+        (
+            'frontend/index.html',
+            'frontend/package.json',
+            'frontend/package-lock.json',
+            'frontend/vite.config.ts',
+            'frontend/playwright.config.ts',
+            'frontend/e2e/fixtures.ts',
+            'frontend/e2e/role-helpers.ts',
+            'frontend/e2e/settlement-helpers.ts',
+            'frontend/src/App.vue',
+            'frontend/src/main.ts',
+            'frontend/src/style.css',
+            'frontend/src/api/',
+            'frontend/src/business.ts',
+            'frontend/src/catalog.ts',
+            'frontend/src/flows.ts',
+            'frontend/src/forms.ts',
+            'frontend/src/navigation.ts',
+            'frontend/src/pagination.ts',
+            'frontend/src/resource-ui.ts',
+            'frontend/src/router.ts',
+            'frontend/src/row-actions.ts',
+            'frontend/src/types.ts',
+            'frontend/src/plugins/',
+            'frontend/src/utils/',
+            'frontend/src/modules/shared.ts',
+            'frontend/src/components/ActionDialog.vue',
+            'frontend/src/components/FormFields.vue',
+            'frontend/src/components/ListPagination.vue',
+            'frontend/src/components/ModulePage.vue',
+            'frontend/src/components/ModuleTabs.vue',
+            'frontend/src/components/ProcessSteps.vue',
+            'frontend/src/components/RecordContext.vue',
+            'frontend/src/components/RemoteSelect.vue',
+            'frontend/src/components/ResourcePanel.vue',
+            'frontend/src/components/StatusBadge.vue',
+            'frontend/src/components/TabContent.vue',
+        ),
+        BUSINESS,
+    ),
+)
+# 只影响静态检查或测试运行器的配置：执行对应一侧的 lint/typecheck/build 与单测，不选业务模块。
+CHECK_ONLY = (
+    'backend/pyproject.toml',
+    'backend/apps/business/tests/__init__.py',
+    'backend/apps/core/tests/__init__.py',
+    'frontend/eslint.config.js',
+    'frontend/tsconfig.json',
+    'frontend/tsconfig.node.json',
+    'frontend/vitest.config.ts',
+)
 
 
 def version_only_paths(base, head, paths, read_blob):
@@ -88,7 +221,7 @@ def plan(paths, modules=(), full=False, version_only=()):
     ops = installers = checks_backend = checks_frontend = False
     reasons = []
     for path in sorted(set(paths)):
-        if path.endswith('.md') or path in ('.gitignore', '.editorconfig', 'LICENSE'):
+        if path.endswith('.md') or Path(path).name in ('.gitignore', '.editorconfig', 'LICENSE'):
             continue
         stem = Path(path).stem.removesuffix('.spec')
         if path.startswith(('docker/', 'deploy/', 'install', 'scripts/')) or path in (
@@ -142,9 +275,20 @@ def plan(paths, modules=(), full=False, version_only=()):
                 continue
             if path.startswith('frontend/src/assets/'):
                 continue
+        if path in CHECK_ONLY:
+            continue
         matched = {module for module, names in MODULE_FILES.items() if stem in names}
+        shared = next((modules for prefixes, modules in SHARED_PATHS if path.startswith(prefixes)), None)
         if matched:
             selected.update(matched)
+        elif shared is not None:
+            selected.update(shared)
+            if path.startswith('frontend/') and set(shared) == set(BUSINESS):
+                browser.update(f'e2e/{name}.spec.ts' for name in SHARED_UI_BROWSERS)
+            if path == 'backend/requirements.txt':
+                # 运行时依赖随离线 wheelhouse 和镜像交付，安装器与升级链路同样受影响。
+                installers = True
+                selected.add('ota')
         else:
             unknown.append(path)
     if unknown and not modules and not full:

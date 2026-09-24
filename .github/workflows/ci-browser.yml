@@ -19,7 +19,8 @@ concurrency:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 全量（发版本必跑）单视口约 15 分钟，留出余量，避免用例增长后被超时误判失败。
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

@@ -40,10 +40,34 @@ TARGETS = {
 }
 
 # Module routing references the registry above; it is not a second target inventory.
+# 跨模块的回归（权限加固、并发、导入导出、历次评审整改）挂到其实际覆盖的每个模块，
+# 改动任一模块都会运行；每个登记目标至少属于一个模块，不再只在全量时才执行。
+# concurrency 同时匹配 core 与 business 的并发用例。
 MODULE_TESTS = {
-    'sales': ('sales', 'commercial_chain', 'payment_terms', 'audit_remediation'),
-    'projects': ('execution', 'budgets', 'production_roles', 'commercial_chain', 'audit_remediation'),
-    'bom': ('bom_selection', 'import_documents', 'product_coding', 'audit_remediation'),
+    'sales': ('sales', 'commercial_chain', 'payment_terms', 'audit_remediation', 'concurrency', 'transfers'),
+    'projects': (
+        'execution',
+        'budgets',
+        'production_roles',
+        'commercial_chain',
+        'audit_remediation',
+        'concurrency',
+        'hardening',
+        'operational_review',
+        'system_reliability',
+        'audit_fixes',
+        'transfers',
+    ),
+    'bom': (
+        'bom_selection',
+        'import_documents',
+        'product_coding',
+        'audit_remediation',
+        'concurrency',
+        'hardening',
+        'operational_review',
+        'audit_fixes',
+    ),
     'purchases': (
         'commercial_chain',
         'inventory',
@@ -51,12 +75,45 @@ MODULE_TESTS = {
         'payment_terms',
         'review_remediation',
         'audit_remediation',
+        'concurrency',
+        'hardening',
+        'operational_review',
+        'system_reliability',
+        'transfers',
     ),
-    'inventory': ('inventory', 'review_remediation', 'audit_remediation'),
-    'finance': ('commercial_chain', 'reconciliation', 'bank_import', 'payment_terms', 'audit_remediation'),
-    'masterdata': ('product_coding', 'import_documents', 'models', 'audit_remediation'),
-    'accounts': ('auth', 'setup', 'platform', 'audit_remediation'),
-    'reports': ('reports', 'workbench', 'audit_remediation'),
+    'inventory': ('inventory', 'review_remediation', 'audit_remediation', 'concurrency', 'audit_fixes', 'transfers'),
+    'finance': (
+        'commercial_chain',
+        'reconciliation',
+        'bank_import',
+        'payment_terms',
+        'audit_remediation',
+        'concurrency',
+        'hardening',
+        'operational_review',
+        'system_reliability',
+        'audit_fixes',
+        'transfers',
+    ),
+    'masterdata': (
+        'product_coding',
+        'import_documents',
+        'models',
+        'audit_remediation',
+        'concurrency',
+        'hardening',
+        'transfers',
+    ),
+    'accounts': ('auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
+    'reports': (
+        'reports',
+        'workbench',
+        'audit_remediation',
+        'hardening',
+        'operational_review',
+        'system_reliability',
+        'transfers',
+    ),
     'ota': ('ota',),
 }
 

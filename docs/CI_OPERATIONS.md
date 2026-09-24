@@ -2,14 +2,16 @@
 
 ## 默认按影响验证
 
-PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链。
+PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链；发版本由 Release 工作流强制运行 full。
 
 计划由 scripts/ci/impact.py 生成：业务模块、后端测试目标、前端组件用例、浏览器 spec、OTA/安装器，以及计划指纹均进入 Summary。后端用例仍只登记在 scripts/ci/backend_test_matrix.py，模块映射在同文件引用登记项。纯 Markdown 修改只运行计划自检和工作流语法检查。
 
 - 采购规则变更选择采购、库存/预算等直接关联测试和相关页面，不跑销售到收款全链。
 - OTA 变更选择升级接口、升级组件/页面及真实升级演练；不附带 ERP 全业务流程。
-- 共享/未知代码、依赖或迁移不能可靠自动归类时，计划明确失败并列出路径；手动指定 modules 或补充经过审阅的路径映射后再运行。不得通过空列表、忽略失败或默认全量来隐藏缺口。
-- 前端版本字段单独递增与依赖更新区别处理：纯版本变更执行前端检查；依赖变化仍需确认实际受影响模块。
+- 共享核心文件（业务模型、序列化、公共服务与导出、权限与幂等、迁移、配置与依赖、公共前端组件和工具、e2e 公共夹具等）使用 impact.py 中经过审阅的 `SHARED_PATHS` 映射，自动覆盖直接调用它们的模块；公共界面组件另加导航、页签、分页、页面概览和岗位逐页巡检用例。只影响静态检查或测试运行器的配置（`CHECK_ONLY`）只跑对应一侧的检查与单测。
+- 跨模块回归（权限加固、并发、导入导出、历次评审整改）登记在其实际覆盖的每个模块下，改动任一模块都会运行。scripts/tests 校验每个后端测试目标和浏览器用例（完整业务链除外）至少属于一个模块，且全部已跟踪源文件都能被计划归类。
+- 新增、尚未登记的共享/未知路径仍明确失败并列出路径；补充经过审阅的路径映射或手动指定 modules 后再运行。不得通过空列表、忽略失败或默认全量来隐藏缺口。
+- 前端版本字段单独递增与依赖更新区别处理：纯版本变更只执行前端检查；前端或 Python 依赖变化按共享路径覆盖全部业务模块，运行时 Python 依赖还会运行安装器与 OTA。
 - 映射是可维护的影响策略，不保证发现任意新增耦合。接口增加新的调用方时同步更新映射及选择测试。
 
 ## 并行、缓存与失败门禁
@@ -48,14 +50,16 @@ Fast checks 和 Browser validation 作为可复用子流程，由统一入口传
 
 ## 发布门禁与证据复用
 
-1. 功能分支更新一致版本与发布说明，完成相应验证，合并 main 后打正式 tag。版本变更或 tag 发布本身不要求全业务测试。
+1. 功能分支更新一致版本与发布说明，完成相应验证，合并 main 后打正式 tag。**发版本必须全量验证**，按影响范围的结果不能代替。
 2. Release 检查 tag 在 main 历史、前后端版本一致、Installation/Documentation 区块、目标未公开发布，再计算前一正式 tag 到目标提交的完整变更范围。
-3. 优先复用本仓库成功 CI：Git tree 和影响计划指纹都必须一致，且必须存在成功的 Scoped validation 标记。既有同 tree 的 Full validation 也可覆盖；CI gate、单视口、局部诊断或不同计划不能冒充发布凭据。
-4. 没有匹配记录时运行该发布差异的 auto 计划，不自动 full。force_validation 只强制重跑影响范围。共享/未知变更需在手动 Release 的 validation_modules 指定范围；不修改已存在 tag 来绕过失败。
+3. 优先复用本仓库成功 CI：必须存在同一 Git tree 成功的 Full validation 标记。Scoped validation、CI gate、单视口或局部诊断都不能作为发布凭据。
+4. 没有匹配记录时 Release 以 suite=full、双视口运行全量验证：全部后端阶段（平台、业务、并发）与前端单测、含完整业务链的全部浏览器用例、OTA 与安装器，约 20 分钟。force_validation 强制重跑全量。前一正式 tag 到本次的差异只写入发布摘要，不再缩小验证范围。不修改已存在 tag 来绕过失败。
 5. wheelhouse 可与验证并行准备；全部选中检查通过后才进入镜像构建、最终打包和发布。三平台 native/docker 六包、双架构预构建镜像、离线 wheelhouse、来源及上传哈希检查保留。只有发布 job 具备 contents 写权限；公开版本拒绝覆盖，草稿可重试。
 
 ```bash
-gh workflow run release.yml --ref main -f tag=vX.Y.Z -F publish=false -f validation_modules=ota,accounts
+# 可选：打 tag 前先对 main 跑全量，Release 会复用同 tree 的 Full validation
+gh workflow run ci.yml --ref main -f suite=full -f browser_projects=both
+gh workflow run release.yml --ref main -f tag=vX.Y.Z -F publish=false
 ```
 
 tag push 默认正式发布，手动默认草稿；发布按 tag 串行且不取消进行中任务。复用最多查询最近100次成功 CI，未找到就跑影响范围，查询错误直接失败。首次发布没有历史正式 tag 时需先明确基线，不能自动认定已验证。
