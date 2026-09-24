@@ -96,3 +96,8 @@ reports_per_role/
 /test_batch1.json
 /test_v4.json
 backend/tools/baseline_failures.txt
+
+# TLS 证书与私钥不入库
+docker/ssl/
+*.key
+*.pem
