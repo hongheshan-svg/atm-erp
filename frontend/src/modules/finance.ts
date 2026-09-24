@@ -73,7 +73,7 @@ export function actionNames(resource: string, r: Row): string[] {
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
-  if (name === '查看到期明细') return { title: name, path: '', readonly: true, initial: { lines: r.payment_schedule || [] }, fields: [{ key: 'lines', label: '未结到期明细', type: 'rows', fields: [t('due_date', '到期日'), t('amount', '待付金额')] }], notice: { type: 'info', text: '月结按合格收货当月月底加账期天数；跨月分别到期。已付款优先抵扣先到期部分，退货冲减原收货批次。未收货部分尚未起算账期，预付款仍需合同核准。' } }
+  if (name === '查看到期明细') return { title: name, path: '', readonly: true, initial: { lines: r.payment_schedule || [] }, fields: [{ key: 'lines', label: '未结到期明细', type: 'rows', fields: [t('due_date', '到期日'), t('amount', '待付金额')] }], notice: { type: 'info', text: '月结按合格收货当月月底加账期天数，跨月分别到期；指定日期账期只对已合格收货部分到期。已付款优先抵扣先到期部分，退货冲减原收货批次。未收货部分不计入到期，预付款仍需合同核准。' } }
   if (name === '生成对账单' || name === '申请预付款核准') return reconciliationCommand(r, name === '申请预付款核准')
   if (name === '补录凭证') {
     const docs = await all('/business/documents/', { project: r.project, category: 'receipt' })

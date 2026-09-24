@@ -50,13 +50,22 @@ class ReportTests(BusinessFixtures, TestCase):
         self.assertEqual(filtered.data['payable'], report['payable'])
 
     def test_entry_rows_carry_partner_and_settlement_status(self):
-        self.purchase(self.project)
+        purchase = self.purchase(self.project)
         Entry.objects.filter(project=self.project, kind='payable').update(
             due_date=timezone.localdate() - timedelta(days=1)
         )
         rows = self.clients['finance'].get('/api/business/entries/', {'project': self.project.pk}).data['results']
         payable = next(row for row in rows if row['kind'] == 'payable')
         self.assertEqual(payable['partner_name'], self.supplier.name)
+        # 未到货的货款付不出去，过了约定日期也不算逾期；合格收货后该部分才逾期。
+        self.assertEqual(payable['status'], 'open')
+        self.post(
+            'warehouse',
+            f'purchases/{purchase.pk}/receive/',
+            {'lines': [{'line': purchase.lines.get().pk, 'quantity': '1'}], 'reason': '到货'},
+        )
+        rows = self.clients['finance'].get('/api/business/entries/', {'project': self.project.pk}).data['results']
+        payable = next(row for row in rows if row['kind'] == 'payable')
         self.assertEqual(payable['status'], 'overdue')
         receivable = next(row for row in rows if row['kind'] == 'receivable')
         self.assertEqual(receivable['partner_name'], self.project.customer.name)

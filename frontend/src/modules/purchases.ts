@@ -14,6 +14,7 @@ export const purchaseFields = (): Field[] => [
   ...termFields(true),
   { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', hint: '仅指定日期账期填写；现付/月结请留空，实际到期明细在应收应付中查看。历史手工账期留空仍沿用订单交期。' },
   t('note', '说明', true),
+  { key: 'warranty_months', label: '供应商质保月数', initial: '12', numeric: { scale: 0, min: 1, max: 120 }, hint: '按每批合格收货日起算，写入采购合同质保条款；默认 12 个月。' },
   rows('lines', '采购明细', [item(), qty, price, { ...date('due_date', '明细交期'), optional: true }]),
 ]
 import { all, read } from '../api'
@@ -80,8 +81,8 @@ export function actionNames(resource: string, r: Row): string[] {
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
   if (['质保记录', '登记采购质保', '处理采购质保'].includes(name)) {
     const path = `/business/purchases/${r.id}/warranty/`, info = await read(path)
-    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases }, fields: [rows('cases', '质保记录', [t('item', '物料'), { ...t('status', '质保进度'), flow: 'warranty' }, t('id', '编号'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('response', '供应商响应与处理'), t('warranty_end', '一年质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
-    if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${x.quantity} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: '逐批按合格收货日起一年提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。' } }
+    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases }, fields: [rows('cases', '质保记录', [t('item', '物料'), { ...t('status', '质保进度'), flow: 'warranty' }, t('id', '编号'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('response', '供应商响应与处理'), t('warranty_end', '质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
+    if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${x.quantity} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: `逐批按合格收货日起 ${info.warranty_months ?? 12} 个月提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。` } }
     const moves = await all('/business/moves/', { project: r.project })
     const expenses = money() ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
     return { title: name, path, fields: [select('case', '质保事项', info.cases.filter((x: Row) => ['待响应', '维修中'].includes(x.status)).map((x: Row) => ({ value: x.id, label: `${x.id} · ${x.item} · ${x.description}` }))), select('status', '处理结果', [{ value: 'repairing', label: '维修中' }, { value: 'replaced', label: '已更换' }, { value: 'closed', label: '已关闭' }]), { key: 'response', label: '供应商响应、责任与处理说明', type: 'textarea' }, select('replacement', '补换货收货流水', moves.filter(x => x.kind === 'receipt').map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${x.quantity}` })), true), select('returned', '原批次退货流水', moves.filter(x => x.kind === 'purchase_return').map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${x.quantity}` })), true), ...(money() ? [select('expense', '关联已登记费用', expenses.map(x => ({ value: x.id, label: `${x.title} · ${x.amount}` })), true)] : [])], prepare: values => ({ ...values, expected_updated_at: info.cases.find((x: Row) => x.id === Number(values.case))?.updated_at }) }
@@ -93,7 +94,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '处理记录') return { title: name, path: '', readonly: true, initial: { lines: (await all(`/business/purchases/${r.id}/handling-history/`)).map(l => ({ ...l, quantity_summary: l.lines.map((row: Row) => `明细${row.line || row.id}：数量 ${row.quantity || '0'}，隔离 ${row.pending_quantity || '0'}`).join('；'), operation: ({ 'purchase.reject': '退回修改', 'purchase.edit': '修改采购', 'purchase.receive': '到货登记', 'purchase.quality_accept': '隔离品合格入库', 'purchase.quality_return': '隔离品退回供应商', 'purchase.delivery_plan': '更新到货计划' } as Record<string, string>)[l.operation] || l.operation })) }, fields: [rows('lines', '处理记录', [t('date', '时间'), t('actor', '操作人'), t('operation', '操作'), t('reason', '原因'), t('quantity_summary', '明细与数量'), t('next_step', '后续处理')])] }
   if (name === '修改采购') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
-    return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '' }, t('note', '说明', true), reason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, qty, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, payment_due_date: data.payment_due_date, note: data.note, reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
+    return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, qty, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, payment_due_date: data.payment_due_date, note: data.note, warranty_months: data.warranty_months, reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
   }
   if (name === '批准采购') {
     const check = await read(`/business/purchases/${r.id}/budget-check/`)
@@ -133,6 +134,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     if (readonly) {
       fields = [
         { key: 'payment_term_label', label: '采购账期' },
+        { key: 'warranty_months', label: '供应商质保月数' },
         rows('lines', '采购明细', [
           t('item_name', '物料'),
           t('assembly_unit', '单元'),
@@ -147,8 +149,12 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       ]
       initial = { ...detail, payment_term_label: termLabel(detail) }
     } else {
+      const locations: string[] = name === '隔离品退回供应商' ? [] : await read('/business/stocks/locations/')
       fields = [
-        ...(name === '隔离品退回供应商' ? [] : [{ key: 'location', label: '库位', initial: '主仓' }]),
+        ...(name === '隔离品退回供应商' ? [] : [
+          { key: 'location', label: '库位', initial: '主仓', suggestions: locations, hint: '从已有库位中选择；全角字符和多余空格会自动统一。' },
+          { key: 'new_location', label: '新建库位', type: 'boolean' as const, initial: false, optional: true, hint: '仅首次使用某个库位时勾选，避免同一库位录成多种写法。' },
+        ]),
         ...(name === '隔离品退回供应商' ? [] : [date('received_date', '实际合格收货日期')]),
         reason,
         { ...rows('lines', '本次收货', [

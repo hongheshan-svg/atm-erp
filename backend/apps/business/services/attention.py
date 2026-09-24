@@ -39,9 +39,7 @@ def projection(params):
                             else '90天以上',
                         }
                     )
-        definition = (
-            '按原应收应付的剩余到期批次列示，净付款先抵最早到期；未收货自动账期采购不预估日期，不含负余额退款。'
-        )
+        definition = '按原应收应付的剩余到期批次列示，净付款先抵最早到期；采购未收货部分不计入到期，不含负余额退款。'
     elif view == 'late_purchase':
         for line in PurchaseLine.objects.filter(
             purchase__status__in=['approved', 'partial'], quantity__gt=F('received_quantity') + F('cancelled_quantity')

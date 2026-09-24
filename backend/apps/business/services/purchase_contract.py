@@ -13,7 +13,7 @@ from apps.core.permissions import MONEY_READERS, PURCHASERS, require_project, re
 
 from ..models import Document, PurchaseContractVersion
 from .common import ZERO, audit, fields, lookup, rounded, save, state, text
-from .contract_clauses import CLAUSES
+from .contract_clauses import clauses
 from .supply import purchase_action, total
 
 
@@ -26,7 +26,8 @@ def preview(actor, purchase):
     cancelled = sum((rounded(line.cancelled_quantity * line.unit_price) for line in lines), ZERO)
     return {
         'template_version': 1,
-        'clauses': CLAUSES,
+        'clauses': clauses(purchase.warranty_months),
+        'warranty_months': purchase.warranty_months,
         'id': purchase.pk,
         'code': purchase.code,
         'status': purchase.status,

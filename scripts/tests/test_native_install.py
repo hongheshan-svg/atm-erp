@@ -66,6 +66,25 @@ class NativeInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.quote_path(self.root / '$bad')
 
+    def test_every_html_location_keeps_security_headers(self):
+        import re
+
+        docker_config = (Path(__file__).parents[2] / "docker/app/nginx.conf").read_text()
+        native_config = native.nginx_config(self.config, self.root)
+        required = ("X-Frame-Options DENY", "X-Content-Type-Options nosniff", "Referrer-Policy same-origin",
+                    f'Content-Security-Policy "{native.CONTENT_SECURITY_POLICY}"')
+        for name, config in (("docker", docker_config), ("native", native_config)):
+            server = config.split("\n    location ", 1)[0]
+            index = re.search(r"location = /erp/index\.html \{(.*?)\n    \}", config, re.S)
+            with self.subTest(config=name):
+                self.assertIsNotNone(index)
+                for header in required:
+                    self.assertIn(header, server)
+                    # 该 location 自己有 add_header（Cache-Control），不会继承 server 级的安全头。
+                    self.assertIn(header, index.group(1))
+                self.assertIn("frame-ancestors 'none'", native.CONTENT_SECURITY_POLICY)
+                self.assertNotIn("unsafe-eval", config)
+
     def test_missing_frontend_does_not_modify_database(self):
         with patch.object(native, "ROOT", self.root), patch.object(native, "nginx_path", return_value="nginx"), \
                 patch.object(native, "available_ports"), patch.object(native, "run") as run:

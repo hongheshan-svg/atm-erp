@@ -7,9 +7,22 @@ from apps.core.actions import perform
 from apps.core.api import Conflict
 from apps.core.permissions import ADMIN, WAREHOUSE, require_role
 
-from ..models import BOMLine, Entry, PurchaseLine, PurchaseOrder, Stock, StockMove, Task
-from .bom import issued
-from .common import ZERO, audit, fields, lock_stocks, lookup, number, project_action, rounded, save, state, text
+from ..models import BOMLine, Entry, Project, PurchaseLine, PurchaseOrder, Stock, StockMove, Task
+from .bom import claimed_by_others, issued
+from .common import (
+    ZERO,
+    audit,
+    fields,
+    location_value,
+    lock_stocks,
+    lookup,
+    number,
+    project_action,
+    rounded,
+    save,
+    state,
+    text,
+)
 
 
 def take_value(stock, qty):
@@ -24,9 +37,8 @@ def opening(actor, key, data):
         from ..models import Item
 
         item = lookup(Item, data.get('item'), 'item', is_active=True)
-        location = text(data, 'location', default='主仓', maximum=80)
-        if not location:
-            raise ValidationError({'location': '库位不能为空。'})
+        # 期初由管理员在上线时建立库位，不要求逐个确认新库位。
+        location = location_value(data, allow_new=True)
         stock = lock_stocks([item.pk], location, user)[item.pk]
         if stock.quantity or stock.value or stock.moves.exists():
             raise Conflict('此物料库位已有库存历史，请使用盘点。')
@@ -89,7 +101,10 @@ def count(actor, key, stock_id, data):
 
 def issue(actor, key, data):
     def execute(user, project):
-        fields(data, {'project', 'stock', 'task', 'quantity', 'reason'})
+        fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared'})
+        confirm_shared = data.get('confirm_shared', False)
+        if not isinstance(confirm_shared, bool):
+            raise ValidationError({'confirm_shared': '必须为布尔值。'})
         state(project, {'active', 'delivering', 'warranty'})
         source = lookup(Stock, data.get('stock'), 'stock')
         task = (
@@ -111,6 +126,21 @@ def issue(actor, key, data):
         reason = text(data, 'reason')
         stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
         value = take_value(stock, qty)
+        claims = claimed_by_others(project, source.item_id)
+        claimed = sum(claims.values(), ZERO)
+        on_hand = Stock.objects.filter(item_id=source.item_id).aggregate(total=Sum('quantity'))['total'] or ZERO
+        shared = []
+        if on_hand - qty < claimed:
+            shared = [
+                {'project': code, 'quantity': str(claims[pk])}
+                for pk, code in Project.objects.filter(pk__in=claims).order_by('code').values_list('pk', 'code')
+            ]
+            if not confirm_shared:
+                summary = '、'.join(f'{row["project"]} {row["quantity"]}' for row in shared)
+                raise Conflict(
+                    f'本次领料会占用其他项目已到货、尚未领用的物料（{summary}）。'
+                    '确认挪用请勾选「确认占用其他项目到货」后重新提交，并通知相关项目补采。'
+                )
         stock.quantity -= qty
         stock.value -= value
         save(stock, user)
@@ -120,7 +150,7 @@ def issue(actor, key, data):
             ),
             user,
         )
-        return audit(user, 'stock.issue', move)
+        return audit(user, 'stock.issue', move, shared_from=shared)
 
     return project_action(actor, key, 'stock.issue', data.get('project'), data, WAREHOUSE, execute)
 

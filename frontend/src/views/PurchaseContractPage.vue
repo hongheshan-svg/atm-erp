@@ -84,7 +84,7 @@ async function archive() {
       <p class="contract-total">订单原含税合计：人民币 ¥ {{ data.total }}</p>
       <template v-if="!sheet">
         <h2>二、交付与结算</h2><p>订单交期：{{ data.due_date }}；逐项交期以明细为准。乙方负责适运包装并交至甲方书面指定地点，运输及包装费用含于合同价，另有书面约定除外。</p><p>{{ payment }} 乙方按约提供合法有效发票；甲方按约支付无争议到期款项。</p>
-        <h2>三、质量、验收与一年质保</h2>
+        <h2>三、质量、验收与{{ !data.warranty_months || data.warranty_months === 12 ? '一年' : `${data.warranty_months}个月` }}质保</h2>
         <p v-for="clause in data.clauses.quality" :key="clause">{{ clause }}</p>
         <h2>四、违约责任与其他约定</h2>
         <p v-for="clause in data.clauses.liability" :key="clause">{{ clause }}</p>

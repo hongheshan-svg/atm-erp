@@ -35,9 +35,12 @@ def schedule(entry):
     from .finance import balance, paid
 
     remaining = max(ZERO, balance(entry))
-    if not entry.purchase_id or entry.purchase.payment_term == 'manual':
+    if not entry.purchase_id:
         return [{'due_date': entry.due_date, 'amount': remaining}] if remaining else []
     purchase = entry.purchase
+    # 指定日期账期也只对已合格收货的部分到期：未到货的货款付不出去（普通对账额度以收货净额为限），
+    # 算进到期或逾期只会让报表和工作台提示一笔无法办理的应付。
+    manual = purchase.payment_term == 'manual'
     moves = [move for line in purchase.lines.all() for move in line.stockmove_set.all()]
     credits = defaultdict(lambda: ZERO)
     for move in moves:
@@ -47,9 +50,8 @@ def schedule(entry):
     for move in moves:
         if move.kind == 'receipt':
             received = move.received_date or timezone.localdate(move.created_at)
-            buckets[due_date(received, purchase.payment_term, purchase.payment_days)] += max(
-                ZERO, move.value - credits[move.pk]
-            )
+            maturity = entry.due_date if manual else due_date(received, purchase.payment_term, purchase.payment_days)
+            buckets[maturity] += max(ZERO, move.value - credits[move.pk])
     offset = max(ZERO, paid(entry))
     result = []
     for date, amount in sorted(buckets.items()):
@@ -101,7 +103,7 @@ def due_entries(queryset, today):
         .annotate(total=Sum('supplier_credit'))
         .values('total')
     )
-    receipts = (
+    base = (
         StockMove.objects.filter(kind='receipt', purchase_line__purchase_id=OuterRef('purchase_id'))
         .annotate(
             received=Coalesce('received_date', TruncDate('created_at')),
@@ -123,19 +125,25 @@ def due_entries(queryset, today):
             ),
             net_value=Greatest(Value(ZERO), F('value') - F('returned_credit'), output_field=money),
         )
-        .filter(maturity__lte=today)
         .order_by()
-        .values('purchase_line__purchase_id')
-        .annotate(total=Sum('net_value'))
-        .values('total')
     )
-    return queryset.annotate(matured=Coalesce(Subquery(receipts), Value(ZERO), output_field=money)).filter(
+
+    def total(receipts):
+        return Coalesce(
+            Subquery(receipts.values('purchase_line__purchase_id').annotate(total=Sum('net_value')).values('total')),
+            Value(ZERO),
+            output_field=money,
+        )
+
+    manual = Q(purchase__payment_term='manual')
+    return queryset.annotate(matured=total(base.filter(maturity__lte=today)), received_net=total(base)).filter(
         Q(remaining__lt=0)
         | (
             Q(remaining__gt=0)
             & (
-                ((Q(purchase__isnull=True) | Q(purchase__payment_term='manual')) & Q(due_date__lte=today))
-                | (~Q(purchase__payment_term='manual') & Q(purchase__isnull=False) & Q(matured__gt=F('net_paid')))
+                (Q(purchase__isnull=True) & Q(due_date__lte=today))
+                | (manual & Q(due_date__lte=today) & Q(received_net__gt=F('net_paid')))
+                | (~manual & Q(purchase__isnull=False) & Q(matured__gt=F('net_paid')))
             )
         )
     )

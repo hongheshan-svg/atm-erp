@@ -45,7 +45,8 @@ def summary(params, *, export=False):
         sale = getattr(project, 'sale', None)
         if sale and sale.is_deleted:
             sale = None
-        contract = sale.contract_amount if sale and sale.status == 'signed' else ZERO
+        # 取消项目时销售单仍保留「已签约」事实（重新打开要恢复原合同），合同额按项目状态排除。
+        contract = sale.contract_amount if sale and sale.status == 'signed' and project.status != 'cancelled' else ZERO
         overdue = bool(project.due_date and project.due_date < today and project.status in ['active', 'delivering'])
         flags = {'over_budget': budget['over_budget'], 'overdue': overdue, 'unbudgeted': not budget['configured']}
         if values['risk'] and not flags[values['risk']]:

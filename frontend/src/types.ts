@@ -5,6 +5,10 @@ export type Field = {
   label: string
   type?: 'text' | 'password' | 'date' | 'select' | 'multi' | 'checks' | 'boolean' | 'rows' | 'file' | 'textarea'
   options?: Option[]
+  // 依赖同一表单其他字段的选项（如按所选项目过滤任务）；选中值不在新选项内时自动清空。
+  optionsFor?: (data: Row) => Option[]
+  // 文本输入的候选值（datalist），仍允许输入新值。
+  suggestions?: string[]
   fields?: Field[]
   optional?: boolean
   initial?: any

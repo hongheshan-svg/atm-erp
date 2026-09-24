@@ -3,6 +3,8 @@
 import csv
 import io
 import json
+import re
+from decimal import Decimal
 
 from django.http import HttpResponse
 from openpyxl import Workbook
@@ -115,6 +117,53 @@ LABELS = {
 }
 
 
+# 纯数字（含负号）不是公式，不需要防注入前缀；其余以 = + - @ 开头的文本仍按公式风险转义。
+NUMBER = re.compile(r'-?\d{1,18}(\.\d{1,6})?')
+# xlsx 里按数值写入的金额和数量列。编码、账号、流水号即使全是数字也保持文本，避免丢前导零或变成科学计数。
+NUMERIC_KEYS = {
+    'amount',
+    'approved_amount',
+    'actual_cost',
+    'balance',
+    'budget',
+    'cancelled_quantity',
+    'cash_amount',
+    'committed_cost',
+    'contract_amount',
+    'cost',
+    'counterparty_balance',
+    'credit_amount',
+    'difference',
+    'due_amount',
+    'equipment_quantity',
+    'fee',
+    'hourly_cost',
+    'hours',
+    'occupied_cost',
+    'original_contract_amount',
+    'overdue_payable',
+    'overdue_receivable',
+    'paid',
+    'paid_amount',
+    'payable',
+    'pending_quantity',
+    'quantity',
+    'quote_amount',
+    'receivable',
+    'received_quantity',
+    'refund_in',
+    'refund_out',
+    'remaining_amount',
+    'returned_quantity',
+    'size',
+    'supplier_credit',
+    'unit_cost',
+    'unit_price',
+    'value',
+    'warranty_months',
+}
+
+
 def cell(value):
     if value is None:
         return ''
@@ -124,13 +173,22 @@ def cell(value):
         value = '是' if value else '否'
     else:
         value = str(value)
+    if NUMBER.fullmatch(value):
+        return value
     # Prevent spreadsheet formula execution, including leading whitespace/control characters.
     if value.lstrip().startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n')):
         value = "'" + value
     return value
 
 
-def document(name, headers, rows, file_format='csv'):
+def spreadsheet_number(value):
+    """金额、数量列写成数值便于求和；Excel 只有 15 位有效数字，超出的仍存文本，不损失精度。"""
+    if not NUMBER.fullmatch(value) or len(value.lstrip('-').replace('.', '').lstrip('0')) > 15:
+        return value
+    return Decimal(value)
+
+
+def document(name, headers, rows, file_format='csv', numeric=()):
     if file_format not in {'csv', 'xlsx'}:
         raise ValidationError({'file_format': '请选择 csv 或 xlsx。'})
     if len(rows) > MAX_EXPORT:
@@ -147,7 +205,10 @@ def document(name, headers, rows, file_format='csv'):
         sheet = book.create_sheet('数据')
         sheet.append(headers)
         for row in rows:
-            sheet.append([cell(v) for v in row])
+            values = [cell(v) for v in row]
+            sheet.append(
+                [spreadsheet_number(value) if index in numeric else value for index, value in enumerate(values)]
+            )
         output = io.BytesIO()
         book.save(output)
         content = output.getvalue()
@@ -172,5 +233,9 @@ def export_rows(name, rows, file_format='csv', fields=None):
     rows = flattened
     keys = list(dict.fromkeys(key for row in rows for key in row)) if rows else list(fields or [])
     return document(
-        name, [LABELS.get(key, key) for key in keys], [[row.get(key) for key in keys] for row in rows], file_format
+        name,
+        [LABELS.get(key, key) for key in keys],
+        [[row.get(key) for key in keys] for row in rows],
+        file_format,
+        numeric={index for index, key in enumerate(keys) if key in NUMERIC_KEYS},
     )

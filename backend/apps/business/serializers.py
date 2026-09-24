@@ -241,6 +241,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'payment_due_date',
             'payment_term',
             'payment_days',
+            'warranty_months',
             'next_delivery_date',
             'status',
             'due_date',
@@ -336,8 +337,9 @@ class EntrySerializer(serializers.ModelSerializer):
             return 'closed'
         if remaining < 0:
             return 'refund'
-        due = self.get_due_date(obj)
-        return 'overdue' if due and due < timezone.localdate() else 'open'
+        # 与到期明细同一口径：只有已经起算的批次逾期才算逾期，未到货的采购不算。
+        today = timezone.localdate()
+        return 'overdue' if any(row['due_date'] < today for row in self.schedule(obj)) else 'open'
 
     def get_due_date(self, obj):
         if not (obj.purchase_id and obj.purchase.payment_term != 'manual'):

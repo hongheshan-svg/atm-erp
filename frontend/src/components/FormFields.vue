@@ -1,19 +1,30 @@
 <script setup lang="ts">
 import type { Field, Row } from '../types'
 import { defaults } from '../forms'
-import { reactive } from 'vue'
+import { reactive, watchEffect } from 'vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import InitialPasswordInput from './InitialPasswordInput.vue'
 import { flowFor } from '../flows'
-defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
+const props = defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
 const model = defineModel<Row>({ required: true })
+const optionsOf = (field: Field) => field.optionsFor ? field.optionsFor(model.value) : field.options
+// 联动选项变化后，原选中值可能已不属于新范围（例如换了项目），留着只会在提交时被服务端拒绝。
+watchEffect(() => {
+  if (props.readonly) return
+  for (const field of props.fields) {
+    if (!field.optionsFor) continue
+    const value = model.value[field.key]
+    if (value !== '' && value != null && !field.optionsFor(model.value).some(option => String(option.value) === String(value))) model.value[field.key] = ''
+  }
+})
 const pages = reactive<Record<string, number>>({})
 const start = (key: string) => Math.min(pages[key] || 0, Math.max(0, Math.ceil((model.value[key]?.length || 0) / 20) - 1)) * 20
 const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[key]?.length || 0) - start(key)) }, (_, i) => start(key) + i)
 function readonlyValue(field: Field) {
   const value = model.value[field.key]
-  if (field.options) return field.options.filter(option => (Array.isArray(value) ? value : [value]).includes(option.value)).map(option => option.label).join('、') || '—'
+  const options = optionsOf(field)
+  if (options) return options.filter(option => (Array.isArray(value) ? value : [value]).includes(option.value)).map(option => option.label).join('、') || '—'
   return value === true ? '启用' : value === false ? '停用' : value == null || value === '' ? '—' : String(value)
 }
 </script>
@@ -59,7 +70,7 @@ function readonlyValue(field: Field) {
           :required="!field.optional"
         >
           <option v-if="field.type !== 'multi'" value="">请选择</option>
-          <option v-for="option in field.options" :key="option.value" :value="option.value">
+          <option v-for="option in optionsOf(field)" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
@@ -96,8 +107,10 @@ function readonlyValue(field: Field) {
           :required="!field.optional"
           :autocomplete="field.type === 'password' ? 'new-password' : 'off'"
           :placeholder="field.placeholder"
+          :list="field.suggestions ? `suggestions-${field.key}` : undefined"
           :inputmode="field.numeric ? (field.numeric.signed ? 'text' : field.numeric.scale ? 'decimal' : 'numeric') : undefined"
         />
+        <datalist v-if="field.suggestions && !readonly" :id="`suggestions-${field.key}`"><option v-for="value in field.suggestions" :key="value" :value="value" /></datalist>
         <small v-if="field.hint && !readonly">{{ field.hint }}</small>
       </label>
     </template>

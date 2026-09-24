@@ -21,7 +21,7 @@ let applied = { search: '', status: '', risk: '' }
 const exportFilters = ref(applied)
 let generation = 0
 const metrics: { key: string; label: string; note: string; overdue?: string }[] = [
-  { key: 'contract_amount', label: '已签约合同额', note: '筛选项目累计合同金额' },
+  { key: 'contract_amount', label: '已签约合同额', note: '筛选项目累计合同金额，不含已取消项目' },
   { key: 'actual_cost', label: '实际成本', note: '材料、人工、费用及退货价差' },
   { key: 'receivable', label: '待收款', note: '应收余额，不含待退客户款', overdue: 'overdue_receivable' },
   { key: 'payable', label: '待付款', note: '采购与费用余额，不含待收退款', overdue: 'overdue_payable' },
@@ -91,7 +91,7 @@ watch(pageSize, () => load())
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
       </el-table>
       <ListPagination :page="data.page" :total="data.count" @change="load" />
-      <p class="muted report-basis">人民币含税经营口径；全部指标按当前筛选项目累计，不是期间收入或会计利润。合同额不等于已收款，未完成项目的实际成本不代表完工成本。已承诺采购仅含未收货采购，人工和费用使用实际记录，采购净额超材料预算同样计入超预算项目。取消项目的待退款仍保留，退款与正向待收待付分别展示。</p>
+      <p class="muted report-basis">人民币含税经营口径；全部指标按当前筛选项目累计，不是期间收入或会计利润。合同额不等于已收款，未完成项目的实际成本不代表完工成本。已承诺采购仅含未收货采购，人工和费用使用实际记录，采购净额超材料预算同样计入超预算项目。取消项目不计合同额，但其待退款仍保留，退款与正向待收待付分别展示。</p>
     </section>
   </template>
   <ReportAttention />
