@@ -1,18 +1,30 @@
 import { test, expect, login } from './fixtures'
 
-test('管理员从左上角查看版本，未连接执行器时不能升级', async ({ page }, info) => {
+test('管理员从左上角查看版本，已是最新版本时不能升级', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  // 版本检查读取 GitHub 最新正式版；把检查结果固定为当前运行版本，避免新版本发布后本用例在旧代码上随机失败。
+  await page.route(url => url.pathname === '/api/core/upgrade/' && url.searchParams.get('check') === '1', async route => {
+    const response = await route.fetch()
+    const state = await response.json()
+    delete state.check_error
+    await route.fulfill({
+      response,
+      json: { ...state, available: false, release: { version: `v${state.current}`, name: `v${state.current}`, notes: '当前版本说明', published_at: '', url: 'https://github.com/hongheshan-svg/atm-erp/releases', assets: [] } },
+    })
+  })
   if (info.project.name === 'mobile') await page.getByRole('button', { name: '菜单', exact: true }).click()
   const entry = page.getByRole('button', { name: /版本与升级/ })
   await expect(entry).toBeInViewport({ ratio: 1 })
   await entry.click()
   const dialog = page.getByRole('dialog', { name: 'ERP 版本与升级', exact: true })
   await expect(dialog).toBeVisible()
-  await expect(dialog).toContainText('当前版本')
+  await expect(dialog).toContainText('当前运行版本')
+  await expect(dialog).toContainText('当前已是最新版本')
   const bounds = await dialog.boundingBox()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
-  await expect(dialog.getByRole('button', { name: '备份并升级', exact: true })).toBeDisabled()
+  // 容器内升级显示「立即更新」，宿主机模式显示「备份并升级」；已是最新版本时都不可点。
+  await expect(dialog.getByRole('button', { name: /^(立即更新|备份并升级)$/ })).toBeDisabled()
   await page.screenshot({ path: info.outputPath('system-upgrade.png'), animations: 'disabled' })
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(dialog).not.toBeVisible()
