@@ -28,4 +28,4 @@ python run_all_tests.py --stage business --plan-only   # 只打印阶段命令
 - 后端请求路径：`business/urls.py` → `business/api/<领域>.py`（DRF 视图、权限、范围过滤）→ `business/services/<领域>.py`（状态校验、加锁事务、ActionReceipt 去重）→ `business/models.py`（`BaseModel` 提供审计和软删除）。跨领域的写入逻辑放在 services，不写在视图或序列化器里。
 - 权限按用户所有角色的并集判断，统一走 `apps/core/permissions.py` 的 `has_role`/`PermissionMixin`。前端导航和动作按钮只做展示层过滤，必须与后端角色一致。
 - 前端：`src/router.ts`、`src/navigation.ts` 定义页面入口；`src/business.ts` 只按资源分发到 `src/modules/<领域>.ts`（表单、动作定义）；HTTP 请求一律经过 `src/api/` 和 `src/utils/request.ts`。
-- CI 按影响范围挑选测试：`scripts/ci/impact.py`、`select_suites.py` 计算要跑的模块，发版本强制发版验证（浏览器按改动范围、不含完整业务链），由 `release_gate.py` 核验能否复用同一代码树的结果。详见 `docs/CI_OPERATIONS.md`。
+- CI 按影响范围挑选测试：`scripts/ci/impact.py`、`select_suites.py` 计算要跑的模块，发版本强制发版验证（后端与前端单测全跑；浏览器按改动范围、不含完整业务链；OTA 与安装器只在相关改动时运行），由 `release_gate.py` 核验能否复用同一代码树的结果。详见 `docs/CI_OPERATIONS.md`。
