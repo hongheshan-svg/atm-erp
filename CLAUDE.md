@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # 项目约束
 
-遵循根目录 [AGENTS.md](AGENTS.md)，按任务需要读取其中引用的文档。当前系统只维护 Lean ERP，旧架构文档不作为现行要求。AGENTS.md 中的 `apply_patch` 指 Codex 工具，在 Claude Code 中用 Edit/Write 修改源码即可。
+遵循根目录 [AGENTS.md](AGENTS.md)，按任务需要读取其中引用的文档。当前系统只维护 Lean ERP，旧架构文档不作为现行要求。
 
 ## 常用命令速查
 
