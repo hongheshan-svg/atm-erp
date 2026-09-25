@@ -151,10 +151,12 @@ jobs:
               expected = 'success' if jobs['plan']['outputs'][name] == 'true' else 'skipped'
               assert jobs[name]['result'] == expected, (name, jobs[name]['result'], expected)
           PY
+  # 标记任务按 gate 的结论显式判断：默认条件会因上游被跳过的套件（未选中的 browser/ota/installers）
+  # 连带跳过，导致通过的范围验证没有标记。任务名是 release_gate 的查找依据，不能修改。
   full-validation:
     name: Full validation (${{ needs.plan.outputs.tree }})
     needs: [plan, gate]
-    if: needs.plan.outputs.full == 'true'
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.plan.outputs.full == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -162,7 +164,7 @@ jobs:
   scoped-validation:
     name: Scoped validation (${{ needs.plan.outputs.tree }} ${{ needs.plan.outputs.fingerprint }})
     needs: [plan, gate]
-    if: needs.plan.outputs.scoped == 'true'
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.plan.outputs.scoped == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
