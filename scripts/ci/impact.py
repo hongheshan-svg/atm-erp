@@ -212,7 +212,9 @@ def version_only_paths(base, head, paths, read_blob):
     return result
 
 
-def plan(paths, modules=(), full=False, version_only=()):
+def plan(paths, modules=(), full=False, version_only=(), release=False):
+    """release=True 为发版验证：后端、前端单测、运维、安装器与 OTA 全部运行，
+    浏览器只运行发布差异涉及的模块及关联页面用例，不含完整业务链。"""
     selected = set(modules)
     if selected - MODULE_TESTS.keys():
         raise ValueError('未知模块：' + ','.join(sorted(selected - MODULE_TESTS.keys())))
@@ -291,9 +293,13 @@ def plan(paths, modules=(), full=False, version_only=()):
                 selected.add('ota')
         else:
             unknown.append(path)
-    if unknown and not modules and not full:
+    if unknown and not modules and not full and not release:
         raise ValueError('以下共享/未知变更需显式指定 modules，不能静默漏测或启动全量：' + ', '.join(unknown))
-    if unknown:
+    if unknown and release and not modules:
+        # 发版不能因未登记映射的新文件中断，也不能漏测：页面用例按全部业务模块选择。
+        selected.update(BUSINESS)
+        reasons.append('发布差异含未登记路径，页面用例覆盖全部业务模块：' + ', '.join(unknown))
+    elif unknown:
         reasons.append('显式模块范围覆盖共享/未知变更：' + ', '.join(unknown))
     backend.update(module_targets(selected))
     for module in selected:
@@ -316,6 +322,11 @@ def plan(paths, modules=(), full=False, version_only=()):
         frontend = {str(p.relative_to(ROOT / 'frontend')) for p in (ROOT / 'frontend/src').rglob('*.spec.ts')}
         browser = {str(p.relative_to(ROOT / 'frontend')) for p in (ROOT / 'frontend/e2e').glob('*.spec.ts')}
         checks_backend = checks_frontend = ops = installers = True
+    if release and not full:
+        backend = {target for group in TARGETS.values() for target in group}
+        frontend = {str(p.relative_to(ROOT / 'frontend')) for p in (ROOT / 'frontend/src').rglob('*.spec.ts')}
+        browser -= {f'e2e/{name}.spec.ts' for name in FULL_ONLY_BROWSERS}
+        checks_backend = checks_frontend = ops = installers = True
     if not full and 'e2e/full-chain.spec.ts' in browser:
         raise ValueError('完整业务链仅可通过显式 suite=full 运行')
     result = {
@@ -326,7 +337,8 @@ def plan(paths, modules=(), full=False, version_only=()):
         'frontend': checks_frontend,
         'ops': ops,
         'installers': installers,
-        'ota': 'ota' in selected or full,
+        'ota': 'ota' in selected or full or release,
+        'mode': 'full' if full else 'release' if release else 'impact',
         'modules': sorted(selected),
         'reasons': reasons,
     }

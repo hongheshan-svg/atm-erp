@@ -42,4 +42,4 @@ description: 修改或验收当前 Lean ERP 的业务动作、权限、金额、
 
 报告改变的业务行为、实际验证范围和结果、未覆盖项。业务变更及正式验收按仓库约定记录到 docs/SIMPLIFICATION_EVIDENCE.md；纯文档/技能维护只检查内容与引用，不制造业务验收记录。某项受阻时继续独立工作，但不把局部通过称为全系统通过。
 
-发版本必须全量：Release 工作流对 tag 的 Git tree 强制 suite=full（或复用同 tree 已通过的 Full validation），不得以按影响范围的结果代替或绕过。除发版本外，只有用户明确要求“全业务流程测试”“全量验收”才执行全量入口（bash scripts/precheck-tests.sh --all 及完整页面链）；修改、提交、push、合并或修复共享代码本身都不代表该要求。发布先查 docs/CI_OPERATIONS.md；证据复用由 scripts/ci/release_gate.py 核验。
+发版本必须通过发版验证：Release 工作流对 tag 的 Git tree 强制 suite=release（后端、前端单测、运维、安装器与 OTA 全部运行；浏览器按改动模块及关联页面，不含完整业务链），不得以 PR 的按影响范围结果代替或绕过。只有用户明确要求“全业务流程测试”“全量验收”才执行全量入口（bash scripts/precheck-tests.sh --all 及完整页面链）；修改、提交、push、合并、打 tag 或修复共享代码本身都不代表该要求。发布先查 docs/CI_OPERATIONS.md；证据复用由 scripts/ci/release_gate.py 核验。

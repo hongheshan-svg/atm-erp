@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Run one suite, full validation, or a custom combination'
         type: choice
-        options: [auto, fast, browser, ota, installers, custom, full]
+        options: [auto, fast, browser, ota, installers, custom, release, full]
         default: auto
       modules:
         description: 'Shared/unknown changes: affected modules, comma separated (sales,projects,bom,purchases,inventory,finance,masterdata,accounts,reports,ota)'
@@ -65,6 +65,7 @@ jobs:
       ota: ${{ steps.select.outputs.ota }}
       installers: ${{ steps.select.outputs.installers }}
       full: ${{ steps.select.outputs.full }}
+      release: ${{ steps.select.outputs.release }}
       tree: ${{ steps.select.outputs.tree }}
       scoped: ${{ steps.select.outputs.scoped }}
       fingerprint: ${{ steps.select.outputs.fingerprint }}
@@ -161,6 +162,14 @@ jobs:
     timeout-minutes: 2
     steps:
       - run: echo '当前 Git tree 的全部测试套件与两种浏览器视口均已通过。'
+  release-validation:
+    name: Release validation (${{ needs.plan.outputs.tree }} ${{ needs.plan.outputs.fingerprint }})
+    needs: [plan, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo '当前 Git tree 的发版验证已通过：后端、前端单测、运维、安装器与 OTA 全部运行，浏览器覆盖发布改动的模块及关联页面，不含完整业务链。'
   scoped-validation:
     name: Scoped validation (${{ needs.plan.outputs.tree }} ${{ needs.plan.outputs.fingerprint }})
     needs: [plan, gate]

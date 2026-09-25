@@ -1,4 +1,4 @@
-"""Release preflight: a release requires Full validation of the exact tree, reused or rerun; no credentials in output."""
+"""Release preflight: a release requires release validation of the exact tree, reused or rerun; no credentials in output."""
 
 import argparse
 import json
@@ -18,9 +18,12 @@ def git(*args):
     return subprocess.check_output(['git', *args], text=True).strip()
 
 
-def reusable_run(runs, repository, tree, jobs_for):
-    # 发版本必须全量：只有同一 Git tree 的 Full validation 才能复用，按影响范围的 Scoped validation 不算发布凭据。
+def reusable_run(runs, repository, tree, jobs_for, fingerprint=None):
+    # 发版凭据：同一 Git tree 的 Release validation（计划指纹一致），或覆盖面更大的 Full validation。
+    # 按影响范围的 Scoped validation 不含全部后端、单测、安装器与 OTA，不算发布凭据。
     expected = {f'Full validation ({tree})'}
+    if fingerprint:
+        expected.add(f'Release validation ({tree} {fingerprint})')
     for run in runs:
         if run.get('conclusion') != 'success' or run.get('event') not in ('pull_request', 'workflow_dispatch', 'push'):
             continue
@@ -45,10 +48,10 @@ def release_scope(commit, tag):
     if not base:
         raise ValueError('缺少之前的正式 tag，无法确定发布差异范围；请先明确首次发布验证基线')
     paths = git('diff', '--name-only', '-z', base, commit).split('\0')
-    # 全量计划覆盖全部用例，不因共享/未知路径失败；差异范围只用于发布摘要。
+    # 发版计划：浏览器按发布差异选择，未登记路径覆盖全部业务模块，不因此失败。
     return base, plan(
         [path for path in paths if path],
-        full=True,
+        release=True,
         version_only=version_only_paths(base, commit, paths, lambda ref, path: git('show', f'{ref}:{path}')),
     )
 
@@ -81,6 +84,7 @@ def preflight(tag, repository, force=False):
             repository,
             tree,
             lambda run_id: api(f'repos/{repository}/actions/runs/{run_id}/jobs?per_page=100')['jobs'],
+            scope['fingerprint'],
         )
     return {
         'tag': tag,
@@ -89,7 +93,8 @@ def preflight(tag, repository, force=False):
         'validate': str(run is None).lower(),
         'reused_run': str(run or ''),
         'base': base,
-        'validation': 'full',
+        'validation': 'release',
+        'fingerprint': scope['fingerprint'],
         'changed_modules': ','.join(scope['modules']),
     }
 

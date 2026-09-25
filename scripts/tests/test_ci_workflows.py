@@ -221,20 +221,32 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 {'name': 'CI gate', 'conclusion': 'success'},
             ]
 
-        # 发版本必须全量：按影响范围通过的记录再完整也不能复用。
-        self.assertIsNone(reusable_run([self.run], 'owner/erp', 'abc', jobs))
+        # 按影响范围通过的记录不含全部后端、单测、安装器与 OTA，即使计划指纹相同也不能作为发版凭据。
+        self.assertIsNone(reusable_run([self.run], 'owner/erp', 'abc', jobs, 'coverage1'))
 
-    def test_release_workflow_always_validates_with_full_suite(self):
+    def test_release_evidence_requires_identical_release_plan(self):
+        def jobs(_):
+            return [{'name': 'Release validation (abc coverage1)', 'conclusion': 'success'}]
+
+        self.assertEqual(reusable_run([self.run], 'owner/erp', 'abc', jobs, 'coverage1'), 42)
+        self.assertIsNone(reusable_run([self.run], 'owner/erp', 'abc', jobs, 'coverage2'))
+        self.assertIsNone(reusable_run([self.run], 'owner/erp', 'different', jobs, 'coverage1'))
+        # 显式全量覆盖面更大，同 tree 时同样可作为发版凭据。
+        self.assertEqual(reusable_run([self.run], 'owner/erp', 'abc', self.jobs, 'coverage1'), 42)
+
+    def test_release_workflow_uses_release_suite(self):
         workflow = (ROOT / '.github/workflows/release.yml').read_text()
         validate = workflow.split('\n  validate:', 1)[1].split('\n  images:', 1)[0]
-        self.assertIn('suite: full', validate)
+        self.assertIn('suite: release', validate)
+        self.assertIn('base: ${{ needs.preflight.outputs.base }}', validate)
         self.assertIn('browser_projects: both', validate)
         self.assertNotIn('validation_modules', workflow)
-        self.assertNotIn('suite: auto', validate)
+        for other in ('suite: full', 'suite: auto'):
+            self.assertNotIn(other, validate)
 
     def test_validation_markers_follow_gate_even_when_suites_are_skipped(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        for job, output in (('full-validation', 'full'), ('scoped-validation', 'scoped')):
+        for job, output in (('full-validation', 'full'), ('release-validation', 'release'), ('scoped-validation', 'scoped')):
             block = re.split(r'\n  (?! )', workflow.split(f'\n  {job}:\n', 1)[1], maxsplit=1)[0]
             condition = next(line for line in block.splitlines() if line.strip().startswith('if:'))
             # 未选中的套件会被跳过；默认 success() 会把标记连带跳过，必须显式依据 gate 结论。
@@ -243,16 +255,38 @@ class ReleaseEvidenceTests(unittest.TestCase):
             self.assertIn(f"needs.plan.outputs.{output} == 'true'", condition, job)
         self.assertIn('name: Full validation (${{ needs.plan.outputs.tree }})', workflow)
 
-    def test_release_scope_is_full_even_for_shared_or_unknown_changes(self):
+    def release_plan(self, *changed):
         def fake_git(*args):
             if args[0] == 'tag':
                 return 'v1.8.8'
-            return 'backend/apps/business/services/common.py\0brand-new.file\0'
+            return '\0'.join(changed) + '\0'
 
         with patch('scripts.ci.release_gate.git', side_effect=fake_git):
-            _, scope = release_scope('commit', 'v1.8.9')
-        self.assertIn('e2e/full-chain.spec.ts', scope['browser_specs'])
-        self.assertTrue(scope['ota'] and scope['installers'])
+            return release_scope('commit', 'v1.8.9')[1]
+
+    def test_release_runs_every_non_browser_check_but_only_affected_pages(self):
+        from scripts.ci.backend_test_matrix import TARGETS
+
+        scope = self.release_plan('backend/apps/business/services/supply.py')
+        self.assertEqual(scope['mode'], 'release')
+        self.assertEqual(set(scope['backend_targets']), {t for group in TARGETS.values() for t in group})
+        units = {str(p.relative_to(ROOT / 'frontend')) for p in (ROOT / 'frontend/src').rglob('*.spec.ts')}
+        self.assertEqual(set(scope['frontend_tests']), units)
+        self.assertTrue(scope['ota'] and scope['installers'] and scope['ops'])
+        self.assertIn('e2e/payment-terms.spec.ts', scope['browser_specs'])
+        self.assertNotIn('e2e/sales-role.spec.ts', scope['browser_specs'])
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
+    def test_release_never_runs_full_chain_and_covers_unregistered_paths(self):
+        scope = self.release_plan('frontend/e2e/full-chain.spec.ts', 'brand-new.file')
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+        self.assertEqual(scope['modules'], sorted(BUSINESS))
+        self.assertTrue(any('未登记路径' in reason for reason in scope['reasons']))
+        # 文档类发布没有页面改动，不启动浏览器任务。
+        self.assertEqual(select(['README.md'], 'release'), {'fast', 'ota', 'installers'})
+        self.assertEqual(
+            select(['backend/apps/business/services/supply.py'], 'release'), {'fast', 'ota', 'installers', 'browser'}
+        )
 
     def test_six_packages_provenance_and_tamper_detection(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -311,7 +345,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with (
             patch('scripts.ci.release_gate.git', side_effect=git_result),
             patch('scripts.ci.release_gate.subprocess.run'),
-            patch('scripts.ci.release_gate.release_scope', return_value=('v1.9.9', {'modules': ['purchases']})),
+            patch(
+                'scripts.ci.release_gate.release_scope',
+                return_value=('v1.9.9', {'modules': ['purchases'], 'fingerprint': 'coverage1'}),
+            ),
         ):
             with patch(
                 'scripts.ci.release_gate.api', side_effect=[[], {'workflow_runs': [self.run]}, {'jobs': self.jobs(42)}]
