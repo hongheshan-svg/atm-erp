@@ -1,4 +1,4 @@
-"""Select affected checks; full business validation requires an explicit request."""
+"""Select affected checks; releases use the release plan; the full business chain requires an explicit request."""
 
 import argparse
 import json
@@ -14,6 +14,8 @@ SUITES = ('fast', 'browser', 'ota', 'installers')
 def select(paths, suite='auto', custom=()):
     if suite == 'full':
         return set(SUITES)
+    if suite == 'release':
+        return required_suites(plan(paths, release=True))
     if suite == 'custom':
         if not set(custom) or set(custom) - set(SUITES):
             raise ValueError('请至少选择一个已知的测试套件')
@@ -59,6 +61,7 @@ def main():
         [path for path in paths if path],
         modules=tuple(filter(None, args.modules.split(','))),
         full=args.suite == 'full',
+        release=args.suite == 'release',
         version_only=version_only_paths(
             args.base,
             args.head,
@@ -66,7 +69,7 @@ def main():
             lambda ref, path: subprocess.check_output(['git', 'show', f'{ref}:{path}'], text=True),
         ),
     )
-    if args.suite == 'auto':
+    if args.suite in ('auto', 'release'):
         selected = required_suites(scope)
     else:
         selected = select([], args.suite, custom)
@@ -76,6 +79,7 @@ def main():
         raise ValueError('没有受影响的快速检查目标；请使用 auto 跳过或指定 modules')
     values = {name: str(name in selected).lower() for name in SUITES}
     values['full'] = str(args.suite == 'full' and args.projects == 'both').lower()
+    values['release'] = str(args.suite == 'release' and args.projects == 'both').lower()
     required = required_suites(scope)
     values['scoped'] = str(required <= selected and args.projects == 'both').lower()
     values['fingerprint'] = scope['fingerprint']

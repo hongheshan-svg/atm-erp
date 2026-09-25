@@ -2,7 +2,7 @@
 
 ## 默认按影响验证
 
-PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链；发版本由 Release 工作流强制运行 full。
+PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链；发版本由 Release 工作流强制运行 suite=release（见下文），不含完整业务链。
 
 计划由 scripts/ci/impact.py 生成：业务模块、后端测试目标、前端组件用例、浏览器 spec、OTA/安装器，以及计划指纹均进入 Summary。后端用例仍只登记在 scripts/ci/backend_test_matrix.py，模块映射在同文件引用登记项。纯 Markdown 修改只运行计划自检和工作流语法检查。
 
@@ -33,6 +33,7 @@ backend 不再默认执行整个 backend 阶段：先静态检查，再运行 JS
 | suite=fast/browser/ota/installers | 仅运行该类诊断，不自动取得完整范围凭据 |
 | suite=custom | 选择多个类别；未覆盖计划全部要求时仅算局部诊断 |
 | browser_projects | both/desktop/mobile；单视口不给完整范围凭据 |
+| suite=release | 发版验证：比较前一正式 tag，后端、前端单测、运维、安装器与 OTA 全部运行，浏览器按改动模块及关联页面，不含完整业务链 |
 | suite=full | 显式全量，包含完整业务链与双视口 |
 
 模块值：sales、projects、bom、purchases、inventory、finance、masterdata、accounts、reports、ota。PR 基线为目标分支提交；手动 auto 默认比较 HEAD 之前最近匹配的版本 tag，发布则比较前一正式 tag。未知基线或未知路径失败，不静默假定没有变更。
@@ -50,15 +51,15 @@ Fast checks 和 Browser validation 作为可复用子流程，由统一入口传
 
 ## 发布门禁与证据复用
 
-1. 功能分支更新一致版本与发布说明，完成相应验证，合并 main 后打正式 tag。**发版本必须全量验证**，按影响范围的结果不能代替。
+1. 功能分支更新一致版本与发布说明，完成相应验证，合并 main 后打正式 tag。**发版本必须通过发版验证（suite=release）**，PR 的按影响范围结果不能代替。
 2. Release 检查 tag 在 main 历史、前后端版本一致、Installation/Documentation 区块、目标未公开发布，再计算前一正式 tag 到目标提交的完整变更范围。
-3. 优先复用本仓库成功 CI：必须存在同一 Git tree 成功的 Full validation 标记。Scoped validation、CI gate、单视口或局部诊断都不能作为发布凭据。
-4. 没有匹配记录时 Release 以 suite=full、双视口运行全量验证：全部后端阶段（平台、业务、并发）与前端单测、含完整业务链的全部浏览器用例、OTA 与安装器，约 20 分钟。force_validation 强制重跑全量。前一正式 tag 到本次的差异只写入发布摘要，不再缩小验证范围。不修改已存在 tag 来绕过失败。
+3. 优先复用本仓库成功 CI：同一 Git tree 且计划指纹一致的 Release validation，或同 tree 的 Full validation。Scoped validation、CI gate、单视口或局部诊断都不能作为发布凭据。
+4. 没有匹配记录时 Release 以 suite=release、双视口运行发版验证：全部后端阶段（平台、业务、并发）、全部前端单测、运维、安装器与 OTA 全部运行；浏览器只跑前一正式 tag 以来改动的模块及关联页面用例（共享核心改动和未登记路径覆盖全部业务模块），不含完整业务链。force_validation 强制重跑。不修改已存在 tag 来绕过失败。完整业务链只在明确要求时手动运行 suite=full。
 5. wheelhouse 可与验证并行准备；全部选中检查通过后才进入镜像构建、最终打包和发布。三平台 native/docker 六包、双架构预构建镜像、离线 wheelhouse、来源及上传哈希检查保留。只有发布 job 具备 contents 写权限；公开版本拒绝覆盖，草稿可重试。
 
 ```bash
-# 可选：打 tag 前先对 main 跑全量，Release 会复用同 tree 的 Full validation
-gh workflow run ci.yml --ref main -f suite=full -f browser_projects=both
+# 可选：发版 PR 合并后、打 tag 前对 main 跑发版验证（默认比较最近的正式 tag），Release 会复用同 tree 同计划的结果
+gh workflow run ci.yml --ref main -f suite=release -f browser_projects=both
 gh workflow run release.yml --ref main -f tag=vX.Y.Z -F publish=false
 ```
 
