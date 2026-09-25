@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - run: echo '当前 Git tree 的发版验证已通过：后端、前端单测、运维、安装器与 OTA 全部运行，浏览器覆盖发布改动的模块及关联页面，不含完整业务链。'
+      - run: echo '当前 Git tree 的发版验证已通过：后端、前端单测与运维脚本测试全部运行，浏览器、OTA 与安装器按发布改动选择，不含完整业务链。'
   scoped-validation:
     name: Scoped validation (${{ needs.plan.outputs.tree }} ${{ needs.plan.outputs.fingerprint }})
     needs: [plan, gate]

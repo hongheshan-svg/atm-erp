@@ -25,7 +25,9 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(select(['backend/apps/business/services/supply.py']), {'fast', 'browser'})
         # 迁移属于经过审阅的共享路径，自动覆盖全部业务模块，不再要求手动补跑。
         scope = plan(['backend/apps/business/migrations/0001_initial.py'])
-        self.assertEqual(scope['modules'], sorted(BUSINESS))
+        # 升级流程先备份再迁移，迁移变化同时选择 OTA 升级演练。
+        self.assertEqual(scope['modules'], sorted((*BUSINESS, 'ota')))
+        self.assertTrue(scope['ota'])
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
 
     def test_pr_changes_do_not_implicitly_run_full_validation(self):
@@ -264,7 +266,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with patch('scripts.ci.release_gate.git', side_effect=fake_git):
             return release_scope('commit', 'v1.8.9')[1]
 
-    def test_release_runs_every_non_browser_check_but_only_affected_pages(self):
+    def test_release_runs_all_backend_and_unit_tests_but_only_affected_pages_ota_and_installers(self):
         from scripts.ci.backend_test_matrix import TARGETS
 
         scope = self.release_plan('backend/apps/business/services/supply.py')
@@ -272,7 +274,8 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertEqual(set(scope['backend_targets']), {t for group in TARGETS.values() for t in group})
         units = {str(p.relative_to(ROOT / 'frontend')) for p in (ROOT / 'frontend/src').rglob('*.spec.ts')}
         self.assertEqual(set(scope['frontend_tests']), units)
-        self.assertTrue(scope['ota'] and scope['installers'] and scope['ops'])
+        self.assertTrue(scope['ops'])
+        self.assertFalse(scope['ota'] or scope['installers'])
         self.assertIn('e2e/payment-terms.spec.ts', scope['browser_specs'])
         self.assertNotIn('e2e/sales-role.spec.ts', scope['browser_specs'])
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
@@ -282,11 +285,22 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
         self.assertEqual(scope['modules'], sorted(BUSINESS))
         self.assertTrue(any('未登记路径' in reason for reason in scope['reasons']))
-        # 文档类发布没有页面改动，不启动浏览器任务。
-        self.assertEqual(select(['README.md'], 'release'), {'fast', 'ota', 'installers'})
-        self.assertEqual(
-            select(['backend/apps/business/services/supply.py'], 'release'), {'fast', 'ota', 'installers', 'browser'}
-        )
+        # 文档类发布只跑后端、前端单测与运维脚本测试，不启动浏览器、OTA 与安装器。
+        self.assertEqual(select(['README.md'], 'release'), {'fast'})
+        self.assertEqual(select(['backend/apps/business/services/supply.py'], 'release'), {'fast', 'browser'})
+
+    def test_release_runs_ota_and_installers_only_for_related_changes(self):
+        cases = {
+            'backend/apps/business/migrations/0001_initial.py': (True, False),
+            'backend/requirements.txt': (True, True),
+            'install.sh': (False, True),
+            'docker/app/Dockerfile': (True, True),
+            'backend/apps/core/ota.py': (True, False),
+            'backend/apps/business/services/reports.py': (False, False),
+        }
+        for path, (ota, installers) in cases.items():
+            scope = self.release_plan(path)
+            self.assertEqual((scope['ota'], scope['installers']), (ota, installers), path)
 
     def test_six_packages_provenance_and_tamper_detection(self):
         with tempfile.TemporaryDirectory() as temporary:

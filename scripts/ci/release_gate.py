@@ -20,7 +20,7 @@ def git(*args):
 
 def reusable_run(runs, repository, tree, jobs_for, fingerprint=None):
     # 发版凭据：同一 Git tree 的 Release validation（计划指纹一致），或覆盖面更大的 Full validation。
-    # 按影响范围的 Scoped validation 不含全部后端、单测、安装器与 OTA，不算发布凭据。
+    # 按影响范围的 Scoped validation 不含全部后端阶段与前端单测，不算发布凭据。
     expected = {f'Full validation ({tree})'}
     if fingerprint:
         expected.add(f'Release validation ({tree} {fingerprint})')

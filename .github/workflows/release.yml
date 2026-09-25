@@ -45,8 +45,8 @@ jobs:
           args=()
           if [[ "$FORCE" == true ]]; then args+=(--force); fi
           python3 -m scripts.ci.release_gate --tag "$TAG" "${args[@]}"
-  # 发版验证：后端全部阶段、前端全部单测、运维、安装器与 OTA 全部运行；浏览器按前一正式 tag 以来改动的
-  # 模块及关联页面用例运行（双视口），不含完整业务链。完整业务链只在明确要求时手动运行 suite=full。
+  # 发版验证：后端全部阶段、前端全部单测与运维脚本测试全部运行；浏览器（双视口，不含完整业务链）、OTA 与
+  # 安装器按前一正式 tag 以来的改动选择。完整业务链只在明确要求时手动运行 suite=full。
   validate:
     needs: preflight
     if: needs.preflight.outputs.validate == 'true'

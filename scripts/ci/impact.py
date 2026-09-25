@@ -213,8 +213,8 @@ def version_only_paths(base, head, paths, read_blob):
 
 
 def plan(paths, modules=(), full=False, version_only=(), release=False):
-    """release=True 为发版验证：后端、前端单测、运维、安装器与 OTA 全部运行，
-    浏览器只运行发布差异涉及的模块及关联页面用例，不含完整业务链。"""
+    """release=True 为发版验证：后端全部阶段、前端全部单测与运维脚本测试全部运行；
+    浏览器、OTA 与安装器按发布差异选择（浏览器永不含完整业务链）。"""
     selected = set(modules)
     if selected - MODULE_TESTS.keys():
         raise ValueError('未知模块：' + ','.join(sorted(selected - MODULE_TESTS.keys())))
@@ -285,6 +285,9 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
             selected.update(matched)
         elif shared is not None:
             selected.update(shared)
+            if '/migrations/' in path:
+                # 升级流程先备份再执行前向迁移；迁移变化须经 OTA 升级演练验证。
+                selected.add('ota')
             if path.startswith('frontend/') and set(shared) == set(BUSINESS):
                 browser.update(f'e2e/{name}.spec.ts' for name in SHARED_UI_BROWSERS)
             if path == 'backend/requirements.txt':
@@ -326,7 +329,8 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
         backend = {target for group in TARGETS.values() for target in group}
         frontend = {str(p.relative_to(ROOT / 'frontend')) for p in (ROOT / 'frontend/src').rglob('*.spec.ts')}
         browser -= {f'e2e/{name}.spec.ts' for name in FULL_ONLY_BROWSERS}
-        checks_backend = checks_frontend = ops = installers = True
+        # OTA 与安装器只在相关改动时运行（升级代码、迁移、Docker/部署、安装与打包脚本、运行时依赖）。
+        checks_backend = checks_frontend = ops = True
     if not full and 'e2e/full-chain.spec.ts' in browser:
         raise ValueError('完整业务链仅可通过显式 suite=full 运行')
     result = {
@@ -337,7 +341,7 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
         'frontend': checks_frontend,
         'ops': ops,
         'installers': installers,
-        'ota': 'ota' in selected or full or release,
+        'ota': 'ota' in selected or full,
         'mode': 'full' if full else 'release' if release else 'impact',
         'modules': sorted(selected),
         'reasons': reasons,
