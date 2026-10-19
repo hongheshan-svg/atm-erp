@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.models import User
@@ -15,6 +15,63 @@ from apps.core.codes import configure
 from apps.core.models import ActionReceipt, AuditLog, CodeRule, Company, SchemaVersion
 from apps.core.permissions import ADMIN, require_role
 from apps.core.schema_guard import check_schema
+
+
+class ChineseErrorTests(SimpleTestCase):
+    def test_framework_error_details_are_chinese_and_keep_status_and_codes(self):
+        from django.http import Http404
+        from rest_framework.exceptions import NotAuthenticated, ParseError, Throttled
+
+        from apps.core.api import exception_handler
+
+        cases = [
+            (Http404('No Project matches the given query.'), 404, '记录不存在'),
+            (NotAuthenticated('Authentication credentials were not provided.'), 401, '请先登录'),
+            (ParseError('JSON parse error - Expecting value'), 400, '提交内容格式不正确'),
+            (Throttled(wait=12, detail='Request was throttled.'), 429, '操作过于频繁'),
+        ]
+        for exc, status, text in cases:
+            with self.subTest(status=status):
+                response = exception_handler(exc, {})
+                self.assertEqual(response.status_code, status)
+                self.assertIn(text, response.data['detail'])
+                if isinstance(exc, Throttled):
+                    self.assertEqual(response['Retry-After'], '12')
+                    self.assertEqual(response.data['detail'].code, 'throttled')
+
+    def test_model_validation_preserves_field_keys_limits_and_business_messages(self):
+        from django.core.exceptions import ValidationError as ModelValidationError
+        from django.core.validators import MaxLengthValidator
+
+        from apps.core.api import exception_handler
+        from apps.core.error_messages import validation_detail
+
+        try:
+            MaxLengthValidator(3)('12345')
+        except ModelValidationError as exc:
+            length_error = exc
+        exc = ModelValidationError(
+            {
+                'code': ModelValidationError('Item with this Code already exists.', code='unique'),
+                'kind': ModelValidationError('Value standard is not a valid choice.', code='invalid_choice'),
+                'name': length_error,
+                'project': ModelValidationError(
+                    '%(model)s instance with %(field)s %(value)s does not exist.',
+                    code='invalid',
+                    params={'model': 'project', 'field': 'id', 'value': 999},
+                ),
+                'assignee': '登录用户名“wuxingguang”已停用。',
+            }
+        )
+        detail = validation_detail(exc)
+        response = exception_handler(exc, {})
+        self.assertEqual(set(response.data), {'code', 'kind', 'name', 'project', 'assignee'})
+        self.assertIn('已存在', detail['code'][0])
+        self.assertIn('有效选项', detail['kind'][0])
+        self.assertIn('3', detail['name'][0])
+        self.assertIn('5', detail['name'][0])
+        self.assertEqual(detail['project'][0], '关联记录不存在，请重新选择。')
+        self.assertIn('wuxingguang', response.data['assignee'][0])
 
 
 class PlatformTests(TestCase):

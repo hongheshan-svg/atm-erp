@@ -32,17 +32,20 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 ## 表格导入导出
 
-- `{resource}/import-schema/` GET 与模板共用有序字段定义，返回 `columns[{key,label,table_keys,hint}]` 和业务说明，沿用对应导入权限。模板及预览统一中文列名、列序；引用列明确填写编码、账号或ID，并映射页面显示名称。状态、派生余额、自动编号不作为新增输入。
+- `{resource}/import-schema/` GET 与模板共用有序字段定义，返回 `columns[{key,label,table_keys,hint,required,example}]`、`title/entry/note/instructions`，沿用对应导入权限。模板及预览统一中文列名、列序；引用列明确填写编码、账号或ID，并映射页面显示名称。状态、派生余额、自动编号不作为新增输入。
+- 全部12类通用模板及BOM模板共用填写说明生成器。Excel下载包含“数据”与“填写说明”页，数据页只有表头，表头附字段提示；示例只位于说明页。`import-template/` 和 `projects/bom-template/` 的 `file_format=html` 下载可独立打开、打印的填写说明，沿用原模板权限。CSV仍仅含原始数据表头。员工操作说明见 [导入模板填写说明](IMPORT_TEMPLATES.md)。
 - 新模板保留旧版列头兼容，按匹配模板的字段映射读取，不按新位置解释旧文件。标准件/非标件、往来类型、任务阶段、采购账期和结算方式可填写页面中文值，兼容原英文值。预览 `rows` 始终按文件行展开，`row_count` 为文件明细数，`count` 为待创建记录数；采购按分组创建草稿而不折叠预览行。
 - BOM 新模板列为物料编码、单元、需求数量、变更说明，支持CSV/XLSX下载，兼容原三列/四列模板；物料名称、规格及品牌在预览中只读关联，已领、在途、库存和缺料仍由业务计算。
 
 - 业务列表 `{resource}/export/?file_format=csv|xlsx` 使用原列表全部筛选结果，忽略分页，最多20000行；沿用 queryset 项目范围及序列化金额过滤。采购按明细展开。附件列表仅导出元数据，附件内容仍走独立鉴权下载。设置不属于业务表格导入范围。
 - `reports/?file_format=csv|xlsx` 导出全部筛选项目明细与合计，沿用管理员/总经理报表授权。金额为 CNY 含税经营口径；XLSX 的金额、数量列在不超过 15 位有效数字时写为数值单元格便于求和，超出的仍存文本以免 Excel 截断精度；编码、账号、流水号始终为文本。CSV保存原始十进制字符串。Excel读取CSV时应按文本导入编码/大金额列，以免软件自动转换前导零或长数字。危险公式前缀转义为文本；纯数字（含负号）不是公式，不加前缀。
-- items/partners/sales/projects/purchases/tasks/stocks/moves/entries/payments/time/deliveries 提供 `import-template/` GET（file_format同上）、`import-file/` POST multipart单个file、`import-confirm/` POST JSON `{token}`。CSV为UTF-8，XLSX仅一个工作表，禁止公式，文件5MB/1000行上限，严格使用模板列。关联使用编码或账号，标注ID的列从列表导出获取。
+- items/partners/sales/projects/purchases/tasks/stocks/moves/entries/payments/time/deliveries 提供 `import-template/` GET（file_format同上，另支持html填写说明）、`import-file/` POST multipart单个file、`import-confirm/` POST JSON `{token}`。CSV为UTF-8；XLSX接受原单工作表，或“数据”加带固定标题标识的系统“填写说明”页，始终只导入数据页；未知或额外工作表拒绝，不静默丢弃业务数据。数据禁止公式，文件5MB/1000行上限，严格使用模板列。关联使用编码或账号，标注ID的列从列表导出获取。
 - 预览返回 count/rows/errors/can_import/token/note，在事务内调用现有服务校验后回滚；错误按文件行号展示。确认凭据绑定用户/模块、30分钟有效，确认重新授权和校验，任一行失败则全部回滚。同一token的重试或并发确认使用同一ActionReceipt，返回同一结果；新文件应重新预览。
 - 物料/往来单位与采购由采购权限新增；销售/项目/任务/交付由经理权限新增；期初仅管理员；领料由仓库权限；费用和收付款由财务权限；工时保留本人任务和项目范围。采购同一分组号合为一张草稿，组内单据信息必须一致。销售/采购不自动审批签约；应收应付由原合同采购产生；退款、冲销、盘点、更正仍从原记录操作。预览不产生持久业务记录、审计或编号计数变更。
 
 ## 平台接口
+
+面向用户的错误提示使用中文；字段键、错误代码、状态码、限流等待头和恢复操作链接保持原协议。导入错误按当前模板的中文列名及文件行号展示，保留实际账号与业务编号，不直接展示模型名、内部字段名或异常对象。未知英文网络/页面异常使用中文处理建议；详细升级异常保留在日志中。
 
 `GET /api/core/setup/` 仅管理员读取首次配置状态、现有公司和编号规则；`me` 返回管理员的 `setup_required`。仅首次 `init_system` 新建公司时标记待配置，旧安装迁移默认不要求重做。
 
@@ -205,6 +208,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 合同正文采用单页 A4 紧凑排版，包含交付结算、质量验收、每批验收合格起按采购单 warranty_months 计算的质保（默认 12 个月即一年）、维修更换费用、违约赔偿、不可抗力、保密及争议处理条款。多项或长明细在正文汇总，完整附件独立预览和打印，保留全部物料及长备注，附件允许分页；双方按同编号确认正文和附件。打印件不带系统生成说明、更新时间或系统订单状态，保留草稿/取消提示及业务条款。模板条款不自动新增采购售后台账，也不改变付款或收货服务规则。
 
 - Partner、PurchaseOrder 增加 payment_term（manual/cash/month30/month60/month90/month120/custom）及 payment_days；custom 为0～365自然日。供应商只提供新单默认值，采购创建时保存条款；草稿可改，提交后沿用原审批和退回流程，供应商改默认值不追改已有订单。
+- 往来单位新增/编辑表单按当前 kind 联动：仅 supplier/both 显示供应商默认采购账期及自定义月结天数，customer 或未选择类型时隐藏且不校验其残留输入。保存纯客户时使用 manual/0，避免从供应商切回客户后沿用不适用的条款；未保存前切回供应商仍保留输入，不追改已有采购单。
 - 月结＝每批实际合格收货日期的当月月底＋天数，不按下单日期、不按整单最后收货日，也不自动顺延工作日。cash＝合格收货日；隔离品合格入库才起算。receive/quality-accept 接受 received_date（缺省今天，不得晚于今天），存入不可变 StockMove；历史缺省日期仅在投影中回退为流水本地创建日。
 - 继续一单一应付，不新增可编辑应付分账。payment_schedule 从原收货金额、原批次退货 supplier_credit 和净 Payment 计算，退货冲原批次，净付款按先到期顺序抵扣。未收货部分没有自动到期日；指定日期（manual）账期同样只对已合格收货净额在原期限到期；API due_date 为最近未结到期日，due_amount 为今天及之前到期金额，报表逾期只计今天之前的未结分批金额。数据库原 Entry.due_date 仅作为旧手工期限事实保留。
 - manual 沿用独立 payment_due_date（留空兼容原交期）；自动账期不能同时填写指定付款日期。采购账期和 bank/cash/other 支付方式独立；到期投影不跳过对账或预付款核准，也不把未来到期付款一律禁止。

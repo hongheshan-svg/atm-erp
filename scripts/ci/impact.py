@@ -103,8 +103,12 @@ SHARED_PATHS = (
         ('sales', 'purchases', 'projects', 'finance'),
     ),
     (
-        ('backend/apps/business/services/transfers.py', 'frontend/src/components/TransferTools.vue'),
-        ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports'),
+        (
+            'backend/apps/business/services/transfers.py',
+            'backend/apps/business/services/import_guides.py',
+            'frontend/src/components/TransferTools.vue',
+        ),
+        ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports', 'bom'),
     ),
     (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
     (('frontend/src/industry-forms.ts',), ('sales', 'projects')),
@@ -131,6 +135,7 @@ SHARED_PATHS = (
             'backend/apps/business/services/tabular.py',
             'backend/apps/core/actions.py',
             'backend/apps/core/api.py',
+            'backend/apps/core/error_messages.py',
             'backend/apps/core/models.py',
             'backend/apps/core/periods.py',
             'backend/apps/core/permissions.py',

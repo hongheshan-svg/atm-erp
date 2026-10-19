@@ -86,24 +86,63 @@ const NETWORK_MESSAGES: Record<string, string> = {
   ERR_CANCELED: '请求已取消。',
 }
 const STATUS_MESSAGES: Record<number, string> = {
+  400: '填写内容或提交格式不正确，请检查后重试。',
   401: '登录状态已失效，请重新登录。',
   403: '没有执行该操作的权限。',
   404: '请求的数据不存在或已被删除。',
+  405: '不支持此操作方式，请刷新页面后重试。',
+  408: '请求超时，请检查网络后重试。',
   413: '提交内容过大，请缩减后重试。',
+  415: '不支持此提交格式，请按页面要求重新提交。',
+  422: '填写内容不符合要求，请检查后重试。',
   429: '操作过于频繁，请稍后再试。',
   500: '服务器处理失败，请稍后重试或联系管理员。',
   502: '服务暂时不可用，请稍后重试。',
   503: '服务暂时不可用，请稍后重试。',
   504: '服务响应超时，请稍后重试。',
 }
+const ERROR_TEXT: Record<string, string> = {
+  'Network Error': NETWORK_MESSAGES.ERR_NETWORK!,
+  'Failed to fetch': NETWORK_MESSAGES.ERR_NETWORK!,
+  'Load failed': NETWORK_MESSAGES.ERR_NETWORK!,
+  'This field is required.': '此项为必填项。',
+  'This field may not be blank.': '此项不能为空。',
+  'This field may not be null.': '此项不能为空。',
+  'A valid integer is required.': '请填写有效整数。',
+  'A valid number is required.': '请填写有效数字。',
+  'Not found.': STATUS_MESSAGES[404]!,
+  'Authentication credentials were not provided.': '请先登录后再操作。',
+  'You do not have permission to perform this action.': STATUS_MESSAGES[403]!,
+  'No active account found with the given credentials': '用户名或密码不正确，或账号已停用。',
+  'Given token not valid for any token type': STATUS_MESSAGES[401]!,
+  'Token is invalid': STATUS_MESSAGES[401]!,
+  'Token is expired': '登录凭据已过期，请重新登录。',
+}
+function chineseMessage(value: string): string {
+  const text = value.trim()
+  if (!text || text.startsWith('<')) return ''
+  if (ERROR_TEXT[text]) return ERROR_TEXT[text]!
+  if (/^timeout of \d+ms exceeded$/.test(text)) return NETWORK_MESSAGES.ETIMEDOUT!
+  if (/^(Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk)/.test(text)) return '页面资源加载失败，请刷新页面后重试。'
+  if (/^JSON parse error/.test(text)) return '提交内容格式不正确，请检查后重新提交。'
+  if (/is not a valid choice\.?$/.test(text)) return '请选择列表中的有效选项。'
+  if (/^Ensure this field has no more than \d+ characters/.test(text)) return `此项不能超过 ${text.match(/\d+/)![0]} 个字符。`
+  return /[\u4e00-\u9fff]/.test(text) ? text : ''
+}
 export function message(error: unknown): string {
   function flatten(value: any): string {
     if (value == null) return ''
     // 响应体是错误页而不是接口返回时，原样展示只会得到一段英文 HTML。
-    if (typeof value === 'string') return value.trimStart().startsWith('<') ? '' : value
-    if (value instanceof Error) return value.message
-    if (Array.isArray(value)) return value.map(flatten).join('；')
-    if (typeof value === 'object') return Object.values(value).map(flatten).join('；')
+    if (typeof value === 'string') return chineseMessage(value)
+    if (value instanceof Error) return chineseMessage(value.message)
+    if (Array.isArray(value)) return value.map(flatten).filter(Boolean).join('；')
+    if (typeof value === 'object') {
+      const text = Object.entries(value).filter(([key, detail]) =>
+        !['row', 'token_class', 'token_type', 'actions'].includes(key) &&
+        !(key === 'code' && typeof detail === 'string' && /^[a-z_]+$/.test(detail)),
+      ).map(([, detail]) => flatten(detail)).filter(Boolean).join('；')
+      return value.row != null ? `第 ${value.row} 行：${text || '填写内容不符合要求，请检查后重试。'}` : text
+    }
     return String(value)
   }
   if (!axios.isAxiosError(error)) return flatten(error) || '操作失败，请重试。'
@@ -111,7 +150,7 @@ export function message(error: unknown): string {
   const detail = flatten(data?.detail ?? data)
   if (detail) return detail
   if (!error.response) return NETWORK_MESSAGES[error.code ?? ''] || '网络异常，请检查连接后重试。'
-  return STATUS_MESSAGES[error.response.status] || `请求失败（HTTP ${error.response.status}）。`
+  return STATUS_MESSAGES[error.response.status] || `请求失败（状态码 ${error.response.status}）。`
 }
 export function recoveryActions(error: unknown): { label: string; path: string }[] {
   const actions = axios.isAxiosError(error) ? error.response?.data?.actions : []

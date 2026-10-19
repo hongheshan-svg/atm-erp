@@ -284,7 +284,7 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 
 测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|backend|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
 
-当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。其他历史文档不作为本版安装或模块清单。
+当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。员工填写表格前请阅读 [导入模板填写说明](docs/IMPORT_TEMPLATES.md)，各模板下载旁也可取得独立说明文档。其他历史文档不作为本版安装或模块清单。
 
 开发环境可设置 `LEAN_ENVIRONMENT=development` 关闭登录限流；直接运行后端时对应 `APP_ENVIRONMENT=development`。开发标记不会开启 DEBUG。发布安装保持 `production`，登录限制为 10 次/分钟；原生发布安装器强制检查该配置。
 

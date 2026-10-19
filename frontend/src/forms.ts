@@ -1,4 +1,7 @@
 import type { Field, Row } from './types'
+export function applicableFields(fields: Field[], data: Row): Field[] {
+  return fields.filter(field => !field.visibleWhen || field.visibleWhen(data))
+}
 export function defaults(fields: Field[], initial: Row = {}): Row {
   return Object.fromEntries(
     fields.map((f) => [
@@ -17,7 +20,7 @@ export function defaults(fields: Field[], initial: Row = {}): Row {
 }
 export function payload(fields: Field[], data: Row): Row {
   return Object.fromEntries(
-    fields
+    applicableFields(fields, data)
       .filter((f) => !f.displayOnly && !(f.optional && (data[f.key] === '' || data[f.key] == null)))
       .map((f) => [
         f.key,
@@ -26,7 +29,7 @@ export function payload(fields: Field[], data: Row): Row {
   )
 }
 export function validateFields(fields: Field[], data: Row, prefix = ''): void {
-  for (const field of fields) {
+  for (const field of applicableFields(fields, data)) {
     if (field.hidden || field.displayOnly || (field.readonly && field.type !== 'rows')) continue
     const value = data[field.key]
     const label = `${prefix}${field.label}`

@@ -1,7 +1,11 @@
+from math import ceil
+
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, ErrorDetail, Throttled
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from .error_messages import localize_detail, validation_detail
 
 
 class Conflict(APIException):
@@ -18,8 +22,13 @@ def exception_handler(exc, context):
     if isinstance(exc, DjangoValidationError):
         from rest_framework.exceptions import ValidationError
 
-        exc = ValidationError(exc.message_dict if hasattr(exc, 'message_dict') else exc.messages)
+        exc = ValidationError(validation_detail(exc))
     response = drf_exception_handler(exc, context)
+    if response is not None:
+        response.data = localize_detail(response.data)
+        if isinstance(exc, Throttled):
+            wait = f'请在 {ceil(exc.wait)} 秒后重试。' if exc.wait is not None else '请稍后再试。'
+            response.data['detail'] = ErrorDetail(f'操作过于频繁（请求限流），{wait}', code='throttled')
     if response is not None and response.status_code == 409 and isinstance(response.data, dict):
         view = context.get('view')
         pk = getattr(view, 'kwargs', {}).get('pk')

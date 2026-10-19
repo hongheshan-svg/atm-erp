@@ -15,6 +15,8 @@ export type Field = {
   readonly?: boolean
   compact?: boolean
   hidden?: boolean
+  // 条件不满足时不展示、不校验、不提交；保留表单内输入以便切换回来。
+  visibleWhen?: (data: Row) => boolean
   hint?: string
   placeholder?: string
   wide?: boolean

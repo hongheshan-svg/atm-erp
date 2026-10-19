@@ -14,9 +14,12 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
 from rest_framework.exceptions import ValidationError
 
+from apps.core.error_messages import chinese_error
+
 from ..models import BOMLine, Item, PurchaseLine
 from .bom import incoming, issued, revision
 from .common import day, number, state
+from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
 MAX_BYTES = 5 * 1024 * 1024
 LEGACY_HEADERS = ['物料编码', '数量', '变更说明', '单元']
@@ -108,9 +111,12 @@ def read_xlsx(content, columns=3):
                             raise ValidationError({'file': f'表格只能包含{columns}列。'})
     workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=False, keep_links=False)
     try:
-        if len(workbook.worksheets) != 1:
-            raise ValidationError({'file': '请保留一个工作表后再导入。'})
-        sheet = workbook.worksheets[0]
+        if len(workbook.worksheets) == 1:
+            sheet = workbook.worksheets[0]
+        elif set(workbook.sheetnames) == {'数据', GUIDE_SHEET} and workbook[GUIDE_SHEET]['A1'].value == GUIDE_MARKER:
+            sheet = workbook['数据']
+        else:
+            raise ValidationError({'file': '请只保留一个数据工作表；可附带系统模板自带的“填写说明”页。'})
         sheet.reset_dimensions()
         result = []
         for cells in sheet.iter_rows(max_row=1002, max_col=columns + 1):
@@ -124,12 +130,18 @@ def read_xlsx(content, columns=3):
         workbook.close()
 
 
-def message(detail):
+def message(detail, labels=None):
+    labels = {key: label for label, key in BOM_COLUMNS} | (labels or {})
     if isinstance(detail, dict):
-        return '；'.join(f'{key}：{message(value)}' for key, value in detail.items())
+        return '；'.join(
+            f'{labels.get(key, key)}：{message(value, labels)}'
+            if key in labels or re.search(r'[\u4e00-\u9fff]', key)
+            else message(value, labels)
+            for key, value in detail.items()
+        )
     if isinstance(detail, (list, tuple)):
-        return '；'.join(message(value) for value in detail)
-    return str(detail)
+        return '；'.join(message(value, labels) for value in detail)
+    return str(chinese_error(detail))
 
 
 def preview(project, upload):

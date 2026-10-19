@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from apps.business.models import BankRecord, Payment
 from apps.business.services import bank_import
@@ -132,10 +132,30 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual(BankRecord.objects.count(), 0)
 
     def test_bad_money_formula_and_file_rejected(self):
-        self.assertFalse(self.preview(file(income='100.001'))['can_import'])
+        result = self.preview(file(income='100.001'))
+        self.assertFalse(result['can_import'])
+        self.assertIn('最多两位小数', result['errors'][0]['message'])
+        self.assertNotIn('ErrorDetail', result['errors'][0]['message'])
         self.preview(file(income='=10+20'), status=400)
         self.preview(SimpleUploadedFile('bad.xls', b'not excel'), status=400)
         self.assertEqual(BankRecord.objects.count(), 0)
+
+    def test_invalid_date_and_long_fields_have_chinese_row_errors(self):
+        for cell, value, expected in [('C3', 'bad-date', '交易日期或时间格式不正确'), ('E3', '户名' * 76, '对方户名')]:
+            with self.subTest(cell=cell):
+                book = load_workbook(file())
+                book.active[cell] = value
+                stream = io.BytesIO()
+                book.save(stream)
+                book.close()
+                result = self.preview(SimpleUploadedFile('bank.xlsx', stream.getvalue()))
+                self.assertFalse(result['can_import'])
+                self.assertIsNone(result['token'])
+                self.assertEqual(result['errors'][0]['row'], 3)
+                self.assertIn(expected, result['errors'][0]['message'])
+                self.assertNotIn('ErrorDetail', result['errors'][0]['message'])
+                self.assertNotIn('counterparty', result['errors'][0]['message'])
+                self.assertFalse(BankRecord.objects.exists())
 
     def test_huaxia_header_mismatch_blocks_import(self):
         rows = [

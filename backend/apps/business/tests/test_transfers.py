@@ -8,6 +8,7 @@ from openpyxl import Workbook, load_workbook
 
 from apps.business.models import BOMLine, Item, Partner, Payment, Project, PurchaseOrder, SalesOrder, Stock, Task
 from apps.business.services import transfers
+from apps.business.services.import_guides import GUIDE_MARKER, GUIDE_SHEET
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import TODAY, BusinessFixtures
@@ -138,6 +139,75 @@ class TransferTests(BusinessFixtures, TestCase):
         self.commit('deliveries', delivery)
         self.assertEqual(project.deliveries.count(), 1)
 
+    def test_task_import_requires_login_username_instead_of_display_name(self):
+        user = self.users['member']
+        user.username = 'wuxingguang'
+        user.display_name = '吴兴广'
+        user.save()
+        project = self.active_project()
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        rows = [
+            [project.code, 'design', '按账号指派', '', user.username, TODAY],
+            [project.code, 'design', '误填姓名', '', user.display_name, TODAY],
+        ]
+        preview = self.preview('tasks', rows, xlsx=True)
+        self.assertFalse(preview.data['can_import'], preview.data)
+        self.assertIsNone(preview.data['token'])
+        self.assertEqual(len(preview.data['errors']), 1)
+        self.assertEqual(preview.data['errors'][0]['row'], 3)
+        self.assertIn('未找到登录用户名“吴兴广”', preview.data['errors'][0]['message'])
+        self.assertIn('“用户名”列', preview.data['errors'][0]['message'])
+        self.assertIn('不按“姓名”匹配', preview.data['errors'][0]['message'])
+        self.assertFalse(project.tasks.exists())
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.assertEqual(AuditLog.objects.count(), audits)
+        valid = self.preview('tasks', rows[:1], xlsx=True)
+        self.assertTrue(valid.data['can_import'], valid.data)
+        self.commit('tasks', valid)
+        self.assertEqual(project.tasks.get().assignee_id, user.pk)
+
+    def test_task_import_accepts_exact_chinese_username(self):
+        user = self.users['member']
+        user.username = '中文登录账号'
+        user.display_name = '不同的显示姓名'
+        user.save()
+        project = self.active_project()
+        preview = self.preview('tasks', [[project.code, 'design', '中文账号指派', '', user.username, TODAY]])
+        self.assertTrue(preview.data['can_import'], preview.data)
+        self.assertFalse(project.tasks.exists())
+        self.commit('tasks', preview)
+        self.assertEqual(project.tasks.get().assignee_id, user.pk)
+
+    def test_task_import_distinguishes_inactive_and_nonparticipant_accounts(self):
+        project = self.active_project()
+        user = self.users['member']
+        rows = [[project.code, 'design', '指派任务', '', user.username, TODAY]]
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        valid = self.preview('tasks', rows)
+        self.assertTrue(valid.data['can_import'], valid.data)
+        user.is_active = False
+        user.save()
+        inactive = self.preview('tasks', rows)
+        self.assertFalse(inactive.data['can_import'], inactive.data)
+        self.assertIsNone(inactive.data['token'])
+        self.assertEqual(inactive.data['errors'][0]['row'], 2)
+        self.assertIn('登录用户名“member”已停用', inactive.data['errors'][0]['message'])
+        rejected = self.commit('tasks', valid, status=400)
+        self.assertIn('已停用', str(rejected))
+        self.assertEqual(str(rejected['rows'][0]['row']), '2')
+        user.is_active = True
+        user.save()
+        project.members.remove(user)
+        outside = self.preview('tasks', rows)
+        self.assertFalse(outside.data['can_import'], outside.data)
+        self.assertIsNone(outside.data['token'])
+        self.assertIn('不是该项目的负责人或成员', outside.data['errors'][0]['message'])
+        self.assertFalse(project.tasks.exists())
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.assertEqual(AuditLog.objects.count(), audits)
+
     def test_exports_all_filtered_rows_sensitive_scope_and_formulas(self):
         for index in range(25):
             Item.objects.create(code=f'E{index}', name='=HYPERLINK("bad")')
@@ -203,11 +273,33 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertFalse(preview.data['can_import'])
         self.assertIsNone(preview.data['token'])
         self.assertEqual([error['row'] for error in preview.data['errors']], [2, 4])
-        self.assertTrue(all('kind' in error['message'] for error in preview.data['errors']))
+        self.assertTrue(all('类型' in error['message'] for error in preview.data['errors']))
+        self.assertTrue(all('kind' not in error['message'] for error in preview.data['errors']))
         self.assertFalse(Partner.objects.filter(name__in=['错误类型一', '有效但只预览', '错误类型二']).exists())
         self.assertEqual(CodeRule.objects.get(key='partner').counter, counter)
         self.assertEqual(ActionReceipt.objects.count(), receipts)
         self.assertEqual(AuditLog.objects.count(), audits)
+
+    def test_import_reference_and_field_errors_use_chinese_names(self):
+        project = self.active_project()
+        cases = [
+            ('stocks', [['MISSING', '主仓', '1', '1', '']], '物料'),
+            ('projects', [['项目', 'MISSING', 'manager', '', TODAY, '1', '12', '']], '往来单位'),
+            ('tasks', [['MISSING', 'design', '设计', '', 'member', TODAY]], '项目'),
+            ('tasks', [[project.code, 'design', '设计', '', 'member', '20']], '期限'),
+            ('stocks', [['I1', '主仓', 'bad', '1', '']], '数量'),
+        ]
+        for resource, rows, label in cases:
+            with self.subTest(resource=resource, label=label):
+                preview = self.preview(resource, rows)
+                self.assertFalse(preview.data['can_import'], preview.data)
+                error = preview.data['errors'][0]
+                self.assertEqual(error['row'], 2)
+                self.assertIn(label, error['message'])
+                for internal in ['item：', 'partner：', 'project：', 'due_date：', 'quantity：']:
+                    self.assertNotIn(internal, error['message'])
+        self.assertFalse(project.tasks.exists())
+        self.assertFalse(Stock.objects.exists())
 
     def downloaded_preview(self, resource, rows, fmt='csv'):
         response = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': fmt})
@@ -308,6 +400,35 @@ class TransferTests(BusinessFixtures, TestCase):
         item = Item.objects.get(pk=result['results'][0]['id'])
         self.assertEqual((item.brand, item.part_type, item.unit), ('品牌B', 'standard', '台'))
         self.assertEqual(self.clients['member'].get('/api/business/items/import-schema/').status_code, 403)
+
+    def test_every_template_includes_downloadable_field_guidance_without_example_records(self):
+        for resource in transfers.SCHEMAS:
+            with self.subTest(resource=resource):
+                layout = self.clients['admin'].get(f'/api/business/{resource}/import-schema/').data
+                html = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': 'html'})
+                self.assertEqual(html.status_code, 200)
+                self.assertContains(html, layout['title'] + '导入模板填写说明')
+                self.assertContains(html, layout['entry'])
+                self.assertIn('attachment;', html['Content-Disposition'])
+                response = self.clients['admin'].get(
+                    f'/api/business/{resource}/import-template/', {'file_format': 'xlsx'}
+                )
+                with io.BytesIO(response.content) as stream:
+                    book = load_workbook(stream)
+                    self.assertEqual(book.sheetnames, ['数据', GUIDE_SHEET])
+                    self.assertEqual(book['数据'].max_row, 1)
+                    self.assertEqual(book[GUIDE_SHEET]['A1'].value, GUIDE_MARKER)
+                    for index, column in enumerate(layout['columns'], 1):
+                        for key in ('required', 'hint', 'example'):
+                            self.assertTrue(column[key], (resource, column))
+                            self.assertIn(column[key], book['数据'].cell(1, index).comment.text)
+                        self.assertContains(html, column['label'])
+                    book.close()
+        for fmt in ('html', 'xlsx', 'csv'):
+            self.assertEqual(
+                self.clients['member'].get('/api/business/projects/import-template/', {'file_format': fmt}).status_code,
+                403,
+            )
 
     def test_purchase_preview_retains_file_rows_and_grouped_confirmation(self):
         project = self.active_project()

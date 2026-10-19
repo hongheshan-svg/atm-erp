@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import type { Field, Row } from '../types'
-import { defaults } from '../forms'
-import { reactive, watchEffect } from 'vue'
+import { applicableFields, defaults } from '../forms'
+import { computed, reactive, watchEffect } from 'vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import InitialPasswordInput from './InitialPasswordInput.vue'
 import { flowFor } from '../flows'
 const props = defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
 const model = defineModel<Row>({ required: true })
+const visibleFields = computed(() => applicableFields(props.fields, model.value))
 const optionsOf = (field: Field) => field.optionsFor ? field.optionsFor(model.value) : field.options
 // 联动选项变化后，原选中值可能已不属于新范围（例如换了项目），留着只会在提交时被服务端拒绝。
 watchEffect(() => {
   if (props.readonly) return
-  for (const field of props.fields) {
+  for (const field of visibleFields.value) {
     if (!field.optionsFor) continue
     const value = model.value[field.key]
     if (value !== '' && value != null && !field.optionsFor(model.value).some(option => String(option.value) === String(value))) model.value[field.key] = ''
@@ -30,7 +31,7 @@ function readonlyValue(field: Field) {
 </script>
 <template>
   <div class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
-    <template v-for="field in fields" :key="field.key">
+    <template v-for="field in visibleFields" :key="field.key">
       <fieldset v-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
