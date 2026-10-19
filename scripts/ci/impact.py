@@ -230,6 +230,9 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
     for path in sorted(set(paths)):
         if path.endswith('.md') or Path(path).name in ('.gitignore', '.editorconfig', 'LICENSE'):
             continue
+        if path.startswith('docs/releases/assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
+            # 发布说明的实际界面截图仅为文档附件；可执行文件仍须经过影响范围判定。
+            continue
         stem = Path(path).stem.removesuffix('.spec')
         if path.startswith(('docker/', 'deploy/', 'install', 'scripts/')) or path in (
             'docker-compose.yml',
