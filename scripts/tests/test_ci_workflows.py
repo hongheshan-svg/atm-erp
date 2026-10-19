@@ -21,6 +21,17 @@ class RoutingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             select(['frontend/src/removed.vue'])
 
+    def test_release_screenshots_are_documentation_but_unknown_sources_are_not(self):
+        screenshots = [f'docs/releases/assets/v1.8.11/desktop.{ext}' for ext in ('png', 'jpg', 'jpeg', 'webp')]
+        self.assertEqual(select(screenshots), set())
+        self.assertEqual(
+            plan(['backend/apps/business/services/supply.py', *screenshots]),
+            plan(['backend/apps/business/services/supply.py']),
+        )
+        for path in ('docs/releases/assets/helper.py', 'docs/releases/assets/page.html', 'docs/unknown.png'):
+            with self.assertRaises(ValueError):
+                select([path])
+
     def test_backend_and_migration_changes(self):
         self.assertEqual(select(['backend/apps/business/services/supply.py']), {'fast', 'browser'})
         # 迁移属于经过审阅的共享路径，自动覆盖全部业务模块，不再要求手动补跑。

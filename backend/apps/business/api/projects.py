@@ -161,9 +161,11 @@ class ProjectView(ImportableMixin, ReadView):
     @action(detail=False, methods=['get'], url_path='bom-template')
     def bom_template(self, request):
         require_role(request.user, BOM_WRITERS)
-        from ..services.tabular import document
+        from ..services.import_guides import BOM_COLUMNS, guide, template_document
 
-        return document('bom-template', bom_material_import.HEADERS, [], request.query_params.get('file_format', 'csv'))
+        return template_document(
+            'bom-template', guide('bom', BOM_COLUMNS), request.query_params.get('file_format', 'csv')
+        )
 
     @action(detail=True, methods=['post'])
     def edit(self, request, pk=None):

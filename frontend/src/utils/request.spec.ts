@@ -125,11 +125,31 @@ describe('错误提示中文化', () => {
   it('网关错误页按状态码给出中文提示', () => {
     expect(message(failure(502, '<html><body>502 Bad Gateway</body></html>'))).toBe('服务暂时不可用，请稍后重试。')
     expect(message(failure(403, ''))).toBe('没有执行该操作的权限。')
-    expect(message(failure(418, {}))).toBe('请求失败（HTTP 418）。')
+    expect(message(failure(418, {}))).toBe('请求失败（状态码 418）。')
   })
 
   it('非请求类错误保留原有消息', () => {
     expect(message(new Error('登录状态已变化。'))).toBe('登录状态已变化。')
     expect(message(null)).toBe('操作失败，请重试。')
+  })
+
+  it('英文接口、登录凭据和未知错误使用中文，内部状态与恢复链接不混入提示', () => {
+    expect(message(failure(400, { name: ['This field is required.'] }))).toBe('此项为必填项。')
+    expect(message(failure(400, { code: ['此值已存在，请修改。'] }))).toBe('此值已存在，请修改。')
+    expect(message(failure(401, {
+      detail: 'Given token not valid for any token type', code: 'token_not_valid',
+      messages: [{ token_class: 'AccessToken', token_type: 'access', message: 'Token is expired' }],
+    }))).toBe('登录状态已失效，请重新登录。')
+    expect(message(failure(502, 'Bad Gateway'))).toBe('服务暂时不可用，请稍后重试。')
+    expect(message(new Error('Failed to fetch dynamically imported module: https://example.test/app.js'))).toBe('页面资源加载失败，请刷新页面后重试。')
+    expect(message(new Error('Unexpected internal exception'))).toBe('操作失败，请重试。')
+    expect(message(failure(409, { reason: '请核对原单据。', actions: [{ label: '打开单据', path: '/finance?focus=1' }] }))).toBe('请核对原单据。')
+  })
+
+  it('导入错误保留文件行号与实际账号，不显示原始字段名', () => {
+    expect(message({ row: 3, message: '执行人账号：未找到登录用户名“wuxingguang”。' })).toBe('第 3 行：执行人账号：未找到登录用户名“wuxingguang”。')
+    expect(message({ row: 4, message: 'This field may not be blank.' })).toBe('第 4 行：此项不能为空。')
+    expect(message({ row: 5, message: 'Unknown error' })).toBe('第 5 行：填写内容不符合要求，请检查后重试。')
+    expect(message(failure(400, { detail: '"中文错误选项" is not a valid choice.' }))).toBe('请选择列表中的有效选项。')
   })
 })

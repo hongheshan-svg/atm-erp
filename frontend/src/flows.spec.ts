@@ -21,7 +21,7 @@ describe('业务流程节点定位', () => {
     const cancelled = flowFor('projects', { status: 'cancelled' })!
     expect(cancelled.current).toBe(-1)
     expect(cancelled.aborted?.label).toBe('已取消')
-    expect(cancelled.nodes).toHaveLength(6)
+    expect(cancelled.nodes).toHaveLength(4)
     expect(labels('reconciliations', { status: 'void' }).aborted).toBe('已作废')
     expect(labels('purchases', { status: 'cancelled' }).aborted).toBe('已取消')
   })

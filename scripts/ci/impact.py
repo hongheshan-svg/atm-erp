@@ -103,8 +103,12 @@ SHARED_PATHS = (
         ('sales', 'purchases', 'projects', 'finance'),
     ),
     (
-        ('backend/apps/business/services/transfers.py', 'frontend/src/components/TransferTools.vue'),
-        ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports'),
+        (
+            'backend/apps/business/services/transfers.py',
+            'backend/apps/business/services/import_guides.py',
+            'frontend/src/components/TransferTools.vue',
+        ),
+        ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports', 'bom'),
     ),
     (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
     (('frontend/src/industry-forms.ts',), ('sales', 'projects')),
@@ -131,6 +135,7 @@ SHARED_PATHS = (
             'backend/apps/business/services/tabular.py',
             'backend/apps/core/actions.py',
             'backend/apps/core/api.py',
+            'backend/apps/core/error_messages.py',
             'backend/apps/core/models.py',
             'backend/apps/core/periods.py',
             'backend/apps/core/permissions.py',
@@ -224,6 +229,9 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
     reasons = []
     for path in sorted(set(paths)):
         if path.endswith('.md') or Path(path).name in ('.gitignore', '.editorconfig', 'LICENSE'):
+            continue
+        if path.startswith('docs/releases/assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
+            # 发布说明的实际界面截图仅为文档附件；可执行文件仍须经过影响范围判定。
             continue
         stem = Path(path).stem.removesuffix('.spec')
         if path.startswith(('docker/', 'deploy/', 'install', 'scripts/')) or path in (

@@ -57,8 +57,6 @@ const definitions: Record<string, Definition> = {
   projects: {
     label: '项目流程',
     nodes: [
-      node('draft', '需求中', '需求登记'),
-      node('quoted', '已报价', '等待客户确认'),
       node('active', '执行中', '设计、采购与装配'),
       node('delivering', '交付中', '发货与现场安装'),
       node('warranty', '已验收', '进入质保期'),

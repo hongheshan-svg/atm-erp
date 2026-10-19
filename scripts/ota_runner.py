@@ -411,8 +411,8 @@ class Runner:
                                              **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
                     except Exception:
                         pass
-                cause = (str(exc) if isinstance(exc, (ValueError, RuntimeError))
-                         else CAUSES.get(type(exc).__name__, f'未预期的错误（{type(exc).__name__}）'))
+                cause = (str(exc) if isinstance(exc, (ValueError, RuntimeError)) and re.search(r'[\u4e00-\u9fff]', str(exc))
+                         else CAUSES.get(type(exc).__name__, '升级过程中发生异常，请查看升级日志'))
                 backup_note = '完整备份已保留。' if backup_complete else '尚未生成完整备份。'
                 safety_note = '迁移已开始，不会自动回退数据库。' if migration_started else '数据库迁移尚未开始。'
                 self.report(job, 'failed', f'{phase}失败：{cause} {backup_note}{safety_note} 日志：{folder / "upgrade.log"}',

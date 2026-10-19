@@ -11,6 +11,10 @@ import { endpoint } from './shared'
 import { materialEditor, partnerEditor, customerOnly } from '../session'
 import { termFields, termLabel } from './payment-terms'
 import { productCategories } from '../product-categories'
+function partnerPayload(data: Row): Row {
+  // 转为纯客户时同步清除已保存的供应商条款，避免后端沿用原账期后拒绝保存。
+  return data.kind === 'customer' ? { ...data, payment_term: 'manual', payment_days: 0 } : data
+}
 export const columns: Record<string, Column[]> = {
   items: [
     C('code', '物料编码'),
@@ -71,13 +75,17 @@ export async function createCommand(resource: string, projectId?: number): Promi
       t('contact', '联系人', true),
       t('phone', '电话', true),
       t('address', '地址', true),
-      ...(!customerOnly() ? termFields() : []),
+      ...(!customerOnly() ? termFields().map(field => ({
+        ...field,
+        visibleWhen: (data: Row) => data.kind === 'supplier' || data.kind === 'both',
+      })) : []),
     ]
   return {
     title: String(createLabel(resource)),
     path,
     fields,
     initial: projectId ? { project: projectId } : {},
+    prepare: resource === 'partners' ? partnerPayload : undefined,
   }
 }
 export function actionNames(resource: string, _r: Row): string[] {
@@ -92,6 +100,6 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   return {
     title: name, path: endpoint(resource) + r.id + '/', method: 'patch', initial: r,
     fields: [...(await createCommand(resource)).fields.filter(f => f.key !== 'code').map(f => resource === 'items' && r.product_category && ['product_category', 'specification', 'drawing_number', 'drawing_revision'].includes(f.key) ? { ...f, readonly: true, displayOnly: true } : f), { key: 'is_active', label: '启用', type: 'boolean' }],
-    prepare: data => resource === 'items' ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '' } : data,
+    prepare: data => resource === 'items' ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '' } : partnerPayload(data),
   }
 }

@@ -11,6 +11,7 @@ from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.models import User
 from apps.core.actions import perform
+from apps.core.error_messages import validation_detail
 from apps.core.permissions import (
     ADMIN,
     ALL_ROLES,
@@ -26,7 +27,7 @@ from apps.core.permissions import (
 from ..models import Item, Partner, Project
 from . import execution, finance, inventory, masterdata, projects, sales, supply
 from .bom_import import message, read_file
-from .tabular import document
+from .import_guides import RESOURCES, guide, template_document
 
 # Label -> service field. Human-readable codes/usernames resolve at both preview and confirmation.
 DETAIL = [
@@ -219,33 +220,6 @@ TABLE_KEYS = {
     'entry': ['entry_title'],
     'stock': ['item_name', 'location'],
 }
-FIELD_HINTS = {
-    'item': '填写基础资料中的物料编码，名称等资料由编码关联。',
-    'customer': '填写客户编码，不能填写客户名称或内部 ID。',
-    'supplier': '填写供应商编码，不能填写供应商名称或内部 ID。',
-    'project': '填写执行项目编号；文件中的编号决定归属，不自动使用当前筛选项目。',
-    'manager': '填写登录账号，不能填写姓名。',
-    'assignee': '填写登录账号，不能填写姓名。',
-    'user': '填写登录账号，不能填写姓名。',
-    'installer': '填写安装人员登录账号。',
-    'acceptor': '填写验收人员登录账号。',
-    'members': '填写登录账号，多个账号用英文分号分隔。',
-    'entry': '从应收应付列表导出获取记录ID，页面显示对应款项名称。',
-    'stock': '从共享库存列表导出获取记录ID，对应物料和库位。',
-    'task': '从项目任务列表导出获取记录ID，页面显示对应任务名称。',
-    'document': '填写已上传的同项目收付凭证记录ID，可留空。',
-    'reconciliation': '采购付款填写已确认且仍有效的对账单ID；客户收款可留空。',
-    'group': '仅用于将多行合并为一张采购草稿，不是采购编号；同组单据信息须一致。',
-    'code': '可自定义，留空自动生成；不能覆盖已有编码。',
-    'part_type': '填写标准件、非标件，或 standard/custom；可留空。',
-    'product_category': '有图：11机加、12钣金、13特殊工艺、19其它；无图：21标准件、22耗材辅料、23办公用品、29其它。可填写编码或完整中文类别；类别与标准/非标属性分别维护。',
-    'drawing_number': '有图产品必填图号；图号与型号/规格分别填写，历史图号可保留。',
-    'drawing_revision': '独立填写图档版本，不与品牌混用；升级新版本请新增物料编码。',
-    'payment_term': '填写指定日期、现付、月结30天、月结60天、月结90天、月结120天、自定义月结；也兼容原英文值。',
-    'payment_days': '仅自定义月结填写 0～365；月结按收货当月月底加天数。',
-    'duplicate_reason': '相同物料独立建码时填写原因；不显示在物料主列表，保留审计。',
-    'method': '填写银行转账、现金、其他（兼容 bank/cash/other）。',
-}
 ENUMS = {
     'product_category': {
         **{label: value for value, label in Item.ProductCategory.choices},
@@ -269,20 +243,7 @@ ENUMS = {
         '自定义月结': 'custom',
     },
 }
-NOTES = {
-    'items': '新增物料；编码留空自动生成，不覆盖现有物料。类别填写 standard（标准件）或 custom（非标件），可留空。',
-    'partners': '新增往来单位；类型填写 customer（客户）、supplier（供应商）或 both（两者）。采购账期可填 manual/cash/month30/month60/month90/month120/custom；custom另填0到365天，纯客户只用manual。',
-    'sales': '新增销售草稿，后续在销售页面报价和签约。',
-    'projects': '新增执行项目；已签约销售请通过销售签约生成项目，避免重复。',
-    'purchases': '同一分组号的行合并为一张采购草稿；项目、供应商、交期、账期及说明必须一致。采购账期留空沿用供应商，或填manual/cash/month30/month60/month90/month120/custom；custom另填天数。自动账期不能同时填付款到期日；月结按每批合格收货当月月底加天数。仍需提交审批。',
-    'tasks': '新增任务；阶段填写 design（设计）、assembly（装配）或 test（调试）。',
-    'stocks': '录入期初库存，仅允许尚无流水的物料与库位；已有库存使用盘点操作。',
-    'entries': '录入项目费用；合同应收和采购应付继续由原单据生成。',
-    'payments': '对现有款项登记正常收付款，金额为正数；采购付款必须填写已确认的对账单ID，客户收款可留空；退款和冲销仍使用原记录操作。',
-    'time': '登记任务工时，仍校验任务、人员和项目权限。',
-    'deliveries': '登记项目发货，仍校验生产阶段和剩余交付数量。',
-    'moves': '登记项目领料，仍校验库存、任务与 BOM；退料和退货使用原流水操作。',
-}
+NOTES = {resource: metadata[2] for resource, metadata in RESOURCES.items()}
 
 
 def schema(actor, resource):
@@ -294,34 +255,30 @@ def schema(actor, resource):
 
 
 def layout(actor, resource):
-    columns = []
-    for label, key in schema(actor, resource):
-        table_keys = TABLE_KEYS.get(key, [key])
-        if resource == 'deliveries' and key == 'date':
-            table_keys = ['shipped_date']
-        hint = FIELD_HINTS.get(key, '按列名填写；仅新增，不覆盖原记录。')
-        if key in {'date', 'due_date', 'line_due_date', 'payment_due_date'}:
-            hint = (
-                '日期格式 YYYY-MM-DD；明细交期留空沿用订单交期。' if key == 'line_due_date' else '日期格式 YYYY-MM-DD。'
-            )
-        if key == 'kind':
-            hint = (
-                '填写客户、供应商、客户及供应商（兼容 customer/supplier/both）。'
-                if resource == 'partners'
-                else '填写设计、装配、调试（兼容 design/assembly/test）。'
-            )
-        columns.append({'key': key, 'label': label, 'table_keys': table_keys, 'hint': hint})
-    return {'columns': columns, 'note': NOTES[resource]}
+    result = guide(resource, schema(actor, resource))
+    for column in result['columns']:
+        key = column['key']
+        column['table_keys'] = (
+            ['shipped_date'] if resource == 'deliveries' and key == 'date' else TABLE_KEYS.get(key, [key])
+        )
+    return result
 
 
 def template(actor, resource, file_format):
-    return document(resource + '-template', [label for label, _ in schema(actor, resource)], [], file_format)
+    return template_document(resource + '-template', layout(actor, resource), file_format)
 
 
 def resolve(model, value, field='code'):
     obj = model.objects.filter(**{field: value}).first()
     if obj is None:
-        raise ValidationError(f'找不到{model._meta.verbose_name}：{value}')
+        if model is User:
+            raise ValidationError(
+                f'未找到登录用户名“{value}”。请核对“设置 → 用户管理”中的“用户名”列，账号字段不按“姓名”匹配。'
+            )
+        label = {Item: '物料', Partner: '往来单位', Project: '项目'}[model]
+        raise ValidationError(f'找不到{label}：{value}，请核对系统中的编号。')
+    if model is User and not obj.is_active:
+        raise ValidationError(f'登录用户名“{value}”已停用，请填写已启用且具备相应业务权限的账号。')
     return obj.pk
 
 
@@ -453,11 +410,12 @@ def run(actor, resource, records, *, preview=False):
                     results.append(execute_row(actor, resource, record['data'], str(uuid4())))
             except (APIException, ModelValidationError, Http404) as exc:
                 detail = (
-                    (exc.message_dict if hasattr(exc, 'message_dict') else exc.messages)
+                    validation_detail(exc)
                     if isinstance(exc, ModelValidationError)
                     else getattr(exc, 'detail', '记录不存在或无权访问。')
                 )
-                errors.append({'row': record['row'], 'message': message(detail)})
+                labels = {key: label for label, key in schema(actor, resource)}
+                errors.append({'row': record['row'], 'message': message(detail, labels)})
                 if not preview:
                     raise ValidationError({'rows': errors}) from exc
         if preview:

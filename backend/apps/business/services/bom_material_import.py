@@ -18,6 +18,7 @@ from apps.core.permissions import BOM_WRITERS, require_project
 from ..models import Item
 from . import bom, bom_import, masterdata
 from .common import project_action
+from .import_guides import BOM_COLUMNS
 
 MATERIAL_FIELDS = (
     'name',
@@ -29,7 +30,7 @@ MATERIAL_FIELDS = (
     'part_type',
     'unit',
 )
-HEADERS = bom_import.HEADERS + ['物料名称', '规格', '图号', '图档版本', '产品编码类别', '品牌', '物料类别', '单位']
+HEADERS = [label for label, _ in BOM_COLUMNS]
 SALT = 'lean-bom-material-import-v1'
 
 

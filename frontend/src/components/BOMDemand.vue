@@ -172,6 +172,7 @@ function saved() {
               )
             "
             >下载模板</el-button
+          ><el-button @click="download('/business/projects/bom-template/', 'bom-template-guide.html', { file_format: 'html' }).catch((e) => (error = message(e)))">下载填写说明</el-button
           ><label class="file-button"
             >导入预览<input type="file" accept=".csv,.xlsx" :disabled="busy" @change="importFile" /></label
           ><el-button @click="inspectImpact">变更影响与处理</el-button><el-button type="primary" @click="start">维护 BOM</el-button></template
@@ -179,6 +180,7 @@ function saved() {
       </div>
     </header>
     <p class="muted">库存为共享库存，不预留，当前可用不保证后续可领：「其他项目待领」列出其他在执行项目对同一物料尚未领走的需求，可用库存同时被它们盯着时会标红，需要先和相关项目确认归属。同物料可分属多个单元；已领、在途及库存按行顺序分摊，非单元实际领用记录。</p>
+    <p v-if="canEdit" class="muted">Excel 模板自带“填写说明”页和表头提示，只在“数据”页填写；CSV 请配合下载的填写说明使用。上传电脑里的文件时，选中文件后点击“打开”。</p>
     <details v-if="canEdit" class="import-help"><summary>导入模板填写说明</summary><p class="muted">已有物料填写编码，后方物料资料可留空；填写时必须与已有资料一致。新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号，品牌与版本分别填写。完全相同物料自动复用，存在多个匹配时须明确编码；新编号只在确认后生成。需求、单元与申请信息按项目填写；修改已有BOM必须填写变更说明。已领、在途、库存、缺料由系统计算，旧版模板仍可使用。</p></details>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
@@ -199,12 +201,8 @@ function saved() {
     <footer v-if="canPurchase" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
     <div v-if="preview" class="import-preview">
       <h3>导入预览</h3>
-      <el-alert
-        v-if="!preview.can_import"
-        :title="JSON.stringify(preview.errors)"
-        type="error"
-        :closable="false"
-      /><el-table :data="visiblePreview" :max-height="560"
+      <div v-if="preview.errors?.length" class="import-errors" role="alert"><p v-for="(issue, index) in preview.errors" :key="index">{{ message(issue) }}</p></div>
+      <el-table :data="visiblePreview" :max-height="560"
         ><el-table-column prop="row" label="文件行号" width="100" /><el-table-column v-for="column in importColumns" :key="column.key" :prop="column.key" :label="column.label" min-width="140" /><el-table-column prop="item_name" label="物料名称（关联）" min-width="160" /><el-table-column prop="brand" label="品牌（关联）" /><el-table-column prop="specification" label="规格（关联）" /></el-table
       ><ListPagination :page="previewPage" :total="preview.lines.length" @change="previewPage = $event" />
       <el-button type="primary" :disabled="!preview.can_import" @click="confirmImport">确认导入</el-button

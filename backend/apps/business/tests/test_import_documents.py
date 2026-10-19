@@ -7,11 +7,12 @@ from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from rest_framework.exceptions import ValidationError
 
 from apps.business.models import BOMLine, Document, SalesOrder
 from apps.business.services.bom_material_import import HEADERS
+from apps.business.services.import_guides import GUIDE_MARKER, GUIDE_SHEET
 from apps.core.models import ActionReceipt
 
 from .test_commercial_chain import BusinessFixtures
@@ -50,6 +51,7 @@ class ImportTests(BusinessFixtures, TestCase):
         self.assertFalse(preview['can_import'])
         self.assertEqual([row['row'] for row in preview['errors']], [2, 3, 4])
         self.assertNotIn('ErrorDetail', str(preview))
+        self.assertIn('数量：', preview['errors'][1]['message'])
         self.assertFalse(BOMLine.objects.exists())
 
     def test_xlsx_values_supported_and_formulas_rejected(self):
@@ -103,10 +105,10 @@ class ImportTests(BusinessFixtures, TestCase):
         self.assertEqual(response.content.decode('utf-8-sig').strip(), ','.join(HEADERS))
 
     def test_new_bom_template_order_and_readable_preview(self):
-        from openpyxl import load_workbook
-
         response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'xlsx'})
         book = load_workbook(io.BytesIO(response.content))
+        self.assertEqual(book.sheetnames, ['数据', GUIDE_SHEET])
+        self.assertEqual(book[GUIDE_SHEET]['A1'].value, GUIDE_MARKER)
         self.assertEqual(
             [cell.value for cell in book.active[1]],
             HEADERS,
@@ -131,6 +133,45 @@ class ImportTests(BusinessFixtures, TestCase):
             },
         )
         self.assertEqual(BOMLine.objects.get().assembly_unit, '装配单元')
+
+    def test_bom_guide_download_uses_bom_rules_and_existing_permissions(self):
+        response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'html'})
+        self.assertEqual(response.status_code, 200)
+        for hint in ('新增物料必填', '同一文件', '不能填1或2', '不是任务的执行人账号'):
+            self.assertContains(response, hint)
+        self.assertEqual(
+            self.clients['member'].get('/api/business/projects/bom-template/', {'file_format': 'html'}).status_code,
+            403,
+        )
+
+    def test_guide_is_not_imported_even_if_first_but_other_data_sheets_are_rejected(self):
+        response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'xlsx'})
+        book = load_workbook(io.BytesIO(response.content))
+        book['数据'].append([self.item.code, '上料单元', 2])
+        book.move_sheet(GUIDE_SHEET, offset=-1)
+
+        def upload(status=200):
+            content = io.BytesIO()
+            book.save(content)
+            return self.preview(content.getvalue(), 'bom.xlsx', status=status)
+
+        result = upload()
+        self.assertTrue(result['can_import'], result)
+        self.assertEqual(len(result['lines']), 1)
+        self.assertEqual(result['lines'][0]['row'], 2)
+        self.assertFalse(BOMLine.objects.exists())
+        book[GUIDE_SHEET]['A1'] = '其他业务数据'
+        upload(status=400)
+        book[GUIDE_SHEET]['A1'] = GUIDE_MARKER
+        book.create_sheet('额外业务数据').append([self.item.code, '另一单元', 3])
+        upload(status=400)
+        del book['额外业务数据']
+        book['数据']['C2'] = '=1+1'
+        upload(status=400)
+        book['数据']['C2'] = 2
+        book['数据']['Z2'] = 999
+        upload(status=400)
+        book.close()
 
     def test_existing_bom_requires_reason_and_observes_ordered_floor(self):
         self.post(

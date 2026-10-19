@@ -18,7 +18,7 @@ from apps.core.permissions import FINANCE, require_role
 
 from ..models import BankRecord
 from . import banking
-from .bom_import import MAX_BYTES, read_xlsx
+from .bom_import import MAX_BYTES, message, read_xlsx
 from .common import audit, save
 
 ICBC = [
@@ -195,7 +195,13 @@ def parse(upload):
             )
             for field, limit in [('account', 100), ('reference', 100), ('counterparty', 150), ('reason', 500)]:
                 if len(data[field]) > limit:
-                    raise ValidationError(f'{field} 超过 {limit} 字符，请核实，系统不会截断原数据。')
+                    label = {
+                        'account': '银行账号',
+                        'reference': '流水号',
+                        'counterparty': '对方户名',
+                        'reason': '说明',
+                    }[field]
+                    raise ValidationError(f'{label} 超过 {limit} 字符，请核实，系统不会截断原数据。')
             record = dict(
                 row=index,
                 data=data,
@@ -212,7 +218,12 @@ def parse(upload):
             income_count += int(incoming > 0)
             expense_count += int(outgoing > 0)
         except (ValidationError, ValueError) as exc:
-            errors.append({'row': index, 'message': str(getattr(exc, 'detail', exc))})
+            detail = (
+                message(exc.detail)
+                if isinstance(exc, ValidationError)
+                else '交易日期或时间格式不正确，请使用银行导出的原始流水。'
+            )
+            errors.append({'row': index, 'message': detail})
     if not records and not errors:
         errors.append({'row': 0, 'message': '没有交易明细。'})
     summary = dict(

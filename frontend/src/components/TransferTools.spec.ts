@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import TransferTools from './TransferTools.vue'
-import { read, write } from '../api'
+import { download, read, write } from '../api'
 import { user } from '../session'
 
 vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn(), download: vi.fn() }))
@@ -15,7 +15,8 @@ describe('导入模板与预览', () => {
       { key: 'item', label: '物料编码', table_keys: ['item_code'], hint: '填写物料编码' },
       { key: 'quantity', label: '数量', table_keys: ['quantity'], hint: '填写数量' },
     ]
-    vi.mocked(read).mockResolvedValue({ columns, note: '生成采购草稿' })
+    vi.mocked(read).mockResolvedValue({ columns, note: '生成采购草稿', title: '采购', entry: '采购 → 导入导出 → 导入' })
+    vi.mocked(download).mockResolvedValue(undefined)
     vi.mocked(write).mockResolvedValue({ columns, rows: [
       { row: 2, data: { group: 'G', item: 'A', quantity: '2' } },
       { row: 3, data: { group: 'G', item: 'B', quantity: '3' } },
@@ -29,6 +30,10 @@ describe('导入模板与预览', () => {
     await flushPromises()
     expect(read).toHaveBeenCalledWith('/business/purchases/import-schema/')
     expect(wrapper.text()).toContain('采购编号 由系统生成')
+    expect(wrapper.text()).toContain('采购 → 导入导出 → 导入')
+    await wrapper.findAll('el-button-stub').find(b => b.text() === '下载填写说明')!.trigger('click')
+    await flushPromises()
+    expect(download).toHaveBeenCalledWith('/business/purchases/import-template/', 'purchases-template-guide.html', { file_format: 'html' })
     const input = wrapper.get('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [new File(['csv'], 'rows.csv')], configurable: true })
     await input.trigger('change')
@@ -66,6 +71,7 @@ it('银行原始文件先预览汇总，确认时提交凭据并显示去重结�
   })
   expect(wrapper.find('input[type=file]').attributes('accept')).toBe('.xls,.xlsx')
   expect(wrapper.text()).not.toContain('下载模板')
+  expect(wrapper.text()).not.toContain('下载填写说明')
   vi.mocked(write).mockResolvedValueOnce({ token: 'signed-preview', count: 2, rows: [], errors: [], can_import: true, summary: { income_count: 1, income: '100.00', expense_count: 1, expense: '20.00', check: '汇总一致' } })
   const input = wrapper.find('input[type=file]')
   Object.defineProperty(input.element, 'files', { value: [new File(['sample'], '华夏.xls')], configurable: true })
