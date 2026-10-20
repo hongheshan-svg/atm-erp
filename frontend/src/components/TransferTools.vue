@@ -1,48 +1,58 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { download, read, write } from '../api'
 import { canImportResource } from '../session'
 import { message, requestKey } from '../utils/request'
 import type { Column, Row } from '../types'
-import ListPagination from './ListPagination.vue'
-import { pageSize } from '../pagination'
+import ImportFeedback from './ImportFeedback.vue'
+import { importDestination, importTitles, templateMismatch } from '../utils/import-context'
 
-const props = defineProps<{ resource: string; path: string; params?: Row; exportPath?: string; tableColumns?: Column[] }>()
+const props = withDefaults(defineProps<{ resource: string; path: string; params?: Row; exportPath?: string; tableColumns?: Column[]; allowImport?: boolean }>(), { allowImport: true })
 const emit = defineEmits<{ changed: [] }>()
-const format = ref('xlsx')
 const busy = ref(false)
 const error = ref('')
 const opened = ref(false)
 const preview = ref<Row | null>(null)
 const result = ref('')
-const page = ref(1)
+const project = ref<Row | null>(null)
+const mismatch = ref<ReturnType<typeof templateMismatch>>(null)
+const destination = computed(() => mismatch.value ? importDestination(mismatch.value.resource, Number(props.params?.project) || undefined) : null)
+const title = computed(() => `导入${layout.value?.title || importTitles[props.resource] || '资料'}`)
+let generation = 0
+onBeforeUnmount(() => { generation++ })
 const layout = ref<Row | null>(null)
 const mappings = computed(() => (layout.value?.columns || []).map((column: Row) => ({
   ...column,
   table: (props.tableColumns || []).filter(c => column.table_keys.includes(c.key)).map(c => c.label).join('、') || '单据明细 / 新增时填写',
 })))
 const generatedColumns = computed(() => (props.tableColumns || []).filter(c => !(layout.value?.columns || []).some((field: Row) => field.table_keys.includes(c.key))).map(c => c.label).join('、'))
-const importable = computed(() => canImportResource(props.resource))
+const importable = computed(() => props.allowImport && canImportResource(props.resource))
 const bankImport = computed(() => props.resource === 'bank-records')
-const visibleRows = computed(() => preview.value?.rows.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) || [])
-watch(pageSize, () => { page.value = 1 })
-watch(() => props.resource, () => { layout.value = null; preview.value = null; opened.value = false; error.value = ''; result.value = '' })
+watch([() => props.resource, () => props.params?.project], () => { generation++; layout.value = null; preview.value = null; project.value = null; opened.value = false; busy.value = false; error.value = ''; result.value = ''; mismatch.value = null })
+watch(opened, value => { if (!value) { generation++; preview.value = null; mismatch.value = null; busy.value = false } })
+watch(importable, value => { if (!value) opened.value = false })
 async function openImport() {
+  if (!importable.value) return
   opened.value = true
   preview.value = null
-  page.value = 1
+  mismatch.value = null
   error.value = ''
   result.value = ''
   layout.value = null
   if (bankImport.value) return
   busy.value = true
-  const resource = props.resource
+  const id = ++generation
   try {
     const data = await read(`${props.path}import-schema/`)
-    if (props.resource === resource) layout.value = data
-  } catch (e) { error.value = message(e) } finally { busy.value = false }
+    if (id !== generation) return
+    layout.value = data
+    if (props.params?.project) {
+      const context = await read(`/business/projects/${props.params.project}/`)
+      if (id === generation) project.value = context
+    }
+  } catch (e) { if (id === generation) error.value = message(e) } finally { if (id === generation) busy.value = false }
 }
-async function file(template = false, chosen = format.value) {
+async function file(template = false, chosen = 'xlsx') {
   busy.value = true
   error.value = ''
   try {
@@ -65,24 +75,29 @@ async function upload(event: Event) {
   error.value = ''
   preview.value = null
   result.value = ''
-  const resource = props.resource
+  const id = ++generation
+  mismatch.value = null
   try {
     const data = new FormData()
     data.append('file', selected)
     const response = await write(`${props.path}import-file/`, data, requestKey())
-    if (props.resource === resource) { preview.value = response; page.value = 1 }
-  } catch (e) { if (props.resource === resource) error.value = message(e) } finally { busy.value = false; input.value = '' }
+    if (id === generation) preview.value = response
+  } catch (e) {
+    if (id === generation) { mismatch.value = templateMismatch(e); error.value = mismatch.value?.message || message(e) }
+  } finally { if (id === generation) busy.value = false; input.value = '' }
 }
 async function confirm() {
-  if (!preview.value?.can_import) return
+  if (busy.value || !preview.value?.can_import || !importable.value) return
+  const id = ++generation
   busy.value = true
   error.value = ''
   try {
     const data = await write(`${props.path}import-confirm/`, { token: preview.value.token }, requestKey())
+    if (id !== generation) return
     result.value = `成功导入 ${data.count} 条记录${bankImport.value ? `，跳过已导入 ${data.skipped} 条` : ''}`
     preview.value = null
     emit('changed')
-  } catch (e) { error.value = message(e) } finally { busy.value = false }
+  } catch (e) { if (id === generation) error.value = message(e) } finally { if (id === generation) busy.value = false }
 }
 </script>
 <template>
@@ -99,7 +114,8 @@ async function confirm() {
       >
     </el-dropdown>
     <span v-if="error && !opened" role="alert">{{ error }}</span>
-    <el-dialog v-model="opened" class="transfer-dialog" title="批量导入" width="min(1100px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
+    <el-dialog v-model="opened" class="transfer-dialog" :title="title" width="min(1100px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
+      <p v-if="params?.project" class="import-context"><strong>当前项目：{{ project ? `${project.name}（${project.code}）` : '当前页面所选项目' }}</strong>。文件中的项目编号仍会逐行校验，请核对是否与本次用途一致。</p>
       <p v-if="bankImport">上传工行 XLSX 或华夏 XLS 原始流水（含表头及汇总），单文件最多 1000 行、5 MB。完整保留个人往来和手续费，不自动核销或指定项目；缺失户名进入待核实，相同交易重复上传会跳过。没有唯一银行编号时生成导入标识，原始编号保留在明细中。预览按银行流水页面列展示；项目和未匹配金额由后续认领、匹配操作维护。</p>
       <p v-else>下载模板后填写，支持 CSV / XLSX，最多 1000 行、5 MB。人员可填姓名或账号，重名请填姓名（用户名）；其他引用使用编号，标明 ID 的列可从对应列表导出获取。日期填写 YYYY-MM-DD。</p>
       <template v-if="layout">
@@ -117,17 +133,16 @@ async function confirm() {
         </details>
       </template>
       <el-button v-else-if="!bankImport" :loading="busy" @click="openImport">加载字段说明</el-button>
-      <div class="toolbar"><select v-if="!bankImport" v-model="format" aria-label="模板格式" :disabled="busy"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><el-button v-if="!bankImport" :disabled="busy || !layout" @click="file(true)">下载模板</el-button><el-button v-if="!bankImport" :disabled="busy || !layout" @click="guide">下载填写说明</el-button><label class="file-button">选择文件并预览<input type="file" :accept="bankImport ? '.xls,.xlsx' : '.csv,.xlsx'" :disabled="busy || (!bankImport && !layout)" @change="upload" /></label></div>
+      <div class="toolbar"><el-button v-if="!bankImport" :disabled="busy || !layout" @click="file(true)">下载模板</el-button><el-button v-if="!bankImport" :disabled="busy || !layout" @click="guide">下载填写说明</el-button><label class="file-button">{{ preview ? '重新选择文件并预览' : '选择文件并预览' }}<input type="file" :accept="bankImport ? '.xls,.xlsx' : '.csv,.xlsx'" :disabled="busy || (!bankImport && !layout)" @change="upload" /></label><details v-if="!bankImport"><summary>更多格式</summary><el-button :disabled="busy || !layout" @click="file(true, 'csv')">下载 CSV 模板</el-button></details></div>
       <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
+      <p v-if="mismatch"><router-link v-if="destination" :to="destination" @click="opened = false">前往{{ mismatch.title }}导入入口</router-link><span v-else>请联系具备相应权限的同事，在{{ mismatch.entry }}操作。</span> 切换入口后请核对导入对象，并重新选择文件。</p>
       <el-alert v-if="result" :title="result" type="success" :closable="false" role="status" />
       <template v-if="preview">
         <p>共 {{ preview.count }} 条，确认时再次校验；任一行失败，整批不保存。预览有效期 30 分钟。<span v-if="resource === 'purchases'">文件 {{ preview.row_count }} 行明细合并为 {{ preview.count }} 张采购草稿，下方按原文件逐行显示。</span></p>
         <p v-if="preview.summary">收入 {{ preview.summary.income_count }} 笔 / {{ preview.summary.income }} 元；支出 {{ preview.summary.expense_count }} 笔 / {{ preview.summary.expense }} 元。{{ preview.summary.check }}</p>
-        <el-table :data="visibleRows" :max-height="360" row-key="row"><el-table-column prop="row" label="文件行号" width="100" fixed="left" /><el-table-column v-if="bankImport" prop="status" label="导入状态" width="150" /><el-table-column v-for="column in preview.columns" :key="column.key" :label="column.label" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ row.data[column.key] || '—' }}</template></el-table-column></el-table>
-        <ListPagination :page="page" :total="preview.rows.length" @change="page = $event" />
-        <div v-if="preview.errors.length" class="import-errors" role="alert"><p v-for="e in preview.errors" :key="e.row">{{ message(e) }}</p></div>
+        <ImportFeedback :rows="(preview.rows || []).map((row: Row) => ({ ...row, data: { ...row.data, status: row.status } }))" :columns="bankImport ? [{ key: 'status', label: '导入状态' }, ...(preview.columns || [])] : (preview.columns || [])" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
       </template>
-      <template #footer><el-button :disabled="busy" @click="opened = false">关闭</el-button><el-button type="primary" :disabled="!preview?.can_import" :loading="busy" @click="confirm">确认导入</el-button></template>
+      <template #footer><el-button :disabled="busy" @click="opened = false">关闭</el-button><el-button type="primary" :disabled="busy || !preview?.can_import" :loading="busy" @click="confirm">确认导入</el-button></template>
     </el-dialog>
   </div>
 </template>

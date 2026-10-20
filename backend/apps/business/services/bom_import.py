@@ -45,7 +45,7 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
                     raise ValidationError({'file': '一次最多导入 1000 行。'})
                 result.append(row)
         elif extension == '.xlsx':
-            result = read_xlsx(content, len(headers))
+            result = read_xlsx(content, max(len(headers), len(BOM_COLUMNS)))
         else:
             raise ValidationError({'file': '仅支持 UTF-8 CSV 或 XLSX。'})
     except (
@@ -75,6 +75,16 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
         and header != legacy_headers
         and not (legacy_headers and isinstance(legacy_headers[0], list) and header in legacy_headers)
     ):
+        from .import_feedback import template_hint
+
+        hint = template_hint(header)
+        if hint:
+            raise ValidationError(
+                {
+                    'file': f'这是{hint["title"]}模板，请到{hint["title"]}导入入口。{hint["entry"]}。切换后请重新选择文件。',
+                    'template_hint': hint,
+                }
+            )
         raise ValidationError(
             {
                 'file': '这个文件的表头与当前导入入口不一致。请先确认要导入的是项目、项目任务还是BOM等资料；'

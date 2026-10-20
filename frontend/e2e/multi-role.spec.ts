@@ -17,7 +17,7 @@ test('管理员分配采购兼仓库，保存回显并即时撤销采购权限',
   await expect(dialog.getByRole('status')).toContainText('新增：采购员、仓管')
   await dialog.getByLabel('密码', { exact: true }).fill(password)
   const created = page.waitForResponse(r => r.url().endsWith('/auth/users/') && r.request().method() === 'POST')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   const response = await created
   expect(response.status()).toBe(201)
   const account = await response.json()

@@ -14,7 +14,7 @@ test('总经理单独授权后查看筛选报表，撤销后接口和入口均�
   await dialog.getByLabel('密码', { exact: true }).fill(password)
   await dialog.getByLabel('总经理报表权限（仅项目经理角色）', { exact: true }).check()
   const created = page.waitForResponse(r => r.url().endsWith('/auth/users/') && r.request().method() === 'POST')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   const result = await created
   expect(result.status()).toBe(201)
   const account = await result.json()
@@ -49,7 +49,7 @@ test('总经理单独授权后查看筛选报表，撤销后接口和入口均�
     await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
     await dialog.getByLabel('总经理报表权限（仅项目经理角色）', { exact: true }).uncheck()
     const revoked = page.waitForResponse(r => r.url().endsWith(`/auth/users/${account.id}/`) && r.request().method() === 'PATCH')
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     expect((await revoked).status()).toBe(200)
     const gmToken = await gm.evaluate(() => localStorage.getItem('access_token'))
     expect((await gm.request.get('/api/business/reports/', { headers: { Authorization: `Bearer ${gmToken}` } })).status()).toBe(403)

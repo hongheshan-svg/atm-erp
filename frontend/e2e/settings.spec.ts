@@ -51,7 +51,7 @@ test('设置页签按需加载，键盘切换并保留内容', async ({ page }, 
     await dialog.getByLabel('修改原因', { exact: true }).fill('隔离测试编号配置与恢复')
     if (values.prefix === prefix) await page.screenshot({ path: info.outputPath('number-rule-dialog.png'), animations: 'disabled' })
     const saved = page.waitForResponse(r => r.url().includes('/configure/') && r.request().method() === 'POST')
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     expect((await saved).status()).toBe(200)
     await expect(dialog).not.toBeVisible()
   }
@@ -62,7 +62,7 @@ test('设置页签按需加载，键盘切换并保留内容', async ({ page }, 
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('物料名称', { exact: true }).fill('规则验证' + suffix)
     const created = page.waitForResponse(r => r.url().endsWith('/items/') && r.request().method() === 'POST')
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     expect((await created).status()).toBe(201)
     await expect(dialog).not.toBeVisible()
     const row = page.getByRole('region', { name: '物料', exact: true }).locator('.el-table__body tr').filter({ hasText: '规则验证' + suffix })

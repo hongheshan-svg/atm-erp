@@ -4,7 +4,8 @@ import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-p
 import { ElSkeleton } from 'element-plus'
 import { read } from '../api'
 import { today } from '../forms'
-import { user } from '../session'
+import { can, user } from '../session'
+import RoleTaskGuide from '../components/RoleTaskGuide.vue'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
 import type { Row } from '../types'
@@ -35,8 +36,8 @@ const idleNote = computed(() => {
 })
 const metrics = computed(() => [
   ...(work.value.tasks || work.value.overdue_purchases || work.value.production_tasks
-    ? [{ label: '已逾期', value: (work.value.tasks?.overdue_count || 0) + count('overdue_purchases') + (work.value.production_tasks?.overdue_count || 0), note: '逾期任务 + 逾期采购 + 生产任务逾期', tone: 'danger' }] : []),
-  ...(work.value.tasks ? [{ label: '今日到期', value: work.value.tasks.today_count || 0, note: '我的任务 · 今日截止', tone: 'primary' }] : []),
+    ? [{ label: work.value.overdue_purchases ? '任务 / 到货逾期' : '任务逾期', value: (work.value.tasks?.overdue_count || 0) + count('overdue_purchases') + (work.value.production_tasks?.overdue_count || 0), note: work.value.production_tasks ? '本人及生产任务分类计数；兼岗任务可能重叠' : work.value.overdue_purchases ? '我的逾期任务与采购到货逾期' : '我的任务 · 已超过截止日期', tone: 'danger' }] : []),
+  ...(work.value.tasks ? [{ label: '我的任务今日截止', value: work.value.tasks.today_count || 0, note: '任务截止日期，不含款项到期', tone: 'primary' }] : []),
   ...(work.value.approvals || work.value.prepayments ? [{ label: '等待我审批', value: count('approvals') + count('prepayments'), note: '采购批准 + 预付款核准', tone: 'warning' }] : []),
 ])
 function collection(key: string) {
@@ -74,6 +75,10 @@ const priority = computed(() => Object.entries(work.value).flatMap(([key, bucket
   .filter((item, index, all) => !['tasks', 'production_tasks'].includes(item.key) || all.findIndex(other => ['tasks', 'production_tasks'].includes(other.key) && other.row.id === item.row.id) === index)
   .filter(item => item.rank < 4 && item.key !== 'receipts')
   .sort((a, b) => a.rank - b.rank || due(a.key, a.row).localeCompare(due(b.key, b.row))).slice(0, 7))
+const ongoing = computed(() => work.value.tasks?.results || [])
+const emptyTaskNote = computed(() => can(['mechanical_engineer', 'electrical_engineer', 'member', 'production_manager'])
+  ? '目前没有分配给你的未完成任务。可查看参与项目；如需派工，请联系项目经理。'
+  : '目前没有分配给你的未完成任务。可从下方岗位指引继续处理日常工作。')
 function title(key: string, row: Row) { return key === 'bank_records' ? row.counterparty || '待核实户名' : row.title || row.code || row.reference || '待处理事项' }
 
 function amount(key: string, row: Row) {
@@ -103,18 +108,27 @@ onBeforeUnmount(() => { generation++ })
     <header class="page-heading"><div><p class="eyebrow">今日协作 / {{ day }}</p><h1>工作台</h1><p class="muted">{{ user?.display_name }}，先处理紧急事项，再推进今天的工作。</p></div><div class="work-refresh"><span v-if="updated" role="status">{{ updated }} 更新</span><el-button :loading="loading" @click="load">刷新</el-button></div></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <div v-if="!initialized && loading" class="panel" role="status" aria-label="正在加载工作台"><el-skeleton :rows="8" animated /></div>
+    <nav v-if="can(['admin', 'warehouse'])" class="panel warehouse-shortcuts" aria-label="日常库存入口"><router-link to="/inventory?section=receipts&project=all">采购收货</router-link><router-link to="/inventory?section=stocks&intent=issue">项目领料</router-link><router-link to="/inventory?section=moves&intent=return&project=all">项目退料</router-link></nav>
     <template v-if="initialized">
       <section v-if="metrics.length" class="work-overview" aria-label="待办概览"><div v-for="metric in metrics" :key="metric.label" class="work-metric" :class="metric.value ? `tone-${metric.tone}` : ''"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.note }}</small></div></section>
+      <div class="work-main" :class="{ 'no-priority': !priority.length }">
       <section class="panel work-priority" aria-labelledby="priority-heading">
         <header><h2 id="priority-heading">今天要处理的</h2><span class="muted">按逾期、今日到期、待审批排序，最多 7 项</span></header>
-        <el-table :data="priority" :max-height="420" empty-text="今天没有需要优先处理的事项" class="priority-table">
+        <el-table v-if="priority.length" :data="priority" :max-height="420" class="priority-table">
           <el-table-column label="事项 / 关联项目" min-width="220"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)">{{ title(item.key, item.row) }}</router-link><small class="record-secondary">{{ context(item.key, item.row) }}</small></template></el-table-column>
           <el-table-column label="类型" min-width="110"><template #default="{ row: item }">{{ labels[item.key] }}</template></el-table-column>
-          <el-table-column label="期限" width="110"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
+          <el-table-column label="截止 / 到期日期" width="135"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
           <el-table-column label="状态" width="95"><template #default="{ row: item }"><span class="work-status" :class="`tone-${item.tone}`">{{ item.text }}</span></template></el-table-column>
           <el-table-column label="操作" width="60" fixed="right"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)" :aria-label="`处理${title(item.key, item.row)}`">处理</router-link></template></el-table-column>
         </el-table>
+        <p v-else class="priority-empty muted">今天没有需要优先处理的事项</p>
       </section>
+      <section v-if="work.tasks" class="panel work-ongoing" aria-labelledby="ongoing-heading">
+        <header><h2 id="ongoing-heading">我正在做的工作</h2><router-link :to="collection('tasks')">查看我的全部任务（{{ count('tasks') }}）</router-link></header>
+        <ul v-if="ongoing.length"><li v-for="task in ongoing" :key="task.id"><div><strong>{{ title('tasks', task) }}</strong><span>{{ task.project_name || '关联项目' }}</span><span>截止日期：{{ task.due_date || '未设置' }}</span></div><router-link :to="target('tasks', task)" :aria-label="`继续处理${title('tasks', task)}`">继续处理 →</router-link></li></ul>
+        <p v-else class="muted">{{ emptyTaskNote }}</p>
+      </section>
+      </div>
       <section class="panel work-categories" aria-labelledby="categories-heading">
         <header><h2 id="categories-heading">其他待办</h2><span class="muted">点击进入对应的完整列表</span></header>
         <router-link v-for="key in active" :key="key" :to="collection(key)" class="work-category" :aria-label="`查看全部${labels[key]}`"><el-icon aria-hidden="true"><component :is="icons[key as keyof typeof icons]" /></el-icon><span><strong>{{ labels[key] }}</strong><small>{{ notes[key] }}</small></span><b>{{ count(key) }}</b><el-icon aria-hidden="true"><ArrowRight /></el-icon></router-link>
@@ -122,10 +136,22 @@ onBeforeUnmount(() => { generation++ })
         <p v-if="idleNote" class="muted work-idle">{{ idleNote }}</p>
       </section>
     </template>
+    <RoleTaskGuide />
   </div>
 </template>
 <style scoped>
 .work-refresh { display: flex; align-items: center; gap: 14px; color: var(--ink-4); font-size: 12px; }
+.work-main { display: flex; flex-direction: column; }
+.no-priority .work-ongoing { order: -1; }
+.priority-empty { padding: 16px 20px; margin: 0; font-size: 14px; }
+.warehouse-shortcuts { display: flex; flex-wrap: wrap; gap: 16px; }
+.work-ongoing header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.work-ongoing h2 { font-size: 18px; margin: 0; }
+.work-ongoing ul { list-style: none; padding: 0; margin-bottom: 0; }
+.work-ongoing li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--surface-border); }
+.work-ongoing li:last-child { border-bottom: 0; }
+.work-ongoing li div { display: grid; gap: 6px; }
+.work-ongoing li span { color: var(--ink-4); font-size: 14px; }
 .work-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .work-metric { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 20px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; color: var(--ink-2); }
 .work-metric strong { font-size: 32px; line-height: 1.2; font-variant-numeric: tabular-nums; }

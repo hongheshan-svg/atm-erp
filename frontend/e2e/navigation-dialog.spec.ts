@@ -46,7 +46,7 @@ test('各入口可直接操作，长表单在短视口保留保存和取消', as
   await page.getByRole('button', { name: '新建项目', exact: true }).click()
   const dialog = page.getByRole('dialog')
   const cancel = dialog.getByRole('button', { name: '取消', exact: true })
-  const save = dialog.getByRole('button', { name: '保存', exact: true })
+  const save = dialog.locator('button[type="submit"]')
   if (info.project.name === 'mobile') {
     await page.setViewportSize({ width: 390, height: 480 })
     await expect(save).toBeInViewport({ ratio: 1 })

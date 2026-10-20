@@ -30,9 +30,15 @@ export type Field = {
   remoteLabel?: (row: Row) => string
   // Renders the row's position in this flow instead of a plain value (read-only row tables).
   flow?: string
+  upload?: { context: Row; category: string }
 }
 export type Command = {
   title: string
+  submitLabel?: string
+  blocked?: string
+  links?: { label: string; path: string }[]
+  alternatives?: { label: string; open: () => Promise<Command> }[]
+  draftScope?: string
   subject?: string
   path: string
   method?: 'post' | 'patch'

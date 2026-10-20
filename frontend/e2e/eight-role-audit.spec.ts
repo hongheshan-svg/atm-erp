@@ -1,3 +1,4 @@
+import { cancelEditing } from './fixtures'
 import { test, expect, login, type Page } from './fixtures'
 
 // Fixtures use the public API; successful business mutations are covered by full-chain.spec.ts.
@@ -83,11 +84,11 @@ async function inspect(page: Page, visited: Record<string, unknown>[]) {
     await button.click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeVisible()
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(dialog.locator('button[type="submit"]')).toBeVisible()
+    await dialog.locator('button[type="submit"]').click()
     await expect(dialog).toBeVisible()
     expect(await dialog.locator('input:invalid, select:invalid, textarea:invalid').count()).toBeGreaterThan(0)
-    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+    await cancelEditing(dialog)
     await expect(dialog).toBeHidden()
   }
   await expect(page.locator('.el-loading-mask:visible, .el-button.is-loading:visible')).toHaveCount(0)
@@ -107,9 +108,9 @@ for (const identity of identities) {
       await expect(page).toHaveURL(new RegExp(`/erp/${route}(?:\\?|$)`))
       await expect(page.locator('h1')).toBeVisible()
       const tabCount: Record<string, number> = {
-        settings: identity.key === 'admin' ? 5 : 1,
+        settings: identity.key === 'admin' ? 6 : 1,
         masterdata: identity.key === 'sales_manager' ? 1 : 2,
-        inventory: 2,
+        inventory: ['admin', 'warehouse'].includes(identity.key) ? 3 : 2,
         projects: 3,
         finance: ['admin', 'finance'].includes(identity.key) ? 5 : 4,
       }

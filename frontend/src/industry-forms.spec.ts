@@ -55,7 +55,7 @@ describe('自动化设备表单', () => {
   it('计划日期不假设今天，实际日期保留默认值，选项显示型号品牌单位', () => {
     expect(date('due_date', '计划交期', true).initial).toBe('')
     expect(date('received_date', '实际收货').initial).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    expect(options([{ id: 1, code: '001', name: '电机', specification: '750W', brand: '确认品牌', unit: '台' }])[0]?.label).toBe('001 · 电机 · 750W · 确认品牌 · 台')
+    expect(options([{ id: 1, code: '001', name: '电机', specification: '750W', brand: '确认品牌', unit: '台' }])[0]?.label).toBe('电机 · 001 · 750W · 确认品牌 · 台')
   })
   it('人员以姓名为主显示账号，重名可区分且提交稳定人员ID', () => {
     expect(options([

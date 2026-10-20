@@ -1,3 +1,4 @@
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login } from './fixtures'
 import { selectRoles } from './role-helpers'
 
@@ -10,13 +11,14 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   const dialog = () => page.locator('[role="dialog"]:visible')
   async function save() {
     const response = page.waitForResponse(r => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'))
-    await dialog().getByRole('button', { name: '保存', exact: true }).click()
+    await dialog().locator('button[type="submit"]').click()
     const result = await response
     expect(result.status(), await result.text()).toBeLessThan(300)
     await expect(dialog()).toHaveCount(0)
   }
   async function choose(label: string, text: string) {
     const field = dialog().getByLabel(label, { exact: true })
+    if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
     const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
     await field.selectOption(value!)
   }
@@ -58,7 +60,7 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   const filename = `销售合同${suffix}.txt`
   await upload.getByLabel('文件', { exact: true }).setInputFiles({ name: filename, mimeType: 'text/plain', buffer: Buffer.from('销售合同测试正文') })
   const uploaded = page.waitForResponse(r => r.url().endsWith('/api/business/documents/') && r.request().method() === 'POST')
-  await upload.getByRole('button', { name: '保存', exact: true }).click()
+  await upload.locator('button[type="submit"]').click()
   const documentResponse = await uploaded
   expect(documentResponse.status(), await documentResponse.text()).toBe(201)
   const documentId = (await documentResponse.json()).id
@@ -80,7 +82,7 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await action('签约')
   await expect(dialog().getByLabel('项目负责人', { exact: true }).locator('option').filter({ hasText: username })).toHaveCount(0)
   await choose('项目负责人', '管理员')
-  await dialog().getByLabel('期限', { exact: true }).fill('2026-12-31')
+  await dialog().getByLabel('收款到期日', { exact: true }).fill('2026-12-31')
   await save()
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const doc = await page.request.get(`/api/business/documents/${documentId}/`, { headers: { Authorization: `Bearer ${token}` } })

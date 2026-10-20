@@ -1,3 +1,5 @@
+import { cancelEditing } from './fixtures'
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
 import { selectRoles } from './role-helpers'
@@ -13,6 +15,7 @@ async function fill(p: Page, label: string, value: string) {
 }
 async function choose(p: Page, label: string, value: string) {
   const field = dialog(p).getByLabel(label, { exact: true })
+  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: value })
   const option = await field.locator('option').filter({ hasText: value }).last().getAttribute('value')
   await field.selectOption(option!)
 }
@@ -20,7 +23,7 @@ async function save(p: Page) {
   const response = p.waitForResponse(
     (r) => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'),
   )
-  await dialog(p).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(p).locator('button[type="submit"]').click()
   const r = await response
   expect(r.status(), await r.text()).toBeLessThan(300)
   await expect(p.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -60,13 +63,13 @@ async function rejectSelfApproval(p: Page, purchase: { id: number; code: string 
   const path = `/api/business/purchases/${purchase.id}/${overBudget ? 'approve-over-budget' : 'approve'}/`
   expectHttpError(p, path, 403)
   const response = p.waitForResponse(r => new URL(r.url()).pathname === path && r.request().method() === 'POST')
-  await dialog(p).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(p).locator('button[type="submit"]').click()
   expect((await response).status()).toBe(403)
   await expect(dialog(p).locator('.el-alert--error')).toContainText('申请人不能审批自己的单据')
   expect(await read(p, `business/purchases/${purchase.id}/`)).toEqual(before)
   expect(await read(p, `business/entries/?project=${before.project}`)).toEqual(entries)
   await p.screenshot({ path: screenshotPath, animations: 'disabled' })
-  await dialog(p).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(p))
 }
 
 for (const combinedRoles of [false, true]) {
@@ -165,13 +168,13 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await choose(salesperson, '项目负责人', 'manager' + suffix)
   await choose(salesperson, '项目成员', 'member' + suffix)
   await fill(salesperson, '日期', day(-2))
-  await fill(salesperson, '期限', day())
+  await fill(salesperson, '收款到期日', day())
   await save(salesperson)
   await expect(salesperson.locator('.el-message')).toHaveCount(0)
   await action(salesperson, saleRow, '查看明细')
   await expect(dialog(salesperson).getByLabel('合同金额（元）', { exact: true })).toHaveValue('10000.00')
   await expect(dialog(salesperson).getByLabel('合同编号', { exact: true })).toHaveValue('HT-' + suffix)
-  await expect(dialog(salesperson).getByRole('button', { name: '保存', exact: true })).toHaveCount(0)
+  await expect(dialog(salesperson).locator('button[type="submit"]')).toHaveCount(0)
   await dialog(salesperson).getByRole('button', { name: '关闭', exact: true }).click()
   await expect(dialog(salesperson)).not.toBeVisible()
   await salesperson.screenshot({ path: info.outputPath('sales-module.png'), fullPage: true, animations: 'disabled' })
@@ -191,7 +194,9 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   expect(initialBudget.budget_total).toBe('750.00')
   await manager.getByRole('tab', { name: 'BOM', exact: true }).click()
   const item = (await read(manager, 'business/items/?search=' + encodeURIComponent(names.item))).results[0]
+  await manager.getByRole('button', { name: '导入 BOM', exact: true }).click()
   await manager
+    .getByRole('dialog', { name: '导入BOM', exact: true })
     .locator('input[type=file]')
     .setInputFiles({
       name: 'bom.csv',
@@ -208,10 +213,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
   const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
   const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
-  const supplierField = purchaseDraft.getByLabel('供应商', { exact: true })
-  const supplierOption = supplierField.locator('option').filter({ hasText: names.supplier }).last()
-  await expect(supplierOption).toBeAttached()
-  await supplierField.selectOption((await supplierOption.getAttribute('value'))!)
+  await selectRemoteOption(purchaseDraft.getByLabel('供应商', { exact: true }), { text: names.supplier })
   await purchaseDraft.getByLabel('交期', { exact: true }).fill(day())
   await purchaseDraft.getByLabel('含税单价（元）', { exact: true }).fill('100')
   const purchaseSaved = purchaser.waitForResponse(r => r.url().endsWith('/api/business/purchases/') && r.request().method() === 'POST')
@@ -351,10 +353,10 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await fill(manager, '日期', day(-1))
   const fail = manager.waitForResponse((r) => r.url().endsWith('/ship/') && r.request().method() === 'POST')
   expectHttpError(manager, `/api/business/projects/${id}/ship/`, 409)
-  await dialog(manager).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(manager).locator('button[type="submit"]').click()
   expect((await fail).status()).toBe(409)
   await expect(dialog(manager).getByRole('alert')).toContainText('领料')
-  await dialog(manager).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(manager))
   await warehouse.goto('/erp/inventory')
   await action(warehouse, row(warehouse, names.item, '现有库存'), '领料')
   await choose(warehouse, '项目', names.project)
@@ -420,7 +422,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await choose(finance, '项目', names.project)
   await fill(finance, '费用名称', '差旅' + suffix)
   await fill(finance, '金额（元）', '50')
-  await fill(finance, '期限', day())
+  await fill(finance, '付款到期日', day())
   await save(finance)
   await manager.reload()
   await projectAction(manager, '结项')
@@ -429,9 +431,9 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     (r) => r.url().endsWith('/close/') && r.request().method() === 'POST',
   )
   expectHttpError(manager, `/api/business/projects/${id}/close/`, 409)
-  await dialog(manager).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(manager).locator('button[type="submit"]').click()
   expect((await closeFail).status()).toBe(409)
-  await dialog(manager).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(manager))
   const entries = (await read(finance, `business/entries/?project=${id}`)).results
   for (const entry of entries.filter((e: { balance: string }) => Number(e.balance) > 0)) {
     await finance.reload()
@@ -475,7 +477,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await salesperson.reload()
   await action(salesperson, row(salesperson, names.project), '交付与回款')
   await expect(dialog(salesperson).getByLabel('项目状态', { exact: true })).toHaveValue('已结项')
-  await expect(dialog(salesperson).getByRole('button', { name: '保存', exact: true })).toHaveCount(0)
+  await expect(dialog(salesperson).locator('button[type="submit"]')).toHaveCount(0)
   await salesperson.screenshot({ path: info.outputPath('sales-completed-progress.png'), fullPage: true, animations: 'disabled' })
   await dialog(salesperson).getByRole('button', { name: '关闭', exact: true }).click()
   await projectAction(manager, '重新打开')

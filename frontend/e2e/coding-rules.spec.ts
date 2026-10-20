@@ -27,7 +27,7 @@ test('合同设备命名说明与项目编号规范应用保留流水', async ({
   await page.getByText('应用项目规范', { exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '应用项目编号规范' })
   await dialog.getByLabel('应用原因').fill('按QP-001执行')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   await expect(dialog).not.toBeVisible()
   const after = await projectRule()
   expect(after).toMatchObject({ prefix: 'ATM', date_format: 'YY', padding: 2, reset_cycle: 'year', counter: before.counter })

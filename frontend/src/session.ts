@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { clearFormDrafts } from './form-experience'
 import { read, write } from './api'
 import { resetSession, requestKey } from './utils/request'
 import type { Row } from './types'
@@ -47,6 +48,7 @@ export function canImportResource(resource: string) {
   return !!roles[resource] && can(roles[resource]!)
 }
 window.addEventListener('erp-session', () => {
+  clearFormDrafts()
   user.value = null
 })
 export async function loadUser() {

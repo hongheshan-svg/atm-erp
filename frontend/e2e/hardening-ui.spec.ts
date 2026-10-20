@@ -36,7 +36,7 @@ test('签署版本归档后保持原资料，整套打印且经营关注只读�
     await dialog.getByLabel('归档或修订原因', { exact: true }).fill('自动测试样本核对')
     await dialog.getByLabel('已核对签署文件与本版正文、明细及收货地址一致', { exact: true }).check()
     const pending = page.waitForResponse(r => r.url().endsWith('/archive-contract/'))
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     expect((await pending).status()).toBe(201)
     await expect(page.getByText('当前为已归档第 1 版，资料保持不变', { exact: true })).toBeVisible()
     const changed = await page.request.patch(`/api/business/partners/${partner.id}/`, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { address: '归档后新地址' } })

@@ -6,7 +6,7 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   await page.goto('/erp/masterdata')
   const panel = page.getByRole('region', { name: '物料', exact: true })
   await openImport(page)
-  const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  const dialog = page.getByRole('dialog', { name: '导入物料', exact: true })
   await expect(dialog.getByText('② 最少填什么：', { exact: true })).toBeVisible()
   await page.screenshot({ path: info.outputPath('import-template-start.png'), animations: 'disabled' })
   const templateEvent = page.waitForEvent('download')
@@ -17,9 +17,9 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   const prefix = `IMPORT${Date.now()}`
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await openImport(page)
-  await dialog.getByLabel('模板格式').selectOption('csv')
+  await dialog.getByText('更多格式', { exact: true }).click()
   const csvDownload = page.waitForEvent('download')
-  await dialog.getByRole('button', { name: '下载模板', exact: true }).click()
+  await dialog.getByRole('button', { name: '下载 CSV 模板', exact: true }).click()
   const csvTemplate = await csvDownload
   const header = (await readFile((await csvTemplate.path())!, 'utf8')).replace(/^\uFEFF/, '').trim()
   expect(header).toBe('物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因')
@@ -55,4 +55,20 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   const report = await reportEvent
   expect(report.suggestedFilename()).toBe('reports.xlsx')
   expect((await readFile((await report.path())!)).subarray(0, 2).toString()).toBe('PK')
+})
+
+
+test('期初批量导入放在管理员初始化，库存日常只保留导出', async ({ page }) => {
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  await page.goto('/erp/inventory?section=stocks')
+  await expect(page.getByRole('button', { name: '导入导出 ▾', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '导出 ▾', exact: true })).toBeVisible()
+  await page.goto('/erp/settings?section=initialization')
+  const initialization = page.getByRole('region', { name: '管理员初始化', exact: true })
+  await expect(initialization.getByRole('button', { name: '期初入库', exact: true })).toBeVisible()
+  await openImport(page)
+  const dialog = page.getByRole('dialog', { name: '导入期初库存', exact: true })
+  await expect(dialog).toContainText('设置 → 管理员初始化')
+  await expect(dialog.getByRole('button', { name: '下载模板', exact: true })).toBeEnabled()
+  await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeDisabled()
 })

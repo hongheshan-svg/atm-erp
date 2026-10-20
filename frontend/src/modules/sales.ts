@@ -46,8 +46,8 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     const [detail, docs, entries] = await Promise.all([read(`${path}${row.id}/`), all('/business/documents/', { project: row.project, category: 'contract' }), all('/business/entries/', { project: row.project, kind: 'receivable' })])
     return { title: action, path: `${path}${row.id}/amend/`, fields: [
       { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date' }, reason,
-      { key: 'document', label: '补充协议附件（先在销售或项目附件上传）', type: 'select', options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
-      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '期限', type: 'date' }] },
+      { key: 'document', label: '补充协议附件', type: 'select', upload: { context: { sale: row.id }, category: 'contract' }, options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
+      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '收款到期日', type: 'date' }] },
       { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
     ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
   }
@@ -126,7 +126,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         fields: [
           { key: 'title', label: '节点名称' },
           { key: 'amount', label: '金额（元）' },
-          { key: 'due_date', label: '期限', type: 'date' },
+          { key: 'due_date', label: '收款到期日', type: 'date' },
         ],
       },
     ],

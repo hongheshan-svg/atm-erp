@@ -33,3 +33,7 @@ export async function download(path: string, name: string, params: Row = {}) {
   anchor.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+export async function readBlob(path: string): Promise<Blob> {
+  return (await request.get(path.replace(/^\/api\//, '/'), { responseType: 'blob' })).data
+}

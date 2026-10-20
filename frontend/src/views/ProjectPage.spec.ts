@@ -5,7 +5,12 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import ProjectPage from './ProjectPage.vue'
 import { read } from '../api'
 import { money } from '../session'
+import { confirmFormNavigation } from '../form-experience'
 vi.mock('../api', () => ({ read: vi.fn() }))
+vi.mock('../form-experience', async importOriginal => ({
+  ...(await importOriginal<typeof import('../form-experience')>()),
+  confirmFormNavigation: vi.fn(async () => true),
+}))
 // Only the permission gates are faked; the rest of the session (and the whole module registry) stays real.
 vi.mock('../session', async importOriginal => ({
   ...(await importOriginal<typeof import('../session')>()),
@@ -25,7 +30,7 @@ async function render() {
   const wrapper = mount(ProjectPage, {
     global: {
       plugins: [ElementPlus, router],
-      stubs: { ProcessSteps: true, ModuleTabs: true, ResourcePanel: true, BOMDemand: true, BudgetPanel: true, ActionDialog: true },
+      stubs: { ProcessSteps: true, ProjectAttention: true, ModuleTabs: true, ResourcePanel: true, BOMDemand: true, BudgetPanel: true, ActionDialog: true },
     },
   })
   await flushPromises()
@@ -83,5 +88,18 @@ it('shows the requirements as one line until the reader opens them', async () =>
   expect(wrapper.find('.requirement-toggle').text()).toBe('收起')
   await wrapper.find('.requirement-toggle').trigger('click')
   expect(wrapper.find('.requirement-text').classes()).toContain('requirement-clamped')
+  wrapper.unmount()
+})
+it('主项目页签经过统一未保存表单守卫，拒绝离开时保留当前页签', async () => {
+  const wrapper = await render()
+  vi.mocked(confirmFormNavigation).mockResolvedValueOnce(false)
+  await wrapper.get('#tab-bom').trigger('click')
+  await flushPromises()
+  expect(confirmFormNavigation).toHaveBeenCalled()
+  expect(wrapper.get('#tab-tasks').attributes('aria-selected')).toBe('true')
+  vi.mocked(confirmFormNavigation).mockResolvedValueOnce(true)
+  await wrapper.get('#tab-bom').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('#tab-bom').attributes('aria-selected')).toBe('true')
   wrapper.unmount()
 })

@@ -46,7 +46,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
       project(),
       t('title', '费用名称'),
       t('amount', '金额（元）'),
-      date('due_date', '期限'),
+      date('due_date', '付款到期日'),
     ]
   }
   return {
@@ -77,7 +77,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '生成对账单' || name === '申请预付款核准') return reconciliationCommand(r, name === '申请预付款核准')
   if (name === '补录凭证') {
     const docs = await all('/business/documents/', { project: r.project, category: 'receipt' })
-    return { title: name, path: `/business/payments/${r.id}/attach-evidence/`, fields: [{ key: 'document', label: '凭证（项目附件中上传）', type: 'select', options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason], notice: { type: 'info', text: '追加凭证并留痕，不覆盖原付款金额和历史凭证。' } }
+    return { title: name, path: `/business/payments/${r.id}/attach-evidence/`, fields: [{ key: 'document', label: '凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason], notice: { type: 'info', text: '追加凭证并留痕，不覆盖原付款金额和历史凭证。' } }
   }
   if (name === '查看凭证') {
     const detail = await read(`/business/payments/${r.id}/`)
@@ -104,10 +104,16 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (routes[name]) path += routes[name] + '/'
   if (['登记收付款', '退款'].includes(name)) {
     const docs = await all('/business/documents/', { project: r.project, category: 'receipt' })
-    fields = [t('amount', '金额（元）'), date(), reason, { key: 'method', label: '结算方式', type: 'select', optional: true, options: [{ value: 'bank', label: '银行转账' }, { value: 'cash', label: '现金' }, { value: 'other', label: '其他' }] }, t('account', '账户标识', true), t('reference', '银行流水号', true), { key: 'document', label: '结算凭证（先在项目附件上传）', type: 'select', optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }]
+    fields = [t('amount', '金额（元）'), date(), reason, { key: 'method', label: '结算方式', type: 'select', optional: true, options: [{ value: 'bank', label: '银行转账' }, { value: 'cash', label: '现金' }, { value: 'other', label: '其他' }] }, t('account', '账户标识', true), t('reference', '银行流水号', true), { key: 'document', label: '结算凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }]
     initial = { amount: String(r.balance).replace(/^-/, '') }
     const statements = await all('/business/reconciliations/', { entry: r.id, status: 'confirmed' })
     const eligible = statements.filter(s => s.valid && Number(s.remaining_amount) > 0 && (s.kind === 'refund') === (name === '退款'))
+    if ((r.purchase || name === '退款') && !eligible.length) return {
+      title: name, path, fields: [], subject: r.title,
+      blocked: name === '退款' ? '尚无可用的已确认退款对账单。请先生成退款对账并确认，再登记退款。' : '尚无可用的已确认对账或预付款核准。已收货款先对账；未收货预付款按合同申请核准。',
+      alternatives: [{ label: '生成对账单', open: () => reconciliationCommand(r) }, ...(r.purchase && name !== '退款' ? [{ label: '申请预付款核准', open: () => reconciliationCommand(r, true) }] : [])],
+      links: [{ label: '查看已有对账与核准', path: `/projects/${r.project}?tab=finance&section=reconciliations` }],
+    }
     fields.push({ key: 'reconciliation', label: '已确认对账 / 预付款核准', type: 'select', optional: !(r.purchase || name === '退款'), options: eligible.map(s => ({ value: s.id, label: `${s.code} · 可用 ${s.remaining_amount}` })), hint: r.purchase || name === '退款' ? '先从款项操作生成对账单，再到业务对账页确认。预付款由项目经理或管理员核准。' : '客户到账可直接登记，不强制先对账。' })
     if (eligible.length === 1) initial.reconciliation = eligible[0]!.id
   }

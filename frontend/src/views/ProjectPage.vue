@@ -3,7 +3,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
-import { money, purchaseReader, productionProject } from '../session'
+import { money, purchaseReader, productionProject, user, manager } from '../session'
 import { actionNames, actionCommand, display } from '../business'
 import { message } from '../utils/request'
 import { money as formatMoney } from '../utils/money'
@@ -15,9 +15,11 @@ import ActionDialog from '../components/ActionDialog.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ProcessSteps from '../components/ProcessSteps.vue'
+import ProjectAttention from '../components/ProjectAttention.vue'
 import { revealActiveTab } from '../utils/tabs'
 import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
+import { confirmFormNavigation } from '../form-experience'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
 const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
@@ -58,10 +60,21 @@ const brief = computed(() => {
   ].join(' · ')
 })
 const command = ref<Command | null>(null)
+const attention = computed(() => String(route.query.attention || ''))
+const taskAttention = computed(() => tab.value === 'tasks' && (!route.query.section || route.query.section === 'tasks') && ['open-tasks', 'acceptance'].includes(attention.value))
+const purchaseAttention = computed(() => tab.value === 'purchases' && ['submitted', 'approved', 'partial'].includes(attention.value))
+const taskParams = computed(() => ({ project: id, ...(taskAttention.value ? { status: 'open', ...(attention.value === 'acceptance' ? { kind: 'acceptance' } : {}) } : {}) }))
+const purchaseParams = computed(() => ({ project: id, ...(purchaseAttention.value ? { status: attention.value } : {}) }))
+const attentionLabel = computed(() => ({ 'open-tasks': '未完成任务', acceptance: '待验收任务', submitted: '待批准采购', approved: '待收货采购', partial: '部分收货采购' }[attention.value]))
+function clearAttention() {
+  const { attention: _attention, ...query } = route.query
+  void router.replace({ query })
+}
 async function load() {
   error.value = ''
   try {
     project.value = await read(`/business/projects/${id}/`)
+    sessionStore.set(`current-project-${user.value?.id}`, String(id))
     if (money() && tab.value === 'cost') cost.value = await read(`/business/projects/${id}/cost/`)
     revision.value++
     await revealTab()
@@ -113,6 +126,7 @@ onMounted(load)
     </header>
     <p v-if="!overview" class="project-brief muted">{{ brief }}</p>
     <ProcessSteps v-if="projectFlow" class="panel project-flow" :flow="projectFlow" />
+    <ProjectAttention :project="project" :revision="revision" />
     <div v-show="overview">
     <section class="project-summary">
       <div>
@@ -140,14 +154,17 @@ onMounted(load)
       >
     </div>
     </div>
-    <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab"
+    <p v-if="taskAttention || purchaseAttention" class="attention-filter" role="status">当前项目 · {{ attentionLabel }}<el-button text @click="clearAttention">查看全部</el-button><router-link v-if="taskAttention && attention === 'acceptance' && manager() && project.can_manage !== false" :to="{ path: `/projects/${id}`, query: { tab: 'deliveries', section: 'deliveries' } }">前往交付批次登记验收</router-link></p>
+    <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab" :before-leave="confirmFormNavigation"
       ><el-tab-pane label="任务与工时" name="tasks"
         ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ResourcePanel
           resource="tasks"
+          :key="`tasks-${attention}`"
+          :class="{ 'attention-list': taskAttention }"
           title="项目任务"
           :allow-create="['active', 'delivering'].includes(project.status) && productionProject(project)"
           :project-id="id"
-          :params="{ project: id }"
+          :params="taskParams"
           :revision="revision"
           @changed="load" /></template><template #time><ResourcePanel
           resource="time"
@@ -174,9 +191,11 @@ onMounted(load)
         lazy
         ><ResourcePanel
           resource="purchases"
+          :key="`purchases-${attention}`"
+          :class="{ 'attention-list': purchaseAttention }"
           title="项目采购"
           :allow-create="['active', 'delivering', 'warranty'].includes(project.status)"
-          :params="{ project: id }"
+          :params="purchaseParams"
           :project-id="id"
           :revision="revision"
           @changed="load" /></el-tab-pane
@@ -230,6 +249,8 @@ onMounted(load)
 .project-summary > div:last-child { border-right: 0; }
 .project-summary strong { font-size: 20px; margin-top: 8px; }
 .project-brief { margin: -14px 0 16px; font-variant-numeric: tabular-nums; }
+.attention-filter { display: flex; align-items: center; gap: 12px; }
+.attention-list :deep(.resource-status-tabs) { display: none; }
 .requirements { display: flex; align-items: flex-start; gap: 12px; background: #fff; border-left: 3px solid var(--brand-line); line-height: 1.7; }
 .requirement-text { flex: 1; min-width: 0; margin: 0; max-height: 150px; overflow: auto; }
 /* 默认只留一行：nowrap 让换行折成空格，省略号提示还有下文。 */

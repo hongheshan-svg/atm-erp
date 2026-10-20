@@ -1,3 +1,5 @@
+import { cancelEditing } from './fixtures'
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, observePage, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
@@ -5,13 +7,14 @@ const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
 async function choose(page: Page, label: string, text: string) {
   const field = dialog(page).getByLabel(label, { exact: true })
+  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
   const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
   await field.selectOption(value!)
 }
 async function fill(page: Page, label: string, value: string) { await dialog(page).getByLabel(label, { exact: true }).fill(value) }
 async function save(page: Page) {
   const pending = page.waitForResponse(r => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'))
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBeLessThan(300)
   await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -74,13 +77,14 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(manager, '原因 / 说明', '确认方案')
   await save(manager)
   await action(manager, row(manager, name), '签约')
-  await fill(manager, '期限', '2026-12-31')
+  await fill(manager, '收款到期日', '2026-12-31')
   await save(manager)
   const sales = (await read(manager, `sales/?search=${name}`)).results[0]
   const id = sales.project
   await manager.goto(`/erp/projects/${id}`)
   await manager.getByRole('tab', { name: 'BOM', exact: true }).click()
-  await manager.locator('input[type=file]').setInputFiles({ name: 'multi-unit.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,数量,变更说明,单元\nREVIEW${suffix},2,初版,上料\nREVIEW${suffix},3,初版,下料\n`) })
+  await manager.getByRole('button', { name: '导入 BOM', exact: true }).click()
+  await manager.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type=file]').setInputFiles({ name: 'multi-unit.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,数量,变更说明,单元\nREVIEW${suffix},2,初版,上料\nREVIEW${suffix},3,初版,下料\n`) })
   await manager.getByRole('button', { name: '确认导入', exact: true }).click()
   await save(manager)
   expect((await read(manager, `projects/${id}/demand/`)).lines).toHaveLength(2)
@@ -88,14 +92,14 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await manager.getByRole('button', { name: '维护 BOM', exact: true }).click()
   await expect(dialog(manager)).toContainText('本项目现有 2 行')
   await expect(dialog(manager).getByLabel('变更说明', { exact: true })).toHaveCount(1)
-  await dialog(manager).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(manager))
   // 改单条用量走 BOM 明细的「修改此行」，只提交这一行，仍可先预览变更影响。
   await manager.getByRole('tab', { name: 'BOM 明细', exact: true }).click()
   await action(manager, row(manager, '下料'), '修改此行')
   await fill(manager, '变更说明', '预览不保存')
   await dialog(manager).getByRole('button', { name: '预览变更影响', exact: true }).click()
   await expect(dialog(manager).getByRole('region', { name: '变更影响预览', exact: true })).toContainText('本次预览可通过')
-  await dialog(manager).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(manager))
   await manager.getByRole('tab', { name: 'BOM 与缺料', exact: true }).click()
   await manager.getByRole('button', { name: '变更影响与处理', exact: true }).click()
   await expect(dialog(manager)).toContainText('当前最低可改量')
@@ -105,10 +109,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
   const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
   const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
-  const supplierField = purchaseDraft.getByLabel('供应商', { exact: true })
-  const supplierOption = supplierField.locator('option').filter({ hasText: `supplier${suffix}` }).last()
-  await expect(supplierOption).toBeAttached()
-  await supplierField.selectOption((await supplierOption.getAttribute('value'))!)
+  await selectRemoteOption(purchaseDraft.getByLabel('供应商', { exact: true }), { text: `supplier${suffix}` })
   await purchaseDraft.getByLabel('结算方式', { exact: true }).selectOption('manual')
   await purchaseDraft.getByLabel('付款到期日', { exact: true }).fill('2026-12-31')
   await purchaseDraft.getByLabel('交期', { exact: true }).fill('2026-12-31')
@@ -127,7 +128,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   const filename = `采购合同${suffix}.txt`
   await upload.getByLabel('文件', { exact: true }).setInputFiles({ name: filename, mimeType: 'text/plain', buffer: Buffer.from('采购合同测试正文') })
   const uploaded = purchaser.waitForResponse(r => r.url().endsWith('/api/business/documents/') && r.request().method() === 'POST')
-  await upload.getByRole('button', { name: '保存', exact: true }).click()
+  await upload.locator('button[type="submit"]').click()
   expect((await uploaded).status()).toBe(201)
   await expect(upload).not.toBeVisible()
   await expect(attachments).toContainText(filename)
@@ -207,7 +208,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await finance.goto(`/erp/projects/${id}?tab=finance`)
   await finance.getByRole('tab', { name: '项目收付流水', exact: true }).click()
   await action(finance, row(finance, `BANK${suffix}`), '补录凭证')
-  await choose(finance, '凭证（项目附件中上传）', '到账回单.txt')
+  await choose(finance, '凭证', '到账回单.txt')
   await fill(finance, '原因 / 说明', '补到银行回单')
   await save(finance)
   const payment = (await read(finance, `payments/?entry=${entry.id}`)).results[0]
@@ -220,7 +221,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await action(manager, row(manager, name), '签订补充协议')
   await fill(manager, '变更后合同总额（元）', '900')
   await fill(manager, '原因 / 说明', '双方确认减额100元')
-  await choose(manager, '补充协议附件（先在销售或项目附件上传）', '补充协议.txt')
+  await choose(manager, '补充协议附件', '补充协议.txt')
   const credits = dialog(manager).locator('fieldset').filter({ has: manager.locator('legend').filter({ hasText: '原合同款抵减' }) })
   await credits.getByRole('button', { name: '添加行', exact: true }).click()
   await choose(manager, '原合同款', '合同款')

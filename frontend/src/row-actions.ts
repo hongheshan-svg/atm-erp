@@ -3,7 +3,7 @@
 
 // The row's headline button is only ever the next step that advances the document, so its meaning
 // is the same on every row; read-only entries stay in the menu. First match wins.
-export const primaryActions = ['批准采购', '收货', '提交采购', '登记收付款', '完成任务']
+export const primaryActions = ['批准采购', '收货', '提交采购', '登记收付款', '完成任务', '领料', '退料']
 
 // Long menus (purchases has nine entries) are grouped by what an entry does. Classifying by shape
 // rather than by a name registry lets a newly added action land somewhere sensible on its own.

@@ -18,6 +18,7 @@ from apps.core.permissions import BOM_WRITERS, require_project
 from ..models import Item
 from . import bom, bom_import, masterdata
 from .common import project_action
+from .import_feedback import feedback
 from .import_guides import BOM_COLUMNS
 
 MATERIAL_FIELDS = (
@@ -140,7 +141,20 @@ def preview(actor, project, upload):
     )
     if headers != HEADERS:
         upload.seek(0)
-        return bom_import.preview(project, upload)
+        result = bom_import.preview(project, upload)
+        keys = (
+            ['item_code', 'assembly_unit', 'quantity', 'change_note', 'required_date', 'application_date', 'applicant']
+            if headers in (bom_import.HEADERS, bom_import.PREVIOUS_HEADERS)
+            else ['item_code', 'quantity', 'change_note', 'assembly_unit']
+        )
+        columns = list(zip(headers, keys[: len(headers)], strict=True))
+        resolved = {line['row']: line for line in result['lines']}
+        result['lines'] = [
+            {**dict(zip(keys[: len(row)], row, strict=True)), 'row': index, **resolved.get(index, {})}
+            for index, row in enumerate(records, 2)
+            if any(value not in (None, '') for value in row)
+        ]
+        return feedback(result, headers, records, columns, 'BOM')
     records = [
         [
             value.date().isoformat()
@@ -187,7 +201,13 @@ def preview(actor, project, upload):
             salt=SALT,
             compress=True,
         )
-    return result
+    return feedback(
+        result,
+        headers,
+        records,
+        [(label, {'code': 'item_code', 'name': 'item_name'}.get(key, key)) for label, key in BOM_COLUMNS],
+        'BOM',
+    )
 
 
 def confirm(actor, project, data):

@@ -1,14 +1,16 @@
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, type Page } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 async function select(page: Page, label: string, text: string) {
   const field = dialog(page).getByLabel(label, { exact: true })
+  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
   const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
   await field.selectOption(value!)
 }
 async function save(page: Page, suffix: string) {
   const pending = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith(suffix))
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBeLessThan(300)
   await expect(dialog(page)).not.toBeVisible()
