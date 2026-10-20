@@ -49,12 +49,12 @@ function downloadErrors() {
       <label v-if="errorRows.size"><input v-model="onlyErrors" type="checkbox" />只看错误行</label>
       <el-button v-if="errorFile" :disabled="busy" @click="downloadErrors">下载标注错误的 Excel</el-button>
     </div>
-    <p v-if="errorFile" class="muted">红色单元格的批注说明填写问题。修改后保存并重新上传，整批重新校验；保留原表头和全部数据行。</p>
     <div v-if="errors.length" class="import-errors" role="alert">
       <p v-for="(issue, index) in errors" :key="index">{{ message(issue.message ? { row: issue.row, message: issue.message } : issue) }}
         <el-button v-if="rows.some(row => row.row === issue.row)" text @click="locate(issue)">定位第 {{ issue.row }} 行</el-button>
       </p>
     </div>
+    <p v-if="errorFile" class="muted">红色单元格的批注说明填写问题。修改后保存并重新上传，整批重新校验；保留原表头和全部数据行。</p>
     <el-table ref="table" :data="visible" :max-height="360" row-key="row" empty-text="没有符合条件的预览行">
       <el-table-column prop="row" label="文件行号" width="100" fixed="left" />
       <el-table-column v-if="errors.length" label="填写问题" min-width="230"><template #default="{ row }">{{ issues(row.row).map(issue => issue.message).join('；') || '—' }}</template></el-table-column>

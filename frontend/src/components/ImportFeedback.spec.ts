@@ -49,3 +49,18 @@ it('错误文件下载使用服务端生成内容，并显示已校验的人员�
   expect(click).toHaveBeenCalledOnce()
   wrapper.unmount()
 })
+
+it('大批量错误紧随汇总显示，文件修改说明放在错误之后', async () => {
+  const rows = Array.from({ length: 120 }, (_, index) => ({ row: index + 2, data: { name: '滑块' } }))
+  const wrapper = mount(ImportFeedback, { props: {
+    rows, columns: [{ key: 'name', label: '物料名称' }],
+    errors: rows.map(row => ({ row: row.row, message: '产品编码类别不正确' })),
+    errorFile: { name: 'BOM待修改.xlsx', content: btoa('xlsx-test') },
+  }, global: { plugins: [ElementPlus], stubs: { ElTable: { template: '<div />' } } } })
+  await flushPromises()
+  const errors = wrapper.get('.import-errors')
+  expect(errors.text()).toContain('第 121 行：产品编码类别不正确')
+  expect(errors.element.previousElementSibling).toBe(wrapper.get('.feedback-toolbar').element)
+  expect(errors.element.nextElementSibling?.textContent).toContain('红色单元格的批注')
+  wrapper.unmount()
+})

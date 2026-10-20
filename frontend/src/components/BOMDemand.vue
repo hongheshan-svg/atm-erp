@@ -22,6 +22,7 @@ const busy = ref(false)
 const importOpen = ref(false)
 const importError = ref('')
 const importFilename = ref('')
+const importResult = ref<HTMLElement>()
 const projectContext = ref<Row | null>(null)
 const mismatch = ref<ReturnType<typeof templateMismatch>>(null)
 const destination = computed(() => mismatch.value ? importDestination(mismatch.value.resource, props.projectId) : null)
@@ -129,6 +130,15 @@ async function template(format = 'xlsx') {
     await download('/business/projects/bom-template/', format === 'html' ? 'BOM导入填写说明.html' : `BOM导入模板.${format}`, { file_format: format })
   } catch (e) { importError.value = message(e) }
 }
+async function revealImportResult() {
+  await nextTick()
+  if (!preview.value && !importError.value) return
+  const result = importResult.value
+  const body = result?.closest<HTMLElement>('.el-dialog__body')
+  if (!result || !body) return
+  // Scroll only the dialog body; the confirmation footer and surrounding page stay in place.
+  body.scrollTop += result.getBoundingClientRect().top - body.getBoundingClientRect().top
+}
 async function importFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -155,7 +165,10 @@ async function importFile(event: Event) {
   } catch (e) {
     if (generation === importGeneration) { mismatch.value = templateMismatch(e); importError.value = mismatch.value?.message || message(e) }
   } finally {
-    if (generation === importGeneration) busy.value = false
+    if (generation === importGeneration) {
+      busy.value = false
+      await revealImportResult()
+    }
   }
 }
 function confirmImport() {
@@ -249,7 +262,7 @@ function saved() {
     </el-table>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <footer v-if="canPurchase && view === 'purchase'" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
-    <el-dialog v-if="importOpen && !command" :model-value="true" title="导入BOM" class="bom-import-dialog" width="min(1200px, 94vw)" top="4vh" :close-on-click-modal="false" @update:model-value="closeImport">
+    <el-dialog v-if="importOpen && !command" :model-value="true" title="导入BOM" class="bom-import-dialog" width="min(1200px, 94vw)" top="4vh" :close-on-click-modal="false" @update:model-value="closeImport" @opened="revealImportResult">
       <div class="import-preview" :aria-busy="busy">
         <p><strong>目标项目：{{ projectContext?.name ? `${projectContext.name}（${projectContext.code}）` : '当前页面所选项目' }}</strong> · 用于编制或修订本项目用料。预览不会保存业务数据。</p>
         <ol class="bom-import-steps">
@@ -260,13 +273,15 @@ function saved() {
           <li><strong>核对后确认导入</strong> · 任一行失败整批不保存，修正后重新上传。</li>
         </ol>
         <p v-if="importFilename" class="import-filename">文件：{{ importFilename }}</p>
-        <p v-if="busy" role="status">正在读取文件并校验物料，请稍候……</p>
-        <el-alert v-if="importError" :title="importError" type="error" :closable="false" role="alert" />
-        <p v-if="mismatch"><router-link v-if="destination" :to="destination" @click="closeImport">前往{{ mismatch.title }}导入入口</router-link><span v-else>请联系具备相应权限的同事，在{{ mismatch.entry }}操作。</span> 切换后请重新选择文件。</p>
-        <template v-if="preview">
-          <p role="status">{{ preview.can_import ? `校验通过，共 ${preview.lines.length} 条明细。请核对后确认导入。` : '校验未通过，尚未导入任何数据。请按文件行号修改后重新上传。' }}</p>
-          <ImportFeedback :rows="(preview.lines || []).map((row: Row) => ({ row: row.row, data: row }))" :columns="[{ key: 'item_name', label: '物料名称' }, ...importColumns, { key: 'brand', label: '品牌' }, { key: 'specification', label: '规格' }]" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
-        </template>
+        <div ref="importResult" class="bom-import-result">
+          <p v-if="busy" role="status">正在读取文件并校验物料，请稍候……</p>
+          <el-alert v-if="importError" :title="importError" type="error" :closable="false" role="alert" />
+          <p v-if="mismatch"><router-link v-if="destination" :to="destination" @click="closeImport">前往{{ mismatch.title }}导入入口</router-link><span v-else>请联系具备相应权限的同事，在{{ mismatch.entry }}操作。</span> 切换后请重新选择文件。</p>
+          <template v-if="preview">
+            <p role="status">{{ preview.can_import ? `校验通过，共 ${preview.lines.length} 条明细。请核对后确认导入。` : '校验未通过，尚未导入任何数据。请按文件行号修改后重新上传。' }}</p>
+            <ImportFeedback :rows="(preview.lines || []).map((row: Row) => ({ row: row.row, data: row }))" :columns="[{ key: 'item_name', label: '物料名称' }, ...importColumns, { key: 'brand', label: '品牌' }, { key: 'specification', label: '规格' }]" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
+          </template>
+        </div>
       </div>
       <template #footer>
         <el-button @click="closeImport">关闭</el-button>
