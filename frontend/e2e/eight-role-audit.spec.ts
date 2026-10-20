@@ -25,10 +25,10 @@ test.beforeAll(async ({ request }) => {
   const auth = await request.post('/api/auth/login/', { data: { username: 'admin', password: process.env.E2E_ADMIN_PASSWORD } })
   expect(auth.status()).toBe(200)
   const headers = { Authorization: `Bearer ${(await auth.json()).access}` }
-  const me = await request.get('/api/auth/me/', { headers })
-  accounts.admin = await me.json()
   const suffix = Date.now()
-  for (const identity of identities.slice(1)) {
+  // 每个岗位使用独立账号；管理员也不继承前序用例累计的每分钟请求额度。
+  // 保留正式限流和所有错误断言，避免快速巡检因共享测试身份产生顺序依赖。
+  for (const identity of identities) {
     const response = await request.post('/api/auth/users/', { headers, data: {
       username: `audit_${identity.key}_${suffix}`, display_name: `岗位验收${identity.key}`,
       roles: identity.roles, password, management_reports: identity.key === 'general_manager',
@@ -99,7 +99,7 @@ for (const identity of identities) {
   test(`十一岗位逐页巡检：${identity.key}`, async ({ page }, info) => {
     test.setTimeout(240000)
     const visited: Record<string, unknown>[] = []
-    await login(page, accounts[identity.key]!.username, identity.key === 'admin' ? process.env.E2E_ADMIN_PASSWORD! : password)
+    await login(page, accounts[identity.key]!.username, password)
     const nav = page.getByRole('navigation', { name: '主导航', includeHidden: true })
     const hrefs = await nav.getByRole('link', { includeHidden: true }).evaluateAll(nodes => nodes.map(n => n.getAttribute('href')!.split('?')[0]!.replace('/erp/', '')))
     expect(hrefs).toEqual(identity.pages)
