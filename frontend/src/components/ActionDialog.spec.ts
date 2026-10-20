@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ActionDialog from './ActionDialog.vue'
 import { installElementPlus } from '../plugins/elementPlus'
 import { write } from '../api'
+import { user } from '../session'
 
 vi.mock('../api', () => ({ write: vi.fn() }))
 
@@ -25,11 +26,49 @@ function open() {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.resetAllMocks()
+  sessionStorage.clear()
+  user.value = null
   ElMessage.closeAll()
 })
 
 describe('业务表单失败与重试', () => {
+  it('误点关闭可继续填写，暂存后重开恢复，保存成功清除暂存', async () => {
+    user.value = { id: 41, role: 'admin' }
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
+    let wrapper = open()
+    await wrapper.get('input').setValue('25.00')
+    await wrapper.findAll('button').find(b => b.text() === '取消')!.trigger('click')
+    await flushPromises()
+    expect(confirm).toHaveBeenCalled()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.get('input').element).toHaveProperty('value', '25.00')
+    await wrapper.findAll('button').find(b => b.text() === '暂存并关闭')!.trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
+    wrapper = open()
+    await wrapper.findAll('button').find(b => b.text() === '恢复填写')!.trigger('click')
+    expect(wrapper.get('input').element).toHaveProperty('value', '25.00')
+    vi.mocked(write).mockResolvedValue({ id: 3 })
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    wrapper.unmount()
+    wrapper = open()
+    expect(wrapper.text()).not.toContain('恢复填写')
+    wrapper.unmount()
+  })
+  it('缺少前置条件时没有提交入口，处理入口加载失败仍保留原因', async () => {
+    const wrapper = open()
+    await wrapper.setProps({ command: { title: '登记收付款', path: '/business/entries/1/pay/', fields: [], blocked: '需要先确认对账', alternatives: [{ label: '生成对账单', open: async () => { throw new Error('网络中断，请重试') } }] } })
+    expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('需要先确认对账')
+    await wrapper.findAll('button').find(b => b.text() === '生成对账单')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('网络中断，请重试')
+    expect(write).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   it('非法金额保留输入且不发送请求，改正后可以提交', async () => {
     const wrapper = open()
     await wrapper.get('input').setValue('1e3')

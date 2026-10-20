@@ -44,9 +44,9 @@ test('各入口可直接操作，长表单在短视口保留保存和取消', as
   if (info.project.name === 'mobile') await page.getByRole('button', { name: '菜单', exact: true }).click()
   await nav.getByRole('link', { name: '项目', exact: true }).click()
   await page.getByRole('button', { name: '新建项目', exact: true }).click()
-  const dialog = page.getByRole('dialog')
+  const dialog = page.getByRole('dialog', { name: '新建项目', exact: true })
   const cancel = dialog.getByRole('button', { name: '取消', exact: true })
-  const save = dialog.getByRole('button', { name: '保存', exact: true })
+  const save = dialog.locator('button[type="submit"]')
   if (info.project.name === 'mobile') {
     await page.setViewportSize({ width: 390, height: 480 })
     await expect(save).toBeInViewport({ ratio: 1 })
@@ -57,5 +57,11 @@ test('各入口可直接操作，长表单在短视口保留保存和取消', as
   }
   if (info.project.name === 'mobile') await cancel.tap()
   else await cancel.click()
+  if (info.project.name === 'mobile') {
+    const confirmation = page.getByRole('dialog', { name: '内容尚未保存', exact: true })
+    await expect(confirmation).toBeVisible()
+    await expect(dialog.getByLabel('质保月数', { exact: true })).toHaveValue('12')
+    await confirmation.getByRole('button', { name: '放弃修改', exact: true }).tap()
+  }
   await expect(dialog).not.toBeVisible()
 })

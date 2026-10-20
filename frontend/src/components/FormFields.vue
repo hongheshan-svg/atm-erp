@@ -1,12 +1,34 @@
 <script setup lang="ts">
 import type { Field, Row } from '../types'
 import { applicableFields, defaults } from '../forms'
-import { computed, reactive, watchEffect } from 'vue'
+import { computed, nextTick, reactive, ref, useId, watchEffect } from 'vue'
+import InlineDocumentField from './InlineDocumentField.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import InitialPasswordInput from './InitialPasswordInput.vue'
 import { flowFor } from '../flows'
-const props = defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean }>()
+const props = defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean; issues?: Record<string, string>; prefix?: string }>()
+const emit = defineEmits<{ touched: [path: string]; uploading: [value: boolean] }>()
+const uid = useId()
+const root = ref<HTMLElement>()
+const children = new Map<string, { focusPath: (path: string) => Promise<void> }>()
+const fieldPath = (key: string) => props.prefix ? `${props.prefix}.${key}` : key
+const fieldId = (key: string) => `${uid}-${key}`
+const issue = (key: string) => props.issues?.[fieldPath(key)]
+async function focusPath(path: string) {
+  const relative = props.prefix ? path.slice(props.prefix.length + 1) : path
+  const [key, index] = relative.split('.')
+  if (index != null && /^\d+$/.test(index)) {
+    pages[key!] = Math.floor(Number(index) / 20)
+    await nextTick()
+    await children.get(`${key}.${index}`)?.focusPath(path)
+  } else {
+    const target = Array.from(root.value?.querySelectorAll<HTMLElement>('[data-field-path]') || []).find(el => el.dataset.fieldPath === path)
+    target?.scrollIntoView?.({ block: 'center' })
+    target?.querySelector<HTMLElement>('input, select, textarea, button')?.focus()
+  }
+}
+defineExpose({ focusPath })
 const model = defineModel<Row>({ required: true })
 const visibleFields = computed(() => applicableFields(props.fields, model.value))
 const optionsOf = (field: Field) => field.optionsFor ? field.optionsFor(model.value) : field.options
@@ -30,7 +52,7 @@ function readonlyValue(field: Field) {
 }
 </script>
 <template>
-  <div class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
+  <div ref="root" class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
     <template v-for="field in visibleFields" :key="field.key">
       <fieldset v-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
@@ -44,26 +66,27 @@ function readonlyValue(field: Field) {
         </el-table>
         <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields" :class="{ 'line-fields-compact': field.compact }">
           <p v-if="!field.compact" class="line-number">第 {{ i + 1 }} 行</p>
-          <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" :compact="field.compact" />
+          <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" :compact="field.compact" :prefix="`${fieldPath(field.key)}.${i}`" :issues="issues" :ref="(el: any) => { if (el) children.set(`${field.key}.${i}`, el); else children.delete(`${field.key}.${i}`) }" @touched="emit('touched', $event)" @uploading="emit('uploading', $event)" />
           <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
         <div v-if="!readonly && model[field.key]?.length > 20"><button type="button" :disabled="start(field.key) === 0" @click="pages[field.key] = start(field.key) / 20 - 1">上一页明细</button> {{ start(field.key) + 1 }}–{{ Math.min(start(field.key) + 20, model[field.key].length) }} / {{ model[field.key].length }} <button type="button" :disabled="start(field.key) + 20 >= model[field.key].length" @click="pages[field.key] = start(field.key) / 20 + 1">下一页明细</button></div>
         <el-button v-if="!disabled && !field.readonly" @click="model[field.key].push(defaults(field.fields!)); pages[field.key] = Math.floor((model[field.key].length - 1) / 20)">添加行</el-button>
       </fieldset>
-      <fieldset v-else-if="field.type === 'checks' && !field.hidden" class="role-checks" :disabled="disabled || field.readonly">
+      <fieldset v-else-if="field.type === 'checks' && !field.hidden" class="role-checks" :data-field-path="fieldPath(field.key)" @focusout="emit('touched', fieldPath(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly">
         <legend>{{ field.label }}</legend>
         <label v-for="option in field.options" :key="option.value">
           <input v-model="model[field.key]" type="checkbox" :value="option.value" /> {{ option.label }}
         </label>
-        <small v-if="field.hint">{{ field.hint }}</small>
+        <span :id="`${fieldId(field.key)}-help`"><small v-if="field.hint">{{ field.hint }}</small><small v-if="issue(field.key)" class="field-error">{{ issue(field.key) }}</small></span>
       </fieldset>
-      <label v-else-if="!field.hidden" class="field" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
-        <span>{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></span>
-        <textarea v-if="readonly" :value="readonlyValue(field)" :aria-label="field.label" readonly rows="1" class="readonly-text" />
-        <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :describe="field.remoteLabel" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
+      <div v-else-if="!field.hidden" class="field" :data-field-path="fieldPath(field.key)" @focusout="emit('touched', fieldPath(field.key))" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
+        <label :for="fieldId(field.key)">{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></label>
+        <textarea v-if="readonly" :value="readonlyValue(field)" :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label" readonly rows="1" class="readonly-text" />
+        <InlineDocumentField v-else-if="field.upload" v-model="model[field.key]" :field="field" :disabled="disabled || field.readonly" :id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" @busy="emit('uploading', $event)" />
+        <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :describe="field.remoteLabel" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" :input-id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" />
         <InitialPasswordInput v-else-if="field.type === 'password' && field.randomPassword" v-model="model[field.key]" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <select
-          :aria-label="field.label"
+          :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
           v-else-if="field.type === 'select' || field.type === 'multi'"
           v-model="model[field.key]"
           :multiple="field.type === 'multi'"
@@ -76,14 +99,14 @@ function readonlyValue(field: Field) {
           </option>
         </select>
         <input
-          :aria-label="field.label"
+          :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
           v-else-if="field.type === 'boolean'"
           v-model="model[field.key]"
           type="checkbox"
           :disabled="disabled || field.readonly"
         />
         <input
-          :aria-label="field.label"
+          :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
           v-else-if="field.type === 'file'"
           type="file"
           :disabled="disabled || field.readonly"
@@ -91,7 +114,7 @@ function readonlyValue(field: Field) {
           @change="model[field.key] = ($event.target as HTMLInputElement).files?.[0]"
         />
         <textarea
-          :aria-label="field.label"
+          :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
           v-else-if="field.type === 'textarea'"
           v-model="model[field.key]"
           :disabled="disabled || field.readonly"
@@ -100,7 +123,7 @@ function readonlyValue(field: Field) {
           :required="!field.optional"
         />
         <input
-          :aria-label="field.label"
+          :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
           v-else
           v-model="model[field.key]"
           :type="field.type === 'date' ? 'date' : field.type === 'password' ? 'password' : 'text'"
@@ -112,14 +135,17 @@ function readonlyValue(field: Field) {
           :inputmode="field.numeric ? (field.numeric.signed ? 'text' : field.numeric.scale ? 'decimal' : 'numeric') : undefined"
         />
         <datalist v-if="field.suggestions && !readonly" :id="`suggestions-${field.key}`"><option v-for="value in field.suggestions" :key="value" :value="value" /></datalist>
-        <small v-if="field.hint && !readonly">{{ field.hint }}</small>
-      </label>
+        <span :id="`${fieldId(field.key)}-help`" class="field-help"><small v-if="field.hint && !readonly">{{ field.hint }}</small><small v-if="issue(field.key)" class="field-error">{{ issue(field.key) }}</small></span>
+      </div>
     </template>
   </div>
 </template>
 <style scoped>
 .readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: var(--ink); padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: var(--ink); }
-.readonly-fields .field > span { color: var(--mute); font-size: 12px; }
+.readonly-fields .field > label { color: var(--mute); font-size: 12px; }
 .readonly-fields .field { gap: 4px; }
 .readonly-fields .readonly-text { field-sizing: content; resize: none; line-height: 1.6; width: 100%; min-height: 26px; }
+.field-help { display: grid; gap: 4px; }
+.field-error { color: var(--risk); font-size: 13px; }
+.field :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--risk); }
 </style>

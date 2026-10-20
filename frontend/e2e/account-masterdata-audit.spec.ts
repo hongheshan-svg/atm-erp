@@ -1,3 +1,5 @@
+import { cancelEditing } from './fixtures'
+import { searchRemote } from './remote-select-helpers'
 import { test, expect, login, expectHttpError, type Page, type Locator } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
@@ -20,7 +22,7 @@ async function api(page: Page) {
 }
 async function save(page: Page, path: string, method: 'POST' | 'PATCH', status: number) {
   const pending = page.waitForResponse(response => response.request().method() === method && new URL(response.url()).pathname === path)
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(status)
   await expect(dialog(page)).toBeHidden()
@@ -67,7 +69,7 @@ test('往来单位账期随客户和供应商类型切换并正确保存', async
   await edit(page, row(page, `客户账期验收${suffix}`))
   await expect(term).toHaveCount(0)
   await expect(days).toHaveCount(0)
-  await dialog(page).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(page))
 
   await page.getByRole('button', { name: '新增往来单位', exact: true }).click()
   await dialog(page).getByLabel('单位名称', { exact: true }).fill(`供应商账期验收${suffix}`)
@@ -157,7 +159,7 @@ test('物料和往来单位编辑停用后退出新单选项，原采购关联�
   await dialog(page).getByLabel('规格', { exact: true }).fill('已核对的新规格')
   const stopExpected = expectHttpError(page, `/api/business/items/${material.id}/`, 400)
   const rejected = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === `/api/business/items/${material.id}/`)
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   expect((await rejected).status()).toBe(400)
   await expect(dialog(page)).toContainText('不能改写已有的规格')
   stopExpected()
@@ -180,24 +182,24 @@ test('物料和往来单位编辑停用后退出新单选项，原采购关联�
 
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '新建采购', exact: true }).click()
-  for (const [label, resource, name, id] of [
+  for (const [label, resource, name] of [
     ['供应商', 'partners', `停用后单位${suffix}`, partner.id],
     ['物料', 'items', `停用后物料${suffix}`, material.id],
   ] as const) {
     const control = dialog(page).locator('.remote-select').filter({ has: page.getByRole('combobox', { name: label, exact: true }) })
-    await control.getByRole('textbox', { name: '搜索选项', exact: true }).fill(name)
     const pending = page.waitForResponse(response => {
       const url = new URL(response.url())
       return url.pathname === `/api/business/${resource}/` && url.searchParams.get('search') === name
     })
-    await control.getByRole('button', { name: '搜索', exact: true }).click()
+    await searchRemote(control.getByRole('combobox', { name: label, exact: true }), name)
     const response = await pending
     expect(response.status()).toBe(200)
     expect(new URL(response.url()).searchParams.get('is_active')).toBe('true')
     expect((await response.json()).count).toBe(0)
-    await expect(control.getByRole('combobox', { name: label, exact: true }).locator(`option[value="${id}"]`)).toHaveCount(0)
+    await expect(control.getByRole('option')).toHaveCount(0)
+    await expect(control.getByRole('status')).toHaveText('无匹配结果')
   }
-  await dialog(page).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(page))
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
   await expect(dialog(page).getByRole('heading', { name: '查看明细', exact: true })).toBeVisible()
   await expect(dialog(page).getByRole('cell', { name: `停用后物料${suffix}`, exact: true })).toBeVisible()

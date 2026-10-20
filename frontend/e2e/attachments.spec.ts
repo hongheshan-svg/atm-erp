@@ -1,3 +1,4 @@
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login } from './fixtures'
 import { readFile } from 'node:fs/promises'
 test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, info) => {
@@ -11,7 +12,7 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
     const pending = page.waitForResponse(
       (r) => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'),
     )
-    await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click()
+    await page.getByRole('dialog').locator('button[type="submit"]').click()
     const response = await pending
     expect(response.status(), await response.text()).toBeLessThan(300)
     await expect(page.getByRole('dialog')).not.toBeVisible()
@@ -24,10 +25,7 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
   await page.goto('/erp/projects')
   await page.getByRole('button', { name: '新建项目', exact: true }).click()
   await page.getByRole('dialog').getByLabel('项目名称', { exact: true }).fill(project)
-  const select = page.getByRole('dialog').getByLabel('客户', { exact: true })
-  await select.selectOption(
-    (await select.locator('option').filter({ hasText: customer }).getAttribute('value'))!,
-  )
+  await selectRemoteOption(page.getByRole('dialog').getByLabel('客户', { exact: true }), { text: customer })
   await page.getByRole('dialog').getByLabel('负责人', { exact: true }).selectOption('1')
   await page.getByRole('dialog').getByLabel('项目成员', { exact: true }).selectOption('1')
   await save()
@@ -46,7 +44,7 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
   const response = page.waitForResponse(
     (r) => r.url().endsWith('/documents/') && r.request().method() === 'POST',
   )
-  await d.getByRole('button', { name: '保存', exact: true }).click()
+  await d.locator('button[type="submit"]').click()
   const result = await response
   expect(result.status(), await result.text()).toBe(201)
   await expect(d).not.toBeVisible()

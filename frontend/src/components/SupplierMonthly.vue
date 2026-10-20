@@ -25,7 +25,7 @@ async function load() {
 function confirm() {
   const report = data.value!
   if (!report || String(report.supplier) !== String(supplier.value) || report.month !== month.value) return
-  command.value = { title: '确认供应商月度对账', path: '/business/reconciliations/supplier-monthly/',
+  command.value = { title: '确认供应商月度对账', draftScope: `supplier:${report.supplier}:${report.month}`, path: '/business/reconciliations/supplier-monthly/',
     subject: `${suppliers.value.find(s => s.id === report.supplier)?.name || report.supplier} · ${report.month}`,
     fields: [{ key: 'counterparty_balance', label: '供应商确认的期末余额' }, { key: 'reason', label: '核对依据与说明', type: 'textarea' }],
     prepare: values => ({ ...values, supplier: report.supplier, month: report.month, expected_snapshot: report.snapshot_hash }),

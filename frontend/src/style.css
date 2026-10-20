@@ -829,3 +829,21 @@ button:focus-visible {
   .resource-workspace.with-detail { grid-template-columns: minmax(0, 1fr); }
   .detail-pane { position: static; max-height: 80dvh; }
 }
+
+/* 长表单占据工作区，让明细和操作按钮保持可见。 */
+.resource-workspace.wide-workspace { grid-template-columns: minmax(0, 1fr); }
+.resource-workspace.wide-workspace > .resource-list { display: none; }
+.detail-pane.wide-action .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-pane.wide-action .dialog-footer > .el-button--primary { order: initial; flex: initial; }
+.saved-result { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; margin-bottom: 16px; background: var(--brand-wash); border-radius: var(--r-field); }
+.empty-guidance { text-align: center; padding: 32px 16px; color: var(--ink-3); }
+.empty-guidance strong { color: var(--ink); }
+.field { min-width: 0; }
+.field small, .form-hint { color: var(--ink-4); font-size: 13px; }
+@media (max-width: 760px) {
+  .detail-pane.wide-action .fields, .line-fields-compact { grid-template-columns: minmax(0, 1fr); }
+  .detail-pane .fields.readonly-fields { grid-template-columns: minmax(0, 1fr); }
+  .dialog-footer .el-button { min-height: 40px; white-space: normal; height: auto; padding: 10px 12px; }
+  .field input:not([type='checkbox']), .field select { min-height: 42px; }
+  .resource-search select { min-height: 40px; }
+}

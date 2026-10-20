@@ -3,7 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { read } from '../api'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
-import { labels } from '../modules/shared'
+import { resourceFilters } from '../resource-ui'
 import type { Row } from '../types'
 import ListPagination from '../components/ListPagination.vue'
 import TransferTools from '../components/TransferTools.vue'
@@ -63,7 +63,7 @@ watch(pageSize, () => load())
   <section class="panel report-filters">
     <form @submit.prevent="filter">
       <label>项目<input v-model="search" aria-label="搜索项目" placeholder="项目名称或编号" maxlength="150" /></label>
-      <label>项目状态<select v-model="status" aria-label="项目状态"><option value="">全部状态</option><option v-for="key in ['draft', 'quoted', 'active', 'delivering', 'warranty', 'closed', 'cancelled']" :key="key" :value="key">{{ labels[key] }}</option></select></label>
+      <label>项目状态<select v-model="status" aria-label="项目状态"><option value="">全部状态</option><option v-for="(label, key) in resourceFilters.projects!.options" :key="key" :value="key">{{ label }}</option></select></label>
       <label>关注事项<select v-model="risk" aria-label="关注事项"><option value="">全部项目</option><option value="over_budget">超预算</option><option value="overdue">交付逾期</option><option value="unbudgeted">未设置预算</option></select></label>
       <el-button type="primary" native-type="submit" :loading="loading">查询</el-button>
     </form>

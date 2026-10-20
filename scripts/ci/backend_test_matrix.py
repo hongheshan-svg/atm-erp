@@ -20,6 +20,7 @@ TARGETS = {
         'apps.business.tests.test_inventory',
         'apps.business.tests.test_execution',
         'apps.business.tests.test_import_documents',
+        'apps.business.tests.test_import_feedback',
         'apps.business.tests.test_workbench',
         'apps.business.tests.test_reports',
         'apps.business.tests.test_transfers',
@@ -44,7 +45,15 @@ TARGETS = {
 # 改动任一模块都会运行；每个登记目标至少属于一个模块，不再只在全量时才执行。
 # concurrency 同时匹配 core 与 business 的并发用例。
 MODULE_TESTS = {
-    'sales': ('sales', 'commercial_chain', 'payment_terms', 'audit_remediation', 'concurrency', 'transfers'),
+    'sales': (
+        'sales',
+        'commercial_chain',
+        'payment_terms',
+        'audit_remediation',
+        'concurrency',
+        'transfers',
+        'import_feedback',
+    ),
     'projects': (
         'execution',
         'budgets',
@@ -57,10 +66,12 @@ MODULE_TESTS = {
         'system_reliability',
         'audit_fixes',
         'transfers',
+        'import_feedback',
     ),
     'bom': (
         'bom_selection',
         'import_documents',
+        'import_feedback',
         'product_coding',
         'audit_remediation',
         'concurrency',
@@ -80,8 +91,17 @@ MODULE_TESTS = {
         'operational_review',
         'system_reliability',
         'transfers',
+        'import_feedback',
     ),
-    'inventory': ('inventory', 'review_remediation', 'audit_remediation', 'concurrency', 'audit_fixes', 'transfers'),
+    'inventory': (
+        'inventory',
+        'review_remediation',
+        'audit_remediation',
+        'concurrency',
+        'audit_fixes',
+        'transfers',
+        'import_feedback',
+    ),
     'finance': (
         'commercial_chain',
         'reconciliation',
@@ -94,15 +114,18 @@ MODULE_TESTS = {
         'system_reliability',
         'audit_fixes',
         'transfers',
+        'import_feedback',
     ),
     'masterdata': (
         'product_coding',
         'import_documents',
+        'import_feedback',
         'models',
         'audit_remediation',
         'concurrency',
         'hardening',
         'transfers',
+        'import_feedback',
     ),
     'accounts': ('auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
     'reports': (
@@ -113,6 +136,7 @@ MODULE_TESTS = {
         'operational_review',
         'system_reliability',
         'transfers',
+        'import_feedback',
     ),
     'ota': ('ota',),
 }

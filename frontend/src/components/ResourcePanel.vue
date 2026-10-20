@@ -14,6 +14,7 @@ import {
 import { message } from '../utils/request'
 import { money } from '../utils/money'
 import { sessionStore } from '../utils/storage'
+import { savedTarget, wideCommand } from '../form-experience'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
@@ -50,6 +51,20 @@ const appliedSearch = ref(search.value)
 const loading = ref(false)
 const error = ref('')
 const command = ref<Command | null>(null)
+const actionDialog = ref<{ confirmLeave: () => Promise<boolean> }>()
+const wide = computed(() => wideCommand(command.value))
+const savedRecord = ref<{ title: string; resource: string; id: number; project?: number } | null>(null)
+const hasFilter = computed(() => !!(appliedSearch.value || filterValue.value || Object.keys(appliedExtra.value).length))
+const emptyHint = computed(() => ({
+  purchases: '按项目缺料可从 BOM 多选下单；零星物料可新建采购。',
+  projects: '已签约销售请从销售单生成项目，避免重复创建。',
+  entries: '签约、批准采购会自动产生应收应付；费用通过登记费用添加。',
+  stocks: '采购收货后自动增加库存；首次启用可登记期初库存。',
+  documents: '上传图纸、合同或业务凭证，便于项目成员协作。',
+  tasks: '先新增任务，选择执行人和截止日期，任务会出现在执行人的工作台。',
+} as Record<string, string>)[props.resource] || (createLabel(props.resource) && props.allowCreate ? '可通过页面上方的新增或导入入口建立记录。' : '当前账号可查看的业务尚无记录。'))
+async function leaveCurrent() { return !actionBusy.value && (!actionDialog.value?.confirmLeave || await actionDialog.value.confirmLeave()) }
+async function openBom() { if (await leaveCurrent()) { command.value = null; pickingBom.value = true } }
 const pickingBom = ref(false)
 const moduleFocusedFlow = inject<Ref<boolean>>('moduleFocusedFlow', ref(false))
 watch(pickingBom, value => { moduleFocusedFlow.value = value })
@@ -144,12 +159,14 @@ async function load() {
       if (current !== generation) return
       // 先记下已处理的 focus：这条记录不属于当前项目时也不该在每次刷新、翻页时重新取一遍。
       focused = focus
-      if (props.projectId && Number(row.project) !== props.projectId) return
+      const scopedProject = Number(props.projectId ?? props.params?.project ?? props.params?.entry__project)
+      if (scopedProject > 0 && Number(row.project) !== scopedProject) return
       if (props.resource === 'purchases') await action(row, '查看明细')
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
       else if (props.resource === 'bank-records') await action(row, '查看银行明细')
-      else { command.value = { title: '待办详情', path: '', readonly: true, initial: row, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'due_date', label: '期限' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
+      else if (props.resource === 'tasks') { command.value = { title: '待办详情', path: '', readonly: true, initial: row, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'due_date', label: '截止日期' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
+      else await inspect(row)
     }
   } catch (e) {
     if (current === generation) error.value = message(e)
@@ -158,8 +175,9 @@ async function load() {
   }
 }
 watch(
-  [() => props.resource, () => JSON.stringify(props.params || {}), () => props.resource === 'sales' ? route.query.search : undefined],
-  () => {
+  [() => props.resource, () => JSON.stringify(props.params || {}), () => props.projectId, () => props.resource === 'sales' ? route.query.search : undefined],
+  (_now, before) => {
+    if (before?.length) { commandGeneration++; command.value = null; selectedId.value = null; selectedRow.value = null; preparing.value = false }
     page.value = 1
     search.value = initialSearch()
     appliedSearch.value = search.value
@@ -175,7 +193,7 @@ watch([() => route.query.focus, () => route.query.resource], () => {
   if (route.query.resource === props.resource && route.query.focus) void load()
 })
 async function create() {
-  if (actionBusy.value) return
+  if (!(await leaveCurrent())) return
   selectedId.value = null
   selectedRow.value = null
   const current = ++commandGeneration
@@ -188,7 +206,7 @@ async function create() {
   } finally { if (current === commandGeneration) preparing.value = false }
 }
 async function action(row: Row, name: string) {
-  if (actionBusy.value) return
+  if (!(await leaveCurrent())) return
   selectedId.value = row.id
   selectedRow.value = row
   const current = ++commandGeneration
@@ -220,9 +238,26 @@ async function action(row: Row, name: string) {
     if (current === commandGeneration) error.value = message(e)
   } finally { if (current === commandGeneration) preparing.value = false }
 }
-function saved() {
+function saved(result?: Row) {
+  if (result && command.value) {
+    const target = savedTarget(command.value, result, selectedId.value)
+    savedRecord.value = target ? { title: `${command.value.title}成功${result.code ? ` · ${result.code}` : ''}`, ...target, project: Number(selectedRow.value?.project || command.value.initial?.project || props.projectId) || undefined } : null
+  }
   if (props.revision === undefined) void load()
   emit('changed')
+}
+async function viewSaved() {
+  const record = savedRecord.value
+  if (!record || !(await leaveCurrent())) return
+  if (record.resource === 'projects') { await router.push(`/projects/${record.id}`); return }
+  if (record.resource !== props.resource) {
+    const module = ['entries', 'payments', 'reconciliations', 'bank-records'].includes(record.resource) ? 'finance' : ['items', 'partners'].includes(record.resource) ? 'masterdata' : record.resource
+    await router.push({ path: `/${module}`, query: { section: record.resource === 'bank-records' ? 'bank' : record.resource, resource: record.resource, focus: record.id, project: record.project || 'all' } }); return
+  }
+  try { await inspect(await read(`${endpoint(record.resource)}${record.id}/`)) } catch (e) { error.value = message(e) }
+}
+function resetFilters() {
+  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = false; dateFrom.value = ''; dateTo.value = ''; searchRecords()
 }
 function searchRecords() {
   appliedExtra.value = {
@@ -257,8 +292,8 @@ function changeFilter(value: string) {
   page.value = 1
   void load()
 }
-function inspect(row: Row) {
-  if (actionBusy.value) return
+async function inspect(row: Row) {
+  if (!(await leaveCurrent())) return
   const names = actionNames(props.resource, row)
   const view = names.find(name => ['查看明细', '查看收付流水', '查看对账明细', '查看银行明细'].includes(name))
   if (view && props.resource !== 'entries') return action(row, view)
@@ -274,7 +309,7 @@ function inspect(row: Row) {
 </script>
 <template>
   <BOMPurchasePicker v-if="pickingBom && resource === 'purchases'" :project-id="projectId" @close="closeBom" @saved="savedBom" />
-  <div v-else class="resource-workspace" :class="{ 'with-detail': sidePanel && command }">
+  <div v-else class="resource-workspace" :class="{ 'with-detail': sidePanel && command, 'wide-workspace': sidePanel && wide }">
   <section class="panel resource-list" :aria-label="title">
     <header class="panel-heading">
       <h2>
@@ -282,11 +317,11 @@ function inspect(row: Row) {
       </h2>
       <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
         <!-- Leading with the entries that create work; BOM selection is the intended purchase path. -->
-        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="pickingBom = true">从 BOM 多选下单</el-button>
+        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="openBom">从 BOM 多选下单</el-button>
         <el-button v-if="createLabel(resource) && allowCreate !== false" :type="resource === 'purchases' ? undefined : 'primary'" @click="create">{{
           createLabel(resource)
         }}</el-button>
-        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
+        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
       </div></Teleport>
     </header>
@@ -305,9 +340,11 @@ function inspect(row: Row) {
       <el-button native-type="submit" :loading="loading">搜索</el-button>
       <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; dateFrom = ''; dateTo = ''; searchRecords()">重置</el-button>
     </form>
+    <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>下一步：查看结果并继续处理。</span><el-button @click="viewSaved">查看结果并继续</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
-    <el-table
+    <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!createLabel(resource) || !allowCreate">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
+    <el-table v-show="records.length || loading"
       v-loading="loading"
       :data="records"
       :max-height="560"
@@ -365,6 +402,6 @@ function inspect(row: Row) {
     <ListPagination :page="page" :total="count" @change="page = $event; load()" />
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
   </section>
-  <ActionDialog :command="command" :inline="sidePanel" @busy="actionBusy = $event" @close="closeCommand" @saved="saved"><template #context><RecordContext v-if="selectedRow && (['stocks', 'entries'].includes(resource) || (['sales', 'purchases'].includes(resource) && actionNames(resource, selectedRow).includes('附件')))" :resource="resource" :record="selectedRow" @attachments="action(selectedRow!, '附件')" /></template></ActionDialog>
+  <ActionDialog ref="actionDialog" :command="command" @replace="command = $event" :inline="sidePanel" @busy="actionBusy = $event" @close="closeCommand" @saved="saved"><template #context><RecordContext v-if="selectedRow && (['stocks', 'entries'].includes(resource) || (['sales', 'purchases'].includes(resource) && actionNames(resource, selectedRow).includes('附件')))" :resource="resource" :record="selectedRow" @attachments="action(selectedRow!, '附件')" /></template></ActionDialog>
   </div>
 </template>

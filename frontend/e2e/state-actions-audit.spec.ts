@@ -1,3 +1,4 @@
+import { cancelEditing } from './fixtures'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
 
@@ -60,7 +61,7 @@ async function action(page: Page, target: Locator, name: string) {
 async function submit(page: Page, path: string, status = 200) {
   if (status >= 400) expectHttpError(page, `/api/${path}`, status)
   const pending = page.waitForResponse(response => new URL(response.url()).pathname === `/api/${path}` && response.request().method() === 'POST')
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(status)
   if (status < 300) await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -100,7 +101,7 @@ test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本�
   await expect(dialog(warehouse).getByRole('alert')).toContainText('盘点期间库存发生变化')
   expect(await api(page, `business/stocks/${stock.id}/`)).toMatchObject({ quantity: '6.000', value: '120.00' })
   expect((await api(page, `business/moves/?stock=${stock.id}&kind=count`)).count).toBe(1)
-  await dialog(warehouse).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(warehouse))
   await warehouse.reload()
   await action(warehouse, row(warehouse, itemName), '盘点')
   await expect(dialog(warehouse).getByLabel('实盘数量', { exact: true })).toHaveValue('6.000')
@@ -161,7 +162,7 @@ test('仓管采购退货同步库存与应付抵减，超退失败不留重复�
   expect(await api(page, `business/stocks/${receipt.stock}/`)).toMatchObject({ quantity: '2.000', value: '200.00' })
   expect(await api(page, `business/entries/${entry.id}/`)).toMatchObject({ credit_amount: '100.00', balance: '200.00' })
   await warehouse.screenshot({ path: info.outputPath('purchase-return-rejected.png'), animations: 'disabled' })
-  await dialog(warehouse).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(warehouse))
   await warehouse.goto(`/erp/projects/${current.id}?tab=purchases`)
   await action(warehouse, row(warehouse, order.code), '登记采购质保')
   await dialog(warehouse).getByLabel('原收货批次', { exact: true }).selectOption(String(receipt.id))

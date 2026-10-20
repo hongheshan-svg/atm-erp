@@ -14,7 +14,7 @@ import { actionCommand } from '../business'
 import { defaults, payload } from '../forms'
 import { read } from '../api'
 import { user } from '../session'
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, params: { id: '1' } }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
+vi.mock('vue-router', async (importOriginal) => ({ ...await importOriginal<typeof import('vue-router')>(), useRoute: () => ({ query: {}, params: { id: '1' } }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
 vi.mock('../api', () => ({ read: vi.fn(), all: vi.fn().mockResolvedValue([{ id: 1, name: '甲', kind: 'supplier' }, { id: 2, name: '乙', kind: 'supplier' }]), write: vi.fn(), download: vi.fn() }))
 vi.mock('../business', () => ({ columns: {}, endpoint: (r: string) => `/business/${r}/`, display: String, createLabel: () => '', createCommand: vi.fn(), actionNames: () => [], actionCommand: vi.fn() }))
 beforeEach(() => { vi.clearAllMocks(); user.value = { role: 'admin' }; vi.mocked(read).mockResolvedValue({ count: 0, results: [] }) })
@@ -89,6 +89,7 @@ describe('审查问题回归', () => {
     const wrapper = shallowMount(ResourcePanel, { props: { resource: 'purchases', title: '采购' }, global })
     void (wrapper.vm as any).action({ id: 1, code: 'PO-A' }, '收货')
     void (wrapper.vm as any).action({ id: 2, code: 'PO-B' }, '收货')
+    await flushPromises()
     resolvers[1]!({ title: '收货', path: '/B', fields: [] })
     await flushPromises()
     resolvers[0]!({ title: '收货', path: '/A', fields: [] })

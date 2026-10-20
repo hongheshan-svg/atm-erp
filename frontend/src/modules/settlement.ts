@@ -26,10 +26,10 @@ export async function createCommand(resource: string, projectId?: number): Promi
 export async function reconciliationCommand(entry: Row, prepayment = false): Promise<Command> {
   const docs = (await all('/business/documents/', { project: entry.project })).filter(d => d.sale || d.purchase || ['contract', 'receipt'].includes(d.category))
   const kind = prepayment ? 'prepayment' : Number(entry.balance) < 0 ? 'refund' : 'settlement'
-  return { title: prepayment ? '申请预付款核准' : '生成对账单', path: '/business/reconciliations/',
+  return { title: prepayment ? '申请预付款核准' : '生成对账单', path: '/business/reconciliations/', draftScope: `entry:${entry.id}:${kind}`, subject: entry.title || `款项 ${entry.id}`,
     fields: [t('counterparty_balance', '对方确认余额（待退款填负数）'), t('approved_amount', '本次申请额度（元）'),
       { key: 'basis', label: '合同编号及付款条款依据', optional: !prepayment },
-      { key: 'document', label: '对账或合同附件（先在原单或项目上传）', type: 'select', optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason],
+      { key: 'document', label: '对账或合同附件', type: 'select', upload: { context: { project: entry.project }, category: 'receipt' }, optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason],
     initial: { counterparty_balance: String(entry.balance), approved_amount: String(Math.abs(Number(entry.balance))) },
     prepare: data => ({ ...data, entry: entry.id, kind }), notice: { type: 'info', text: prepayment ? '预付款必须填写合同依据，由项目经理或管理员核准。未收货部分不能通过普通对账付款。' : '保存原业务快照供核对。普通采购付款额度受已收货净额约束；差异须回到原业务纠正。生成后仍需财务确认。' } }
 }

@@ -1,3 +1,5 @@
+import { cancelEditing } from './fixtures'
+import { selectRemoteOption, clearRemote } from './remote-select-helpers'
 import { readFile } from 'node:fs/promises'
 import { test, expect, login, expectHttpError, openImport } from './fixtures'
 
@@ -43,12 +45,12 @@ test('人员可按姓名选择并导入，重名明确账号', async ({ page }, 
   await expect(form.getByLabel('执行人', { exact: true })).toHaveValue(String(member.id))
   await form.getByLabel('执行人', { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: info.outputPath('person-name-selection.png'), animations: 'disabled' })
-  await form.getByRole('button', { name: '保存', exact: true }).click()
+  await form.locator('button[type="submit"]').click()
   await expect(form).toBeHidden()
   expect(await savedTasks()).toEqual([expect.objectContaining({ title: '按姓名选择执行人', assignee: member.id })])
 
   await openImport(page)
-  const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  const dialog = page.getByRole('dialog', { name: '导入项目任务', exact: true })
   const confirm = dialog.getByRole('button', { name: '确认导入', exact: true })
   async function preview(title: string, person: string) {
     const response = page.waitForResponse(r => r.url().endsWith('/tasks/import-file/') && r.request().method() === 'POST')
@@ -118,7 +120,7 @@ test('任务与BOM导入错误显示中文字段和文件行号', async ({ page 
 
   await page.goto(`/erp/projects/${project.id}?tab=tasks&section=tasks`)
   await openImport(page)
-  const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  const dialog = page.getByRole('dialog', { name: '导入项目任务', exact: true })
   await expect(dialog.locator('input[type="file"]')).toBeEnabled()
   const tasks = [
     '任务名称,阶段,执行人账号,期限,项目编号,说明',
@@ -138,8 +140,9 @@ test('任务与BOM导入错误显示中文字段和文件行号', async ({ page 
   await page.screenshot({ path: info.outputPath('task-chinese-errors.png'), animations: 'disabled' })
 
   await page.goto('/erp/bom')
-  await page.getByRole('combobox', { name: '项目筛选', exact: true }).selectOption(String(project.id))
-  const upload = page.locator('input[type="file"]')
+  await selectRemoteOption(page.getByRole('combobox', { name: '项目筛选', exact: true }), { id: project.id, text: project.name })
+  await page.getByRole('button', { name: '导入 BOM', exact: true }).click()
+  const upload = page.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type="file"]')
   await expect(upload).toBeEnabled()
   await upload.setInputFiles({ name: 'bom.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,数量,变更说明\n${itemCode},错误,检查数量`) })
   const bomErrors = page.locator('.import-preview [role="alert"]')
@@ -176,9 +179,10 @@ test('BOM选择文件后直接显示预览、错误和确认入口，修正后�
     return response.json()
   }
   await page.goto('/erp/bom')
-  await page.getByRole('combobox', { name: '项目筛选', exact: true }).selectOption(String(project.id))
-  const upload = page.locator('input[type="file"]')
-  const dialog = page.getByRole('dialog', { name: 'BOM 导入预览', exact: true })
+  await selectRemoteOption(page.getByRole('combobox', { name: '项目筛选', exact: true }), { id: project.id, text: project.name })
+  await page.getByRole('button', { name: '导入 BOM', exact: true }).click()
+  const upload = page.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type="file"]')
+  const dialog = page.getByRole('dialog', { name: '导入BOM', exact: true })
   const confirm = dialog.getByRole('button', { name: '确认导入', exact: true })
   const columns = '物料编码,单元,需求数量,变更说明,需求日期,申请日期,申请人,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位'
   const name = `预览测试滑块${suffix}`
@@ -186,6 +190,7 @@ test('BOM选择文件后直接显示预览、错误和确认入口，修正后�
   const badRow = [...goodRow]
   badRow[11] = '无图标准件'
   async function uploadRows(rows: string[][]) {
+    if (!await dialog.isVisible()) await page.getByRole('button', { name: '导入 BOM', exact: true }).click()
     await upload.setInputFiles({
       name: 'bom.csv', mimeType: 'text/csv',
       buffer: Buffer.from([columns, ...rows.map(row => row.join(','))].join('\n')),
@@ -209,6 +214,7 @@ test('BOM选择文件后直接显示预览、错误和确认入口，修正后�
   await expect(dialog).toBeHidden()
 
   const stopExpecting = expectHttpError(page, `/api/business/projects/${project.id}/import-preview/`, 400)
+  await page.getByRole('button', { name: '导入 BOM', exact: true }).click()
   await upload.setInputFiles({ name: 'wrong.csv', mimeType: 'text/csv', buffer: Buffer.from('任务名称,阶段\n设计,T0') })
   await expect(dialog.getByRole('alert')).toContainText('表头')
   await expect(confirm).toBeDisabled()
@@ -226,10 +232,10 @@ test('BOM选择文件后直接显示预览、错误和确认入口，修正后�
   const action = page.getByRole('dialog', { name: '确认导入 BOM 与物料', exact: true })
   await expect(action).toBeVisible()
   await expect(dialog).toBeHidden()
-  await action.getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(action)
   await expect(dialog).toBeVisible()
   await confirm.click()
-  await action.getByRole('button', { name: '保存', exact: true }).click()
+  await action.locator('button[type="submit"]').click()
   await expect(action).toBeHidden()
   await expect(dialog).toBeHidden()
   const saved = (await demand()).lines
@@ -240,10 +246,9 @@ test('BOM选择文件后直接显示预览、错误和确认入口，修正后�
 test('BOM模板提供可转发的逐列填写说明', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   await page.goto('/erp/bom')
-  const select = page.getByRole('combobox', { name: '项目筛选', exact: true })
-  const choice = select.locator('option').nth(1)
-  await expect(choice).toBeAttached()
-  await select.selectOption((await choice.getAttribute('value'))!)
+  await selectRemoteOption(page.getByRole('combobox', { name: '项目筛选', exact: true }))
+  await page.getByRole('button', { name: '导入 BOM', exact: true }).click()
+  await page.getByText('导入模板填写说明', { exact: true }).click()
   await expect(page.getByText('Excel 模板自带“填写说明”页和表头提示', { exact: false })).toBeVisible()
   const downloading = page.waitForEvent('download')
   await page.getByRole('button', { name: '下载填写说明', exact: true }).click()
@@ -267,7 +272,7 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
   const cases = [
     ['items', 'masterdata?section=items', '物料'], ['partners', 'masterdata?section=partners', '往来单位'],
     ['sales', 'sales', '销售'], ['projects', 'projects', '项目'], ['purchases', 'purchases', '采购'],
-    ['stocks', 'inventory?section=stocks', '期初库存'], ['moves', 'inventory?section=moves', '项目领料'],
+    ['stocks', 'settings?section=initialization', '期初库存'], ['moves', 'inventory?section=moves', '项目领料'],
     ['entries', 'finance?section=entries', '项目费用'], ['payments', 'finance?section=payments', '收付款记录'],
     ['tasks', `projects/${projectId}?tab=tasks&section=tasks`, '项目任务'],
     ['time', `projects/${projectId}?tab=tasks&section=time`, '工时'],
@@ -277,10 +282,10 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
   for (const [resource, route, title] of cases) {
     await page.goto(`/erp/${route}`)
     await openImport(page)
-    const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+    const dialog = page.getByRole('dialog', { name: `导入${title}`, exact: true })
     await expect(dialog.getByText('① 先准备：', { exact: true })).toBeVisible()
     await expect(dialog.getByText('② 最少填什么：', { exact: true })).toBeVisible()
-    await dialog.getByLabel('模板格式').selectOption('csv')
+    await dialog.getByText('更多格式', { exact: true }).click()
     await dialog.getByText('模板字段与页面列对应说明', { exact: true }).click()
     const fieldLabels = dialog.locator('.import-field-guide .el-table__body tr td:first-child')
     await expect(fieldLabels.first()).toBeVisible()
@@ -299,7 +304,7 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
     for (const label of labels) expect(guideContent).toContain(label)
     if (resource === 'tasks') await page.screenshot({ path: info.outputPath('task-import-guide.png'), animations: 'disabled' })
     const downloading = page.waitForEvent('download')
-    await dialog.getByRole('button', { name: '下载模板', exact: true }).click()
+    await dialog.getByRole('button', { name: '下载 CSV 模板', exact: true }).click()
     const file = await downloading
     expect(file.suggestedFilename()).toBe(`${title}导入模板.csv`)
     const content = (await readFile((await file.path())!, 'utf8')).replace(/^\uFEFF/, '').trim()
@@ -325,7 +330,7 @@ test('关闭未确认的导入后重新打开，不应继续提交上次文件',
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   await page.goto('/erp/masterdata?section=items')
   await openImport(page)
-  const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  const dialog = page.getByRole('dialog', { name: '导入物料', exact: true })
   const code = `CANCEL${Date.now()}`
   await dialog.locator('input[type=file]').setInputFiles({ name: 'cancel.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因\n${code},取消导入验收,规格,,,21,品牌,标准件,台,`) })
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeEnabled()
@@ -347,13 +352,11 @@ test('项目筛选提示随选中和清空同步变化', async ({ page }) => {
     await page.goto(`/erp/${route}`)
     const select = page.getByRole('combobox', { name: '项目筛选', exact: true })
     const hint = page.locator('.project-filter > small')
-    await select.selectOption('')
+    await clearRemote(select)
     await expect(hint).toHaveText(route === 'bom' ? '请选择项目' : '未选择时显示全部项目')
-    const choice = select.locator('option').nth(1)
-    await expect(choice).toBeAttached()
-    await select.selectOption((await choice.getAttribute('value'))!)
+    await selectRemoteOption(select)
     await expect(hint).toHaveText('仅显示所选项目')
-    await select.selectOption('')
+    await clearRemote(select)
     await expect(hint).toHaveText(route === 'bom' ? '请选择项目' : '未选择时显示全部项目')
   }
 })
@@ -372,7 +375,7 @@ test('导入类型填错逐行提示，夹在错误行之间的有效记录也�
     return columns.map(c => data[c.key] || '').join(',')
   })
   await openImport(page)
-  const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  const dialog = page.getByRole('dialog', { name: '导入往来单位', exact: true })
   const pending = page.waitForResponse(r => r.url().endsWith('/partners/import-file/') && r.request().method() === 'POST')
   await dialog.locator('input[type=file]').setInputFiles({ name: 'invalid-kind.csv', mimeType: 'text/csv', buffer: Buffer.from([columns.map(c => c.label).join(','), ...lines].join('\n')) })
   const preview = await pending

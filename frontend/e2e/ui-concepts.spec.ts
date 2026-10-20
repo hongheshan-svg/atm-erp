@@ -1,3 +1,4 @@
+import { cancelEditing } from './fixtures'
 import { test, expect, login } from './fixtures'
 
 test('概念图全部页面与子模块在真实数据下可查看，侧边详情可关闭', async ({ page }, info) => {
@@ -84,11 +85,11 @@ test('概念图全部页面与子模块在真实数据下可查看，侧边详�
   await page.getByRole('button', { name: '新增物料', exact: true }).click()
   await page.getByRole('dialog').getByLabel('物料名称', { exact: true }).fill('定位治具底板')
   await page.screenshot({ path: info.outputPath('material-form.png'), animations: 'disabled' })
-  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(page.getByRole('dialog'))
   await page.goto('/erp/settings?section=users')
   await page.getByRole('button', { name: '新增用户', exact: true }).click()
   await page.screenshot({ path: info.outputPath('user-form.png'), animations: 'disabled' })
-  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(page.getByRole('dialog'))
   await page.goto('/erp/settings?section=audit')
   await page.getByRole('region', { name: '操作审计', exact: true }).locator('.record-link').first().click()
   await expect(page.getByRole('dialog', { name: '操作审计详情', exact: true })).toBeVisible()

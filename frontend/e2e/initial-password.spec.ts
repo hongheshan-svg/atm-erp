@@ -21,7 +21,7 @@ test('管理员随机或手动设置初始密码，用户登录后自行改密�
     if (mode === 'manual') { password = '1'; await passwordInput.fill(password) }
     await page.screenshot({ path: info.outputPath(`initial-${mode}.png`), fullPage: true })
     const saved = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/users/' && r.request().method() === 'POST')
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     expect((await saved).status()).toBe(201)
     await expect(dialog).toBeHidden()
     accounts.push({ username, password })
@@ -35,7 +35,7 @@ test('管理员随机或手动设置初始密码，用户登录后自行改密�
     await dialog.getByLabel('原密码', { exact: true }).fill(account.password)
     await dialog.getByLabel('新密码', { exact: true }).fill('123456')
     const stopExpecting = expectHttpError(page, '/api/auth/password/', 400)
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     await expect(dialog.getByRole('alert')).toContainText('密码至少需要 12 个字符。')
     await expect(dialog.getByRole('alert')).toContainText('这个密码太常见了，请换一个密码。')
     await expect(dialog.getByRole('alert')).toContainText('密码不能只包含数字。')
@@ -45,7 +45,7 @@ test('管理员随机或手动设置初始密码，用户登录后自行改密�
     const newPassword = 'Personal-K9!River-Change-2026'
     await dialog.getByLabel('新密码', { exact: true }).fill(newPassword)
     const changed = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/password/' && r.request().method() === 'POST')
-    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    await dialog.locator('button[type="submit"]').click()
     expect((await changed).status()).toBe(200)
     await expect(page).toHaveURL(/\/login$/)
     await login(page, account.username, newPassword)

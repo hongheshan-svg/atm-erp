@@ -91,8 +91,9 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(command('backend', ['apps.core.tests.test_ota'])[1][2], 'test')
 
     def test_full_chain_requires_explicit_full_even_if_changed(self):
-        with self.assertRaises(ValueError):
-            plan(['frontend/e2e/full-chain.spec.ts'])
+        scoped = plan(['frontend/e2e/full-chain.spec.ts'])
+        self.assertNotIn('e2e/full-chain.spec.ts', scoped['browser_specs'])
+        self.assertTrue(any('仅在显式 suite=full' in reason for reason in scoped['reasons']))
         self.assertIn('e2e/full-chain.spec.ts', plan([], full=True)['browser_specs'])
 
     def test_version_only_change_is_not_confused_with_dependency_update(self):

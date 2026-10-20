@@ -29,6 +29,7 @@ from apps.core.permissions import (
 from ..models import Item, Partner, Project
 from . import execution, finance, inventory, masterdata, projects, sales, supply
 from .bom_import import message, read_file
+from .import_feedback import feedback
 from .import_guides import RESOURCES, guide, template_document
 
 # Label -> service field. Human-readable references resolve at preview and confirmation.
@@ -359,31 +360,27 @@ def execute_row(actor, resource, raw, key, people=None):
     return service(actor, key, data.pop(target, None), data)
 
 
-def parse(actor, resource, upload):
+def accepted_schemas(resource):
+    old = LEGACY_SCHEMAS[resource][1]
+    sizes = {'payments': [4, 8], 'items': [4, 6], 'purchases': [8, 9, 10], 'partners': [5]}
+    return [
+        SCHEMAS[resource][1],
+        PREVIOUS_SCHEMAS[resource],
+        old,
+        *[old[:size] for size in sizes.get(resource, [])],
+        *([PREVIOUS_ITEM_COLUMNS] if resource == 'items' else []),
+    ]
+
+
+def parse(actor, resource, upload, *, with_source=False):
     columns = schema(actor, resource)
     records = []
+    variants = accepted_schemas(resource)
     headers = [label for label, _ in columns]
-    old_columns = LEGACY_SCHEMAS[resource][1]
-    old_headers = [label for label, _ in old_columns]
-    legacy = [old_headers] + (
-        [old_headers[:4], old_headers[:8]]
-        if resource == 'payments'
-        else [old_headers[:4], old_headers[:6]]
-        if resource == 'items'
-        else [old_headers[:8], old_headers[:9], old_headers[:10]]
-        if resource == 'purchases'
-        else [old_headers[:5]]
-        if resource == 'partners'
-        else []
+    actual_headers, rows = read_file(
+        upload, headers, [[label for label, _ in variant] for variant in variants], return_headers=True
     )
-    if resource == 'items':
-        legacy.append([label for label, _ in PREVIOUS_ITEM_COLUMNS])
-    previous_headers = [label for label, _ in PREVIOUS_SCHEMAS[resource]]
-    legacy.append(previous_headers)
-    actual_headers, rows = read_file(upload, headers, legacy, return_headers=True)
-    source_columns = columns if actual_headers in (headers, previous_headers) else old_columns[: len(actual_headers)]
-    if resource == 'items' and actual_headers == [label for label, _ in PREVIOUS_ITEM_COLUMNS]:
-        source_columns = PREVIOUS_ITEM_COLUMNS
+    source_columns = next(variant for variant in variants if [label for label, _ in variant] == actual_headers)
     for index, row in enumerate(rows, 2):
         if not any(value not in (None, '') for value in row):
             continue
@@ -400,7 +397,7 @@ def parse(actor, resource, upload):
         records.append({'row': index, 'data': {key: raw.get(key, '') for _, key in columns}})
     if not records:
         raise ValidationError('文件没有可导入明细。请在“数据”页第2行起填写真实业务数据；“填写说明”页和示例不参与导入。')
-    return records
+    return (records, actual_headers, rows, source_columns) if with_source else records
 
 
 def executable_records(resource, records):
@@ -462,9 +459,36 @@ def run(actor, resource, records, *, preview=False):
 
 
 def preview(actor, resource, upload):
-    display_records = parse(actor, resource, upload)
+    display_records, headers, source_rows, source_columns = parse(actor, resource, upload, with_source=True)
     records = executable_records(resource, display_records)
     _, errors = run(actor, resource, records, preview=True)
+    if resource == 'purchases':
+        groups = {record['row']: record['data']['group'] for record in display_records}
+        errors = [
+            {**error, 'row': record['row']}
+            for error in errors
+            for record in display_records
+            if groups[record['row']] == groups[error['row']]
+        ]
+    invalid_rows = {error['row'] for error in errors}
+    people_by_row = {record['row']: record.get('people', {}) for record in records if record['row'] not in invalid_rows}
+    person_ids = {
+        pk
+        for people in people_by_row.values()
+        for value in people.values()
+        for pk in (value if isinstance(value, list) else [value])
+    }
+    names = {
+        person.pk: f'{person.display_name or person.username}（{person.username}）'
+        for person in User.objects.filter(pk__in=person_ids)
+    }
+    for record in display_records:
+        if record['row'] in invalid_rows:
+            continue
+        record['matches'] = {
+            field: '；'.join(names[pk] for pk in (value if isinstance(value, list) else [value]) if pk in names)
+            for field, value in people_by_row.get(record['row'], {}).items()
+        }
     token = (
         signing.dumps(
             {'actor': actor.pk, 'resource': resource, 'records': records, 'nonce': str(uuid4())},
@@ -474,16 +498,22 @@ def preview(actor, resource, upload):
         if not errors
         else None
     )
-    return {
-        'count': len(records),
-        'rows': display_records,
-        'row_count': len(display_records),
-        'columns': layout(actor, resource)['columns'],
-        'errors': errors,
-        'can_import': not errors,
-        'token': token,
-        'note': NOTES[resource],
-    }
+    return feedback(
+        {
+            'count': len(records),
+            'rows': display_records,
+            'row_count': len(display_records),
+            'columns': layout(actor, resource)['columns'],
+            'errors': errors,
+            'can_import': not errors,
+            'token': token,
+            'note': NOTES[resource],
+        },
+        headers,
+        source_rows,
+        source_columns,
+        RESOURCES[resource][0],
+    )
 
 
 def confirm(actor, resource, token):

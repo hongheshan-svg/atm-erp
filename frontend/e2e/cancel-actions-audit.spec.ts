@@ -30,7 +30,7 @@ async function projectAction(page: Page, name: string) {
 async function save(page: Page, suffix: string, reason: string) {
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill(reason)
   const pending = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith(suffix))
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(200)
   await expect(dialog(page)).toBeHidden()

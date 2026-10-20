@@ -28,32 +28,41 @@ export function payload(fields: Field[], data: Row): Row {
       ]),
   )
 }
-export function validateFields(fields: Field[], data: Row, prefix = ''): void {
+export type FieldIssue = { path: string; label: string; message: string }
+export function fieldIssues(fields: Field[], data: Row, prefix = '', path = ''): FieldIssue[] {
+  const issues: FieldIssue[] = []
   for (const field of applicableFields(fields, data)) {
     if (field.hidden || field.displayOnly || (field.readonly && field.type !== 'rows')) continue
     const value = data[field.key]
     const label = `${prefix}${field.label}`
+    const key = path ? `${path}.${field.key}` : field.key
+    const add = (message: string) => issues.push({ path: key, label, message })
     if (field.type === 'rows') {
-      if (!Array.isArray(value)) throw new Error(`${label}明细格式无效。`)
-      value.forEach((row, i) => validateFields(field.fields || [], row, `${label}第 ${i + 1} 行 · `))
+      if (!Array.isArray(value)) add(`${label}明细格式无效。`)
+      else value.forEach((row, i) => issues.push(...fieldIssues(field.fields || [], row, `${label}第 ${i + 1} 行 · `, `${key}.${i}`)))
       continue
     }
-    if (value === '' || value == null || (typeof value === 'string' && !value.trim())) {
-      if (!field.optional) throw new Error(`请填写${label}。`)
+    if (value === '' || value == null || (typeof value === 'string' && !value.trim()) || (Array.isArray(value) && !value.length)) {
+      if (!field.optional) add(`请填写${label}。`)
       continue
     }
+    if (field.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) { add(`${label}请按年-月-日填写，例如2026-10-21。`); continue }
     if (!field.numeric) continue
     const { scale, signed, min, max } = field.numeric
     const text = String(value).trim()
     const pattern = new RegExp(`^${signed ? '-?' : ''}\\d+${scale ? `(\\.\\d{1,${scale}})?` : ''}$`)
-    if (!pattern.test(text)) throw new Error(`${label}请填写${signed ? '' : '非负'}${scale ? `数字，最多 ${scale} 位小数` : '整数'}，不要带单位、千分位或科学计数法。`)
-    // Bounds are small integers; use scaled BigInt so validation never rounds money.
+    if (!pattern.test(text)) { add(`${label}请填写${signed ? '' : '非负'}${scale ? `数字，最多 ${scale} 位小数` : '整数'}，不要带单位、千分位或科学计数法。`); continue }
     const [whole, fraction = ''] = text.replace(/^-/, '').split('.')
     const factor = 10n ** BigInt(scale)
     const number = (BigInt(whole!) * factor + BigInt(fraction.padEnd(scale, '0') || '0')) * (text.startsWith('-') ? -1n : 1n)
-    if (min != null && number < BigInt(min) * factor) throw new Error(`${label}不能小于 ${min}。`)
-    if (max != null && number > BigInt(max) * factor) throw new Error(`${label}不能大于 ${max}。`)
+    if (min != null && number < BigInt(min) * factor) add(`${label}不能小于 ${min}。`)
+    if (max != null && number > BigInt(max) * factor) add(`${label}不能大于 ${max}。`)
   }
+  return issues
+}
+export function validateFields(fields: Field[], data: Row, prefix = ''): void {
+  const first = fieldIssues(fields, data, prefix)[0]
+  if (first) throw new Error(first.message)
 }
 export const today = () => {
   const d = new Date()

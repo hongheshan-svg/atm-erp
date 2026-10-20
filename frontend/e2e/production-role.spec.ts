@@ -1,3 +1,5 @@
+import { cancelEditing } from './fixtures'
+import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
@@ -24,7 +26,7 @@ async function api(page: Page, path: string, data?: Record<string, unknown>, sta
 async function save(page: Page, path: string, status = 200) {
   if (status >= 400) expectHttpError(page, '/api/' + path, status)
   const pending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/' + path && response.request().method() === 'POST')
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(status)
   if (status < 300) await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -80,7 +82,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await manager.goto('/erp/projects')
   await manager.getByRole('button', { name: '新建项目', exact: true }).click()
   await dialog(manager).getByLabel('项目名称', { exact: true }).fill(`生产交付验收${suffix}`)
-  await dialog(manager).getByLabel('客户', { exact: true }).selectOption(String(customer.id))
+  await selectRemoteOption(dialog(manager).getByLabel('客户', { exact: true }), { id: customer.id, text: customer.name })
   await dialog(manager).getByLabel('负责人', { exact: true }).selectOption(String(owner.id))
   await dialog(manager).getByLabel('项目成员', { exact: true }).selectOption([producer.id, first.id, second.id].map(String))
   await dialog(manager).getByLabel('质保月数', { exact: true }).fill('12')
@@ -125,11 +127,13 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   async function createTask(kind: string, title: string) {
     await page.getByRole('button', { name: '新建任务', exact: true }).click()
     await expect(dialog(page).getByLabel('阶段', { exact: true }).locator('option[value="design"]')).toHaveCount(0)
-    await expect(dialog(page).getByLabel('项目', { exact: true }).locator(`option[value="${outside.id}"]`)).toHaveCount(0)
+    const projectField = dialog(page).getByLabel('项目', { exact: true })
+    await expect(projectField).toBeDisabled()
+    await expect(projectField).toHaveValue(new RegExp(`生产交付验收${suffix}`))
     await dialog(page).getByLabel('阶段', { exact: true }).selectOption(kind)
     await dialog(page).getByLabel('任务名称', { exact: true }).fill(title)
     await dialog(page).getByLabel('执行人', { exact: true }).selectOption(String(first.id))
-    await dialog(page).getByLabel('期限', { exact: true }).fill(date())
+    await dialog(page).getByLabel('截止日期', { exact: true }).fill(date())
     return save(page, 'business/tasks/', 201)
   }
   const assemblyTitle = `装配派工${suffix}`, testTitle = `调试派工${suffix}`
@@ -140,7 +144,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await save(page, `business/tasks/${commissioning.id}/complete/`, 409)
   await expect(dialog(page).getByRole('alert')).toContainText('装配')
   expect((await api(admin, `business/tasks/${commissioning.id}/`)).status).toBe('open')
-  await dialog(page).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(page))
   await action(page, row(page, assemblyTitle), '取消任务')
   await reason(page, '排程暂缓后恢复同一任务')
   await save(page, `business/tasks/${assembly.id}/cancel/`)

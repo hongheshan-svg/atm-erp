@@ -2,7 +2,8 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { all } from '../api'
 import { user } from '../session'
 import { actionCommand as paymentCommand } from './finance'
-import { actionNames, createLabel } from './settlement'
+import { actionNames, createLabel, reconciliationCommand } from './settlement'
+import { draftKey, loadDraft, saveDraft } from '../form-experience'
 import { purchaseFields } from './purchases'
 import { defaults, payload } from '../forms'
 
@@ -44,8 +45,11 @@ it('采购付款和退款必选有效对账，客户收款可不选', async () =
   const receipt = await paymentCommand('entries', { id: 6, project: 1, balance: '20' }, '登记收付款')
   expect(receipt.fields.find(f => f.key === 'reconciliation')?.optional).toBe(true)
   const refund = await paymentCommand('entries', { id: 6, project: 1, balance: '-20' }, '退款')
-  expect(refund.fields.find(f => f.key === 'reconciliation')?.optional).toBe(false)
-  expect(refund.fields.find(f => f.key === 'reconciliation')?.options).toEqual([])
+  expect(refund.fields).toEqual([])
+  expect(refund.blocked).toContain('尚无可用的已确认退款对账单')
+  expect(refund.alternatives?.map(a => a.label)).toEqual(['生成对账单'])
+  const next = await refund.alternatives![0]!.open()
+  expect(next.prepare?.({}).kind).toBe('refund')
 })
 
 it('已核对或支出银行记录不提供认领到账操作', () => {
@@ -61,4 +65,26 @@ it('缺失户名必须核实后才能认领、匹配或关联退回', () => {
   expect(names).toContain('核实对方户名')
   for (const action of ['认领到账', '匹配已有收付款', '关联未认领款退回']) expect(names).not.toContain(action)
   expect(actionNames('bank-records', { ...row, needs_review: false })).toContain('认领到账')
+})
+
+it('采购付款缺少核准时先给可执行的处理入口，客户到账保持可直接登记', async () => {
+  const blocked = await paymentCommand('entries', { id: 5, project: 3, purchase: 2, balance: '80' }, '登记收付款')
+  expect(blocked.blocked).toContain('未收货预付款')
+  expect(blocked.fields).toEqual([])
+  expect(blocked.links?.[0]?.path).toContain('/projects/3?tab=finance')
+  const next = await blocked.alternatives![1]!.open()
+  expect(next.prepare?.({}).entry).toBe(5)
+  expect(next.prepare?.({}).kind).toBe('prepayment')
+  expect(next.fields.find(f => f.key === 'document')?.upload).toEqual({ context: { project: 3 }, category: 'receipt' })
+  const receipt = await paymentCommand('entries', { id: 6, project: 3, balance: '80' }, '登记收付款')
+  expect(receipt.blocked).toBeUndefined()
+  expect(receipt.fields.find(f => f.key === 'document')?.upload?.context).toEqual({ project: 3 })
+})
+
+it('余额和名称相同的两笔款项，对账草稿仍按款项身份隔离', async () => {
+  const first = await reconciliationCommand({ id: 7, project: 3, title: '采购款', balance: '80' })
+  const second = await reconciliationCommand({ id: 9, project: 3, title: '采购款', balance: '80' })
+  saveDraft(draftKey(first, 1), first, { reason: '仅适用第一笔款项' })
+  expect(loadDraft(draftKey(second, 1), second)).toBeNull()
+  expect(loadDraft(draftKey(first, 1), first)?.reason).toBe('仅适用第一笔款项')
 })

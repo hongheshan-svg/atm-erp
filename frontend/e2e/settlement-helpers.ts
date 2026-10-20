@@ -8,7 +8,7 @@ export async function confirmSettlement(finance: Page, approver: Page, entry: Lo
   if (prepayment) await dialog.getByLabel('合同编号及付款条款依据', { exact: true }).fill('HT-E2E 合同约定付款额度，经理核准后执行')
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('核对双方原始业务记录')
   const created = finance.waitForResponse(r => r.url().endsWith('/reconciliations/') && r.request().method() === 'POST')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   const response = await created
   expect(response.status(), await response.text()).toBe(201)
   const statement = await response.json()
@@ -19,7 +19,7 @@ export async function confirmSettlement(finance: Page, approver: Page, entry: Lo
   await dialog.getByRole('button', { name: '确认对账', exact: true }).click()
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('确认合同及收退货与资金记录')
   const confirmed = approver.waitForResponse(r => r.url().endsWith(`/reconciliations/${statement.id}/confirm/`) && r.request().method() === 'POST')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   const confirmedResponse = await confirmed
   expect(confirmedResponse.status(), await confirmedResponse.text()).toBe(200)
   await expect(dialog).not.toBeVisible()

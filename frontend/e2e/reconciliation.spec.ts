@@ -1,9 +1,11 @@
+import { cancelEditing } from './fixtures'
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, expectHttpError, login, type Page, type Locator, openRowAction } from './fixtures'
 
 const dialog = (p: Page) => p.getByRole('dialog')
 async function save(p: Page, path: string) {
   const pending = p.waitForResponse(r => r.url().endsWith(path) && r.request().method() === 'POST')
-  await dialog(p).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(p).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBeLessThan(300)
   const result = await response.json()
@@ -12,6 +14,7 @@ async function save(p: Page, path: string) {
 }
 async function choose(p: Page, label: string, text: string) {
   const field = dialog(p).getByLabel(label, { exact: true })
+  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
   const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
   await field.selectOption(value!)
 }
@@ -47,7 +50,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('客户确认')
   await save(page, `/sales/${sale.id}/quote/`)
   await action(page, saleRow, '签约')
-  await dialog(page).getByLabel('期限', { exact: true }).fill('2026-12-31')
+  await dialog(page).getByLabel('收款到期日', { exact: true }).fill('2026-12-31')
   const signed = await save(page, `/sales/${sale.id}/sign/`)
   const id = signed.project
   const entry = (await read(page, `entries/?project=${id}`)).results[0]
@@ -64,10 +67,10 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('尝试确认未解决差异')
   expectHttpError(page, `/api/business/reconciliations/${statement.id}/confirm/`, 409)
   const rejected = page.waitForResponse(r => r.url().endsWith(`/reconciliations/${statement.id}/confirm/`))
-  await dialog(page).getByRole('button', { name: '保存', exact: true }).click()
+  await dialog(page).locator('button[type="submit"]').click()
   expect((await rejected).status()).toBe(409)
   await expect(dialog(page).getByRole('alert').filter({ hasText: '对账差异未解决' })).toBeVisible()
-  await dialog(page).getByRole('button', { name: '取消', exact: true }).click()
+  await cancelEditing(dialog(page))
   await page.goto(`/erp/finance?section=reconciliations&resource=reconciliations&focus=${statement.id}`)
   await dialog(page).getByRole('button', { name: '作废对账', exact: true }).click()
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('原错误账单作废')

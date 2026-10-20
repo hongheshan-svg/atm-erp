@@ -58,7 +58,7 @@ BROWSERS = {
         'specialist-roles',
         'import-surface-audit',
     ),
-    'bom': ('bom-selection', 'bom-purchase-layout', 'specialist-roles'),
+    'bom': ('bom-selection', 'bom-purchase-layout', 'specialist-roles', 'import-feedback'),
     'purchases': (
         'payment-terms',
         'review-remediation',
@@ -68,7 +68,7 @@ BROWSERS = {
         'import-surface-audit',
     ),
     'inventory': ('cancel-actions-audit', 'import-surface-audit'),
-    'finance': ('reconciliation', 'bank-review-audit', 'import-surface-audit'),
+    'finance': ('reconciliation', 'bank-review-audit', 'import-surface-audit', 'usability-finance'),
     'masterdata': ('product-coding', 'account-masterdata-audit', 'transfers', 'import-surface-audit'),
     'accounts': (
         'initial-password',
@@ -85,11 +85,20 @@ BROWSERS = {
     'reports': ('reports', 'hardening-ui', 'transfers'),
     'ota': ('system-upgrade', 'navigation-dialog'),
 }
-# 完整业务链只在显式 full（含发版本）时运行，不属于任何模块。
+# 完整业务链只在显式 full 时运行，普通发版不包含，不属于任何模块。
 FULL_ONLY_BROWSERS = ('full-chain',)
 BUSINESS = ('sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'accounts', 'reports')
 # 公共界面组件改动时额外运行的页面级用例：导航、页签、分页、各页面概览和各岗位逐页巡检。
-SHARED_UI_BROWSERS = ('navigation-dialog', 'module-tabs', 'pagination-layout', 'ui-concepts', 'eight-role-audit')
+SHARED_UI_BROWSERS = (
+    'navigation-dialog',
+    'module-tabs',
+    'pagination-layout',
+    'ui-concepts',
+    'eight-role-audit',
+    'usability-forms',
+    'role-pages-usability',
+    'remote-select',
+)
 # 经过审阅的共享路径映射：这些文件被多个模块直接调用，改动时运行所列模块的全部关联用例。
 # 按前缀匹配、先匹配先用；只在文件名未命中 MODULE_FILES 时使用。新增的未登记路径仍然失败，不静默漏测。
 SHARED_PATHS = (
@@ -98,6 +107,7 @@ SHARED_PATHS = (
             'backend/apps/business/services/documents.py',
             'backend/apps/business/attachments.py',
             'frontend/src/components/AttachmentDialog.vue',
+            'frontend/src/components/InlineDocumentField.vue',
             'frontend/src/modules/documents.ts',
         ),
         ('sales', 'purchases', 'projects', 'finance'),
@@ -106,11 +116,14 @@ SHARED_PATHS = (
         (
             'backend/apps/business/services/transfers.py',
             'backend/apps/business/services/import_guides.py',
+            'backend/apps/business/services/import_feedback.py',
+            'frontend/src/components/ImportFeedback.vue',
             'frontend/src/components/TransferTools.vue',
         ),
         ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports', 'bom'),
     ),
     (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
+    (('frontend/src/components/ProjectAttention.vue',), ('projects', 'bom', 'purchases')),
     (('frontend/src/industry-forms.ts',), ('sales', 'projects')),
     (
         ('frontend/src/utils/password.ts', 'backend/apps/core/views.py', 'backend/apps/core/setup.py'),
@@ -154,6 +167,7 @@ SHARED_PATHS = (
             'frontend/playwright.config.ts',
             'frontend/e2e/fixtures.ts',
             'frontend/e2e/role-helpers.ts',
+            'frontend/e2e/remote-select-helpers.ts',
             'frontend/e2e/settlement-helpers.ts',
             'frontend/src/App.vue',
             'frontend/src/main.ts',
@@ -163,6 +177,7 @@ SHARED_PATHS = (
             'frontend/src/catalog.ts',
             'frontend/src/flows.ts',
             'frontend/src/forms.ts',
+            'frontend/src/form-experience.ts',
             'frontend/src/navigation.ts',
             'frontend/src/pagination.ts',
             'frontend/src/resource-ui.ts',
@@ -180,6 +195,8 @@ SHARED_PATHS = (
             'frontend/src/components/ProcessSteps.vue',
             'frontend/src/components/RecordContext.vue',
             'frontend/src/components/RemoteSelect.vue',
+            'frontend/src/components/QuickReferenceCreate.vue',
+            'frontend/src/components/RoleTaskGuide.vue',
             'frontend/src/components/ResourcePanel.vue',
             'frontend/src/components/StatusBadge.vue',
             'frontend/src/components/TabContent.vue',
@@ -281,6 +298,9 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
             if path.endswith(('.ts', '.vue')) and (ROOT / companion).is_file():
                 frontend.add(str(companion).removeprefix('frontend/'))
             if path.endswith('.spec.ts') and (ROOT / path).is_file():
+                if not full and path in {f'frontend/e2e/{name}.spec.ts' for name in FULL_ONLY_BROWSERS}:
+                    reasons.append('完整业务链用例已适配，但仅在显式 suite=full 时执行：' + path)
+                    continue
                 (browser if '/e2e/' in path else frontend).add(path.removeprefix('frontend/'))
                 continue
             if path.startswith('frontend/src/assets/'):

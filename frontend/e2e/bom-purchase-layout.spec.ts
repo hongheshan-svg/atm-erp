@@ -1,3 +1,4 @@
+import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, type Page } from './fixtures'
 
 async function api(page: Page, path: string, data?: object, method: 'post' | 'patch' = 'post') {
@@ -54,7 +55,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   const draft = workspace.getByRole('region', { name: '采购草稿', exact: true })
   const selection = workspace.getByRole('status', { name: 'BOM 选择状态', exact: true })
   const materialPane = workspace.locator('.purchase-materials')
-  await workspace.getByLabel('采购项目', { exact: true }).selectOption(String(project.id))
+  await selectRemoteOption(workspace.getByLabel('采购项目', { exact: true }), { id: project.id, text: project.name })
   await expect(selection).toContainText('已选 0 项 · 筛选结果 6 项')
   await expect(workspace.getByRole('checkbox', { name: `选择 ${items[2]!.code}`, exact: true })).toBeDisabled()
 
@@ -73,7 +74,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   }
   await expect(selection).toContainText('已选 3 项 · 筛选结果 6 项')
   await expect(materialPane.locator('.el-table__body tbody tr')).toHaveCount(6)
-  await draft.getByLabel('供应商', { exact: true }).selectOption(String(partner.id))
+  await selectRemoteOption(draft.getByLabel('供应商', { exact: true }), { id: partner.id, text: partner.name })
   await draft.getByLabel('交期', { exact: true }).fill('2026-09-18')
   await expect(draft).toContainText('每批合格收货当月月底 + 30天')
   const quantities = draft.getByLabel('采购数量', { exact: true })
@@ -148,6 +149,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   }
   await page.goto(`/erp/projects/${project.id}?tab=bom`)
   const projectBom = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
+  await projectBom.getByRole('radio', { name: '采购缺料', exact: true }).check()
   await projectBom.getByRole('checkbox', { name: `选择 ${items[3]!.code} ${samples[3]!.assembly_unit}`, exact: true }).check()
   await projectBom.getByRole('button', { name: '按缺料采购', exact: true }).click()
   await expect(draft.locator('.draft-item')).toHaveCount(1)

@@ -17,14 +17,15 @@ test('BOM空编码导入预览不建物料，确认后自动建码并关联BOM',
   const region = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
   const name = `空编码气缸${suffix}`
   const content = `物料编码,单元,需求数量,变更说明,需求日期,申请日期,申请人,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位\n,上料,2,新增,2026-10-01,2026-09-11,设计员,${name},ABC-10,,,21,SMC,standard,件\n`
-  await region.locator('input[type=file]').setInputFiles({ name: 'auto.csv', mimeType: 'text/csv', buffer: Buffer.from(content) })
+  await region.getByRole('button', { name: '导入 BOM', exact: true }).click()
+  await page.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type=file]').setInputFiles({ name: 'auto.csv', mimeType: 'text/csv', buffer: Buffer.from(content) })
   await expect(region.locator('.import-preview')).toContainText('确认时自动生成')
   const before = await (await page.request.get('/api/business/items/?search=' + name, { headers })).json()
   expect(before.count).toBe(0)
   await region.locator('.import-preview').screenshot({ path: info.outputPath('auto-code-preview.png'), animations: 'disabled' })
   await region.getByRole('button', { name: '确认导入', exact: true }).click()
   const pending = page.waitForResponse(r => r.url().endsWith('/bom-import-confirm/'))
-  await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('dialog').locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(200)
   await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -50,7 +51,7 @@ test('物料表单按有图类别自动编码并分离图号版本和品牌', as
   await dialog.getByLabel('物料类别', { exact: true }).selectOption('custom')
   await page.screenshot({ path: info.outputPath('product-coding-form.png'), fullPage: true })
   const pending = page.waitForResponse(r => r.url().endsWith('/api/business/items/') && r.request().method() === 'POST')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(201)
   const id = (await response.json()).id

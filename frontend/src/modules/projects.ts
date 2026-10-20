@@ -24,7 +24,7 @@ export const taskFields = (c: Catalog, canDesign = manager(), scope?: Row | null
   t('title', '任务名称'),
   t('description', '说明', true),
   person(c, 'assignee', '执行人', scope),
-  date('due_date', '期限', true),
+  date('due_date', '截止日期', true),
 ]
 import { all, read } from '../api'
 import { catalog } from '../catalog'
@@ -58,7 +58,7 @@ export const columns: Record<string, Column[]> = {
     C('kind', '阶段'),
     C('assignee_name', '执行人'),
     C('status', '状态'),
-    C('due_date', '期限'),
+    C('due_date', '截止日期'),
   ],
   deliveries: [
     C('code', '交付批次'),
@@ -238,7 +238,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       t('title', '售后事项'),
       t('description', '说明', true),
       person(c, 'assignee', '执行人', scope),
-      date('due_date', '期限', true),
+      date('due_date', '截止日期', true),
       ...(managesProject ? [{
         key: 'fee',
         label: '收费金额（元）',

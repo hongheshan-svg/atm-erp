@@ -88,3 +88,13 @@ export const test = base.extend<{ consoleCheck: void }>({
 })
 export { expect }
 export type { Page, Locator } from '@playwright/test'
+
+// 业务表单关闭时显式确认丢弃；未保存保护由 usability-forms 验证继续填写和恢复。
+export async function cancelEditing(dialog: Locator) {
+  const form = dialog.filter({ has: dialog.page().locator('form.action-form') })
+  await form.getByRole('button', { name: '取消', exact: true }).click()
+  const discard = dialog.page().getByRole('button', { name: '放弃修改', exact: true })
+  await Promise.race([discard.waitFor({ state: 'visible' }), form.waitFor({ state: 'hidden' })])
+  if (await discard.isVisible()) await discard.click()
+  await expect(form).not.toBeVisible()
+}

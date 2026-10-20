@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { provide, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { user } from '../session'
 import { read } from '../api'
 import RemoteSelect from './RemoteSelect.vue'
@@ -18,9 +18,15 @@ const descriptions: Record<string, string> = {
 }
 const projects = ref<Row[]>([])
 const route = useRoute()
+const router = useRouter()
 const projectKey = `module-project-${user.value?.id}-${props.title}`
-const savedProject = Number(route.query.project || sessionStore.get(projectKey))
-const projectId = ref<number | undefined>(Number.isSafeInteger(savedProject) && savedProject > 0 ? savedProject : undefined)
+function projectFrom(value: unknown) {
+  const id = Number(value)
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined
+}
+const projectId = ref(projectFrom(route.query.project ?? sessionStore.get(projectKey)))
+// 同一路由的结果链接也能改变项目；此时路由守卫已经处理过未保存内容。
+watch(() => route.query.project, value => { projectId.value = projectFrom(value) })
 watch(projectId, value => { if (value) sessionStore.set(projectKey, String(value)); else sessionStore.remove(projectKey) })
 const revision = ref(0)
 const toolbarTarget = ref<HTMLElement | null>(null)
@@ -38,6 +44,13 @@ async function loadProjects() {
     error.value = message(e)
   }
 }
+async function chooseProject(value: string | number | undefined) {
+  const project = projectFrom(value)
+  if (project === projectId.value) return
+  const { focus: _focus, resource: _resource, ...query } = route.query
+  // 仅在导航成功后由上面的 watch 更新范围，取消离开时保留原筛选和表单。
+  await router.replace({ query: { ...query, project: project ?? 'all' } })
+}
 function refresh() { revision.value++ }
 watch(projectId, loadProjects, { immediate: true })
 </script>
@@ -52,7 +65,7 @@ watch(projectId, loadProjects, { immediate: true })
   </header>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
   <label v-if="projectFilter" class="project-filter"
-    >项目筛选<RemoteSelect :model-value="projectId" @update:model-value="projectId = $event ? Number($event) : undefined" path="/business/projects/" label="项目筛选" /><small>{{ projectId ? '仅显示所选项目' : requireProject ? '请选择项目' : '未选择时显示全部项目' }}</small></label
+    >项目筛选<RemoteSelect :model-value="projectId" @update:model-value="chooseProject" path="/business/projects/" label="项目筛选" commit-on-select /><small>{{ projectId ? '仅显示所选项目' : requireProject ? '请选择项目' : '未选择时显示全部项目' }}</small></label
   >
   <slot :project-id="projectId" :projects="projects" :revision="revision" :refresh="refresh" />
 </template>

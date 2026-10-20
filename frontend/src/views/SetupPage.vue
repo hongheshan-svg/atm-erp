@@ -140,7 +140,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
         <footer class="setup-actions"><el-button v-if="step > 0" :disabled="busy" @click="step--; error = ''">上一步</el-button><span>第 {{ step + 1 }} / 5 步</span><el-button type="primary" native-type="submit" :loading="busy">{{ step === 4 ? '完成配置并启用' : '下一步' }}</el-button></footer>
       </form>
     </template>
-    <section v-else class="panel"><h2>开始使用 ERP</h2><p>账号、公司和编号已可使用。按业务需要补充资料后即可开单。</p><div class="setup-links"><router-link to="/masterdata?section=partners">1. 添加客户与供应商</router-link><router-link to="/masterdata?section=items">2. 添加或导入物料</router-link><router-link to="/settings?section=users">3. 维护人员与岗位</router-link><router-link to="/sales">4. 创建第一张销售单</router-link><router-link to="/workbench">进入工作台</router-link></div></section>
+    <section v-else class="panel"><h2>开始使用 ERP</h2><p>账号、公司和编号已可使用。按业务需要补充资料后即可开单。</p><div class="setup-links"><router-link to="/masterdata?section=partners">1. 添加客户与供应商</router-link><router-link to="/masterdata?section=items">2. 添加或导入物料</router-link><router-link to="/settings?section=users">3. 维护人员与岗位</router-link><router-link to="/settings?section=initialization">4. 登记期初库存（如有）</router-link><router-link to="/sales">5. 创建第一张销售单</router-link><router-link to="/workbench?guide=show">进入工作台，查看岗位首任务指引</router-link></div></section>
   </main>
 </template>
 <style scoped>

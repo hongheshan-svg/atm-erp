@@ -1,3 +1,4 @@
+import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
@@ -19,7 +20,7 @@ async function api(page: Page, path: string, data?: Record<string, unknown>, sta
 async function save(page: Page, path: string, status = 200) {
   if (status >= 400) expectHttpError(page, '/api/' + path, status)
   const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/' + path && ['POST', 'PATCH'].includes(r.request().method()))
-  await d(page).getByRole('button', { name: '保存', exact: true }).click()
+  await d(page).locator('button[type="submit"]').click()
   const response = await pending
   expect(response.status(), await response.text()).toBe(status)
   if (status < 300) await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -92,7 +93,8 @@ for (const [role, label, category] of [
     await expect(page.getByRole('button', { name: '项目操作 ▾', exact: true })).toHaveCount(0)
     await expect(page.getByRole('tab', { name: '成本与预算', exact: true })).toHaveCount(0)
     const demand = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
-    await demand.locator('input[type=file]').setInputFiles({ name: 'engineering-bom.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,单元,需求数量,变更说明,需求日期,申请日期,申请人\n${code},设计单元,2,初版,,,${label}\n`) })
+    await demand.getByRole('button', { name: '导入 BOM', exact: true }).click()
+    await page.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type=file]').setInputFiles({ name: 'engineering-bom.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,单元,需求数量,变更说明,需求日期,申请日期,申请人\n${code},设计单元,2,初版,,,${label}\n`) })
     await demand.getByRole('button', { name: '确认导入', exact: true }).click()
     await save(page, `business/projects/${current.id}/revise-bom/`)
     expect((await api(page, `business/projects/${current.id}/demand/`)).lines).toEqual(expect.arrayContaining([expect.objectContaining({ item: item.id, quantity: '2.000' })]))
@@ -147,7 +149,7 @@ test('采购经理从工作台审核采购与超预算摘要，本人申请仍�
   async function order(actor: Page, price: string) {
     await actor.goto('/erp/purchases')
     await actor.getByRole('button', { name: '新建采购', exact: true }).click()
-    for (const [label, value] of [['项目', current.id], ['供应商', supplier.id], ['物料', item.id]]) await d(actor).getByLabel(String(label), { exact: true }).selectOption(String(value))
+    for (const [label, record] of [['项目', current], ['供应商', supplier], ['物料', item]] as const) await selectRemoteOption(d(actor).getByLabel(label, { exact: true }), { id: record.id, text: record.name })
     await d(actor).getByLabel('交期', { exact: true }).fill(date())
     await d(actor).getByLabel('数量', { exact: true }).fill('1')
     await d(actor).getByLabel('含税单价（元）', { exact: true }).fill(price)

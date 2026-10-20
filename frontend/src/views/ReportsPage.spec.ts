@@ -6,6 +6,7 @@ import ReportsPage from './ReportsPage.vue'
 import { read } from '../api'
 import { user } from '../session'
 import { navigation } from '../navigation'
+import { resourceFilters } from '../resource-ui'
 
 vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn() }))
 
@@ -69,6 +70,20 @@ function mountPage(stubs: Record<string, Component>) {
 }
 
 describe('经营报表', () => {
+  it('项目状态与项目列表共用执行阶段，不再出现草稿和已报价', async () => {
+    vi.mocked(read).mockResolvedValue(payload)
+    const wrapper = mountPage(tableStubs)
+    await flushPromises()
+    const options = wrapper.get('[aria-label="项目状态"]').findAll('option')
+    expect(options.map(option => option.attributes('value'))).toEqual(['', ...Object.keys(resourceFilters.projects!.options)])
+    expect(options.map(option => option.text())).not.toContain('草稿')
+    expect(options.map(option => option.text())).not.toContain('已报价')
+    await wrapper.get('[aria-label="项目状态"]').setValue('warranty')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/reports/', expect.objectContaining({ status: 'warranty' }))
+    wrapper.unmount()
+  })
   it('仅管理员与显式授权经理拥有入口', () => {
     for (const profile of [{ role: 'manager' }, { role: 'finance' }, { role: 'member', management_reports: true }]) {
       user.value = profile

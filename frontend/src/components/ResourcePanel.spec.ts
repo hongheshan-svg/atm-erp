@@ -8,7 +8,8 @@ import { read } from '../api'
 import { pageSize, setPageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
-const route = reactive<{ query: { search?: string } }>({ query: {} })
+import ActionDialog from './ActionDialog.vue'
+const route = reactive<{ query: Record<string, string> }>({ query: {} })
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace: vi.fn() }) }))
 
 vi.mock('../api', () => ({
@@ -20,6 +21,47 @@ vi.mock('../api', () => ({
 
 describe('列表创建入口', () => {
   beforeEach(() => { route.query = {}; sessionStorage.clear(); vi.clearAllMocks() })
+  it('项目范围变化时关闭原表单，避免乙项目页面继续提交甲项目内容', async () => {
+    user.value = { id: 1, role: 'admin' }
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 }, projectId: 3 }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    await flushPromises()
+    await (wrapper.vm as any).create()
+    expect(wrapper.findComponent(ActionDialog).props('command')?.initial?.project).toBe(3)
+    await wrapper.setProps({ params: { project: 4 }, projectId: 4 })
+    await flushPromises()
+    expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
+    await (wrapper.vm as any).create()
+    expect(wrapper.findComponent(ActionDialog).props('command')?.initial?.project).toBe(4)
+    wrapper.unmount()
+  })
+  it('收付款结果链接打开真实流水字段，不落入空任务详情', async () => {
+    user.value = { id: 1, role: 'finance' }
+    route.query = { resource: 'payments', focus: '25' }
+    vi.mocked(read).mockImplementation(async path => path.endsWith('/25/') ? { id: 25, entry_title: '采购款', amount: '50.00', date: '2026-10-21', evidence: [] } : { count: 0, results: [] })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'payments', title: '收付款流水' }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    await flushPromises()
+    const command = wrapper.findComponent(ActionDialog).props('command')
+    expect(command?.title).toBe('收付款流水详情')
+    expect(command?.initial?.entry_title).toBe('采购款')
+    expect(command?.initial?.amount).toContain('50.00')
+    wrapper.unmount()
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+  })
+  it.each(['payments', 'reconciliations'])('%s 不打开其他项目的 focus，范围变化也不重新打开旧记录', async resource => {
+    user.value = { id: 1, roles: ['finance'] }
+    route.query = { resource, focus: '25' }
+    vi.mocked(read).mockImplementation(async path => path.endsWith('/25/') ? { id: 25, project: 7, entry_title: '甲项目款项', amount: '50.00', evidence: [] } : { count: 0, results: [] })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '财务明细', params: { entry__project: 8 } }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    await flushPromises()
+    expect(read).toHaveBeenCalledWith(`/business/${resource}/25/`)
+    expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
+    await wrapper.setProps({ projectId: 9, params: { entry__project: 9 } })
+    await flushPromises()
+    expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
+    expect(read).toHaveBeenCalledWith(`/business/${resource}/`, expect.objectContaining({ entry__project: 9 }))
+    wrapper.unmount()
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+  })
   it('工作台销售链接优先使用单号筛选，同页切换链接重新查询，分页保留已提交搜索', async () => {
     user.value = { id: 8, role: 'sales_manager' }
     sessionStorage.setItem('resource-search-8-sales-{}', '原来搜索')
