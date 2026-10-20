@@ -32,15 +32,15 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 ## 表格导入导出
 
-- `{resource}/import-schema/` GET 与模板共用有序字段定义，返回 `columns[{key,label,table_keys,hint,required,example}]`、`title/entry/note/instructions`，沿用对应导入权限。模板及预览统一中文列名、列序；引用列明确填写编码、账号或ID，并映射页面显示名称。状态、派生余额、自动编号不作为新增输入。
+- `{resource}/import-schema/` GET 与模板共用有序字段定义，返回 `columns[{key,label,table_keys,hint,required,example}]`、`title/entry/note/instructions`，沿用对应导入权限。模板及预览统一中文列名、列序；引用列明确填写编码、人员姓名或账号、ID，并映射页面显示名称。状态、派生余额、自动编号不作为新增输入。
 - 全部12类通用模板及BOM模板共用填写说明生成器。Excel下载包含“数据”与“填写说明”页，数据页只有表头，表头附字段提示；示例只位于说明页。`import-template/` 和 `projects/bom-template/` 的 `file_format=html` 下载可独立打开、打印的填写说明，沿用原模板权限。CSV仍仅含原始数据表头。员工操作说明见 [导入模板填写说明](IMPORT_TEMPLATES.md)。
 - 新模板保留旧版列头兼容，按匹配模板的字段映射读取，不按新位置解释旧文件。标准件/非标件、往来类型、任务阶段、采购账期和结算方式可填写页面中文值，兼容原英文值。预览 `rows` 始终按文件行展开，`row_count` 为文件明细数，`count` 为待创建记录数；采购按分组创建草稿而不折叠预览行。
 - BOM 新模板列为物料编码、单元、需求数量、变更说明，支持CSV/XLSX下载，兼容原三列/四列模板；物料名称、规格及品牌在预览中只读关联，已领、在途、库存和缺料仍由业务计算。
 
 - 业务列表 `{resource}/export/?file_format=csv|xlsx` 使用原列表全部筛选结果，忽略分页，最多20000行；沿用 queryset 项目范围及序列化金额过滤。采购按明细展开。附件列表仅导出元数据，附件内容仍走独立鉴权下载。设置不属于业务表格导入范围。
 - `reports/?file_format=csv|xlsx` 导出全部筛选项目明细与合计，沿用管理员/总经理报表授权。金额为 CNY 含税经营口径；XLSX 的金额、数量列在不超过 15 位有效数字时写为数值单元格便于求和，超出的仍存文本以免 Excel 截断精度；编码、账号、流水号始终为文本。CSV保存原始十进制字符串。Excel读取CSV时应按文本导入编码/大金额列，以免软件自动转换前导零或长数字。危险公式前缀转义为文本；纯数字（含负号）不是公式，不加前缀。
-- items/partners/sales/projects/purchases/tasks/stocks/moves/entries/payments/time/deliveries 提供 `import-template/` GET（file_format同上，另支持html填写说明）、`import-file/` POST multipart单个file、`import-confirm/` POST JSON `{token}`。CSV为UTF-8；XLSX接受原单工作表，或“数据”加带固定标题标识的系统“填写说明”页，始终只导入数据页；未知或额外工作表拒绝，不静默丢弃业务数据。数据禁止公式，文件5MB/1000行上限，严格使用模板列。关联使用编码或账号，标注ID的列从列表导出获取。
-- 预览返回 count/rows/errors/can_import/token/note，在事务内调用现有服务校验后回滚；错误按文件行号展示。确认凭据绑定用户/模块、30分钟有效，确认重新授权和校验，任一行失败则全部回滚。同一token的重试或并发确认使用同一ActionReceipt，返回同一结果；新文件应重新预览。
+- items/partners/sales/projects/purchases/tasks/stocks/moves/entries/payments/time/deliveries 提供 `import-template/` GET（file_format同上，另支持html填写说明）、`import-file/` POST multipart单个file、`import-confirm/` POST JSON `{token}`。CSV为UTF-8；XLSX接受原单工作表，或“数据”加带固定标题标识的系统“填写说明”页，始终只导入数据页；未知或额外工作表拒绝，不静默丢弃业务数据。数据禁止公式，文件5MB/1000行上限，严格使用模板列。物料和业务单据关联使用编码，标注ID的列从列表导出获取；人员列可填姓名、登录账号或姓名（用户名），精确匹配，重名（含停用人员）或姓名与他人账号冲突时拒绝自动选择。显式姓名（用户名）必须同时匹配同一人。成员支持中英文分号；旧版账号表头及列序继续兼容。
+- 预览返回 count/rows/errors/can_import/token/note，在事务内调用现有服务校验后回滚；错误按文件行号展示。确认凭据绑定用户/模块、30分钟有效，签名凭据保存预览解析的人员ID；确认重新解析并比对，拒绝人员对应关系变化，再按原服务重新授权和校验，任一行失败则全部回滚。同一token的重试或并发确认使用同一ActionReceipt，返回同一结果；新文件应重新预览。
 - 物料/往来单位与采购由采购权限新增；销售/项目/任务/交付由经理权限新增；期初仅管理员；领料由仓库权限；费用和收付款由财务权限；工时保留本人任务和项目范围。采购同一分组号合为一张草稿，组内单据信息必须一致。销售/采购不自动审批签约；应收应付由原合同采购产生；退款、冲销、盘点、更正仍从原记录操作。预览不产生持久业务记录、审计或编号计数变更。
 
 ## 平台接口
@@ -51,7 +51,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 `POST /api/core/setup/` 提供 Idempotency-Key，提交 display_name、old_password、new_password、company{name,address,phone}、team（可空，最多50位，复用用户字段）、codes（仅变更规则，id及原configure完整字段）、confirmed=true。公司、管理员密码、人员、规则在同一事务提交；同公司锁阻止重复初始化，完成后其他新请求409。密码只做校验及哈希存储，不进入审计/回执；旧JWT撤销，重新登录。向导不创建业务台账、示例库存或订单。
 
-账号支持兼任多个固定角色：用户管理接受非空、无重复的 `roles` 数组，最多十一项，仅允许现有十一种角色；`me`、人员目录和用户列表返回 `roles`。旧 `role` 字段兼容单角色请求，提交该字段且未提交 roles 时替换为单角色。已有账号保留原角色，新增兼岗字段默认为空，不变更历史审计或业务负责人。
+账号支持兼任多个固定角色：用户管理接受非空、无重复的 `roles` 数组，最多十一项，仅允许现有十一种角色；`me`、人员目录和用户列表返回 `roles`。人员目录仅返回启用人员的 `id/display_name/username/role/roles`，姓名为空时显示用户名；业务选择项显示姓名（用户名）以区分重名，仍提交人员ID，不返回成本、密码等敏感信息。旧 `role` 字段兼容单角色请求，提交该字段且未提交 roles 时替换为单角色。已有账号保留原角色，新增兼岗字段默认为空，不变更历史审计或业务负责人。
 
 授权按业务角色集合合并，不通过主角色推断。销售读权限可合并财务读权限，但没有 admin/manager 时只能修改本人销售单；销售兼成员沿用项目成员范围。菜单、金额过滤、附件下载及幂等重放均检查有效角色。总经理报表仍需具备 manager 并显式授权，admin 默认允许；最后启用管理员保护也检查兼岗角色。用户修改审计保留角色集合前后值。兼岗不改变原有按操作人身份执行的审批限制。
 

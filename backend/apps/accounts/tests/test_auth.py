@@ -142,7 +142,7 @@ class AuthenticationTests(TestCase):
         directory = self.client.get('/api/auth/directory/')
         account = next(row for row in directory.data if row['id'] == identity)
         self.assertEqual(account['roles'], sorted(selected))
-        self.assertEqual(set(account), {'id', 'display_name', 'role', 'roles'})
+        self.assertEqual(set(account), {'id', 'display_name', 'username', 'role', 'roles'})
         self.assertEqual(self.client.patch(f'/api/auth/users/{identity}/', {'is_active': False}).status_code, 200)
         self.assertNotIn(identity, [row['id'] for row in self.client.get('/api/auth/directory/').data])
 
@@ -222,7 +222,24 @@ class AuthenticationTests(TestCase):
             self.assertEqual(response.status_code, 200 if role == 'admin' else 403)
             directory = self.client.get('/api/auth/directory/')
             self.assertEqual(directory.status_code, 200)
-        self.assertTrue(all(set(row) == {'id', 'display_name', 'role', 'roles'} for row in directory.data))
+        self.assertTrue(all(set(row) == {'id', 'display_name', 'username', 'role', 'roles'} for row in directory.data))
+
+    def test_directory_exposes_name_and_account_for_disambiguation_but_not_private_fields(self):
+        first, second = self.users['member'], self.users['mechanical_engineer']
+        for user in (first, second):
+            user.display_name = '同名员工'
+            user.save()
+        self.assertEqual(self.client.get('/api/auth/directory/').status_code, 401)
+        self.login('member')
+        directory = self.client.get('/api/auth/directory/').data
+        matches = [row for row in directory if row['display_name'] == '同名员工']
+        self.assertEqual({row['username'] for row in matches}, {first.username, second.username})
+        self.assertEqual({row['id'] for row in matches}, {first.pk, second.pk})
+        for row in matches:
+            self.assertEqual(set(row), {'id', 'display_name', 'username', 'role', 'roles'})
+        second.is_active = False
+        second.save()
+        self.assertNotIn(second.pk, [row['id'] for row in self.client.get('/api/auth/directory/').data])
 
     def test_deactivated_user_loses_access_and_refresh(self):
         tokens = self.login('member')

@@ -1,6 +1,98 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect, login, expectHttpError, openImport } from './fixtures'
 
+test('人员可按姓名选择并导入，重名明确账号', async ({ page }, info) => {
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const token = await page.evaluate(() => localStorage.getItem('access_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const me = await page.request.get('/api/auth/me/', { headers })
+  expect(me.status()).toBe(200)
+  const actor = await me.json()
+  const suffix = Date.now()
+  const displayName = `吴兴广${suffix}`
+  const username = `wuxingguang_${suffix}`
+  async function create(path: string, data: Record<string, unknown>) {
+    const response = await page.request.post(`/api/${path}/`, {
+      headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data,
+    })
+    expect(response.status(), await response.text()).toBe(201)
+    return response.json()
+  }
+  const member = await create('auth/users', {
+    username, display_name: displayName, roles: ['member'], password: 'Isolated-person-name-2026-only',
+  })
+  const partner = await create('business/partners', { name: `姓名导入客户${suffix}`, kind: 'customer' })
+  const project = await create('business/projects', {
+    name: `姓名导入项目${suffix}`, customer: partner.id, manager: actor.id, members: [member.id],
+  })
+  const projectResponse = await page.request.get(`/api/business/projects/${project.id}/`, { headers })
+  expect(projectResponse.status()).toBe(200)
+  const projectCode = (await projectResponse.json()).code
+  async function savedTasks() {
+    const response = await page.request.get(`/api/business/tasks/?project=${project.id}`, { headers })
+    expect(response.status()).toBe(200)
+    return (await response.json()).results as { assignee: number; title: string }[]
+  }
+
+  await page.goto(`/erp/projects/${project.id}?tab=tasks&section=tasks`)
+  await page.getByRole('button', { name: '新建任务', exact: true }).click()
+  const form = page.getByRole('dialog', { name: '新建任务', exact: true })
+  await form.getByLabel('阶段', { exact: true }).selectOption('design')
+  await form.getByLabel('任务名称', { exact: true }).fill('按姓名选择执行人')
+  await form.getByLabel('执行人', { exact: true }).selectOption({ label: `${displayName}（${username}）` })
+  await expect(form.getByLabel('执行人', { exact: true })).toHaveValue(String(member.id))
+  await form.getByLabel('执行人', { exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('person-name-selection.png'), animations: 'disabled' })
+  await form.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(form).toBeHidden()
+  expect(await savedTasks()).toEqual([expect.objectContaining({ title: '按姓名选择执行人', assignee: member.id })])
+
+  await openImport(page)
+  const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  const confirm = dialog.getByRole('button', { name: '确认导入', exact: true })
+  async function preview(title: string, person: string) {
+    const response = page.waitForResponse(r => r.url().endsWith('/tasks/import-file/') && r.request().method() === 'POST')
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: 'tasks.csv', mimeType: 'text/csv',
+      buffer: Buffer.from(`任务名称,阶段,执行人姓名或账号,期限,项目编号,说明\n${title},设计,${person},,${projectCode},`),
+    })
+    expect((await response).status()).toBe(200)
+  }
+  await preview('直接填写姓名导入', displayName)
+  await expect(confirm).toBeEnabled()
+  // 预览没有写入；确认后仍指向姓名对应的唯一人员。
+  expect(await savedTasks()).toHaveLength(1)
+  await confirm.click()
+  await expect(dialog.getByRole('status')).toContainText('成功导入 1 条记录')
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  expect(await savedTasks()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ title: '直接填写姓名导入', assignee: member.id }),
+  ]))
+
+  await create('auth/users', {
+    username: `tongming_${suffix}`, display_name: displayName, roles: ['member'], password: 'Isolated-person-name-2026-only',
+  })
+  await openImport(page)
+  await preview('重名明确账号导入', displayName)
+  const errors = dialog.locator('.import-errors')
+  await expect(errors).toContainText('对应多名人员')
+  await expect(errors).toContainText('姓名（用户名）')
+  await expect(confirm).toBeDisabled()
+  expect(await savedTasks()).toHaveLength(2)
+  await errors.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('person-name-ambiguity.png'), animations: 'disabled' })
+  await preview('重名明确账号导入', `${displayName}（${username}）`)
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+  await expect(dialog.getByRole('status')).toContainText('成功导入 1 条记录')
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  const tasks = await savedTasks()
+  expect(tasks).toHaveLength(3)
+  expect(tasks.every(task => task.assignee === member.id)).toBe(true)
+})
+
 test('任务与BOM导入错误显示中文字段和文件行号', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
@@ -36,7 +128,7 @@ test('任务与BOM导入错误显示中文字段和文件行号', async ({ page 
   ].join('\n')
   await dialog.locator('input[type="file"]').setInputFiles({ name: 'tasks.csv', mimeType: 'text/csv', buffer: Buffer.from(tasks) })
   const errors = dialog.locator('.import-errors')
-  await expect(errors).toContainText('第 2 行：未找到登录用户名')
+  await expect(errors).toContainText('第 2 行：未找到人员')
   await expect(errors).toContainText('第 3 行：期限：')
   await expect(errors).toContainText('第 4 行：阶段：')
   await expect(errors).not.toContainText('due_date')
