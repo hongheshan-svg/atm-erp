@@ -101,7 +101,7 @@ async function confirm() {
     <span v-if="error && !opened" role="alert">{{ error }}</span>
     <el-dialog v-model="opened" class="transfer-dialog" title="批量导入" width="min(1100px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
       <p v-if="bankImport">上传工行 XLSX 或华夏 XLS 原始流水（含表头及汇总），单文件最多 1000 行、5 MB。完整保留个人往来和手续费，不自动核销或指定项目；缺失户名进入待核实，相同交易重复上传会跳过。没有唯一银行编号时生成导入标识，原始编号保留在明细中。预览按银行流水页面列展示；项目和未匹配金额由后续认领、匹配操作维护。</p>
-      <p v-else>下载模板后填写，支持 CSV / XLSX，最多 1000 行、5 MB。引用使用编号或账号；标明 ID 的列可从对应列表导出获取。日期填写 YYYY-MM-DD。</p>
+      <p v-else>下载模板后填写，支持 CSV / XLSX，最多 1000 行、5 MB。人员可填姓名或账号，重名请填姓名（用户名）；其他引用使用编号，标明 ID 的列可从对应列表导出获取。日期填写 YYYY-MM-DD。</p>
       <template v-if="layout">
         <p><strong>{{ layout.title }}导入</strong> · {{ layout.entry }}</p>
         <p>{{ layout.note }}</p>

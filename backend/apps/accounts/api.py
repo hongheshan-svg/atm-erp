@@ -106,7 +106,13 @@ class DirectoryView(APIView):
     def get(self, request):
         return Response(
             [
-                {'id': u.pk, 'display_name': u.display_name or u.username, 'role': role(u), 'roles': sorted(roles(u))}
+                {
+                    'id': u.pk,
+                    'display_name': u.display_name or u.username,
+                    'username': u.username,
+                    'role': role(u),
+                    'roles': sorted(roles(u)),
+                }
                 for u in User.objects.filter(is_active=True)
             ]
         )

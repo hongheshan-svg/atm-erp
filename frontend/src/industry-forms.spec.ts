@@ -57,4 +57,17 @@ describe('自动化设备表单', () => {
     expect(date('received_date', '实际收货').initial).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(options([{ id: 1, code: '001', name: '电机', specification: '750W', brand: '确认品牌', unit: '台' }])[0]?.label).toBe('001 · 电机 · 750W · 确认品牌 · 台')
   })
+  it('人员以姓名为主显示账号，重名可区分且提交稳定人员ID', () => {
+    expect(options([
+      { id: 1, display_name: '吴兴广', username: 'wuxingguang' },
+      { id: 2, display_name: '吴兴广', username: 'wuxingguang2' },
+      { id: 3, display_name: 'admin', username: 'admin' },
+      { id: 4, username: 'unnamed' },
+    ])).toEqual([
+      { value: 1, label: '吴兴广（wuxingguang）' },
+      { value: 2, label: '吴兴广（wuxingguang2）' },
+      { value: 3, label: 'admin' },
+      { value: 4, label: 'unnamed' },
+    ])
+  })
 })

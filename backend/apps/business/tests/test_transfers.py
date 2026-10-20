@@ -6,7 +6,19 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from openpyxl import Workbook, load_workbook
 
-from apps.business.models import BOMLine, Item, Partner, Payment, Project, PurchaseOrder, SalesOrder, Stock, Task
+from apps.accounts.models import User
+from apps.business.models import (
+    BOMLine,
+    Item,
+    Partner,
+    Payment,
+    Project,
+    PurchaseOrder,
+    SalesOrder,
+    Stock,
+    Task,
+    TimeEntry,
+)
 from apps.business.services import transfers
 from apps.business.services.import_guides import GUIDE_MARKER, GUIDE_SHEET
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
@@ -76,15 +88,22 @@ class TransferTests(BusinessFixtures, TestCase):
         self.commit('items', valid, status=403)
 
     def test_masterdata_sales_projects_and_grouped_purchase_import(self):
+        self.users['manager'].display_name = '刘经理'
+        self.users['manager'].save()
+        self.users['member'].display_name = '吴兴广'
+        self.users['member'].save()
         partners = self.preview('partners', [['往来', 'both', '联系人', '001234', '地址']])
         self.commit('partners', partners)
         self.assertEqual(Partner.objects.get(name='往来').phone, '001234')
-        detail = ['导入需求', 'C1', 'manager', '说明', TODAY, '2', '12']
+        detail = ['导入需求', 'C1', '刘经理', '说明', TODAY, '2', '12']
         self.commit('sales', self.preview('sales', [detail]))
         self.assertEqual(SalesOrder.objects.get(name='导入需求').status, 'draft')
-        self.commit('projects', self.preview('projects', [detail + ['member']]))
+        self.commit('projects', self.preview('projects', [detail + ['吴兴广；mechanical_engineer']]))
         project = Project.objects.get(name='导入需求')
+        self.assertEqual(project.manager_id, self.users['manager'].pk)
+        self.assertEqual(SalesOrder.objects.get(name='导入需求').manager_id, self.users['manager'].pk)
         self.assertTrue(project.members.filter(username='member').exists())
+        self.assertTrue(project.members.filter(username='mechanical_engineer').exists())
         other = Item.objects.create(code='I2', name='第二物料')
         rows = [
             ['P1', project.code, 'S1', TODAY, '', 'I1', '2', '10'],
@@ -103,13 +122,19 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertIn('物料编码', exported_rows[0])
 
     def test_operational_imports_reuse_finance_inventory_and_execution(self):
+        self.users['member'].display_name = '吴兴广'
+        self.users['member'].save()
+        self.users['manager'].display_name = '刘经理'
+        self.users['manager'].save()
         project = self.active_project()
-        self.commit('tasks', self.preview('tasks', [[project.code, 'design', '设计任务', '', 'member', TODAY]]))
+        self.commit('tasks', self.preview('tasks', [[project.code, 'design', '设计任务', '', '吴兴广', TODAY]]))
         task = Task.objects.get(title='设计任务')
-        timed = self.preview('time', [[str(task.pk), 'member', TODAY, '2', '设计']], role='member')
+        self.assertEqual(task.assignee_id, self.users['member'].pk)
+        timed = self.preview('time', [[str(task.pk), '吴兴广', TODAY, '2', '设计']], role='member')
         self.assertTrue(timed.data['can_import'], timed.data)
         self.commit('time', timed, role='member')
-        bad = self.preview('time', [[str(task.pk), 'manager', TODAY, '2', '越权']], role='member')
+        self.assertEqual(TimeEntry.objects.get(task=task).user_id, self.users['member'].pk)
+        bad = self.preview('time', [[str(task.pk), '刘经理', TODAY, '2', '越权']], role='member')
         self.assertFalse(bad.data['can_import'])
         self.commit(
             'entries', self.preview('entries', [[project.code, '差旅', '100', TODAY]], role='finance'), role='finance'
@@ -134,12 +159,14 @@ class TransferTests(BusinessFixtures, TestCase):
                 kind=stage,
                 defaults={'title': stage, 'assignee': self.users['member'], 'status': 'done'},
             )
-        delivery = self.preview('deliveries', [[project.code, '1', TODAY, 'member', 'manager', '发货']])
+        delivery = self.preview('deliveries', [[project.code, '1', TODAY, '吴兴广（member）', '刘经理', '发货']])
         self.assertTrue(delivery.data['can_import'], delivery.data)
         self.commit('deliveries', delivery)
         self.assertEqual(project.deliveries.count(), 1)
+        self.assertEqual(project.tasks.get(kind='install').assignee_id, self.users['member'].pk)
+        self.assertEqual(project.tasks.get(kind='acceptance').assignee_id, self.users['manager'].pk)
 
-    def test_task_import_requires_login_username_instead_of_display_name(self):
+    def test_task_import_accepts_name_username_and_explicit_identity(self):
         user = self.users['member']
         user.username = 'wuxingguang'
         user.display_name = '吴兴广'
@@ -149,23 +176,100 @@ class TransferTests(BusinessFixtures, TestCase):
         audits = AuditLog.objects.count()
         rows = [
             [project.code, 'design', '按账号指派', '', user.username, TODAY],
-            [project.code, 'design', '误填姓名', '', user.display_name, TODAY],
+            [project.code, 'design', '按姓名指派', '', '  吴兴广  ', TODAY],
+            [project.code, 'design', '明确同名人员', '', '吴兴广（wuxingguang）', TODAY],
+            [project.code, 'design', '英文括号', '', '吴兴广(wuxingguang)', TODAY],
         ]
         preview = self.preview('tasks', rows, xlsx=True)
-        self.assertFalse(preview.data['can_import'], preview.data)
-        self.assertIsNone(preview.data['token'])
-        self.assertEqual(len(preview.data['errors']), 1)
-        self.assertEqual(preview.data['errors'][0]['row'], 3)
-        self.assertIn('未找到登录用户名“吴兴广”', preview.data['errors'][0]['message'])
-        self.assertIn('“用户名”列', preview.data['errors'][0]['message'])
-        self.assertIn('不按“姓名”匹配', preview.data['errors'][0]['message'])
+        self.assertTrue(preview.data['can_import'], preview.data)
         self.assertFalse(project.tasks.exists())
         self.assertEqual(ActionReceipt.objects.count(), receipts)
         self.assertEqual(AuditLog.objects.count(), audits)
-        valid = self.preview('tasks', rows[:1], xlsx=True)
-        self.assertTrue(valid.data['can_import'], valid.data)
-        self.commit('tasks', valid)
+        result = self.commit('tasks', preview)
+        self.assertEqual(result['count'], 4)
+        self.assertEqual(set(project.tasks.values_list('assignee_id', flat=True)), {user.pk})
+        self.assertEqual(self.commit('tasks', preview), result)
+        self.assertEqual(project.tasks.count(), 4)
+
+    def test_duplicate_names_and_account_name_collisions_require_explicit_identity(self):
+        project = self.active_project()
+        user = self.users['member']
+        user.display_name = '吴兴广'
+        user.save()
+        other = User.objects.create_user(username='other-wu', display_name=user.display_name, role='member')
+        for active in (True, False):
+            other.is_active = active
+            other.save()
+            ambiguous = self.preview('tasks', [[project.code, 'design', '不能猜测', '', '吴兴广', TODAY]])
+            self.assertFalse(ambiguous.data['can_import'], ambiguous.data)
+            self.assertIsNone(ambiguous.data['token'])
+            self.assertIn('对应多名人员', ambiguous.data['errors'][0]['message'])
+        # The same string can be one person's account and another person's name.
+        other.display_name = user.username
+        other.save()
+        collision = self.preview('tasks', [[project.code, 'design', '账号姓名冲突', '', user.username, TODAY]])
+        self.assertFalse(collision.data['can_import'], collision.data)
+        explicit = self.preview('tasks', [[project.code, 'design', '明确本人', '', '吴兴广（member）', TODAY]])
+        self.assertTrue(explicit.data['can_import'], explicit.data)
+        self.commit('tasks', explicit)
         self.assertEqual(project.tasks.get().assignee_id, user.pk)
+
+    def test_missing_partial_and_mismatched_person_references_are_rejected(self):
+        project = self.active_project()
+        self.users['member'].display_name = '吴兴广'
+        self.users['member'].save()
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        for value in ('吴兴', '不存在', '错误姓名（member）', '吴兴广（missing）'):
+            with self.subTest(value=value):
+                preview = self.preview('tasks', [[project.code, 'design', '错误人员', '', value, TODAY]])
+                self.assertFalse(preview.data['can_import'], preview.data)
+                self.assertIn('未找到人员', preview.data['errors'][0]['message'])
+        self.assertFalse(project.tasks.exists())
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.assertEqual(AuditLog.objects.count(), audits)
+
+    def test_confirmation_rejects_identity_reassignment_and_rolls_back_whole_batch(self):
+        project = self.active_project()
+        user = self.users['member']
+        user.display_name = '吴兴广'
+        user.save()
+        preview = self.preview(
+            'tasks',
+            [
+                [project.code, 'design', '前行也要回滚', '', 'manager', TODAY],
+                [project.code, 'design', '不得换人', '', '吴兴广', TODAY],
+            ],
+        )
+        self.assertTrue(preview.data['can_import'], preview.data)
+        user.display_name = '更名后的员工'
+        user.save()
+        other = User.objects.create_user(username='replacement', display_name='吴兴广', role='member')
+        project.members.add(other)
+        receipts = ActionReceipt.objects.count()
+        audits = AuditLog.objects.count()
+        rejected = self.commit('tasks', preview, status=400)
+        self.assertIn('人员对应关系已变化', str(rejected))
+        self.assertFalse(project.tasks.exists())
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.assertEqual(AuditLog.objects.count(), audits)
+
+    def test_names_do_not_bypass_project_manager_role_or_sales_ownership(self):
+        user = self.users['member']
+        user.display_name = '吴兴广'
+        user.save()
+        invalid = self.preview('projects', [['无经理权限', 'C1', '吴兴广', '', TODAY, '1', '12', '']])
+        self.assertFalse(invalid.data['can_import'], invalid.data)
+        salesperson = self.users['sales_manager']
+        salesperson.display_name = '销售张经理'
+        salesperson.save()
+        own = self.preview('sales', [['本人销售', 'C1', '销售张经理', '', TODAY, '1', '12']], role='sales_manager')
+        self.assertTrue(own.data['can_import'], own.data)
+        self.commit('sales', own, role='sales_manager')
+        self.assertEqual(SalesOrder.objects.get(name='本人销售').manager_id, salesperson.pk)
+        denied = self.preview('sales', [['他人销售', 'C1', 'manager', '', TODAY, '1', '12']], role='sales_manager')
+        self.assertFalse(denied.data['can_import'], denied.data)
+        self.assertFalse(SalesOrder.objects.filter(name='他人销售').exists())
 
     def test_task_import_accepts_exact_chinese_username(self):
         user = self.users['member']
@@ -182,7 +286,9 @@ class TransferTests(BusinessFixtures, TestCase):
     def test_task_import_distinguishes_inactive_and_nonparticipant_accounts(self):
         project = self.active_project()
         user = self.users['member']
-        rows = [[project.code, 'design', '指派任务', '', user.username, TODAY]]
+        user.display_name = '吴兴广'
+        user.save()
+        rows = [[project.code, 'design', '指派任务', '', user.display_name, TODAY]]
         receipts = ActionReceipt.objects.count()
         audits = AuditLog.objects.count()
         valid = self.preview('tasks', rows)
@@ -193,7 +299,7 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertFalse(inactive.data['can_import'], inactive.data)
         self.assertIsNone(inactive.data['token'])
         self.assertEqual(inactive.data['errors'][0]['row'], 2)
-        self.assertIn('登录用户名“member”已停用', inactive.data['errors'][0]['message'])
+        self.assertIn('人员“吴兴广（member）”已停用', inactive.data['errors'][0]['message'])
         rejected = self.commit('tasks', valid, status=400)
         self.assertIn('已停用', str(rejected))
         self.assertEqual(str(rejected['rows'][0]['row']), '2')
@@ -301,14 +407,14 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertFalse(project.tasks.exists())
         self.assertFalse(Stock.objects.exists())
 
-    def downloaded_preview(self, resource, rows, fmt='csv'):
+    def downloaded_preview(self, resource, rows, fmt='csv', *, previous=False):
         response = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': fmt})
         self.assertEqual(response.status_code, 200)
         if fmt == 'csv':
             headers = next(csv.reader(io.StringIO(response.content.decode('utf-8-sig'))))
             stream = io.StringIO()
             writer = csv.writer(stream)
-            writer.writerow(headers)
+            writer.writerow([label for label, _ in transfers.PREVIOUS_SCHEMAS[resource]] if previous else headers)
             writer.writerows([[row.get(label, '') for label in headers] for row in rows])
             content = stream.getvalue().encode()
         else:
@@ -316,6 +422,9 @@ class TransferTests(BusinessFixtures, TestCase):
             headers = [cell.value for cell in book.active[1]]
             for row in rows:
                 book.active.append([row.get(label, '') for label in headers])
+            if previous:
+                for column, (label, _) in enumerate(transfers.PREVIOUS_SCHEMAS[resource], 1):
+                    book.active.cell(1, column).value = label
             stream = io.BytesIO()
             book.save(stream)
             book.close()
@@ -353,8 +462,8 @@ class TransferTests(BusinessFixtures, TestCase):
                 '单位': '台',
             },
             'partners': {'往来单位': '模板供应商', '类型': '供应商', '采购账期': '月结30天', '电话': '00123'},
-            'sales': {'销售名称': '模板销售', '客户编码': 'C1', '负责人账号': 'manager', '设备数量': '1'},
-            'projects': {'项目名称': '模板项目', '客户编码': 'C1', '负责人账号': 'manager', '设备数量': '1'},
+            'sales': {'销售名称': '模板销售', '客户编码': 'C1', '负责人姓名或账号': 'manager', '设备数量': '1'},
+            'projects': {'项目名称': '模板项目', '客户编码': 'C1', '负责人姓名或账号': 'manager', '设备数量': '1'},
             'purchases': {
                 '分组号': 'G1',
                 '项目编号': project.code,
@@ -365,7 +474,7 @@ class TransferTests(BusinessFixtures, TestCase):
                 '含税单价': '12.34',
                 '采购账期': '现付',
             },
-            'tasks': {'任务名称': '新设计', '阶段': '设计', '执行人账号': 'member', '项目编号': project.code},
+            'tasks': {'任务名称': '新设计', '阶段': '设计', '执行人姓名或账号': 'member', '项目编号': project.code},
             'stocks': {'物料编码': 'I1', '库位': '新期初仓', '库存数量': '2', '单位成本': '3.45', '原因': '期初'},
             'entries': {'项目编号': project.code, '款项': '模板差旅', '原金额': '10.25', '最近待付期限': TODAY},
             'payments': {
@@ -375,13 +484,13 @@ class TransferTests(BusinessFixtures, TestCase):
                 '说明': '实际支付',
                 '结算方式': '银行转账',
             },
-            'time': {'任务ID': str(task.pk), '人员账号': 'admin', '日期': TODAY, '工时': '1.25', '说明': '设计'},
+            'time': {'任务ID': str(task.pk), '人员姓名或账号': 'admin', '日期': TODAY, '工时': '1.25', '说明': '设计'},
             'deliveries': {
                 '项目编号': project.code,
                 '设备数量': '1',
                 '发货日': TODAY,
-                '安装人账号': 'member',
-                '验收人账号': 'manager',
+                '安装人姓名或账号': 'member',
+                '验收人姓名或账号': 'manager',
             },
             'moves': {'库存ID': str(stock.pk), '数量': '1', '说明': '生产领料', '项目编号': project.code},
         }
@@ -395,6 +504,9 @@ class TransferTests(BusinessFixtures, TestCase):
                     self.assertEqual(preview.data['columns'], layout.data['columns'])
                     self.assertEqual(preview.data['row_count'], 1)
                     self.assertEqual(preview.data['rows'][0]['row'], 2)
+                    if any(key in transfers.PERSON_LABELS for _, key in transfers.SCHEMAS[resource][1]):
+                        old = self.downloaded_preview(resource, [row], fmt, previous=True)
+                        self.assertEqual(old.data['rows'], preview.data['rows'])
         # Confirm the new order does not swap brand/category/unit, including Chinese enums.
         result = self.commit('items', self.downloaded_preview('items', [samples['items']], 'xlsx'))
         item = Item.objects.get(pk=result['results'][0]['id'])
@@ -423,6 +535,10 @@ class TransferTests(BusinessFixtures, TestCase):
                             self.assertTrue(column[key], (resource, column))
                             self.assertIn(column[key], book['数据'].cell(1, index).comment.text)
                         self.assertContains(html, column['label'])
+                        if column['key'] in transfers.PERSON_LABELS:
+                            self.assertIn('姓名或账号', column['label'])
+                            self.assertIn('可填姓名或登录账号', column['hint'])
+                            self.assertIn('姓名（用户名）', column['hint'])
                     book.close()
         for fmt in ('html', 'xlsx', 'csv'):
             self.assertEqual(

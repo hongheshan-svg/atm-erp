@@ -1,11 +1,13 @@
 """Batch creation through existing services, with rollback-only preview and signed confirmation."""
 
+import re
 from datetime import date, datetime
 from uuid import uuid4
 
 from django.core import signing
 from django.core.exceptions import ValidationError as ModelValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from rest_framework.exceptions import APIException, ValidationError
 
@@ -29,7 +31,7 @@ from . import execution, finance, inventory, masterdata, projects, sales, supply
 from .bom_import import message, read_file
 from .import_guides import RESOURCES, guide, template_document
 
-# Label -> service field. Human-readable codes/usernames resolve at both preview and confirmation.
+# Label -> service field. Human-readable references resolve at preview and confirmation.
 DETAIL = [
     ('名称', 'name'),
     ('客户编码', 'customer'),
@@ -192,7 +194,16 @@ ORDERS = {
     'tasks': ['title', 'kind', 'assignee', 'due_date', 'project', 'description'],
     'moves': ['stock', 'quantity', 'reason', 'project', 'task'],
 }
+PERSON_LABELS = {
+    'manager': '负责人姓名或账号',
+    'members': '成员姓名或账号（分号分隔）',
+    'assignee': '执行人姓名或账号',
+    'user': '人员姓名或账号',
+    'installer': '安装人姓名或账号',
+    'acceptor': '验收人姓名或账号',
+}
 SCHEMAS = {}
+PREVIOUS_SCHEMAS = {}
 PREVIOUS_ITEM_COLUMNS = [
     ('物料编码', 'code'),
     ('物料名称', 'name'),
@@ -206,7 +217,9 @@ for resource, (roles, old_columns) in LEGACY_SCHEMAS.items():
     labels = {key: LABEL_OVERRIDES.get(resource, {}).get(key, label) for label, key in old_columns}
     if resource == 'items':
         labels.update(drawing_number='图号', drawing_revision='图档版本', product_category='产品编码类别')
-    SCHEMAS[resource] = (roles, [(labels[key], key) for key in ORDERS.get(resource, list(labels))])
+    previous = [(labels[key], key) for key in ORDERS.get(resource, list(labels))]
+    PREVIOUS_SCHEMAS[resource] = previous
+    SCHEMAS[resource] = (roles, [(PERSON_LABELS.get(key, label), key) for label, key in previous])
 
 TABLE_KEYS = {
     'item': ['item_code', 'item_name'],
@@ -268,21 +281,39 @@ def template(actor, resource, file_format):
     return template_document(resource + '-template', layout(actor, resource), file_format)
 
 
-def resolve(model, value, field='code'):
-    obj = model.objects.filter(**{field: value}).first()
-    if obj is None:
-        if model is User:
-            raise ValidationError(
-                f'未找到登录用户名“{value}”。请核对“设置 → 用户管理”中的“用户名”列，账号字段不按“姓名”匹配。'
-            )
-        label = {Item: '物料', Partner: '往来单位', Project: '项目'}[model]
-        raise ValidationError(f'找不到{label}：{value}，请核对系统中的编号。')
-    if model is User and not obj.is_active:
-        raise ValidationError(f'登录用户名“{value}”已停用，请填写已启用且具备相应业务权限的账号。')
+def resolve_person(value):
+    value = str(value).strip()
+    explicit = re.fullmatch(r'(.+?)[（(]([^（）()]+)[）)]', value)
+    if explicit:
+        name, username = (part.strip() for part in explicit.groups())
+        obj = User.objects.filter(username=username).first()
+        candidates = [obj] if obj and (obj.display_name or obj.username) == name else []
+    else:
+        # Include inactive users and name/account collisions: never choose an arbitrary person.
+        candidates = list(User.objects.filter(Q(username=value) | Q(display_name=value)).order_by('pk')[:2])
+    if not candidates:
+        raise ValidationError(f'未找到人员“{value}”。请核对人员姓名或登录账号；也可填写姓名（用户名）。')
+    if len(candidates) > 1:
+        raise ValidationError(
+            f'“{value}”对应多名人员，请填写姓名（用户名）或可唯一匹配的登录账号，不能仅填写重名姓名。'
+        )
+    obj = candidates[0]
+    if not obj.is_active:
+        raise ValidationError(f'人员“{obj.display_name or obj.username}（{obj.username}）”已停用，请选择已启用的人员。')
     return obj.pk
 
 
-def payload(raw):
+def resolve(model, value, field='code'):
+    if model is User:
+        return resolve_person(value)
+    obj = model.objects.filter(**{field: value}).first()
+    if obj is None:
+        label = {Item: '物料', Partner: '往来单位', Project: '项目'}[model]
+        raise ValidationError(f'找不到{label}：{value}，请核对系统中的编号。')
+    return obj.pk
+
+
+def payload(raw, people=None):
     data = {key: value for key, value in raw.items() if value != ''}
     for field in ['item', 'customer', 'supplier', 'project']:
         if field in data:
@@ -293,14 +324,17 @@ def payload(raw):
         if field in data:
             data[field] = resolve(User, data[field], 'username')
     if 'members' in data:
-        data['members'] = [
-            resolve(User, value.strip(), 'username') for value in data['members'].split(';') if value.strip()
-        ]
+        data['members'] = [resolve_person(value) for value in re.split('[;；]', data['members']) if value.strip()]
+    if people is not None:
+        resolved = {key: data[key] for key in PERSON_LABELS if key in data}
+        if people and people != resolved:
+            raise ValidationError('人员对应关系已变化，请重新预览文件并核对人员后再确认。')
+        people.update(resolved)
     return data
 
 
-def execute_row(actor, resource, raw, key):
-    data = payload(raw)
+def execute_row(actor, resource, raw, key, people=None):
+    data = payload(raw, people)
     if resource in {'items', 'partners'}:
         return masterdata.masterdata(actor, key, Item if resource == 'items' else Partner, data)
     simple = {
@@ -344,8 +378,10 @@ def parse(actor, resource, upload):
     )
     if resource == 'items':
         legacy.append([label for label, _ in PREVIOUS_ITEM_COLUMNS])
+    previous_headers = [label for label, _ in PREVIOUS_SCHEMAS[resource]]
+    legacy.append(previous_headers)
     actual_headers, rows = read_file(upload, headers, legacy, return_headers=True)
-    source_columns = columns if actual_headers == headers else old_columns[: len(actual_headers)]
+    source_columns = columns if actual_headers in (headers, previous_headers) else old_columns[: len(actual_headers)]
     if resource == 'items' and actual_headers == [label for label, _ in PREVIOUS_ITEM_COLUMNS]:
         source_columns = PREVIOUS_ITEM_COLUMNS
     for index, row in enumerate(rows, 2):
@@ -407,7 +443,9 @@ def run(actor, resource, records, *, preview=False):
         for record in records:
             try:
                 with transaction.atomic():
-                    results.append(execute_row(actor, resource, record['data'], str(uuid4())))
+                    # Bind previewed identities in the signed token, then reject silent reassignment on confirmation.
+                    people = record.setdefault('people', {}) if preview else record.get('people')
+                    results.append(execute_row(actor, resource, record['data'], str(uuid4()), people))
             except (APIException, ModelValidationError, Http404) as exc:
                 detail = (
                     validation_detail(exc)
