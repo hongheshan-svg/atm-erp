@@ -4,25 +4,34 @@ import io
 from html import escape
 
 from django.http import HttpResponse
+from django.utils.http import content_disposition_header
 from openpyxl import Workbook
 from openpyxl.comments import Comment
+from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.hyperlink import Hyperlink
 from rest_framework.exceptions import ValidationError
 
-from ..models import Item
+from ..models import Item, Partner, Task
 from .tabular import document
 
 GUIDE_SHEET = '填写说明'
 GUIDE_MARKER = 'ERP导入模板填写说明'
 COMMON = [
     '只在“数据”页第2行起填写，一行一条明细；保留表头名称和顺序。填写说明不参与导入，请勿在说明页填业务数据。',
+    '优先使用Excel模板。选中数据单元格可看到填写提示；单击第2行起的空白格，再点右侧▼展开下拉，'
+    '不是点击表头，也不需要双击。说明页的“点此选择”可直接跳到对应填写位置；单位也可自行输入。',
+    '红色表头为必填，黄色表头为条件必填，蓝色表头为可选。开始填写一行后，已知必填的空格会标红；空白行不提示。',
+    '下拉选项、输入提示和缺项标红覆盖第2～1001行。粘贴可能覆盖或绕过Excel校验，上传后仍须检查系统预览。',
     '说明中的姓名、账号、编码、ID和日期均为格式示例，必须换成实际值；示例不代表系统中已有记录。',
     '最多1000条数据、5MB。Excel可保留系统附带的填写说明页；不要增加其他工作表。旧版单工作表模板仍可用。',
     '日期填写YYYY-MM-DD，例如2026-10-20。不能填写20天、20或46290等普通数字；Excel日期单元格请设置为日期格式。',
     '人员可填姓名或登录账号，重名请填姓名（用户名）；编码、账号、电话、流水号按文本填写，保留前导零，不要把编号与记录ID混用。',
     '金额使用人民币含税金额，最多2位小数；数量最多3位小数。只填数值，不加元、件、千分位或计算公式。',
-    'CSV使用UTF-8编码，只保存数据页；CSV不能附带说明，请另行下载填写说明。Excel打开CSV时注意编码与长数字按文本读取。',
+    'CSV使用UTF-8编码，只保存数据页；CSV不保留下拉选项、提示或标红，请配合下载的填写说明使用。'
+    'Excel打开CSV时注意编码与长数字按文本读取。',
     '上传后先检查预览，再确认导入；任一行失败整批不保存。不要重复上传已经确认成功的文件，避免重复新增。',
 ]
 
@@ -104,11 +113,157 @@ RESOURCES = {
     ),
 }
 
+# Each template starts with a short task-specific route, before the detailed field reference.
+# These instructions describe existing rules; they do not invent default business records.
+QUICK_START = {
+    'items': (
+        '先在基础资料 → 物料搜索，确认没有同一物料；准备型号、图纸和计量单位。',
+        '物料名称必填。选择产品编码类别后还要填规格；有图类别再填图号。编码留空可自动编号。',
+        '例如新增外购滑块：名称填滑块，规格填厂家真实型号，类别选无图·标准件，单位按实物填写；'
+        '不要把这份表传到BOM入口。',
+    ),
+    'partners': (
+        '准备单位全称和联系方式，先确认是客户、供应商还是两者兼有。',
+        '先填往来单位，再下拉选择类型。纯客户不用填采购账期和月结天数；供应商按实际采购约定填写。',
+        '例如新增客户：填真实公司全称，类型选客户，其余无资料的可选项留空。'
+        '选择自定义月结的供应商还要核实约定天数，不能用销售回款约定代替采购账期。',
+    ),
+    'sales': (
+        '先建好客户；到基础资料 → 往来单位复制客户编码，确认销售负责人已启用。',
+        '销售名称、客户编码、负责人姓名或账号必填；有约定交期时填具体日期。',
+        '例如销售一台设备：填合同业务名称、真实客户编码和负责人姓名。'
+        '导入后是销售草稿，仍需报价、签约；不会直接生成执行项目。',
+    ),
+    'projects': (
+        '先确认是否已有销售单：已签约的销售请从销售签约生成项目，避免建两次。',
+        '项目名称、客户编码、负责人姓名或账号必填；负责人须是项目经理或管理员。',
+        '例如直接新建执行项目：填真实项目名称、客户编码、项目经理姓名。'
+        '要导入设计/装配/调试任务，请使用项目任务模板；要导入物料需求，请使用BOM模板。',
+    ),
+    'purchases': (
+        '准备项目编号、供应商编码和已建档物料编码。按BOM单元采购请使用页面“从BOM多选下单”。',
+        '每行填分组号、项目编号、供应商编码、交期、物料编码、数量、含税单价；同张单的分组号相同。',
+        '例如同一采购单有两种物料：分成两行，分组号都填G001，物料编码分别填写，其他单头资料保持一致。'
+        '另一张单改填G002；这些分组号由填表人编写，不是系统采购编号。',
+    ),
+    'tasks': (
+        '先确认项目处于执行中或交付中，执行人员已加入该项目。',
+        '任务名称、阶段、执行人姓名或账号、项目编号必填；期限有要求时填截止日期。',
+        '例如设计任务：名称填机械设计，阶段下拉选设计，执行人填真实姓名，项目编号从项目列表复制。'
+        '期限填2026-10-20这种日期，不填20；采购、发货和T0/T1不是任务阶段。',
+    ),
+    'stocks': (
+        '仅管理员使用。先建好物料，确认这个物料和库位还没有库存流水；已有库存用盘点调整。',
+        '物料编码、库存数量、单位成本、原因必填；库位留空默认主仓。',
+        '例如录入某库位10件物料：数量填10，单位成本填每件成本，不能填10件的总成本。'
+        '同一物料在不同库位要分行填写，不要重复导入期初。',
+    ),
+    'entries': (
+        '准备项目编号、真实费用依据和付款期限；这里只登记项目费用。',
+        '项目编号、款项、原金额、最近待付期限必填；这里的原金额就是本笔费用金额。',
+        '例如项目差旅费：款项填项目差旅费，原金额填本笔费用，期限填付款到期日期。'
+        '合同应收、采购应付由业务单据生成，不要在这里再录一次。',
+    ),
+    'payments': (
+        '先到收付款 → 应收应付与费用导出款项记录ID；采购付款还要核实已确认的业务对账单ID。',
+        '款项ID、金额、日期、说明必填；采购付款还须填对账单ID，金额不能超过可收付余额。',
+        '例如登记实际到账：款项ID从导出文件复制，金额填本次到账金额，日期填实际到账日。'
+        '这里登记流水，不会发起银行转账；退款和冲销从原记录操作。',
+    ),
+    'time': (
+        '先打开项目 → 任务与工时 → 项目任务，导出取得任务ID；任务须已存在。',
+        '任务ID、日期、工时、说明必填；人员留空表示本人。普通成员仅能登记本人任务的本人工时。',
+        '例如当天完成7.5小时设计：工时填7.5，说明填写实际工作内容。'
+        '不要在任务ID里填任务名称；同人同日累计净工时不能超过24小时。',
+    ),
+    'deliveries': (
+        '先核实设计/装配/调试已完成，BOM和领料满足本批交付；多单元项目从页面发货并指定配套清单。',
+        '项目编号、设备数量、发货日必填；安装人、验收人留空默认项目负责人。',
+        '例如实际发出1台设备：设备数量填1，发货日填实际发出日期。不能超过剩余未发货台数；导入后会创建安装和验收任务。',
+    ),
+    'moves': (
+        '到库存 → 现有库存导出库存记录ID，核对物料和库位，再准备项目编号。',
+        '库存ID、数量、说明、项目编号必填；已验收项目还须填该项目未完成的售后任务ID。',
+        '例如装配领料：库存ID从对应物料和库位的导出行复制，数量填本次实际领用数量。'
+        '不要用物料编码代替库存ID；库存不足、超BOM或需确认占用其他项目到货时，按系统提示处理。',
+    ),
+    'bom': (
+        '先在BOM页面选对项目；再分清本行是引用已有物料，还是新增物料。',
+        '已有物料：填系统物料编码和需求数量。新增物料：编码留空，填需求数量、名称、规格、产品编码类别、单位；'
+        '有图物料还填图号。修改已有BOM行还要填变更说明。',
+        '例如新增外购滑块：编码空着，数量填本项目需求量，规格填真实厂家型号，类别选无图·标准件，'
+        '单位按实物填写。加工件选实际加工类别，规格写真实材质/尺寸，图号另填，不能用图号代替规格。',
+    ),
+}
+
+SOURCES = {
+    'customer': '基础资料 → 往来单位：查到客户后复制“编码”。',
+    'supplier': '基础资料 → 往来单位：查到供应商后复制“编码”。',
+    'project': '项目 → 项目列表：复制对应项目的“编号”，例如ATM2601。',
+    'item': '基础资料 → 物料：核对名称和规格，再复制“编码”。',
+    'entry': '收付款 → 应收应付与费用 → 导入导出 → 导出：复制对应行的“ID”。',
+    'stock': '库存 → 现有库存 → 导入导出 → 导出：核对物料和库位，复制对应行的“ID”。',
+    'task': '打开对应项目 → 任务与工时 → 项目任务 → 导入导出 → 导出：复制任务“ID”。',
+    'document': '核对已上传的同项目收付凭证记录ID；不清楚时请财务核对，不能填文件名或路径。',
+    'reconciliation': '收付款 → 业务对账：核对已确认且仍有效的同款项对账单，导出取得“ID”。',
+    'specification': '标准件查厂家型号；加工件查设计图纸的材质和尺寸，资料缺失先找设计人员确认。',
+    'drawing_number': '从实际设计图纸复制图号，与规格分开填写。',
+    'drawing_revision': '查图纸上的实际版本；没有版本可空，不是计量单位。',
+    'brand': '按实物铭牌、厂家资料或原物料档案填写。',
+    'group': '自己为本次采购文件编写分组号：同张单相同，不同单不同。',
+    'phone': '向业务联系人核实号码；保留区号和前导零。',
+}
+
+
+def field_source(resource, key, options):
+    if key in ('manager', 'members', 'assignee', 'user', 'installer', 'acceptor'):
+        return '填写系统中已启用人员的姓名；重名时请管理员在设置 → 用户管理核对账号，填“姓名（用户名）”。'
+    if key == 'code':
+        return (
+            '已有物料到基础资料 → 物料复制编码；新增物料此格留空。'
+            if resource == 'bom'
+            else '新增编码可留空自动编号；自定义编码先核实未使用，已有物料请直接复用。'
+        )
+    if options:
+        return (
+            '单击第2行起的空白格，再点右侧▼选择；单位允许手填实际单位。'
+            if key == 'unit'
+            else ('单击第2行起的空白格，再点右侧▼选择；不用记代码，也不要改写选项名称。')
+        )
+    if key.endswith('_date') or key == 'date':
+        return '从实际业务记录或约定中确认具体日期；填写年-月-日，例如2026-10-20。'
+    return SOURCES.get(key, '按本列规则填写真实业务资料；没有资料的可选项留空，不复制示例凑数。')
+
+
 PERSON_HINT = '可填姓名或登录账号；重名或姓名与他人账号相同时，填写姓名（用户名）明确人员。'
 DATE_HINT = '填写具体日期YYYY-MM-DD，不是天数，也不能填Excel日期序号。'
 PRODUCT_HINT = '；'.join(f'{value}＝{label}' for value, label in Item.ProductCategory.choices) + (
-    '。可填上述编码或完整中文名称，不能填1或2；与“物料类别”的标准件/非标件不是同一分类。'
+    '。用于自动生成物料编码；Excel从下拉框选择完整中文名称，CSV可填上述编码或完整名称，不能填1或2。'
+    '“物料类别”只区分标准件/非标件，不要把机加、钣金填到那一列。'
 )
+COMMON_UNITS = [
+    '件',
+    'PCS',
+    '套',
+    '台',
+    '个',
+    '只',
+    '支',
+    '根',
+    '米',
+    '平方米',
+    '千克',
+    '克',
+    '升',
+    '毫升',
+    '瓶',
+    '桶',
+    '盒',
+    '箱',
+    '包',
+    '卷',
+    '张',
+]
 
 # required, hint, example. Every schema key must have an explicit description.
 FIELDS = {
@@ -118,7 +273,12 @@ FIELDS = {
         '新增物料可自定义唯一编码，最多30字符；留空自动生成。已用编码（含停用或已删除）不能重复使用。',
         'MAT-001',
     ),
-    'specification': ('条件必填', '填写产品编码类别时必填型号/规格；不能用图号替代。最多2000字符。', 'HGW20CC'),
+    'specification': (
+        '条件必填',
+        '填写产品编码类别时必填真实型号/规格，不能用图号替代。标准件填厂家型号；'
+        '加工件可填实际材质、尺寸等识别信息，例如6061铝板 200×100×10mm。最多2000字符。',
+        'HGW20CC',
+    ),
     'drawing_number': (
         '条件必填',
         '产品编码类别为11/12/13/19时必填图号。与型号/规格分别填写，最多100字符。',
@@ -127,7 +287,12 @@ FIELDS = {
     'drawing_revision': ('可空', '填写实际图档版本，最多30字符；没有版本可留空。不要填写PCS、品牌或数量。', 'A'),
     'product_category': ('可空', PRODUCT_HINT, '无图·标准件'),
     'brand': ('可空', '填写品牌，最多80字符；不要填写图档版本。', '上银'),
-    'part_type': ('可空', '填写标准件或非标件（兼容standard/custom）。机加、钣金应填在产品编码类别中。', '标准件'),
+    'part_type': (
+        '可空',
+        '只区分标准件/非标件；通常外购标准产品选标准件，按项目图纸定制的零件选非标件，不确定可先留空。'
+        '机加、钣金填在产品编码类别中。旧文件兼容standard/custom。',
+        '标准件',
+    ),
     'unit': ('可空，默认件', '填写计量单位，不要填入图档版本列；同一物料沿用其原单位。', 'PCS'),
     'duplicate_reason': (
         '条件必填',
@@ -230,7 +395,12 @@ OVERRIDES = {
         'MAT-001',
     ),
     ('bom', 'name'): ('新增物料必填', '编码留空时填写物料名称；已有物料可空，填写时须与系统一致。', '滑块'),
-    ('bom', 'specification'): ('新增物料必填', '编码留空时必须填写型号/规格，即使已填写图号也不能省略。', 'HGW20CC'),
+    ('bom', 'specification'): (
+        '新增物料必填',
+        '编码留空时必须填写真实型号/规格，即使已填写图号也不能省略。标准件填厂家型号，例如HGW20CC；'
+        '加工件填实际材质、尺寸等识别信息，例如6061铝板 200×100×10mm。资料不全请向设计人员确认。',
+        'HGW20CC',
+    ),
     ('bom', 'drawing_number'): (
         '新增有图物料必填',
         '新建11/12/13/19类物料时填写图号，最多100字符；已有物料可空，填写时须与系统一致。',
@@ -259,23 +429,155 @@ BOM_COLUMNS = [
 ]
 
 
+def choices(resource, key):
+    # Reuse the importer's accepted Chinese values; avoid a second enum vocabulary.
+    from .transfers import ENUMS
+
+    if key == 'product_category':
+        return list(Item.ProductCategory.labels)
+    if key in ('part_type', 'payment_term', 'method'):
+        return list(ENUMS[key])
+    if (resource, key) == ('partners', 'kind'):
+        return list(Partner.Kind.labels)
+    if (resource, key) == ('tasks', 'kind'):
+        return [Task.Kind(value).label for value in ('design', 'assembly', 'test')]
+    return COMMON_UNITS if key == 'unit' else []
+
+
 def guide(resource, columns):
     title, entry, note = RESOURCES[resource]
     fields = []
-    for label, key in columns:
+    for index, (label, key) in enumerate(columns, 1):
         required, hint, example = OVERRIDES[(resource, key)] if (resource, key) in OVERRIDES else FIELDS[key]
-        fields.append({'key': key, 'label': label, 'required': required, 'hint': hint, 'example': example})
-    return {'title': title, 'entry': entry, 'note': note, 'instructions': COMMON, 'columns': fields}
+        options = choices(resource, key)
+        if options:
+            hint = (
+                '可从下拉选择常用单位，也可直接输入实际单位。' if key == 'unit' else 'Excel请从下拉选项中选择。'
+            ) + hint
+        fields.append(
+            {
+                'key': key,
+                'label': label,
+                'required': required,
+                'hint': hint,
+                'example': example,
+                'options': options,
+                'allow_custom': key == 'unit',
+                'source': field_source(resource, key, options),
+                'cell': f'{get_column_letter(index)}2',
+            }
+        )
+    return {
+        'resource': resource,
+        'title': title,
+        'entry': entry,
+        'note': note,
+        'quick_start': dict(zip(('prepare', 'minimum', 'example'), QUICK_START[resource], strict=True)),
+        'instructions': COMMON,
+        'columns': fields,
+    }
+
+
+def required_condition(resource, column, letters):
+    """Only highlight conditions knowable from this row; server checks project facts."""
+    key = column['key']
+    if column['required'] == '必填':
+        return 'TRUE'
+    if resource == 'bom' and key in ('name', 'specification', 'product_category', 'unit'):
+        return f'LEN(TRIM(${letters["code"]}2&""))=0'
+    if resource == 'items' and key == 'specification':
+        return f'LEN(TRIM(${letters["product_category"]}2&""))>0'
+    if resource in ('bom', 'items') and key == 'drawing_number':
+        category = f'${letters["product_category"]}2'
+        drawing = f'OR(LEFT({category}&"",1)="1",LEFT({category}&"",2)="有图")'
+        return f'AND(LEN(TRIM(${letters["code"]}2&""))=0,{drawing})' if resource == 'bom' else drawing
+    return ''
+
+
+def input_controls(data, layout):
+    letters = {column['key']: get_column_letter(index) for index, column in enumerate(layout['columns'], 1)}
+    active_row = f'COUNTA($A2:${get_column_letter(len(letters))}2)>0'
+    for column in layout['columns']:
+        letter = letters[column['key']]
+        cells = f'{letter}2:{letter}1001'
+        options = column['options']
+        validation = DataValidation(
+            type='list' if options else 'custom',
+            formula1='"' + ','.join(options) + '"' if options else 'TRUE',
+            allow_blank=True,
+            showDropDown=False,
+            showInputMessage=True,
+            showErrorMessage=bool(options) and not column['allow_custom'],
+            errorStyle='stop',
+            errorTitle='请使用下拉选项',
+            error=f'“{column["label"]}”请从右侧▼选择，不要自行改写名称。可选内容：' + '、'.join(options),
+            promptTitle=column['label'][:32],
+            prompt=(
+                f'{column["required"]}。{column["source"]} 示例：{column["example"]}。'
+                + ('完整规则见“填写说明”页。' if options else column['hint'])
+            )[:255],
+        )
+        data.add_data_validation(validation)
+        validation.add(cells)
+        condition = required_condition(layout['resource'], column, letters)
+        if condition:
+            data.conditional_formatting.add(
+                cells,
+                FormulaRule(
+                    formula=[f'AND({active_row},{condition},LEN(TRIM({letter}2&""))=0)'],
+                    fill=PatternFill('solid', fgColor='FDE2E2'),
+                    font=Font(color='9B1C1C'),
+                ),
+            )
+        if column['key'].endswith('_date') or column['key'] == 'date':
+            data.column_dimensions[letter].number_format = 'yyyy-mm-dd'
+        elif column['key'] in (
+            'code',
+            'item',
+            'customer',
+            'supplier',
+            'project',
+            'phone',
+            'reference',
+            'account',
+            'manager',
+            'members',
+            'assignee',
+            'user',
+            'installer',
+            'acceptor',
+            'drawing_number',
+            'drawing_revision',
+            'group',
+            'entry',
+            'stock',
+            'task',
+            'document',
+            'reconciliation',
+        ):
+            data.column_dimensions[letter].number_format = '@'
 
 
 def html_guide(layout):
     fields = ''.join(
         '<tr>'
-        + ''.join(f'<td>{escape(column[key])}</td>' for key in ('label', 'required', 'hint', 'example'))
+        + f'<td>{escape(column["label"])}<br><small>数据页 {column["cell"]} 起'
+        + (' · ▼下拉选择' if column['options'] else ' · 手动填写')
+        + '</small></td>'
+        + ''.join(f'<td>{escape(column[key])}</td>' for key in ('required', 'source', 'hint', 'example'))
         + '</tr>'
         for column in layout['columns']
     )
     rules = ''.join(f'<li>{escape(rule)}</li>' for rule in layout['instructions'])
+    quick = layout['quick_start']
+    dropdowns = '、'.join(
+        f'{column["label"]}（{column["cell"]}起）' for column in layout['columns'] if column['options']
+    )
+    dropdown_hint = (
+        dropdowns + '。单击数据格，再点右侧▼；表头不显示下拉箭头。'
+        if dropdowns
+        else '本模板没有固定选项，请按真实资料填写；选中数据格可查看填写提示。'
+    )
     return (
         '<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -283,24 +585,121 @@ def html_guide(layout):
         '<style>body{font:16px/1.7 system-ui,sans-serif;color:#233044;max-width:1100px;margin:32px auto;padding:0 20px}'
         'h1{font-size:26px}li{margin:8px 0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccd5df;'
         'padding:12px;text-align:left;vertical-align:top}th{background:#edf3f8}td:first-child{min-width:100px}'
-        '.table{overflow:auto}@media print{body{font-size:11px;margin:0}thead{display:table-header-group}'
+        '.quick{background:#edf5ff;border:1px solid #b9d2f2;border-radius:12px;padding:16px 20px}'
+        '.table{overflow:auto}small{color:#546377}@media print{body{font-size:11px;margin:0}thead{display:table-header-group}'
         'tr{break-inside:avoid}}</style>'
         f'<h1>{escape(layout["title"])}导入模板填写说明</h1>'
-        f'<p><strong>导入入口：</strong>{escape(layout["entry"])}</p><p>{escape(layout["note"])}</p>'
+        f'<p><strong>导入入口：</strong>{escape(layout["entry"])}</p>'
+        '<section class="quick"><h2>第一次填写，照这三步做</h2>'
+        f'<p><strong>① 先准备：</strong>{escape(quick["prepare"])}</p>'
+        f'<p><strong>② 开始填写：</strong>{escape(quick["minimum"])}</p>'
+        '<p><strong>③ 上传预览：</strong>保存Excel，回到上方导入入口选择文件，核对项目、行数、数量和金额。'
+        '有错误先按行号修改，重新上传，校验通过后再确认导入。</p>'
+        f'<p><strong>下拉在哪里：</strong>{escape(dropdown_hint)}</p></section>'
+        f'<h2>照着理解，不要照抄</h2><p>{escape(quick["example"])}</p>'
+        f'<p>{escape(layout["note"])}</p>'
         f'<h2>填写前请阅读</h2><ol>{rules}</ol>'
         '<h2>逐列填写说明</h2><p>示例仅说明格式，请替换为真实业务数据。</p><div class="table"><table>'
-        '<thead><tr><th>模板字段</th><th>是否必填</th><th>填写规则</th><th>格式示例</th></tr></thead>'
+        '<thead><tr><th>模板字段 / 填写位置</th><th>是否必填</th><th>去哪找 / 怎么选</th><th>填写规则</th>'
+        '<th>格式示例</th></tr></thead>'
         f'<tbody>{fields}</tbody></table></div></html>'
     )
+
+
+def workbook_guide(book, layout):
+    sheet = book.create_sheet(GUIDE_SHEET)
+    quick = layout['quick_start']
+    sheet.append([GUIDE_MARKER])
+    sheet.append([f'{layout["title"]}导入 · 从这里开始'])
+    sheet.merge_cells('A2:C2')
+    sheet.append(['用在哪个入口', layout['entry']])
+    sheet.append(['① 先准备', quick['prepare']])
+    sheet.append(['② 最少填什么', quick['minimum']])
+    sheet.append(['开始填写 →', '点击这里，到“数据”页第2行开始填写；一行一条，不改表头。'])
+    sheet['B6'].hyperlink = Hyperlink(ref='B6', location="'数据'!A2")
+    sheet.append(
+        [
+            '下拉怎么打开',
+            '单击空白数据格，再点右侧▼；不要点表头，也不需要双击。下面标有“▼点此选择”的字段可以直接跳转。'
+            if any(column['options'] for column in layout['columns'])
+            else '本模板没有固定下拉选项，按真实资料填写即可。下方“点此填写”可跳到对应输入格，并查看填写提示。',
+        ]
+    )
+    sheet.append(
+        [
+            '③ 上传并预览',
+            '保存Excel，回到上面的导入入口选择文件。核对项目、行数、数量和金额；'
+            '有错误按文件行号修改并重新上传，通过后才确认导入。',
+        ]
+    )
+    sheet.append(['先看一个例子', quick['example']])
+    sheet.append(
+        [
+            '遇到错误怎么办',
+            '不要猜规格、姓名、编号或ID。按报错行号核对资料；表头不符时先确认导入入口，'
+            '重新下载对应模板，只把业务数据按列粘贴为值。没有错误才确认，成功文件不要重复导入。',
+        ]
+    )
+    sheet.append(['这份表会做什么', layout['note']])
+    sheet.append(
+        [
+            '颜色怎么认',
+            '红色表头＝必填；黄色＝满足条件才必填；蓝色＝可选。填写后缺项标红。'
+            '说明页不参与导入，示例不要复制为真实业务。',
+        ]
+    )
+    section_rows = [13]
+    sheet.append(['字段 / 点此去填', '是否必填 · 去哪里找 · 填写规则', '示例（必须换成真实资料）'])
+    for column in layout['columns']:
+        action = '▼点此选择' if column['options'] else '点此填写'
+        sheet.append(
+            [
+                f'{column["label"]}\n{action} · {column["cell"]}',
+                f'{column["required"]}\n{column["source"]}\n{column["hint"]}',
+                column['example'],
+            ]
+        )
+        cell = sheet.cell(sheet.max_row, 1)
+        cell.hyperlink = Hyperlink(ref=cell.coordinate, location=f"'数据'!{column['cell']}")
+    section_rows.append(sheet.max_row + 1)
+    sheet.append(['保存前再核对', '操作提醒'])
+    for rule in layout['instructions']:
+        sheet.append(['填写提醒', rule])
+    for row in sheet:
+        for cell in row:
+            cell.alignment = Alignment(vertical='top', wrap_text=True)
+            cell.font = Font(name='等线', size=11, color='233044')
+            if cell.hyperlink:
+                cell.font = Font(name='等线', size=11, bold=True, color='175CD3', underline='single')
+        lines = max(
+            sum(max(1, (len(line) + width - 1) // width) for line in str(cell.value or '').split('\n'))
+            for cell, width in zip(row, (12, 42, 18), strict=True)
+        )
+        sheet.row_dimensions[row[0].row].height = max(40, 18 * lines + 12)
+    for letter, width in [('A', 26), ('B', 86), ('C', 34)]:
+        sheet.column_dimensions[letter].width = width
+    for row in (2, 6, *section_rows):
+        for cell in sheet[row]:
+            cell.fill = PatternFill('solid', fgColor='E8F0F8')
+    sheet['A2'].font = Font(name='等线', size=20, bold=True, color='17365D')
+    sheet.row_dimensions[1].hidden = True
+    sheet.row_dimensions[2].height = 42
+    sheet.freeze_panes = 'B3'
+    sheet.sheet_view.showGridLines = False
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_setup.orientation = 'landscape'
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    book.active = sheet
 
 
 def template_document(name, layout, file_format):
     headers = [column['label'] for column in layout['columns']]
     if file_format == 'csv':
-        return document(name, headers, [], 'csv')
-    if file_format == 'html':
+        response = document(name, headers, [], 'csv')
+    elif file_format == 'html':
         response = HttpResponse(html_guide(layout), content_type='text/html; charset=utf-8')
-        response['Content-Disposition'] = f'attachment; filename="{name}-guide.html"'
     elif file_format == 'xlsx':
         book = Workbook()
         data = book.active
@@ -308,52 +707,33 @@ def template_document(name, layout, file_format):
         data.append(headers)
         data.freeze_panes = 'A2'
         data.sheet_properties.pageSetUpPr.fitToPage = True
-        fill = PatternFill('solid', fgColor='E8F0F8')
+        data.row_dimensions[1].height = 32
         for index, column in enumerate(layout['columns'], 1):
             header = data.cell(1, index)
             header.font = Font(bold=True, color='233044')
-            header.fill = fill
+            required = column['required']
+            header.fill = PatternFill(
+                'solid', fgColor='FDE2E2' if required == '必填' else 'FFF2CC' if '必填' in required else 'E8F0F8'
+            )
+            header.alignment = Alignment(vertical='center', wrap_text=True)
             header.comment = Comment(
                 f'{column["required"]}\n{column["hint"]}\n格式示例：{column["example"]}\n完整说明见“填写说明”页。',
                 '项目ERP',
             )
+            header.comment.width = 380
+            header.comment.height = 220
             data.column_dimensions[get_column_letter(index)].width = max(18, len(column['label']) * 2 + 2)
-        help_sheet = book.create_sheet(GUIDE_SHEET)
-        help_sheet.append([GUIDE_MARKER])
-        help_sheet.append([f'{layout["title"]}导入模板'])
-        help_sheet.append(['导入入口', layout['entry']])
-        help_sheet.append(['用途与前提', layout['note']])
-        for rule in layout['instructions']:
-            help_sheet.append(['通用说明', rule])
-        help_sheet.append(['模板字段', '是否必填与填写规则', '格式示例（请替换为真实值）'])
-        for column in layout['columns']:
-            help_sheet.append([column['label'], f'{column["required"]}。{column["hint"]}', column['example']])
-        for row in help_sheet:
-            for value in row:
-                value.alignment = Alignment(vertical='top', wrap_text=True)
-                value.font = Font(name='等线', size=11, color='233044')
-            lines = max(len(str(value.value or '')) // width for value, width in zip(row, (12, 42, 18), strict=True))
-            help_sheet.row_dimensions[row[0].row].height = max(36, 18 * (1 + lines))
-        for letter, width in [('A', 24), ('B', 86), ('C', 38)]:
-            help_sheet.column_dimensions[letter].width = width
-        for row in (1, 2, 5 + len(layout['instructions'])):
-            for value in help_sheet[row]:
-                value.fill = fill
-                value.font = Font(bold=True, color='233044')
-        help_sheet.freeze_panes = 'B5'
-        help_sheet.sheet_properties.pageSetUpPr.fitToPage = True
-        help_sheet.page_setup.orientation = 'landscape'
-        help_sheet.page_setup.paperSize = help_sheet.PAPERSIZE_A4
-        help_sheet.page_setup.fitToWidth = 1
-        help_sheet.page_setup.fitToHeight = 0
+        input_controls(data, layout)
+        workbook_guide(book, layout)
         output = io.BytesIO()
         book.save(output)
         book.close()
         response = HttpResponse(
             output.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = f'attachment; filename="{name}.xlsx"'
     else:
         raise ValidationError({'file_format': '请选择csv、xlsx或html填写说明。'})
+    title = layout['title'] + ('导入填写说明' if file_format == 'html' else '导入模板')
+    response['Content-Disposition'] = content_disposition_header(True, f'{title}.{file_format}')
     response['Cache-Control'] = 'no-store'
     return response

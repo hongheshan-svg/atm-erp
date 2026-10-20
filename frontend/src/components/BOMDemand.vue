@@ -17,6 +17,18 @@ const demand = ref<Row>({ lines: [] })
 const preview = ref<Row | null>(null)
 const error = ref('')
 const busy = ref(false)
+const importOpen = ref(false)
+const importError = ref('')
+const importFilename = ref('')
+let importGeneration = 0
+function closeImport() {
+  importGeneration++
+  importOpen.value = false
+  preview.value = null
+  importError.value = ''
+  busy.value = false
+}
+onBeforeUnmount(() => { importGeneration++ })
 const templateFormat = ref('xlsx')
 const importColumns = [
   { key: 'item_code', label: '物料编码' }, { key: 'assembly_unit', label: '单元' },
@@ -81,7 +93,8 @@ async function load() {
 watch(
   () => [props.projectId, props.revision],
   () => {
-    preview.value = null
+    if (importOpen.value) command.value = null
+    closeImport()
     void load()
   },
   { immediate: true },
@@ -98,8 +111,13 @@ async function importFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  const generation = ++importGeneration
+  input.value = ''
   busy.value = true
   error.value = ''
+  importError.value = ''
+  importFilename.value = file.name
+  importOpen.value = true
   preview.value = null
   const importingProject = props.projectId
   try {
@@ -110,12 +128,11 @@ async function importFile(event: Event) {
       body,
       requestKey(),
     )
-    if (props.projectId === importingProject) preview.value = result
+    if (generation === importGeneration) preview.value = result
   } catch (e) {
-    error.value = message(e)
+    if (generation === importGeneration) importError.value = message(e)
   } finally {
-    busy.value = false
-    input.value = ''
+    if (generation === importGeneration) busy.value = false
   }
 }
 function confirmImport() {
@@ -150,7 +167,7 @@ function confirmImport() {
 }
 function saved() {
   selected.value = []
-  preview.value = null
+  closeImport()
   void load()
   emit('changed')
 }
@@ -167,12 +184,12 @@ function saved() {
         ><template v-if="canEdit && ['draft', 'quoted', 'active', 'delivering'].includes(status || '')"
           ><select v-model="templateFormat" aria-label="BOM 模板格式"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><el-button
             @click="
-              download('/business/projects/bom-template/', `bom-template.${templateFormat}`, { file_format: templateFormat }).catch(
+              download('/business/projects/bom-template/', `BOM导入模板.${templateFormat}`, { file_format: templateFormat }).catch(
                 (e) => (error = message(e)),
               )
             "
             >下载模板</el-button
-          ><el-button @click="download('/business/projects/bom-template/', 'bom-template-guide.html', { file_format: 'html' }).catch((e) => (error = message(e)))">下载填写说明</el-button
+          ><el-button @click="download('/business/projects/bom-template/', 'BOM导入填写说明.html', { file_format: 'html' }).catch((e) => (error = message(e)))">下载填写说明</el-button
           ><label class="file-button"
             >导入预览<input type="file" accept=".csv,.xlsx" :disabled="busy" @change="importFile" /></label
           ><el-button @click="inspectImpact">变更影响与处理</el-button><el-button type="primary" @click="start">维护 BOM</el-button></template
@@ -180,7 +197,7 @@ function saved() {
       </div>
     </header>
     <p class="muted">库存为共享库存，不预留，当前可用不保证后续可领：「其他项目待领」列出其他在执行项目对同一物料尚未领走的需求，可用库存同时被它们盯着时会标红，需要先和相关项目确认归属。同物料可分属多个单元；已领、在途及库存按行顺序分摊，非单元实际领用记录。</p>
-    <p v-if="canEdit" class="muted">Excel 模板自带“填写说明”页和表头提示，只在“数据”页填写；CSV 请配合下载的填写说明使用。上传电脑里的文件时，选中文件后点击“打开”。</p>
+    <p v-if="canEdit" class="muted">Excel 模板自带“填写说明”页和表头提示，打开先看操作指引，点“开始填写”进入数据页。产品编码类别、标准/非标可下拉选择，单位可选择或手填。单击第2行起的空白格，再点右侧▼；说明页的“▼点此选择”也能带你找到对应单元格。缺少必填内容会标红；CSV 请配合填写说明使用。上传电脑里的文件时，选中文件后点击“打开”。</p>
     <details v-if="canEdit" class="import-help"><summary>导入模板填写说明</summary><p class="muted">已有物料填写编码，后方物料资料可留空；填写时必须与已有资料一致。新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号，品牌与版本分别填写。完全相同物料自动复用，存在多个匹配时须明确编码；新编号只在确认后生成。需求、单元与申请信息按项目填写；修改已有BOM必须填写变更说明。已领、在途、库存、缺料由系统计算，旧版模板仍可使用。</p></details>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
@@ -199,15 +216,24 @@ function saved() {
     ></el-table>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <footer v-if="canPurchase" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
-    <div v-if="preview" class="import-preview">
-      <h3>导入预览</h3>
-      <div v-if="preview.errors?.length" class="import-errors" role="alert"><p v-for="(issue, index) in preview.errors" :key="index">{{ message(issue) }}</p></div>
-      <el-table :data="visiblePreview" :max-height="560"
-        ><el-table-column prop="row" label="文件行号" width="100" /><el-table-column v-for="column in importColumns" :key="column.key" :prop="column.key" :label="column.label" min-width="140" /><el-table-column prop="item_name" label="物料名称（关联）" min-width="160" /><el-table-column prop="brand" label="品牌（关联）" /><el-table-column prop="specification" label="规格（关联）" /></el-table
-      ><ListPagination :page="previewPage" :total="preview.lines.length" @change="previewPage = $event" />
-      <el-button type="primary" :disabled="!preview.can_import" @click="confirmImport">确认导入</el-button
-      ><el-button @click="preview = null">取消导入</el-button>
-    </div>
+    <el-dialog v-if="importOpen && !command" :model-value="true" title="BOM 导入预览" class="bom-import-dialog" width="min(1200px, 94vw)" top="4vh" :close-on-click-modal="false" @update:model-value="closeImport">
+      <div class="import-preview" :aria-busy="busy">
+        <p class="import-filename">文件：{{ importFilename }}</p>
+        <p v-if="busy" role="status">正在读取文件并校验物料，请稍候……</p>
+        <el-alert v-if="importError" :title="importError" type="error" :closable="false" role="alert" />
+        <template v-if="preview">
+          <p role="status">{{ preview.can_import ? `校验通过，共 ${preview.lines.length} 条明细。请核对后确认导入。` : '校验未通过，尚未导入任何数据。请按文件行号修改后重新上传。' }}</p>
+          <div v-if="preview.errors?.length" class="import-errors" role="alert"><p v-for="(issue, index) in preview.errors" :key="index">{{ message(issue) }}</p></div>
+          <el-table :data="visiblePreview" :max-height="360" empty-text="没有可预览的明细，请查看上方提示"
+            ><el-table-column prop="row" label="文件行号" width="90" fixed /><el-table-column prop="item_name" label="物料名称" min-width="160" /><el-table-column prop="validation_error" label="填写问题" min-width="280"><template #default="{ row }">{{ row.validation_error || '—' }}</template></el-table-column><el-table-column v-for="column in importColumns" :key="column.key" :prop="column.key" :label="column.label" min-width="140" /><el-table-column prop="brand" label="品牌" /><el-table-column prop="specification" label="规格" min-width="160" /></el-table
+          ><ListPagination :page="previewPage" :total="preview.lines.length" @change="previewPage = $event" />
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="closeImport">关闭</el-button>
+        <el-button type="primary" :disabled="busy || !preview?.can_import" @click="confirmImport">确认导入</el-button>
+      </template>
+    </el-dialog>
     <ActionDialog :command="command" @close="command = null" @saved="saved" />
   </section>
 </template>
@@ -217,6 +243,9 @@ function saved() {
 .bom-demand-filters .shortage-toggle { display: flex; align-items: center; min-height: 38px; }
 .import-help { color: var(--mute); font-size: 13px; line-height: 1.7; }
 .import-help summary { cursor: pointer; }
+.import-preview { max-height: calc(92dvh - 160px); overflow: auto; }
+.import-filename { overflow-wrap: anywhere; }
+.import-preview .import-errors { max-height: 160px; overflow: auto; }
 .bom-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--brand-wash-2); padding: 14px 18px; border: 1px solid var(--brand-line); border-radius: 8px; margin-top: 18px; z-index: 5; }
 .bom-selection-bar > .el-button--primary { margin-left: auto; }
 @media (max-width: 760px) { .bom-demand-filters > label { flex: 1 1 140px; } }

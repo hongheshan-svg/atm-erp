@@ -15,7 +15,8 @@ describe('导入模板与预览', () => {
       { key: 'item', label: '物料编码', table_keys: ['item_code'], hint: '填写物料编码' },
       { key: 'quantity', label: '数量', table_keys: ['quantity'], hint: '填写数量' },
     ]
-    vi.mocked(read).mockResolvedValue({ columns, note: '生成采购草稿', title: '采购', entry: '采购 → 导入导出 → 导入' })
+    vi.mocked(read).mockResolvedValue({ columns, note: '生成采购草稿', title: '采购', entry: '采购 → 导入导出 → 导入',
+      quick_start: { prepare: '准备已建档物料编码', minimum: '同张单的分组号相同', example: '两种物料分两行' } })
     vi.mocked(download).mockResolvedValue(undefined)
     vi.mocked(write).mockResolvedValue({ columns, rows: [
       { row: 2, data: { group: 'G', item: 'A', quantity: '2' } },
@@ -31,9 +32,15 @@ describe('导入模板与预览', () => {
     expect(read).toHaveBeenCalledWith('/business/purchases/import-schema/')
     expect(wrapper.text()).toContain('采购编号 由系统生成')
     expect(wrapper.text()).toContain('采购 → 导入导出 → 导入')
+    expect(wrapper.text()).toContain('准备已建档物料编码')
+    expect(wrapper.text()).toContain('② 最少填什么：同张单的分组号相同')
+    expect(wrapper.text()).toContain('再点右侧▼')
+    await wrapper.findAll('el-button-stub').find(b => b.text() === '下载模板')!.trigger('click')
+    await flushPromises()
+    expect(download).toHaveBeenCalledWith('/business/purchases/import-template/', '采购导入模板.xlsx', { file_format: 'xlsx' })
     await wrapper.findAll('el-button-stub').find(b => b.text() === '下载填写说明')!.trigger('click')
     await flushPromises()
-    expect(download).toHaveBeenCalledWith('/business/purchases/import-template/', 'purchases-template-guide.html', { file_format: 'html' })
+    expect(download).toHaveBeenCalledWith('/business/purchases/import-template/', '采购导入填写说明.html', { file_format: 'html' })
     const input = wrapper.get('input[type=file]')
     Object.defineProperty(input.element, 'files', { value: [new File(['csv'], 'rows.csv')], configurable: true })
     await input.trigger('change')

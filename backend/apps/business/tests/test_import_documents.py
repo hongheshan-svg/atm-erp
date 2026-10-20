@@ -109,11 +109,13 @@ class ImportTests(BusinessFixtures, TestCase):
         book = load_workbook(io.BytesIO(response.content))
         self.assertEqual(book.sheetnames, ['数据', GUIDE_SHEET])
         self.assertEqual(book[GUIDE_SHEET]['A1'].value, GUIDE_MARKER)
+        self.assertEqual(book.active.title, GUIDE_SHEET)
+        self.assertEqual(book[GUIDE_SHEET]['B6'].hyperlink.location, "'数据'!A2")
         self.assertEqual(
-            [cell.value for cell in book.active[1]],
+            [cell.value for cell in book['数据'][1]],
             HEADERS,
         )
-        book.active.append([self.item.code, '装配单元', '2.125', '初版'])
+        book['数据'].append([self.item.code, '装配单元', '2.125', '初版'])
         content = io.BytesIO()
         book.save(content)
         book.close()
@@ -143,6 +145,47 @@ class ImportTests(BusinessFixtures, TestCase):
             self.clients['member'].get('/api/business/projects/bom-template/', {'file_format': 'html'}).status_code,
             403,
         )
+
+    def test_bom_template_dropdowns_and_required_hints_preserve_empty_data_sheet(self):
+        response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'xlsx'})
+        book = load_workbook(io.BytesIO(response.content))
+        sheet = book['数据']
+        self.assertEqual(sheet.max_row, 1)
+        self.assertEqual([cell.value for cell in sheet[1]], HEADERS)
+        controls = {str(rule.sqref): rule for rule in sheet.data_validations.dataValidation}
+        self.assertEqual(
+            controls['L2:L1001'].formula1,
+            '"有图·机加,有图·钣金,有图·特殊工艺,有图·其它,无图·标准件,无图·耗材辅料,无图·办公用品,无图·其它"',
+        )
+        self.assertEqual(controls['N2:N1001'].formula1, '"标准件,非标件"')
+        self.assertTrue(controls['L2:L1001'].showErrorMessage)
+        self.assertTrue(controls['N2:N1001'].showErrorMessage)
+        self.assertIn('PCS', controls['O2:O1001'].formula1)
+        self.assertFalse(controls['O2:O1001'].showErrorMessage)
+        self.assertIn('新增物料必填', controls['I2:I1001'].prompt)
+        self.assertIn('即使已填写图号也不能省略', sheet['I1'].comment.text)
+        self.assertIn('不要填写PCS', sheet['K1'].comment.text)
+        rules = {
+            str(region.sqref): sheet.conditional_formatting[region][0].formula[0]
+            for region in sheet.conditional_formatting
+        }
+        self.assertEqual(rules['I2:I1001'], 'AND(COUNTA($A2:$O2)>0,LEN(TRIM($A2&""))=0,LEN(TRIM(I2&""))=0)')
+        self.assertEqual(rules['C2:C1001'], 'AND(COUNTA($A2:$O2)>0,TRUE,LEN(TRIM(C2&""))=0)')
+        self.assertIn('LEFT($L2&"",2)="有图"', rules['J2:J1001'])
+        self.assertNotIn('A2:A1001', rules)  # New materials legitimately have no existing code.
+        # Format/validation ranges must not become 1000 phantom records or formula cells.
+        sheet.append(
+            ['', '机械手', 4, '', '', '', '张工', '下拉气缸', 'ABC-100', '', '', '无图·标准件', '', '标准件', 'PCS']
+        )
+        content = io.BytesIO()
+        book.save(content)
+        preview = self.preview(content.getvalue(), 'bom.xlsx')
+        self.assertTrue(preview['can_import'], preview)
+        self.assertEqual(len(preview['lines']), 1)
+        self.assertEqual(preview['lines'][0]['product_category'], '21')
+        self.assertEqual(preview['lines'][0]['part_type'], 'standard')
+        self.assertFalse(BOMLine.objects.exists())
+        book.close()
 
     def test_guide_is_not_imported_even_if_first_but_other_data_sheets_are_rejected(self):
         response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'xlsx'})

@@ -1,6 +1,8 @@
 import csv
 import io
+import zipfile
 from unittest.mock import patch
+from xml.etree import ElementTree
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -419,12 +421,12 @@ class TransferTests(BusinessFixtures, TestCase):
             content = stream.getvalue().encode()
         else:
             book = load_workbook(io.BytesIO(response.content))
-            headers = [cell.value for cell in book.active[1]]
+            headers = [cell.value for cell in book['数据'][1]]
             for row in rows:
-                book.active.append([row.get(label, '') for label in headers])
+                book['数据'].append([row.get(label, '') for label in headers])
             if previous:
                 for column, (label, _) in enumerate(transfers.PREVIOUS_SCHEMAS[resource], 1):
-                    book.active.cell(1, column).value = label
+                    book['数据'].cell(1, column).value = label
             stream = io.BytesIO()
             book.save(stream)
             book.close()
@@ -520,16 +522,34 @@ class TransferTests(BusinessFixtures, TestCase):
                 html = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': 'html'})
                 self.assertEqual(html.status_code, 200)
                 self.assertContains(html, layout['title'] + '导入模板填写说明')
+                self.assertContains(html, '第一次填写，照这三步做')
+                has_options = any(column['options'] for column in layout['columns'])
+                self.assertContains(html, '表头不显示下拉箭头' if has_options else '本模板没有固定选项')
+                for key in ('prepare', 'minimum', 'example'):
+                    self.assertTrue(layout['quick_start'][key], resource)
+                    self.assertContains(html, layout['quick_start'][key])
                 self.assertContains(html, layout['entry'])
                 self.assertIn('attachment;', html['Content-Disposition'])
                 response = self.clients['admin'].get(
                     f'/api/business/{resource}/import-template/', {'file_format': 'xlsx'}
                 )
+                with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                    root = ElementTree.fromstring(archive.read('xl/worksheets/sheet1.xml'))
+                    stored_validations = root.findall('.//{*}dataValidation')
                 with io.BytesIO(response.content) as stream:
                     book = load_workbook(stream)
                     self.assertEqual(book.sheetnames, ['数据', GUIDE_SHEET])
                     self.assertEqual(book['数据'].max_row, 1)
                     self.assertEqual(book[GUIDE_SHEET]['A1'].value, GUIDE_MARKER)
+                    self.assertEqual(book.active.title, GUIDE_SHEET)
+                    self.assertEqual(book[GUIDE_SHEET]['B6'].hyperlink.location, "'数据'!A2")
+                    self.assertEqual(book[GUIDE_SHEET]['B4'].value, layout['quick_start']['prepare'])
+                    self.assertEqual(book[GUIDE_SHEET]['B5'].value, layout['quick_start']['minimum'])
+                    self.assertIn(
+                        '再点右侧▼' if has_options else '本模板没有固定下拉选项', book[GUIDE_SHEET]['B7'].value
+                    )
+                    validations = list(book['数据'].data_validations.dataValidation)
+                    self.assertEqual(len(validations), len(layout['columns']))
                     for index, column in enumerate(layout['columns'], 1):
                         for key in ('required', 'hint', 'example'):
                             self.assertTrue(column[key], (resource, column))
@@ -539,12 +559,91 @@ class TransferTests(BusinessFixtures, TestCase):
                             self.assertIn('姓名或账号', column['label'])
                             self.assertIn('可填姓名或登录账号', column['hint'])
                             self.assertIn('姓名（用户名）', column['hint'])
+                            letter = book['数据'].cell(1, index).column_letter
+                            self.assertEqual(book['数据'].column_dimensions[letter].number_format, '@')
+                        validation = validations[index - 1]
+                        letter = book['数据'].cell(1, index).column_letter
+                        self.assertEqual(column['cell'], f'{letter}2')
+                        self.assertTrue(column['source'])
+                        self.assertEqual(book[GUIDE_SHEET].cell(13 + index, 1).hyperlink.location, f"'数据'!{letter}2")
+                        self.assertIn(column['source'], book[GUIDE_SHEET].cell(13 + index, 2).value)
+                        if column['key'] in ('code', 'customer', 'supplier', 'item', 'project', 'phone', 'reference'):
+                            self.assertEqual(book['数据'].column_dimensions[letter].number_format, '@')
+                        self.assertEqual(str(validation.sqref), f'{letter}2:{letter}1001')
+                        self.assertTrue(validation.showInputMessage)
+                        self.assertIn(column['required'], validation.prompt)
+                        self.assertLessEqual(len(validation.prompt), 255)
+                        # openpyxl's alias default overwrites allowBlank on reload; verify the native file flag.
+                        self.assertEqual(stored_validations[index - 1].get('allowBlank'), '1')
+                        if column['options']:
+                            self.assertEqual(validation.type, 'list')
+                            self.assertFalse(validation.showDropDown)  # False keeps the Excel arrow visible.
+                            self.assertEqual(validation.formula1, '"' + ','.join(column['options']) + '"')
+                            self.assertLessEqual(len(validation.formula1), 255)
+                            self.assertEqual(validation.showErrorMessage, not column['allow_custom'])
+                            self.assertEqual(validation.errorStyle, 'stop')
+                        else:
+                            self.assertEqual(validation.type, 'custom')
+                            self.assertFalse(validation.showErrorMessage)
+                    self.assertTrue(book['数据'].conditional_formatting)
                     book.close()
         for fmt in ('html', 'xlsx', 'csv'):
             self.assertEqual(
                 self.clients['member'].get('/api/business/projects/import-template/', {'file_format': fmt}).status_code,
                 403,
             )
+
+    def test_fixed_dropdown_choices_are_importable_and_custom_units_remain_allowed(self):
+        expected = {
+            ('items', 'product_category'): list(Item.ProductCategory.labels),
+            ('items', 'part_type'): ['标准件', '非标件'],
+            ('partners', 'kind'): ['客户', '供应商', '客户及供应商'],
+            ('partners', 'payment_term'): [
+                '指定日期',
+                '现付',
+                '月结30天',
+                '月结60天',
+                '月结90天',
+                '月结120天',
+                '自定义月结',
+            ],
+            ('purchases', 'payment_term'): [
+                '指定日期',
+                '现付',
+                '月结30天',
+                '月结60天',
+                '月结90天',
+                '月结120天',
+                '自定义月结',
+            ],
+            ('tasks', 'kind'): ['设计', '装配', '调试'],
+            ('payments', 'method'): ['银行转账', '现金', '其他'],
+        }
+        for (resource, key), options in expected.items():
+            with self.subTest(resource=resource, key=key):
+                layout = self.clients['admin'].get(f'/api/business/{resource}/import-schema/').data
+                column = next(column for column in layout['columns'] if column['key'] == key)
+                self.assertEqual(column['options'], options)
+                self.assertFalse(column['allow_custom'])
+        samples = [
+            {
+                '物料名称': f'下拉选项验证{code}',
+                '规格': '实际型号规格',
+                '产品编码类别': label,
+                '图号': f'TEST-{code}' if code.startswith('1') else '',
+                '物料类别': '非标件' if code.startswith('1') else '标准件',
+                '单位': '托盘',
+            }
+            for code, label in Item.ProductCategory.choices
+        ]
+        initial = Item.objects.count()
+        preview = self.downloaded_preview('items', samples, 'xlsx')
+        self.assertEqual(preview.data['row_count'], 8)
+        self.assertEqual(Item.objects.count(), initial)
+        result = self.commit('items', preview)
+        items = Item.objects.filter(pk__in=[row['id'] for row in result['results']])
+        self.assertEqual(set(items.values_list('product_category', flat=True)), set(Item.ProductCategory.values))
+        self.assertEqual(set(items.values_list('unit', flat=True)), {'托盘'})
 
     def test_purchase_preview_retains_file_rows_and_grouped_confirmation(self):
         project = self.active_project()

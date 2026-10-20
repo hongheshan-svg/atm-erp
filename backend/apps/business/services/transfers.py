@@ -399,7 +399,7 @@ def parse(actor, resource, upload):
         raw = dict(zip([key for _, key in source_columns], values, strict=True))
         records.append({'row': index, 'data': {key: raw.get(key, '') for _, key in columns}})
     if not records:
-        raise ValidationError('文件没有可导入明细。')
+        raise ValidationError('文件没有可导入明细。请在“数据”页第2行起填写真实业务数据；“填写说明”页和示例不参与导入。')
     return records
 
 

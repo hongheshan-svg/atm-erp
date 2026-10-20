@@ -75,7 +75,14 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
         and header != legacy_headers
         and not (legacy_headers and isinstance(legacy_headers[0], list) and header in legacy_headers)
     ):
-        raise ValidationError({'file': '表头必须依次为：' + '、'.join(headers) + '。'})
+        raise ValidationError(
+            {
+                'file': '这个文件的表头与当前导入入口不一致。请先确认要导入的是项目、项目任务还是BOM等资料；'
+                '在对应入口重新下载模板，只把业务数据按列粘贴为值，保留新模板表头。表头必须依次为：'
+                + '、'.join(headers)
+                + '。'
+            }
+        )
     if len(result) > 1001:
         raise ValidationError({'file': '一次最多导入 1000 行。'})
     normalized = []
