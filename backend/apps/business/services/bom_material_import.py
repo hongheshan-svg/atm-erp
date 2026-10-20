@@ -53,13 +53,17 @@ def material(actor, row):
         ):
             raise ValidationError('所填物料资料与编码对应的现有物料不一致，请核对编码；导入不会覆盖物料主数据。')
         return item, '使用已有编码'
-    for field in ('name', 'specification', 'product_category', 'unit'):
-        if not data[field]:
-            raise ValidationError('编码留空时必须填写物料名称、规格、产品编码类别和单位。')
-    if data['product_category'] not in Item.ProductCategory.values:
-        raise ValidationError('请选择明确的有图/无图产品编码类别。')
+    errors = {
+        field: '新增物料时必填。' for field in ('name', 'specification', 'product_category', 'unit') if not data[field]
+    }
+    if data['product_category'] and data['product_category'] not in Item.ProductCategory.values:
+        errors['product_category'] = '请按填写说明选择，例如“无图·标准件”（21）、“有图·机加”（11）、“有图·钣金”（12）。'
     if data['product_category'].startswith('1') and not data['drawing_number']:
-        raise ValidationError('有图产品必须填写图号。')
+        errors['drawing_number'] = '有图产品必须填写图号。'
+    if data['part_type'] not in ('', *Item.PartType.values):
+        errors['part_type'] = '请填写标准件或非标件，未分类可留空；机加、钣金属于产品编码类别。'
+    if errors:
+        raise ValidationError(errors)
     matches = masterdata.duplicates(data)
     if len(matches) > 1:
         raise ValidationError('存在多个相同物料，请明确填写要复用的物料编码。')
@@ -71,20 +75,24 @@ def material(actor, row):
     return Item.objects.get(pk=result['id']), '自动新建物料'
 
 
-def resolve(actor, project, records, expected):
+def resolve(actor, project, records, expected, *, collect_errors=False):
     if bom.revision(project) != expected:
         raise Conflict('BOM 已变化，请重新上传预览。')
     CodeRule.objects.select_for_update().get(key='item')
-    output, actions = [], []
+    output, actions, errors = [], [], []
     new_ids = set()
     for index, row in enumerate(records, 2):
         if not any(row):
             output.append(row[:7])
             continue
         try:
-            item, action = material(actor, row)
+            with transaction.atomic():
+                item, action = material(actor, row)
         except ValidationError as exc:
-            raise ValidationError(f'第{index}行：{bom_import.message(exc.detail)}') from exc
+            errors.append({'row': index, 'message': bom_import.message(exc.detail)})
+            # Preserve source row numbers when validating the remaining BOM lines.
+            output.append([''] * 7)
+            continue
         if action == '自动新建物料':
             new_ids.add(item.pk)
         output.append([item.code, *row[1:7]])
@@ -94,11 +102,31 @@ def resolve(actor, project, records, expected):
     writer.writerow(bom_import.HEADERS)
     writer.writerows(output)
     result = bom_import.preview(project, SimpleUploadedFile('bom.csv', stream.getvalue().encode()))
-    if not result['can_import']:
+    if errors and not actions:
+        result['errors'] = []  # Material errors already explain why there are no valid lines.
+    result['errors'] = sorted([*errors, *result['errors']], key=lambda error: error['row'])
+    result['can_import'] = bool(result['lines']) and not result['errors']
+    if not result['can_import'] and not collect_errors:
         raise ValidationError([f'第{error["row"]}行：{error["message"]}' for error in result['errors']])
     by_row = {index: (action, new) for index, action, new in actions}
     for line in result['lines']:
         line['material_action'], line['new_material'] = by_row[line['row']]
+    if collect_errors:
+        resolved = {line['row']: line for line in result['lines']}
+        issues = {error['row']: error['message'] for error in result['errors']}
+        result['lines'] = [
+            {
+                **dict(zip((key for _, key in BOM_COLUMNS), row, strict=True)),
+                'row': index,
+                'item_code': row[0],
+                'item_name': row[7],
+                'material_action': '需修改',
+                **resolved.get(index, {}),
+                'validation_error': issues.get(index, ''),
+            }
+            for index, row in enumerate(records, 2)
+            if any(row)
+        ]
     return result
 
 
@@ -136,7 +164,7 @@ def preview(actor, project, upload):
                 project.pk,
                 {},
                 BOM_WRITERS,
-                lambda user, locked: resolve(user, locked, records, expected),
+                lambda user, locked: resolve(user, locked, records, expected, collect_errors=True),
             )
             transaction.set_rollback(True)
     except ValidationError as exc:
@@ -146,16 +174,19 @@ def preview(actor, project, upload):
             'errors': [{'message': bom_import.message(exc.detail)}],
             'expected_revision': expected,
         }
-    result['token'] = signing.dumps(
-        {'actor': actor.pk, 'project': project.pk, 'revision': expected, 'records': records}, salt=SALT, compress=True
-    )
     result['note'] = (
         '预览不占用编号；新物料编号在确认时生成。物料与BOM整批保存，已有相同物料自动复用；任一行失败全部撤销。'
     )
     for line in result['lines']:
-        if line['new_material']:
+        if line.get('new_material'):
             line['item_code'] = '确认时自动生成'
             line.pop('item', None)
+    if result['can_import']:
+        result['token'] = signing.dumps(
+            {'actor': actor.pk, 'project': project.pk, 'revision': expected, 'records': records},
+            salt=SALT,
+            compress=True,
+        )
     return result
 
 

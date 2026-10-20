@@ -7,10 +7,12 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   const panel = page.getByRole('region', { name: '物料', exact: true })
   await openImport(page)
   const dialog = page.getByRole('dialog', { name: '批量导入', exact: true })
+  await expect(dialog.getByText('② 最少填什么：', { exact: true })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('import-template-start.png'), animations: 'disabled' })
   const templateEvent = page.waitForEvent('download')
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click()
   const template = await templateEvent
-  expect(template.suggestedFilename()).toBe('items-template.xlsx')
+  expect(template.suggestedFilename()).toBe('物料导入模板.xlsx')
   expect((await readFile((await template.path())!)).subarray(0, 2).toString()).toBe('PK')
   const prefix = `IMPORT${Date.now()}`
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()

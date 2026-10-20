@@ -47,14 +47,14 @@ async function file(template = false, chosen = format.value) {
   error.value = ''
   try {
     await download(template ? `${props.path}import-template/` : (props.exportPath || `${props.path}export/`),
-      `${props.resource}${template ? '-template' : ''}.${chosen}`, { ...(template ? {} : props.params), file_format: chosen })
+      `${template ? `${layout.value?.title || props.resource}导入模板` : props.resource}.${chosen}`, { ...(template ? {} : props.params), file_format: chosen })
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 async function guide() {
   busy.value = true
   error.value = ''
   try {
-    await download(`${props.path}import-template/`, `${props.resource}-template-guide.html`, { file_format: 'html' })
+    await download(`${props.path}import-template/`, `${layout.value?.title || props.resource}导入填写说明.html`, { file_format: 'html' })
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 async function upload(event: Event) {
@@ -104,10 +104,15 @@ async function confirm() {
       <p v-else>下载模板后填写，支持 CSV / XLSX，最多 1000 行、5 MB。人员可填姓名或账号，重名请填姓名（用户名）；其他引用使用编号，标明 ID 的列可从对应列表导出获取。日期填写 YYYY-MM-DD。</p>
       <template v-if="layout">
         <p><strong>{{ layout.title }}导入</strong> · {{ layout.entry }}</p>
+        <div v-if="layout.quick_start" class="import-quick-start">
+          <p><strong>① 先准备：</strong>{{ layout.quick_start.prepare }}</p>
+          <p><strong>② 最少填什么：</strong>{{ layout.quick_start.minimum }}</p>
+          <p><strong>③ 保存并上传：</strong>先核对预览中的项目、行数、数量和金额；有错误按文件行号修改后重新上传，通过后再确认导入。</p>
+        </div>
         <p>{{ layout.note }}</p>
-        <p>Excel 模板自带“填写说明”页和表头提示，只在“数据”页填写。使用 CSV 或转发给同事时，请一并下载填写说明；说明文档可用浏览器打开和打印。</p>
+        <p>Excel 模板自带“填写说明”页和表头提示，打开先看操作指引，点击“开始填写”进入数据页。固定取值可下拉选择：单击第2行起的空白格，再点右侧▼；也可从说明页点“▼点此选择”跳过去。缺少必填内容会标红，CSV 不保留下拉选项。</p>
         <details class="import-field-guide"><summary>模板字段与页面列对应说明</summary>
-          <el-table :data="mappings" max-height="260"><el-table-column prop="label" label="模板字段" min-width="160" /><el-table-column prop="required" label="是否必填" min-width="160" /><el-table-column prop="hint" label="填写说明" min-width="320" /><el-table-column prop="example" label="格式示例（请替换）" min-width="180" /><el-table-column prop="table" label="对应页面列" min-width="150" /></el-table>
+          <el-table :data="mappings" max-height="260"><el-table-column prop="label" label="模板字段" min-width="160" /><el-table-column prop="required" label="是否必填" min-width="160" /><el-table-column prop="source" label="去哪找 / 怎么选" min-width="280" /><el-table-column prop="hint" label="填写说明" min-width="320" /><el-table-column prop="example" label="格式示例（请替换）" min-width="180" /><el-table-column prop="table" label="对应页面列" min-width="150" /></el-table>
           <p v-if="generatedColumns">页面中的 {{ generatedColumns }} 由系统生成或业务操作维护，无需填写到新增模板中。</p>
         </details>
       </template>
@@ -126,3 +131,6 @@ async function confirm() {
     </el-dialog>
   </div>
 </template>
+<style scoped>
+.import-quick-start { padding: 4px 16px; border: 1px solid #c6dbf5; border-radius: 8px; background: #f2f7ff; }
+</style>
