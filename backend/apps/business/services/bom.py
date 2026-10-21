@@ -339,11 +339,17 @@ def revise_bom(actor, key, project_id, data):
             )
             item_id = identity(row.get('item'), 'item')
             matching = [line for line in existing if line.item_id == item_id]
-            unit = (
-                text(row, 'assembly_unit', default='', maximum=100)
-                if 'assembly_unit' in row
-                else (matching[0].assembly_unit if len(matching) == 1 else '')
-            )
+            if 'assembly_unit' in row:
+                unit = text(row, 'assembly_unit', default='', maximum=100)
+            else:
+                by_id = None
+                if row.get('id') is not None:
+                    row_id = identity(row['id'], 'id')
+                    by_id = next((line for line in matching if line.pk == row_id), None)
+                if by_id is not None:
+                    unit = by_id.assembly_unit
+                else:
+                    unit = matching[0].assembly_unit if len(matching) == 1 else ''
             line_key = (item_id, unit)
             if line_key in planned:
                 raise ValidationError('同一物料在同一单元只能出现一次。')

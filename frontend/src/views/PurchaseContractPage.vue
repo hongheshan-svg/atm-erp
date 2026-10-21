@@ -34,7 +34,13 @@ async function load() {
 watch(() => route.params.id, () => { selectedVersion.value = ''; packagePrint.value = false; void load() }, { immediate: true })
 function print() { window.print() }
 async function archive() {
-  if (!data.value || data.value.archived_version) return
+  if (!data.value) return
+  // 查看历史归档版本时，先切到当前采购资料再归档，快照哈希始终按当前资料计算。
+  if (data.value.archived_version) {
+    selectedVersion.value = 'current'
+    await load()
+    if (!data.value || data.value.archived_version || data.value.draft || data.value.status === 'cancelled') return
+  }
   const docs = await all('/business/documents/', { purchase: route.params.id, category: 'contract' })
   command.value = {
     title: '归档已签署合同版本', path: `/business/purchases/${route.params.id}/archive-contract/`,
@@ -62,7 +68,7 @@ async function archive() {
       <el-button :disabled="loading" @click="appendix = !appendix">{{ appendix ? '查看合同正文' : '查看完整附件' }}</el-button>
       <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
       <label><input v-model="packagePrint" type="checkbox"> 正文与完整附件一起打印</label>
-      <el-button v-if="buyer() && !data.draft && !data.archived_version && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">归档签署版本</el-button>
+      <el-button v-if="buyer() && !data.draft && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">{{ data.archived_version ? '归档新版本' : '归档签署版本' }}</el-button>
       <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : '当前采购资料预览，尚未归档签署版本' }}</span>
       <p class="contract-help">正文按单页 A4 排版，完整附件允许分页；勾选整套打印可一次输出正文与附件。签署文件请从采购附件查看，归档前需补齐双方资料并核对收货地址。</p>
     </aside>

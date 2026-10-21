@@ -113,3 +113,39 @@ class BOMSelectionTests(BusinessFixtures, TestCase):
         self.post('manager', f'projects/{self.project.pk}/revise-bom/', data)
         self.assertNotEqual(self.bom_version(self.project.pk), previous)
         self.post('manager', f'projects/{self.project.pk}/revise-bom/', data, status=409)
+
+    def test_revise_bom_with_id_and_omitted_unit_keeps_multi_unit_line_unit(self):
+        upper = BOMLine.objects.create(project=self.project, item=self.item, quantity=2, assembly_unit='上料')
+        BOMLine.objects.create(project=self.project, item=self.item, quantity=3, assembly_unit='下料')
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/revise-bom/',
+            {
+                'expected_revision': self.bom_version(self.project.pk),
+                'lines': [{'id': upper.pk, 'item': self.item.pk, 'quantity': '4', 'change_note': '只改用量'}],
+            },
+        )
+        upper.refresh_from_db()
+        self.assertEqual((upper.quantity, upper.assembly_unit), (4, '上料'))
+        self.assertEqual(BOMLine.objects.filter(project=self.project).count(), 2)
+
+    def test_revise_bom_with_id_and_explicit_blank_unit_clears_unit(self):
+        upper = BOMLine.objects.create(project=self.project, item=self.item, quantity=2, assembly_unit='上料')
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/revise-bom/',
+            {
+                'expected_revision': self.bom_version(self.project.pk),
+                'lines': [
+                    {
+                        'id': upper.pk,
+                        'item': self.item.pk,
+                        'quantity': '2',
+                        'assembly_unit': '',
+                        'change_note': '清空单元',
+                    }
+                ],
+            },
+        )
+        upper.refresh_from_db()
+        self.assertEqual(upper.assembly_unit, '')

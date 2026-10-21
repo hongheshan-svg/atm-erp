@@ -6,7 +6,17 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from apps.business.models import BOMLine, ContractAmendment, Document, Entry, Item, Payment, PurchaseOrder, Stock
+from apps.business.models import (
+    BOMLine,
+    ContractAmendment,
+    Document,
+    Entry,
+    Item,
+    Payment,
+    PurchaseOrder,
+    Stock,
+    StockMove,
+)
 from apps.business.services import bom, bom_import, finance
 from apps.core.models import ActionReceipt
 
@@ -261,3 +271,92 @@ class ReviewRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.content.decode('utf-8-sig').splitlines()), 2002)
         self.assertLessEqual(len(queries), 8)
+
+
+class PartialReceiveTests(BusinessFixtures, TestCase):
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+        self.other = Item.objects.create(code='I2', name='气缸')
+
+    def two_line_purchase(self):
+        data = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                'project': self.project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'lines': [
+                    {'item': self.item.pk, 'quantity': '5', 'unit_price': '100'},
+                    {'item': self.other.pk, 'quantity': '3', 'unit_price': '50'},
+                ],
+            },
+            status=201,
+        )
+        purchase = PurchaseOrder.objects.get(pk=data['id'])
+        self.post('purchaser', f'purchases/{purchase.pk}/submit/')
+        self.post('manager', f'purchases/{purchase.pk}/approve/')
+        return purchase
+
+    def receive(self, purchase, lines, status=200):
+        return self.post(
+            'warehouse',
+            f'purchases/{purchase.pk}/receive/',
+            {'location': '主仓', 'reason': '分次到货', 'lines': lines},
+            status=status,
+        )
+
+    def assert_only_first_received(self, purchase, first, second):
+        purchase.refresh_from_db()
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+        self.assertEqual((first.received_quantity, first.pending_quantity), (5, 0))
+        self.assertEqual((second.received_quantity, second.pending_quantity), (0, 0))
+        self.assertEqual(StockMove.objects.filter(kind='receipt').count(), 1)
+
+    def test_zero_row_for_untouched_line_is_skipped(self):
+        purchase = self.two_line_purchase()
+        first, second = purchase.lines.order_by('pk')
+        self.receive(
+            purchase,
+            [
+                {'line': first.pk, 'quantity': '5', 'pending_quantity': '0'},
+                {'line': second.pk, 'quantity': '0', 'pending_quantity': '0'},
+            ],
+        )
+        self.assert_only_first_received(purchase, first, second)
+
+    def test_omitted_line_is_skipped(self):
+        purchase = self.two_line_purchase()
+        first, second = purchase.lines.order_by('pk')
+        self.receive(purchase, [{'line': first.pk, 'quantity': '5'}])
+        self.assert_only_first_received(purchase, first, second)
+
+    def test_all_zero_rows_are_rejected_without_movements(self):
+        purchase = self.two_line_purchase()
+        first, second = purchase.lines.order_by('pk')
+        result = self.receive(
+            purchase,
+            [
+                {'line': first.pk, 'quantity': '0', 'pending_quantity': '0'},
+                {'line': second.pk, 'quantity': '0'},
+            ],
+            status=400,
+        )
+        self.assertIn('请至少填写一条到货数量', str(result))
+        self.assertFalse(StockMove.objects.exists())
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'approved')
+
+    def test_real_overage_keeps_remaining_quantity_message(self):
+        purchase = self.two_line_purchase()
+        first, second = purchase.lines.order_by('pk')
+        result = self.receive(
+            purchase,
+            [{'line': first.pk, 'quantity': '6'}, {'line': second.pk, 'quantity': '0'}],
+            status=409,
+        )
+        self.assertIn('超过未收余量', str(result))
+        self.assertFalse(StockMove.objects.exists())

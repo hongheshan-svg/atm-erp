@@ -95,8 +95,8 @@ export async function bomCommand(projectId: number): Promise<Command> {
     path: `/business/projects/${projectId}/revise-bom/`,
     previewPath: `/business/projects/${projectId}/bom-change-preview/`,
     // 以前这里把整张 BOM 灌进表单，几百行的项目根本改不动，而服务端本来就只更新提交到的行。
-    notice: { type: 'info', text: `本项目现有 ${demand.lines.length} 行。这里只填要新增或修改的物料，没有列出的行保持不变；改单条用量可直接在「BOM 明细」里用「修改此行」。整批替换请用导入。` },
+    notice: { type: 'info', text: `本项目现有 ${demand.lines.length} 行。这里只填要新增或修改的物料，没有列出的行保持不变；改单条用量可直接在「BOM 明细」里用「修改此行」。整批替换请用导入。单元留空＝保持该物料原单元（物料有多个单元或为新物料时按「未分单元」处理）。` },
     fields: [{ ...rows('lines', '本次变更', [item(), qty, t('assembly_unit', '单元', true), { key: 'required_date', label: '需求日期', type: 'date', optional: true }, { key: 'application_date', label: '申请日期', type: 'date', optional: true }, t('applicant', '申请人', true), { ...t('change_note', '变更说明', true), hint: 'ECN 请注明图档升级或新增及对应版本；修改已有行必填，新增行可留空。' }]), compact: true }],
-    prepare: (data) => ({ ...data, lines: data.lines.map((r: Row) => ({ ...r, assembly_unit: r.assembly_unit ?? '', required_date: r.required_date || null, application_date: r.application_date || null, applicant: r.applicant || '' })), expected_revision: demand.revision }),
+    prepare: (data) => ({ ...data, lines: data.lines.map(({ assembly_unit, ...r }: Row) => ({ ...r, ...(assembly_unit ? { assembly_unit } : {}), required_date: r.required_date || null, application_date: r.application_date || null, applicant: r.applicant || '' })), expected_revision: demand.revision }),
   }
 }

@@ -223,6 +223,8 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             qty = number(row.get('quantity'), 'quantity', 3)
             pending = number(row.get('pending_quantity', '0'), 'pending_quantity', 3)
             line = lines[line_id]
+            if not from_quarantine and qty == ZERO and pending == ZERO:
+                continue
             if from_quarantine:
                 if pending or qty <= ZERO or qty > line.pending_quantity:
                     raise Conflict('处理数量超过待处理数量。')
@@ -236,6 +238,8 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             line.pending_quantity += pending
             save(line, user)
             selected[line_id] = qty
+        if not selected:
+            raise ValidationError('请至少填写一条到货数量。')
         stocks = lock_stocks([lines[line_id].item_id for line_id, qty in selected.items() if qty], location, user)
         for line_id, qty in selected.items():
             if not qty:
