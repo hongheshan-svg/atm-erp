@@ -63,6 +63,38 @@ describe('收付款余额卡片', () => {
     wrapper.unmount()
   })
 
+  it('其中已逾期按分精确相加，不产生浮点误差', async () => {
+    vi.mocked(read).mockResolvedValue({ ...totals, overdue_receivable: '100.10', overdue_payable: '200.20' })
+    const wrapper = await render()
+    expect(wrapper.findAll('.finance-total')[2].get('strong').text()).toBe('¥ 300.30')
+    wrapper.unmount()
+  })
+
+  it('小额分角相加精确显示两位小数', async () => {
+    vi.mocked(read).mockResolvedValue({ ...totals, overdue_receivable: '0.10', overdue_payable: '0.20' })
+    const wrapper = await render()
+    expect(wrapper.findAll('.finance-total')[2].get('strong').text()).toBe('¥ 0.30')
+    wrapper.unmount()
+  })
+
+  it('逾期两端都为 0 时显示 0.00 且不标风险色', async () => {
+    vi.mocked(read).mockResolvedValue({ ...totals, overdue_receivable: '0', overdue_payable: '0' })
+    const wrapper = await render()
+    const overdue = wrapper.findAll('.finance-total')[2]
+    expect(overdue.get('strong').text()).toBe('¥ 0.00')
+    expect(overdue.get('strong').classes()).not.toContain('finance-risk')
+    wrapper.unmount()
+  })
+
+  it('逾期合计为负数时按负号显示并标风险色', async () => {
+    vi.mocked(read).mockResolvedValue({ ...totals, overdue_receivable: '-100.10', overdue_payable: '50.00' })
+    const wrapper = await render()
+    const overdue = wrapper.findAll('.finance-total')[2]
+    expect(overdue.get('strong').text()).toBe('-¥ 50.10')
+    expect(overdue.get('strong').classes()).toContain('finance-risk')
+    wrapper.unmount()
+  })
+
   it('接口失败时给出提示而不是空白卡片', async () => {
     vi.mocked(read).mockRejectedValue(new Error('网络异常'))
     const wrapper = await render()

@@ -8,10 +8,24 @@ const props = defineProps<{ projectId?: number; revision?: number }>()
 const data = ref<Row | null>(null)
 const error = ref('')
 let generation = 0
+// 金额是后端返回的两位小数字符串，按「分」用 BigInt 相加，避免 Number 的浮点误差。
+function toCents(value: unknown): bigint {
+  if (value == null || value === '') return 0n
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(value).trim())
+  if (!match) throw new Error(`无法识别的金额：${String(value)}`)
+  const [, sign, whole, fraction = ''] = match
+  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
+  return sign ? -cents : cents
+}
+function centsToAmount(cents: bigint): string {
+  const abs = cents < 0n ? -cents : cents
+  const text = `${abs / 100n}.${(abs % 100n).toString().padStart(2, '0')}`
+  return cents < 0n ? `-${text}` : text
+}
 const overdue = computed(() => {
   const row = data.value
-  if (!row) return '0'
-  return String(Number(row.overdue_receivable) + Number(row.overdue_payable))
+  if (!row) return '0.00'
+  return centsToAmount(toCents(row.overdue_receivable) + toCents(row.overdue_payable))
 })
 const cards = computed(() => {
   const row = data.value
