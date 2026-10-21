@@ -10,7 +10,7 @@ from apps.core.permissions import MANAGERS, SALES, has_role, require_role, requi
 
 from ..models import Partner, Project, SalesOrder
 from . import finance, projects
-from .common import ZERO, audit, day, fields, identity, integer, lookup, number, rows, save, state, text
+from .common import ZERO, audit, day, event_date, fields, identity, integer, lookup, number, rows, save, state, text
 
 DETAIL_FIELDS = {'name', 'customer', 'manager', 'requirements', 'due_date', 'equipment_quantity', 'warranty_months'}
 
@@ -154,7 +154,7 @@ def sign(actor, key, sale_id, data):
             )
         if sum((row['amount'] for row in milestones), ZERO) != sale.quote_amount:
             raise ValidationError({'milestones': '收款节点合计必须等于最终报价。'})
-        sale.contract_date = day(data, 'date')
+        sale.contract_date = event_date(data, 'date')
         if sale.project_id:
             # Forward-migrated pre-contract records retain their original project identity and members.
             project = get_object_or_404(Project.objects.select_for_update(), pk=sale.project_id)

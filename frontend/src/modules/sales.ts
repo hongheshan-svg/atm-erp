@@ -45,7 +45,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   if (row && action === '签订补充协议') {
     const [detail, docs, entries] = await Promise.all([read(`${path}${row.id}/`), all('/business/documents/', { project: row.project, category: 'contract' }), all('/business/entries/', { project: row.project, kind: 'receivable' })])
     return { title: action, path: `${path}${row.id}/amend/`, fields: [
-      { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date' }, reason,
+      { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date', hint: '协议已签署的日期，不能晚于今天，也不能早于签约日期。' }, reason,
       { key: 'document', label: '补充协议附件', type: 'select', upload: { context: { sale: row.id }, category: 'contract' }, options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
       { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '收款到期日', type: 'date' }] },
       { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
@@ -99,7 +99,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     title: '签约',
     path: `${path}${row.id}/sign/`,
     fields: [
-      { key: 'date', label: '日期', type: 'date', initial: today() },
+      { key: 'date', label: '签约日期', type: 'date', initial: today(), hint: '已发生的签约事实，不能晚于今天；签约日晚于实际登记工时、发货的日期会阻断这些操作。' },
       { key: 'contract_number', label: '合同编号（按签署合同填写）', optional: true },
       ...(!row.project
         ? [

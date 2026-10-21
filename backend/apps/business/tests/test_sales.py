@@ -1,11 +1,13 @@
 import uuid
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.business.models import Entry, Project, SalesOrder
-from apps.core.models import ActionReceipt, CodeRule
+from apps.business.models import Document, Entry, Project, SalesOrder
+from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -324,3 +326,88 @@ class SalesTests(BusinessFixtures, TestCase):
         self.assertEqual((project.status, project.contract_amount, project.contract_date), ('active', 0, None))
         self.assertFalse(Entry.objects.exists())
         self.assertEqual(SalesOrder.objects.count(), 1)
+
+
+class SalesDateFactTests(BusinessFixtures, TestCase):
+    def setUp(self):
+        self.setup_business()
+
+    def quoted_sale(self):
+        sale = self.post(
+            'manager',
+            'sales/',
+            {'name': '日期校验', 'customer': self.customer.pk, 'manager': self.users['manager'].pk},
+            status=201,
+        )['id']
+        self.post('manager', f'sales/{sale}/quote/', {'amount': '100', 'reason': '确认'})
+        return sale
+
+    def test_future_contract_date_is_rejected_without_side_effects(self):
+        sale = self.quoted_sale()
+        future = (timezone.localdate() + timedelta(days=1)).isoformat()
+        counts = (Project.objects.count(), Entry.objects.count(), ActionReceipt.objects.count())
+        number = CodeRule.objects.get(key='project').counter
+        result = self.post(
+            'manager',
+            f'sales/{sale}/sign/',
+            {
+                'date': future,
+                'members': [self.users['member'].pk],
+                'milestones': [{'title': '合同款', 'amount': '100', 'due_date': future}],
+            },
+            status=400,
+        )
+        self.assertIn('date', result)
+        self.assertEqual((Project.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()), counts)
+        self.assertEqual(CodeRule.objects.get(key='project').counter, number)
+        order = SalesOrder.objects.get(pk=sale)
+        self.assertEqual((order.status, order.contract_date, order.project_id), ('quoted', None, None))
+
+    def test_same_day_contract_allows_same_day_time_entry(self):
+        today = timezone.localdate().isoformat()
+        sale = self.quoted_sale()
+        project_id = self.post(
+            'manager',
+            f'sales/{sale}/sign/',
+            {
+                'date': today,
+                'members': [self.users['member'].pk],
+                'milestones': [{'title': '合同款', 'amount': '100', 'due_date': today}],
+            },
+        )['project']
+        task = self.post(
+            'manager',
+            'tasks/',
+            {'project': project_id, 'kind': 'design', 'title': '设计', 'assignee': self.users['member'].pk},
+            status=201,
+        )['id']
+        self.post('member', f'tasks/{task}/time/', {'hours': '1', 'date': today, 'reason': '当天工作'})
+
+    def test_future_amendment_date_is_rejected(self):
+        project = self.active_project()
+        sale = project.sale
+        doc = Document.objects.create(
+            project=project, category='contract', original_name='a.pdf', size=1, sha256='a' * 64, file='t'
+        )
+        future = (timezone.localdate() + timedelta(days=1)).isoformat()
+        audits = AuditLog.objects.count()
+        receipts = ActionReceipt.objects.count()
+        result = self.post(
+            'manager',
+            f'sales/{sale.pk}/amend/',
+            {
+                'expected_updated_at': sale.updated_at.isoformat(),
+                'reason': '补充协议',
+                'date': future,
+                'document': doc.pk,
+                'amount': '10000.00',
+                'equipment_quantity': 1,
+                'warranty_months': 12,
+                'credits': [],
+                'milestones': [],
+            },
+            status=400,
+        )
+        self.assertIn('date', result)
+        self.assertFalse(sale.amendments.exists())
+        self.assertEqual((AuditLog.objects.count(), ActionReceipt.objects.count()), (audits, receipts))

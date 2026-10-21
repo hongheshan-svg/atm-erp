@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from apps.accounts.models import User
 from apps.business.models import BOMLine, Delivery, Entry, Project, Stock, StockMove, Task, TimeEntry
-from apps.core.models import ActionReceipt
+from apps.core.models import ActionReceipt, AuditLog
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -82,6 +82,58 @@ class ExecutionFixtures(BusinessFixtures):
 
 
 class ExecutionTests(ExecutionFixtures, TestCase):
+    def test_manager_only_change_rejects_when_old_manager_has_open_task(self):
+        project = self.active_project()
+        old = self.users['manager']
+        new = User.objects.create_user(username='manager2', role='manager')
+        task_id = self.post(
+            'manager',
+            'tasks/',
+            {'project': project.pk, 'kind': 'design', 'title': '经理自领设计', 'assignee': old.pk},
+            status=201,
+        )['id']
+        before_members = set(project.members.values_list('pk', flat=True))
+        audits = AuditLog.objects.count()
+        result = self.clients['admin'].post(
+            f'/api/business/projects/{project.pk}/edit/',
+            {'manager': new.pk, 'reason': '负责人交接'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(result.status_code, 409, result.data)
+        self.assertIn('原负责人', str(result.data))
+        project.refresh_from_db()
+        self.assertEqual(project.manager_id, old.pk)
+        self.assertEqual(set(project.members.values_list('pk', flat=True)), before_members)
+        self.assertEqual(AuditLog.objects.count(), audits)
+        self.assertEqual(Task.objects.get(pk=task_id).assignee_id, old.pk)
+
+    def test_manager_only_change_allows_old_manager_kept_as_member_or_task_done(self):
+        project = self.active_project()
+        old = self.users['manager']
+        new = User.objects.create_user(username='manager2', role='manager')
+        task_id = self.post(
+            'manager',
+            'tasks/',
+            {'project': project.pk, 'kind': 'design', 'title': '经理自领设计', 'assignee': old.pk},
+            status=201,
+        )['id']
+        # Kept as member in the same request: allowed.
+        self.post(
+            'admin',
+            f'projects/{project.pk}/edit/',
+            {'manager': new.pk, 'members': [self.users['member'].pk, old.pk], 'reason': '保留为成员'},
+        )
+        self.assertTrue(project.members.filter(pk=old.pk).exists())
+        # Already a member: swapping back and forth by manager only is allowed too.
+        self.post('admin', f'projects/{project.pk}/edit/', {'manager': old.pk, 'reason': '换回'})
+        self.post('manager', f'tasks/{task_id}/complete/', {'reason': '完成'})
+        # Task done: a manager-only change without membership is allowed.
+        self.post('admin', f'projects/{project.pk}/edit/', {'members': [self.users['member'].pk], 'reason': '清理成员'})
+        self.post('admin', f'projects/{project.pk}/edit/', {'manager': new.pk, 'reason': '负责人交接'})
+        project.refresh_from_db()
+        self.assertEqual(project.manager_id, new.pk)
+
     def setUp(self):
         self.setup_execution()
 

@@ -9,7 +9,22 @@ from apps.core.api import Conflict
 from apps.core.permissions import MANAGERS
 
 from ..models import ContractAmendment, Document, Entry, SalesOrder
-from .common import ZERO, audit, day, fields, identity, integer, lookup, number, project_action, rows, save, state, text
+from .common import (
+    ZERO,
+    audit,
+    day,
+    event_date,
+    fields,
+    identity,
+    integer,
+    lookup,
+    number,
+    project_action,
+    rows,
+    save,
+    state,
+    text,
+)
 from .finance import record_contract
 
 
@@ -49,7 +64,7 @@ def amend(actor, key, sale_id, data):
             pk=identity(data.get('document'), 'document'),
             category='contract',
         )
-        date = day(data, 'date')
+        date = event_date(data, 'date')
         if date < sale.contract_date:
             raise ValidationError('补充协议日期不能早于签约日期。')
         amount = number(data.get('amount'), 'amount')

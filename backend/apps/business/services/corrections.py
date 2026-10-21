@@ -77,6 +77,7 @@ def edit_project(actor, key, project_id, data):
             project.customer = lookup(
                 Partner, data['customer'], 'customer', is_active=True, kind__in=['customer', 'both']
             )
+        old_manager_id = project.manager_id
         if 'manager' in data:
             manager = lookup(User, data['manager'], 'manager', is_active=True)
             if not has_role(manager, MANAGERS):
@@ -89,14 +90,29 @@ def edit_project(actor, key, project_id, data):
             members = list(User.objects.filter(pk__in=ids, is_active=True))
             if len(members) != len(ids):
                 raise ValidationError({'members': '包含不存在或已停用的用户。'})
+            member_ids = ids
+            members_to_set = members
+        else:
+            member_ids = None
+            members_to_set = None
+        if member_ids is not None or project.manager_id != old_manager_id:
+            keep = set(member_ids) if member_ids is not None else set(project.members.values_list('pk', flat=True))
             stranded = (
                 project.tasks.filter(status='open')
-                .exclude(assignee_id__in=ids | {project.manager_id})
+                .exclude(assignee_id__in=keep | {project.manager_id})
                 .select_related('assignee')
             )
-            if any(not has_role(task.assignee, GLOBAL_PROJECT_ROLES) for task in stranded):
+            for task in stranded:
+                if has_role(task.assignee, GLOBAL_PROJECT_ROLES):
+                    continue
+                if task.assignee_id == old_manager_id:
+                    raise Conflict(
+                        f'原负责人 {task.assignee.display_name or task.assignee.username} 还有未完成任务，'
+                        '请先重新分配，或把其保留为项目成员。'
+                    )
                 raise Conflict('移除的成员还有未完成任务，请先重新分配或取消任务。')
-            project.members.set(members)
+        if members_to_set is not None:
+            project.members.set(members_to_set)
         for field, maximum in [('name', 150), ('requirements', 20000)]:
             if field in data:
                 setattr(
