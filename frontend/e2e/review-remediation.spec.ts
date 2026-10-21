@@ -3,6 +3,8 @@ import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, observePage, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
+test.use({ timezoneId: 'UTC' })
+
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
 async function choose(page: Page, label: string, text: string) {
@@ -30,7 +32,7 @@ async function read(page: Page, path: string) {
   return response.json()
 }
 
-test('真实角色处理同料多单元、退回修改、隔离品、补充协议和完工估算', async ({ page, browser }, info) => {
+test('真实角色处理同料多单元、退回修改、隔离品、补充协议和完工估算', async ({ page, browser, timezoneId }, info) => {
   test.setTimeout(240000)
   const suffix = String(Date.now()).slice(-9)
   const password = 'Lean-QA-2026-password'
@@ -45,7 +47,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
     await selectRoles(dialog(page), [role])
     await fill(page, '密码', password)
     await save(page)
-    const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: info.project.use.viewport, isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch })
+    const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: info.project.use.viewport, isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch, timezoneId })
     const p = await context.newPage()
     p.setDefaultTimeout(15000)
     observePage(p, errors)
@@ -172,12 +174,18 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await expect(dialog(purchaser).getByRole('heading', { name: '查看明细', exact: true })).toBeVisible()
   await dialog(purchaser).getByRole('button', { name: '关闭', exact: true }).click()
   await warehouse.goto(`/erp/projects/${id}?tab=purchases`)
+  expect(await warehouse.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe('UTC')
   await action(warehouse, row(warehouse, order.code), '收货')
+  await expect(dialog(warehouse).getByLabel('实际到货 / 合格收货日期', { exact: true })).toHaveValue(order.created_at.slice(0, 10))
+  await expect(dialog(warehouse).getByLabel('补录原因', { exact: true })).toHaveCount(0)
   await fill(warehouse, '数量', '1')
   await fill(warehouse, '不合格隔离数量', '2')
   await fill(warehouse, '原因 / 说明', '两件尺寸待复检')
+  await warehouse.screenshot({ path: info.outputPath('receipt-default-date.png'), animations: 'disabled' })
   await save(warehouse)
   await action(warehouse, row(warehouse, order.code), '隔离品合格入库')
+  await expect(dialog(warehouse).getByLabel('实际合格收货日期', { exact: true })).toHaveValue(order.created_at.slice(0, 10))
+  await expect(dialog(warehouse).getByLabel('补录原因', { exact: true })).toHaveCount(0)
   await fill(warehouse, '数量', '1')
   await fill(warehouse, '原因 / 说明', '复检一件合格')
   await save(warehouse)

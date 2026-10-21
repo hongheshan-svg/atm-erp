@@ -5,6 +5,7 @@ import { test, expect, login, observePage, expectHttpError, type Page, type Loca
 // The period-lock case changes an installation-wide setting. Run this file with
 // the configured single worker, without another E2E process sharing the database.
 test.describe.configure({ mode: 'serial' })
+const utcTest = test.extend({ timezoneId: 'UTC' })
 const password = 'State-actions-audit-2026-only'
 const contexts: BrowserContext[] = []
 const errors: string[] = []
@@ -34,10 +35,10 @@ async function account(page: Page, role: string, suffix: string): Promise<Accoun
   }, 201)
 }
 
-async function session(browser: Browser, info: TestInfo, person: Account) {
+async function session(browser: Browser, info: TestInfo, person: Account, timezoneId?: string) {
   const context = await browser.newContext({
     baseURL: info.project.use.baseURL, viewport: info.project.use.viewport,
-    isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch,
+    isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch, timezoneId,
   })
   contexts.push(context)
   const page = await context.newPage()
@@ -120,7 +121,7 @@ test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本�
   await warehouse.screenshot({ path: info.outputPath('stock-count.png'), animations: 'disabled' })
 })
 
-test('仓管采购退货同步库存与应付抵减，超退失败不留重复流水', async ({ page, browser }, info) => {
+utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重复流水', async ({ page, browser, timezoneId }, info) => {
   const suffix = String(Date.now())
   const person = await account(page, 'warehouse', suffix)
   const admin = await api(page, 'auth/me/')
@@ -139,7 +140,8 @@ test('仓管采购退货同步库存与应付抵减，超退失败不留重复�
     received_date: order.created_at.slice(0, 10), reason: '三件合格入库', lines: [{ line: order.lines[0].id, quantity: '3' }],
   })
   const receipt = (await api(page, `business/moves/?project=${current.id}&kind=receipt`)).results[0]
-  const warehouse = await session(browser, info, person)
+  const warehouse = await session(browser, info, person, timezoneId)
+  expect(await warehouse.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe('UTC')
   await warehouse.goto('/erp/inventory?section=moves')
   await action(warehouse, row(warehouse, itemName).filter({ hasText: '采购收货' }), '采购退货')
   await dialog(warehouse).getByLabel('数量', { exact: true }).fill('1')
@@ -165,12 +167,14 @@ test('仓管采购退货同步库存与应付抵减，超退失败不留重复�
   await cancelEditing(dialog(warehouse))
   await warehouse.goto(`/erp/projects/${current.id}?tab=purchases`)
   await action(warehouse, row(warehouse, order.code), '登记采购质保')
+  await expect(dialog(warehouse).getByLabel('报修日期', { exact: true })).toHaveValue(order.created_at.slice(0, 10))
   await dialog(warehouse).getByLabel('原收货批次', { exact: true }).selectOption(String(receipt.id))
   await dialog(warehouse).getByLabel('数量', { exact: true }).fill('1')
   await dialog(warehouse).getByLabel('故障描述', { exact: true }).fill('气缸密封失效，与供应商核对退货责任')
+  await warehouse.screenshot({ path: info.outputPath('warranty-default-date.png'), animations: 'disabled' })
   await submit(warehouse, `business/purchases/${purchase.id}/warranty/`)
   const warranty = (await api(page, `business/purchases/${purchase.id}/warranty/`)).cases[0]
-  expect(warranty).toMatchObject({ status: '待响应', quantity: '1.000', receipt: receipt.id, within_warranty: true })
+  expect(warranty).toMatchObject({ status: '待响应', date: order.created_at.slice(0, 10), quantity: '1.000', receipt: receipt.id, within_warranty: true })
   for (const [status, label, response] of [
     ['repairing', '维修中', '供应商已接收故障反馈，正在检查密封组件'],
     ['closed', '已关闭', '双方确认原批次退货退款完成，关闭质保事项'],

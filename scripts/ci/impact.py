@@ -8,7 +8,7 @@ from scripts.ci.backend_test_matrix import MODULE_TESTS, TARGETS, module_targets
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_FILES = {
-    'sales': ('sales', 'amendments', 'SalesPage'),
+    'sales': ('sales', 'amendments', 'SalesPage', 'business-date'),
     'projects': ('projects', 'execution', 'budgets', 'ProjectsPage', 'ProjectPage', 'BudgetPanel', 'production'),
     'bom': ('bom', 'bom_import', 'bom_material_import', 'BOMPage', 'BOMDemand', 'BOMPurchasePicker', 'bom-purchase'),
     'purchases': (
@@ -22,6 +22,7 @@ MODULE_FILES = {
         'payment-terms',
         'PurchasesPage',
         'PurchaseContractPage',
+        'business-date',
     ),
     'inventory': ('inventory', 'corrections', 'InventoryPage'),
     'finance': (
@@ -33,6 +34,7 @@ MODULE_FILES = {
         'settlement',
         'FinancePage',
         'FinanceTotals',
+        'business-date',
     ),
     'masterdata': ('masterdata', 'product-categories', 'MasterdataPage'),
     'accounts': (

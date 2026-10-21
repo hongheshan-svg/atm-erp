@@ -68,9 +68,13 @@ export function validateFields(fields: Field[], data: Row, prefix = ''): void {
   const first = fieldIssues(fields, data, prefix)[0]
   if (first) throw new Error(first.message)
 }
+// Business dates follow the backend TIME_ZONE, regardless of the browser's timezone.
+const businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+})
 export const today = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const parts = Object.fromEntries(businessDateFormatter.formatToParts(new Date()).map(({ type, value }) => [type, value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 export function decimalDifference(...values: string[]): string {
   const scaled = (v: string) => {

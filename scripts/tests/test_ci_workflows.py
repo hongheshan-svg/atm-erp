@@ -167,6 +167,13 @@ class RoutingTests(unittest.TestCase):
         for target in ('hardening', 'concurrency', 'transfers', 'operational_review'):
             self.assertIn(f'apps.business.tests.test_{target}', scope['backend_targets'])
         self.assertIn('e2e/specialist-roles.spec.ts', scope['browser_specs'])
+        for path in (
+            'frontend/src/forms.ts',
+            'frontend/src/modules/sales.ts',
+            'frontend/src/modules/purchases.ts',
+            'frontend/src/modules/finance.ts',
+        ):
+            self.assertIn('src/modules/business-date.spec.ts', plan([path])['frontend_tests'])
 
     def test_check_only_configuration_runs_static_checks_without_modules(self):
         scope = plan(['frontend/eslint.config.js', 'backend/pyproject.toml'])
@@ -275,7 +282,11 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
     def test_validation_markers_follow_gate_even_when_suites_are_skipped(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        for job, output in (('full-validation', 'full'), ('release-validation', 'release'), ('scoped-validation', 'scoped')):
+        for job, output in (
+            ('full-validation', 'full'),
+            ('release-validation', 'release'),
+            ('scoped-validation', 'scoped'),
+        ):
             block = re.split(r'\n  (?! )', workflow.split(f'\n  {job}:\n', 1)[1], maxsplit=1)[0]
             condition = next(line for line in block.splitlines() if line.strip().startswith('if:'))
             # 未选中的套件会被跳过；默认 success() 会把标记连带跳过，必须显式依据 gate 结论。
