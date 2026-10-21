@@ -138,6 +138,14 @@ class RoutingTests(unittest.TestCase):
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
         self.assertFalse(scope['ota'] or scope['installers'])
 
+    def test_config_settings_uses_shared_mapping_not_accounts_stem(self):
+        scope = plan(['backend/config/settings.py'])
+        self.assertEqual(scope['modules'], sorted(BUSINESS))
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+        for path in ('frontend/src/modules/settings.ts', 'frontend/src/views/SettingsPage.vue'):
+            self.assertTrue((ROOT / path).is_file(), path)
+            self.assertIn('accounts', plan([path])['modules'], path)
+
     def test_shared_ui_change_adds_page_level_specs(self):
         scope = plan(['frontend/src/components/ResourcePanel.vue'])
         self.assertEqual(scope['modules'], sorted(BUSINESS))

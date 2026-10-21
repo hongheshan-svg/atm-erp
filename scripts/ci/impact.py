@@ -309,9 +309,8 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
             continue
         matched = {module for module, names in MODULE_FILES.items() if stem in names}
         shared = next((modules for prefixes, modules in SHARED_PATHS if path.startswith(prefixes)), None)
-        if matched:
-            selected.update(matched)
-        elif shared is not None:
+        # 文件名词干可能与模块同名（如 config/settings.py 命中 accounts），若共享组已覆盖该模块，则以共享组为准，避免被截走。
+        if shared is not None and (not matched or set(matched) <= set(shared)):
             selected.update(shared)
             if '/migrations/' in path:
                 # 升级流程先备份再执行前向迁移；迁移变化须经 OTA 升级演练验证。
@@ -322,6 +321,8 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
                 # 运行时依赖随离线 wheelhouse 和镜像交付，安装器与升级链路同样受影响。
                 installers = True
                 selected.add('ota')
+        elif matched:
+            selected.update(matched)
         else:
             unknown.append(path)
     if unknown and not modules and not full and not release:
