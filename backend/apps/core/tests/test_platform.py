@@ -74,6 +74,39 @@ class ChineseErrorTests(SimpleTestCase):
         self.assertIn('wuxingguang', response.data['assignee'][0])
 
 
+class IntegrityConflictTests(TestCase):
+    def test_integrity_error_becomes_409_json_without_database_text_and_rolls_back_receipt(self):
+        from django.db import IntegrityError
+
+        from apps.core.api import exception_handler
+
+        actor = User.objects.create_user(username='integrity', role='purchaser')
+
+        def execute(user):
+            raise IntegrityError('duplicate key value violates unique constraint "uniq_secret_name"')
+
+        with self.assertRaises(IntegrityError) as caught:
+            perform(
+                actor=actor,
+                key='integrity-1',
+                operation='test.integrity',
+                payload={},
+                authorize=lambda user: None,
+                execute=execute,
+            )
+        self.assertFalse(ActionReceipt.objects.filter(key='integrity-1').exists())
+        response = exception_handler(caught.exception, {})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('请刷新后重试', str(response.data['detail']))
+        self.assertNotIn('uniq_secret_name', str(response.data))
+        self.assertNotIn('duplicate key', str(response.data))
+
+    def test_other_exceptions_are_not_swallowed(self):
+        from apps.core.api import exception_handler
+
+        self.assertIsNone(exception_handler(RuntimeError('boom'), {}))
+
+
 class PlatformTests(TestCase):
     def test_user_search_filters_include_secondary_roles_without_widening_access(self):
         from rest_framework.test import APIClient

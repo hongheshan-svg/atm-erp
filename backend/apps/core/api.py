@@ -1,11 +1,15 @@
+import logging
 from math import ceil
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError
 from rest_framework.exceptions import APIException, ErrorDetail, Throttled
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import exception_handler as drf_exception_handler
 
 from .error_messages import localize_detail, validation_detail
+
+logger = logging.getLogger(__name__)
 
 
 class Conflict(APIException):
@@ -23,6 +27,10 @@ def exception_handler(exc, context):
         from rest_framework.exceptions import ValidationError
 
         exc = ValidationError(validation_detail(exc))
+    if isinstance(exc, IntegrityError):
+        # 并发竞态下唯一约束冲突：事务已由 atomic 回滚；不向用户暴露数据库原文，但留日志便于发现真正的代码缺陷。
+        logger.warning('数据库完整性冲突已转为 409', exc_info=exc)
+        exc = Conflict()
     response = drf_exception_handler(exc, context)
     if response is not None:
         response.data = localize_detail(response.data)

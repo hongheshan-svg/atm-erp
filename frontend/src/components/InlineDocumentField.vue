@@ -10,6 +10,8 @@ const uploaded = ref<Option[]>([]), busy = ref(false), error = ref('')
 const previewUrl = ref(''), previewType = ref(''), previewName = ref('')
 const choices = computed(() => [...(props.field.options || []), ...uploaded.value].filter((item, i, all) => all.findIndex(other => String(other.value) === String(item.value)) === i))
 let generation = 0
+// 同一文件在同一上下文下失败/超时后重传复用同一操作键，服务端据此去重；成功或换文件后换新键。
+let uploadKey = '', uploadSignature = ''
 function closePreview() { if (previewUrl.value) URL.revokeObjectURL(previewUrl.value); previewUrl.value = '' }
 watch(() => JSON.stringify(props.field.upload), () => { generation++; busy.value = false; emit('busy', false); uploaded.value = []; error.value = ''; closePreview() })
 onBeforeUnmount(() => { generation++; closePreview(); emit('busy', false) })
@@ -25,7 +27,10 @@ async function upload(event: Event) {
     const body = new FormData()
     body.append('file', file); body.append('category', props.field.upload.category)
     for (const [key, value] of Object.entries(props.field.upload.context)) if (value != null) body.append(key, String(value))
-    const result = await write('/business/documents/', body, requestKey())
+    const signature = JSON.stringify([file.name, file.size, file.lastModified, props.field.upload.category, props.field.upload.context])
+    if (signature !== uploadSignature) { uploadKey = requestKey(); uploadSignature = signature }
+    const result = await write('/business/documents/', body, uploadKey)
+    uploadKey = ''; uploadSignature = ''
     if (current !== generation) return
     uploaded.value.push({ value: result.id, label: result.original_name || file.name })
     model.value = result.id
