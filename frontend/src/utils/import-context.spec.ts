@@ -35,6 +35,7 @@ it('导出文件使用中文业务名称和本地日期', () => {
   expect(exportFilename('entries', 'xlsx', date)).toBe('应收应付与费用导出_2026-10-22.xlsx')
   expect(exportFilename('moves', 'csv', date)).toBe('库存流水导出_2026-10-22.csv')
   expect(exportFilename('time', 'xlsx', date)).toBe('工时记录导出_2026-10-22.xlsx')
+  expect(exportFilename('reports', 'xlsx', date)).toBe('经营报表导出_2026-10-22.xlsx')
 })
 
 it('成功入口仅聚焦服务端明确资源的真实记录，不把期初流水ID当库存ID', () => {

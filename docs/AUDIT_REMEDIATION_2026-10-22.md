@@ -73,7 +73,7 @@
 - 桌面与390px手机视口实际核验采购部分取消、历史补录、待检数量、售后双期限、提前节点签约；财务额度默认值、超额拒绝、重复流水号；库存四入口0值拦截/0.001保存、盘点0保存。均读取实际保存结果，代表截图已打开检查。手机为模拟视口，不代表手机真机验收。
 - 导入页面使用真实API专项（两场景×桌面/手机），核对项目上下文、中文错误定位、确认失败整批回滚、重复确认、结果入口，以及生产经理任务范围和降权后旧凭据拒绝。最终后端重启后 **4项通过**，结果见 `imports-browser-integrated.log`。
 - 临时证据目录：`/private/tmp/erp-audit32-handoff/`。主要日志为 `backend-integration-final.log`、`backend-checks-final.log`、`frontend-integration-final.log`、`frontend-lint-final.log`、`frontend-typecheck-final.log`、`frontend-build-final.log`、`ci-routing-final.log`、`imports-browser-integrated.log`、`business-browser-results.md`、`finance-browser-final.log`、`inventory-ux07-browser.log`。永久测试代码已纳入仓库，临时日志不是发版凭据。
-- 未运行完整业务页面链、正式发版验证或真实OTA升级演练；本轮OTA证据限升级接口事务、权限和回放。尚未提交GitHub、打tag、发布或升级生产环境。
+- 上述记录属于发布前本地验证，未运行完整业务页面链或真实OTA升级演练，本地OTA证据限升级接口事务、权限和回放。后续v1.8.15正式发版另由GitHub Actions运行suite=release（含所选OTA演练），状态以工作流和发布页为准；不升级生产环境。
 
 ## 独立复核追加修正
 

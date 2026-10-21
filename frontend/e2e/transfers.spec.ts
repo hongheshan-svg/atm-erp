@@ -14,7 +14,7 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   const template = await templateEvent
   expect(template.suggestedFilename()).toBe('物料导入模板.xlsx')
   expect((await readFile((await template.path())!)).subarray(0, 2).toString()).toBe('PK')
-  const prefix = `IMPORT${Date.now()}`
+  const prefix = `IMPORT${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await openImport(page)
   await dialog.getByText('更多格式', { exact: true }).click()
@@ -53,7 +53,7 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   await page.getByRole('button', { name: '导出 ▾', exact: true }).click()
   await page.getByRole('menuitem', { name: '导出 Excel', exact: true }).click()
   const report = await reportEvent
-  expect(report.suggestedFilename()).toBe('reports.xlsx')
+  expect(report.suggestedFilename()).toMatch(/^经营报表导出_\d{4}-\d{2}-\d{2}\.xlsx$/)
   expect((await readFile((await report.path())!)).subarray(0, 2).toString()).toBe('PK')
 })
 

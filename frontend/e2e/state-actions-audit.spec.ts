@@ -136,7 +136,7 @@ test('仓管采购退货同步库存与应付抵减，超退失败不留重复�
   await api(page, `business/purchases/${purchase.id}/approve/`, { reason: '隔离验收管理员复核自建采购' })
   const order = await api(page, `business/purchases/${purchase.id}/`)
   await api(page, `business/purchases/${purchase.id}/receive/`, {
-    received_date: day(), reason: '三件合格入库', lines: [{ line: order.lines[0].id, quantity: '3' }],
+    received_date: order.created_at.slice(0, 10), reason: '三件合格入库', lines: [{ line: order.lines[0].id, quantity: '3' }],
   })
   const receipt = (await api(page, `business/moves/?project=${current.id}&kind=receipt`)).results[0]
   const warehouse = await session(browser, info, person)
