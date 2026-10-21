@@ -552,6 +552,14 @@ class TransferTests(BusinessFixtures, TestCase):
                     self.assertEqual(len(validations), len(layout['columns']))
                     for index, column in enumerate(layout['columns'], 1):
                         for key in ('required', 'hint', 'example'):
+                            if key == 'example' and (resource, column['key']) in {
+                                ('partners', 'payment_days'),
+                                ('purchases', 'payment_days'),
+                                ('purchases', 'payment_due_date'),
+                            }:
+                                self.assertEqual(column[key], '')
+                                self.assertIn('此列留空', column['hint'])
+                                continue
                             self.assertTrue(column[key], (resource, column))
                             self.assertIn(column[key], book['数据'].cell(1, index).comment.text)
                         self.assertContains(html, column['label'])

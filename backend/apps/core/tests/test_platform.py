@@ -1,11 +1,12 @@
 import io
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.models import User
@@ -75,15 +76,16 @@ class ChineseErrorTests(SimpleTestCase):
 
 
 class IntegrityConflictTests(TestCase):
-    def test_integrity_error_becomes_409_json_without_database_text_and_rolls_back_receipt(self):
-        from django.db import IntegrityError
+    def test_unique_error_becomes_409_and_rolls_back_business_write_and_receipt(self):
+        from types import SimpleNamespace
 
         from apps.core.api import exception_handler
 
         actor = User.objects.create_user(username='integrity', role='purchaser')
 
         def execute(user):
-            raise IntegrityError('duplicate key value violates unique constraint "uniq_secret_name"')
+            Company.objects.create(pk=1, name='must roll back')
+            User.objects.create_user(username=user.username, role='purchaser')
 
         with self.assertRaises(IntegrityError) as caught:
             perform(
@@ -95,11 +97,72 @@ class IntegrityConflictTests(TestCase):
                 execute=execute,
             )
         self.assertFalse(ActionReceipt.objects.filter(key='integrity-1').exists())
-        response = exception_handler(caught.exception, {})
+        self.assertFalse(Company.objects.filter(pk=1).exists())
+        self.assertEqual(caught.exception.__cause__.pgcode, '23505')
+        with self.assertLogs('apps.core.api', level='WARNING') as logs:
+            response = exception_handler(
+                caught.exception, {'view': SimpleNamespace(basename='project', kwargs={'pk': 7})}
+            )
         self.assertEqual(response.status_code, 409)
         self.assertIn('请刷新后重试', str(response.data['detail']))
-        self.assertNotIn('uniq_secret_name', str(response.data))
+        self.assertEqual(response.data['actions'][0]['path'], '/projects/7')
+        self.assertNotIn('lean_user', str(response.data))
         self.assertNotIn('duplicate key', str(response.data))
+        self.assertIs(logs.records[0].exc_info[1], caught.exception)
+
+    def test_other_real_integrity_errors_are_not_reported_as_retryable_conflicts(self):
+        from apps.core.api import exception_handler
+
+        actor = User.objects.create_user(username='non-unique-integrity', role='purchaser')
+        failures = {
+            '23514': lambda: User.objects.filter(pk=actor.pk).update(hourly_cost=-1),
+            '23502': lambda: Company.objects.create(name=None),
+            '23503': lambda: AuditLog.objects.create(actor_id=actor.pk + 100000, operation='missing.actor'),
+        }
+        for sqlstate, fail in failures.items():
+            with self.subTest(sqlstate=sqlstate):
+
+                def execute(user):
+                    Company.objects.create(pk=1, name='must roll back')
+                    fail()
+                    # PostgreSQL foreign keys are deferred until transaction exit.
+                    with connection.cursor() as cursor:
+                        cursor.execute('SET CONSTRAINTS ALL IMMEDIATE')
+
+                with self.assertRaises(IntegrityError) as caught:
+                    perform(
+                        actor=actor,
+                        key=sqlstate,
+                        operation='test.integrity',
+                        payload={},
+                        authorize=lambda user: None,
+                        execute=execute,
+                    )
+                self.assertEqual(caught.exception.__cause__.pgcode, sqlstate)
+                self.assertFalse(Company.objects.exists())
+                self.assertFalse(ActionReceipt.objects.filter(key=sqlstate).exists())
+                self.assertIsNone(exception_handler(caught.exception, {}))
+                actor.refresh_from_db()
+                self.assertEqual(actor.hourly_cost, 0)
+
+    def test_unique_constraint_inside_view_transaction_rolls_back_before_response(self):
+        from rest_framework.test import APIRequestFactory
+        from rest_framework.views import APIView
+
+        User.objects.create_user(username='view-conflict')
+
+        class ConflictingView(APIView):
+            authentication_classes = permission_classes = throttle_classes = []
+
+            def post(self, request):
+                with transaction.atomic():
+                    Company.objects.create(pk=1)
+                    User.objects.create_user(username='view-conflict')
+
+        with self.assertLogs('apps.core.api', level='WARNING'):
+            response = ConflictingView.as_view()(APIRequestFactory().post('/'))
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(Company.objects.exists())
 
     def test_other_exceptions_are_not_swallowed(self):
         from apps.core.api import exception_handler
@@ -259,6 +322,36 @@ class PlatformTests(TestCase):
         self.assertEqual(first, self.action())
         self.assertEqual(CodeRule.objects.get(key='project').counter, 1)
         self.assertEqual(ActionReceipt.objects.count(), 1)
+
+    def test_long_term_receipt_replays_without_reexecuting_or_accepting_changed_payload(self):
+        first = self.action(payload={'value': 1})
+        old = timezone.now() - timedelta(days=3650)
+        ActionReceipt.objects.filter(actor=self.actor, key='one').update(created_at=old)
+
+        def unexpected_write(user):
+            self.fail('长期凭据重放不得再次执行业务写入。')
+
+        self.assertEqual(self.action(payload={'value': 1}, execute=unexpected_write), first)
+        with self.assertRaises(Conflict):
+            self.action(payload={'value': 2}, execute=unexpected_write)
+        receipt = ActionReceipt.objects.get(actor=self.actor, key='one')
+        self.assertEqual(receipt.created_at, old)
+        self.assertEqual(receipt.result, first)
+        self.assertEqual(ActionReceipt.objects.count(), 1)
+        self.assertEqual(CodeRule.objects.get(key='project').counter, 1)
+
+    def test_long_term_receipt_rechecks_removed_role_and_disabled_account(self):
+        self.action()
+        ActionReceipt.objects.filter(actor=self.actor, key='one').update(
+            created_at=timezone.now() - timedelta(days=3650)
+        )
+        for role, active in [('member', True), ('admin', False)]:
+            with self.subTest(role=role, active=active):
+                User.objects.filter(pk=self.actor.pk).update(role=role, is_active=active)
+                with self.assertRaises(PermissionDenied):
+                    self.action()
+        self.assertEqual(ActionReceipt.objects.count(), 1)
+        self.assertEqual(CodeRule.objects.get(key='project').counter, 1)
 
     def test_same_key_cannot_change_payload(self):
         self.action(payload={'value': 1})

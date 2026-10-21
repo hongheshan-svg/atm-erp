@@ -69,7 +69,9 @@ def summary(user, supplier, month):
     if not str(supplier).isdigit():
         raise ValidationError({'supplier': '请选择供应商。'})
     entries = (
-        Entry.objects.filter(purchase__supplier_id=supplier, project__in=projects_for(user, Project.objects.all()))
+        Entry.objects.filter(
+            purchase__supplier_id=supplier, project__in=projects_for(user, Project.objects.all(), MONEY_READERS)
+        )
         .select_related('purchase__supplier', 'project')
         .prefetch_related('payments', 'purchase__lines__stockmove_set')
         .order_by('project_id', 'id')

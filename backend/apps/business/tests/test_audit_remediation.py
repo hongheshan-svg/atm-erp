@@ -131,7 +131,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         row = next(row for row in self.get('admin', 'business/reports/').data['results'] if row['id'] == project.pk)
         self.assertEqual((row['payable'], row['overdue_payable']), ('500.00', '0.00'))
         listed = self.get('finance', f'business/entries/{entry.pk}/').data
-        self.assertEqual((listed['status'], listed['due_amount'], listed['payment_schedule']), ('open', '0', []))
+        self.assertEqual((listed['status'], listed['due_amount'], listed['payment_schedule']), ('open', '0.00', []))
         settlements = self.get('finance', 'business/workbench/', {'bucket': 'settlements'}).data['settlements']
         self.assertNotIn(entry.pk, [item['id'] for item in settlements['results']])
         aging = self.get('admin', 'business/reports/', {'view': 'aging'}).data['results']
@@ -304,7 +304,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.assertIn('验收合格之日起一年', default_preview['clauses']['quality'][2])
         self.post('purchaser', f'purchases/{purchase.pk}/submit/')
         self.post('manager', f'purchases/{purchase.pk}/approve/')
-        self.receive(purchase, '5', received_date=TODAY)
+        self.receive(purchase, '5', received_date=TODAY, backfill_reason='根据历史签收单补录质保起算日期')
         listing = self.get('purchaser', f'business/purchases/{purchase.pk}/warranty/').data
         self.assertEqual(listing['warranty_months'], 24)
         self.assertEqual(listing['receipts'][0]['warranty_end'], date(2028, 9, 9))

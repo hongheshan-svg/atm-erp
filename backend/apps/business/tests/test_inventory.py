@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 
 from apps.business.models import Entry, Stock, StockMove, Task
+from apps.core.models import ActionReceipt, AuditLog
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -164,7 +165,14 @@ class InventoryTests(BusinessFixtures, TestCase):
             'unit_cost': '25',
             'reason': '发现未登记物料',
         }
-        self.post('warehouse', f'stocks/{stock.pk}/count/', payload, status=403)
+        counts = (ActionReceipt.objects.count(), AuditLog.objects.count())
+        response = self.post('warehouse', f'stocks/{stock.pk}/count/', payload, status=403)
+        self.assertIn('零库存盘盈需管理员填写单位成本', str(response))
+        self.assertIn('库存页面', str(response))
+        stock.refresh_from_db()
+        self.assertEqual((stock.quantity, stock.value), (0, 0))
+        self.assertFalse(stock.moves.exists())
+        self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), counts)
         self.post('admin', f'stocks/{stock.pk}/count/', payload)
         stock.refresh_from_db()
         self.assertEqual(stock.value, Decimal('25'))

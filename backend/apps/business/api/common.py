@@ -47,8 +47,10 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             'reconciliation': 'entry__project',
             'stockmove': 'project',
         }.get(queryset.model._meta.model_name)
-        if path and not has_role(self.request.user, GLOBAL_PROJECT_ROLES):
-            queryset = queryset.filter(**{f'{path}__in': projects_for(self.request.user, Project.objects.all())})
+        if path and not has_role(self.request.user, GLOBAL_PROJECT_ROLES & self.read_roles):
+            queryset = queryset.filter(
+                **{f'{path}__in': projects_for(self.request.user, Project.objects.all(), self.read_roles)}
+            )
         return queryset
 
     @action(detail=False, methods=['get'], url_path='export', throttle_classes=[ExportThrottle])
@@ -104,6 +106,14 @@ class ImportableMixin:
 
     @action(detail=False, methods=['post'], url_path='import-confirm', throttle_classes=[ImportThrottle])
     def import_confirm(self, request):
-        if set(request.data) != {'token'}:
+        if 'token' not in request.data or set(request.data) - {'token', 'allow_duplicate'}:
             raise ValidationError('请提交预览凭据。')
-        return Response(transfers.confirm(request.user, request.path.split('/')[-3], request.data['token']))
+        return Response(
+            transfers.confirm(
+                request.user,
+                request.path.split('/')[-3],
+                request.data['token'],
+                allow_duplicate=request.data.get('allow_duplicate', False),
+                key=request.headers.get('Idempotency-Key'),
+            )
+        )

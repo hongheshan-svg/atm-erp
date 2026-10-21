@@ -1,15 +1,136 @@
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.db import connection, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
-from apps.core.models import Company, UpgradeJob
+from apps.core.models import ActionReceipt, AuditLog, Company, UpgradeJob
 from apps.core.ota import RELEASE_CACHE, version
 
 TOKEN = 'a' * 64
+
+
+@override_settings(OTA_AGENT_TOKEN=TOKEN, OTA_MODE='host')
+class UpgradeQueueTransactionTests(TransactionTestCase):
+    def setUp(self):
+        cache.clear()
+        self.admin = User.objects.create_user(username='ota-transaction', role='admin')
+        Company.objects.create(pk=1)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        self.runner = {
+            'id': 'c' * 32,
+            'seen': timezone.now().timestamp(),
+            'platform': 'linux',
+            'mode': 'native',
+            'execution': 'host',
+        }
+        cache.set('ota.runner', self.runner, 60)
+        self.info = {
+            'version': 'v9.0.0',
+            'assets': [{'name': 'atm-erp-v9.0.0-linux-native.zip', 'sha256': 'b' * 64, 'size': 5, 'url': 'fixture'}],
+        }
+
+    def queue(self, key='queue-transaction'):
+        return self.client.post(
+            '/api/core/upgrade/',
+            {'target': 'v9.0.0', 'confirmed': True},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=key,
+        )
+
+    def test_release_request_runs_without_transaction_or_company_and_mutation_locks(self):
+        def fetch():
+            self.assertFalse(connection.in_atomic_block)
+            other = connection.copy(alias='ota_lock_probe')
+            try:
+                other.set_autocommit(False)
+                with other.cursor() as cursor:
+                    cursor.execute('SELECT id FROM lean_company WHERE id = 1 FOR UPDATE NOWAIT')
+                    self.assertEqual(cursor.fetchone(), (1,))
+                    cursor.execute('SELECT pg_try_advisory_xact_lock(18360, 1)')
+                    self.assertTrue(cursor.fetchone()[0])
+            finally:
+                other.rollback()
+                other.close()
+            return self.info
+
+        with patch('apps.core.ota.release_info', side_effect=fetch):
+            response = self.queue()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(UpgradeJob.objects.count(), 1)
+        self.assertTrue(ActionReceipt.objects.filter(key='queue-transaction').exists())
+
+    def test_changes_during_release_request_are_rechecked_and_fail_without_partial_writes(self):
+        changes = ('active_job', 'heartbeat', 'mode', 'permission', 'disabled', 'version', 'runner_platform', 'token')
+        for change in changes:
+            with self.subTest(change=change):
+                # Keep each simulated race isolated while exercising the actual perform transaction/savepoint.
+                with transaction.atomic():
+
+                    def fetch():
+                        if change == 'active_job':
+                            UpgradeJob.objects.create(target='v8.0.0', mode='native', platform='linux')
+                        elif change == 'heartbeat':
+                            cache.set('ota.runner', {**self.runner, 'seen': timezone.now().timestamp() - 46}, 60)
+                        elif change == 'mode':
+                            cache.set('ota.runner', {**self.runner, 'execution': 'container'}, 60)
+                        elif change == 'permission':
+                            User.objects.filter(pk=self.admin.pk).update(role='member')
+                        elif change == 'disabled':
+                            User.objects.filter(pk=self.admin.pk).update(is_active=False)
+                        elif change == 'version':
+                            version_patch.start()
+                        elif change == 'runner_platform':
+                            cache.set('ota.runner', {**self.runner, 'platform': 'windows'}, 60)
+                        elif change == 'token':
+                            token_patch.enable()
+                        return self.info
+
+                    version_patch = patch('apps.core.ota.VERSION', '9.0.0')
+                    token_patch = override_settings(OTA_AGENT_TOKEN='')
+                    try:
+                        with patch('apps.core.ota.release_info', side_effect=fetch):
+                            response = self.queue()
+                        self.assertEqual(response.status_code, 403 if change in ('permission', 'disabled') else 409)
+                        self.assertEqual(UpgradeJob.objects.count(), int(change == 'active_job'))
+                        self.assertFalse(ActionReceipt.objects.exists())
+                        self.assertFalse(AuditLog.objects.filter(operation='system.upgrade.request').exists())
+                    finally:
+                        version_patch.stop()
+                        if change == 'token':
+                            token_patch.disable()
+                        cache.set('ota.runner', self.runner, 60)
+                        transaction.set_rollback(True)
+
+    def test_completed_request_replays_without_network_but_still_rechecks_authorization_and_payload(self):
+        with patch('apps.core.ota.release_info', return_value=self.info):
+            first = self.queue()
+        self.assertEqual(first.status_code, 200)
+        with patch('apps.core.ota.release_info', side_effect=ValidationError('offline')) as fetch:
+            self.assertEqual(self.queue().data['id'], first.data['id'])
+            response = self.client.post(
+                '/api/core/upgrade/',
+                {'target': 'v10.0.0', 'confirmed': True},
+                format='json',
+                HTTP_IDEMPOTENCY_KEY='queue-transaction',
+            )
+            self.assertEqual(response.status_code, 409)
+            User.objects.filter(pk=self.admin.pk).update(role='member')
+            self.assertEqual(self.queue().status_code, 403)
+            fetch.assert_not_called()
+        self.assertEqual(UpgradeJob.objects.count(), 1)
+
+    def test_release_failure_leaves_no_job_audit_or_receipt(self):
+        with patch('apps.core.ota.release_info', side_effect=ValidationError('offline')):
+            self.assertEqual(self.queue().status_code, 400)
+        self.assertFalse(UpgradeJob.objects.exists())
+        self.assertFalse(ActionReceipt.objects.exists())
+        self.assertFalse(AuditLog.objects.filter(operation='system.upgrade.request').exists())
 
 
 @override_settings(OTA_AGENT_TOKEN=TOKEN)

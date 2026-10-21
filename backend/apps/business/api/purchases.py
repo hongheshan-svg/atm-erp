@@ -6,7 +6,7 @@ from apps.core.permissions import (
     MONEY_READERS,
     PURCHASE_APPROVERS,
     PURCHASE_READERS,
-    require_role,
+    require_project,
 )
 
 from ..models import (
@@ -23,7 +23,7 @@ class PurchaseView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     write_roles = PURCHASE_READERS
     queryset = PurchaseOrder.objects.select_related('supplier', 'project').prefetch_related(
-        'lines__item', 'lines__bom_line'
+        'lines__item', 'lines__bom_line', 'project__members'
     )
     serializer_class = PurchaseSerializer
     filterset_fields = ['project', 'supplier', 'status']
@@ -145,8 +145,9 @@ class PurchaseView(ImportableMixin, ReadView):
 
     @action(detail=True, methods=['get'], url_path='budget-check')
     def budget_check(self, request, pk=None):
-        require_role(request.user, MONEY_READERS | PURCHASE_APPROVERS)
-        return Response(budgets.purchase_visibility(request.user, budgets.purchase_check(self.get_object())))
+        purchase = self.get_object()
+        require_project(request.user, purchase.project, MONEY_READERS | PURCHASE_APPROVERS)
+        return Response(budgets.purchase_visibility(request.user, budgets.purchase_check(purchase), purchase.project))
 
     @action(detail=True, methods=['post'], url_path='approve-over-budget')
     def approve_over_budget(self, request, pk=None):

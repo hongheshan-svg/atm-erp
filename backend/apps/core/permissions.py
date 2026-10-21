@@ -64,11 +64,34 @@ def projects_for(user, queryset, allowed=OPERATION_ROLES):
 
 
 def project_allowed(user, project, allowed=OPERATION_ROLES):
+    members = getattr(project, '_prefetched_objects_cache', {}).get('members')
     return has_role(user, allowed & OPERATION_ROLES) and (
         has_role(user, GLOBAL_PROJECT_ROLES & allowed)
         or project.manager_id == user.pk
-        or project.members.filter(pk=user.pk).exists()
+        or (
+            any(member.pk == user.pk for member in members)
+            if members is not None
+            else project.members.filter(pk=user.pk).exists()
+        )
     )
+
+
+def project_read_allowed(request, project_id, allowed=MONEY_READERS):
+    """Resolve sensitive read scope once per request, never cache a write authorization."""
+    user = request.user
+    if not has_role(user, allowed):
+        return False
+    if project_id is None or has_role(user, GLOBAL_PROJECT_ROLES & allowed):
+        return True
+    from apps.business.models import Project
+
+    cache = getattr(request, '_project_read_scopes', None)
+    if cache is None:
+        cache = request._project_read_scopes = {}
+    scope = frozenset(allowed)
+    if scope not in cache:
+        cache[scope] = set(projects_for(user, Project.objects.all(), allowed).values_list('pk', flat=True))
+    return project_id in cache[scope]
 
 
 def require_project(user, project, allowed=OPERATION_ROLES):

@@ -405,6 +405,84 @@ class AuthenticationTests(TestCase):
             self.client.post('/api/auth/login/', {'username': 'member', 'password': PASSWORD}).status_code, 200
         )
 
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_office_refreshes_have_independent_account_buckets_and_do_not_consume_login(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        for index in range(50):
+            user = User.objects.create_user(username=f'office-{index}', role='member')
+            response = self.client.post('/api/auth/refresh/', {'refresh': str(RefreshToken.for_user(user))})
+            self.assertEqual(response.status_code, 200, response.data)
+        # All fifty refreshes used the same IP; production login still permits exactly ten attempts.
+        self.test_login_is_throttled()
+        token = str(RefreshToken.for_user(self.users['member']))
+        self.assertEqual(self.client.post('/api/auth/refresh/', {'refresh': token}).status_code, 200)
+
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_refresh_limit_follows_account_across_tokens_and_ips(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        tokens = [str(RefreshToken.for_user(self.users['member'])) for _ in range(2)]
+        for index in range(31):
+            response = self.client.post(
+                '/api/auth/refresh/', {'refresh': tokens[index % 2]}, REMOTE_ADDR=f'198.51.100.{index + 1}'
+            )
+            self.assertEqual(response.status_code, 200 if index < 30 else 429, response.data)
+        other = str(RefreshToken.for_user(self.users['manager']))
+        self.assertEqual(self.client.post('/api/auth/refresh/', {'refresh': other}).status_code, 200)
+
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_invalid_refresh_has_separate_ip_limit_and_cannot_consume_account_bucket(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        token = str(RefreshToken.for_user(self.users['member']))
+        # A genuine payload with a forged signature must never identify the account for throttling.
+        forged = token.rsplit('.', 1)[0] + '.' + 'A' * 43
+        for index in range(11):
+            response = self.client.post(
+                '/api/auth/refresh/',
+                {'refresh': forged if index % 2 else 'invalid'},
+                REMOTE_ADDR='198.51.100.10',
+                HTTP_X_FORWARDED_FOR=f'203.0.113.{index}',
+            )
+            self.assertEqual(response.status_code, 401 if index < 10 else 429, response.data)
+        for _ in range(30):
+            self.assertEqual(
+                self.client.post('/api/auth/refresh/', {'refresh': token}, REMOTE_ADDR='198.51.100.10').status_code, 200
+            )
+        self.assertEqual(
+            self.client.post(
+                '/api/auth/login/', {'username': 'member', 'password': PASSWORD}, REMOTE_ADDR='198.51.100.10'
+            ).status_code,
+            200,
+        )
+
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_refresh_rechecks_disabled_password_and_roles_after_successful_refresh(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        user = self.users['admin']
+        token = str(RefreshToken.for_user(user))
+        self.assertEqual(self.client.post('/api/auth/refresh/', {'refresh': token}).status_code, 200)
+        User.objects.filter(pk=user.pk).update(role='member')
+        response = self.client.post('/api/auth/refresh/', {'refresh': token})
+        self.assertEqual(response.status_code, 200)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {response.data["access"]}')
+        self.assertEqual(self.client.get('/api/auth/users/').status_code, 403)
+        User.objects.filter(pk=user.pk).update(is_active=False)
+        self.assertEqual(self.client.post('/api/auth/refresh/', {'refresh': token}).status_code, 401)
+        user.is_active = True
+        user.set_password('Changed-Only-For-Test-982')
+        user.save(update_fields=['is_active', 'password'])
+        self.assertEqual(self.client.post('/api/auth/refresh/', {'refresh': token}).status_code, 401)
+
+    @override_settings(APP_ENVIRONMENT='production')
+    def test_malformed_refresh_requests_share_invalid_bucket(self):
+        for index in range(11):
+            data = [{}, {'refresh': None}, {'refresh': []}, ['invalid']][index % 4]
+            response = self.client.post('/api/auth/refresh/', data, format='json')
+            self.assertEqual(response.status_code, 400 if index < 10 else 429, response.data)
+
     def test_environment_defaults_to_production_and_rejects_typos(self):
         import os
         import subprocess

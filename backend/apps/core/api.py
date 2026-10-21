@@ -27,9 +27,11 @@ def exception_handler(exc, context):
         from rest_framework.exceptions import ValidationError
 
         exc = ValidationError(validation_detail(exc))
-    if isinstance(exc, IntegrityError):
-        # 并发竞态下唯一约束冲突：事务已由 atomic 回滚；不向用户暴露数据库原文，但留日志便于发现真正的代码缺陷。
-        logger.warning('数据库完整性冲突已转为 409', exc_info=exc)
+    cause = exc.__cause__
+    sqlstate = getattr(cause, 'sqlstate', None) or getattr(cause, 'pgcode', None)
+    if isinstance(exc, IntegrityError) and sqlstate == '23505':
+        # 只识别 PostgreSQL 的真实唯一冲突；外键、非空、CHECK 等错误保留 500 与原始排障日志。
+        logger.warning('数据库唯一约束冲突已转为 409', exc_info=exc)
         exc = Conflict()
     response = drf_exception_handler(exc, context)
     if response is not None:

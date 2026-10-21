@@ -26,6 +26,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { user, operations } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
+import { scopedImportProject } from '../utils/import-context'
 import { resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
 import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
@@ -159,8 +160,8 @@ async function load() {
       if (current !== generation) return
       // 先记下已处理的 focus：这条记录不属于当前项目时也不该在每次刷新、翻页时重新取一遍。
       focused = focus
-      const scopedProject = Number(props.projectId ?? props.params?.project ?? props.params?.entry__project)
-      if (scopedProject > 0 && Number(row.project) !== scopedProject) return
+      const scopedProject = scopedImportProject(props.params, props.projectId)
+      if (scopedProject && Number(row.project) !== scopedProject) return
       if (props.resource === 'purchases') await action(row, '查看明细')
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
@@ -321,7 +322,7 @@ async function inspect(row: Row) {
         <el-button v-if="createLabel(resource) && allowCreate !== false" :type="resource === 'purchases' ? undefined : 'primary'" @click="create">{{
           createLabel(resource)
         }}</el-button>
-        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
+        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :project-id="scopedImportProject(params, projectId)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
       </div></Teleport>
     </header>

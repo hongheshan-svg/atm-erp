@@ -47,18 +47,19 @@ describe('列表创建入口', () => {
     wrapper.unmount()
     vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
   })
-  it.each(['payments', 'reconciliations'])('%s 不打开其他项目的 focus，范围变化也不重新打开旧记录', async resource => {
+  it.each(['payments', 'reconciliations', 'time'])('%s 不打开其他项目的 focus，范围变化也不重新打开旧记录', async resource => {
     user.value = { id: 1, roles: ['finance'] }
     route.query = { resource, focus: '25' }
     vi.mocked(read).mockImplementation(async path => path.endsWith('/25/') ? { id: 25, project: 7, entry_title: '甲项目款项', amount: '50.00', evidence: [] } : { count: 0, results: [] })
-    const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '财务明细', params: { entry__project: 8 } }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    const projectParam = resource === 'time' ? 'task__project' : 'entry__project'
+    const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '导入明细', params: { [projectParam]: 8 } }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
     await flushPromises()
     expect(read).toHaveBeenCalledWith(`/business/${resource}/25/`)
     expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
-    await wrapper.setProps({ projectId: 9, params: { entry__project: 9 } })
+    await wrapper.setProps({ projectId: 9, params: { [projectParam]: 9 } })
     await flushPromises()
     expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
-    expect(read).toHaveBeenCalledWith(`/business/${resource}/`, expect.objectContaining({ entry__project: 9 }))
+    expect(read).toHaveBeenCalledWith(`/business/${resource}/`, expect.objectContaining({ [projectParam]: 9 }))
     wrapper.unmount()
     vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
   })
@@ -95,6 +96,13 @@ describe('列表创建入口', () => {
     wrapper.findComponent(ListPagination).vm.$emit('change', 2)
     await flushPromises()
     expect(read).toHaveBeenLastCalledWith('/business/sales/', { status: 'quoted', page: 2, page_size: pageSize.value, search: '' })
+    wrapper.unmount()
+  })
+  it('把项目页上下文透传给导入导出工具，不依赖参数名', async () => {
+    user.value = { role: 'admin' }
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'time', title: '工时记录', params: { task__project: 7 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    await flushPromises()
+    expect(wrapper.findComponent(TransferTools).props('projectId')).toBe(7)
     wrapper.unmount()
   })
   it('改变统一每页数量回到第一页并持久化，翻页请求保留数量', async () => {

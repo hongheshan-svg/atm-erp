@@ -148,7 +148,7 @@ describe('模块边界', () => {
     expect(customerField.remoteFilter?.({ kind: 'supplier' })).toBe(false)
     const sign = await actionCommand('sales', { id: 7, manager: 2, quote_amount: '100' }, '签约')
     expect(sign.path).toBe('/business/sales/7/sign/')
-    expect(sign.fields.map((f) => f.key)).toEqual(['date', 'contract_number', 'manager', 'members', 'milestones'])
+    expect(sign.fields.map((f) => f.key)).toEqual(['date', 'contract_number', 'manager', 'members', 'milestones', 'early_due_notice'])
     expect(actionNames('projects', { status: 'quoted' })).not.toContain('签约')
     expect(actionNames('sales', { status: 'quoted' })).toContain('签约')
   })
@@ -183,9 +183,9 @@ describe('模块边界', () => {
   })
 
   it('签约后仅经理可签补充协议，财务仍只读', () => {
-    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '补充协议记录', '签订补充协议', '附件'])
+    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '交付与回款', '补充协议记录', '签订补充协议', '附件'])
     user.value = { role: 'finance' }
-    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '补充协议记录', '附件'])
+    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '交付与回款', '补充协议记录', '附件'])
     expect(actionNames('sales', { status: 'quoted' })).toEqual(['查看明细', '附件'])
   })
 })

@@ -41,7 +41,7 @@ export function canImportResource(resource: string) {
   if (resource === 'time') return operations()
   const roles: Record<string, string[]> = {
     'bank-records': ['admin', 'finance'], sales: ['admin', 'manager', 'sales_manager'],
-    projects: ['admin', 'manager'], tasks: ['admin', 'manager'], stocks: ['admin'],
+    projects: ['admin', 'manager'], tasks: ['admin', 'manager', 'production_manager'], stocks: ['admin'],
     entries: ['admin', 'finance'], payments: ['admin', 'finance'],
     moves: ['admin', 'warehouse'], deliveries: ['admin', 'manager'],
   }

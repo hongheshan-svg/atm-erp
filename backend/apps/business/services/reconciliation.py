@@ -148,8 +148,39 @@ def used(statement):
     return sum((abs(p.amount) for p in statement.payments.all() if p.reversal_of_id is None), ZERO)
 
 
+def economic_facts(data):
+    # Keep the original display snapshot, but names and notes are not authorization facts.
+    ignored = {
+        'entry': {'title'},
+        'project': {'name', 'customer'},
+        'purchase': {'supplier', 'note'},
+        'contract': {'updated_at'},
+        'lines': {'item__name'},
+        'payments': {'reason'},
+    }
+    result = dict(data)
+    for section, keys in ignored.items():
+        value = data.get(section)
+        if isinstance(value, list):
+            result[section] = [{key: value for key, value in row.items() if key not in keys} for row in value]
+        elif isinstance(value, dict):
+            result[section] = {key: value for key, value in value.items() if key not in keys}
+    return result
+
+
 def current(statement):
-    return snapshot(statement) == statement.snapshot
+    return economic_facts(snapshot(statement)) == economic_facts(statement.snapshot)
+
+
+def check_allowance(statement):
+    eligible = Decimal(statement.snapshot['eligible'])
+    if statement.approved_amount > eligible:
+        hint = (
+            '未收货部分需按合同申请预付款核准。'
+            if statement.entry.purchase_id and statement.kind == 'settlement'
+            else ''
+        )
+        raise Conflict({'approved_amount': f'核准金额超过可结算额度，当前可结算额度为 {eligible:.2f} 元。{hint}'})
 
 
 def difference(statement):
@@ -181,7 +212,10 @@ def create(actor, key, data):
         if month:
             from .monthly import bounds
 
-            bounds(month)
+            try:
+                bounds(month)
+            except ValidationError as exc:
+                raise ValidationError({'settlement_month': exc.detail['month']}) from exc
             if kind != 'settlement' or not source.purchase_id:
                 raise ValidationError('月度核对仅适用于采购普通结算。')
         if not isinstance(kind, str) or kind not in {'settlement', 'prepayment', 'refund'}:
@@ -217,6 +251,7 @@ def create(actor, key, data):
         remaining = Decimal(statement.snapshot['balance'])
         if (kind == 'refund') != (remaining < 0) or remaining == 0:
             raise Conflict('请按当前待收付或待退款余额选择对账类型。')
+        check_allowance(statement)
         save(statement, user)
         return audit(user, 'reconciliation.create', statement)
 
@@ -249,8 +284,7 @@ def action(actor, key, statement_id, data, *, void=False):
                 raise Conflict('原单据、收退货或资金流水已变化，请作废后重新生成对账单。')
             if difference(statement) != 0:
                 raise Conflict('对账差异未解决，请先更正原业务或对方账单后重新生成。')
-            if statement.approved_amount > Decimal(statement.snapshot['eligible']):
-                raise Conflict('核准金额超过可结算额度。未收货部分需按合同申请预付款核准。')
+            check_allowance(statement)
             if project.status == 'closed':
                 raise Conflict('项目已结项，请先重新打开。')
             statement.status, statement.confirmed_at, statement.confirmed_by = 'confirmed', timezone.now(), user

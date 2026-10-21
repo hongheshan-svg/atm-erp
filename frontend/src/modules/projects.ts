@@ -220,7 +220,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       person(c, 'installer', '安装人', scope),
       person(c, 'acceptor', '验收负责人', scope),
       t('note', '说明', true),
-      { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: shipMaterialOptions((await read(`/business/projects/${r.id}/demand/`)).lines) }, qty] },
+      { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: shipMaterialOptions((await read(`/business/projects/${r.id}/demand/`)).lines) }, { ...qty, numeric: { scale: 3, min: 0.001 } }] },
     ]
     initial = { quantity: '1', installer: r.manager, acceptor: r.manager, materials: [] }
   }
@@ -238,12 +238,18 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       t('title', '售后事项'),
       t('description', '说明', true),
       person(c, 'assignee', '执行人', scope),
-      date('due_date', '截止日期', true),
+      date('due_date', '维修截止日期', true),
       ...(managesProject ? [{
         key: 'fee',
         label: '收费金额（元）',
         initial: '0',
         hint: '质保内免费；质保外收费填正数，免费则填 0 并写明免费原因。',
+      }, {
+        key: 'fee_due_date',
+        label: '客户付款到期日',
+        type: 'date' as const,
+        visibleWhen: (data: Row) => Number(data.fee) > 0,
+        hint: '按客户确认的付款期限填写，与维修截止日期分别维护。',
       }, {
         key: 'free_reason',
         label: '过保免费原因',
@@ -277,5 +283,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     fields = [person(c, 'assignee', '执行人', scope), reason]
     initial = { assignee: inScope(r.assignee) ? r.assignee : '' }
   }
-  return { title: name, path, fields, initial, method, readonly }
+  return { title: name, path, fields, initial, method, readonly,
+    ...(name === '编辑项目' && ['draft', 'quoted'].includes(r.status) ? { notice: { type: 'warning' as const, text: '历史未签约项目修改需求后将清除原报价，请到关联销售单重新报价并签约。' } } : {}),
+  }
 }

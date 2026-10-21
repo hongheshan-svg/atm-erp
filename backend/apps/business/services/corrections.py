@@ -46,6 +46,19 @@ def sync_sale(user, project):
     for field in changed:
         setattr(sale, field, getattr(project, field))
     if changed:
+        if sale.status in {'draft', 'quoted'}:
+            before = {'status': sale.status, 'quote_amount': str(sale.quote_amount)}
+            sale.status, sale.quote_amount = 'draft', ZERO
+            project.status = 'draft'
+            save(project, user)
+            audit(
+                user,
+                'sale.invalidate_quote',
+                sale,
+                before=before,
+                project=project.pk,
+                reason='历史项目需求变更，需重新报价',
+            )
         save(sale, user)
     return [field.removesuffix('_id') for field in changed]
 
@@ -170,9 +183,10 @@ def cancel_project(actor, key, project_id, data):
         for task in project.tasks.select_for_update().filter(status='open'):
             task.status = 'cancelled'
             save(task, user)
+        before = project.status
         project.status, project.close_reason = 'cancelled', reason
         save(project, user)
-        return audit(user, 'project.cancel', project, reason=reason)
+        return audit(user, 'project.cancel', project, before=before, reason=reason)
 
     return project_action(actor, key, 'project.cancel', project_id, data, MANAGERS, execute)
 
@@ -184,7 +198,8 @@ def reopen_project(actor, key, project_id, data):
         reason = text(data, 'reason')
         before = project.status
         if project.status == 'cancelled':
-            project.status = 'active'
+            sale = SalesOrder.objects.filter(project=project).first()
+            project.status = sale.status if sale and sale.status in {'draft', 'quoted'} else 'active'
             for entry in project.entries.select_for_update().filter(
                 kind='receivable', task__isnull=True, cancelled=True
             ):
@@ -203,7 +218,7 @@ def reopen_project(actor, key, project_id, data):
             project.status = 'warranty'
         project.close_reason = ''
         save(project, user)
-        return audit(user, 'project.reopen', project, before=before, reason=reason)
+        return audit(user, 'project.reopen', project, before=before, after=project.status, reason=reason)
 
     return project_action(actor, key, 'project.reopen', project_id, data, MANAGERS, execute)
 

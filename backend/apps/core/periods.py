@@ -26,7 +26,8 @@ def check_dates(*dates):
 
 def check_record(obj):
     name = obj._meta.model_name
-    if name in {'payment', 'timeentry', 'bankrecord'}:
+    # 新增原始银行流水只登记核对证据；不生成 Payment。既有锁定期流水不能借此修改。
+    if name in {'payment', 'timeentry'} or (name == 'bankrecord' and not obj._state.adding):
         check_dates(obj.date)
     elif name == 'stockmove':
         check_dates(obj.received_date or timezone.localdate())

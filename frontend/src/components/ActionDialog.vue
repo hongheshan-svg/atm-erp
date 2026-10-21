@@ -5,7 +5,7 @@ import { user } from '../session'
 import { clearDraft, draftKey, formSignature, loadDraft, saveDraft, registerFormGuard, submitLabel, wideCommand } from '../form-experience'
 import { ElDialog, ElMessage, ElMessageBox } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
-import type { Command, Row } from '../types'
+import type { Command, Field, Row } from '../types'
 import { defaults, fieldIssues, payload, validateFields, type FieldIssue } from '../forms'
 import { industryCommand } from '../industry-forms'
 import { read, write } from '../api'
@@ -80,7 +80,23 @@ async function follow(path: string) { if (await confirmLeave()) { emit('close');
 function mapServerIssues(error: unknown) {
   const response = (error as { response?: { data?: Row } })?.response?.data
   if (!response || !command.value) return
-  serverIssues.value = command.value.fields.filter(field => response[field.key] != null).map(field => ({ path: field.key, label: field.label, message: `${field.label}：${message(response[field.key])}` }))
+  const visit = (fields: Field[], errors: Row, path = '', prefix = ''): FieldIssue[] => fields.flatMap(field => {
+    const value = errors[field.key]
+    if (value == null) return []
+    const key = path ? `${path}.${field.key}` : field.key
+    const label = `${prefix}${field.label}`
+    if (field.type === 'rows' && typeof value === 'object') {
+      const nested = Object.entries(value).flatMap(([index, row]) => /^\d+$/.test(index) && row && typeof row === 'object' && !Array.isArray(row)
+        ? visit(field.fields || [], row, `${key}.${index}`, `${label}第 ${Number(index) + 1} 行 · `) : [])
+      if (nested.length) return nested
+    }
+    return [{ path: key, label, message: `${label}：${message(value)}` }]
+  })
+  serverIssues.value = visit(command.value.fields, response)
+  // The single-line BOM editor submits a one-row batch while showing its fields directly.
+  if (!serverIssues.value.length && command.value.path.includes('/revise-bom/') && !command.value.fields.some(f => f.key === 'lines') && response.lines?.[0]) {
+    serverIssues.value = visit(command.value.fields, response.lines[0])
+  }
 }
 const panelHeading = ref<HTMLElement>()
 const panelHeight = ref('calc(100dvh - 36px)')
@@ -144,10 +160,12 @@ async function previewChange() {
   busy.value = true
   error.value = ''
   try {
+    attempted.value = true
+    serverIssues.value = []
     validateFields(c.fields, data.value)
     const body = payload(c.fields, data.value)
     preview.value = await write(c.previewPath, c.prepare ? c.prepare(body) : body, requestKey())
-  } catch (e) { error.value = message(e) } finally { busy.value = false }
+  } catch (e) { error.value = message(e); mapServerIssues(e) } finally { busy.value = false }
 }
 const fieldsContainer = ref<HTMLElement>()
 let key = ''

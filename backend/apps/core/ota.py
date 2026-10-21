@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from .actions import perform
 from .api import Conflict
-from .models import AuditLog, Company, UpgradeJob
+from .models import ActionReceipt, AuditLog, Company, UpgradeJob
 from .permissions import ADMIN, PermissionMixin, has_role, require_role
 from .version import VERSION
 
@@ -135,6 +135,11 @@ class UpgradeView(PermissionMixin, APIView):
         if not isinstance(payload, dict) or set(payload) != {'target', 'confirmed'} or payload['confirmed'] is not True:
             raise ValidationError('请确认升级期间暂停业务操作及升级前自动备份。')
         version(payload['target'])
+        # 仅用存在性检查避免已完成请求重放依赖外网；结果、请求指纹和当前授权仍由 perform 锁内核验。
+        key = request.headers.get('Idempotency-Key')
+        release = None
+        if not ActionReceipt.objects.filter(actor=request.user, key=key).exists():
+            release = release_info()
 
         def execute(actor):
             Company.objects.select_for_update().get(pk=1)
@@ -143,7 +148,8 @@ class UpgradeView(PermissionMixin, APIView):
             runner = runner_state()
             if not runner or len(settings.OTA_AGENT_TOKEN) < 32:
                 raise Conflict('升级执行器未连接，请检查部署服务日志。')
-            release = release_info()
+            if release is None:
+                raise Conflict('升级操作记录已变化，请重新检查版本后重试。')
             if release['version'] != payload['target'] or version(payload['target']) <= version(VERSION):
                 raise Conflict('版本已变化或不是新版本，请重新检查。')
             name = f'atm-erp-{payload["target"]}-{runner["platform"]}-{runner["mode"]}.zip'
@@ -175,7 +181,7 @@ class UpgradeView(PermissionMixin, APIView):
         return Response(
             perform(
                 actor=request.user,
-                key=request.headers.get('Idempotency-Key'),
+                key=key,
                 operation='system.upgrade',
                 payload=payload,
                 authorize=lambda actor: require_role(actor, ADMIN),

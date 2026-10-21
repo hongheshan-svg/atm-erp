@@ -20,7 +20,7 @@ import { t } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
 const auditObjects: Record<string, string> = { sale: '销售', project: '项目', purchase: '采购', purchaseorder: '采购单', task: '任务', bom: 'BOM', document: '附件', stock: '库存', payment: '收付款', entry: '款项', reconciliation: '对账', user: '用户', company: '公司', code: '编号' }
-const auditActions: Record<string, string> = { create: '新增', update: '修改', delete: '删除', quote: '报价', sign: '签约', submit: '提交', approve: '批准', reject: '退回', receive: '收货', cancel: '取消', complete: '完成', revise: '变更', upload: '上传', download: '下载', confirm: '确认', void: '冲销' }
+const auditActions: Record<string, string> = { create: '新增', update: '修改', delete: '删除', quote: '报价', invalidate_quote: '需求变更后重新报价', sign: '签约', submit: '提交', approve: '批准', reject: '退回', receive: '收货', cancel: '取消', cancel_remainder: '取消未收余量', complete: '完成', revise: '变更', upload: '上传', download: '下载', confirm: '确认', void: '冲销' }
 function auditOperation(operation: string) {
   const [object, action] = operation.split('.')
   return auditObjects[object!] && auditActions[action!] ? `${auditObjects[object!]} · ${auditActions[action!]}` : operation

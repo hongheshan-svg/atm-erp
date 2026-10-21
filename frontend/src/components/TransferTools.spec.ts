@@ -162,3 +162,105 @@ it('allowImport默认开启，库存日常关闭后仅提供导出并阻止打�
   expect(wrapper.findComponent({ name: 'ElButton' }).text()).toBe('导入导出 ▾')
   wrapper.unmount()
 })
+
+describe('项目上下文与确认失败回填', () => {
+  async function openImport(resource: string, params: Record<string, unknown>) {
+    vi.clearAllMocks()
+    user.value = { roles: ['admin'] }
+    vi.mocked(read).mockImplementation(async (url: string) => url.includes('import-schema')
+      ? { title: '工时', columns: [], entry: '入口', note: '' }
+      : { id: 7, name: '示例项目', code: 'ATM2601' })
+    const wrapper = shallowMount(TransferTools, { props: { resource, path: `/business/${resource}/`, params }, global: {
+      plugins: [ElementPlus], renderStubDefaultSlot: true,
+      stubs: { RouterLink: RouterLinkStub, ElDialog: { template: '<section><slot /><slot name="footer" /></section>' }, ElTableColumn: true },
+    } })
+    wrapper.findComponent({ name: 'ElDropdown' }).vm.$emit('command', 'import')
+    await flushPromises()
+    return wrapper
+  }
+
+  it.each([['time', { task__project: 7 }], ['payments', { entry__project: 7 }]])('项目内%s导入显示当前项目上下文', async (resource, params) => {
+    const wrapper = await openImport(resource, params)
+    expect(wrapper.find('.import-context').text()).toContain('示例项目（ATM2601）')
+    expect(vi.mocked(read).mock.calls.some(call => call[0] === '/business/projects/7/')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('确认时整批重新校验失败：错误行回填预览、禁用确认并提示重新上传', async () => {
+    const wrapper = await openImport('moves', { project: 7 })
+    vi.mocked(write).mockResolvedValueOnce({
+      can_import: true, token: 'tok', count: 1, columns: [{ key: 'stock', label: '库存ID' }],
+      rows: [{ row: 2, data: { stock: '9' } }], errors: [],
+    })
+    const input = wrapper.get('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'moves.csv')] })
+    await input.trigger('change')
+    await flushPromises()
+    const confirmButton = () => wrapper.findAll('el-button-stub').find(button => button.text() === '确认导入')!
+    expect(confirmButton().attributes('disabled')).not.toBe('true')
+    vi.mocked(write).mockRejectedValueOnce({ isAxiosError: true, response: { status: 400, data: { rows: [{ row: '2', message: '可用库存不足，请刷新后重试。', fields: ['stock'] }], error_file: { name: '待修改.xlsx', content: 'base64' } } } })
+    await confirmButton().trigger('click')
+    await flushPromises()
+    const feedback = wrapper.getComponent({ name: 'ImportFeedback' })
+    expect(feedback.props('errors')).toEqual([{ row: 2, message: '可用库存不足，请刷新后重试。', fields: ['stock'] }])
+    expect(feedback.props('errorFile')).toEqual({ name: '待修改.xlsx', content: 'base64' })
+    expect(confirmButton().attributes('disabled')).toBe('true')
+    expect(wrapper.getComponent({ name: 'ElAlert' }).props('title')).toContain('数据已变化，请修改文件后重新上传预览')
+    wrapper.unmount()
+  })
+
+  it('已导入内容须明确勾选，成功提供准确记录入口；再次上传清除确认', async () => {
+    const wrapper = await openImport('entries', { project: 7 })
+    const data = { token: 'repeat-token', can_import: true, count: 1, rows: [], columns: [], errors: [], duplicate_import: { message: '相同业务归属和内容已成功导入' } }
+    vi.mocked(write).mockResolvedValueOnce(data)
+    const input = wrapper.get('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'renamed.csv')] })
+    await input.trigger('change'); await flushPromises()
+    const confirm = () => wrapper.findAll('el-button-stub').find(b => b.text() === '确认导入')!
+    expect(confirm().attributes('disabled')).toBe('true')
+    await confirm().trigger('click')
+    expect(write).toHaveBeenCalledTimes(1)
+    await wrapper.get('input[type=checkbox]').setValue(true)
+    expect(confirm().attributes('disabled')).not.toBe('true')
+    vi.mocked(write).mockResolvedValueOnce({ count: 1, resource: 'entries', results: [{ id: 42 }] })
+    await confirm().trigger('click'); await flushPromises()
+    expect(vi.mocked(write).mock.calls[1]?.[1]).toEqual({ token: 'repeat-token', allow_duplicate: true })
+    expect(wrapper.getComponent(RouterLinkStub).props('to')).toEqual({ path: '/finance', query: { section: 'entries', resource: 'entries', project: 'all', focus: 42 } })
+    expect(wrapper.text()).toContain('查看导入记录')
+    expect(wrapper.emitted('changed')).toHaveLength(1)
+    vi.mocked(write).mockResolvedValueOnce(data)
+    await input.trigger('change'); await flushPromises()
+    expect(wrapper.get('input[type=checkbox]').element).toHaveProperty('checked', false)
+    expect(confirm().attributes('disabled')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('确认时发现其他批次已成功：保留预览要求勾选，网络重试使用同一操作键', async () => {
+    const wrapper = await openImport('entries', {})
+    vi.mocked(write).mockResolvedValueOnce({ token: 'race-token', can_import: true, count: 1, rows: [], errors: [] })
+    const input = wrapper.get('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'expenses.csv')] })
+    await input.trigger('change'); await flushPromises()
+    const confirm = () => wrapper.findAll('el-button-stub').find(b => b.text() === '确认导入')!
+    vi.mocked(write).mockRejectedValueOnce({ response: { status: 409, data: { duplicate_import: { message: '已经成功导入' } } } })
+    await confirm().trigger('click'); await flushPromises()
+    expect(confirm().attributes('disabled')).toBe('true')
+    await wrapper.get('input[type=checkbox]').setValue(true)
+    vi.mocked(write).mockRejectedValueOnce(new Error('网络暂不可用'))
+    await confirm().trigger('click'); await flushPromises()
+    vi.mocked(write).mockResolvedValueOnce({ count: 1, resource: 'entries', results: [{ id: 42 }] })
+    await confirm().trigger('click'); await flushPromises()
+    const calls = vi.mocked(write).mock.calls.filter(call => call[0].endsWith('import-confirm/'))
+    expect(new Set(calls.map(call => call[2])).size).toBe(1)
+    expect(wrapper.text()).toContain('查看导入记录')
+    wrapper.unmount()
+  })
+
+  it('导出采用中文文件名并保留当前列表筛选', async () => {
+    const wrapper = await openImport('entries', { project: 7, search: '差旅' })
+    wrapper.findComponent({ name: 'ElDropdown' }).vm.$emit('command', 'xlsx')
+    await flushPromises()
+    expect(download).toHaveBeenCalledWith('/business/entries/export/', expect.stringMatching(/^应收应付与费用导出_\d{4}-\d{2}-\d{2}\.xlsx$/), { project: 7, search: '差旅', file_format: 'xlsx' })
+    wrapper.unmount()
+  })
+})

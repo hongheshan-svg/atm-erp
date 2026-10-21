@@ -36,9 +36,11 @@ MONEY_CATEGORIES = {'contract', 'receipt'}
 def visible_documents(user, queryset):
     allowed = Q(pk__in=[])
     if has_role(user, OPERATION_ROLES):
-        direct = Q(project__in=projects_for(user, Project.objects.all()))
-        if not has_role(user, MONEY_READERS):
-            direct &= ~Q(category__in=MONEY_CATEGORIES)
+        direct = Q(project__in=projects_for(user, Project.objects.all())) & ~Q(category__in=MONEY_CATEGORIES)
+        if has_role(user, MONEY_READERS):
+            direct |= Q(
+                project__in=projects_for(user, Project.objects.all(), MONEY_READERS), category__in=MONEY_CATEGORIES
+            )
         allowed |= direct
     if has_role(user, SALES_READERS):
         sales = SalesOrder.objects.all()
@@ -46,7 +48,11 @@ def visible_documents(user, queryset):
             sales = sales.filter(manager=user)
         allowed |= Q(sale__in=sales)
     if has_role(user, PURCHASERS | FINANCE):
-        allowed |= Q(purchase__in=PurchaseOrder.objects.filter(project__in=projects_for(user, Project.objects.all())))
+        allowed |= Q(
+            purchase__in=PurchaseOrder.objects.filter(
+                project__in=projects_for(user, Project.objects.all(), PURCHASERS | FINANCE)
+            )
+        )
     return queryset.filter(allowed)
 
 

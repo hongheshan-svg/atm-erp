@@ -9,8 +9,8 @@ from apps.core.permissions import (
     PURCHASE_APPROVERS,
     PURCHASERS,
     can_manage_task,
-    has_role,
     project_allowed,
+    project_read_allowed,
 )
 
 from .models import (
@@ -29,7 +29,7 @@ from .models import (
     TimeEntry,
 )
 from .services import payment_terms
-from .services.common import ZERO
+from .services.common import ZERO, rounded
 from .services.finance import balance, paid
 
 
@@ -39,7 +39,15 @@ class MoneyFilter:
 
     def to_representation(self, instance):
         result = super().to_representation(instance)
-        if not has_role(self.context['request'].user, self.money_roles):
+        if isinstance(instance, Project):
+            project_id = instance.pk
+        elif isinstance(instance, PurchaseLine):
+            project_id = instance.purchase.project_id
+        elif isinstance(instance, TimeEntry):
+            project_id = instance.task.project_id
+        else:
+            project_id = getattr(instance, 'project_id', None)
+        if not project_read_allowed(self.context['request'], project_id, self.money_roles):
             for field in self.sensitive_fields:
                 result.pop(field, None)
         return result
@@ -207,6 +215,7 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
 class PurchaseSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
     can_approve = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(read_only=True)
 
     def get_can_manage(self, obj):
         return project_allowed(self.context['request'].user, obj.project, MANAGERS)
@@ -247,6 +256,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'due_date',
             'note',
             'lines',
+            'created_at',
             'updated_at',
         ]
 
@@ -312,6 +322,7 @@ class EntrySerializer(serializers.ModelSerializer):
     balance = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
     due_date = serializers.SerializerMethodField()
+    agreed_payment_date = serializers.SerializerMethodField()
     payment_schedule = serializers.SerializerMethodField()
     due_amount = serializers.SerializerMethodField()
     partner_name = serializers.SerializerMethodField()
@@ -342,17 +353,22 @@ class EntrySerializer(serializers.ModelSerializer):
         return 'overdue' if any(row['due_date'] < today for row in self.schedule(obj)) else 'open'
 
     def get_due_date(self, obj):
-        if not (obj.purchase_id and obj.purchase.payment_term != 'manual'):
+        if not obj.purchase_id:
             return obj.due_date
         rows = self.schedule(obj)
         return rows[0]['due_date'] if rows else None
+
+    def get_agreed_payment_date(self, obj):
+        if obj.purchase_id and obj.purchase.payment_term == 'manual':
+            return obj.purchase.payment_due_date or obj.due_date
+        return None
 
     def get_payment_schedule(self, obj):
         return [{'due_date': row['due_date'], 'amount': str(row['amount'])} for row in self.schedule(obj)]
 
     def get_due_amount(self, obj):
         today = timezone.localdate()
-        return str(sum((row['amount'] for row in self.schedule(obj) if row['due_date'] <= today), ZERO))
+        return str(rounded(sum((row['amount'] for row in self.schedule(obj) if row['due_date'] <= today), ZERO)))
 
     def get_paid_amount(self, obj):
         return str(paid(obj))
@@ -379,6 +395,7 @@ class EntrySerializer(serializers.ModelSerializer):
             'due_amount',
             'balance',
             'due_date',
+            'agreed_payment_date',
             'cancelled',
             'updated_at',
         ]

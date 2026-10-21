@@ -22,10 +22,15 @@ export function salesActions(row: Row): string[] {
 function salesBusinessActions(row: Row): string[] {
   if (salesOnly() && row.manager === user.value?.id) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
   if (!can(['admin', 'manager', 'finance'])) return []
-  if (row.status === 'signed') return ['查看明细', '补充协议记录', ...(manager() ? ['签订补充协议'] : [])]
+  if (row.status === 'signed') return ['查看明细', '交付与回款', '补充协议记录', ...(manager() ? ['签订补充协议'] : [])]
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
+const earlyMilestoneReminder = (contractDate?: string): Field => ({
+  key: 'early_due_notice', label: '付款期限提醒', type: 'textarea', displayOnly: true, readonly: true,
+  initial: '存在早于签约日的收款节点。允许按合同约定保存；已过付款期限的未收金额将计入逾期，请核对客户约定。',
+  visibleWhen: data => !!(contractDate || data.date) && (data.milestones || []).some((row: Row) => row.due_date && row.due_date < (contractDate || data.date)),
+})
 const reason: Field = { key: 'reason', label: '原因 / 说明' }
 export async function salesCommand(row?: Row, action?: string): Promise<Command> {
   const path = '/business/sales/'
@@ -47,7 +52,8 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     return { title: action, path: `${path}${row.id}/amend/`, fields: [
       { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date', hint: '协议已签署的日期，不能晚于今天，也不能早于签约日期。' }, reason,
       { key: 'document', label: '补充协议附件', type: 'select', upload: { context: { sale: row.id }, category: 'contract' }, options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
-      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '收款到期日', type: 'date' }] },
+      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '收款到期日', type: 'date', hint: '允许早于签约日，按合同约定填写；已到期未收款会计入逾期。' }] },
+      earlyMilestoneReminder(detail.contract_date),
       { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
     ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
   }
@@ -126,9 +132,10 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         fields: [
           { key: 'title', label: '节点名称' },
           { key: 'amount', label: '金额（元）' },
-          { key: 'due_date', label: '收款到期日', type: 'date' },
+          { key: 'due_date', label: '收款到期日', type: 'date', hint: '允许早于签约日，按合同约定填写；已到期未收款会计入逾期。' },
         ],
       },
+      earlyMilestoneReminder(),
     ],
     initial: { milestones: [{ title: '合同款', amount: row.quote_amount, due_date: '' }] },
     notice: { type: 'info', text: '按签署合同拆分预付款、发货款、验收款及质保尾款，节点合计须等于报价金额；填写合同约定的收款日期，签约后自动建立执行项目。' },

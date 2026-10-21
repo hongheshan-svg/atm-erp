@@ -41,16 +41,18 @@ async function archive() {
     await load()
     if (!data.value || data.value.archived_version || data.value.draft || data.value.status === 'cancelled') return
   }
-  const docs = await all('/business/documents/', { purchase: route.params.id, category: 'contract' })
+  const snapshot = data.value.snapshot_hash, purchaseId = route.params.id
+  const docs = await all('/business/documents/', { purchase: purchaseId, category: 'contract' })
+  if (route.params.id !== purchaseId) return
   command.value = {
-    title: '归档已签署合同版本', path: `/business/purchases/${route.params.id}/archive-contract/`,
+    title: '归档已签署合同版本', path: `/business/purchases/${purchaseId}/archive-contract/`,
     fields: [
       { key: 'document', label: '已签署合同附件', type: 'select', options: docs.map(d => ({ value: d.id, label: d.original_name })) },
       { key: 'delivery_address', label: '双方确认的收货地址' },
       { key: 'reason', label: '归档或修订原因', type: 'textarea' },
       { key: 'confirmed', label: '已核对签署文件与本版正文、明细及收货地址一致', type: 'boolean', initial: false },
     ],
-    prepare: values => ({ ...values, expected_snapshot: data.value!.snapshot_hash }),
+    prepare: values => ({ ...values, expected_snapshot: snapshot }),
     notice: { type: 'warning', text: '先在采购附件中上传双方签署的完整合同。归档后本版资料不可覆盖；后续修订创建新版本，金额仍以原采购业务为准。' },
   }
 }

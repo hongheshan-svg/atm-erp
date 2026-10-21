@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from apps.business.models import PurchaseOrder, StockMove
+from apps.business.models import Entry, PurchaseOrder, Reconciliation, StockMove
 from apps.business.services import payment_terms, reports
 
 from .test_commercial_chain import TODAY, BusinessFixtures
@@ -30,6 +30,7 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
             f'purchases/{purchase.pk}/receive/',
             {
                 'received_date': received,
+                'backfill_reason': '补录已核对的历史到货单',
                 'lines': [{'line': purchase.lines.get().pk, 'quantity': qty, **extra}],
                 'reason': '按实际日期收货',
             },
@@ -115,6 +116,7 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
             f'purchases/{purchase.pk}/quality-accept/',
             {
                 'received_date': '2026-08-01',
+                'backfill_reason': '补录历史复检记录',
                 'lines': [{'line': purchase.lines.get().pk, 'quantity': '5'}],
                 'reason': '合格确认',
             },
@@ -139,3 +141,82 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         self.assertEqual(purchase.payment_term, 'manual')
         self.assertEqual(str(purchase.payment_due_date), '2026-12-15')
         self.post('purchaser', 'purchases/', {**data, 'payment_term': 'month60'}, status=400)
+
+    def test_manual_agreed_payment_date_is_separate_from_received_maturity_and_allowance(self):
+        purchase = self.purchase(self.project)
+        agreed = date(2026, 7, 1)
+        purchase.payment_due_date = agreed
+        purchase.save()
+        entry = purchase.entry
+        entry.due_date = agreed
+        entry.save()
+        detail = self.detail(entry)
+        self.assertEqual(str(detail['agreed_payment_date']), '2026-07-01')
+        self.assertIsNone(detail['due_date'])
+        self.assertEqual(detail['due_amount'], '0.00')
+        self.assertEqual(detail['status'], 'open')
+        self.assertEqual(detail['payment_schedule'], [])
+        self.assert_workbench_maturity(entry, False, date(2026, 8, 1))
+        self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': 'settlement',
+                'counterparty_balance': '500',
+                'approved_amount': '1',
+                'reason': '有约定日期但尚未收货',
+            },
+            status=409,
+        )
+        self.assertFalse(Reconciliation.objects.exists())
+        self.receive(purchase, '2', '2026-07-10')
+        detail = self.detail(entry)
+        self.assertEqual(str(detail['agreed_payment_date']), '2026-07-01')
+        self.assertEqual(str(detail['due_date']), '2026-07-01')
+        self.assertEqual(detail['due_amount'], '200.00')
+        statement = self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': 'settlement',
+                'counterparty_balance': '500',
+                'approved_amount': '200',
+                'reason': '仅结算已收货部分',
+            },
+            status=201,
+        )['id']
+        self.post('finance', f'reconciliations/{statement}/confirm/', {'reason': '核对收货'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '200', 'date': TODAY, 'reason': '已收货部分付清', 'reconciliation': statement},
+        )
+        detail = self.detail(entry)
+        self.assertEqual(str(detail['agreed_payment_date']), '2026-07-01')
+        self.assertIsNone(detail['due_date'])
+        self.assertEqual(detail['due_amount'], '0.00')
+        self.assertEqual(detail['balance'], '300.00')
+
+    def test_agreed_payment_date_manual_fallback_and_other_entry_kinds(self):
+        purchase = self.purchase(self.project)
+        self.assertIsNone(purchase.payment_due_date)
+        detail = self.detail(purchase.entry)
+        self.assertEqual(str(detail['agreed_payment_date']), str(purchase.entry.due_date))
+        purchase.payment_term = 'month30'
+        purchase.payment_days = 30
+        purchase.save()
+        self.assertIsNone(self.detail(purchase.entry)['agreed_payment_date'])
+        receivable = self.project.entries.get(kind='receivable')
+        self.assertIsNone(self.detail(receivable)['agreed_payment_date'])
+        self.assertEqual(str(self.detail(receivable)['due_date']), str(receivable.due_date))
+        expense = self.post(
+            'finance',
+            'entries/expense/',
+            {'project': self.project.pk, 'title': '费用', 'amount': '20', 'due_date': TODAY},
+            status=201,
+        )
+        expense_entry = Entry.objects.get(pk=expense['id'])
+        self.assertIsNone(self.detail(expense_entry)['agreed_payment_date'])
+        self.assertEqual(str(self.detail(expense_entry)['due_date']), TODAY)

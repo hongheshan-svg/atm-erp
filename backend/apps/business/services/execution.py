@@ -15,6 +15,7 @@ from apps.core.permissions import (
     PRODUCTION_MANAGERS,
     can_manage_task,
     project_allowed,
+    require_project,
     task_management_roles,
 )
 
@@ -162,8 +163,12 @@ def log_time(actor, key, task_id, data):
         fields(data, {'user', 'date', 'hours', 'reason'})
         state(task, {'open', 'done'})
         person_id = identity(data.get('user', user.pk), 'user')
-        # The project lock serializes its tasks; the person lock covers other projects too.
-        person = get_object_or_404(User.objects.select_for_update(), pk=person_id, is_active=True)
+        # Keep daily totals/rates serialized without blocking actor/audit FK KEY SHARE
+        # checks when two people record each other's time in different projects.
+        person = get_object_or_404(User.objects.select_for_update(no_key=True), pk=person_id, is_active=True)
+        user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
+        require_project(user, project, ALL_ROLES)
+        authorize(user, task)
         participant(project, person, 'user')
         date = event_date(data)
         if project.contract_date and date < project.contract_date:
@@ -198,7 +203,10 @@ def amend_time(actor, key, entry_id, data):
 
     def execute(user, project, task):
         fields(data, {'hours', 'date', 'reason'})
-        person = User.objects.select_for_update().get(pk=original.user_id)
+        person = User.objects.select_for_update(no_key=True).get(pk=original.user_id)
+        user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
+        require_project(user, project, ALL_ROLES)
+        authorize(user, task)
         source = get_object_or_404(TimeEntry.objects.select_for_update(), pk=original.pk, task=task)
         if source.reversal_of_id or source.hours <= 0 or TimeEntry.objects.filter(reversal_of=source).exists():
             raise Conflict('此工时已经更正，不能重复更正原记录。')
@@ -298,12 +306,15 @@ def ship(actor, key, project_id, data):
         if data.get('materials'):
             if not isinstance(data['materials'], list) or len(data['materials']) > 1000:
                 raise ValidationError({'materials': '本批配套清单必须为最多1000行的列表。'})
-            for row in data['materials']:
+            for index, row in enumerate(data['materials']):
                 fields(row, {'item', 'quantity'})
                 item = identity(row.get('item'), 'item')
                 if item in planned or item not in {line['item_id'] for line in bom}:
                     raise ValidationError({'materials': '物料重复或不属于本项目BOM。'})
-                planned[item] = number(row.get('quantity'), 'quantity', 3, positive=True)
+                try:
+                    planned[item] = number(row.get('quantity'), 'quantity', 3, positive=True)
+                except ValidationError as exc:
+                    raise ValidationError({'materials': {index: exc.detail}}) from exc
         else:
             if len({line.assembly_unit for line in project.bom_lines.all() if line.assembly_unit}) > 1:
                 raise Conflict('多单元项目请填写本批配套物料清单，明确本批实际用量。')
@@ -398,7 +409,10 @@ def service(actor, key, project_id, data):
                 raise PermissionDenied('收费及过保售后由项目经理确认费用后创建；生产经理负责后续派工和处理。')
 
     def execute(user, project):
-        fields(data, {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee', 'free_reason'})
+        fields(
+            data,
+            {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee', 'fee_due_date', 'free_reason'},
+        )
         state(project, {'delivering', 'warranty'})
         delivery = lookup(Delivery, data.get('delivery'), 'delivery', project=project)
         if not delivery.accepted_date or not delivery.warranty_until:
@@ -414,6 +428,9 @@ def service(actor, key, project_id, data):
         free_reason = text(data, 'free_reason', default='', maximum=500)
         if not free and not fee and not free_reason:
             raise ValidationError({'free_reason': '过保售后免费时请填写免费原因，例如商务赠送或延保约定。'})
+        # Older clients can omit this field; the service date is the explicit compatibility default.
+        # The repair deadline never determines when a customer payment becomes due.
+        fee_due_date = (day(data, 'fee_due_date', optional=True) or date) if fee else None
         task = save(
             Task(
                 project=project,
@@ -433,9 +450,9 @@ def service(actor, key, project_id, data):
                     project=project,
                     task=task,
                     kind='receivable',
-                    title=f'售后 {task.title}',
+                    title=f'售后 {task.title}'[: Entry._meta.get_field('title').max_length],
                     amount=fee,
-                    due_date=task.due_date or date,
+                    due_date=fee_due_date,
                 ),
                 user,
             )
@@ -446,6 +463,7 @@ def service(actor, key, project_id, data):
             delivery=delivery.pk,
             date=date.isoformat(),
             fee=str(fee),
+            fee_due_date=fee_due_date.isoformat() if fee_due_date else None,
             free_reason=free_reason,
         )
 

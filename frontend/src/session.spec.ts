@@ -90,6 +90,7 @@ describe('固定岗位与权限并集', () => {
     expect(money()).toBe(false)
     expect(reports()).toBe(false)
     expect(canImportResource('time')).toBe(true)
+    expect(canImportResource('tasks')).toBe(true)
     expect(productionProject({ can_manage_production: true })).toBe(true)
     expect(productionProject({})).toBe(false)
     expect(taskManager({ kind: 'assembly', can_manage: true })).toBe(true)
@@ -97,6 +98,7 @@ describe('固定岗位与权限并集', () => {
     expect(timeAmender({ user: 9, can_amend: true })).toBe(true)
     expect(timeAmender({ user: 9, can_amend: false })).toBe(false)
     user.value = { id: 8, roles: ['production_manager', 'purchaser'] }
+    expect(canImportResource('tasks')).toBe(true)
     expect(navigation().map(page => page.key)).toEqual(oldNavigation.purchaser)
     expect(productionProject({ can_manage_production: false })).toBe(false)
     expect(taskManager({ kind: 'assembly', can_manage: false })).toBe(false)

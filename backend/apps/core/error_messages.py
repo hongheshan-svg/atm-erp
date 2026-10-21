@@ -47,7 +47,7 @@ def localize_detail(detail):
     if isinstance(detail, dict):
         return {
             key: value
-            if key in {'row', 'token_class', 'token_type', 'actions'}
+            if key in {'row', 'fields', 'token_class', 'token_type', 'actions'}
             or (key == 'code' and isinstance(value, str) and re.fullmatch(r'[a-z_]+', value))
             else localize_detail(value)
             for key, value in detail.items()

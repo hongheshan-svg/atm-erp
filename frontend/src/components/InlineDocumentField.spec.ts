@@ -4,9 +4,22 @@ import InlineDocumentField from './InlineDocumentField.vue'
 import { read, readBlob, write } from '../api'
 
 vi.mock('../api', () => ({ write: vi.fn(), read: vi.fn(), readBlob: vi.fn(), download: vi.fn() }))
-afterEach(() => { vi.resetAllMocks() })
+afterEach(() => { vi.restoreAllMocks(); vi.resetAllMocks() })
 function open() {
   return mount(InlineDocumentField, { props: { field: { key: 'document', label: '结算凭证', upload: { context: { project: 8 }, category: 'receipt' } } }, global: { stubs: { ElButton: { template: '<button><slot /></button>' }, ElDialog: true } } })
+}
+async function pick(wrapper: ReturnType<typeof open>, file: File) {
+  const before = vi.mocked(write).mock.calls.length
+  const input = wrapper.get('input[type=file]')
+  Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+  await input.trigger('change')
+  await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(before + 1))
+  await flushPromises()
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void, reject!: (reason: Error) => void
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
 }
 it('就地上传关联当前项目，成功后选中；失败保留原选择且解除忙碌', async () => {
   const wrapper = open()
@@ -14,7 +27,7 @@ it('就地上传关联当前项目，成功后选中；失败保留原选择且�
   Object.defineProperty(input.element, 'files', { value: [new File(['evidence'], '回单.pdf', { type: 'application/pdf' })], configurable: true })
   vi.mocked(write).mockResolvedValue({ id: 18, original_name: '回单.pdf' })
   await input.trigger('change')
-  await flushPromises()
+  await vi.waitFor(() => expect(wrapper.emitted('update:modelValue')).toEqual([[18]]))
   const body = vi.mocked(write).mock.calls[0]![1] as FormData
   expect(body.get('project')).toBe('8')
   expect(body.get('category')).toBe('receipt')
@@ -22,10 +35,48 @@ it('就地上传关联当前项目，成功后选中；失败保留原选择且�
   await wrapper.setProps({ modelValue: 18 })
   vi.mocked(write).mockRejectedValue(new Error('上传失败'))
   await input.trigger('change')
-  await flushPromises()
+  await vi.waitFor(() => expect(wrapper.text()).toContain('上传失败'))
   expect(wrapper.text()).toContain('上传失败')
   expect(wrapper.emitted('update:modelValue')).toHaveLength(1)
   expect(wrapper.emitted('busy')?.at(-1)).toEqual([false])
+  wrapper.unmount()
+})
+it('离开再回到相同上下文后，旧成功响应不会清掉当前重传键', async () => {
+  const wrapper = open()
+  const field = wrapper.props('field')
+  const old = deferred<{ id: number }>()
+  const file = new File(['a'], '回单.pdf', { lastModified: 1 })
+  vi.mocked(write).mockReturnValueOnce(old.promise).mockRejectedValueOnce(new Error('timeout')).mockResolvedValue({ id: 99 })
+  await pick(wrapper, file)
+  await wrapper.setProps({ field: { ...field, upload: { context: { project: 9 }, category: 'receipt' } } })
+  await wrapper.setProps({ field })
+  await pick(wrapper, file)
+  const newKey = vi.mocked(write).mock.calls[1]![2]
+  expect(newKey).not.toBe(vi.mocked(write).mock.calls[0]![2])
+  old.resolve({ id: 88 })
+  await flushPromises()
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  await pick(wrapper, file)
+  expect(vi.mocked(write).mock.calls[2]![2]).toBe(newKey)
+  expect(wrapper.emitted('update:modelValue')).toEqual([[99]])
+  wrapper.unmount()
+})
+it('本地读取失败保留既有重传键且解除忙碌，不产生上传请求', async () => {
+  const wrapper = open()
+  const file = new File(['a'], '回单.pdf', { lastModified: 1 })
+  vi.mocked(write).mockRejectedValueOnce(new Error('timeout')).mockResolvedValue({ id: 99 })
+  await pick(wrapper, file)
+  const read = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (this: FileReader) {
+    this.dispatchEvent(new ProgressEvent('error'))
+  })
+  await wrapper.get('input[type=file]').trigger('change')
+  await flushPromises()
+  expect(wrapper.text()).toContain('无法读取附件')
+  expect(wrapper.emitted('busy')?.at(-1)).toEqual([false])
+  expect(write).toHaveBeenCalledTimes(1)
+  read.mockRestore()
+  await pick(wrapper, file)
+  expect(vi.mocked(write).mock.calls[1]![2]).toBe(vi.mocked(write).mock.calls[0]![2])
   wrapper.unmount()
 })
 it('附件预览通过鉴权下载，不直接嵌入原下载地址；不支持格式给出下载说明', async () => {
@@ -42,18 +93,71 @@ it('附件预览通过鉴权下载，不直接嵌入原下载地址；不支持�
 })
 it('同一文件上传失败后重传复用同一幂等键，成功后与换文件均使用新键', async () => {
   const wrapper = open()
-  const input = wrapper.get('input[type=file]')
-  const pick = async (file: File) => { Object.defineProperty(input.element, 'files', { value: [file], configurable: true }); await input.trigger('change'); await flushPromises() }
   const a = new File(['a'], '回单.pdf', { type: 'application/pdf', lastModified: 1 })
   const b = new File(['bb'], '回单2.pdf', { type: 'application/pdf', lastModified: 2 })
   vi.mocked(write).mockRejectedValueOnce(new Error('timeout')).mockRejectedValueOnce(new Error('timeout')).mockResolvedValue({ id: 1, original_name: '回单.pdf' })
-  await pick(a)
-  await pick(a)
+  await pick(wrapper, a)
+  await pick(wrapper, new File(['a'], a.name, { type: a.type, lastModified: a.lastModified }))
   const keys = () => vi.mocked(write).mock.calls.map(call => call[2])
   expect(keys()[1]).toBe(keys()[0])
-  await pick(b)
+  await pick(wrapper, b)
   expect(keys()[2]).not.toBe(keys()[0])
-  await pick(b)
+  await pick(wrapper, b)
   expect(keys()[3]).not.toBe(keys()[2])
+  wrapper.unmount()
+})
+it('文件元数据相同但内容不同必须使用新操作键', async () => {
+  const wrapper = open()
+  vi.mocked(write).mockRejectedValue(new Error('timeout'))
+  await pick(wrapper, new File(['ab'], '回单.pdf', { lastModified: 1 }))
+  await pick(wrapper, new File(['cd'], '回单.pdf', { lastModified: 1 }))
+  const calls = vi.mocked(write).mock.calls
+  expect(calls[0]![2]).toBeTruthy()
+  expect(calls[1]![2]).not.toBe(calls[0]![2])
+  wrapper.unmount()
+})
+it.each(['success', 'failure'])('上下文切换后旧请求%s不能覆盖新请求或清除新重传键', async outcome => {
+  const wrapper = open()
+  const old = deferred<{ id: number }>(), next = deferred<{ id: number }>()
+  const file = new File(['a'], '回单.pdf', { lastModified: 1 })
+  vi.mocked(write).mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise).mockResolvedValue({ id: 99 })
+  await pick(wrapper, file)
+  await wrapper.setProps({ field: { ...wrapper.props('field'), upload: { context: { project: 9 }, category: 'receipt' } } })
+  await pick(wrapper, file)
+  const newKey = vi.mocked(write).mock.calls[1]![2]
+  expect(newKey).toBeTruthy()
+  expect(newKey).not.toBe(vi.mocked(write).mock.calls[0]![2])
+  expect((vi.mocked(write).mock.calls[1]![1] as FormData).get('project')).toBe('9')
+  if (outcome === 'success') old.resolve({ id: 88 })
+  else old.reject(new Error('旧请求失败'))
+  await flushPromises()
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  expect(wrapper.emitted('busy')?.at(-1)).toEqual([true])
+  expect(wrapper.text()).not.toContain('旧请求失败')
+  next.reject(new Error('timeout'))
+  await flushPromises()
+  await pick(wrapper, new File(['a'], file.name, { lastModified: 1 }))
+  expect(vi.mocked(write).mock.calls[2]![2]).toBe(newKey)
+  expect(wrapper.emitted('update:modelValue')).toEqual([[99]])
+  wrapper.unmount()
+})
+it('读取文件期间切换上下文不会把旧文件发送到新项目', async () => {
+  const wrapper = open()
+  const readers: FileReader[] = []
+  const read = FileReader.prototype.readAsArrayBuffer
+  vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (this: FileReader) { readers.push(this) })
+  const file = new File(['a'], '回单.pdf')
+  const input = wrapper.get('input[type=file]')
+  Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+  await input.trigger('change')
+  expect(readers).toHaveLength(1)
+  await wrapper.setProps({ field: { ...wrapper.props('field'), upload: { context: { project: 9 }, category: 'receipt' } } })
+  const loaded = new Promise<void>(resolve => readers[0]!.addEventListener('loadend', () => resolve()))
+  read.call(readers[0]!, file)
+  await loaded
+  await flushPromises()
+  expect(write).not.toHaveBeenCalled()
+  expect(wrapper.emitted('busy')?.at(-1)).toEqual([false])
+  vi.restoreAllMocks()
   wrapper.unmount()
 })

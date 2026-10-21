@@ -16,6 +16,13 @@ from scripts.ci.select_suites import SUITES, select
 
 
 class RoutingTests(unittest.TestCase):
+    def test_import_helpers_include_scope_and_concurrency_regressions(self):
+        for helper in ('import_dedup', 'import_locks'):
+            scope = plan([f'backend/apps/business/services/{helper}.py'])
+            self.assertIn('apps.business.tests.test_import_concurrency', scope['backend_targets'])
+            self.assertIn('finance', scope['modules'])
+            self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
     def test_documentation_and_deleted_paths(self):
         self.assertEqual(select(['README.md', 'docs/old-guide.md']), set())
         with self.assertRaises(ValueError):

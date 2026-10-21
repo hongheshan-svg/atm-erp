@@ -112,7 +112,7 @@ def summary(request):
     purchases = (
         PurchaseOrder.objects.filter(project__in=projects)
         .select_related('project', 'supplier')
-        .prefetch_related('lines__item', 'lines__bom_line')
+        .prefetch_related('lines__item', 'lines__bom_line', 'project__members')
         .order_by('due_date', 'pk')
     )
     if has_role(user, PURCHASE_APPROVERS):
@@ -144,7 +144,7 @@ def summary(request):
     if has_role(user, MONEY_READERS):
         amount = DecimalField(max_digits=18, decimal_places=2)
         entries = with_sources(
-            Entry.objects.filter(project__in=projects)
+            Entry.objects.filter(project__in=projects_for(user, Project.objects.all(), MONEY_READERS))
             .exclude(project__status='closed')
             .select_related('project')
             .annotate(net_paid=Coalesce(Sum('payments__amount'), Value(ZERO), output_field=amount))

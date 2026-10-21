@@ -4,11 +4,12 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, serializers, viewsets
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
@@ -54,8 +55,35 @@ class RefreshSerializer(TokenRefreshSerializer):
         return super().validate(attrs)
 
 
+class RefreshThrottle(LoginThrottle):
+    scope = 'refresh_invalid'
+
+    def allow_request(self, request, view):
+        if settings.APP_ENVIRONMENT == 'development':
+            return True
+        self.scope = 'refresh_invalid'
+        self.ident = self.get_ident(request)
+        raw = request.data.get('refresh') if isinstance(request.data, dict) else None
+        if isinstance(raw, str):
+            try:
+                token = RefreshSerializer.token_class(raw)
+                user = JWTAuthentication().get_user(token)
+            except (TokenError, AuthenticationFailed):
+                pass
+            else:
+                # 只信任已验签且仍有效的账号；不同 token/IP 仍共用该账号的刷新桶。
+                self.scope = 'refresh'
+                self.ident = str(user.pk)
+        self.rate = self.get_rate()
+        self.num_requests, self.duration = self.parse_rate(self.rate)
+        return super().allow_request(request, view)
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': self.ident}
+
+
 class RefreshView(TokenRefreshView):
-    throttle_classes = [LoginThrottle]
+    throttle_classes = [RefreshThrottle]
     serializer_class = RefreshSerializer
 
 

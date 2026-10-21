@@ -7,6 +7,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.api import Conflict
 from apps.core.models import AuditLog, CodeRule
+from apps.core.periods import check_dates
 from apps.core.permissions import PURCHASE_APPROVERS, PURCHASERS, WAREHOUSE, has_role
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
@@ -87,11 +88,14 @@ def create_purchase(actor, key, data):
             ),
             user,
         )
-        for (item_id, _), row in prepared.items():
+        for index, ((item_id, _), row) in enumerate(prepared.items()):
             if not items[item_id].is_active:
                 raise ValidationError('已停用物料不能新建采购。')
-            qty = number(row.get('quantity'), 'quantity', 3, positive=True)
-            price = number(row.get('unit_price'), 'unit_price')
+            try:
+                qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+                price = number(row.get('unit_price'), 'unit_price')
+            except ValidationError as exc:
+                raise ValidationError({'lines': {index: exc.detail}}) from exc
             bom = None
             if row.get('bom_line') is not None:
                 bom = lookup(BOMLine, row['bom_line'], 'bom_line', project=project, item_id=item_id)
@@ -174,7 +178,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
             if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
                 raise PermissionDenied('预算调整人不能批准本项目超预算采购，请由其他经理审批；管理员例外必须填写原因。')
         elif report['over_budget']:
-            warnings = purchase_visibility(user, report)['warnings']
+            warnings = purchase_visibility(user, report, purchase.project)['warnings']
             raise Conflict('；'.join(warnings) + '。请重新打开审批，填写超预算批准原因。')
         save(
             Entry(
@@ -205,21 +209,27 @@ def approve(actor, key, purchase_id, data, *, override=False):
 
 def receive(actor, key, purchase_id, data, *, from_quarantine=False):
     def execute(user, purchase):
-        fields(data, {'location', 'new_location', 'lines', 'reason', 'received_date'})
+        fields(data, {'location', 'new_location', 'lines', 'reason', 'received_date', 'backfill_reason'})
         received_date = day(data, 'received_date') if data.get('received_date') else timezone.localdate()
         if received_date > timezone.localdate():
             raise ValidationError({'received_date': '实际收货日期不能晚于今天。'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'approved', 'partial'})
+        # Also check quarantine-only arrivals, which do not create a StockMove yet.
+        check_dates(received_date)
+        backfill_reason = text(data, 'backfill_reason', default='')
+        if received_date < timezone.localdate(purchase.created_at) and not backfill_reason:
+            raise ValidationError({'backfill_reason': '收货日期早于采购创建日期，请填写补录原因。'})
         location = location_value(data)
         reason = text(data, 'reason')
         lines = {line.pk: line for line in purchase.lines.select_for_update().order_by('item_id', 'pk')}
-        selected = {}
+        selected, seen = {}, set()
         for row in rows(data):
             fields(row, {'line', 'quantity', 'pending_quantity'})
             line_id = identity(row.get('line'), 'line')
-            if line_id in selected or line_id not in lines:
+            if line_id in seen or line_id not in lines:
                 raise ValidationError('收货明细重复或不属于此采购单。')
+            seen.add(line_id)
             qty = number(row.get('quantity'), 'quantity', 3)
             pending = number(row.get('pending_quantity', '0'), 'pending_quantity', 3)
             line = lines[line_id]
@@ -278,7 +288,9 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             'purchase.quality_accept' if from_quarantine else 'purchase.receive',
             purchase,
             lines=data['lines'],
-            reason=reason,
+            reason=f'{reason}；补录原因：{backfill_reason}' if backfill_reason else reason,
+            received_date=received_date.isoformat(),
+            backfill_reason=backfill_reason,
         )
 
     return purchase_action(
@@ -294,26 +306,63 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
 
 def cancel_remainder(actor, key, purchase_id, data):
     def execute(user, purchase):
-        fields(data, {'reason'})
+        fields(data, {'reason', 'lines'})
         reason = text(data, 'reason')
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'draft', 'submitted', 'approved', 'partial'})
         lines = list(purchase.lines.select_for_update().order_by('item_id', 'pk'))
+        by_id = {line.pk: line for line in lines}
+        selected = {}
+        if 'lines' in data:
+            if purchase.status in {'draft', 'submitted'}:
+                raise ValidationError({'lines': '未批准采购请整单作废；按明细取消仅适用于已批准采购。'})
+            for index, row in enumerate(rows(data)):
+                fields(row, {'line', 'quantity'})
+                pk = identity(row.get('line'), 'line')
+                if pk not in by_id or pk in selected:
+                    raise ValidationError({'lines': {index: {'line': '明细重复或不属于本采购单。'}}})
+                line = by_id[pk]
+                remaining = line.quantity - line.received_quantity - line.cancelled_quantity
+                try:
+                    qty = number(row['quantity'], 'quantity', 3, positive=True) if 'quantity' in row else remaining
+                except ValidationError as exc:
+                    raise ValidationError({'lines': {index: exc.detail}}) from exc
+                if qty <= ZERO or qty > remaining:
+                    raise Conflict('取消数量超过该明细未收余量，请刷新后重试。')
+                selected[pk] = qty
+        else:
+            selected = {
+                line.pk: line.quantity - line.received_quantity - line.cancelled_quantity
+                for line in lines
+                if line.quantity > line.received_quantity + line.cancelled_quantity
+            }
+        # Pending goods still belong to the supplier commitment. Only selected lines are checked;
+        # quarantined goods on other lines must not prevent cancelling an unrelated shortage.
+        if any(by_id[pk].pending_quantity for pk in selected):
+            raise Conflict('请先处理所选明细隔离中的不合格到货，再取消未收余量。')
         credit = ZERO
-        for line in lines:
-            if line.pending_quantity:
-                raise Conflict('请先处理隔离中的不合格到货，再取消未收余量。')
-            if line.quantity > line.received_quantity + line.cancelled_quantity:
-                credit += rounded(line.quantity * line.unit_price) - rounded(line.received_quantity * line.unit_price)
-                line.cancelled_quantity = line.quantity - line.received_quantity
-                save(line, user)
+        for pk, qty in selected.items():
+            line = by_id[pk]
+            retained = line.quantity - line.cancelled_quantity
+            # Difference of cumulative rounded amounts avoids losing a cent across partial cancellations.
+            credit += rounded(retained * line.unit_price) - rounded((retained - qty) * line.unit_price)
+            line.cancelled_quantity += qty
+            save(line, user)
         entry = Entry.objects.select_for_update().filter(purchase=purchase).first()
         if entry:
             entry.credit_amount += credit
             save(entry, user)
-        purchase.status = 'received' if any(line.received_quantity for line in lines) else 'cancelled'
+        if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines):
+            purchase.status = 'received' if any(line.received_quantity for line in lines) else 'cancelled'
         save(purchase, user)
-        return audit(user, 'purchase.cancel_remainder', purchase, credit=str(credit), reason=reason)
+        return audit(
+            user,
+            'purchase.cancel_remainder',
+            purchase,
+            credit=str(credit),
+            reason=reason,
+            lines=[{'line': pk, 'quantity': str(qty)} for pk, qty in selected.items()],
+        )
 
     return purchase_action(actor, key, 'purchase.cancel_remainder', purchase_id, data, PURCHASERS, execute)
 
@@ -407,7 +456,7 @@ def edit(actor, key, purchase_id, data):
         if set(selected) != set(lines):
             raise ValidationError('请保留所有采购明细；不再需要的采购请取消后重建。')
         before = []
-        for pk, row in selected.items():
+        for index, (pk, row) in enumerate(selected.items()):
             line = lines[pk]
             before.append(
                 {
@@ -417,7 +466,11 @@ def edit(actor, key, purchase_id, data):
                     'due_date': str(line.due_date),
                 }
             )
-            qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+            try:
+                qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+                price = number(row.get('unit_price'), 'unit_price')
+            except ValidationError as exc:
+                raise ValidationError({'lines': {index: exc.detail}}) from exc
             if line.bom_line_id:
                 check_line_limit(line.bom_line, qty, exclude_line=line.pk)
                 needed = sum(
@@ -432,7 +485,7 @@ def edit(actor, key, purchase_id, data):
                 ):
                     raise Conflict('修改数量超过 BOM 剩余需求。')
             line.quantity = qty
-            line.unit_price = number(row.get('unit_price'), 'unit_price')
+            line.unit_price = price
             line.due_date = day(row, 'due_date')
             number(rounded(qty * line.unit_price), 'line_amount')
             save(line, user)

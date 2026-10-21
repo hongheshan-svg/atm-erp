@@ -148,13 +148,13 @@ async function save() {
   try {
     if (!chosen.value.length) throw new Error('请先勾选需要采购的物料。')
     const data = { ...form.value, project: project.value, lines: chosen.value }
-    validateFields(fields, data)
     for (const row of chosen.value) {
       if (quantityValue(row.quantity) === 0n) throw new Error(`${row.item_name}：采购数量必须大于零。`)
       if (purchaseLineCents(row.quantity, row.unit_price) == null) throw new Error(`${row.item_name}：数量须为正数、最多3位小数；含税单价须为非负数字、最多2位小数，不含单位或科学计数法。`)
       const issue = selectedIssue(row)
       if (issue) throw new Error(`${row.item_name}：${issue}`)
     }
+    validateFields(fields, data)
     if (effectiveTerm.value === 'custom' && form.value.payment_days !== '' && (!/^\d+$/.test(String(form.value.payment_days)) || Number(form.value.payment_days) > 365)) throw new Error('自定义月结天数须为0到365的整数。')
     const body = { ...payload(fields, data), from_demand: true,
       lines: chosen.value.map(row => ({ item: row.item, bom_line: row.bom_line, quantity: row.quantity, unit_price: row.unit_price, ...(row.due_date ? { due_date: row.due_date } : {}) })),

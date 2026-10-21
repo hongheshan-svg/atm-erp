@@ -84,6 +84,8 @@ REST_FRAMEWORK = {
     # 不单独限，和其余接口一样走 user 兜底，防的是脚本失控而不是人工操作。
     'DEFAULT_THROTTLE_RATES': {
         'login': '10/min',
+        'refresh': '30/min',  # 已验签且仍有效的账号，允许多标签页续期，不共享办公室出口的登录桶。
+        'refresh_invalid': '10/min',  # 无效、停用或已撤销的 refresh 按来源 IP 防滥用。
         'password': '10/min',
         'export': '12/min',
         'import': '30/min',

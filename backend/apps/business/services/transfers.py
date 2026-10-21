@@ -2,6 +2,7 @@
 
 import re
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 from django.core import signing
@@ -9,10 +10,11 @@ from django.core.exceptions import ValidationError as ModelValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from apps.accounts.models import User
 from apps.core.actions import perform
+from apps.core.api import Conflict
 from apps.core.error_messages import validation_detail
 from apps.core.permissions import (
     ADMIN,
@@ -20,17 +22,25 @@ from apps.core.permissions import (
     FINANCE,
     ITEM_WRITERS,
     MANAGERS,
+    PRODUCTION_MANAGERS,
     PURCHASERS,
     SALES,
     WAREHOUSE,
+    can_manage_task,
+    has_role,
+    require_project,
     require_role,
+    task_management_roles,
 )
 
-from ..models import Item, Partner, Project
+from ..models import Document, Entry, Item, Partner, Project, Reconciliation, Stock, Task
 from . import execution, finance, inventory, masterdata, projects, sales, supply
 from .bom_import import message, read_file
-from .import_feedback import feedback
+from .common import identity
+from .import_dedup import DUPLICATE_MESSAGE, content_digest, imported, normalized_record, receipt_payload
+from .import_feedback import feedback, locate
 from .import_guides import RESOURCES, guide, template_document
+from .import_locks import lock_batch, lock_content
 
 # Label -> service field. Human-readable references resolve at preview and confirmation.
 DETAIL = [
@@ -87,7 +97,7 @@ LEGACY_SCHEMAS = {
         ],
     ),
     'tasks': (
-        MANAGERS,
+        PRODUCTION_MANAGERS,
         [
             ('项目编号', 'project'),
             ('阶段', 'kind'),
@@ -270,6 +280,19 @@ def schema(actor, resource):
 
 def layout(actor, resource):
     result = guide(resource, schema(actor, resource))
+    if resource == 'tasks' and not has_role(actor, MANAGERS):
+        result['quick_start']['prepare'] = '生产经理仅可导入本人参与项目的装配、调试任务；执行人员须已加入该项目。'
+        result['quick_start']['example'] = (
+            '例如装配任务：名称填机械装配，阶段选装配，执行人填真实姓名，项目编号从参与项目复制。'
+        )
+        for column in result['columns']:
+            if column['key'] == 'kind':
+                column.update(
+                    options=['装配', '调试'],
+                    example='装配',
+                    hint='生产经理仅可选择装配、调试（兼容assembly/test）；不能导入设计任务。',
+                    source='Excel下拉选择装配或调试。',
+                )
     for column in result['columns']:
         key = column['key']
         column['table_keys'] = (
@@ -334,8 +357,47 @@ def payload(raw, people=None):
     return data
 
 
+UNREACHABLE = '记录不存在或不在你的权限范围内。'
+
+
+def check_references(actor, resource, data):
+    """Locate ID columns before the business service, using the service's own lookup filters.
+
+    Check project access before resolving secondary references. Missing and out-of-range
+    records share one wording to avoid revealing which reference exists.
+    """
+
+    def need(key, model, **filters):
+        if data.get(key) in (None, ''):
+            return None
+        found = model.objects.filter(pk=identity(data[key], key), **filters).first()
+        if found is None:
+            raise ValidationError({key: UNREACHABLE})
+        if model in {Entry, Task}:
+            try:
+                require_project(actor, found.project, SCHEMAS[resource][0])
+            except PermissionDenied as exc:
+                raise ValidationError({key: UNREACHABLE}) from exc
+        return found
+
+    if resource == 'payments':
+        entry = need('entry', Entry)
+        if entry is not None:
+            need('document', Document, project=entry.project, category='receipt')
+            need('reconciliation', Reconciliation, entry=entry)
+    elif resource == 'moves':
+        need('stock', Stock)
+        if data.get('project'):
+            need('task', Task, project_id=data['project'], status='open')
+    elif resource == 'time':
+        need('task', Task)
+
+
 def execute_row(actor, resource, raw, key, people=None):
     data = payload(raw, people)
+    if resource == 'tasks' and not has_role(actor, task_management_roles(data.get('kind'))):
+        raise ValidationError({'kind': '生产经理只能导入装配、调试任务；设计任务须由项目经理或管理员导入。'})
+    check_references(actor, resource, data)
     if resource in {'items', 'partners'}:
         return masterdata.masterdata(actor, key, Item if resource == 'items' else Partner, data)
     simple = {
@@ -437,12 +499,17 @@ def executable_records(resource, records):
 def run(actor, resource, records, *, preview=False):
     results, errors = [], []
     with transaction.atomic():
+        lock_batch(actor, resource, records)
         for record in records:
             try:
                 with transaction.atomic():
                     # Bind previewed identities in the signed token, then reject silent reassignment on confirmation.
                     people = record.setdefault('people', {}) if preview else record.get('people')
                     results.append(execute_row(actor, resource, record['data'], str(uuid4()), people))
+                    current = normalized_record(actor, resource, record['data'], people)
+                    if not preview and record.get('normalized') != current:
+                        raise ValidationError('引用资料或默认值已变化，请重新上传预览后确认。')
+                    record['normalized'] = current
             except (APIException, ModelValidationError, Http404) as exc:
                 detail = (
                     validation_detail(exc)
@@ -450,26 +517,33 @@ def run(actor, resource, records, *, preview=False):
                     else getattr(exc, 'detail', '记录不存在或无权访问。')
                 )
                 labels = {key: label for label, key in schema(actor, resource)}
-                errors.append({'row': record['row'], 'message': message(detail, labels)})
+                fields = [key for key in detail if key in labels] if isinstance(detail, dict) else []
+                errors.append({'row': record['row'], 'message': message(detail, labels), 'fields': fields})
                 if not preview:
+                    locate(errors, schema(actor, resource))
                     raise ValidationError({'rows': errors}) from exc
         if preview:
             transaction.set_rollback(True)
     return results, errors
 
 
+def expand_errors(resource, errors, display_records):
+    if resource != 'purchases':
+        return errors
+    groups = {record['row']: record['data']['group'] for record in display_records}
+    return [
+        {**error, 'row': record['row']}
+        for error in errors
+        for record in display_records
+        if groups[record['row']] == groups[error['row']]
+    ]
+
+
 def preview(actor, resource, upload):
     display_records, headers, source_rows, source_columns = parse(actor, resource, upload, with_source=True)
     records = executable_records(resource, display_records)
     _, errors = run(actor, resource, records, preview=True)
-    if resource == 'purchases':
-        groups = {record['row']: record['data']['group'] for record in display_records}
-        errors = [
-            {**error, 'row': record['row']}
-            for error in errors
-            for record in display_records
-            if groups[record['row']] == groups[error['row']]
-        ]
+    errors = expand_errors(resource, errors, display_records)
     invalid_rows = {error['row'] for error in errors}
     people_by_row = {record['row']: record.get('people', {}) for record in records if record['row'] not in invalid_rows}
     person_ids = {
@@ -489,9 +563,25 @@ def preview(actor, resource, upload):
             field: '；'.join(names[pk] for pk in (value if isinstance(value, list) else [value]) if pk in names)
             for field, value in people_by_row.get(record['row'], {}).items()
         }
+    digest = content_digest(resource, records) if not errors else None
+    duplicate = imported(resource, digest) if digest else False
     token = (
         signing.dumps(
-            {'actor': actor.pk, 'resource': resource, 'records': records, 'nonce': str(uuid4())},
+            {
+                'actor': actor.pk,
+                'resource': resource,
+                'records': records,
+                'nonce': str(uuid4()),
+                'source': {
+                    'headers': headers,
+                    'rows': [
+                        [value.isoformat()[:10] if isinstance(value, date) else value for value in row]
+                        for row in source_rows
+                    ],
+                    'columns': source_columns,
+                    'records': display_records,
+                },
+            },
             salt='business-import',
             compress=True,
         )
@@ -508,6 +598,7 @@ def preview(actor, resource, upload):
             'can_import': not errors,
             'token': token,
             'note': NOTES[resource],
+            'duplicate_import': {'message': DUPLICATE_MESSAGE} if duplicate else None,
         },
         headers,
         source_rows,
@@ -516,8 +607,10 @@ def preview(actor, resource, upload):
     )
 
 
-def confirm(actor, resource, token):
+def confirm(actor, resource, token, *, allow_duplicate=False, key=None):
     schema(actor, resource)
+    if not isinstance(allow_duplicate, bool):
+        raise ValidationError({'allow_duplicate': '必须明确选择是否再次导入。'})
     if not isinstance(token, str) or len(token) > 10 * 1024 * 1024:
         raise ValidationError('请重新预览文件。')
     try:
@@ -526,16 +619,76 @@ def confirm(actor, resource, token):
         raise ValidationError('预览已过期或被修改，请重新上传。') from exc
     if batch['actor'] != actor.pk or batch['resource'] != resource:
         raise ValidationError('预览不属于当前用户或模块。')
+    if any('normalized' not in record for record in batch['records']):
+        raise ValidationError('导入校验已更新，请重新上传预览。')
+    digest = content_digest(resource, batch['records'])
+
+    def authorize(user):
+        schema(user, resource)
+        projects_by_id = {project.pk: project for project in lock_batch(user, resource, batch['records'])}
+        user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
+        schema(user, resource)
+        for project in projects_by_id.values():
+            require_project(user, project, SCHEMAS[resource][0])
+        for record in batch['records']:
+            data = record['normalized']
+            if resource == 'tasks':
+                project = projects_by_id.get(data['project'])
+                if project is None:
+                    raise ValidationError({'project': UNREACHABLE})
+                require_project(user, project, task_management_roles(data['kind']))
+            if resource == 'sales' and not has_role(user, MANAGERS) and data.get('manager') != user.pk:
+                raise PermissionDenied('仅能操作自己负责的销售单。')
+            if resource == 'time':
+                task = Task.objects.filter(pk=int(Decimal(data['task']))).first()
+                if task is None:
+                    raise ValidationError({'task': UNREACHABLE})
+                if not can_manage_task(user, task) and (data['user'] != user.pk or task.assignee_id != user.pk):
+                    raise PermissionDenied('只能为自己的任务登记本人工时，或登记管理范围内的生产与售后工时。')
 
     def execute(user):
-        results, _ = run(user, resource, batch['records'])
-        return {'count': len(results), 'results': results}
+        lock_content(digest)
+        if imported(resource, digest) and not allow_duplicate:
+            raise Conflict({'duplicate_import': {'message': DUPLICATE_MESSAGE}})
+        try:
+            results, _ = run(user, resource, batch['records'])
+        except ValidationError as exc:
+            if not isinstance(exc.detail, dict) or 'rows' not in exc.detail:
+                raise
+            errors = [{**error, 'row': int(error['row'])} for error in exc.detail['rows']]
+            source = batch['source']
+            result = feedback(
+                {'errors': expand_errors(resource, errors, source['records'])},
+                source['headers'],
+                source['rows'],
+                source['columns'],
+                RESOURCES[resource][0],
+            )
+            raise ValidationError({'rows': result['errors'], 'error_file': result['error_file']}) from exc
+        if resource == 'deliveries':
+            results = [
+                {**result, 'project': record['normalized']['project']}
+                for result, record in zip(results, batch['records'], strict=True)
+            ]
+        return {'count': len(results), 'results': results, 'resource': 'moves' if resource == 'stocks' else resource}
 
+    def confirm_token(user):
+        return perform(
+            actor=user,
+            key='import:' + batch['nonce'],
+            operation='import.' + resource,
+            payload=receipt_payload(digest),
+            authorize=authorize,
+            execute=execute,
+        )
+
+    if key is None:
+        return confirm_token(actor)
     return perform(
         actor=actor,
-        key='import:' + batch['nonce'],
-        operation='import.' + resource,
-        payload=batch,
-        authorize=lambda user: schema(user, resource),
-        execute=execute,
+        key=key,
+        operation='import.request.' + resource,
+        payload=receipt_payload(digest),
+        authorize=authorize,
+        execute=confirm_token,
     )

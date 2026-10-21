@@ -55,8 +55,12 @@ export function fieldIssues(fields: Field[], data: Row, prefix = '', path = ''):
     const [whole, fraction = ''] = text.replace(/^-/, '').split('.')
     const factor = 10n ** BigInt(scale)
     const number = (BigInt(whole!) * factor + BigInt(fraction.padEnd(scale, '0') || '0')) * (text.startsWith('-') ? -1n : 1n)
-    if (min != null && number < BigInt(min) * factor) add(`${label}不能小于 ${min}。`)
-    if (max != null && number > BigInt(max) * factor) add(`${label}不能大于 ${max}。`)
+    const bound = (limit: number) => {
+      const [whole = '0', fraction = ''] = String(Math.abs(limit)).split('.')
+      return (BigInt(whole) * factor + BigInt(fraction.padEnd(scale, '0') || '0')) * (limit < 0 ? -1n : 1n)
+    }
+    if (min != null && number < bound(min)) add(`${label}不能小于 ${min}。`)
+    if (max != null && number > bound(max)) add(`${label}不能大于 ${max}。`)
   }
   return issues
 }

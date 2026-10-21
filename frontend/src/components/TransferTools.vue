@@ -1,22 +1,30 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { download, read, write } from '../api'
 import { canImportResource } from '../session'
 import { message, requestKey } from '../utils/request'
 import type { Column, Row } from '../types'
 import ImportFeedback from './ImportFeedback.vue'
-import { importDestination, importTitles, templateMismatch } from '../utils/import-context'
+import { exportFilename, importDestination, importResultDestination, importTitles, scopedImportProject, templateMismatch } from '../utils/import-context'
 
-const props = withDefaults(defineProps<{ resource: string; path: string; params?: Row; exportPath?: string; tableColumns?: Column[]; allowImport?: boolean }>(), { allowImport: true })
+const props = withDefaults(defineProps<{ resource: string; path: string; params?: Row; exportPath?: string; tableColumns?: Column[]; allowImport?: boolean; projectId?: number }>(), { allowImport: true })
 const emit = defineEmits<{ changed: [] }>()
 const busy = ref(false)
 const error = ref('')
 const opened = ref(false)
 const preview = ref<Row | null>(null)
 const result = ref('')
+const resultData = ref<Row | null>(null)
+const allowDuplicate = ref(false)
+const feedbackStart = ref<HTMLElement>()
+let confirmationKey = ''
+const resultDestination = computed(() => resultData.value ? importResultDestination(props.resource, resultData.value) : null)
+const hasResultRecord = computed(() => !!resultDestination.value && (resultDestination.value.query?.focus || (props.resource === 'projects' && /^\/projects\/\d+$/.test(resultDestination.value.path))))
 const project = ref<Row | null>(null)
 const mismatch = ref<ReturnType<typeof templateMismatch>>(null)
-const destination = computed(() => mismatch.value ? importDestination(mismatch.value.resource, Number(props.params?.project) || undefined) : null)
+// 项目页各面板的项目筛选参数名不同，统一解析当前项目。
+const scopedProject = computed(() => scopedImportProject(props.params, props.projectId))
+const destination = computed(() => mismatch.value ? importDestination(mismatch.value.resource, scopedProject.value) : null)
 const title = computed(() => `导入${layout.value?.title || importTitles[props.resource] || '资料'}`)
 let generation = 0
 onBeforeUnmount(() => { generation++ })
@@ -28,9 +36,14 @@ const mappings = computed(() => (layout.value?.columns || []).map((column: Row) 
 const generatedColumns = computed(() => (props.tableColumns || []).filter(c => !(layout.value?.columns || []).some((field: Row) => field.table_keys.includes(c.key))).map(c => c.label).join('、'))
 const importable = computed(() => props.allowImport && canImportResource(props.resource))
 const bankImport = computed(() => props.resource === 'bank-records')
-watch([() => props.resource, () => props.params?.project], () => { generation++; layout.value = null; preview.value = null; project.value = null; opened.value = false; busy.value = false; error.value = ''; result.value = ''; mismatch.value = null })
+watch([() => props.resource, scopedProject], () => { generation++; layout.value = null; preview.value = null; project.value = null; opened.value = false; busy.value = false; error.value = ''; result.value = ''; resultData.value = null; allowDuplicate.value = false; mismatch.value = null })
 watch(opened, value => { if (!value) { generation++; preview.value = null; mismatch.value = null; busy.value = false } })
 watch(importable, value => { if (!value) opened.value = false })
+watch([preview, error, result], async () => {
+  if (!opened.value || (!preview.value && !error.value && !result.value)) return
+  await nextTick()
+  feedbackStart.value?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+})
 async function openImport() {
   if (!importable.value) return
   opened.value = true
@@ -38,6 +51,8 @@ async function openImport() {
   mismatch.value = null
   error.value = ''
   result.value = ''
+  resultData.value = null
+  allowDuplicate.value = false
   layout.value = null
   if (bankImport.value) return
   busy.value = true
@@ -46,8 +61,8 @@ async function openImport() {
     const data = await read(`${props.path}import-schema/`)
     if (id !== generation) return
     layout.value = data
-    if (props.params?.project) {
-      const context = await read(`/business/projects/${props.params.project}/`)
+    if (scopedProject.value) {
+      const context = await read(`/business/projects/${scopedProject.value}/`)
       if (id === generation) project.value = context
     }
   } catch (e) { if (id === generation) error.value = message(e) } finally { if (id === generation) busy.value = false }
@@ -57,7 +72,7 @@ async function file(template = false, chosen = 'xlsx') {
   error.value = ''
   try {
     await download(template ? `${props.path}import-template/` : (props.exportPath || `${props.path}export/`),
-      `${template ? `${layout.value?.title || props.resource}导入模板` : props.resource}.${chosen}`, { ...(template ? {} : props.params), file_format: chosen })
+      template ? `${layout.value?.title || importTitles[props.resource] || '资料'}导入模板.${chosen}` : exportFilename(props.resource, chosen), { ...(template ? {} : props.params), file_format: chosen })
   } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 async function guide() {
@@ -75,6 +90,9 @@ async function upload(event: Event) {
   error.value = ''
   preview.value = null
   result.value = ''
+  resultData.value = null
+  allowDuplicate.value = false
+  confirmationKey = requestKey()
   const id = ++generation
   mismatch.value = null
   try {
@@ -87,17 +105,41 @@ async function upload(event: Event) {
   } finally { if (id === generation) busy.value = false; input.value = '' }
 }
 async function confirm() {
-  if (busy.value || !preview.value?.can_import || !importable.value) return
+  if (busy.value || !preview.value?.can_import || !importable.value || (preview.value.duplicate_import && !allowDuplicate.value)) return
   const id = ++generation
   busy.value = true
   error.value = ''
   try {
-    const data = await write(`${props.path}import-confirm/`, { token: preview.value.token }, requestKey())
+    const data = await write(`${props.path}import-confirm/`, { token: preview.value.token, ...(allowDuplicate.value && !bankImport.value ? { allow_duplicate: true } : {}) }, confirmationKey)
     if (id !== generation) return
     result.value = `成功导入 ${data.count} 条记录${bankImport.value ? `，跳过已导入 ${data.skipped} 条` : ''}`
+    resultData.value = data
     preview.value = null
     emit('changed')
-  } catch (e) { if (id === generation) error.value = message(e) } finally { if (id === generation) busy.value = false }
+  } catch (e) {
+    if (id !== generation) return
+    const detail = (e as { response?: { data?: Row } })?.response?.data
+    const rows = detail?.rows
+    if (detail?.duplicate_import && preview.value) {
+      preview.value = { ...preview.value, duplicate_import: detail.duplicate_import }
+      allowDuplicate.value = false
+      error.value = '预览后已有相同内容导入成功。本批尚未新增，请先核对记录；确需再次新增时请勾选确认。'
+      return
+    }
+    if (Array.isArray(rows) && rows.length && preview.value) {
+      // 确认时整批重新校验失败：把失败行并入预览，旧凭据作废，必须重新上传。
+      const errors = rows.map((item: Row) => ({ ...item, row: Number(item.row) || item.row, fields: Array.isArray(item.fields) ? item.fields : [] }))
+      preview.value = { ...preview.value, errors, error_file: detail?.error_file, can_import: false, token: null }
+      error.value = '数据已变化，请修改文件后重新上传预览；本批未导入任何记录。'
+    } else {
+      error.value = message(e)
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (preview.value && status && [400, 403, 404, 409].includes(status)) {
+        preview.value = { ...preview.value, can_import: false, token: null }
+        error.value += ' 请重新上传预览后再确认。'
+      }
+    }
+  } finally { if (id === generation) busy.value = false }
 }
 </script>
 <template>
@@ -115,7 +157,7 @@ async function confirm() {
     </el-dropdown>
     <span v-if="error && !opened" role="alert">{{ error }}</span>
     <el-dialog v-model="opened" class="transfer-dialog" :title="title" width="min(1100px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
-      <p v-if="params?.project" class="import-context"><strong>当前项目：{{ project ? `${project.name}（${project.code}）` : '当前页面所选项目' }}</strong>。文件中的项目编号仍会逐行校验，请核对是否与本次用途一致。</p>
+      <p v-if="scopedProject" class="import-context"><strong>当前项目：{{ project ? `${project.name}（${project.code}）` : '当前页面所选项目' }}</strong>。文件中的项目编号仍会逐行校验，请核对是否与本次用途一致。</p>
       <p v-if="bankImport">上传工行 XLSX 或华夏 XLS 原始流水（含表头及汇总），单文件最多 1000 行、5 MB。完整保留个人往来和手续费，不自动核销或指定项目；缺失户名进入待核实，相同交易重复上传会跳过。没有唯一银行编号时生成导入标识，原始编号保留在明细中。预览按银行流水页面列展示；项目和未匹配金额由后续认领、匹配操作维护。</p>
       <p v-else>下载模板后填写，支持 CSV / XLSX，最多 1000 行、5 MB。人员可填姓名或账号，重名请填姓名（用户名）；其他引用使用编号，标明 ID 的列可从对应列表导出获取。日期填写 YYYY-MM-DD。</p>
       <template v-if="layout">
@@ -134,18 +176,26 @@ async function confirm() {
       </template>
       <el-button v-else-if="!bankImport" :loading="busy" @click="openImport">加载字段说明</el-button>
       <div class="toolbar"><el-button v-if="!bankImport" :disabled="busy || !layout" @click="file(true)">下载模板</el-button><el-button v-if="!bankImport" :disabled="busy || !layout" @click="guide">下载填写说明</el-button><label class="file-button">{{ preview ? '重新选择文件并预览' : '选择文件并预览' }}<input type="file" :accept="bankImport ? '.xls,.xlsx' : '.csv,.xlsx'" :disabled="busy || (!bankImport && !layout)" @change="upload" /></label><details v-if="!bankImport"><summary>更多格式</summary><el-button :disabled="busy || !layout" @click="file(true, 'csv')">下载 CSV 模板</el-button></details></div>
+      <div ref="feedbackStart" class="import-feedback-start" aria-live="polite">
       <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
       <p v-if="mismatch"><router-link v-if="destination" :to="destination" @click="opened = false">前往{{ mismatch.title }}导入入口</router-link><span v-else>请联系具备相应权限的同事，在{{ mismatch.entry }}操作。</span> 切换入口后请核对导入对象，并重新选择文件。</p>
       <el-alert v-if="result" :title="result" type="success" :closable="false" role="status" />
+      </div>
       <template v-if="preview">
+        <div v-if="preview.duplicate_import" class="import-duplicate" role="alert">
+          <p>{{ preview.duplicate_import.message }}</p>
+          <label><input v-model="allowDuplicate" type="checkbox" :disabled="busy" />我已核对现有记录，确认再次导入并新增相同内容</label>
+        </div>
         <p>共 {{ preview.count }} 条，确认时再次校验；任一行失败，整批不保存。预览有效期 30 分钟。<span v-if="resource === 'purchases'">文件 {{ preview.row_count }} 行明细合并为 {{ preview.count }} 张采购草稿，下方按原文件逐行显示。</span></p>
         <p v-if="preview.summary">收入 {{ preview.summary.income_count }} 笔 / {{ preview.summary.income }} 元；支出 {{ preview.summary.expense_count }} 笔 / {{ preview.summary.expense }} 元。{{ preview.summary.check }}</p>
         <ImportFeedback :rows="(preview.rows || []).map((row: Row) => ({ ...row, data: { ...row.data, status: row.status } }))" :columns="bankImport ? [{ key: 'status', label: '导入状态' }, ...(preview.columns || [])] : (preview.columns || [])" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
       </template>
-      <template #footer><el-button :disabled="busy" @click="opened = false">关闭</el-button><el-button type="primary" :disabled="busy || !preview?.can_import" :loading="busy" @click="confirm">确认导入</el-button></template>
+      <template #footer><el-button :disabled="busy" @click="opened = false">关闭</el-button><router-link v-if="result && resultDestination" :to="resultDestination" @click="opened = false"><el-button type="primary">{{ hasResultRecord ? (Number(resultData?.count) > 1 ? '查看首条导入记录' : '查看导入记录') : '关闭并查看列表' }}</el-button></router-link><el-button v-else-if="result" type="primary" @click="opened = false">关闭并查看列表</el-button><el-button v-else type="primary" :disabled="busy || !preview?.can_import || (!!preview?.duplicate_import && !allowDuplicate)" :loading="busy" @click="confirm">确认导入</el-button></template>
     </el-dialog>
   </div>
 </template>
 <style scoped>
 .import-quick-start { padding: 4px 16px; border: 1px solid #c6dbf5; border-radius: 8px; background: #f2f7ff; }
+.import-duplicate { padding: 12px; margin-bottom: 12px; border: 1px solid #e6a23c; border-radius: 8px; background: #fdf6ec; }
+.import-duplicate input { margin-right: 8px; }
 </style>

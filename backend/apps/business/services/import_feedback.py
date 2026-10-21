@@ -35,17 +35,26 @@ def template_hint(headers):
     return {'code': resource, 'title': '物料清单（BOM）' if resource == 'bom' else title, 'entry': entry}
 
 
-def feedback(result, headers, rows, columns, title):
-    """Add locations and a re-uploadable workbook without changing the import schema."""
-    errors = result.get('errors', [])
+def locate(errors, columns):
+    """Infer which template columns an error message refers to."""
     for error in errors:
         text = error['message']
         if not error.get('fields'):
             error['fields'] = [
                 key
                 for label, key in columns
-                if label in text or (key == 'quantity' and ('数量' in text or '用量' in text))
+                if label in text
+                or (label.endswith('ID') and label[:-2] in text)
+                or (key == 'quantity' and ('数量' in text or '用量' in text))
+                or (key == 'amount' and ('金额' in text or '余额' in text))
+                or (key == 'hours' and ('工时' in text or '小时' in text))
             ]
+    return errors
+
+
+def feedback(result, headers, rows, columns, title):
+    """Add locations and a re-uploadable workbook without changing the import schema."""
+    errors = locate(result.get('errors', []), columns)
     if not errors:
         return result
     book = Workbook()

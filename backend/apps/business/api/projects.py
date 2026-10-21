@@ -65,8 +65,9 @@ class ProjectView(ImportableMixin, ReadView):
 
     @action(detail=True, methods=['get'])
     def cost(self, request, pk=None):
-        require_role(request.user, MONEY_READERS)
-        return Response(finance.cost(self.get_object()))
+        project = self.get_object()
+        require_project(request.user, project, MONEY_READERS)
+        return Response(finance.cost(project))
 
     @action(detail=True, methods=['get'], url_path='cost-sources')
     def cost_sources(self, request, pk=None):
@@ -76,6 +77,7 @@ class ProjectView(ImportableMixin, ReadView):
         from ..models import Entry, StockMove, TimeEntry
 
         project = self.get_object()
+        require_project(request.user, project, MONEY_READERS)
         category = request.query_params.get('category', 'materials')
         if category == 'materials':
             records = (
@@ -127,6 +129,7 @@ class ProjectView(ImportableMixin, ReadView):
     def cost_analysis(self, request, pk=None):
         require_role(request.user, MONEY_READERS)
         project = self.get_object()
+        require_project(request.user, project, MONEY_READERS)
         report = budgets.analysis(project)
         if project.forecast_at and not report['forecast_stale']:
             from ..models import Entry, StockMove, TimeEntry

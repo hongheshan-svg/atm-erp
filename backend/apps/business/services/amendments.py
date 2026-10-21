@@ -56,6 +56,8 @@ def amend(actor, key, sale_id, data):
             expected = parse_datetime(version) if isinstance(version, str) else None
         except ValueError:
             expected = None
+        if expected is None:
+            raise ValidationError({'expected_updated_at': '请提供打开表单时的记录版本。'})
         if expected != sale.updated_at:
             raise Conflict('合同已更新，请重新查看补充协议。')
         reason = text(data, 'reason')

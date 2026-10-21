@@ -98,10 +98,11 @@ it('未批准采购显示作废采购，已批准显示取消未收余量，走�
   expect(actionNames('purchases', { status: 'approved' })).toContain('取消未收余量')
   expect(actionNames('purchases', { status: 'approved' })).not.toContain('作废采购')
   const voided = await actionCommand('purchases', { id: 9, status: 'draft' }, '作废采购')
+  vi.mocked(read).mockResolvedValue(purchaseDetail)
   const cancel = await actionCommand('purchases', { id: 9, status: 'approved' }, '取消未收余量')
   expect(voided.path).toBe('/business/purchases/9/cancel-remainder/')
   expect(cancel.path).toBe(voided.path)
-  expect(cancel.notice?.text).toContain('全部未收明细')
+  expect(cancel.notice?.text).toContain('仅取消填写数量的明细')
 })
 
 it('修改采购含账期字段，选月结时不提交付款到期日', async () => {

@@ -1,7 +1,7 @@
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
 from apps.core.api import Conflict
@@ -76,7 +76,10 @@ def count(actor, key, stock_id, data):
         qty = number(data.get('quantity'), 'quantity', 3)
         reason = text(data, 'reason')
         if stock.quantity == 0 and qty > 0:
-            require_role(user, ADMIN)
+            try:
+                require_role(user, ADMIN)
+            except PermissionDenied as exc:
+                raise PermissionDenied('零库存盘盈需管理员填写单位成本，请联系管理员在库存页面完成盘点。') from exc
             value = rounded(qty * number(data.get('unit_cost'), 'unit_cost'))
         else:
             if 'unit_cost' in data:

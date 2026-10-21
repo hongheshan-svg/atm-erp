@@ -450,6 +450,7 @@ class HardeningTests(BusinessFixtures, TestCase):
         receipt = {
             'received_date': str(cutoff),
             'reason': '实际到货',
+            'backfill_reason': '依签收单补录昨天到货',
             'lines': [{'line': purchase.lines.get().pk, 'quantity': '1'}],
         }
         self.post('warehouse', f'purchases/{purchase.pk}/receive/', receipt, status=409)

@@ -11,6 +11,7 @@ from uuid import uuid4
 import xlrd
 from django.core import signing
 from django.db import transaction
+from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 
 from apps.core.actions import perform
@@ -67,7 +68,7 @@ def amount(value):
         result = Decimal(raw)
         if not result.is_finite() or abs(result) >= Decimal('1e16') or result != result.quantize(Decimal('.01')):
             raise ValueError
-        return result.quantize(Decimal('.01'))
+        return result.quantize(Decimal('.01')) if result else Decimal('0.00')
     except (ValueError, InvalidOperation) as exc:
         raise ValidationError('金额须为有效数字，最多两位小数。') from exc
 
@@ -103,24 +104,72 @@ def read(upload):
     return content, rows
 
 
+def fingerprint(account, value, source):
+    # Keep identifiers (including leading zeroes) intact; normalize only parsed time and money.
+    if source['bank'] not in {'ICBC', 'HXB'}:
+        raise ValueError('unsupported bank')
+    stamp = datetime.strptime(source['timestamp'], '%Y-%m-%d %H:%M:%S').isoformat(sep=' ')
+    identity = [
+        source['bank'],
+        string(account),
+        stamp,
+        str(amount(value)),
+        str(amount(source['balance'])),
+        string(source['counterparty_account']),
+        string(source['original_reference']),
+    ]
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+
+
+def normalized(record):
+    source = record['source']
+    canonical = fingerprint(record['data']['account'], record['data']['amount'], source)
+    reference = (
+        f'IMPORT-{source["bank"]}-{canonical[:40]}'
+        if source['bank'] == 'ICBC' or not source['original_reference']
+        else f'{record["data"]["date"]}:{source["original_reference"]}'
+    )
+    return {**record, 'fingerprint': canonical, 'data': {**record['data'], 'reference': reference}}
+
+
 def existing(record, *, lock=False):
     data = record['data']
     queryset = BankRecord.objects.select_for_update() if lock else BankRecord.objects.all()
-    found = queryset.filter(import_fingerprint=record['fingerprint']).first()
-    if not found:
-        found = queryset.filter(
-            account=data['account'], reference__in=[data['reference'], record['legacy_reference']], void_reason=''
-        ).first()
-    if found:
-        # Do not silently skip a reference collision with different money or ownership.
+    direct = Q(import_fingerprint=record['fingerprint']) | Q(
+        account=data['account'], reference__in=[data['reference'], record['legacy_reference']], void_reason=''
+    )
+    # Older fingerprints contain the raw timestamp. Rebuild from stored evidence, never from
+    # the new file's spelling, and leave historical evidence/matches untouched (also when locked).
+    historical = Q(account=data['account'], date=data['date'], amount=data['amount']) & (
+        Q(import_fingerprint__isnull=False) | Q(source__has_key='bank')
+    )
+    matches = []
+    for found in queryset.filter(direct | historical).order_by('pk'):
         expected = ['account', 'amount', 'date']
         if any(str(getattr(found, field)) != data[field] for field in expected):
             raise ValidationError(f'第 {record["row"]} 行：已有相同标识但日期或金额不同，请核对原记录。')
-        if not found.import_fingerprint and found.counterparty != data['counterparty']:
+        if found.import_fingerprint or found.source:
+            try:
+                prior = fingerprint(found.account, found.amount, found.source)
+                if datetime.strptime(found.source['timestamp'], '%Y-%m-%d %H:%M:%S').date() != found.date:
+                    raise ValueError('evidence date differs')
+            except (KeyError, TypeError, ValueError, ValidationError) as exc:
+                raise ValidationError(
+                    f'第 {record["row"]} 行：已有同账户、日期和金额的导入记录原始证据不足，请先核对原记录。'
+                ) from exc
+            if prior != record['fingerprint']:
+                if found.import_fingerprint == record['fingerprint'] or found.reference in {
+                    data['reference'],
+                    record['legacy_reference'],
+                }:
+                    raise ValidationError(f'第 {record["row"]} 行：银行流水号重复但原始内容不同。')
+                continue
+        elif found.counterparty != data['counterparty']:
             raise ValidationError(f'第 {record["row"]} 行：已有记录户名不同，请先核实。')
-        if found.import_fingerprint and found.import_fingerprint != record['fingerprint']:
-            raise ValidationError(f'第 {record["row"]} 行：银行流水号重复但原始内容不同。')
-    return found
+        matches.append(found)
+    if len(matches) > 1:
+        raise ValidationError(f'第 {record["row"]} 行：存在多条相同交易的导入记录，请先核对原记录及认领情况。')
+    return matches[0] if matches else None
 
 
 def parse(upload):
@@ -172,16 +221,15 @@ def parse(upload):
                 balance=str(balance),
                 raw=[string(v) for v in row],
             )
-            identity = [bank, account, stamp, str(value), str(balance), source['counterparty_account'], original]
-            fingerprint = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
-            if fingerprint in fingerprints:
+            canonical = fingerprint(account, value, source)
+            if canonical in fingerprints:
                 raise ValidationError('文件内有完全重复的交易，请核实银行原文件后重试。')
-            fingerprints.add(fingerprint)
+            fingerprints.add(canonical)
             if bank == 'ICBC' and string(row[3]) != ('贷' if value > 0 else '借'):
                 raise ValidationError('借贷标志与收入/支出金额不一致。')
             detail = '；'.join(string(row[i]) for i in ([6, 7, 8] if bank == 'ICBC' else [10, 11]))
             reference = (
-                f'IMPORT-{bank}-{fingerprint[:40]}'
+                f'IMPORT-{bank}-{canonical[:40]}'
                 if bank == 'ICBC' or not original
                 else f'{parsed_date.date()}:{original}'
             )
@@ -206,7 +254,7 @@ def parse(upload):
                 row=index,
                 data=data,
                 source=source,
-                fingerprint=fingerprint,
+                fingerprint=canonical,
                 needs_review=not name,
                 legacy_reference=f'IMPORT-ICBC-{sha[:16]}-{index}' if bank == 'ICBC' else reference,
             )
@@ -295,7 +343,10 @@ def confirm(actor, token):
         with transaction.get_connection().cursor() as cursor:
             cursor.execute('SELECT pg_advisory_xact_lock(%s)', [731960911])
         created = skipped = 0
-        for record in batch['records']:
+        for original in batch['records']:
+            # Old, unfinished previews must use today's identity under the same import lock.
+            # Keep batch itself unchanged so completed token receipts retain their payload hash.
+            record = normalized(original)
             found = existing(record, lock=True)
             if found:
                 if not found.import_fingerprint:
@@ -306,12 +357,18 @@ def confirm(actor, token):
                     audit(user, 'bank.import-evidence', found)
                 skipped += 1
                 continue
-            result = banking.create(user, 'bank-import:' + record['fingerprint'], record['data'])
+            result = banking.create(
+                user,
+                'bank-import:' + record['fingerprint'],
+                record['data'],
+                import_evidence={
+                    'import_fingerprint': record['fingerprint'],
+                    'source': record['source'],
+                    'needs_review': record['needs_review'],
+                },
+            )
             bank = BankRecord.objects.get(pk=result['id'])
-            bank.import_fingerprint = record['fingerprint']
-            bank.source = record['source']
-            bank.needs_review = record['needs_review']
-            save(bank, user)
+            # Original evidence is stored by create; a second save would modify a locked historical record.
             audit(user, 'bank.import-evidence', bank)
             created += 1
         return dict(count=created, skipped=skipped)

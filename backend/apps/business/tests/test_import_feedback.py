@@ -6,10 +6,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from openpyxl import Workbook, load_workbook
 
-from apps.business.models import BOMLine, Item, Task
+from apps.business.models import BOMLine, Entry, Item, Stock, StockMove, Task
 from apps.business.services import transfers
 from apps.business.services.import_guides import BOM_COLUMNS
-from apps.core.models import ActionReceipt, CodeRule
+from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -226,3 +226,249 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
         self.assertNotIn('后台匹配名称', comments)
         book.close()
         self.assertFalse(Task.objects.exists())
+
+    def id_preview(self, resource, data, role='admin'):
+        columns = transfers.SCHEMAS[resource][1]
+        return self.upload(
+            f'{resource}/import-file/',
+            [label for label, _ in columns],
+            [[data.get(key, '') for _, key in columns]],
+            role=role,
+        )
+
+    def test_id_reference_errors_name_the_column_and_use_one_wording(self):
+        entry = Entry.objects.create(
+            project=self.project, title='差旅', kind='expense', amount='100.00', due_date='2026-09-09'
+        )
+        other = self.active_project()
+        foreign_task = Task.objects.create(
+            project=other, title='别的项目任务', kind='design', assignee=self.users['manager']
+        )
+        stock = Stock.objects.create(item=Item.objects.first(), location='主仓', quantity='10.000', value='100.00')
+        base = {'amount': '10', 'date': '2026-09-09', 'reason': '付款'}
+        cases = [
+            ('payments', {**base, 'entry': '999999'}, '款项ID', 'entry'),
+            ('payments', {**base, 'entry': str(entry.pk), 'document': '999999'}, '凭证ID', 'document'),
+            ('payments', {**base, 'entry': str(entry.pk), 'reconciliation': '999999'}, '对账单ID', 'reconciliation'),
+            (
+                'moves',
+                {'stock': '999999', 'quantity': '1', 'reason': '领料', 'project': self.project.code},
+                '库存ID',
+                'stock',
+            ),
+            (
+                'moves',
+                {
+                    'stock': str(stock.pk),
+                    'quantity': '1',
+                    'reason': '领料',
+                    'project': self.project.code,
+                    'task': str(foreign_task.pk),
+                },
+                '任务ID',
+                'task',
+            ),
+            ('time', {'task': '999999', 'date': '2026-09-09', 'hours': '1', 'reason': '设计'}, '任务ID', 'task'),
+        ]
+        wording = set()
+        for resource, data, label, key in cases:
+            with self.subTest(resource=resource, key=key):
+                result = self.id_preview(resource, data)
+                self.assertEqual(result.status_code, 200, result.data)
+                error = result.data['errors'][0]
+                self.assertIn(label, error['message'])
+                self.assertEqual(error['fields'], [key])
+                wording.add(error['message'].split('：', 1)[1])
+                book = self.workbook(result.data)
+                marked = [
+                    cell.column
+                    for row in book.active
+                    for cell in row
+                    if cell.comment and cell.fill.fgColor.rgb.endswith('FDE2E2')
+                ]
+                self.assertEqual(len(marked), 1)
+                book.close()
+        self.assertEqual(wording, {'记录不存在或不在你的权限范围内。'})
+
+    def test_confirmation_failure_returns_located_rows_and_writes_nothing(self):
+        stock = Stock.objects.create(item=Item.objects.first(), location='主仓', quantity='10.000', value='100.00')
+        BOMLine.objects.create(project=self.project, item=stock.item, quantity='5.000')
+        preview = self.id_preview(
+            'moves', {'stock': str(stock.pk), 'quantity': '5', 'reason': '领料', 'project': self.project.code}
+        )
+        self.assertTrue(preview.data['can_import'], preview.data)
+        stock.quantity = '1.000'
+        stock.save()
+        moves, receipts, audits = StockMove.objects.count(), ActionReceipt.objects.count(), AuditLog.objects.count()
+        response = self.clients['admin'].post(
+            '/api/business/moves/import-confirm/',
+            {'token': preview.data['token']},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='confirm-fail',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        row = response.data['rows'][0]
+        self.assertEqual(int(row['row']), 2)
+        self.assertEqual(list(row['fields']), ['stock'])
+        self.assertEqual(
+            (StockMove.objects.count(), ActionReceipt.objects.count(), AuditLog.objects.count()),
+            (moves, receipts, audits),
+        )
+        stock.refresh_from_db()
+        self.assertEqual(str(stock.quantity), '1.000')
+
+    def test_purchase_and_partner_guide_examples_are_valid_as_whole_rows(self):
+        before = ActionReceipt.objects.count()
+        for resource, overrides in [
+            ('partners', {}),
+            (
+                'purchases',
+                {
+                    'project': self.project.code,
+                    'supplier': self.supplier.code,
+                    'item': self.item.code,
+                },
+            ),
+        ]:
+            with self.subTest(resource=resource):
+                layout = transfers.layout(self.users['admin'], resource)
+                row = {column['key']: column['example'] for column in layout['columns']}
+                row.update(overrides)
+                self.assertEqual(row['payment_days'], '')
+                if resource == 'purchases':
+                    self.assertEqual(row['payment_due_date'], '')
+                result = self.id_preview(resource, row)
+                self.assertTrue(result.data['can_import'], result.data)
+        self.assertEqual(ActionReceipt.objects.count(), before)
+
+    def test_expense_guidance_explains_new_expense_without_changing_compatible_headers(self):
+        layout = transfers.layout(self.users['admin'], 'entries')
+        self.assertEqual(
+            [column['label'] for column in layout['columns']], ['项目编号', '款项', '原金额', '最近待付期限']
+        )
+        self.assertIn('费用名称', layout['quick_start']['minimum'])
+        self.assertIn('本笔付款到期日', layout['quick_start']['minimum'])
+        amount = next(column for column in layout['columns'] if column['key'] == 'amount')
+        self.assertIn('本笔费用金额', amount['hint'])
+        for columns in transfers.accepted_schemas('entries'):
+            row = {'project': self.project.code, 'title': '差旅费', 'amount': '10', 'due_date': '2026-09-09'}
+            preview = self.upload(
+                'entries/import-file/', [label for label, _ in columns], [[row.get(key, '') for _, key in columns]]
+            )
+            self.assertTrue(preview.data['can_import'], preview.data)
+
+    def test_out_of_scope_task_id_is_located_without_names_or_duplicate_history(self):
+        other = self.active_project()
+        other.manager = self.users['admin']
+        other.members.clear()
+        other.save()
+        task = Task.objects.create(project=other, title='不可见任务名称', kind='design', assignee=self.users['admin'])
+        columns = transfers.SCHEMAS['time'][1]
+        row = {'task': str(task.pk), 'date': '2026-09-09', 'hours': '1', 'reason': '测试'}
+        result = self.upload(
+            'time/import-file/',
+            [label for label, _ in columns],
+            [[row.get(key, '') for _, key in columns]],
+            role='member',
+        )
+        self.assertFalse(result.data['can_import'])
+        self.assertEqual(result.data['errors'][0]['fields'], ['task'])
+        self.assertIn(transfers.UNREACHABLE, result.data['errors'][0]['message'])
+        self.assertNotIn(task.title, str(result.data))
+        self.assertIsNone(result.data['duplicate_import'])
+
+    def test_production_manager_template_and_chinese_task_import_are_scoped(self):
+        person = self.users['production_manager']
+        self.project.members.add(person)
+        layout = self.clients['production_manager'].get('/api/business/tasks/import-schema/')
+        self.assertEqual(layout.status_code, 200, layout.data)
+        kind = next(column for column in layout.data['columns'] if column['key'] == 'kind')
+        self.assertEqual(kind['options'], ['装配', '调试'])
+        self.assertEqual(kind['example'], '装配')
+        self.assertIn('本人参与项目', layout.data['note'])
+        template = self.clients['production_manager'].get('/api/business/tasks/import-template/?file_format=xlsx')
+        book = load_workbook(io.BytesIO(template.content))
+        stage = next(
+            control for control in book['数据'].data_validations.dataValidation if str(control.sqref).startswith('B2:')
+        )
+        self.assertEqual(stage.formula1, '"装配,调试"')
+        book.close()
+        for stage in ('装配', '调试'):
+            preview = self.id_preview(
+                'tasks',
+                {
+                    'project': self.project.code,
+                    'kind': stage,
+                    'title': stage + '任务',
+                    'assignee': 'production_manager',
+                },
+                role='production_manager',
+            )
+            self.assertTrue(preview.data['can_import'], preview.data)
+            self.post('production_manager', 'tasks/import-confirm/', {'token': preview.data['token']})
+        self.assertEqual(set(Task.objects.values_list('kind', flat=True)), {'assembly', 'test'})
+
+    def test_production_manager_mixed_design_or_foreign_project_rolls_back_entire_preview(self):
+        person = self.users['production_manager']
+        person.additional_roles = ['purchaser']
+        person.save()
+        self.project.members.add(person)
+        other = self.active_project()
+        columns = transfers.SCHEMAS['tasks'][1]
+        good = {'project': self.project.code, 'kind': '装配', 'title': '本项目装配', 'assignee': 'production_manager'}
+        before = ActionReceipt.objects.count(), AuditLog.objects.count()
+        for bad in [{**good, 'kind': '设计'}, {**good, 'project': other.code}]:
+            result = self.upload(
+                'tasks/import-file/',
+                [label for label, _ in columns],
+                [[row.get(key, '') for _, key in columns] for row in (good, bad)],
+                role='production_manager',
+            )
+            self.assertFalse(result.data['can_import'], result.data)
+            self.assertIsNone(result.data['token'])
+            self.assertEqual(result.data['errors'][0]['row'], 3)
+            self.assertFalse(Task.objects.exists())
+            self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), before)
+        for role in ('mechanical_engineer', 'electrical_engineer', 'member', 'purchaser'):
+            self.assertEqual(self.clients[role].get('/api/business/tasks/import-schema/').status_code, 403)
+
+    def test_production_import_confirmation_and_replay_recheck_membership_and_stage_role(self):
+        person = self.users['production_manager']
+        self.project.members.add(person)
+        row = {'project': self.project.code, 'kind': 'assembly', 'title': '装配', 'assignee': 'manager'}
+        pending = self.id_preview('tasks', row, role='production_manager')
+        self.assertTrue(pending.data['can_import'], pending.data)
+        self.project.members.remove(person)
+        self.post('production_manager', 'tasks/import-confirm/', {'token': pending.data['token']}, status=403)
+        self.assertFalse(Task.objects.exists())
+        self.project.members.add(person)
+        result = self.post(
+            'production_manager', 'tasks/import-confirm/', {'token': pending.data['token']}, key='production-confirm'
+        )
+        person.role = 'purchaser'
+        person.additional_roles = ['member']
+        person.save()
+        self.post(
+            'production_manager',
+            'tasks/import-confirm/',
+            {'token': pending.data['token']},
+            key='production-confirm',
+            status=403,
+        )
+        self.assertEqual(Task.objects.count(), 1)
+        self.assertEqual(result['resource'], 'tasks')
+        # A formerly valid design token cannot be replayed after switching to production-only authority.
+        design = self.id_preview('tasks', {**row, 'kind': 'design', 'title': '设计'}, role='manager')
+        self.post('manager', 'tasks/import-confirm/', {'token': design.data['token']}, key='design-confirm')
+        assembly = self.id_preview('tasks', {**row, 'title': '经理导入的装配任务'}, role='manager')
+        saved = self.post('manager', 'tasks/import-confirm/', {'token': assembly.data['token']}, key='assembly-confirm')
+        self.users['manager'].role = 'production_manager'
+        self.users['manager'].additional_roles = ['purchaser']
+        self.users['manager'].save()
+        self.post('manager', 'tasks/import-confirm/', {'token': design.data['token']}, key='design-confirm', status=403)
+        self.post('manager', 'tasks/import-confirm/', {'token': design.data['token']}, key='new-design-key', status=403)
+        for key in ('assembly-confirm', 'new-assembly-key'):
+            self.assertEqual(
+                self.post('manager', 'tasks/import-confirm/', {'token': assembly.data['token']}, key=key), saved
+            )
+        self.assertEqual(Task.objects.count(), 3)

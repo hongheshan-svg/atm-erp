@@ -12,13 +12,38 @@ import { endpoint } from './shared'
 import { ledgerStatus } from './shared'
 import { all, download, read } from '../api'
 import { reconciliationCommand } from './settlement'
+
+function cents(value: unknown): bigint {
+  const [whole, fraction = ''] = String(value).replace(/^-/, '').split('.')
+  return BigInt(whole || '0') * 100n + BigInt(fraction.padEnd(2, '0'))
+}
+function amount(value: bigint): string {
+  return `${value / 100n}.${String(value % 100n).padStart(2, '0')}`
+}
+function cappedAmount(balance: unknown, allowance: unknown): string {
+  const remaining = cents(balance), available = cents(allowance)
+  return amount(remaining < available ? remaining : available)
+}
+async function entryReconciliationCommand(entry: Row, prepayment = false): Promise<Command> {
+  const command = await reconciliationCommand(entry, prepayment)
+  if (entry.purchase && !prepayment && !String(entry.balance).startsWith('-')) {
+    const detail = Array.isArray(entry.payment_schedule) ? entry : await read(`/business/entries/${entry.id}/`)
+    // The schedule includes all outstanding qualified receipts, including future maturities.
+    const eligible = (detail.payment_schedule || []).reduce((total: bigint, row: Row) => total + cents(row.amount), 0n)
+    command.initial = { ...command.initial, approved_amount: eligible > 0n ? cappedAmount(entry.balance, amount(eligible)) : '' }
+    command.fields = command.fields.map(field => field.key === 'approved_amount'
+      ? { ...field, hint: `当前普通结算可申请 ${amount(eligible)} 元；未收货部分请申请预付款核准。保存和确认时都会重新校验。` }
+      : field)
+  }
+  return command
+}
 export const columns: Record<string, Column[]> = {
   // 类型、项目、当前到期金额、已结算由列表合并为副行；原金额与冲减都在「查看收付流水」里，
-  // 因此实际表头为 款项、往来单位、到期日、待结算、状态 五列。
+  // 约定付款日单独展示；实际到期金额仍只来自已收货批次。
   entries: [
     C('title', '款项'), C('kind', '类型'),
     C('partner_name', '往来单位'), C('project_name', '项目'),
-    C('due_date', '到期日'), C('due_amount', '当前到期金额'),
+    C('agreed_payment_date', '约定付款日'), C('due_date', '到期日'), C('due_amount', '当前到期金额'),
     C('balance', '待结算'), C('paid_amount', '已结算'),
     { key: 'status', label: '状态', format: row => (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期' } as Record<string, string>)[String(row.status)] || '未结') },
   ],
@@ -73,8 +98,8 @@ export function actionNames(resource: string, r: Row): string[] {
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
-  if (name === '查看到期明细') return { title: name, path: '', readonly: true, initial: { lines: r.payment_schedule || [] }, fields: [{ key: 'lines', label: '未结到期明细', type: 'rows', fields: [t('due_date', '到期日'), t('amount', '待付金额')] }], notice: { type: 'info', text: '月结按合格收货当月月底加账期天数，跨月分别到期；指定日期账期只对已合格收货部分到期。已付款优先抵扣先到期部分，退货冲减原收货批次。未收货部分不计入到期，预付款仍需合同核准。' } }
-  if (name === '生成对账单' || name === '申请预付款核准') return reconciliationCommand(r, name === '申请预付款核准')
+  if (name === '查看到期明细') return { title: name, path: '', readonly: true, initial: { agreed_payment_date: r.agreed_payment_date, lines: r.payment_schedule || [] }, fields: [...(r.agreed_payment_date ? [t('agreed_payment_date', '约定付款日')] : []), { key: 'lines', label: '未结到期明细', type: 'rows', fields: [t('due_date', '到期日'), t('amount', '待付金额')] }], notice: { type: 'info', text: '约定付款日是指定日期账期的合同约定，仅有日期不产生可付款额度。月结按合格收货当月月底加账期天数，跨月分别到期；指定日期账期只对已合格收货部分到期。已付款优先抵扣先到期部分，退货冲减原收货批次。未收货部分不计入到期，预付款仍需合同核准。' } }
+  if (name === '生成对账单' || name === '申请预付款核准') return entryReconciliationCommand(r, name === '申请预付款核准')
   if (name === '补录凭证') {
     const docs = await all('/business/documents/', { project: r.project, category: 'receipt' })
     return { title: name, path: `/business/payments/${r.id}/attach-evidence/`, fields: [{ key: 'document', label: '凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason], notice: { type: 'info', text: '追加凭证并留痕，不覆盖原付款金额和历史凭证。' } }
@@ -95,6 +120,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   let initial: Row = {}
   let method: 'post' | 'patch' = 'post'
   let readonly = false
+  let prepare: Command['prepare']
   const routes: Record<string, string> = {
     登记收付款: 'pay',
     退款: 'refund',
@@ -111,12 +137,25 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     if ((r.purchase || name === '退款') && !eligible.length) return {
       title: name, path, fields: [], subject: r.title,
       blocked: name === '退款' ? '尚无可用的已确认退款对账单。请先生成退款对账并确认，再登记退款。' : '尚无可用的已确认对账或预付款核准。已收货款先对账；未收货预付款按合同申请核准。',
-      alternatives: [{ label: '生成对账单', open: () => reconciliationCommand(r) }, ...(r.purchase && name !== '退款' ? [{ label: '申请预付款核准', open: () => reconciliationCommand(r, true) }] : [])],
+      alternatives: [{ label: '生成对账单', open: () => entryReconciliationCommand(r) }, ...(r.purchase && name !== '退款' ? [{ label: '申请预付款核准', open: () => entryReconciliationCommand(r, true) }] : [])],
       links: [{ label: '查看已有对账与核准', path: `/projects/${r.project}?tab=finance&section=reconciliations` }],
     }
-    fields.push({ key: 'reconciliation', label: '已确认对账 / 预付款核准', type: 'select', optional: !(r.purchase || name === '退款'), options: eligible.map(s => ({ value: s.id, label: `${s.code} · 可用 ${s.remaining_amount}` })), hint: r.purchase || name === '退款' ? '先从款项操作生成对账单，再到业务对账页确认。预付款由项目经理或管理员核准。' : '客户到账可直接登记，不强制先对账。' })
-    if (eligible.length === 1) initial.reconciliation = eligible[0]!.id
+    fields.push({ key: 'reconciliation', label: '已确认对账 / 预付款核准', type: 'select', optional: !(r.purchase || name === '退款'), options: eligible.map(s => ({ value: s.id, label: `${s.code} · 可用 ${s.remaining_amount} · 本次默认 ${cappedAmount(r.balance, s.remaining_amount)}` })), hint: r.purchase || name === '退款' ? '先从款项操作生成对账单，再到业务对账页确认。预付款由项目经理或管理员核准。' : '客户到账可直接登记，不强制先对账。' })
+    if (eligible.length === 1) {
+      initial.reconciliation = eligible[0]!.id
+      initial.amount = cappedAmount(r.balance, eligible[0]!.remaining_amount)
+      fields[0] = { ...fields[0]!, hint: `对账剩余额度 ${eligible[0]!.remaining_amount} 元；本次最多 ${initial.amount} 元，可按实际收付填写更小金额。` }
+    } else if (eligible.length > 1) {
+      initial.amount = ''
+      fields[0] = { ...fields[0]!, optional: true, placeholder: '留空使用所选对账的本次默认金额', hint: `每张对账选项显示本次默认金额。留空时按所选对账默认值登记；手工填写时使用填写金额。${r.purchase || name === '退款' ? '' : `不选对账时默认 ${amount(cents(r.balance))} 元。`}` }
+      prepare = data => {
+        if (data.amount != null && String(data.amount).trim() !== '') return data
+        const selected = eligible.find(statement => String(statement.id) === String(data.reconciliation))
+        if (!selected && (r.purchase || name === '退款' || data.reconciliation)) throw new Error('请选择有效的已确认对账单。')
+        return { ...data, amount: selected ? cappedAmount(r.balance, selected.remaining_amount) : amount(cents(r.balance)) }
+      }
+    }
   }
   if (name === '冲销付款') fields = [date(), reason]
-  return { title: name, path, fields, initial, method, readonly }
+  return { title: name, path, fields, initial, method, readonly, prepare }
 }

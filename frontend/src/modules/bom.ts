@@ -7,11 +7,12 @@ import type { Column } from '../types'
 import { t } from './shared'
 import { rows } from './shared'
 import { reason } from './shared'
-import { qty } from './shared'
+import { qty as baseQty } from './shared'
 import { C } from './shared'
 import { item } from './shared'
 import { endpoint } from './shared'
 import { productCategories } from '../product-categories'
+const qty: Field = { ...baseQty, numeric: { scale: 3, min: 0.001 } }
 export const columns: Record<string, Column[]> = {
   bom: [
     C('item_code', '物料编码'),

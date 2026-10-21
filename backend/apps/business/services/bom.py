@@ -233,7 +233,7 @@ def preview_revision(actor, project, data):
     before = impact(project)
     before_lines = {line.pk: line for line in project.bom_lines.all()}
     totals = {row['item']: Decimal(row['quantity']) for row in before['items']}
-    for row in rows(data):
+    for index, row in enumerate(rows(data)):
         item = identity(row.get('item'), 'item')
         current = (
             before_lines.get(identity(row['id'], 'id'))
@@ -247,11 +247,11 @@ def preview_revision(actor, project, data):
                 None,
             )
         )
-        totals[item] = (
-            totals.get(item, ZERO)
-            + number(row.get('quantity'), 'quantity', 3, positive=True)
-            - (current.quantity if current else ZERO)
-        )
+        try:
+            qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+        except ValidationError as exc:
+            raise ValidationError({'lines': {index: exc.detail}}) from exc
+        totals[item] = totals.get(item, ZERO) + qty - (current.quantity if current else ZERO)
     blockers = []
     try:
         with transaction.atomic():
@@ -360,10 +360,13 @@ def revise_bom(actor, key, project_id, data):
             totals[line.item_id] = totals.get(line.item_id, ZERO) + line.quantity
         prepared = []
         seen_ids = set()
-        for (item_id, unit), row in planned.items():
+        for index, ((item_id, unit), row) in enumerate(planned.items()):
             if not items[item_id].is_active:
                 raise ValidationError('BOM 不能添加或修改为已停用物料。')
-            qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+            try:
+                qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+            except ValidationError as exc:
+                raise ValidationError({'lines': {index: exc.detail}}) from exc
             if row.get('id') is not None:
                 line_id = identity(row['id'], 'id')
                 current = next((line for line in existing if line.pk == line_id and line.item_id == item_id), None)

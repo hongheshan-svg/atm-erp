@@ -50,6 +50,7 @@ MODULE_FILES = {
 BROWSERS = {
     'sales': ('sales-role', 'attachments', 'industry-forms', 'import-surface-audit'),
     'projects': (
+        'import-audit-real',
         'production-role',
         'state-actions-audit',
         'attachments',
@@ -68,7 +69,13 @@ BROWSERS = {
         'import-surface-audit',
     ),
     'inventory': ('cancel-actions-audit', 'import-surface-audit'),
-    'finance': ('reconciliation', 'bank-review-audit', 'import-surface-audit', 'usability-finance'),
+    'finance': (
+        'reconciliation',
+        'bank-review-audit',
+        'import-surface-audit',
+        'import-audit-real',
+        'usability-finance',
+    ),
     'masterdata': ('product-coding', 'account-masterdata-audit', 'transfers', 'import-surface-audit'),
     'accounts': (
         'initial-password',
@@ -117,6 +124,8 @@ SHARED_PATHS = (
             'backend/apps/business/services/transfers.py',
             'backend/apps/business/services/import_guides.py',
             'backend/apps/business/services/import_feedback.py',
+            'backend/apps/business/services/import_dedup.py',
+            'backend/apps/business/services/import_locks.py',
             'frontend/src/components/ImportFeedback.vue',
             'frontend/src/components/TransferTools.vue',
         ),

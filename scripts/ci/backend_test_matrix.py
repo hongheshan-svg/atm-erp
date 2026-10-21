@@ -21,6 +21,9 @@ TARGETS = {
         'apps.business.tests.test_execution',
         'apps.business.tests.test_import_documents',
         'apps.business.tests.test_import_feedback',
+        'apps.business.tests.test_import_dedup',
+        'apps.business.tests.test_money_scope',
+        'apps.business.tests.test_permission_queries',
         'apps.business.tests.test_workbench',
         'apps.business.tests.test_reports',
         'apps.business.tests.test_transfers',
@@ -36,8 +39,13 @@ TARGETS = {
         'apps.business.tests.test_production_roles',
         'apps.business.tests.test_audit_fixes',
         'apps.business.tests.test_audit_remediation',
+        'apps.business.tests.test_audit_business',
     ),
-    'concurrency': ('apps.core.tests.test_concurrency', 'apps.business.tests.test_concurrency'),
+    'concurrency': (
+        'apps.core.tests.test_concurrency',
+        'apps.business.tests.test_concurrency',
+        'apps.business.tests.test_import_concurrency',
+    ),
 }
 
 # Module routing references the registry above; it is not a second target inventory.
@@ -46,6 +54,8 @@ TARGETS = {
 # concurrency 同时匹配 core 与 business 的并发用例。
 MODULE_TESTS = {
     'sales': (
+        'audit_business',
+        'import_dedup',
         'sales',
         'commercial_chain',
         'payment_terms',
@@ -53,8 +63,14 @@ MODULE_TESTS = {
         'concurrency',
         'transfers',
         'import_feedback',
+        'import_concurrency',
     ),
     'projects': (
+        'audit_business',
+        'import_dedup',
+        'money_scope',
+        'permission_queries',
+        'import_concurrency',
         'execution',
         'budgets',
         'production_roles',
@@ -69,6 +85,10 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'bom': (
+        'audit_business',
+        'import_dedup',
+        'permission_queries',
+        'import_concurrency',
         'bom_selection',
         'import_documents',
         'import_feedback',
@@ -80,6 +100,11 @@ MODULE_TESTS = {
         'audit_fixes',
     ),
     'purchases': (
+        'audit_business',
+        'import_dedup',
+        'money_scope',
+        'permission_queries',
+        'import_concurrency',
         'commercial_chain',
         'inventory',
         'budgets',
@@ -94,6 +119,10 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'inventory': (
+        'audit_business',
+        'import_dedup',
+        'money_scope',
+        'import_concurrency',
         'inventory',
         'review_remediation',
         'audit_remediation',
@@ -103,6 +132,10 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'finance': (
+        'audit_business',
+        'import_dedup',
+        'money_scope',
+        'import_concurrency',
         'commercial_chain',
         'reconciliation',
         'bank_import',
@@ -117,6 +150,8 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'masterdata': (
+        'import_dedup',
+        'import_concurrency',
         'product_coding',
         'import_documents',
         'import_feedback',
@@ -129,6 +164,7 @@ MODULE_TESTS = {
     ),
     'accounts': ('auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
     'reports': (
+        'money_scope',
         'reports',
         'workbench',
         'audit_remediation',

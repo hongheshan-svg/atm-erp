@@ -2,6 +2,7 @@
 
 import hashlib
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.db.models import DecimalField, F, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Abs, Coalesce
@@ -78,7 +79,9 @@ def bank_action(actor, key, operation, payload, execute):
     )
 
 
-def create(actor, key, data):
+def create(actor, key, data, *, import_evidence=None):
+    duplicate = {'reference': '此账户和银行流水号已登记，请核对流水号或打开原记录。'}
+
     def execute(user):
         fields(data, {'project', 'amount', 'date', 'account', 'reference', 'counterparty', 'reason'})
         project = lookup(Project, data['project'], 'project') if data.get('project') else None
@@ -88,24 +91,42 @@ def create(actor, key, data):
         amount = signed_number(data.get('amount'), 'amount')
         if not amount:
             raise Conflict('银行金额不能为零，收入填正数，支出填负数。')
+        account = text(data, 'account', maximum=100)
+        reference = text(data, 'reference', maximum=100)
+        if BankRecord.objects.filter(account=account, reference=reference, void_reason='').exists():
+            raise Conflict(duplicate)
         bank = save(
             BankRecord(
                 project=project,
                 amount=amount,
                 date=event_date(data),
-                account=text(data, 'account', maximum=100),
-                reference=text(data, 'reference', maximum=100),
+                account=account,
+                reference=reference,
                 counterparty=text(data, 'counterparty', maximum=150),
                 reason=text(data, 'reason'),
+                # Internal signed-import evidence is part of the first insert, never a public request field.
+                **(import_evidence or {}),
             ),
             user,
         )
         return audit(user, 'bank.create', bank)
 
     try:
-        return bank_action(actor, key, 'bank.create', data, execute)
+        payload = data if import_evidence is None else {'data': data, 'import_evidence': import_evidence}
+        return bank_action(actor, key, 'bank.create', payload, execute)
+    except DjangoValidationError as exc:
+        # A competing insert may win after our precheck but before full_clean validates the constraint.
+        constraint = next(c for c in BankRecord._meta.constraints if c.name == 'lean_bank_reference_unique')
+        if exc.messages == [constraint.get_violation_error_message()]:
+            raise Conflict(duplicate) from exc
+        raise
     except IntegrityError as exc:
-        raise Conflict('此账户和银行流水号已登记，请刷新查看原记录。') from exc
+        cause = exc.__cause__
+        sqlstate = getattr(cause, 'sqlstate', None) or getattr(cause, 'pgcode', None)
+        constraint = getattr(getattr(cause, 'diag', None), 'constraint_name', None)
+        if sqlstate == '23505' and constraint == 'lean_bank_reference_unique':
+            raise Conflict(duplicate) from exc
+        raise
 
 
 def closed_project(bank):

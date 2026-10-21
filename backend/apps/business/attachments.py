@@ -66,7 +66,9 @@ class DocumentSerializer(serializers.ModelSerializer):
 class DocumentView(ReadView):
     read_roles = ALL_ROLES
     write_roles = ALL_ROLES
-    queryset = Document.objects.select_related('project', 'sale__project', 'purchase__project')
+    queryset = Document.objects.select_related('project', 'sale__project', 'purchase__project').prefetch_related(
+        'project__members', 'sale__project__members', 'purchase__project__members'
+    )
     serializer_class = DocumentSerializer
     parser_classes = [MultiPartParser]
     filterset_fields = ['sale', 'purchase', 'category']

@@ -14,6 +14,7 @@ import { C } from './shared'
 import { project } from './shared'
 import { item } from './shared'
 import { endpoint } from './shared'
+const positiveQuantity: Field = { ...qty, numeric: { scale: 3, min: 0.001 } }
 export const columns: Record<string, Column[]> = {
   stocks: [
     C('item_code', '物料编码'),
@@ -46,7 +47,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
     fields = [
       item(),
       { key: 'location', label: '库位', initial: '主仓', suggestions: locations, hint: '期初可建立新库位；全角字符和多余空格会自动统一。' },
-      qty,
+      positiveQuantity,
       t('unit_cost', '单位成本（元）'),
       reason,
     ]
@@ -90,7 +91,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         // 只列所选项目的售后任务；别的项目的任务选了也会被服务端拒绝。
         optionsFor: (data) => tasks.filter((task) => String(task.project) === String(data.project)).map((task) => ({ value: task.id, label: task.title })),
       },
-      qty,
+      positiveQuantity,
       reason,
       {
         key: 'confirm_shared',
@@ -105,7 +106,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '盘点') {
     fields = [
-      { ...qty, label: '实盘数量' },
+      { ...qty, label: '实盘数量', ...(Number(r.quantity) === 0 ? { hint: '当前库存为零。若有盘盈，请联系管理员在库存页面盘点并填写单位成本；仓管不能提交零库存盘盈。' } : {}) },
       ...(Number(r.quantity) === 0 && can(['admin']) ? [t('unit_cost', '盘盈单位成本（元）')] : []),
       reason,
     ]
@@ -116,6 +117,6 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       expected_updated_at: r.updated_at,
     })
   }
-  if (['退料', '采购退货'].includes(name)) fields = [qty, reason]
+  if (['退料', '采购退货'].includes(name)) fields = [positiveQuantity, reason]
   return { title: name, path, fields, initial, method, readonly, prepare }
 }

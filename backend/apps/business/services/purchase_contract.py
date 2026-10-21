@@ -19,11 +19,18 @@ from .supply import purchase_action, total
 
 def preview(actor, purchase):
     require_role(actor, MONEY_READERS | PURCHASERS)
-    require_project(actor, purchase.project)
+    require_project(actor, purchase.project, MONEY_READERS | PURCHASERS)
     company = Company.objects.first()
     supplier = purchase.supplier
     lines = list(purchase.lines.all())
-    cancelled = sum((rounded(line.cancelled_quantity * line.unit_price) for line in lines), ZERO)
+    cancelled = sum(
+        (
+            rounded(line.quantity * line.unit_price)
+            - rounded((line.quantity - line.cancelled_quantity) * line.unit_price)
+            for line in lines
+        ),
+        ZERO,
+    )
     return {
         'template_version': 1,
         'clauses': clauses(purchase.warranty_months),
