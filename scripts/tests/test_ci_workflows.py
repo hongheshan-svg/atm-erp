@@ -16,6 +16,13 @@ from scripts.ci.select_suites import SUITES, select
 
 
 class RoutingTests(unittest.TestCase):
+    def test_process_progress_covers_its_read_projections(self):
+        scope = plan(['backend/apps/business/services/progress.py', 'frontend/src/components/ProjectProgress.vue'])
+        self.assertEqual(set(scope['modules']), {'sales', 'projects', 'purchases', 'finance'})
+        self.assertIn('apps.business.tests.test_progress', scope['backend_targets'])
+        self.assertIn('e2e/process-progress.spec.ts', scope['browser_specs'])
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
     def test_import_helpers_include_scope_and_concurrency_regressions(self):
         for helper in ('import_dedup', 'import_locks'):
             scope = plan([f'backend/apps/business/services/{helper}.py'])

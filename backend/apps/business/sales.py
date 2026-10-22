@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from apps.core.permissions import SALES, SALES_READERS, sales_for
 
 from .api.common import ImportableMixin, ReadView, key
-from .models import SalesOrder
-from .services import amendments, finance, sales
+from .models import Project, SalesOrder
+from .services import amendments, finance, progress, sales
 
 
 class SalesSerializer(serializers.ModelSerializer):
@@ -61,6 +61,9 @@ class SalesView(ImportableMixin, ReadView):
             return Response({'project_status': None, 'deliveries': [], 'receivables': []})
         return Response(
             {
+                'progress_project': sale.project_id
+                if progress.readable_projects(request.user, Project.objects.filter(pk=sale.project_id)).exists()
+                else None,
                 'project_status': sale.project.status,
                 'deliveries': list(sale.project.deliveries.values('code', 'quantity', 'shipped_date', 'accepted_date')),
                 'receivables': [

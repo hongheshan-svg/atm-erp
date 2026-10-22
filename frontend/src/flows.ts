@@ -24,6 +24,7 @@ function deliveryStage(row: Row) {
 }
 
 function entryStage(row: Row) {
+  if (['pending', 'partial', 'settled', 'cancelled', 'refund'].includes(row.progress_status)) return row.progress_status
   if (row.cancelled) return 'cancelled'
   if (settled(row.balance)) return 'settled'
   if (number(row.balance) < 0) return 'refund'

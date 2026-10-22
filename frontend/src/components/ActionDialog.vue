@@ -13,6 +13,7 @@ import { message, recoveryActions, requestKey } from '../utils/request'
 import FormFields from './FormFields.vue'
 import StatusBadge from './StatusBadge.vue'
 import ProcessSteps from './ProcessSteps.vue'
+import ProjectProgress from './ProjectProgress.vue'
 const props = defineProps<{ command: Command | null; inline?: boolean }>()
 const command = computed(() => props.command ? industryCommand(props.command) : null)
 const emit = defineEmits<{ close: []; saved: [result: Row]; busy: [value: boolean]; replace: [command: Command] }>()
@@ -261,6 +262,7 @@ async function submit() {
       <section v-if="issues.length" class="field-issues" aria-label="填写问题汇总" role="alert"><strong>请修正以下 {{ issues.length }} 项，其他填写内容已保留：</strong><ul><li v-for="issue in issues" :key="issue.path"><button type="button" @click="fields?.focusPath(issue.path)">{{ issue.message }}</button></li></ul></section>
       <FormFields v-if="!command.blocked" ref="fields" v-model="data" :fields="command.fields" :disabled="locked || command.readonly" :readonly="command.readonly" :issues="issueMap" @touched="touch" @uploading="uploading = $event" />
       <slot v-if="command.readonly" name="context" />
+      <ProjectProgress v-if="command.readonly && command.progressProject" :project-id="command.progressProject" />
       <section v-if="similarItems.length" aria-label="相似物料">
         <p>发现相似物料，请核对后优先复用现有编码：</p>
         <p v-for="item in similarItems" :key="item.id"><router-link :to="{ path: '/masterdata', query: { section: 'items', resource: 'items', focus: item.id } }">{{ item.code }} · {{ item.name }} · {{ item.specification }} · {{ item.brand }} · {{ item.unit }}</router-link></p>

@@ -50,6 +50,7 @@ export type Command = {
   actions?: { label: string; run: () => void | Promise<void> }[]
   previewPath?: string
   flow?: Flow | null
+  progressProject?: number
 }
 export type Column = { key: string; label: string; format?: (row: Row) => string }
 export type FlowNode = { key: string; label: string; hint?: string }
