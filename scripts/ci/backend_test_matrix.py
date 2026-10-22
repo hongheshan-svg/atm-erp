@@ -15,6 +15,7 @@ TARGETS = {
     'business': (
         'apps.business.tests.test_models',
         'apps.business.tests.test_deletions',
+        'apps.business.tests.test_progress',
         'apps.business.tests.test_sales',
         'apps.business.tests.test_budgets',
         'apps.business.tests.test_commercial_chain',
@@ -55,6 +56,7 @@ TARGETS = {
 # concurrency 同时匹配 core 与 business 的并发用例。
 MODULE_TESTS = {
     'sales': (
+        'progress',
         'deletions',
         'audit_business',
         'import_dedup',
@@ -68,6 +70,7 @@ MODULE_TESTS = {
         'import_concurrency',
     ),
     'projects': (
+        'progress',
         'deletions',
         'audit_business',
         'import_dedup',
@@ -104,6 +107,7 @@ MODULE_TESTS = {
         'audit_fixes',
     ),
     'purchases': (
+        'progress',
         'deletions',
         'audit_business',
         'import_dedup',
@@ -138,6 +142,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'finance': (
+        'progress',
         'deletions',
         'audit_business',
         'import_dedup',

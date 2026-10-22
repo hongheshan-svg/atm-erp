@@ -7,6 +7,7 @@ from apps.core.permissions import (
     BOM_WRITERS,
     MANAGERS,
     MONEY_READERS,
+    OPERATION_ROLES,
     PRODUCTION_MANAGERS,
     projects_for,
     require_project,
@@ -19,7 +20,7 @@ from ..models import (
 from ..serializers import (
     ProjectSerializer,
 )
-from ..services import bom, bom_material_import, budgets, corrections, execution, finance, projects
+from ..services import bom, bom_material_import, budgets, corrections, execution, finance, progress, projects
 from .common import ImportableMixin, ReadView, key
 
 
@@ -31,6 +32,8 @@ class ProjectView(ImportableMixin, ReadView):
     filterset_fields = ['status', 'customer', 'manager']
 
     def get_permissions(self):
+        if self.action == 'progress':
+            self.read_roles = OPERATION_ROLES | {'sales_manager'}
         if self.action in {'bom_change_preview', 'revise_bom', 'import_preview', 'bom_import_confirm'}:
             self.write_roles = BOM_WRITERS
         elif self.action == 'service':
@@ -38,7 +41,13 @@ class ProjectView(ImportableMixin, ReadView):
         return super().get_permissions()
 
     def get_queryset(self):
+        if self.action == 'progress':
+            return progress.readable_projects(self.request.user, super().get_queryset())
         return projects_for(self.request.user, super().get_queryset())
+
+    @action(detail=True, methods=['get'])
+    def progress(self, request, pk=None):
+        return Response(progress.summary(request.user, self.get_object(), request.query_params))
 
     def create(self, request):
         return Response(projects.create_project(request.user, key(request), request.data), status=201)

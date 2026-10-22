@@ -8,10 +8,22 @@ from scripts.ci.backend_test_matrix import MODULE_TESTS, TARGETS, module_targets
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_FILES = {
-    'sales': ('sales', 'amendments', 'SalesPage', 'business-date'),
-    'projects': ('projects', 'execution', 'budgets', 'ProjectsPage', 'ProjectPage', 'BudgetPanel', 'production'),
+    'sales': ('sales', 'amendments', 'SalesPage', 'business-date', 'progress', 'ProjectProgress'),
+    'projects': (
+        'projects',
+        'execution',
+        'budgets',
+        'ProjectsPage',
+        'ProjectPage',
+        'BudgetPanel',
+        'production',
+        'progress',
+        'ProjectProgress',
+    ),
     'bom': ('bom', 'bom_import', 'bom_material_import', 'BOMPage', 'BOMDemand', 'BOMPurchasePicker', 'bom-purchase'),
     'purchases': (
+        'progress',
+        'ProjectProgress',
         'supply',
         'approval',
         'purchases',
@@ -26,6 +38,8 @@ MODULE_FILES = {
     ),
     'inventory': ('inventory', 'corrections', 'InventoryPage'),
     'finance': (
+        'progress',
+        'ProjectProgress',
         'finance',
         'monthly',
         'banking',
@@ -50,8 +64,16 @@ MODULE_FILES = {
     'ota': ('ota', 'upgrade', 'SystemUpgrade'),
 }
 BROWSERS = {
-    'sales': ('admin-deletion', 'sales-role', 'attachments', 'industry-forms', 'import-surface-audit'),
+    'sales': (
+        'process-progress',
+        'admin-deletion',
+        'sales-role',
+        'attachments',
+        'industry-forms',
+        'import-surface-audit',
+    ),
     'projects': (
+        'process-progress',
         'admin-deletion',
         'import-audit-real',
         'production-role',
@@ -64,6 +86,7 @@ BROWSERS = {
     ),
     'bom': ('admin-deletion', 'bom-selection', 'bom-purchase-layout', 'specialist-roles', 'import-feedback'),
     'purchases': (
+        'process-progress',
         'admin-deletion',
         'payment-terms',
         'review-remediation',
@@ -74,6 +97,7 @@ BROWSERS = {
     ),
     'inventory': ('cancel-actions-audit', 'import-surface-audit'),
     'finance': (
+        'process-progress',
         'admin-deletion',
         'reconciliation',
         'bank-review-audit',

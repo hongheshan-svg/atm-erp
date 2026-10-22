@@ -16,6 +16,7 @@ import ModuleTabs from '../components/ModuleTabs.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ProcessSteps from '../components/ProcessSteps.vue'
 import ProjectAttention from '../components/ProjectAttention.vue'
+import ProjectProgress from '../components/ProjectProgress.vue'
 import { revealActiveTab } from '../utils/tabs'
 import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
@@ -35,7 +36,7 @@ const tabsRef = ref<TabsInstance>()
 async function revealTab() {
   await revealActiveTab(() => tabsRef.value)
 }
-const allowedTabs = ['tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
+const allowedTabs = ['progress', 'tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
 const initialTab = String(route.query.tab || sessionStore.get(`project-tab-${id}`) || 'tasks')
 const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
 // 概览默认收起，任务 / BOM / 成本紧跟页头；展开过的用户在本机沿用自己的选择（storage 已内置 try/catch）。
@@ -126,7 +127,7 @@ onMounted(load)
     </header>
     <p v-if="!overview" class="project-brief muted">{{ brief }}</p>
     <ProcessSteps v-if="projectFlow" class="panel project-flow" :flow="projectFlow" />
-    <ProjectAttention :project="project" :revision="revision" />
+    <ProjectAttention v-if="tab !== 'progress'" :project="project" :revision="revision" />
     <div v-show="overview">
     <section class="project-summary">
       <div>
@@ -156,7 +157,7 @@ onMounted(load)
     </div>
     <p v-if="taskAttention || purchaseAttention" class="attention-filter" role="status">当前项目 · {{ attentionLabel }}<el-button text @click="clearAttention">查看全部</el-button><router-link v-if="taskAttention && attention === 'acceptance' && manager() && project.can_manage !== false" :to="{ path: `/projects/${id}`, query: { tab: 'deliveries', section: 'deliveries' } }">前往交付批次登记验收</router-link></p>
     <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab" :before-leave="confirmFormNavigation"
-      ><el-tab-pane label="任务与工时" name="tasks"
+      ><el-tab-pane label="流程进度" name="progress" lazy><ProjectProgress v-if="tab === 'progress'" :project-id="id" :revision="revision" /></el-tab-pane><el-tab-pane label="任务与工时" name="tasks"
         ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ResourcePanel
           resource="tasks"
           :key="`tasks-${attention}`"

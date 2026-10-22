@@ -36,7 +36,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   const path = '/business/sales/'
   if (row && action === '交付与回款') {
     const data = await read(`${path}${row.id}/progress/`)
-    return { title: '交付与回款', path: '', readonly: true, initial: { ...data, project_status: display(data.project_status) }, fields: [
+    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status) }, fields: [
       { key: 'project_status', label: '项目状态' },
       { key: 'deliveries', label: '交付批次', type: 'rows', fields: [{ key: 'code', label: '批次' }, { key: 'quantity', label: '数量' }, { key: 'shipped_date', label: '发货日期' }, { key: 'accepted_date', label: '验收日期' }] },
       { key: 'receivables', label: '应收与回款', type: 'rows', fields: [{ key: 'title', label: '款项' }, { key: 'balance', label: '待收 / 待退' }, { key: 'paid', label: '净回款' }, { key: 'amount', label: '原应收' }, { key: 'credit_amount', label: '已抵减' }, { key: 'due_date', label: '到期日' }] },

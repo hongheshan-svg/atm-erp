@@ -645,3 +645,13 @@
 - 按影响矩阵检查34个后端模块共485项：首次仅接口白名单断言未包含新资源，更新断言后对关联50项复验全部通过，其余成功证据复用。前端23文件共206项首次仅BOM列顺序断言未适配新增勾选列；修正后相关24项通过，另补同物料不同单元确认标识用例，最终覆盖207项。新增路径与用例已登记；CI路由/门禁35项通过。Ruff、格式、Django与迁移检查、ESLint、类型检查和构建通过（构建保留既有动态/静态导入提示）。
 - 真实隔离数据库浏览器验收最终4项通过：桌面1440px和手机390px各执行通用列表批量删除、原因/确认、记录消失与审计核对、财务岗位无入口/403、BOM两单元删除及历史、销售附件单条删除及按单据筛选历史。已实际打开检查确认弹窗与历史截图。
 - 验证日志：`/private/tmp/admin-deletion-regression.log`、`admin-deletion-backend-final.log`、`admin-deletion-frontend-regression.log`、`admin-deletion-ui-final.log`、`admin-deletion-dialog-final.log`、`admin-deletion-ci-routing-final.log`、`admin-deletion-checks.log`、`admin-deletion-browser-final.log`；最终截图目录 `/private/tmp/admin-deletion-browser-final/`。范围为本次功能及关联回归，未运行完整业务浏览器链、OTA或安装器，未提交GitHub、打tag或发布。
+
+## 2026-10-22 项目相关人员查看流程进度
+
+- 项目新增“流程进度”，本人销售单的“交付与回款”复用同一组件；展示任务执行、采购到货、交付验收及收付款节点的当前状态、实际执行人或可处理岗位人员、期限与逾期。可复制跟进信息，没有自动发送消息。审批候选人明确区别于已指定执行人，同名候选人补账号区分，较多人选折叠显示。
+- 只读投影复用原任务、采购、收货、交付、账款和对账记录，未新增流程表或第二份金额、库存台账。服务端按角色并集和项目范围授权，销售仅可跟进本人销售关联项目，且不提供供应商付款状态。节点响应不含金额、成本、银行账号、合同或自由备注；查看原单仍要求原读取权限，不能借流程进度取得业务写入权限。
+- 到货待检与合格入库区分，全部待检不误报交货逾期；一部分待检、一部分未到时同时展示采购和仓管跟进人员。付款期限沿用合格收货与净支付计算，约定付款日独立显示，不凭日期产生应付额度；预付款核准沿用申请人与核准人分离。已隐藏记录不出现在投影列表，历史事实仍参与原业务计算；关闭或取消项目不继续显示逾期催办。
+- 新增16项后端用例全部通过，覆盖相关岗位可见、非参与者拒绝、销售转交与撤权、金额隔离、候选审批人员、同名区分、日期、待检、预付款、净收付、交付任务、分页、历史隐藏及只读无写入。销售、金额隔离和权限查询相关32项通过；首次44项组合运行仅新用例将匿名拒绝码误写为401而失败，校正为系统实际403后新增模块完整复验通过，32项原成功证据复用。日志：`/private/tmp/erp-progress-backend-regression.log`、`/private/tmp/erp-progress-backend-accepted.log`。
+- 前端11文件78项通过；人员折叠调整后组件7项复验通过。CI路由23项通过，新接口、组件和页面用例登记到销售、项目、采购、财务影响计划。Ruff/格式、Django及迁移检查、ESLint、类型检查、构建通过；无数据库迁移，构建保留既有组件动态/静态导入提示。日志：`/private/tmp/erp-progress-frontend-final.log`、`erp-progress-ui-verified.log`、`erp-progress-routing-final.log`、`erp-progress-checks-final.log`、`erp-progress-lint-final.log`、`erp-progress-typecheck-verified.log`、`erp-progress-build-final.log`。
+- 隔离数据库真实浏览器桌面1440px、手机390px各1项通过：工程人员跨部门只读流程、原采购详情403、独立审批后刷新变化、待起算付款、本人销售入口和金额隔离。截图核验后修复销售侧栏卡片过窄，补宽度及视口边界断言，最终双端2项通过；实际打开检查项目手机页面、销售桌面侧栏及手机页面。日志 `/private/tmp/erp-progress-browser-layout.log`，截图目录 `/private/tmp/erp-progress-browser-layout/`。
+- 本次为功能及关联模块验证，未运行完整业务链、正式发版验证、OTA或安装器；未操作生产数据，尚未提交GitHub、打tag或发布此功能。
