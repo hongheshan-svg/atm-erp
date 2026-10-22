@@ -243,6 +243,10 @@ class UserView(
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        if self.action in {'list', 'partial_update', 'update'}:
+            from apps.business.services.deletions import visible_rows
+
+            queryset = visible_rows(queryset)
         selected_role = self.request.query_params.get('role')
         if selected_role:
             if selected_role not in User.Role.values:

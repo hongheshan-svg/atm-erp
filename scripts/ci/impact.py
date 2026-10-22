@@ -50,8 +50,9 @@ MODULE_FILES = {
     'ota': ('ota', 'upgrade', 'SystemUpgrade'),
 }
 BROWSERS = {
-    'sales': ('sales-role', 'attachments', 'industry-forms', 'import-surface-audit'),
+    'sales': ('admin-deletion', 'sales-role', 'attachments', 'industry-forms', 'import-surface-audit'),
     'projects': (
+        'admin-deletion',
         'import-audit-real',
         'production-role',
         'state-actions-audit',
@@ -61,8 +62,9 @@ BROWSERS = {
         'specialist-roles',
         'import-surface-audit',
     ),
-    'bom': ('bom-selection', 'bom-purchase-layout', 'specialist-roles', 'import-feedback'),
+    'bom': ('admin-deletion', 'bom-selection', 'bom-purchase-layout', 'specialist-roles', 'import-feedback'),
     'purchases': (
+        'admin-deletion',
         'payment-terms',
         'review-remediation',
         'attachments',
@@ -72,14 +74,16 @@ BROWSERS = {
     ),
     'inventory': ('cancel-actions-audit', 'import-surface-audit'),
     'finance': (
+        'admin-deletion',
         'reconciliation',
         'bank-review-audit',
         'import-surface-audit',
         'import-audit-real',
         'usability-finance',
     ),
-    'masterdata': ('product-coding', 'account-masterdata-audit', 'transfers', 'import-surface-audit'),
+    'masterdata': ('admin-deletion', 'product-coding', 'account-masterdata-audit', 'transfers', 'import-surface-audit'),
     'accounts': (
+        'admin-deletion',
         'initial-password',
         'settings',
         'login',
@@ -99,6 +103,7 @@ FULL_ONLY_BROWSERS = ('full-chain',)
 BUSINESS = ('sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'accounts', 'reports')
 # 公共界面组件改动时额外运行的页面级用例：导航、页签、分页、各页面概览和各岗位逐页巡检。
 SHARED_UI_BROWSERS = (
+    'admin-deletion',
     'navigation-dialog',
     'module-tabs',
     'pagination-layout',
@@ -111,6 +116,15 @@ SHARED_UI_BROWSERS = (
 # 经过审阅的共享路径映射：这些文件被多个模块直接调用，改动时运行所列模块的全部关联用例。
 # 按前缀匹配、先匹配先用；只在文件名未命中 MODULE_FILES 时使用。新增的未登记路径仍然失败，不静默漏测。
 SHARED_PATHS = (
+    (
+        (
+            'backend/apps/business/services/deletions.py',
+            'backend/apps/business/api/deletions.py',
+            'frontend/src/modules/deletions.ts',
+            'frontend/src/components/RecordDeletionDialog.vue',
+        ),
+        BUSINESS,
+    ),
     (
         (
             'backend/apps/business/services/documents.py',

@@ -9,6 +9,7 @@ import { pageSize, setPageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import ActionDialog from './ActionDialog.vue'
+import RecordDeletionDialog from './RecordDeletionDialog.vue'
 const route = reactive<{ query: Record<string, string> }>({ query: {} })
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace: vi.fn() }) }))
 
@@ -21,6 +22,29 @@ vi.mock('../api', () => ({
 
 describe('列表创建入口', () => {
   beforeEach(() => { route.query = {}; sessionStorage.clear(); vi.clearAllMocks() })
+  it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
+    user.value = { roles: ['finance', 'admin'] }
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('批量删除')
+    expect(wrapper.text()).toContain('已删除记录')
+    wrapper.findComponent({ name: 'ElTable' }).vm.$emit('selection-change', [{ id: 21, title: '费用' }])
+    await flushPromises()
+    const button = wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text().includes('批量删除'))!
+    expect(button.props('disabled')).toBe(false)
+    button.vm.$emit('click')
+    await flushPromises()
+    expect(wrapper.findComponent(RecordDeletionDialog).props('rows')).toEqual([{ id: 21, title: '费用' }])
+    await wrapper.setProps({ params: { project: 4 } })
+    await flushPromises()
+    expect(wrapper.findComponent(RecordDeletionDialog).exists()).toBe(false)
+    expect(wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text().includes('批量删除'))!.props('disabled')).toBe(true)
+    user.value = { role: 'finance' }
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('批量删除')
+    expect(wrapper.text()).not.toContain('已删除记录')
+    wrapper.unmount()
+  })
   it('项目范围变化时关闭原表单，避免乙项目页面继续提交甲项目内容', async () => {
     user.value = { id: 1, role: 'admin' }
     const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 }, projectId: 3 }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })

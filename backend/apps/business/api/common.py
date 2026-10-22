@@ -39,6 +39,10 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        if self.action in {'list', 'export'}:
+            from ..services.deletions import visible_rows
+
+            queryset = visible_rows(queryset)
         # List, detail, export and action lookup share the same project boundary.
         path = {
             'purchaseorder': 'project',

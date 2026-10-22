@@ -77,7 +77,7 @@ class HardeningTests(BusinessFixtures, TestCase):
         self.assertEqual(exposed, importable)
         self.assertEqual(
             {prefix for prefix, _, _ in router.registry} - exposed,
-            {'bom', 'reconciliations', 'bank-records', 'bank-matches', 'documents'},
+            {'bom', 'reconciliations', 'bank-records', 'bank-matches', 'documents', 'record-deletions'},
         )
 
     def test_ledger_rows_cannot_be_hidden_by_flipping_the_deleted_flag(self):

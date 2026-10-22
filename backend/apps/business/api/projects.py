@@ -46,7 +46,14 @@ class ProjectView(ImportableMixin, ReadView):
     @action(detail=True, methods=['get'])
     def demand(self, request, pk=None):
         project = self.get_object()
-        return Response({'revision': bom.revision(project), 'lines': bom.demand(project)})
+        lines = bom.demand(project)
+        if project.status in {'closed', 'cancelled'}:
+            from ..models import BOMLine
+            from ..services.deletions import visible_rows
+
+            visible = set(visible_rows(BOMLine.objects.filter(project=project)).values_list('pk', flat=True))
+            lines = [line for line in lines if line['bom_line'] in visible]
+        return Response({'revision': bom.revision(project), 'lines': lines})
 
     @action(detail=True, methods=['get'], url_path='bom-impact')
     def bom_impact(self, request, pk=None):

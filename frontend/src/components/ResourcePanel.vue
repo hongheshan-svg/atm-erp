@@ -31,6 +31,8 @@ import { resourceFilters, searchableResources, sidePanelResources } from '../res
 import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
 import { buyer, labels } from '../modules/shared'
+import { canDeleteRecords } from '../modules/deletions'
+import RecordDeletionDialog from './RecordDeletionDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
@@ -87,6 +89,24 @@ const filterParams = computed(() => ({
 const sidePanel = computed(() => sidePanelResources.includes(props.resource))
 const selectedId = ref<number | null>(null)
 const selectedRow = ref<Row | null>(null)
+const deletionAllowed = computed(() => canDeleteRecords(props.resource))
+const deletionSelection = ref<Row[]>([])
+const deleting = ref<Row[] | null>(null)
+const deletionHistory = ref(false)
+async function openDeletion(rows: Row[]) {
+  if (deletionAllowed.value && rows.length && await leaveCurrent()) deleting.value = [...rows]
+}
+async function openDeletionHistory() {
+  if (deletionAllowed.value && await leaveCurrent()) deletionHistory.value = true
+}
+function deleted() {
+  deletionSelection.value = []; command.value = null; selectedRow.value = null; selectedId.value = null; savedRecord.value = null
+  page.value = 1; void load(); emit('changed')
+}
+async function openRemoved(id: number) {
+  try { const row = await read(`${endpoint(props.resource)}${id}/`); deletionHistory.value = false; await inspect(row) }
+  catch (e) { error.value = message(e) }
+}
 const active = inject<Ref<boolean>>('panelActive', computed(() => true))
 const toolbarTarget = inject<Ref<HTMLElement | null>>('moduleToolbar', ref(null))
 const preparing = ref(false)
@@ -138,6 +158,7 @@ function mobileSummary(row: Row) {
   return [row.status ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : ''].filter(Boolean).join(' · ')
 }
 async function load() {
+  deletionSelection.value = []
   if (!active.value) { dirty = true; return }
   dirty = false
   const current = ++generation
@@ -178,7 +199,7 @@ async function load() {
 watch(
   [() => props.resource, () => JSON.stringify(props.params || {}), () => props.projectId, () => props.resource === 'sales' ? route.query.search : undefined],
   (_now, before) => {
-    if (before?.length) { commandGeneration++; command.value = null; selectedId.value = null; selectedRow.value = null; preparing.value = false }
+    if (before?.length) { commandGeneration++; command.value = null; selectedId.value = null; selectedRow.value = null; preparing.value = false; deleting.value = null; deletionHistory.value = false }
     page.value = 1
     search.value = initialSearch()
     appliedSearch.value = search.value
@@ -324,6 +345,8 @@ async function inspect(row: Row) {
         }}</el-button>
         <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :project-id="scopedImportProject(params, projectId)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
+        <el-button v-if="deletionAllowed" type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
+        <el-button v-if="deletionAllowed" :disabled="actionBusy" @click="openDeletionHistory">已删除记录</el-button>
       </div></Teleport>
     </header>
     <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" :aria-label="filterConfig.label">
@@ -354,7 +377,9 @@ async function inspect(row: Row) {
       :row-class-name="({ row }: { row: Row }) => row.id === selectedId ? 'selected-record' : ''"
       empty-text="暂无记录"
       style="width: 100%"
+      @selection-change="deletionSelection = $event"
     >
+      <el-table-column v-if="deletionAllowed" type="selection" width="44" :selectable="() => !actionBusy && !loading" />
       <el-table-column
         v-for="col in shownColumns"
         :key="col.key"
@@ -375,7 +400,7 @@ async function inspect(row: Row) {
           <span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
-      <el-table-column label="操作" fixed="right" width="170"
+      <el-table-column label="操作" fixed="right" :width="deletionAllowed ? 220 : 170"
         ><template #default="{ row }"
           ><div class="row-actions"
             ><el-button v-if="primaryAction(row)" type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ primaryAction(row) }}</el-button
@@ -395,13 +420,14 @@ async function inspect(row: Row) {
                   ></el-dropdown-menu
                 ></template
               ></el-dropdown
-            ><span v-else-if="!primaryAction(row)" class="muted">—</span></div
+            ><span v-else-if="!primaryAction(row) && !deletionAllowed" class="muted">—</span><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
           ></template
         ></el-table-column
       >
     </el-table>
     <ListPagination :page="page" :total="count" @change="page = $event; load()" />
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
+    <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" :resource="resource" :title="title" :rows="deleting || undefined" :project-id="scopedImportProject(params, projectId)" @close="deleting = null; deletionHistory = false" @saved="deleted" @open="openRemoved" />
   </section>
   <ActionDialog ref="actionDialog" :command="command" @replace="command = $event" :inline="sidePanel" @busy="actionBusy = $event" @close="closeCommand" @saved="saved"><template #context><RecordContext v-if="selectedRow && (['stocks', 'entries'].includes(resource) || (['sales', 'purchases'].includes(resource) && actionNames(resource, selectedRow).includes('附件')))" :resource="resource" :record="selectedRow" @attachments="action(selectedRow!, '附件')" /></template></ActionDialog>
   </div>
