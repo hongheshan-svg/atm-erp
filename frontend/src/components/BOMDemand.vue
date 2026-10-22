@@ -13,6 +13,8 @@ import { pageSize } from '../pagination'
 import { productCategories } from '../product-categories'
 import ImportFeedback from './ImportFeedback.vue'
 import { importDestination, templateMismatch } from '../utils/import-context'
+import RecordDeletionDialog from './RecordDeletionDialog.vue'
+import { canDeleteRecords } from '../modules/deletions'
 const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
@@ -50,6 +52,11 @@ const importColumns = [
 const command = ref<Command | null>(null)
 const search = ref(''), brand = ref(''), unit = ref(''), partType = ref(''), shortageOnly = ref(view.value === 'purchase')
 const selected = ref<number[]>([])
+const deletionAllowed = computed(() => canDeleteRecords('bom'))
+const deletionSelection = ref<Row[]>([]), deleting = ref<Row[] | null>(null), deletionHistory = ref(false)
+const deletionLoading = ref(false)
+function openDeletion(rows: Row[]) { deleting.value = rows.map(row => ({ ...row, id: row.bom_line })) }
+watch([() => props.projectId, search, brand, unit, partType, shortageOnly, view], () => { deletionSelection.value = []; deleting.value = null; deletionHistory.value = false })
 const pickingBom = ref(false)
 const moduleFocusedFlow = inject<Ref<boolean>>('moduleFocusedFlow', ref(false))
 watch(pickingBom, value => { moduleFocusedFlow.value = value })
@@ -88,7 +95,9 @@ watch([search, brand, unit, partType, shortageOnly], () => { page.value = 1 })
 watch(() => props.projectId, () => { selected.value = []; search.value = ''; brand.value = ''; unit.value = ''; partType.value = ''; shortageOnly.value = view.value === 'purchase'; projectContext.value = null })
 let generation = 0
 async function load() {
+  deletionSelection.value = []
   const id = ++generation
+  deletionLoading.value = true
   try {
     const result = await read(`/business/projects/${props.projectId}/demand/`)
     if (id === generation) {
@@ -97,7 +106,7 @@ async function load() {
     }
   } catch (e) {
     if (id === generation) error.value = message(e)
-  }
+  } finally { if (id === generation) deletionLoading.value = false }
 }
 watch(
   () => [props.projectId, props.revision],
@@ -220,6 +229,8 @@ function saved() {
         <el-button v-if="canMaintain" @click="inspectImpact">变更影响与处理</el-button>
         <TransferTools resource="bom" path="/business/bom/" :params="{ project: projectId }" />
         <el-button @click="load">刷新需求</el-button>
+        <el-button v-if="deletionAllowed && view === 'prepare'" type="danger" plain :disabled="busy || deletionLoading || !deletionSelection.length" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
+        <el-button v-if="deletionAllowed" :disabled="busy" @click="deletionHistory = true">已删除记录</el-button>
       </div>
     </header>
     <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
@@ -235,7 +246,8 @@ function saved() {
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
     </el-dialog>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <el-table :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'">
+    <el-table :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'" @selection-change="deletionSelection = $event">
+      <el-table-column v-if="deletionAllowed && view === 'prepare'" type="selection" width="44" fixed="left" />
       <el-table-column v-if="canPurchase && view === 'purchase'" label="选择" width="60" fixed><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
       <el-table-column label="物料名称 / 编码" min-width="180" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small></template></el-table-column>
       <el-table-column v-if="view === 'prepare'" prop="specification" label="规格" min-width="140" />
@@ -259,7 +271,9 @@ function saved() {
         <el-table-column prop="change_note" label="变更说明" min-width="150" />
         <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column prop="available" label="可用库存" /><el-table-column prop="shortage" label="缺料" /></template>
       </template>
+      <el-table-column v-if="deletionAllowed" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button></template></el-table-column>
     </el-table>
+    <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" resource="bom" title="BOM明细" :rows="deleting || undefined" :project-id="projectId" :show-original="false" @close="deleting = null; deletionHistory = false" @saved="saved" />
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <footer v-if="canPurchase && view === 'purchase'" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
     <el-dialog v-if="importOpen && !command" :model-value="true" title="导入BOM" class="bom-import-dialog" width="min(1200px, 94vw)" top="4vh" :close-on-click-modal="false" @update:model-value="closeImport" @opened="revealImportResult">

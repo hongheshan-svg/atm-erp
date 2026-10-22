@@ -21,7 +21,7 @@ def perform(*, actor, key, operation, payload, authorize, execute):
     with transaction.atomic():
         from .periods import mutation_lock
 
-        mutation_lock(exclusive=operation == 'period.lock')
+        mutation_lock(exclusive=operation in {'period.lock', 'record.delete'})
         current_actor = get_user_model().objects.get(pk=actor.pk)
         if not current_actor.is_active:
             raise PermissionDenied('用户已停用。')

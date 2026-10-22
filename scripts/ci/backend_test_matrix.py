@@ -14,6 +14,7 @@ TARGETS = {
     ),
     'business': (
         'apps.business.tests.test_models',
+        'apps.business.tests.test_deletions',
         'apps.business.tests.test_sales',
         'apps.business.tests.test_budgets',
         'apps.business.tests.test_commercial_chain',
@@ -54,6 +55,7 @@ TARGETS = {
 # concurrency 同时匹配 core 与 business 的并发用例。
 MODULE_TESTS = {
     'sales': (
+        'deletions',
         'audit_business',
         'import_dedup',
         'sales',
@@ -66,6 +68,7 @@ MODULE_TESTS = {
         'import_concurrency',
     ),
     'projects': (
+        'deletions',
         'audit_business',
         'import_dedup',
         'money_scope',
@@ -85,6 +88,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'bom': (
+        'deletions',
         'audit_business',
         'import_dedup',
         'permission_queries',
@@ -100,6 +104,7 @@ MODULE_TESTS = {
         'audit_fixes',
     ),
     'purchases': (
+        'deletions',
         'audit_business',
         'import_dedup',
         'money_scope',
@@ -119,6 +124,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'inventory': (
+        'deletions',
         'audit_business',
         'import_dedup',
         'money_scope',
@@ -132,6 +138,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'finance': (
+        'deletions',
         'audit_business',
         'import_dedup',
         'money_scope',
@@ -150,6 +157,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'masterdata': (
+        'deletions',
         'import_dedup',
         'import_concurrency',
         'product_coding',
@@ -162,8 +170,9 @@ MODULE_TESTS = {
         'transfers',
         'import_feedback',
     ),
-    'accounts': ('auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
+    'accounts': ('deletions', 'auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
     'reports': (
+        'deletions',
         'money_scope',
         'reports',
         'workbench',

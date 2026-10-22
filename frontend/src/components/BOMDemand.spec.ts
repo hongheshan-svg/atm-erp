@@ -179,7 +179,7 @@ it('编制与采购视图使用相同BOM行，关键列优先且选择保留稳�
     stubs: { RouterLink: true, ElTableColumn: { template: '<div class="col" />' } },
   } })
   await flushPromises()
-  expect(wrapper.findAll('.col').slice(0, 6).map(col => col.attributes('label'))).toEqual(['物料名称 / 编码', '规格', '单元', '需求数量', '单位', '需求日期'])
+  expect(wrapper.findAll('.col').filter(col => col.attributes('type') !== 'selection').slice(0, 6).map(col => col.attributes('label'))).toEqual(['物料名称 / 编码', '规格', '单元', '需求数量', '单位', '需求日期'])
   expect(wrapper.text()).not.toContain('从 BOM 多选下单')
   await wrapper.get('input[value=purchase]').setValue()
   const labels = wrapper.findAll('.col').map(col => col.attributes('label'))
