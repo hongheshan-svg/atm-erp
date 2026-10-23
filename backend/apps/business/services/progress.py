@@ -7,7 +7,6 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.accounts.models import User
-from apps.core.models import AuditLog
 from apps.core.permissions import (
     ADMIN,
     FINANCE,
@@ -28,6 +27,7 @@ from . import finance, payment_terms
 from . import reconciliation as statements
 from .common import ZERO
 from .deletions import visible_rows
+from .supply import applicants_by_purchase
 
 GROUPS = {'tasks': '任务执行', 'purchases': '采购到货', 'deliveries': '交付验收', 'entries': '收付款进度'}
 
@@ -51,23 +51,16 @@ class Progress:
         # A small staff directory is shared by every row; no rates or contact details are returned.
         self.staff = list(User.objects.filter(is_active=True).order_by('pk'))
         self.today = timezone.localdate()
-        self.submitters = {}
+        self.applicants = {}
         # 重名统计每次请求一次，所有行、候选人和项目负责人共用同一显示规则。
         self.ambiguous = ambiguous_people()
 
     def person(self, user):
         return person(user, self.ambiguous)
 
-    def load_submitters(self, purchases):
-        """Latest submitter of every submitted purchase on the page, read in one query."""
-        resources = {f'purchaseorder:{p.pk}': p.pk for p in purchases if p.status == 'submitted'}
-        logs = (
-            AuditLog.objects.filter(operation='purchase.submit', resource__in=resources)
-            .order_by('id')
-            .values_list('resource', 'actor_id')
-        )
-        # 按 id 升序覆盖，保留每张采购单最近一次提交的人。
-        self.submitters = {resources[resource]: actor for resource, actor in logs}
+    def load_applicants(self, purchases):
+        """Applicants of every submitted purchase on the page (creator, latest submitter, amount editors)."""
+        self.applicants = applicants_by_purchase([p for p in purchases if p.status == 'submitted'])
 
     def candidates(self, allowed, exclude=()):
         selected = [
@@ -153,8 +146,8 @@ class Progress:
         if purchase.status == 'draft':
             row['hint'] = '完善采购草稿后提交审批。'
         elif purchase.status == 'submitted':
-            submitter = self.submitters.get(purchase.pk)
-            row['handlers'] = self.candidates(PURCHASE_APPROVERS, {purchase.created_by_id, submitter})
+            applicants = self.applicants.get(purchase.pk, {purchase.created_by_id})
+            row['handlers'] = self.candidates(PURCHASE_APPROVERS, applicants)
             row['handler_label'] = '可审批人员'
             row['hint'] = '由其他有权限的人员审批；超预算还需预算复核及人员分离校验。'
             if not row['handlers']:
@@ -331,7 +324,7 @@ def summary(user, project, params):
     selected = Paginator(query, size).get_page(page)
     progress = Progress(user, project)
     if category == 'purchases':
-        progress.load_submitters(selected)
+        progress.load_applicants(selected)
     build = {
         'tasks': progress.task,
         'purchases': progress.purchase,

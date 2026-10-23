@@ -140,6 +140,33 @@ class ProgressTests(BusinessFixtures, TestCase):
         self.assertFalse({submitter.pk, self.users['purchaser'].pk, inactive.pk, outsider.pk} & ids)
         self.assertEqual(row['handler_label'], '可审批人员')
 
+    def test_candidate_approvers_exclude_draft_amount_editors(self):
+        # 草稿阶段改过数量或单价的人与审批动作同口径计入申请人，不能列为本单可审批人员。
+        editor = User.objects.create_user(username='price-editor', role='purchase_manager')
+        line = self.line
+        AuditLog.objects.create(
+            actor=editor,
+            operation='purchase.edit',
+            resource=f'purchaseorder:{self.purchase.pk}',
+            detail={
+                'before': [{'id': line.pk, 'quantity': '1', 'unit_price': '10'}],
+                'after': {'lines': [{'id': line.pk, 'quantity': '1', 'unit_price': '95'}]},
+            },
+        )
+        note_only = User.objects.create_user(username='note-editor', role='purchase_manager')
+        AuditLog.objects.create(
+            actor=note_only,
+            operation='purchase.edit',
+            resource=f'purchaseorder:{self.purchase.pk}',
+            detail={
+                'before': [{'id': line.pk, 'quantity': '1', 'unit_price': '10'}],
+                'after': {'lines': [{'id': line.pk, 'quantity': '1.0', 'unit_price': '10.00'}]},
+            },
+        )
+        ids = {person['id'] for person in self.get(category='purchases')['results'][0]['handlers']}
+        self.assertNotIn(editor.pk, ids)
+        self.assertIn(note_only.pk, ids)
+
     def test_task_names_deadlines_and_completion_are_live(self):
         row = self.get()['results'][0]
         self.assertEqual(row['handlers'][0]['name'], '张师傅')
