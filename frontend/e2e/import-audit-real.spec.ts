@@ -68,7 +68,7 @@ test('真实导入：项目上下文、字段纠错、确认重验、内容去�
   expectHttpError(page, '/api/business/payments/import-confirm/', 400)
   await dialog.getByRole('button', { name: '确认导入', exact: true }).click()
   await expect(dialog).toContainText('数据已变化')
-  await expect(dialog.locator('.import-errors')).toContainText('未结余额')
+  await expect(dialog.locator('.import-errors')).toContainText('付款超过当前未付余额')
   await expect(dialog.locator('.import-feedback-start')).toBeInViewport({ ratio: 1 })
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeDisabled()
   await expect(dialog.getByRole('button', { name: '下载标注错误的 Excel', exact: true })).toBeVisible()
