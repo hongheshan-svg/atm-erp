@@ -389,6 +389,11 @@ class EntrySerializer(serializers.ModelSerializer):
     due_amount = serializers.SerializerMethodField()
     partner_name = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    prepaid_excess = serializers.SerializerMethodField()
+
+    def get_prepaid_excess(self, obj):
+        value = payment_terms.prepaid_excess(obj)
+        return str(rounded(value)) if value > 0 else None
 
     def get_partner_name(self, obj):
         if obj.purchase_id:
@@ -457,6 +462,7 @@ class EntrySerializer(serializers.ModelSerializer):
             'payment_schedule',
             'due_amount',
             'balance',
+            'prepaid_excess',
             'due_date',
             'agreed_payment_date',
             'cancelled',
