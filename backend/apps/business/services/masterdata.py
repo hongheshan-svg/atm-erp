@@ -164,12 +164,12 @@ def masterdata(actor, key, model, data, object_id=None):
         duplicate_reason = ''
         if model is Item:
             # 图号判重同样在 CodeRule('item') 锁内，建料和改料不会并发占用同一图号版本。
+            # 停用物料仍占用图号；管理员删除的物料只能是未被引用的误建记录，且不可见、不可恢复，
+            # 不再占用图号版本（物料编码仍按含软删除的全局唯一，见上方 code 校验与自动取号）。
             if (
                 obj.drawing_number
                 # 与 lean_item_drawing_key 函数索引同一套表达式；iexact 生成的 UPPER(col::text) 用不上索引。
-                and Item.all_objects.annotate(
-                    drawing_key=Lower('drawing_number'), revision_key=Lower('drawing_revision')
-                )
+                and Item.objects.annotate(drawing_key=Lower('drawing_number'), revision_key=Lower('drawing_revision'))
                 .filter(drawing_key=obj.drawing_number.lower(), revision_key=obj.drawing_revision.lower())
                 .exclude(pk=obj.pk)
                 .exists()
