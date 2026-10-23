@@ -817,7 +817,10 @@ button:focus-visible {
 @media (max-width: 760px) {
   .resource-workspace.with-detail { grid-template-columns: minmax(0, 1fr); }
   .resource-workspace.with-detail > .resource-list { display: none; }
-  .detail-pane { position: static; max-height: calc(100dvh - 100px); }
+  .detail-pane { position: static; max-height: none !important; }
+  /* 手机端详情整体随页面滚动，操作栏排在内容之后，不再用内部小滚动区把首条记录压在按钮栏下。 */
+  .detail-pane .action-form { overflow: visible; }
+  .detail-pane .action-fields { overflow: visible; padding-bottom: 12px; }
   .resource-status-tabs { margin-left: -14px; margin-right: -14px; padding: 0 14px; }
   .mobile-row-summary { display: block; white-space: normal; color: var(--ink-3); font-size: 12px; line-height: 1.6; margin-top: 6px; }
   .mobile-menu-toggle { display: inline-flex !important; }
