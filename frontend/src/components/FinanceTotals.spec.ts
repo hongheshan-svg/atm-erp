@@ -23,11 +23,14 @@ const render = async (props = {}) => {
 describe('收付款余额卡片', () => {
   beforeEach(() => { vi.clearAllMocks(); vi.mocked(read).mockResolvedValue({ ...totals }) })
 
-  it('三张卡片给出待收、待付与其中逾期，逾期用风险色', async () => {
+  it('五张卡片给出待收、待付、其中逾期与两类退款，逾期用风险色', async () => {
     const wrapper = await render()
     expect(read).toHaveBeenCalledWith('/business/entries/summary/', { project: undefined })
     const cards = wrapper.findAll('.finance-total')
-    expect(cards.map(card => card.attributes('aria-label'))).toEqual(['待收款', '待付款', '其中已逾期'])
+    expect(cards.map(card => card.attributes('aria-label'))).toEqual(['待收款', '待付款', '其中已逾期', '待退客户款', '待收退款'])
+    expect(cards[3].get('strong').text()).toBe('¥ 50,000.00')
+    expect(cards[4].get('strong').text()).toBe('¥ 20,000.00')
+    expect(cards[3].classes()).not.toContain('finance-muted')
     expect(cards[0].get('strong').text()).toBe('¥ 4,926,000.00')
     expect(cards[1].get('strong').text()).toBe('¥ 1,845,300.00')
     // 其中已逾期 = 逾期待收 682,000 + 逾期待付 139,840
@@ -44,6 +47,16 @@ describe('收付款余额卡片', () => {
     const overdue = wrapper.findAll('.finance-total')[2]
     expect(overdue.get('strong').text()).toBe('¥ 0.00')
     expect(overdue.get('strong').classes()).not.toContain('finance-risk')
+    wrapper.unmount()
+  })
+
+  it('退款为 0 时淡化显示，缺失字段按 0 处理', async () => {
+    vi.mocked(read).mockResolvedValue({ ...totals, refund_out: '0.00', refund_in: undefined })
+    const wrapper = await render()
+    const cards = wrapper.findAll('.finance-total')
+    expect(cards[3].get('strong').text()).toBe('¥ 0.00')
+    expect(cards[3].classes()).toContain('finance-muted')
+    expect(cards[4].classes()).toContain('finance-muted')
     wrapper.unmount()
   })
 
