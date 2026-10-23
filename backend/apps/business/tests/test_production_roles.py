@@ -268,7 +268,20 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.post(
             'production_manager', f'projects/{self.project.pk}/service/', self.service_data(delivery, '100'), status=403
         )
+        # 质保期内收费需写明非质保责任原因，但仍只能由项目经理确认；生产经理写了原因也不能收费。
+        self.post(
+            'production_manager',
+            f'projects/{self.project.pk}/service/',
+            {**self.service_data(delivery, '100'), 'charge_reason': '客户误操作'},
+            status=403,
+        )
         self.assertEqual((Task.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()), before)
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/service/',
+            {**self.service_data(delivery, '100'), 'charge_reason': '客户误操作'},
+        )
+        self.assertEqual(Entry.objects.count(), before[1] + 1)
 
     def test_production_manager_cannot_create_out_of_warranty_service_even_with_zero_fee(self):
         delivery = self.delivery(accepted=True, expired=True)

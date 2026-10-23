@@ -438,7 +438,18 @@ def service(actor, key, project_id, data):
     def execute(user, project):
         fields(
             data,
-            {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee', 'fee_due_date', 'free_reason'},
+            {
+                'delivery',
+                'date',
+                'title',
+                'description',
+                'assignee',
+                'due_date',
+                'fee',
+                'fee_due_date',
+                'free_reason',
+                'charge_reason',
+            },
         )
         state(project, {'delivering', 'warranty'})
         delivery = lookup(Delivery, data.get('delivery'), 'delivery', project=project)
@@ -449,8 +460,13 @@ def service(actor, key, project_id, data):
             raise ValidationError({'date': '售后日期不能早于验收日期。'})
         free = date <= delivery.warranty_until
         fee = number(data.get('fee', 0 if free else None), 'fee')
-        if free and fee:
-            raise ValidationError({'fee': '质保内售后免费，不能生成收费应收。'})
+        # 质保内默认免费；客户误操作、人为损坏等非质保责任可收费，但必须写明原因留审计。
+        # 授权已限定只有项目经理/管理员能登记收费售后，生产经理仍只建质保内免费售后。
+        charge_reason = text(data, 'charge_reason', default='', maximum=500) if fee else ''
+        if free and fee and not charge_reason:
+            raise ValidationError(
+                {'charge_reason': '质保期内收费请填写非质保责任原因，例如客户误操作、人为损坏；否则请按免费售后登记。'}
+            )
         # 过保后的商务赠送、延保等免费服务同样要能派工，但必须写明免费依据；授权已限定由项目经理登记。
         free_reason = text(data, 'free_reason', default='', maximum=500)
         if not free and not fee and not free_reason:
@@ -492,6 +508,7 @@ def service(actor, key, project_id, data):
             fee=str(fee),
             fee_due_date=fee_due_date.isoformat() if fee_due_date else None,
             free_reason=free_reason,
+            charge_reason=charge_reason,
         )
 
     return project_action(

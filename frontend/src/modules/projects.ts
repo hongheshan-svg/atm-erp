@@ -226,14 +226,14 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '登记售后') {
     const managesProject = manager() && r.can_manage !== false
+    const accepted = (await all('/business/deliveries/', { project: r.id })).filter((d) => d.accepted_date)
+    // 与服务端同口径：售后日期不晚于所选批次质保到期日即为质保期内。
+    const inWarranty = (data: Row) => {
+      const batch = accepted.find((d) => String(d.id) === String(data.delivery))
+      return Boolean(batch?.warranty_until && data.date && String(data.date) <= String(batch.warranty_until))
+    }
     fields = [
-      select(
-        'delivery',
-        '交付批次',
-        options(
-          (await all('/business/deliveries/', { project: r.id })).filter((d) => d.accepted_date),
-        ),
-      ),
+      select('delivery', '交付批次', options(accepted)),
       date(),
       t('title', '售后事项'),
       t('description', '说明', true),
@@ -243,7 +243,12 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         key: 'fee',
         label: '收费金额（元）',
         initial: '0',
-        hint: '质保内免费；质保外收费填正数，免费则填 0 并写明免费原因。',
+        hint: '质保内默认免费，确属客户误操作、人为损坏等非质保责任需收费时填正数并写明原因；质保外收费填正数，免费则填 0 并写明免费原因。',
+      }, {
+        key: 'charge_reason',
+        label: '非质保责任原因',
+        visibleWhen: (data: Row) => Number(data.fee) > 0 && inWarranty(data),
+        hint: '质保期内收费必填，例如客户误操作、人为损坏；原因记入操作审计，应收和客户付款期限按收费售后生成。',
       }, {
         key: 'fee_due_date',
         label: '客户付款到期日',

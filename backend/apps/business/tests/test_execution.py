@@ -427,6 +427,42 @@ class ExecutionTests(ExecutionFixtures, TestCase):
                 status=400,
             )
 
+    def test_in_warranty_chargeable_service_requires_non_warranty_reason(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        delivery = self.deliver(project)
+        self.accept(delivery)
+        payment_due = date.fromisoformat(TODAY) + timedelta(days=30)
+        payload = {
+            'delivery': delivery.pk,
+            'date': TODAY,
+            'title': '客户误操作撞机维修',
+            'assignee': self.users['member'].pk,
+            'fee': '800',
+            'fee_due_date': payment_due.isoformat(),
+        }
+        before = Task.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()
+        for reason in (None, '  '):
+            with self.subTest(reason=reason):
+                data = payload if reason is None else {**payload, 'charge_reason': reason}
+                denied = self.post('manager', f'projects/{project.pk}/service/', data, status=400)
+                self.assertIn('非质保责任原因', str(denied['charge_reason']))
+        self.assertEqual((Task.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()), before)
+        task_id = self.post(
+            'manager', f'projects/{project.pk}/service/', {**payload, 'charge_reason': '客户误操作撞机，非质保责任'}
+        )['id']
+        entry = Entry.objects.get(task_id=task_id)
+        self.assertEqual((entry.kind, entry.amount, entry.due_date), ('receivable', Decimal('800'), payment_due))
+        log = AuditLog.objects.get(operation='service.create', resource=f'task:{task_id}')
+        self.assertEqual(log.detail['charge_reason'], '客户误操作撞机，非质保责任')
+        self.assertEqual(Decimal(log.detail['fee']), Decimal('800'))
+        free = {key: value for key, value in payload.items() if key not in {'fee', 'fee_due_date'}}
+        free_id = self.post('manager', f'projects/{project.pk}/service/', {**free, 'title': '质保换件'})['id']
+        self.assertFalse(Entry.objects.filter(task_id=free_id).exists())
+        self.assertEqual(
+            AuditLog.objects.get(operation='service.create', resource=f'task:{free_id}').detail['charge_reason'], ''
+        )
+
     def test_installed_and_accepted_tasks_cannot_be_deleted_or_reopened(self):
         project = self.ready_project()
         self.stock_and_issue(project)

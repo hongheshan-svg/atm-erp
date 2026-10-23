@@ -82,6 +82,24 @@ it('收费售后独立填写客户付款期限，免费时不校验也不发送'
   expect(payload(command.fields, data)).not.toHaveProperty('fee_due_date')
 })
 
+it('质保期内收费售后须填写非质保责任原因，质保外或免费时不显示', async () => {
+  vi.mocked(all).mockImplementation(async path => path.includes('deliveries') ? [{ id: 5, accepted_date: '2026-09-01', warranty_until: '2027-09-01' }, { id: 6, accepted_date: '2025-01-01', warranty_until: '2026-01-01' }] : [{ id: 1, roles: ['admin'] }])
+  const command = industryCommand(await projectAction('projects', { id: 9, manager: 1, members: [], can_manage: true }, '登记售后'))
+  expect(command.fields.find(field => field.key === 'fee')?.hint).toContain('非质保责任')
+  const data = defaults(command.fields)
+  Object.assign(data, { delivery: 5, date: '2026-10-20', title: '客户误操作撞机', assignee: 1, fee: '800', fee_due_date: '2026-11-20' })
+  expect(fieldIssues(command.fields, data).map(issue => issue.path)).toContain('charge_reason')
+  expect(command.fields.find(field => field.key === 'charge_reason')?.hint).toContain('客户误操作')
+  data.charge_reason = '客户误操作撞机'
+  expect(fieldIssues(command.fields, data)).toEqual([])
+  expect(payload(command.fields, data)).toMatchObject({ fee: '800', charge_reason: '客户误操作撞机' })
+  data.fee = '0'
+  expect(payload(command.fields, data)).not.toHaveProperty('charge_reason')
+  Object.assign(data, { delivery: 6, fee: '800' })
+  expect(fieldIssues(command.fields, data).map(issue => issue.path)).not.toContain('charge_reason')
+  expect(payload(command.fields, data)).not.toHaveProperty('charge_reason')
+})
+
 it('管理员、项目经理、财务与本人销售均有已签约交付回款入口', () => {
   for (const role of ['admin', 'manager', 'finance', 'sales_manager']) {
     user.value = { id: 1, roles: [role] }
