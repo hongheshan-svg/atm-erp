@@ -198,3 +198,53 @@ class BudgetTests(BusinessFixtures, TestCase):
         self.post('manager', f'projects/{self.project.pk}/budget/', payload, key=key)
         self.assertEqual(self.report()['budget_revision'], 2)
         self.assertEqual(self.report()['rows'][0]['budget'], '600.00')
+
+    def approval_log(self, purchase):
+        return AuditLog.objects.filter(operation='purchase.approve', resource=f'purchaseorder:{purchase.pk}').first()
+
+    def test_budget_raised_during_review_cannot_be_approved_by_adjuster(self):
+        self.budget('100', '0', '0')
+        purchase = self.purchase(self.project, approve=False)
+        url = f'purchases/{purchase.pk}/approve/'
+        self.post('manager', url, status=409)
+        self.budget('1000', '0', '0', revision=1)
+        key = str(uuid.uuid4())
+        rejected = self.post('manager', url, key=key, status=403)
+        self.assertIn('调整过项目预算', str(rejected))
+        self.post('manager', url, {'reason': '已核对预算'}, status=403)
+        self.assertFalse(ActionReceipt.objects.filter(key=key).exists())
+        self.assertFalse(Entry.objects.filter(purchase=purchase).exists())
+        self.post('purchase_manager', url)
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'approved')
+        self.assertFalse(self.approval_log(purchase).detail['budget_adjuster_approval'])
+
+    def test_reject_raise_budget_and_resubmit_still_needs_another_approver(self):
+        self.budget('100', '0', '0')
+        purchase = self.purchase(self.project, approve=False)
+        url = f'purchases/{purchase.pk}/'
+        self.post('manager', url + 'reject/', {'reason': '超预算退回'})
+        self.budget('1000', '0', '0', revision=1)
+        self.post('purchaser', url + 'submit/')
+        self.post('manager', url + 'approve/', status=403)
+        self.post('purchase_manager', url + 'approve/')
+
+    def test_unrelated_budget_change_keeps_normal_approval(self):
+        # 提交前已调整的预算不受影响；待审期间的调整若与本单是否超预算无关，也不限制调整人。
+        self.budget('1000', '0', '0')
+        purchase = self.purchase(self.project, approve=False)
+        self.budget('1000', '50', '0', revision=1)
+        self.post('manager', f'purchases/{purchase.pk}/approve/')
+        self.assertFalse(self.approval_log(purchase).detail['budget_adjuster_approval'])
+
+    def test_admin_budget_adjuster_needs_exception_reason_for_normal_approval(self):
+        self.budget('100', '0', '0')
+        purchase = self.purchase(self.project, approve=False)
+        self.budget('1000', '0', '0', revision=1, role='admin')
+        url = f'purchases/{purchase.pk}/approve/'
+        self.post('admin', url, status=400)
+        self.assertFalse(Entry.objects.filter(purchase=purchase).exists())
+        self.post('admin', url, {'reason': '客户已书面追加预算'})
+        log = self.approval_log(purchase)
+        self.assertTrue(log.detail['budget_adjuster_approval'])
+        self.assertFalse(log.detail['self_approval'])

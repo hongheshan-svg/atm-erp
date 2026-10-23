@@ -1,3 +1,4 @@
+import copy
 from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
@@ -78,6 +79,35 @@ def purchase_applicants(purchase):
     申请人不能审批本单（管理员例外须填原因，见 approval.independent_approval）。
     """
     return _applicants({purchase.pk: purchase.created_by_id})[purchase.pk]
+
+
+def review_budget_adjusters(purchase, amount):
+    """本单首次提交后调整过本项目预算、且按调整前预算本单会超预算的人（普通批准时视同申请人）。
+
+    提交前的预算调整不受影响；待审期间与本单是否超预算无关的调整也不限制调整人。
+    """
+    from .budgets import CATEGORIES, analysis
+
+    resource = f'purchaseorder:{purchase.pk}'
+    first = AuditLog.objects.filter(operation='purchase.submit', resource=resource).order_by('id').first()
+    if first is None:
+        return set()
+    revisions = list(
+        AuditLog.objects.filter(operation='project.budget', resource=f'project:{purchase.project_id}', id__gt=first.pk)
+        .order_by('id')
+        .values_list('actor_id', 'detail')
+    )
+    adjusters = {actor for actor, _ in revisions}
+    if not revisions:
+        return adjusters
+    before = revisions[0][1].get('before')
+    if not isinstance(before, dict) or not set(CATEGORIES) <= set(before):
+        return adjusters
+    baseline = copy.copy(purchase.project)
+    for category in CATEGORIES:
+        value = before[category]
+        setattr(baseline, f'budget_{category}', None if value in (None, 'None') else Decimal(value))
+    return adjusters if analysis(baseline, amount)['over_budget'] else set()
 
 
 def applicants_by_purchase(purchases):
@@ -209,6 +239,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
         report = purchase_check(purchase)
         reason = text(data, 'reason', default='')
         self_approval = independent_approval(user, purchase_applicants(purchase), reason)
+        budget_adjuster_approval = False
         if override:
             reason = text(data, 'reason')
             if data.get('confirmed') is not True:
@@ -224,6 +255,15 @@ def approve(actor, key, purchase_id, data, *, override=False):
         elif report['over_budget']:
             warnings = purchase_visibility(user, report, purchase.project)['warnings']
             raise Conflict('；'.join(warnings) + '。请重新打开审批，填写超预算批准原因。')
+        else:
+            budget_adjuster_approval = independent_approval(
+                user,
+                review_budget_adjusters(purchase, Decimal(report['purchase_amount'])),
+                reason,
+                denied='你在本单提交后调整过项目预算，按调整前预算本单会超预算，不能由你批准；'
+                '请交由其他有权限的人员审批，管理员例外须填写原因。',
+                reason_required='管理员调整预算后批准本单，必须填写例外审批原因并保留审计。',
+            )
         save(
             Entry(
                 project=purchase.project,
@@ -244,6 +284,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
             over_budget=override,
             reason=reason,
             self_approval=self_approval,
+            budget_adjuster_approval=budget_adjuster_approval,
             budget_check=report,
         )
 
