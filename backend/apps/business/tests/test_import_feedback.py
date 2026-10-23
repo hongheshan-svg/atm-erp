@@ -503,6 +503,86 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
             )
         self.assertEqual(Task.objects.count(), 3)
 
+    ITEM_HEADERS = [
+        '物料编码',
+        '物料名称',
+        '规格',
+        '图号',
+        '图档版本',
+        '产品编码类别',
+        '品牌',
+        '物料类别',
+        '单位',
+        '独立建码原因',
+    ]
+
+    def test_item_import_reports_every_independent_field_error_on_one_row(self):
+        counts = (Item.objects.count(), CodeRule.objects.get(key='item').product_counters)
+        rows = [
+            ['', '机架', '', '', '', '有图·机加', '', '', '件', ''],  # 规格、图号都缺
+            ['', '单错件', '', '', '', '无图·标准件', '', '', '件', ''],  # 只缺规格：单错行不变
+            ['', '', '', '', '', '有图·机加', '', '', '', ''],  # 名称、规格、图号都缺
+        ]
+        result = self.upload('items/import-file/', self.ITEM_HEADERS, rows)
+        self.assertEqual(result.status_code, 200, result.data)
+        self.assertFalse(result.data['can_import'])
+        by_row = {error['row']: error for error in result.data['errors']}
+        self.assertEqual(set(by_row[2]['fields']), {'specification', 'drawing_number'})
+        self.assertIn('规格', by_row[2]['message'])
+        self.assertIn('图号', by_row[2]['message'])
+        self.assertEqual(by_row[3]['fields'], ['specification'])
+        self.assertNotIn('图号', by_row[3]['message'])
+        self.assertEqual(set(by_row[4]['fields']), {'name', 'specification', 'drawing_number'})
+        sheet = self.workbook(result.data).active
+        headers = [cell.value for cell in sheet[1]]
+        for row, fields in ((2, {'规格', '图号'}), (3, {'规格'}), (4, {'物料名称', '规格', '图号'})):
+            marked = {headers[index] for index, cell in enumerate(sheet[row]) if cell.comment}
+            self.assertEqual(marked, fields, row)
+        self.assertEqual(counts, (Item.objects.count(), CodeRule.objects.get(key='item').product_counters))
+
+    def test_item_api_returns_all_field_errors_as_dict_and_keeps_single_field_shape(self):
+        client = self.clients['purchaser']
+        response = client.post(
+            '/api/business/items/',
+            {'name': '机架', 'product_category': '11', 'part_type': 'bogus'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='multi-field-1',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(set(response.data), {'part_type', 'specification', 'drawing_number'})
+        single = client.post(
+            '/api/business/items/',
+            {'name': '机架', 'specification': 'x', 'product_category': '11'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='multi-field-2',
+        )
+        self.assertEqual(single.status_code, 400)
+        self.assertEqual(set(single.data), {'drawing_number'})
+        invalid = client.post(
+            '/api/business/items/',
+            {'name': '机架', 'product_category': '99'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='multi-field-3',
+        )
+        self.assertEqual(set(invalid.data), {'product_category'})  # 类别无效时规格/图号依赖类别，不编造
+
+    def test_bom_material_import_reports_every_new_material_field_error(self):
+        from apps.business.services import bom_material_import
+
+        row = ['', '上料', '1', '', '', '', '', '机架', '', '', '', '有图·机加', '', '', '']
+        stream = io.StringIO()
+        csv.writer(stream).writerows([bom_material_import.HEADERS, row])
+        response = self.clients['manager'].post(
+            f'/api/business/projects/{self.project.pk}/import-preview/',
+            {'file': SimpleUploadedFile('bom.csv', stream.getvalue().encode())},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data['can_import'])
+        message = response.data['errors'][0]['message']
+        for label in ('规格', '图号', '单位'):
+            self.assertIn(label, message)
+
 
 class CorruptSpreadsheetTests(BusinessFixtures, TestCase):
     """解包失败（deflate 数据损坏等）的 XLSX 在各导入入口返回中文 400，不再 500。"""
