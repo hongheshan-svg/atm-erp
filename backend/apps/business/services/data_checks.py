@@ -30,7 +30,6 @@ from django.utils.http import content_disposition_header
 from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
-from apps.core.models import AuditLog
 
 from ..models import BankMatch, BankRecord, Delivery, Entry, Payment, PurchaseWarranty, Reconciliation
 from . import deletions, finance, tabular
@@ -241,22 +240,10 @@ def explain(obj):
 
 def deleted_open():
     """Records moved to "已删除记录" that the current in-progress rule (deletions.check_open) would keep."""
-    prefixes = {model._meta.model_name: resource for resource, (model, _) in deletions.RESOURCES.items()}
-    wanted = ('entries', 'payments', 'reconciliations', 'bank-records', 'bank-matches', 'deliveries')
-    removed = {resource: set() for resource in wanted}
-    names = [deletions.RESOURCES[resource][0]._meta.model_name for resource in wanted]
-    logs = AuditLog.objects.filter(
-        Q(*[Q(resource__startswith=f'{name}:') for name in names], _connector=Q.OR), operation=deletions.OPERATION
-    )
-    for resource in logs.values_list('resource', flat=True):
-        name, _, pk = resource.partition(':')
-        if prefixes.get(name) in removed and pk.isdigit():
-            removed[prefixes[name]].add(int(pk))
 
-    def hidden(model, resource):
-        # Exactly the rows the list hides (visible_rows), in case a later rule makes some visible again.
-        ids = removed[resource]
-        return model.objects.filter(pk__in=ids).exclude(pk__in=deletions.visible_rows(model.objects.filter(pk__in=ids)))
+    def hidden(model):
+        # Same rule as the list filter: a record.delete with no later record.restore (restored rows are live).
+        return model.objects.alias(_removed=deletions.removed(model)).filter(_removed=True)
 
     def annotated_entries(ids):
         paid = (
@@ -273,7 +260,7 @@ def deleted_open():
         }
 
     rows = []
-    entries = annotated_entries(hidden(Entry, 'entries').values('pk'))
+    entries = annotated_entries(hidden(Entry).values('pk'))
     draft_problem = None
     for entry in sorted(entries.values(), key=lambda value: value.pk):
         if finance.balance(entry):
@@ -301,7 +288,7 @@ def deleted_open():
                 )
             )
 
-    payments = list(hidden(Payment, 'payments').order_by('pk'))
+    payments = list(hidden(Payment).order_by('pk'))
     owners = annotated_entries({payment.entry_id for payment in payments})
     for payment in payments:
         payment.entry = owners[payment.entry_id]
@@ -320,7 +307,7 @@ def deleted_open():
                 )
             )
 
-    statements = hidden(Reconciliation, 'reconciliations').select_related('entry__project').prefetch_related('payments')
+    statements = hidden(Reconciliation).select_related('entry__project').prefetch_related('payments')
     for statement in statements.order_by('pk'):
         problem = explain(statement)
         if problem:
@@ -337,11 +324,16 @@ def deleted_open():
                 )
             )
 
-    matches = list(hidden(BankMatch, 'bank-matches').select_related('payment__entry').order_by('pk'))
-    bank_ids = removed['bank-records'] | {match.bank_id for match in matches}
-    banks = with_remaining(BankRecord.objects.filter(pk__in=bank_ids)).select_related('project').in_bulk()
-    for pk in sorted(hidden(BankRecord, 'bank-records').values_list('pk', flat=True)):
-        bank = banks[pk]
+    matches = list(hidden(BankMatch).select_related('payment__entry').order_by('pk'))
+    # Removed bank records and the banks of removed matches, in one query with the remaining amount.
+    banks = (
+        with_remaining(BankRecord.objects.annotate(removed=deletions.removed(BankRecord)))
+        .filter(Q(removed=True) | Q(pk__in={match.bank_id for match in matches}))
+        .select_related('project')
+        .order_by('pk')
+        .in_bulk()
+    )
+    for bank in (bank for bank in banks.values() if bank.removed):
         problem = explain(bank)
         if problem:
             rows.append(
@@ -373,7 +365,7 @@ def deleted_open():
                 )
             )
 
-    for delivery in hidden(Delivery, 'deliveries').select_related('project').order_by('pk'):
+    for delivery in hidden(Delivery).select_related('project').order_by('pk'):
         problem = explain(delivery)
         if problem:
             rows.append(

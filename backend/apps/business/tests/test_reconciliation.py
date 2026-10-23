@@ -1,17 +1,23 @@
+import csv
+import io
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from decimal import Decimal
 from threading import Barrier
 from unittest.mock import patch
+from urllib.parse import quote
 
-from django.db import IntegrityError, close_old_connections, transaction
+from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from apps.business.models import (
     BankMatch,
     BankRecord,
+    Delivery,
     Document,
     Entry,
     Partner,
@@ -19,8 +25,11 @@ from apps.business.models import (
     Project,
     PurchaseLine,
     PurchaseOrder,
+    PurchaseWarranty,
     Reconciliation,
     SalesOrder,
+    Stock,
+    StockMove,
 )
 from apps.business.services import banking, finance, reconciliation
 from apps.core.api import Conflict
@@ -858,3 +867,338 @@ class BankReferenceConcurrencyTests(BusinessFixtures, TransactionTestCase):
         self.assertEqual(ActionReceipt.objects.count(), counts[0] + 1)
         self.assertEqual(AuditLog.objects.count(), counts[1] + 1)
         self.assertFalse(Payment.objects.exists())
+
+
+class DataCheckTests(BusinessFixtures, TestCase):
+    """Administrator read-only checklist of historical records that today's rules would reject."""
+
+    CATEGORIES = ('duplicate-payments', 'claim-manual', 'duplicate-banks', 'warranty-links', 'deleted-open')
+
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+        self.today = timezone.localdate()
+        self.stock = Stock.objects.create(item=self.item, location='主仓', quantity=100, value=10000)
+
+    def checks(self, category=None, *, role='admin', status=200, **params):
+        response = self.clients[role].get(
+            '/api/business/data-checks/', {**({'category': category} if category else {}), **params}
+        )
+        self.assertEqual(response.status_code, status, getattr(response, 'data', response))
+        return response
+
+    def counts(self):
+        return {row['key']: row['count'] for row in self.checks().data['categories']}
+
+    def rows(self, category):
+        return self.checks(category, page_size=200).data['results']
+
+    def entry(self, title, *, kind='receivable', amount='1000'):
+        return Entry.objects.create(project=self.project, kind=kind, title=title, amount=amount, due_date=self.today)
+
+    def pay(self, entry, amount, reference='', account='基本户', **extra):
+        return Payment.objects.create(
+            entry=entry,
+            amount=amount,
+            date=self.today,
+            reason=extra.pop('reason', '历史登记'),
+            account=account,
+            reference=reference,
+            **extra,
+        )
+
+    def bank(self, reference, amount, account='基本户', **extra):
+        return BankRecord.objects.create(
+            amount=amount,
+            date=extra.pop('date', self.today),
+            account=account,
+            reference=reference,
+            counterparty='客户',
+            reason='到账',
+            **extra,
+        )
+
+    def match(self, bank, payment, amount):
+        return BankMatch.objects.create(bank=bank, payment=payment, amount=amount, reason='历史匹配')
+
+    def removed(self, obj):
+        return AuditLog.objects.create(
+            actor=self.users['admin'],
+            operation='record.delete',
+            resource=f'{obj._meta.model_name}:{obj.pk}',
+            detail={'resource': 'history', 'record': {}, 'reason': '历史删除', 'mode': 'archive'},
+        )
+
+    def receipt(self, code, quantity='5'):
+        purchase = PurchaseOrder.objects.create(
+            code=code, project=self.project, supplier=self.supplier, status='received', due_date=self.today
+        )
+        line = PurchaseLine.objects.create(
+            purchase=purchase, item=self.item, quantity=quantity, unit_price='100', received_quantity=quantity
+        )
+        move = StockMove.objects.create(
+            stock=self.stock,
+            project=self.project,
+            purchase_line=line,
+            kind='receipt',
+            quantity=quantity,
+            value=Decimal(quantity) * 100,
+            received_date=self.today,
+            reason='采购收货',
+        )
+        return purchase, move
+
+    def give_back(self, receipt, quantity):
+        return StockMove.objects.create(
+            stock=self.stock,
+            project=self.project,
+            purchase_line=receipt.purchase_line,
+            source=receipt,
+            kind='purchase_return',
+            quantity=-Decimal(quantity),
+            value=-Decimal(quantity) * 100,
+            reason='采购退货',
+        )
+
+    def warranty(self, receipt, quantity, **links):
+        return PurchaseWarranty.objects.create(
+            receipt=receipt, date=self.today, quantity=quantity, description='报修', **links
+        )
+
+    def group(self, index):
+        """One hit for every category; groups never share an identity with each other."""
+        duplicated = self.entry(f'重复登记款项{index}')
+        self.pay(duplicated, '100', f'DUP-{index}')
+        self.pay(duplicated, '100', f'DUP-{index}')
+
+        amount = Decimal(300 + index)
+        claimed = self.bank(f'CLM-{index}', amount)
+        self.match(claimed, self.pay(self.entry(f'认领款项{index}'), amount, f'CLM-{index}'), amount)
+        self.pay(self.entry(f'手工款项{index}'), amount, f'CLM-{index}')
+
+        self.bank(f'M-{index}', '500', account=f'核查户{index}')
+        self.bank(f'IMPORT-HXB-{index}', '500', account=f'核查户{index}', import_fingerprint=f'fp-{index}')
+
+        _, receipt = self.receipt(f'PO-DC-{index}')
+        returned = self.give_back(receipt, '2')
+        expense = self.entry(f'质保费用{index}', kind='expense', amount='50')
+        self.warranty(receipt, '1', returned=returned, expense=expense)
+        self.warranty(receipt, '2', returned=returned, expense=expense)
+
+        self.removed(self.entry(f'已删未结款项{index}', amount='100'))
+        zero = self.entry(f'已删待确认对账款项{index}', amount='0')
+        Reconciliation.objects.create(
+            code=f'REC-Z-{index}', entry=zero, kind='settlement', approved_amount='10', reason='待确认'
+        )
+        self.removed(zero)
+        self.removed(self.pay(self.entry(f'未结款项{index}'), '100'))
+        self.removed(
+            Reconciliation.objects.create(
+                code=f'REC-D-{index}',
+                entry=self.entry(f'对账款项{index}'),
+                kind='settlement',
+                approved_amount='10',
+                reason='待确认',
+            )
+        )
+        self.removed(self.bank(f'DEL-{index}', '700', account=f'删除户{index}'))
+        open_bank = self.bank(f'DM-{index}', '800', account=f'匹配户{index}')
+        self.removed(self.match(open_bank, self.pay(self.entry(f'匹配款项{index}'), '100'), '100'))
+        self.removed(
+            Delivery.objects.create(code=f'DEL-DC-{index}', project=self.project, quantity=1, shipped_date=self.today)
+        )
+
+    def test_every_category_lists_its_hits_with_links_and_reasons(self):
+        self.group(1)
+        self.assertEqual(
+            self.counts(),
+            {'duplicate-payments': 2, 'claim-manual': 1, 'duplicate-banks': 2, 'warranty-links': 2, 'deleted-open': 7},
+        )
+        body = self.checks().data
+        self.assertEqual(body['category'], 'duplicate-payments')
+        self.assertIn('只读核查，不会修改任何数据', body['notice'])
+        first = body['results'][0]
+        self.assertEqual(
+            set(first),
+            {
+                'category',
+                'category_label',
+                'record_type',
+                'record_type_label',
+                'record_id',
+                'title',
+                'project_code',
+                'amount',
+                'problem',
+                'path',
+            },
+        )
+        self.assertEqual(first['project_code'], self.project.code)
+        self.assertEqual(first['amount'], '100.00')
+        self.assertIn('可能重复登记', first['problem'])
+        self.assertEqual(
+            first['path'], f'/finance?section=payments&resource=payments&focus={first["record_id"]}&project=all'
+        )
+
+        manual = self.rows('claim-manual')[0]
+        self.assertEqual(Payment.objects.get(pk=manual['record_id']).entry.title, '手工款项1')
+        self.assertIn('已有 1 条收付款匹配了银行流水', manual['problem'])
+        self.assertIn('可能重复计收', manual['problem'])
+
+        banks = self.rows('duplicate-banks')
+        self.assertEqual({row['record_type'] for row in banks}, {'bank-records'})
+        self.assertIn('本条为手工录入', banks[0]['problem'])
+        self.assertIn('本条为导入记录', banks[1]['problem'])
+        self.assertTrue(banks[0]['path'].startswith('/finance?section=bank&resource=bank-records&focus='))
+
+        warranties = self.rows('warranty-links')
+        self.assertIn('同时关联了 2 张质保单', warranties[0]['problem'])
+        self.assertIn('关联退货数量 2.000 超过本质保单报修数量 1.000', warranties[0]['problem'])
+        self.assertIn('费用「质保费用1」同时关联了 2 张质保单', warranties[0]['problem'])
+        self.assertNotIn('超过本质保单报修数量', warranties[1]['problem'])
+        purchase = PurchaseOrder.objects.get(code='PO-DC-1')
+        self.assertEqual(warranties[0]['path'], f'/purchases?resource=purchases&focus={purchase.pk}')
+
+        deleted = self.rows('deleted-open')
+        self.assertEqual(
+            [row['record_type'] for row in deleted],
+            ['entries', 'entries', 'payments', 'reconciliations', 'bank-records', 'bank-matches', 'deliveries'],
+        )
+        self.assertTrue(all(row['problem'].startswith('已移入“已删除记录”，但按现行在办规则仍在办') for row in deleted))
+        self.assertIn('账款余额 100.00 元尚未结清', deleted[0]['problem'])
+        self.assertIn('待确认的对账单', deleted[1]['problem'])
+        self.assertIn('余额 900.00 元尚未结清', deleted[2]['problem'])
+        self.assertIn('对账单待确认', deleted[3]['problem'])
+        self.assertIn('还有 700.00 元未认领或未匹配', deleted[4]['problem'])
+        self.assertIn('还有 700.00 元未认领或未匹配', deleted[5]['problem'])
+        self.assertIn('交付批次尚未验收', deleted[6]['problem'])
+        delivery = Delivery.objects.get(code='DEL-DC-1')
+        self.assertEqual(
+            deleted[6]['path'],
+            f'/projects/{self.project.pk}?tab=deliveries&section=deliveries&resource=deliveries&focus={delivery.pk}',
+        )
+
+    def test_records_that_current_rules_accept_are_not_listed(self):
+        entry = self.entry('正常款项')
+        reversed_payment = self.pay(entry, '100', 'R-1')
+        self.pay(entry, '-100', 'R-1', reversal_of=reversed_payment, reason='冲销')
+        self.pay(entry, '100', 'R-1')
+        self.pay(entry, '100', '')
+        self.pay(entry, '100', '')
+        # Same reference in another entry is a split of one transfer; a refund is the other direction.
+        self.pay(self.entry('拆分款项'), '100', 'R-1')
+        self.pay(entry, '-50', 'R-1')
+        # All registrations of a claimed transfer are matched.
+        bank = self.bank('ALL-MATCHED', '200')
+        for title in ('认领一', '认领二'):
+            self.match(bank, self.pay(self.entry(title), '100', 'ALL-MATCHED'), '100')
+        # Bank groups: two imported rows, a voided manual row, or a different date.
+        self.bank('A', '600', account='导入户', import_fingerprint='fp-a')
+        self.bank('B', '600', account='导入户', source={'bank': 'ICBC'})
+        self.bank('C', '600', account='作废户', void_reason='误录')
+        self.bank('D', '600', account='作废户')
+        self.bank('E', '600', account='日期户')
+        self.bank('F', '600', account='日期户', date=self.today - timedelta(days=1))
+        # Warranty linked to its own partial return and expense.
+        _, receipt = self.receipt('PO-OK')
+        self.warranty(receipt, '2', returned=self.give_back(receipt, '1'), expense=self.entry('质保', kind='expense'))
+        # Deleted but ended: settled entry, void statement, accepted delivery out of warranty, restored record.
+        settled = self.entry('已结清', amount='100')
+        self.pay(settled, '100')
+        self.removed(settled)
+        self.removed(
+            Reconciliation.objects.create(
+                code='REC-V', entry=settled, kind='settlement', approved_amount='10', reason='作废', status='void'
+            )
+        )
+        self.removed(
+            Delivery.objects.create(
+                code='DEL-OK',
+                project=self.project,
+                quantity=1,
+                shipped_date=self.today,
+                accepted_date=self.today,
+                warranty_until=self.today - timedelta(days=1),
+            )
+        )
+        restored = self.entry('已恢复未结款项', amount='100')
+        self.removed(restored)
+        AuditLog.objects.create(
+            actor=self.users['admin'], operation='record.restore', resource=f'entry:{restored.pk}', detail={}
+        )
+        # In progress but never deleted.
+        self.entry('未删除未结款项', amount='100')
+        self.assertEqual(self.counts(), dict.fromkeys(self.CATEGORIES, 0))
+
+    def test_only_administrators_can_read_or_export(self):
+        self.group(1)
+        for role in ('finance', 'manager', 'purchaser', 'member'):
+            self.checks(role=role, status=403)
+            self.checks('deleted-open', role=role, status=403, file_format='csv')
+        actor = self.users['finance']
+        actor.additional_roles = ['admin']
+        actor.save()
+        self.assertEqual(self.checks(role='finance').data['categories'][0]['count'], 2)
+        self.checks('unknown', status=400)
+        self.checks(status=400, file_format='pdf')
+        self.assertIn(self.client.get('/api/business/data-checks/').status_code, {401, 403})
+
+    def test_export_uses_chinese_name_and_blocks_formulas(self):
+        entry = self.entry('=HYPERLINK("http://bad")')
+        self.pay(entry, '100', '+SUM(1)')
+        self.pay(entry, '100', '+SUM(1)')
+        response = self.checks('duplicate-payments', file_format='csv')
+        self.assertIn("filename*=utf-8''", response['Content-Disposition'])
+        self.assertIn(quote('历史数据核查_同一款项重复登记的银行收付款_'), response['Content-Disposition'])
+        lines = list(csv.reader(io.StringIO(response.content.decode('utf-8-sig'))))
+        self.assertEqual(
+            lines[0], ['类别', '记录类型', '记录ID', '编号/标题', '项目编号', '金额', '问题说明', '原单路径']
+        )
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[1][0], '同一款项重复登记的银行收付款')
+        self.assertTrue(lines[1][3].startswith('\'=HYPERLINK("http://bad")'), lines[1][3])
+        self.assertEqual(lines[1][5], '100.00')
+        self.assertTrue(lines[1][7].startswith('/finance?section=payments'))
+        workbook = load_workbook(io.BytesIO(self.checks('duplicate-payments', file_format='xlsx').content))
+        values = list(workbook.active.iter_rows(values_only=True))
+        self.assertEqual(values[1][5], 100)
+        self.assertTrue(values[1][3].startswith("'="))
+
+    def test_checks_are_read_only(self):
+        self.group(1)
+        models = (Entry, Payment, BankRecord, BankMatch, Reconciliation, PurchaseWarranty, Delivery, StockMove)
+
+        def snapshot():
+            return (
+                [
+                    (model.all_objects.count(), model.all_objects.order_by('-updated_at').values('updated_at').first())
+                    for model in models
+                ],
+                ActionReceipt.objects.count(),
+                AuditLog.objects.count(),
+            )
+
+        before = snapshot()
+        for category in self.CATEGORIES:
+            self.checks(category)
+            self.checks(category, file_format='csv')
+            self.checks(category, file_format='xlsx')
+        self.assertEqual(snapshot(), before)
+
+    def test_query_count_does_not_grow_with_problem_records(self):
+        def measured():
+            total = 0
+            for category in self.CATEGORIES:
+                with CaptureQueriesContext(connection) as queries:
+                    self.checks(category, page_size=200)
+                total += len(queries)
+            return total
+
+        for index in range(2):
+            self.group(index)
+        small = measured()
+        self.assertEqual(self.counts()['deleted-open'], 14)
+        for index in range(2, 10):
+            self.group(index)
+        self.assertEqual(self.counts()['deleted-open'], 70)
+        self.assertEqual(measured(), small)
