@@ -1,10 +1,12 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from apps.business.models import (
     BOMLine,
@@ -317,6 +319,44 @@ class ReviewRemediationTests(BusinessFixtures, TestCase):
         )
         purchase.refresh_from_db()
         self.assertEqual(purchase.status, 'partial')
+
+    def test_quality_accept_date_cannot_precede_latest_quarantine_arrival(self):
+        today = timezone.localdate()
+        first, latest = today - timedelta(days=5), today - timedelta(days=2)
+        purchase = self.purchase(self.project, qty='5')
+        line = purchase.lines.get()
+        url = f'purchases/{purchase.pk}/'
+        for arrived in (first, latest):
+            self.post(
+                'warehouse',
+                url + 'receive/',
+                {
+                    'location': '主仓',
+                    'reason': '到货待检',
+                    'received_date': arrived.isoformat(),
+                    'backfill_reason': '补录纸质到货单',
+                    'lines': [{'line': line.pk, 'quantity': '0', 'pending_quantity': '2'}],
+                },
+            )
+        accept = {
+            'location': '主仓',
+            'reason': '检验合格',
+            'backfill_reason': '补录检验记录',
+            'lines': [{'line': line.pk, 'quantity': '1'}],
+        }
+        counts = (ActionReceipt.objects.count(), StockMove.objects.count())
+        for early in (today - timedelta(days=40), latest - timedelta(days=1)):
+            rejected = self.post(
+                'warehouse', url + 'quality-accept/', {**accept, 'received_date': early.isoformat()}, status=400
+            )
+            self.assertIn(latest.isoformat(), str(rejected['received_date']))
+        self.assertEqual((ActionReceipt.objects.count(), StockMove.objects.count()), counts)
+        line.refresh_from_db()
+        self.assertEqual(line.pending_quantity, 4)
+        self.post('warehouse', url + 'quality-accept/', {**accept, 'received_date': latest.isoformat()})
+        self.assertEqual(StockMove.objects.get(kind='receipt').received_date, latest)
+        self.post('warehouse', url + 'quality-accept/', {**accept, 'backfill_reason': ''})
+        self.assertEqual(StockMove.objects.filter(kind='receipt').latest('id').received_date, today)
 
 
 class PartialReceiveTests(BusinessFixtures, TestCase):

@@ -1,4 +1,5 @@
 import copy
+from datetime import date
 from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
@@ -45,6 +46,25 @@ def receiving_status(lines):
     if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines):
         return 'received' if any(line.received_quantity for line in lines) else 'cancelled'
     return 'partial' if any(line.received_quantity or line.pending_quantity for line in lines) else 'approved'
+
+
+def quarantine_arrivals(purchase):
+    """{明细ID: 最近一次隔离到货日期}，取自收货审计（隔离到货不产生库存流水）。"""
+    result = {}
+    logs = AuditLog.objects.filter(operation='purchase.receive', resource=f'purchaseorder:{purchase.pk}')
+    for detail, created_at in logs.values_list('detail', 'created_at'):
+        try:
+            arrived = date.fromisoformat(detail['received_date'])
+        except (KeyError, TypeError, ValueError):
+            arrived = timezone.localdate(created_at)
+        for row in detail.get('lines') or []:
+            try:
+                line_id, pending = int(row['line']), Decimal(str(row.get('pending_quantity', '0')))
+            except (KeyError, TypeError, ValueError, ArithmeticError):
+                continue
+            if pending > ZERO and arrived > result.get(line_id, date.min):
+                result[line_id] = arrived
+    return result
 
 
 def _amount_changed(detail):
@@ -347,6 +367,17 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             remarks[line_id] = remark
         if not selected:
             raise ValidationError('请至少填写一条到货数量。')
+        if from_quarantine:
+            arrivals = quarantine_arrivals(purchase)
+            for line_id in selected:
+                arrived = arrivals.get(line_id)
+                if arrived and received_date < arrived:
+                    raise ValidationError(
+                        {
+                            'received_date': f'合格入库日期不能早于{lines[line_id].item.name}的隔离到货日期 '
+                            f'{arrived.isoformat()}，请填写该日期当天或之后的检验合格日期。'
+                        }
+                    )
         stocks = lock_stocks([lines[line_id].item_id for line_id, qty in selected.items() if qty], location, user)
         for line_id, qty in selected.items():
             if not qty:
