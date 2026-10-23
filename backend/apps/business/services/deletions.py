@@ -13,7 +13,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import CharField, Exists, OuterRef, Value
 from django.db.models.functions import Cast, Concat
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.accounts.models import User
 from apps.core.actions import perform
@@ -23,9 +23,10 @@ from apps.core.permissions import ADMIN, require_role
 
 from .. import models
 from . import banking, finance, reconciliation
-from .common import audit, fields, text
+from .common import audit, fields, identity, text
 
 OPERATION = 'record.delete'
+RESTORE = 'record.restore'
 ENDED_PROJECT = {'closed', 'cancelled'}
 RESOURCES = {
     'items': (models.Item, '物料'),
@@ -47,6 +48,8 @@ RESOURCES = {
     'documents': (models.Document, '附件'),
     'users': (User, '用户'),
 }
+# Only accounts come back: a restored user stays disabled until an admin reviews its roles.
+RESTORABLE = {'users'}
 
 
 def resource_definition(resource):
@@ -55,18 +58,29 @@ def resource_definition(resource):
     return RESOURCES[resource]
 
 
+def unrestored(removals):
+    """Deletion logs not followed by a restore of the same record (audit ids only grow)."""
+    later = AuditLog.objects.filter(operation=RESTORE, resource=OuterRef('resource'), pk__gt=OuterRef('pk'))
+    return removals.alias(_restored=Exists(later)).filter(_restored=False)
+
+
+def removed(model):
+    """Whether a row is currently removed: a record.delete exists with no later record.restore."""
+    removals = AuditLog.objects.filter(
+        operation=OPERATION,
+        resource=Concat(Value(f'{model._meta.model_name}:'), Cast(OuterRef('pk'), CharField())),
+    )
+    # A zero stock row can be put away, but a later receipt makes it visible again.
+    if model is models.Stock:
+        removals = removals.filter(created_at__gte=OuterRef('updated_at'))
+    return Exists(unrestored(removals))
+
+
 def visible_rows(queryset):
     """Only list/export call this; business services keep the original fact queries."""
     if queryset.model not in {definition[0] for definition in RESOURCES.values()}:
         return queryset
-    removals = AuditLog.objects.filter(
-        operation=OPERATION,
-        resource=Concat(Value(f'{queryset.model._meta.model_name}:'), Cast(OuterRef('pk'), CharField())),
-    )
-    # A zero stock row can be put away, but a later receipt makes it visible again.
-    if queryset.model is models.Stock:
-        removals = removals.filter(created_at__gte=OuterRef('updated_at'))
-    return queryset.alias(_admin_removed=Exists(removals)).filter(_admin_removed=False)
+    return queryset.alias(_admin_removed=removed(queryset.model)).filter(_admin_removed=False)
 
 
 def references(obj, *, ignore=()):
@@ -281,3 +295,43 @@ def remove(request, key, data):
         return {'count': len(results), 'records': results}
 
     return perform(actor=actor, key=key, operation=OPERATION, payload=data, authorize=authorize, execute=execute)
+
+
+def restore(request, key, data):
+    """Bring a deleted account back to the user list, still disabled until an admin reviews its roles.
+
+    The deletion log stays as history; the restore is a separate audit entry pointing at it.
+    """
+    actor = request.user
+    require_role(actor, ADMIN)
+    fields(data, {'resource', 'id', 'reason'})
+    if data.get('resource') not in RESTORABLE:
+        raise ValidationError(
+            {'resource': '本轮仅支持恢复用户账号；其他已删除记录仅保留历史，业务错误请按冲销、退料或更正处理。'}
+        )
+    pk = identity(data.get('id'))
+    reason = text(data, 'reason')
+
+    def authorize(user):
+        # Same order as account deletion and user maintenance: company lock, then the account row.
+        Company.objects.get_or_create(pk=1)
+        Company.objects.select_for_update().get(pk=1)
+        user.refresh_from_db()
+        require_role(user, ADMIN)
+
+    def execute(user):
+        target = User.objects.select_for_update().filter(pk=pk).first()
+        if target is None:
+            raise NotFound('账号不存在，请刷新已删除记录后重试。')
+        removals = AuditLog.objects.filter(operation=OPERATION, resource=f'{User._meta.model_name}:{target.pk}')
+        deletion = unrestored(removals).order_by('-pk').first()
+        if deletion is None:
+            raise Conflict('该账号未处于已删除状态，无需恢复；请刷新已删除记录，启用或停用请在用户管理中编辑。')
+        if target.is_active:
+            target.is_active = False
+            target.save(update_fields=['is_active'])
+        record = snapshot(target, request)
+        audit(user, RESTORE, target, resource='users', record=record, reason=reason, deletion=deletion.pk)
+        return {'id': target.pk, 'deletion': deletion.pk, 'is_active': target.is_active}
+
+    return perform(actor=actor, key=key, operation=RESTORE, payload=data, authorize=authorize, execute=execute)

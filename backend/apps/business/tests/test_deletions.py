@@ -5,8 +5,9 @@ from decimal import Decimal
 from threading import Event
 from unittest.mock import patch
 
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.business.models import (
@@ -288,6 +289,134 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertEqual(record['username'], 'member')
         response = self.clients['admin'].get('/api/auth/users/')
         self.assertNotIn(member.pk, {row['id'] for row in response.data['results']})
+
+    def restore(self, user_id, *, role='admin', resource='users', reason='误删账号，核对后恢复', status=200, key=None):
+        return self.post(
+            role,
+            'record-deletions/restore/',
+            {'resource': resource, 'id': user_id, 'reason': reason},
+            status=status,
+            key=key,
+        )
+
+    def user_rows(self):
+        response = self.clients['admin'].get('/api/auth/users/')
+        self.assertEqual(response.status_code, 200, response.data)
+        return {row['id']: row for row in response.data['results']}
+
+    def test_user_restore_reappears_disabled_with_audit_until_admin_enables(self):
+        member = self.users['member']
+        self.project.members.add(member)
+        url = f'/api/auth/users/{member.pk}/'
+        self.remove('users', [member.pk], reason='误删')
+        deletion = AuditLog.objects.get(operation='record.delete', resource=f'user:{member.pk}')
+        self.assertFalse(self.history('users')[0]['restored'])
+        # 仍处于已删除状态的账号，普通编辑不能启用。
+        self.assertEqual(self.clients['admin'].patch(url, {'is_active': True}, format='json').status_code, 404)
+        result = self.restore(member.pk)
+        self.assertEqual(result['id'], member.pk)
+        self.assertEqual(result['deletion'], deletion.pk)
+        self.assertFalse(result['is_active'])
+        member.refresh_from_db()
+        self.assertFalse(member.is_active)
+        self.assertEqual(member.username, 'member')
+        restored = AuditLog.objects.get(operation='record.restore', resource=f'user:{member.pk}')
+        self.assertEqual(restored.actor, self.users['admin'])
+        self.assertEqual(restored.detail['resource'], 'users')
+        self.assertEqual(restored.detail['reason'], '误删账号，核对后恢复')
+        self.assertEqual(restored.detail['deletion'], deletion.pk)
+        self.assertEqual(restored.detail['record']['username'], 'member')
+        self.assertFalse(restored.detail['record']['is_active'])
+        self.assertNotIn('password', restored.detail['record'])
+        self.assertTrue(AuditLog.objects.filter(pk=deletion.pk, detail__reason='误删').exists())
+        self.assertFalse(self.user_rows()[member.pk]['is_active'])
+        [history] = self.history('users')
+        self.assertEqual(history['id'], deletion.pk)
+        self.assertTrue(history['restored'])
+        self.assertEqual(history['restored_by'], 'admin')
+        self.assertIsNotNone(history['restored_at'])
+        self.assertIn(member, self.project.members.all())
+        response = self.clients['admin'].patch(url, {'is_active': True}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        member.refresh_from_db()
+        self.assertTrue(member.is_active)
+        # 用户名仍归该账号所有，不能新建同名账号。
+        response = self.clients['admin'].post(
+            '/api/auth/users/', {'username': 'member', 'password': 'temporary', 'role': 'member'}, format='json'
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+
+    def test_user_restore_rejects_live_accounts_and_replays_receipt(self):
+        member = self.users['member']
+        self.assertIn('未处于已删除状态', str(self.restore(member.pk, status=409)))
+        self.remove('users', [member.pk])
+        key = str(uuid.uuid4())
+        first = self.restore(member.pk, key=key)
+        self.assertEqual(self.restore(member.pk, key=key), first)
+        self.assertEqual(AuditLog.objects.filter(operation='record.restore').count(), 1)
+        self.assertIn('未处于已删除状态', str(self.restore(member.pk, status=409)))
+        self.restore(member.pk, key=key, reason='更换原因', status=409)
+        self.restore(999999, status=404)
+        self.assertEqual(AuditLog.objects.filter(operation='record.restore').count(), 1)
+
+    def test_user_restore_requires_admin_users_resource_reason_and_key(self):
+        member = self.users['member']
+        self.remove('users', [member.pk])
+        for role in ['finance', 'warehouse', 'manager', 'production_manager', 'purchase_manager']:
+            with self.subTest(role=role):
+                self.restore(member.pk, role=role, status=403)
+        self.assertIn('本轮仅支持恢复用户账号', str(self.restore(self.item.pk, resource='items', status=400)))
+        self.assertIn('本轮仅支持恢复用户账号', str(self.restore(member.pk, resource='audit', status=400)))
+        for reason in ['  ', 'x' * 501]:
+            self.restore(member.pk, reason=reason, status=400)
+        for value in [True, 'abc', 0, None]:
+            self.restore(value, status=400)
+        self.post('admin', 'record-deletions/restore/', {'resource': 'users', 'id': member.pk}, status=400)
+        self.post(
+            'admin',
+            'record-deletions/restore/',
+            {'resource': 'users', 'id': member.pk, 'reason': '恢复', 'ids': [member.pk]},
+            status=400,
+        )
+        response = self.clients['admin'].post(
+            '/api/business/record-deletions/restore/',
+            {'resource': 'users', 'id': member.pk, 'reason': '恢复'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(AuditLog.objects.filter(operation='record.restore').exists())
+        actor = self.users['manager']
+        actor.additional_roles = ['admin']
+        actor.save()
+        key = str(uuid.uuid4())
+        first = self.restore(member.pk, role='manager', key=key)
+        self.assertEqual(self.restore(member.pk, role='manager', key=key), first)
+        actor.additional_roles = []
+        actor.save()
+        self.restore(member.pk, role='manager', key=key, status=403)
+        self.assertEqual(AuditLog.objects.filter(operation='record.restore').count(), 1)
+
+    def test_restored_user_can_be_deleted_and_restored_again(self):
+        member = self.users['member']
+        url = f'/api/auth/users/{member.pk}/'
+        self.remove('users', [member.pk])
+        with CaptureQueriesContext(connection) as single:
+            self.history('users')
+        self.restore(member.pk)
+        self.remove('users', [member.pk], reason='再次删除')
+        self.assertNotIn(member.pk, self.user_rows())
+        self.assertEqual(self.clients['admin'].patch(url, {'is_active': True}, format='json').status_code, 404)
+        self.assertEqual([row['restored'] for row in self.history('users')], [False, True])
+        self.restore(member.pk, reason='再次恢复')
+        self.assertIn(member.pk, self.user_rows())
+        self.assertEqual([row['restored'] for row in self.history('users')], [True, True])
+        with CaptureQueriesContext(connection) as both:
+            self.history('users')
+        self.assertEqual(len(both), len(single), '已删除记录的恢复状态不能逐条查询')
+        removals = AuditLog.objects.filter(operation='record.delete', resource=f'user:{member.pk}').order_by('pk')
+        restores = AuditLog.objects.filter(operation='record.restore', resource=f'user:{member.pk}').order_by('pk')
+        self.assertEqual([log.detail['deletion'] for log in restores], [log.pk for log in removals])
+        self.assertEqual(self.clients['admin'].patch(url, {'is_active': True}, format='json').status_code, 200)
 
     def test_unused_attachment_preserves_file_reference(self):
         doc = Document.objects.create(
