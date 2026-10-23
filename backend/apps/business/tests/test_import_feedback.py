@@ -290,6 +290,36 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
                 book.close()
         self.assertEqual(wording, {'记录不存在或不在你的权限范围内。'})
 
+    def test_person_reference_errors_name_the_column_and_keep_wording(self):
+        from apps.accounts.models import User
+
+        User.objects.filter(pk=self.users['manager'].pk).update(display_name='重名')
+        User.objects.filter(pk=self.users['member'].pk).update(display_name='重名')
+        inactive = self.users['mechanical_engineer']
+        headers = [label for label, _ in transfers.SCHEMAS['tasks'][1]]
+        keys = [key for _, key in transfers.SCHEMAS['tasks'][1]]
+        ghost_rows = {'不存在的人': '未找到人员', '重名': '对应多名人员'}
+        User.objects.filter(pk=inactive.pk).update(is_active=False)
+        ghost_rows[inactive.username] = '已停用'
+        for value, text in ghost_rows.items():
+            with self.subTest(value=value):
+                row = {'title': '任务', 'kind': '设计', 'assignee': value, 'project': self.project.code}
+                result = self.upload('tasks/import-file/', headers, [[row.get(key, '') for key in keys]])
+                self.assertEqual(result.status_code, 200, result.data)
+                error = result.data['errors'][0]
+                self.assertIn(text, error['message'])
+                self.assertNotIn('执行人姓名或账号：', error['message'])
+                self.assertEqual(error['fields'], ['assignee'])
+                book = self.workbook(result.data)
+                marked = [
+                    cell.column
+                    for row_cells in book.active
+                    for cell in row_cells
+                    if cell.comment and cell.fill.fgColor.rgb.endswith('FDE2E2')
+                ]
+                self.assertEqual(marked, [keys.index('assignee') + 1])
+                book.close()
+
     def test_confirmation_failure_returns_located_rows_and_writes_nothing(self):
         stock = Stock.objects.create(item=Item.objects.first(), location='主仓', quantity='10.000', value='100.00')
         BOMLine.objects.create(project=self.project, item=stock.item, quantity='5.000')
