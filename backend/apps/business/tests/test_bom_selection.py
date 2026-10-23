@@ -262,3 +262,101 @@ class MultiUnitReceiptAttributionTests(BusinessFixtures, TestCase):
         self.assertIn('检测', str(conflict['detail']))
         self.buy(self.feed, '6', status=409)
         self.buy(self.feed, '5')
+
+
+class BOMRevisionScopeTests(BusinessFixtures, TestCase):
+    """某物料在途/已领超过其 BOM 总量时，只拒绝改动该物料，不连累其他物料的修订与导入。"""
+
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+        self.other = Item.objects.create(code='Z-01', name='超量气缸')
+        self.revise(
+            [
+                {'item': self.item.pk, 'quantity': '10', 'assembly_unit': '上料'},
+                {'item': self.other.pk, 'quantity': '4', 'assembly_unit': '检测'},
+            ]
+        )
+        # 手工采购不关联 BOM 行，数量超过该物料 BOM 总量。
+        self.post(
+            'purchaser',
+            'purchases/',
+            {
+                'project': self.project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'lines': [{'item': self.other.pk, 'quantity': '6', 'unit_price': '3'}],
+            },
+            status=201,
+        )
+        self.line = BOMLine.objects.get(project=self.project, item=self.item)
+        self.over = BOMLine.objects.get(project=self.project, item=self.other)
+
+    def revise(self, lines, status=200):
+        return self.post(
+            'manager',
+            f'projects/{self.project.pk}/revise-bom/',
+            {'expected_revision': self.bom_version(self.project.pk), 'lines': lines},
+            status=status,
+        )
+
+    def import_preview(self, records):
+        import csv
+        import io
+
+        from apps.business.services.bom_material_import import HEADERS
+
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(HEADERS)
+        writer.writerows([[*row, *[''] * (len(HEADERS) - len(row))] for row in records])
+        response = self.clients['manager'].post(
+            f'/api/business/projects/{self.project.pk}/import-preview/',
+            {'file': SimpleUploadedFile('bom.csv', stream.getvalue().encode())},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def test_overpurchased_item_only_blocks_its_own_quantity_change(self):
+        self.revise([{'id': self.line.pk, 'item': self.item.pk, 'quantity': '12', 'change_note': '增加上料用量'}])
+        # 同一次修订带上未改数量的超量物料行，也不阻止其他物料。
+        self.revise(
+            [
+                {'id': self.line.pk, 'item': self.item.pk, 'quantity': '13', 'change_note': '再增加'},
+                {'id': self.over.pk, 'item': self.other.pk, 'quantity': '4', 'change_note': '只改说明'},
+            ]
+        )
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.quantity, 13)
+        for qty in ('3', '5'):
+            with self.subTest(quantity=qty):
+                result = self.revise(
+                    [{'id': self.over.pk, 'item': self.other.pk, 'quantity': qty, 'change_note': '调整'}], status=409
+                )
+                message = str(result['detail'])
+                self.assertIn('Z-01', message)
+                self.assertIn('超量气缸', message)
+                self.assertIn('最低可改为 6.000', message)
+        self.over.refresh_from_db()
+        self.assertEqual(self.over.quantity, 4)
+        self.revise([{'id': self.over.pk, 'item': self.other.pk, 'quantity': '6', 'change_note': '补足到在途'}])
+
+    def test_bom_import_preview_and_confirm_agree_on_overpurchased_items(self):
+        preview = self.import_preview(
+            [[self.item.code, '上料', '12', '增加上料用量'], [self.other.code, '检测', '4', '未改数量']]
+        )
+        self.assertTrue(preview['can_import'], preview['errors'])
+        self.post('manager', f'projects/{self.project.pk}/bom-import-confirm/', {'token': preview['token']})
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.quantity, 12)
+        blocked = self.import_preview([[self.other.code, '检测', '3', '减少']])
+        self.assertFalse(blocked['can_import'])
+        message = '；'.join(error['message'] for error in blocked['errors'])
+        self.assertIn('Z-01', message)
+        self.assertIn('最低可改为 6.000', message)
+        legacy = bom_import.preview(
+            self.project, SimpleUploadedFile('bom.csv', f'物料编码,数量,变更说明\n{self.other.code},3,减少\n'.encode())
+        )
+        self.assertFalse(legacy['can_import'])
+        self.assertIn('最低可改为 6.000', legacy['errors'][0]['message'])

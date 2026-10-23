@@ -17,7 +17,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.error_messages import chinese_error
 
 from ..models import BOMLine, Item, PurchaseLine
-from .bom import incoming, issued, revision
+from .bom import revision, total_shortfalls
 from .common import day, number, state
 from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
@@ -243,17 +243,17 @@ def preview(project, upload):
             errors.append({'row': row_number, 'message': message(exc.detail)})
     if not lines and not errors:
         errors.append({'row': 2, 'message': '文件没有可导入的明细。'})
-    proposed = {key: line.quantity for key, line in current.items()}
-    proposed.update({(line['item'], line['assembly_unit']): number(line['quantity'], 'quantity', 3) for line in lines})
-    for item_id in {line['item'] for line in lines}:
-        total = sum(qty for (pk, unit), qty in proposed.items() if pk == item_id)
-        if total < issued(project, item_id) + incoming(project, item_id):
-            errors.append(
-                {
-                    'row': next(line['row'] for line in lines if line['item'] == item_id),
-                    'message': '物料各单元总量不能小于已领用和在途采购数量。',
-                }
-            )
+    updates = [
+        (current.get((line['item'], line['assembly_unit'])), line['item'], number(line['quantity'], 'quantity', 3))
+        for line in lines
+    ]
+    for problem in total_shortfalls(project, existing, updates):
+        errors.append(
+            {
+                'row': next(line['row'] for line in lines if line['item'] == problem['item']),
+                'message': problem['message'],
+            }
+        )
     return {
         'expected_revision': expected_revision,
         'lines': lines,

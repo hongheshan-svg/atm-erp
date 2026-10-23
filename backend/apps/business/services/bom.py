@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.api import Conflict
 from apps.core.permissions import BOM_WRITERS, require_project
 
-from ..models import BOMLine, PurchaseLine, Stock, StockMove
+from ..models import BOMLine, Item, PurchaseLine, Stock, StockMove
 from .common import (
     ZERO,
     audit,
@@ -70,6 +70,38 @@ def issued(project, item_id):
         .aggregate(total=Sum('quantity'))['total']
         or ZERO
     )
+
+
+def total_shortfalls(project, existing, updates):
+    """本次实际改动数量的物料，各单元合计不得低于已领用与在途；BOM 修订、修订预览和导入预览共用。
+
+    existing 为当前 BOM 行，updates 为 [(原 BOM 行或 None, 物料, 新数量)]。只核对数量有变化或新增的物料，
+    其他物料即使历史上已超量也不连带拒绝；返回 [{'item', 'message'}]。
+    """
+    totals = {}
+    for line in existing:
+        totals[line.item_id] = totals.get(line.item_id, ZERO) + line.quantity
+    changed = set()
+    for current, item_id, qty in updates:
+        totals[item_id] = totals.get(item_id, ZERO) + qty - (current.quantity if current else ZERO)
+        if current is None or qty != current.quantity:
+            changed.add(item_id)
+    shortfalls = []
+    for item_id in sorted(changed):
+        used, pending = issued(project, item_id) + ZERO, incoming(project, item_id) + ZERO
+        if totals[item_id] < used + pending:
+            shortfalls.append((item_id, used, pending))
+    names = Item.objects.in_bulk([item_id for item_id, _, _ in shortfalls]) if shortfalls else {}
+    return [
+        {
+            'item': item_id,
+            'minimum': used + pending,
+            'message': f'物料 {names[item_id].code} {names[item_id].name} 的各单元需求数量合计 {totals[item_id]} '
+            f'小于已领用 {used} 与在途采购 {pending} 之和，最低可改为 {used + pending}；'
+            '请先取消采购余量或退回未用材料后再减少。',
+        }
+        for item_id, used, pending in shortfalls
+    ]
 
 
 def revision(project):
@@ -409,9 +441,6 @@ def revise_bom(actor, key, project_id, data):
                 raise ValidationError('同一物料在同一单元只能出现一次。')
             planned[line_key] = row
         items = lock_items({item_id for item_id, unit in planned})
-        totals = {}
-        for line in existing:
-            totals[line.item_id] = totals.get(line.item_id, ZERO) + line.quantity
         prepared = []
         seen_ids = set()
         for index, ((item_id, unit), row) in enumerate(planned.items()):
@@ -442,11 +471,12 @@ def revise_bom(actor, key, project_id, data):
             if current:
                 if qty < linked_incoming(current):
                     raise Conflict('单元用量不能小于该 BOM 行在途采购，请先取消相关余量。')
-            totals[item_id] = totals.get(item_id, ZERO) + qty - (current.quantity if current else ZERO)
             prepared.append((item_id, unit, qty, note, current))
-        for item_id, qty in totals.items():
-            if qty < issued(project, item_id) + incoming(project, item_id):
-                raise Conflict('BOM 数量不能小于已领用和在途采购数量，请先处理相关单据。')
+        problems = total_shortfalls(
+            project, existing, [(current, item_id, qty) for item_id, _, qty, _, current in prepared]
+        )
+        if problems:
+            raise Conflict('；'.join(problem['message'] for problem in problems))
         for item_id, unit, qty, note, current in prepared:
             before = str(current.quantity) if current else None
             line = current or BOMLine(project=project, item=items[item_id])
