@@ -7,13 +7,14 @@ import TransferTools from '../components/TransferTools.vue'
 import ActionDialog from '../components/ActionDialog.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
 import CodingRules from '../components/CodingRules.vue'
+import DataChecks from '../components/DataChecks.vue'
 import { createCommand } from '../business'
 import { message } from '../utils/request'
 const tabs = computed(() => [
   ...(can(['admin']) ? [
     { key: 'users', label: '用户管理' }, { key: 'company', label: '公司资料' },
     { key: 'codes', label: '编号规则' }, { key: 'audit', label: '操作审计' },
-    { key: 'initialization', label: '管理员初始化' },
+    { key: 'initialization', label: '管理员初始化' }, { key: 'data-checks', label: '历史数据核查' },
   ] : []),
   { key: 'account', label: '我的账户' },
 ])
@@ -63,6 +64,7 @@ function password() {
     <template #company><ResourcePanel v-if="can(['admin'])" resource="company" title="公司资料" /></template>
     <template #codes><CodingRules v-if="can(['admin'])" /><ResourcePanel v-if="can(['admin'])" resource="codes" title="编号规则" /></template>
     <template #audit><ResourcePanel v-if="can(['admin'])" resource="audit" title="操作审计" /></template>
+    <template #data-checks><DataChecks v-if="can(['admin'])" /></template>
     <template #initialization><section v-if="can(['admin'])" class="panel" aria-label="管理员初始化"><h2>期初库存</h2><p>首次启用时，按盘点结果登记已有物料、库位、数量与单位成本。日常采购到货请使用库存页的“采购收货”。</p><el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" /><div class="toolbar"><el-button type="primary" :loading="openingBusy" @click="opening">期初入库</el-button><TransferTools resource="stocks" path="/business/stocks/" @changed="savedOpening = true" /></div><p v-if="savedOpening" role="status">期初库存已登记。<router-link to="/inventory?section=stocks">查看现有库存</router-link> · <router-link to="/inventory?section=moves&project=all">查看入库流水</router-link></p></section></template>
   </ModuleTabs>
   <ActionDialog :command="command" @close="command = null" @saved="saved" />
