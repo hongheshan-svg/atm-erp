@@ -4,12 +4,14 @@ import tempfile
 import uuid
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from apps.business.models import Document, Entry, Stock
+from apps.business.models import Document, Entry, SalesOrder, Stock
+from apps.business.services import documents
 from apps.core.models import Company
 
 from .test_commercial_chain import TODAY, BusinessFixtures
@@ -214,3 +216,34 @@ class DocumentRemovalTests(BusinessFixtures, TestCase):
     def test_removal_requires_a_reason(self):
         document = self.upload()
         self.post('member', f'documents/{document}/remove/', {}, status=400)
+
+    def test_sale_attachment_removal_rechecks_links_after_project_first_locking(self):
+        sale = SalesOrder.objects.create(
+            code='SO-RM', name='待签约方案', customer=self.customer, manager=self.users['sales_manager']
+        )
+        response = self.clients['sales_manager'].post(
+            '/api/business/documents/',
+            {'sale': sale.pk, 'category': 'other', 'file': SimpleUploadedFile('方案.pdf', b'demo')},
+            format='multipart',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        document = response.data['id']
+        # 看不到销售单的成员无法删除其附件。
+        self.post('member', f'documents/{document}/remove/', {'reason': '误传'}, status=404)
+        original = documents.get_object_or_404
+
+        def signed_meanwhile(queryset, **lookup):
+            found = original(queryset, **lookup)
+            # 无锁读出“未签约”后、按序加锁前，销售单恰好签约关联了项目。
+            locking = getattr(getattr(queryset, 'query', None), 'select_for_update', False)
+            if getattr(queryset, 'model', None) is SalesOrder and not locking:
+                SalesOrder.objects.filter(pk=sale.pk).update(project=self.project)
+            return found
+
+        with patch.object(documents, 'get_object_or_404', signed_meanwhile):
+            self.post('sales_manager', f'documents/{document}/remove/', {'reason': '传错文件'}, status=409)
+        self.assertFalse(Document.all_objects.get(pk=document).is_deleted)
+        SalesOrder.objects.filter(pk=sale.pk).update(project=None)
+        self.post('sales_manager', f'documents/{document}/remove/', {'reason': '传错文件'})
+        self.assertTrue(Document.all_objects.get(pk=document).is_deleted)

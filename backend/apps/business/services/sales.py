@@ -72,18 +72,27 @@ def create(actor, key, data):
     )
 
 
-def action(actor, key, operation, sale_id, data, execute):
+def action(actor, key, operation, sale_id, data, execute, *, project_first=False):
+    def locked():
+        if project_first:
+            # 历史项目签约会改写项目；与项目编辑、补充协议保持“先项目后销售单”的全局锁序，
+            # 先无锁读出关联项目并加锁，再锁销售单并复核关联未变，避免与同项目操作形成死锁。
+            initial = get_object_or_404(SalesOrder.objects, pk=identity(sale_id))
+            if initial.project_id:
+                get_object_or_404(Project.objects.select_for_update(), pk=initial.project_id)
+            sale = get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
+            if sale.project_id and sale.project_id != initial.project_id:
+                raise Conflict('销售单关联的项目已变化，请刷新后重试。')
+            return sale
+        return get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
+
     return perform(
         actor=actor,
         key=key,
         operation=operation,
         payload={'id': sale_id, 'data': data},
-        authorize=lambda user: require_sale(
-            user, get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
-        ),
-        execute=lambda user: execute(
-            user, get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
-        ),
+        authorize=lambda user: require_sale(user, locked()),
+        execute=lambda user: execute(user, locked()),
     )
 
 
@@ -196,7 +205,7 @@ def sign(actor, key, sale_id, data):
         )
         return {**result, 'project': project.pk}
 
-    return action(actor, key, 'sale.sign', sale_id, data, execute)
+    return action(actor, key, 'sale.sign', sale_id, data, execute, project_first=True)
 
 
 def cancel(actor, key, sale_id, data):

@@ -186,16 +186,24 @@ def remove(actor, key, document_id, data):
     def authorize(user):
         require_role(user, ALL_ROLES)
         user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
-        document = get_object_or_404(Document.objects.select_for_update(), pk=source.pk)
-        project_id = document.project_id
-        if document.purchase_id:
-            purchase = get_object_or_404(PurchaseOrder.objects.select_for_update(), pk=document.purchase_id)
-            project_id = purchase.project_id
-        if document.sale_id:
-            sale = get_object_or_404(SalesOrder.objects.select_for_update(), pk=document.sale_id)
-            require_sale(user, sale)
-            project_id = sale.project_id
+        # 与上传和 project_action 同一锁序：项目 → 采购/销售单 → 附件。先无锁读出关联，
+        # 按序加锁后复核关联未变；反序加锁会与同项目的提交、补充协议等操作形成死锁。
+        initial = get_object_or_404(Document.objects, pk=source.pk)
+        owner_model = PurchaseOrder if initial.purchase_id else SalesOrder if initial.sale_id else None
+        owner_id = initial.purchase_id or initial.sale_id
+        project_id = (
+            get_object_or_404(owner_model.objects, pk=owner_id).project_id if owner_model else initial.project_id
+        )
         project = get_object_or_404(Project.objects.select_for_update(), pk=project_id) if project_id else None
+        owner = get_object_or_404(owner_model.objects.select_for_update(), pk=owner_id) if owner_model else None
+        document = get_object_or_404(Document.objects.select_for_update(), pk=source.pk)
+        links = ('project_id', 'purchase_id', 'sale_id')
+        if (owner.project_id if owner else document.project_id) != project_id or any(
+            getattr(document, field) != getattr(initial, field) for field in links
+        ):
+            raise Conflict('附件所属的项目或单据已变化，请刷新后重试。')
+        if document.sale_id:
+            require_sale(user, owner)
         if project is not None and not document.sale_id:
             require_project(user, project, ALL_ROLES)
         if document.created_by_id != user.pk and not (project is not None and project_allowed(user, project, MANAGERS)):
