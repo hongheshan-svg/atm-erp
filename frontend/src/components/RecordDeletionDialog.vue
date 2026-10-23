@@ -50,7 +50,7 @@ function close() { if (!busy.value) emit('close') }
       <form class="deletion-form" @submit.prevent="submit">
         <label for="deletion-reason">删除原因</label>
         <textarea id="deletion-reason" v-model="reason" maxlength="500" rows="3" :disabled="busy" placeholder="说明为什么删除，便于以后追溯" required />
-        <label class="deletion-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />我已核对所选记录，并了解本次删除的影响</label>
+        <label class="deletion-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />{{ resource === 'users' ? '我已核对所选账号，了解删除后不能通过普通编辑恢复，原用户名不能再次使用' : '我已核对所选记录，并了解本次删除的影响' }}</label>
         <div class="deletion-buttons"><el-button :disabled="busy" @click="close">取消</el-button><el-button type="danger" native-type="submit" :loading="busy" :disabled="!reason.trim() || !confirmed">确认删除 {{ rows?.length }} 条</el-button></div>
       </form>
     </template>

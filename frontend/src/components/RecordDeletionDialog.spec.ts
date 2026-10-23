@@ -4,7 +4,7 @@ import ElementPlus from 'element-plus'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { read, write } from '../api'
 import { user } from '../session'
-import { deletionLabel } from '../modules/deletions'
+import { deletionLabel, deletionNotice } from '../modules/deletions'
 
 vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn(), all: vi.fn().mockResolvedValue([]), download: vi.fn() }))
 const props = { resource: 'items', title: '物料', rows: [{ id: 12, code: 'MAT12', name: '气缸' }, { id: 13, name: '导轨' }] }
@@ -16,6 +16,33 @@ it('同物料不同单元在删除确认中可清楚区分', () => {
   expect(deletionLabel(row)).toContain('MAT12')
   expect(deletionLabel(row)).toContain('上料单元')
   expect(deletionLabel({ ...row, assembly_unit: '检测单元' })).toContain('检测单元')
+})
+
+it('删除用户前说明停用隐藏、历史保留、不能普通编辑恢复且用户名不能复用', () => {
+  const wrapper = make({ resource: 'users', title: '用户', rows: [{ id: 5, username: 'member', display_name: '成员' }] })
+  for (const text of ['账号停用并从用户列表隐藏', '历史记录保留', '不能通过普通编辑恢复', '原用户名不能再次使用', '不能删除当前登录账号'])
+    expect(wrapper.text()).toContain(text)
+  expect(wrapper.get('.deletion-confirm').text()).toContain('原用户名不能再次使用')
+  wrapper.unmount()
+})
+
+it('账款、流水、对账、银行和交付的删除说明提示在办记录会被拒绝及下一步', () => {
+  const cases: Array<[string, string[]]> = [
+    ['entries', ['余额未结清', '待退款', '对账单']],
+    ['payments', ['所属账款尚未结清', '冲销或匹配']],
+    ['reconciliations', ['待确认', '剩余核准额度', '作废']],
+    ['bank-records', ['未认领', '待复核', '作废']],
+    ['deliveries', ['未验收', '质保期内', '结项或取消后可整理']],
+  ]
+  for (const [resource, texts] of cases) {
+    const notice = deletionNotice(resource)
+    for (const text of [...texts, '不能删除', '已结束的记录仅移入']) expect(notice, resource).toContain(text)
+  }
+  expect(deletionNotice('moves')).not.toContain('不能删除')
+  expect(deletionNotice('moves')).toContain('不会撤销业务')
+  const wrapper = make({ resource: 'entries', title: '应收应付与费用', rows: [{ id: 3, title: '合同款' }] })
+  expect(wrapper.text()).toContain('余额未结清')
+  wrapper.unmount()
 })
 
 it('明确勾选记录，填写原因并确认后才提交，失败保留内容和幂等标识，重试成功后关闭', async () => {
