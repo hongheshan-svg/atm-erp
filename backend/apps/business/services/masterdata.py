@@ -98,6 +98,10 @@ def masterdata(actor, key, model, data, object_id=None):
             and (not isinstance(data['part_type'], str) or data['part_type'] not in {'', *Item.PartType.values})
         ):
             raise ValidationError({'part_type': '请选择标准件或非标件，未分类可留空。'})
+        if model is Item:
+            # 建料、改料与 BOM 物料导入共用一个锁序：先物料编码规则、后物料行（导入经 revise_bom 锁物料）。
+            # 先锁物料再锁编码规则会与导入确认形成锁环；物料行在锁后读取，下面的校验都基于最新数据。
+            CodeRule.objects.select_for_update().get(key='item')
         obj = model.objects.select_for_update().get(pk=identity(object_id)) if object_id else model()
         category = ''
         if model is Item:
@@ -126,9 +130,7 @@ def masterdata(actor, key, model, data, object_id=None):
         ):
             raise PermissionDenied('销售经理只能维护纯客户资料，不能修改供应商或双用途往来单位。')
         if not object_id:
-            # Manual and automatic item codes share the same lock and uniqueness domain.
-            if model is Item:
-                CodeRule.objects.select_for_update().get(key='item')
+            # Manual and automatic item codes share the CodeRule('item') lock taken above.
             custom = text(data, 'code', default='', maximum=30) if model is Item else ''
             if custom and Item.all_objects.filter(code=custom).exists():
                 raise ValidationError({'code': '物料编码已使用，包括停用或已删除记录。'})
@@ -161,8 +163,7 @@ def masterdata(actor, key, model, data, object_id=None):
             obj.is_active = data['is_active']
         duplicate_reason = ''
         if model is Item:
-            # Same lock as custom code creation, including edits that could collide.
-            CodeRule.objects.select_for_update().get(key='item')
+            # 图号判重同样在 CodeRule('item') 锁内，建料和改料不会并发占用同一图号版本。
             if (
                 obj.drawing_number
                 # 与 lean_item_drawing_key 函数索引同一套表达式；iexact 生成的 UPPER(col::text) 用不上索引。

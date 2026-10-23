@@ -14,8 +14,8 @@ from django.test import TransactionTestCase
 from rest_framework.exceptions import APIException, PermissionDenied
 
 from apps.accounts.models import User
-from apps.business.models import BOMLine, Entry, Partner, Project, Stock, StockMove, Task, TimeEntry
-from apps.business.services import execution, supply, transfers
+from apps.business.models import BOMLine, Entry, Item, Partner, Project, Stock, StockMove, Task, TimeEntry
+from apps.business.services import bom_import, bom_material_import, execution, masterdata, supply, transfers
 from apps.core.api import Conflict
 from apps.core.models import ActionReceipt, AuditLog
 
@@ -160,6 +160,70 @@ class ImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
         replay = transfers.confirm(self.users['admin'], 'moves', preview['token'])
         self.assertEqual(replay['count'], 2)
         self.assertEqual(StockMove.objects.filter(kind='issue').count(), 2)
+
+    def test_bom_material_import_and_item_edit_lock_code_rule_before_item(self):
+        # 物料导入确认先锁物料编码规则、再由 BOM 修订锁物料；编辑物料必须同序，
+        # 否则真实 PostgreSQL 会检测到锁环（40P01），其中一方返回 500。
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(bom_material_import.HEADERS)
+        writer.writerow([self.item.code, '', '2', '导入现有物料', *[''] * (len(bom_material_import.HEADERS) - 4)])
+        preview = bom_material_import.preview(
+            self.users['manager'], self.first, SimpleUploadedFile('bom.csv', stream.getvalue().encode())
+        )
+        self.assertTrue(preview['can_import'], preview)
+        holding, release, ready, context = Event(), Event(), Event(), {}
+        original = bom_import.preview
+
+        def held_preview(project, upload):
+            # resolve() 已持有 CodeRule('item')，revise_bom 还没有锁物料。
+            holding.set()
+            if not release.wait(10):
+                raise RuntimeError('等待物料编辑进入锁等待超时。')
+            return original(project, upload)
+
+        def session(action, name=None):
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET statement_timeout = '12s'")
+                    cursor.execute('SELECT pg_backend_pid()')
+                    if name:
+                        context[name] = cursor.fetchone()[0]
+                        ready.set()
+                return action()
+            except Exception as exc:  # Keep the real database error as test evidence.
+                return exc
+            finally:
+                connections.close_all()
+
+        def confirm():
+            return bom_material_import.confirm(
+                User.objects.get(pk=self.users['manager'].pk),
+                Project.objects.get(pk=self.first.pk),
+                {'token': preview['token']},
+            )
+
+        def edit():
+            return masterdata.masterdata(
+                User.objects.get(pk=self.users['admin'].pk),
+                'edit-during-import',
+                Item,
+                {'brand': '新品牌'},
+                self.item.pk,
+            )
+
+        with patch.object(bom_import, 'preview', held_preview), ThreadPoolExecutor(max_workers=2) as pool:
+            importing = pool.submit(session, confirm)
+            self.assertTrue(holding.wait(10))
+            editing = pool.submit(session, edit, 'edit')
+            self.assertTrue(ready.wait(5))
+            self.wait_for_lock(context['edit'])
+            release.set()
+            results = [importing.result(timeout=30), editing.result(timeout=30)]
+        self.assertTrue(all(isinstance(result, dict) for result in results), repr(results))
+        self.assertEqual(BOMLine.objects.get(project=self.first, item=self.item).quantity, 2)
+        self.assertEqual(Item.objects.get(pk=self.item.pk).brand, '新品牌')
 
     def test_cross_user_equivalent_content_confirmation_is_serialized(self):
         stream = io.StringIO()
