@@ -2,6 +2,8 @@
 
 AuditLog is the single removal record. Ledger queries never use this list filter:
 removing a row from the screen must not change stock, money or project costs.
+Records still being worked (open balances, draft or unused reconciliations, unmatched
+bank money, deliveries awaiting acceptance or in warranty) stay on the list until ended.
 """
 
 import json
@@ -10,6 +12,7 @@ import uuid
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import CharField, Exists, OuterRef, Value
 from django.db.models.functions import Cast, Concat
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.accounts.models import User
@@ -19,9 +22,11 @@ from apps.core.models import AuditLog, Company, LedgerModel
 from apps.core.permissions import ADMIN, require_role
 
 from .. import models
+from . import banking, finance, reconciliation
 from .common import audit, fields, text
 
 OPERATION = 'record.delete'
+ENDED_PROJECT = {'closed', 'cancelled'}
 RESOURCES = {
     'items': (models.Item, '物料'),
     'partners': (models.Partner, '往来单位'),
@@ -75,12 +80,67 @@ def references(obj, *, ignore=()):
     return ''
 
 
+def bank_pending(bank):
+    """Why a bank record still needs finance work; voided records are ended."""
+    if bank.void_reason:
+        return ''
+    if bank.needs_review:
+        return '待核实对方户名，请先复核户名并记录依据'
+    left = banking.remaining(bank)
+    if left:
+        return f'还有 {left:.2f} 元未认领或未匹配，请先认领、匹配、退回或作废'
+    return ''
+
+
+def check_open(obj):
+    """Hiding an in-progress fact would drop it from lists while totals still count it."""
+    if isinstance(obj, models.Entry):
+        left = finance.balance(obj)
+        if left > 0:
+            raise Conflict(f'账款余额 {left:.2f} 元尚未结清，请先收付款结清或按规则取消后再删除。')
+        if left < 0:
+            raise Conflict(f'账款还有待退款 {-left:.2f} 元，请先完成退款对账和退款后再删除。')
+        if obj.reconciliations.filter(status='draft').exists():
+            raise Conflict('账款还有待确认的对账单，请先确认或作废对账单后再删除。')
+    elif isinstance(obj, models.Payment):
+        left = finance.balance(obj.entry)
+        if left:
+            raise Conflict(
+                f'所属账款「{obj.entry.title}」余额 {left:.2f} 元尚未结清，流水移出列表后无法冲销或匹配；'
+                '请先结清账款后再删除。'
+            )
+    elif isinstance(obj, models.Reconciliation):
+        if obj.status == 'draft':
+            raise Conflict('对账单待确认，请先确认或作废后再删除。')
+        left = obj.approved_amount - reconciliation.used(obj) if obj.status == 'confirmed' else 0
+        if left > 0:
+            raise Conflict(
+                f'对账单还有 {left:.2f} 元核准额度未使用，请先作废剩余额度（已发生的收付款不受影响）后再删除。'
+            )
+    elif isinstance(obj, models.BankRecord):
+        pending = bank_pending(obj)
+        if pending:
+            raise Conflict(f'银行流水{pending}后再删除。')
+    elif isinstance(obj, models.BankMatch):
+        pending = bank_pending(obj.bank)
+        if pending:
+            raise Conflict(f'所属银行流水「{obj.bank.reference}」{pending}后再删除匹配。')
+    elif isinstance(obj, models.Delivery) and obj.project.status not in ENDED_PROJECT:
+        if not obj.accepted_date:
+            raise Conflict('交付批次尚未验收，请先完成验收（含安装任务）后再删除；项目结项或取消后也可整理。')
+        if obj.warranty_until and obj.warranty_until >= timezone.localdate():
+            raise Conflict(
+                f'交付批次在质保期内（至 {obj.warranty_until}），售后登记需要选择该批次；质保期满或项目结项后再删除。'
+            )
+
+
 def mode_for(obj, actor):
     if isinstance(obj, models.Stock):
         if obj.quantity or obj.value:
             raise Conflict('库存余额不为零，不能移出库存列表；请先通过收退料或盘点核实库存。')
         return 'archive'
     if isinstance(obj, (LedgerModel, models.Delivery)):
+        check_open(obj)
         return 'archive'
     if isinstance(obj, User):
         if obj.pk == actor.pk:
@@ -91,7 +151,9 @@ def mode_for(obj, actor):
 
         return 'archive' if referenced(obj) else 'soft'
     if isinstance(obj, models.BOMLine):
-        return 'archive' if obj.project.status in {'closed', 'cancelled'} else 'bom'
+        if obj.project.status in ENDED_PROJECT:
+            return 'archive'
+        return 'bom'
     if isinstance(obj, models.Project):
         used = references(obj)
         if used:
