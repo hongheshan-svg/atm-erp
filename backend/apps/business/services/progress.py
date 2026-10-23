@@ -1,7 +1,7 @@
 """Read-only collaboration projection; never exposes commercial payloads or grants actions."""
 
 from django.core.paginator import Paginator
-from django.db.models import DecimalField, F, Q, Sum, Value
+from django.db.models import DecimalField, F, Prefetch, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -21,8 +21,9 @@ from apps.core.permissions import (
     projects_for,
 )
 
-from ..models import Delivery, Entry, PurchaseOrder, Task
+from ..models import Delivery, Entry, PurchaseOrder, Reconciliation, Task
 from . import finance, payment_terms
+from . import reconciliation as statements
 from .common import ZERO
 from .deletions import visible_rows
 
@@ -228,9 +229,18 @@ class Progress:
             row['hint'] = '尚无已到期的合格收货款项；预付款须单独核准。'
             if entry.purchase.payment_term == 'manual':
                 row['agreed_date'] = entry.purchase.payment_due_date or entry.due_date
-        drafts = [item for item in entry.reconciliations.all() if item.status == 'draft'] if pending else []
-        prepayments = [item for item in drafts if item.kind == 'prepayment']
-        if prepayments:
+        drafts = getattr(entry, 'progress_drafts', None)
+        if drafts is None:
+            drafts = [item for item in entry.reconciliations.all() if item.status == 'draft']
+        drafts = drafts if pending else []
+        # 快照失效的草稿谁都不能确认（确认时同样校验），只能由财务作废后按最新业务重建。
+        stale = [item for item in drafts if not statements.current(item)]
+        prepayments = [item for item in drafts if item.kind == 'prepayment' and item not in stale]
+        if stale:
+            row['status_label'] = '原业务已变化，待财务作废重建'
+            row['handlers'], row['handler_label'] = self.candidates(FINANCE), '财务跟进人员'
+            row['hint'] = '生成对账后原单据、收退货或资金流水已变化，需由财务作废原对账单并按最新业务重新生成。'
+        elif prepayments:
             row['status_label'] = '预付款待核准'
             row['handlers'] = list(
                 {
@@ -294,7 +304,12 @@ def summary(user, project, params):
     elif category == 'deliveries':
         query = query.prefetch_related('tasks__assignee').order_by('shipped_date', 'pk')
     else:
-        query = payment_terms.with_sources(query).prefetch_related('reconciliations').order_by('due_date', 'pk')
+        drafts = statements.with_snapshot_sources(Reconciliation.objects.filter(status='draft')).order_by('pk')
+        query = (
+            payment_terms.with_sources(query)
+            .prefetch_related(Prefetch('reconciliations', queryset=drafts, to_attr='progress_drafts'))
+            .order_by('due_date', 'pk')
+        )
     selected = Paginator(query, size).get_page(page)
     progress = Progress(user, project)
     build = {

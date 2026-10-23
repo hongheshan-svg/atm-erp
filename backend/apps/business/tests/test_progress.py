@@ -1,6 +1,8 @@
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -17,6 +19,7 @@ from apps.business.models import (
     StockMove,
     Task,
 )
+from apps.business.services import reconciliation as statements
 from apps.core.models import AuditLog
 
 from .test_commercial_chain import BusinessFixtures
@@ -55,6 +58,25 @@ class ProgressTests(BusinessFixtures, TestCase):
         )
         self.assertEqual(response.status_code, status, response.data)
         return response.data
+
+    def draft(self, entry, code, created_by, kind='prepayment'):
+        # 真实草稿总带有生成时的原业务快照；空快照等同于原业务已变化。
+        statement = Reconciliation(
+            entry=Entry.objects.get(pk=entry.pk),
+            kind=kind,
+            status='draft',
+            code=code,
+            approved_amount=30,
+            basis='合同约定',
+            reason='核对原始业务',
+            created_by=created_by,
+        )
+        statement.snapshot = statements.snapshot(statement)
+        statement.save()
+        return statement
+
+    def entry_row(self, entry, role='member'):
+        return next(row for row in self.get(role, 'entries')['results'] if row['id'] == entry.pk)
 
     def test_participants_can_follow_other_departments_without_original_record_access(self):
         for role in ['member', 'mechanical_engineer', 'production_manager']:
@@ -182,14 +204,7 @@ class ProgressTests(BusinessFixtures, TestCase):
         entry = Entry.objects.create(
             project=self.project, purchase=self.purchase, kind='payable', title='采购', amount=100, due_date=self.today
         )
-        Reconciliation.objects.create(
-            entry=entry,
-            kind='prepayment',
-            status='draft',
-            code='PRE-1',
-            approved_amount=30,
-            created_by=self.users['manager'],
-        )
+        self.draft(entry, 'PRE-1', self.users['manager'])
         row = next(row for row in self.get(category='entries')['results'] if row['id'] == entry.pk)
         self.assertEqual(row['status_label'], '预付款待核准')
         self.assertNotIn(self.users['manager'].pk, [person['id'] for person in row['handlers']])
@@ -300,16 +315,76 @@ class ProgressTests(BusinessFixtures, TestCase):
     def test_multiple_prepayment_applicants_can_review_each_others_requests(self):
         entry = self.project.entries.get(kind='receivable')
         for index, role in enumerate(['admin', 'manager']):
-            Reconciliation.objects.create(
-                entry=entry,
-                code=f'PRE-MULTI-{index}',
-                kind='prepayment',
-                status='draft',
-                approved_amount=30,
-                created_by=self.users[role],
-            )
+            self.draft(entry, f'PRE-MULTI-{index}', self.users[role])
         handlers = self.get(category='entries')['results'][0]['handlers']
         self.assertEqual({person['id'] for person in handlers}, {self.users['admin'].pk, self.users['manager'].pk})
+
+    def test_stale_prepayment_draft_is_routed_to_finance_to_void_and_rebuild(self):
+        purchase = BusinessFixtures.purchase(self, self.project)
+        entry = Entry.objects.get(purchase=purchase)
+        statement = self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': 'prepayment',
+                'counterparty_balance': '500.00',
+                'approved_amount': '150.00',
+                'basis': '合同30%预付',
+                'reason': '预付',
+            },
+            status=201,
+        )
+        row = self.entry_row(entry)
+        self.assertEqual((row['status_label'], row['handler_label']), ('预付款待核准', '可核准人员'))
+        self.assertIn(self.users['manager'].pk, [person['id'] for person in row['handlers']])
+
+        self.post(
+            'warehouse',
+            f'purchases/{purchase.pk}/receive/',
+            {
+                'lines': [{'line': purchase.lines.get().pk, 'quantity': '1'}],
+                'reason': '到一件',
+            },
+        )
+        row = self.entry_row(entry)
+        self.assertEqual(row['status_label'], '原业务已变化，待财务作废重建')
+        self.assertEqual(row['handler_label'], '财务跟进人员')
+        ids = {person['id'] for person in row['handlers']}
+        self.assertIn(self.users['finance'].pk, ids)
+        self.assertNotIn(self.users['manager'].pk, ids)
+        self.assertIn('作废', row['hint'])
+        # 经理此时确实无法核准，进度不能再把经理列为可核准人员。
+        response = self.clients['manager'].post(
+            f'/api/business/reconciliations/{statement["id"]}/confirm/',
+            {'reason': '核准'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='stale-prepayment-confirm',
+        )
+        self.assertEqual(response.status_code, 409)
+
+        stale_settlement = self.draft(entry, 'SET-STALE', self.users['finance'], kind='settlement')
+        Reconciliation.objects.filter(pk=stale_settlement.pk).update(snapshot={})
+        self.post('finance', f'reconciliations/{statement["id"]}/void/', {'reason': '收货后重建'})
+        row = self.entry_row(entry)
+        self.assertEqual(row['status_label'], '原业务已变化，待财务作废重建')
+        self.post('finance', f'reconciliations/{stale_settlement.pk}/void/', {'reason': '收货后重建'})
+        self.assertNotIn('原业务已变化', self.entry_row(entry)['status_label'])
+
+    def entry_queries(self, extra):
+        for index in range(extra):
+            entry = Entry.objects.create(
+                project=self.project, kind='receivable', title=f'节点{extra}-{index}', amount=100, due_date=self.today
+            )
+            self.draft(entry, f'PRE-Q-{extra}-{index}', self.users['admin'])
+        with CaptureQueriesContext(connection) as captured:
+            result = self.get('manager', 'entries', page_size=50)
+        self.assertTrue(all(row['status_label'] == '预付款待核准' for row in result['results'][1:]))
+        return len(captured)
+
+    def test_entry_draft_validity_is_checked_without_per_row_queries(self):
+        self.get('manager', 'entries')
+        self.assertEqual(self.entry_queries(3), self.entry_queries(9))
 
     def test_delivery_uses_install_then_acceptance_assignee(self):
         delivery = Delivery.objects.create(
