@@ -68,6 +68,14 @@ it('领料的售后任务只列所选项目，换项目后清空原选择', asyn
   wrapper.unmount()
 })
 
+it('采购退货与领料一样提供确认占用其他项目到货', async () => {
+  const command = await actionCommand('moves', { id: 7 }, '采购退货')
+  const shared = command.fields.find(f => f.key === 'confirm_shared')!
+  expect(shared.type).toBe('boolean')
+  expect(defaults(command.fields).confirm_shared).toBe(false)
+  expect(payload(command.fields, { ...defaults(command.fields), quantity: '1', reason: '退货' }).confirm_shared).toBe(false)
+})
+
 it('收货提供已用库位候选并默认不新建库位', async () => {
   vi.mocked(read).mockImplementation(async (path: string) => (path === '/business/stocks/locations/' ? ['主仓', 'A区'] : { lines: [{ id: 1, item_name: '电机', quantity: '2', received_quantity: '0', cancelled_quantity: '0', pending_quantity: '0' }] }))
   const command = await actionCommand('purchases', { id: 9, status: 'approved' }, '收货')
