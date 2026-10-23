@@ -66,6 +66,19 @@ class NativeInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.quote_path(self.root / '$bad')
 
+    def test_both_nginx_configs_pass_and_log_request_id(self):
+        # 员工报出的错误编号要能同时在 Nginx 访问日志和后端日志里查到；两种部署保持同一规则。
+        docker_config = (Path(__file__).parents[2] / 'docker/app/nginx.conf').read_text()
+        native_config = native.nginx_config(self.config, self.root)
+        for name, config in (('docker', docker_config), ('native', native_config)):
+            with self.subTest(config=name):
+                self.assertIn('map $http_x_request_id $erp_request_id {\n    default $request_id;', config)
+                self.assertIn('"~^[A-Za-z0-9._-]{1,64}$" $http_x_request_id;', config)
+                self.assertIn('proxy_set_header X-Request-ID $erp_request_id;', config)
+                self.assertIn('"$http_referer" "$http_user_agent" request_id=$erp_request_id', config)
+                self.assertRegex(config, r'access_log \S+ erp_request;')
+                self.assertNotRegex(config, r'\$(http_authorization|http_cookie|request_body)')
+
     def test_every_html_location_keeps_security_headers(self):
         import re
 

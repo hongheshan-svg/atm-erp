@@ -204,6 +204,7 @@ SHARED_PATHS = (
             'backend/apps/core/models.py',
             'backend/apps/core/periods.py',
             'backend/apps/core/permissions.py',
+            'backend/apps/core/request_id.py',
             'backend/config/',
             'backend/manage.py',
             'backend/requirements',

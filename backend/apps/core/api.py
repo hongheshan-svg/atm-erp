@@ -8,6 +8,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import exception_handler as drf_exception_handler
 
 from .error_messages import localize_detail, validation_detail
+from .request_id import request_id
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,12 @@ def exception_handler(exc, context):
         if isinstance(exc, Throttled):
             wait = f'请在 {ceil(exc.wait)} 秒后重试。' if exc.wait is not None else '请稍后再试。'
             response.data['detail'] = ErrorDetail(f'操作过于频繁（请求限流），{wait}', code='throttled')
+        if response.status_code >= 500:
+            # 接口主动返回的 5xx 不经过 django.request 的异常堆栈，这里补记，并把编号交给员工报给管理员。
+            logger.error('接口返回服务器错误', exc_info=exc)
+            value = request_id(context.get('request'))
+            if value and isinstance(response.data, dict):
+                response.data['request_id'] = value
     if response is not None and response.status_code == 409 and isinstance(response.data, dict):
         view = context.get('view')
         pk = getattr(view, 'kwargs', {}).get('pk')

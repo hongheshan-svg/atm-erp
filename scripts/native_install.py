@@ -126,7 +126,15 @@ http {{
     image/png png; image/jpeg jpg jpeg; image/svg+xml svg; image/x-icon ico;
     font/woff woff; font/woff2 woff2; }}
   default_type application/octet-stream;
-  access_log logs/nginx-access.log;
+  # 请求编号：入站已带安全格式（字母数字 . _ -，不超过 64 位）的 X-Request-ID 时沿用，否则用 Nginx 生成的 $request_id；与后端校验一致。
+  map $http_x_request_id $erp_request_id {{
+    default $request_id;
+    "~^[A-Za-z0-9._-]{{1,64}}$" $http_x_request_id;
+  }}
+  # 保留 combined 原字段，末尾追加请求编号，员工报出的错误编号可直接在访问日志中检索。
+  log_format erp_request '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent '
+                         '"$http_referer" "$http_user_agent" request_id=$erp_request_id';
+  access_log logs/nginx-access.log erp_request;
   server_tokens off;
   client_body_temp_path temp/client;
   proxy_temp_path temp/proxy;
@@ -151,6 +159,7 @@ http {{
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header X-Request-ID $erp_request_id;
       proxy_read_timeout 60;
     }}
     location / {{ return 404; }}
