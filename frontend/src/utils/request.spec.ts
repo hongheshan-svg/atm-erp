@@ -146,6 +146,41 @@ describe('错误提示中文化', () => {
     expect(message(failure(409, { reason: '请核对原单据。', actions: [{ label: '打开单据', path: '/finance?focus=1' }] }))).toBe('请核对原单据。')
   })
 
+  describe('服务器处理失败附带错误编号', () => {
+    function serverError(data: unknown, headers: Record<string, string> = {}) {
+      const result: AxiosResponse = { config, status: 500, data, statusText: '', headers: new AxiosHeaders(headers) }
+      return new AxiosError('Request failed with status code 500', 'ERR_BAD_RESPONSE', config, {}, result)
+    }
+    const suffix = (id: string) => `错误编号：${id}（请把编号告诉管理员）`
+
+    it('优先使用响应体中的编号，原中文提示不变', () => {
+      const data = { detail: '服务器处理失败，请稍后重试或联系管理员。', request_id: '0f3a9c' }
+      expect(message(serverError(data, { 'X-Request-ID': 'header-id' }))).toBe(`服务器处理失败，请稍后重试或联系管理员。${suffix('0f3a9c')}`)
+    })
+
+    it('错误页没有响应体编号时取响应头', () => {
+      expect(message(serverError('<html>Server Error (500)</html>', { 'X-Request-ID': 'nginx-7d1e' })))
+        .toBe(`服务器处理失败，请稍后重试或联系管理员。${suffix('nginx-7d1e')}`)
+    })
+
+    it('没有编号或编号格式异常时只显示原提示', () => {
+      expect(message(serverError({}))).toBe('服务器处理失败，请稍后重试或联系管理员。')
+      expect(message(serverError({ request_id: '<img src=x>' }, { 'X-Request-ID': 'x'.repeat(65) })))
+        .toBe('服务器处理失败，请稍后重试或联系管理员。')
+    })
+
+    it('其他状态码即使带编号也不改文案', () => {
+      const headers = new AxiosHeaders({ 'X-Request-ID': 'abc' })
+      for (const [status, data, text] of [
+        [400, { detail: '金额不能为负。', request_id: 'abc' }, '金额不能为负。'],
+        [502, '', '服务暂时不可用，请稍后重试。'],
+      ] as const) {
+        const result: AxiosResponse = { config, status, data, statusText: '', headers }
+        expect(message(new AxiosError('failed', 'ERR_BAD_RESPONSE', config, {}, result))).toBe(text)
+      }
+    })
+  })
+
   it('导入错误保留文件行号与实际账号，不显示原始字段名', () => {
     expect(message({ row: 3, message: '执行人账号：未找到登录用户名“wuxingguang”。' })).toBe('第 3 行：执行人账号：未找到登录用户名“wuxingguang”。')
     expect(message({ row: 4, message: 'This field may not be blank.' })).toBe('第 4 行：此项不能为空。')

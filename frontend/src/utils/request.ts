@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { localStore } from './storage'
 export const request = axios.create({ baseURL: '/api', timeout: 25000 })
 let epoch = 0
@@ -129,6 +129,16 @@ function chineseMessage(value: string): string {
   if (/^Ensure this field has no more than \d+ characters/.test(text)) return `此项不能超过 ${text.match(/\d+/)![0]} 个字符。`
   return /[\u4e00-\u9fff]/.test(text) ? text : ''
 }
+// 与后端、Nginx 的校验一致；格式异常的编号不展示，避免把响应内容原样塞进提示条。
+const REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/
+function serverErrorId(response: AxiosResponse): string {
+  const headers = response.headers as { get?: (name: string) => unknown } & Record<string, unknown>
+  const candidates = [
+    (response.data as { request_id?: unknown } | null)?.request_id,
+    typeof headers?.get === 'function' ? headers.get('x-request-id') : headers?.['x-request-id'],
+  ]
+  return candidates.find((value): value is string => typeof value === 'string' && REQUEST_ID.test(value)) ?? ''
+}
 export function message(error: unknown): string {
   function flatten(value: any): string {
     if (value == null) return ''
@@ -138,7 +148,7 @@ export function message(error: unknown): string {
     if (Array.isArray(value)) return value.map(flatten).filter(Boolean).join('；')
     if (typeof value === 'object') {
       const text = Object.entries(value).filter(([key, detail]) =>
-        !['row', 'token_class', 'token_type', 'actions'].includes(key) &&
+        !['row', 'token_class', 'token_type', 'actions', 'request_id'].includes(key) &&
         !(key === 'code' && typeof detail === 'string' && /^[a-z_]+$/.test(detail)),
       ).map(([, detail]) => flatten(detail)).filter(Boolean).join('；')
       return value.row != null ? `第 ${value.row} 行：${text || '填写内容不符合要求，请检查后重试。'}` : text
@@ -148,9 +158,11 @@ export function message(error: unknown): string {
   if (!axios.isAxiosError(error)) return flatten(error) || '操作失败，请重试。'
   const data = error.response?.data
   const detail = flatten(data?.detail ?? data)
-  if (detail) return detail
-  if (!error.response) return NETWORK_MESSAGES[error.code ?? ''] || '网络异常，请检查连接后重试。'
-  return STATUS_MESSAGES[error.response.status] || `请求失败（状态码 ${error.response.status}）。`
+  if (!error.response) return detail || NETWORK_MESSAGES[error.code ?? ''] || '网络异常，请检查连接后重试。'
+  const text = detail || STATUS_MESSAGES[error.response.status] || `请求失败（状态码 ${error.response.status}）。`
+  // 只有 500 附带编号：管理员按编号在 Nginx 与后端日志里找到对应请求、操作人和异常。
+  const id = error.response.status === 500 ? serverErrorId(error.response) : ''
+  return id ? `${text}错误编号：${id}（请把编号告诉管理员）` : text
 }
 export function recoveryActions(error: unknown): { label: string; path: string }[] {
   const actions = axios.isAxiosError(error) ? error.response?.data?.actions : []
