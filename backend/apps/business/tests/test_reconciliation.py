@@ -551,6 +551,13 @@ class ReconciliationTests(BusinessFixtures, TestCase):
         )
         self.assertEqual(finance.balance(purchase), -400)
 
+    def test_over_balance_message_follows_entry_direction(self):
+        receivable = self.project.entries.get(kind='receivable')
+        self.assertEqual(str(self.pay(receivable, '10000.01', status=409)['detail']), '收款超过当前未收余额。')
+        payable = self.purchase_entry()
+        self.assertEqual(str(self.pay(payable, '500.01', status=409)['detail']), '付款超过当前未付余额。')
+        self.assertFalse(Payment.objects.exists())
+
     def test_reversed_payment_no_longer_blocks_reregistration_or_allocation(self):
         entry = self.project.entries.get(kind='receivable')
         first = self.bank_pay(entry, '3000', 'R1')['id']

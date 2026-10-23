@@ -100,7 +100,7 @@ def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
                 raise Conflict('退款超过当前应退余额。')
             amount = -amount
         elif remaining <= 0 or amount > remaining:
-            raise Conflict('付款超过当前未结余额。')
+            raise Conflict('收款超过当前未收余额。' if entry.kind == 'receivable' else '付款超过当前未付余额。')
         from .reconciliation import authorize_payment
 
         statement = authorize_payment(entry, data, amount, refund)
