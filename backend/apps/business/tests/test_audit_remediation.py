@@ -432,7 +432,11 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
     def test_warranty_expense_cannot_be_shared_between_cases(self):
         purchase, receipt = self.warranty_receipt()
         expense = Entry.objects.create(
-            project=purchase.project, kind='expense', title='返修运费', amount=Decimal('10'), due_date=timezone.localdate()
+            project=purchase.project,
+            kind='expense',
+            title='返修运费',
+            amount=Decimal('10'),
+            due_date=timezone.localdate(),
         )
         first = self.warranty_case(purchase, receipt, '1')
         second = self.warranty_case(purchase, receipt, '1')
