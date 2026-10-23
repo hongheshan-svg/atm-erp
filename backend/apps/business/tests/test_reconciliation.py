@@ -523,6 +523,26 @@ class ReconciliationTests(BusinessFixtures, TestCase):
         self.assertEqual(finance.balance(entry), 7000)
         self.assertEqual(finance.balance(other), 8000)
 
+    def test_claimed_transfer_remainder_may_be_registered_manually_within_bank_balance(self):
+        # 一笔到账先认领部分到款项，剩余部分手工登记后再匹配，是合法拆分；银行剩余额度限制继续登记。
+        entry = self.project.entries.get(kind='receivable')
+        other = self.active_project().entries.get(kind='receivable')
+        bank = self.bank_with('1100', 'R7')
+        self.request(
+            'finance', f'bank-records/{bank}/allocate/', {'entry': entry.pk, 'amount': '400', 'reason': '认领'}
+        )
+        manual = self.bank_pay(entry, '600', 'R7')['id']
+        self.request('finance', f'bank-records/{bank}/match/', {'payment': manual, 'reason': '核对银行'})
+        self.assertEqual(banking.remaining(BankRecord.objects.get(pk=bank)), 100)
+        receipts = ActionReceipt.objects.count()
+        rejected = self.bank_pay(entry, '200', 'R7', status=409)
+        self.assertIn('尚未匹配的金额只剩 100.00 元', str(rejected['detail']))
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.bank_pay(other, '100', 'R7')
+        self.bank_pay(other, '50', 'R7', status=409)
+        self.assertEqual(finance.balance(entry), 9000)
+        self.assertEqual(finance.balance(other), 9900)
+
     def test_manual_bank_reference_is_unique_per_entry_and_direction_but_may_split(self):
         entry = self.project.entries.get(kind='receivable')
         other = self.active_project().entries.get(kind='receivable')
