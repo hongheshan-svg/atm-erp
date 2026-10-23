@@ -415,6 +415,8 @@ def report(selected):
 
 def export(selected, file_format):
     selected = category(selected)
+    if file_format not in {'csv', 'xlsx'}:
+        raise ValidationError({'file_format': '请选择 csv 或 xlsx。'})
     rows = CHECKS[selected]()
     response = tabular.document(
         'data-checks',
