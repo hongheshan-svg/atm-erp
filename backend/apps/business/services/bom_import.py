@@ -1,7 +1,10 @@
 import csv
 import io
+import lzma
 import re
+import struct
 import zipfile
+import zlib
 from datetime import date, datetime
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
@@ -48,10 +51,16 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
             result = read_xlsx(content, max(len(headers), len(BOM_COLUMNS)))
         else:
             raise ValidationError({'file': '仅支持 UTF-8 CSV 或 XLSX。'})
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise ValidationError({'file': '文件损坏、编码不正确或不是受支持的表格。'}) from exc
     except (
-        UnicodeDecodeError,
-        csv.Error,
+        # XLSX 是 ZIP 包：部件压缩数据损坏、截断或加密时，解包会抛出这些底层异常。
         zipfile.BadZipFile,
+        zipfile.LargeZipFile,
+        zlib.error,
+        lzma.LZMAError,
+        struct.error,
+        EOFError,
         KeyError,
         ValueError,
         DefusedXmlException,
@@ -62,9 +71,10 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
         RuntimeError,
         NotImplementedError,
         OSError,
-        EOFError,
     ) as exc:
-        raise ValidationError({'file': '文件损坏、编码不正确或不是受支持的表格。'}) from exc
+        raise ValidationError(
+            {'file': '表格损坏、加密或格式不支持，请用 Excel 重新另存为 XLSX（不设密码）或下载模板后重新导入。'}
+        ) from exc
     if not result:
         raise ValidationError({'file': '表格不能为空。'})
     header = [str(value).strip() if value is not None else '' for value in result[0]]

@@ -502,3 +502,48 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
                 self.post('manager', 'tasks/import-confirm/', {'token': assembly.data['token']}, key=key), saved
             )
         self.assertEqual(Task.objects.count(), 3)
+
+
+class CorruptSpreadsheetTests(BusinessFixtures, TestCase):
+    """解包失败（deflate 数据损坏等）的 XLSX 在各导入入口返回中文 400，不再 500。"""
+
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+
+    def corrupt_xlsx(self, headers):
+        import zipfile
+
+        book = Workbook()
+        book.active.append(headers)
+        for index in range(50):
+            book.active.append([f'I{index}'] + [''] * (len(headers) - 1))
+        stream = io.BytesIO()
+        book.save(stream)
+        data = bytearray(stream.getvalue())
+        with zipfile.ZipFile(io.BytesIO(bytes(data))) as archive:
+            offset = archive.getinfo('xl/worksheets/sheet1.xml').header_offset
+        name_length = int.from_bytes(data[offset + 26 : offset + 28], 'little')
+        extra_length = int.from_bytes(data[offset + 28 : offset + 30], 'little')
+        start = offset + 30 + name_length + extra_length
+        data[start : start + 8] = b'\xff' * 8  # 非法 deflate 块类型，解压时抛 zlib.error
+        return bytes(data)
+
+    def test_corrupt_xlsx_returns_chinese_400_for_generic_and_bom_import(self):
+        from apps.business.services import bom_material_import
+
+        cases = [
+            ('admin', '/api/business/projects/import-file/', [label for label, _ in transfers.SCHEMAS['projects'][1]]),
+            ('admin', '/api/business/items/import-file/', [label for label, _ in transfers.SCHEMAS['items'][1]]),
+            ('manager', f'/api/business/projects/{self.project.pk}/import-preview/', bom_material_import.HEADERS),
+        ]
+        for role, url, headers in cases:
+            with self.subTest(url=url):
+                client = self.clients[role]
+                client.raise_request_exception = False
+                response = client.post(
+                    url, {'file': SimpleUploadedFile('broken.xlsx', self.corrupt_xlsx(headers))}, format='multipart'
+                )
+                self.assertEqual(response.status_code, 400, getattr(response, 'data', response.content[:200]))
+                self.assertIn('表格损坏、加密或格式不支持', str(response.data))
+        self.assertFalse(BOMLine.objects.filter(project=self.project).exists())
