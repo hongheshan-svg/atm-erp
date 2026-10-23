@@ -26,6 +26,7 @@ class SalesSerializer(serializers.ModelSerializer):
     project_code = serializers.CharField(source='project.code', read_only=True, default=None)
     project_status = serializers.CharField(source='project.status', read_only=True, default=None)
     amounts_visible = serializers.SerializerMethodField()
+    can_transfer = serializers.SerializerMethodField()
 
     class Meta:
         model = SalesOrder
@@ -53,10 +54,14 @@ class SalesSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'amounts_visible',
+            'can_transfer',
         ]
 
     def get_amounts_visible(self, sale):
         return sale_amounts_visible(self.context['request'], sale)
+
+    def get_can_transfer(self, sale):
+        return sale.status == 'signed' and sales.may_transfer(self.context['request'].user, sale)
 
     def to_representation(self, instance):
         result = super().to_representation(instance)

@@ -26,7 +26,7 @@ export function salesActions(row: Row): string[] {
 function salesBusinessActions(row: Row): string[] {
   if (salesOnly() && row.manager === user.value?.id) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
   if (!can(['admin', 'manager', 'finance'])) return []
-  if (row.status === 'signed') return ['查看明细', '交付与回款', '补充协议记录', ...(manager() && !amountsHidden(row) ? ['签订补充协议'] : []), ...(manager() ? ['转交负责人'] : [])]
+  if (row.status === 'signed') return ['查看明细', '交付与回款', '补充协议记录', ...(manager() && !amountsHidden(row) ? ['签订补充协议'] : []), ...(manager() && row.can_transfer ? ['转交负责人'] : [])]
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
@@ -68,7 +68,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   if (row && action === '转交负责人') {
     const users = await all('/auth/directory/')
     return { title: action, path: `${path}${row.id}/transfer/`, fields: [
-      { key: 'manager', label: '新销售负责人', type: 'select', options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager)) },
+      { key: 'manager', label: '新销售负责人', type: 'select', options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager && u.id !== user.value?.id)) },
       { key: 'reason', label: '转交原因', hint: '必填，最多 500 字，记入操作审计。' },
     ], notice: { type: 'info', text: '只更换销售负责人，不改变合同与回款。原负责人立即失去本人范围内的查看权限，新负责人立即获得。' } }
   }

@@ -347,6 +347,48 @@ class SalesTests(BusinessFixtures, TestCase):
         sale.refresh_from_db()
         self.assertEqual(sale.manager_id, self.users['manager'].pk)
 
+    def test_transfer_limited_to_admin_or_project_owner_and_never_to_self(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        sale = self.signed_sale_of_sales_manager()
+        other = User.objects.create_user(username='sm2', role='sales_manager')
+        # 兼任销售经理、未负责该项目的项目经理：转给自己即可借负责人身份读到被隐藏的金额，必须拒绝。
+        dual = User.objects.create_user(username='pm2', role='manager', additional_roles=['sales_manager'])
+        self.clients['pm2'] = APIClient()
+        self.clients['pm2'].force_authenticate(dual)
+        url = f'sales/{sale.pk}/transfer/'
+        receipts = ActionReceipt.objects.count()
+        row = self.clients['pm2'].get(f'/api/business/sales/{sale.pk}/').data
+        self.assertEqual((row['amounts_visible'], row['can_transfer']), (False, False))
+        self.post('pm2', url, {'manager': dual.pk, 'reason': '转给自己'}, status=403)
+        self.post('pm2', url, {'manager': other.pk, 'reason': '代为交接'}, status=403)
+        # 参与项目不等于项目负责人。
+        sale.project.members.add(dual)
+        self.assertFalse(self.clients['pm2'].get(f'/api/business/sales/{sale.pk}/').data['can_transfer'])
+        self.post('pm2', url, {'manager': other.pk, 'reason': '代为交接'}, status=403)
+        # 项目负责人与管理员兼任销售经理时也不能转给自己。
+        for role in ('manager', 'admin'):
+            self.users[role].additional_roles = ['sales_manager']
+            self.users[role].save()
+            self.assertTrue(self.clients[role].get(f'/api/business/sales/{sale.pk}/').data['can_transfer'])
+            response = self.post(role, url, {'manager': self.users[role].pk, 'reason': '转给自己'}, status=400)
+            self.assertIn('manager', response)
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['sales_manager'].pk)
+        self.assertFalse(AuditLog.objects.filter(operation='sale.transfer').exists())
+        # 管理员不负责该项目也可以转交；项目负责人换人后，原负责人的旧请求回放被拒绝。
+        self.post('admin', url, {'manager': other.pk, 'reason': '管理员交接'})
+        payload = {'manager': self.users['sales_manager'].pk, 'reason': '交回原负责人'}
+        self.post('manager', url, payload, key='transfer-back')
+        Project.objects.filter(pk=sale.project_id).update(manager=dual)
+        self.post('manager', url, payload, key='transfer-back', status=403)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['sales_manager'].pk)
+        self.assertEqual(AuditLog.objects.filter(operation='sale.transfer').count(), 2)
+
     def test_failed_finance_handoff_rolls_back_project_sale_and_number(self):
         sale = self.sale()
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '确认'})
