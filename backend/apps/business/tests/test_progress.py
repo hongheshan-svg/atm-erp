@@ -520,3 +520,20 @@ class ProgressTests(BusinessFixtures, TestCase):
         User.objects.create_user(username='zhang-2', display_name='张师傅', role='member')
         queries(0)
         self.assertEqual(queries(3), queries(9))
+
+    def test_entry_rows_are_named_by_milestone_not_record_id(self):
+        entry = self.project.entries.get(kind='receivable')
+        self.assertTrue(entry.title)
+        payable = Entry.objects.create(
+            project=self.project,
+            purchase=self.purchase,
+            kind='payable',
+            title='机密款项',
+            amount=1,
+            due_date=self.today,
+        )
+        rows = {row['id']: row['title'] for row in self.get('member', 'entries')['results']}
+        self.assertEqual(rows[entry.pk], entry.title)
+        self.assertEqual(rows[payable.pk], '采购 PROGRESS-PO')
+        Entry.objects.filter(pk=entry.pk).update(title='')
+        self.assertEqual(self.entry_row(entry)['title'], f'客户收款节点（到期日 {entry.due_date}）')

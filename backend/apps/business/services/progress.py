@@ -226,7 +226,10 @@ class Progress:
             'partial': '部分结算',
             'pending': '待结算',
         }[flow]
-        title = f'采购 {entry.purchase.code}' if entry.purchase_id else f'客户收款节点 #{entry.pk}'
+        # 用签约节点或售后费自身的名称，主键对业务人员没有意义；采购应付仍只显示采购单号，不暴露款项名称。
+        title = f'采购 {entry.purchase.code}' if entry.purchase_id else entry.title
+        if not title:
+            title = f'{"客户收款" if entry.kind == "receivable" else "付款"}节点（到期日 {entry.due_date}）'
         row = self.row(
             entry, 'entries', title, status, pending, due=due, due_label='付款到期日', record={'progress_status': flow}
         )
