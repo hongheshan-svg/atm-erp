@@ -20,10 +20,62 @@ it('同物料不同单元在删除确认中可清楚区分', () => {
 
 it('删除用户前说明停用隐藏、历史保留、不能普通编辑恢复且用户名不能复用', () => {
   const wrapper = make({ resource: 'users', title: '用户', rows: [{ id: 5, username: 'member', display_name: '成员' }] })
-  for (const text of ['账号停用并从用户列表隐藏', '历史记录保留', '不能通过普通编辑恢复', '原用户名不能再次使用', '不能删除当前登录账号'])
+  for (const text of ['账号停用并从用户列表隐藏', '历史记录保留', '不能通过普通编辑恢复', '原用户名不能再次使用', '“已删除记录”中恢复账号', '不能删除当前登录账号'])
     expect(wrapper.text()).toContain(text)
   expect(wrapper.get('.deletion-confirm').text()).toContain('原用户名不能再次使用')
+  expect(wrapper.get('.deletion-confirm').text()).toContain('恢复账号')
   wrapper.unmount()
+})
+
+const removedUsers = () => ({ count: 2, results: [
+  { id: 21, actor_name: '管理员', created_at: '2026-10-22T08:00:00Z', restored: false, restored_at: null, restored_by: null, detail: { reason: '误删', mode: 'disable', record: { id: 5, username: 'member', display_name: '成员' } } },
+  { id: 20, actor_name: '管理员', created_at: '2026-10-21T08:00:00Z', restored: true, restored_at: '2026-10-21T09:00:00Z', restored_by: '审核管理员', detail: { reason: '离职', mode: 'disable', record: { id: 6, username: 'old', display_name: '旧账号' } } },
+] })
+const buttons = (wrapper: ReturnType<typeof make>, text: string) => wrapper.findAll('button').filter(button => button.text() === text)
+
+it('已删除账号显示是否已恢复；未恢复的可填写原因恢复，失败保留幂等标识，成功后刷新列表', async () => {
+  vi.mocked(read).mockResolvedValue(removedUsers())
+  const wrapper = make({ resource: 'users', title: '用户', rows: undefined })
+  await flushPromises()
+  expect(wrapper.text()).toContain('已恢复 · 审核管理员')
+  expect(buttons(wrapper, '恢复账号')).toHaveLength(1)
+  await buttons(wrapper, '恢复账号')[0]!.trigger('click')
+  expect(wrapper.text()).toContain('恢复后为停用状态，请在用户管理中确认角色后启用')
+  expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+  await wrapper.get('textarea').setValue('误删，核对后恢复')
+  vi.mocked(write).mockRejectedValueOnce(new Error('该账号未处于已删除状态')).mockResolvedValueOnce({ id: 5, is_active: false })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.text()).toContain('未处于已删除状态')
+  expect(wrapper.emitted('saved')).toBeUndefined()
+  const key = vi.mocked(write).mock.calls[0]![2]
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(write).toHaveBeenLastCalledWith('/business/record-deletions/restore/', { resource: 'users', id: 5, reason: '误删，核对后恢复' }, key)
+  expect(wrapper.emitted('saved')).toHaveLength(1)
+  expect(wrapper.emitted('close')).toBeUndefined()
+  expect(read).toHaveBeenCalledTimes(2)
+  expect(wrapper.find('form').exists()).toBe(false)
+  wrapper.unmount()
+})
+
+it('恢复账号仅管理员可见，其他资源的已删除记录不提供恢复', async () => {
+  vi.mocked(read).mockResolvedValue(removedUsers())
+  user.value = { roles: ['finance'] }
+  const finance = make({ resource: 'users', title: '用户', rows: undefined })
+  await flushPromises()
+  expect(buttons(finance, '恢复账号')).toHaveLength(0)
+  expect(finance.text()).toContain('已恢复')
+  finance.unmount()
+  user.value = { roles: ['finance', 'admin'] }
+  const entries = make({ resource: 'entries', title: '应收应付与费用', rows: undefined })
+  await flushPromises()
+  expect(buttons(entries, '恢复账号')).toHaveLength(0)
+  entries.unmount()
+  const admin = make({ resource: 'users', title: '用户', rows: undefined })
+  await flushPromises()
+  expect(buttons(admin, '恢复账号')).toHaveLength(1)
+  admin.unmount()
 })
 
 it('账款、流水、对账、银行和交付的删除说明提示在办记录会被拒绝及下一步', () => {
