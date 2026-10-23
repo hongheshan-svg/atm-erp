@@ -206,3 +206,27 @@ it('非参与项目的已签约销售显示“无权查看”，不出现空金�
   expect(history.notice?.text).toContain('补充协议金额')
   expect(history.initial?.lines[0]).toMatchObject({ before_text: '设备数量：1；质保月数：12', after_text: '设备数量：2；质保月数：12', document__original_name: '无权查看' })
 })
+
+it('已签约销售单仅管理员与项目经理可见转交负责人，表单只含新负责人与原因', async () => {
+  const row = { id: 9, manager: 3, status: 'signed' }
+  for (const role of ['admin', 'manager']) {
+    user.value = { id: 1, roles: [role] }
+    expect(salesActions(row)).toContain('转交负责人')
+  }
+  for (const role of ['finance', 'sales_manager']) {
+    user.value = { id: 3, roles: [role] }
+    expect(salesActions(row)).not.toContain('转交负责人')
+  }
+  user.value = { id: 1, roles: ['manager'] }
+  expect(salesActions({ id: 9, manager: 3, status: 'quoted' })).not.toContain('转交负责人')
+  vi.mocked(all).mockResolvedValue([
+    { id: 3, username: 'old', display_name: '原负责人', roles: ['sales_manager'] },
+    { id: 4, username: 'new', display_name: '新负责人', roles: ['sales_manager'] },
+    { id: 5, username: 'pm', display_name: '经理', roles: ['manager'] },
+  ])
+  const command = await salesCommand(row, '转交负责人')
+  expect(command.path).toBe('/business/sales/9/transfer/')
+  expect(command.fields.map(field => field.key)).toEqual(['manager', 'reason'])
+  expect(command.fields[0].options).toEqual([{ value: 4, label: '新负责人（new）' }])
+  expect(command.notice?.text).toContain('只更换销售负责人，不改变合同与回款')
+})
