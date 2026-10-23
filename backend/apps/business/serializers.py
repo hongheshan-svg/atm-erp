@@ -370,13 +370,14 @@ class EntrySerializer(serializers.ModelSerializer):
         return obj._payment_schedule
 
     def get_status(self, obj):
-        if obj.cancelled:
-            return 'cancelled'
         remaining = balance(obj)
-        if remaining == 0:
-            return 'closed'
+        # 取消只冲减原金额，已收已付仍需退回：余额小于零优先显示待退款，退完才显示已取消。
         if remaining < 0:
             return 'refund'
+        if obj.cancelled:
+            return 'cancelled'
+        if remaining == 0:
+            return 'closed'
         # 与到期明细同一口径：只有已经起算的批次逾期才算逾期，未到货的采购不算。
         today = timezone.localdate()
         return 'overdue' if any(row['due_date'] < today for row in self.schedule(obj)) else 'open'

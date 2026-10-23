@@ -237,6 +237,66 @@ class ProgressTests(BusinessFixtures, TestCase):
         row = self.get(category='entries')['results'][0]
         self.assertEqual(row['record']['progress_status'], 'refund')
 
+    def entry_group(self, result):
+        return next(group for group in result['groups'] if group['key'] == 'entries')
+
+    def test_cancelled_project_receipt_stays_pending_refund_until_finance_returns_it(self):
+        PurchaseOrder.objects.filter(pk=self.purchase.pk).update(status='cancelled')
+        entry = self.project.entries.get(kind='receivable')
+        self.post(
+            'finance', f'entries/{entry.pk}/pay/', {'amount': '500.00', 'date': str(self.today), 'reason': '定金'}
+        )
+        self.post('manager', f'projects/{self.project.pk}/cancel/', {'reason': '客户终止'})
+        entry.refresh_from_db()
+        self.assertTrue(entry.cancelled)
+        result = self.get('manager', 'entries')
+        self.assertEqual((self.entry_group(result)['open'], result['count']), (1, 1))
+        row = result['results'][0]
+        self.assertEqual((row['status_label'], row['pending']), ('待退款', True))
+        self.assertEqual(row['record']['progress_status'], 'refund')
+        self.assertEqual(row['handler_label'], '财务跟进人员')
+        self.assertIn(self.users['finance'].pk, [person['id'] for person in row['handlers']])
+        self.assertIn('由财务办理退款', row['hint'])
+        self.assertNotIn('重开', row['hint'])
+        listed = self.clients['finance'].get(f'/api/business/entries/{entry.pk}/').data
+        self.assertEqual((listed['status'], listed['balance']), ('refund', '-500.00'))
+
+        # 退款只拦已结项；退回后余额为零，按已取消结束，不再计入待跟进。
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/refund/',
+            {'amount': '500.00', 'date': str(self.today), 'reason': '退回定金', **self.reconciliation_data(entry)},
+        )
+        result = self.get('manager', 'entries', state='all')
+        self.assertEqual(self.entry_group(result)['open'], 0)
+        row = result['results'][0]
+        self.assertEqual((row['status_label'], row['pending']), ('已取消', False))
+        self.assertEqual(self.clients['finance'].get(f'/api/business/entries/{entry.pk}/').data['status'], 'cancelled')
+
+    def test_cancelled_expense_with_payment_is_refund_not_finished(self):
+        expense = self.post(
+            'finance',
+            'entries/expense/',
+            {'project': self.project.pk, 'title': '差旅', 'amount': '500.00', 'due_date': str(self.today)},
+            status=201,
+        )
+        self.post(
+            'finance', f'entries/{expense["id"]}/pay/', {'amount': '200.00', 'date': str(self.today), 'reason': '付'}
+        )
+        self.post('finance', f'entries/{expense["id"]}/cancel-expense/', {'reason': '误报'})
+        listed = self.clients['finance'].get(f'/api/business/entries/{expense["id"]}/').data
+        self.assertEqual((listed['status'], listed['balance']), ('refund', '-200.00'))
+        unpaid = self.post(
+            'finance',
+            'entries/expense/',
+            {'project': self.project.pk, 'title': '未付费用', 'amount': '80.00', 'due_date': str(self.today)},
+            status=201,
+        )
+        self.post('finance', f'entries/{unpaid["id"]}/cancel-expense/', {'reason': '误报'})
+        self.assertEqual(
+            self.clients['finance'].get(f'/api/business/entries/{unpaid["id"]}/').data['status'], 'cancelled'
+        )
+
     def test_multiple_prepayment_applicants_can_review_each_others_requests(self):
         entry = self.project.entries.get(kind='receivable')
         for index, role in enumerate(['admin', 'manager']):

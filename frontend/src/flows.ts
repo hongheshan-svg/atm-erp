@@ -25,9 +25,10 @@ function deliveryStage(row: Row) {
 
 function entryStage(row: Row) {
   if (['pending', 'partial', 'settled', 'cancelled', 'refund'].includes(row.progress_status)) return row.progress_status
+  // 取消只冲减原金额，已收已付超出部分仍待退回；余额归零后才按已取消结束。
+  if (number(row.balance) < 0 && !settled(row.balance)) return 'refund'
   if (row.cancelled) return 'cancelled'
   if (settled(row.balance)) return 'settled'
-  if (number(row.balance) < 0) return 'refund'
   return settled(row.paid_amount) && settled(row.credit_amount) ? 'pending' : 'partial'
 }
 

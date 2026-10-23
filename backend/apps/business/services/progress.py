@@ -190,16 +190,18 @@ class Progress:
 
     def entry(self, entry):
         remaining = finance.balance(entry)
-        pending = not entry.cancelled and remaining != 0
+        # 取消只冲减原金额；已收已付超出的部分仍要退回，余额小于零一律是待退款，归零才算结束。
+        refund = remaining < 0
+        pending = refund or (not entry.cancelled and remaining != 0)
         schedule = payment_terms.schedule(entry) if pending else []
         due = schedule[0]['due_date'] if schedule else None
         flow = (
-            'cancelled'
+            'refund'
+            if refund
+            else 'cancelled'
             if entry.cancelled
             else 'settled'
             if remaining == 0
-            else 'refund'
-            if remaining < 0
             else 'partial'
             if finance.paid(entry) or entry.credit_amount
             else 'pending'
@@ -217,6 +219,8 @@ class Progress:
         )
         row['handlers'], row['handler_label'] = self.candidates(FINANCE), '财务跟进人员'
         row['hint'] = '财务核对原始业务后登记收付款。'
+        if refund:
+            row['hint'] = '已收付金额超过应结金额，由财务办理退款；退款前须先完成退款对账。'
         if entry.kind == 'receivable':
             row['due_label'] = '收款到期日'
         if entry.purchase_id and pending and remaining > 0 and not schedule:
@@ -272,7 +276,10 @@ def summary(user, project, params):
         'tasks': queries['tasks'].filter(status='open'),
         'purchases': queries['purchases'].exclude(status__in=['received', 'cancelled']),
         'deliveries': queries['deliveries'].filter(accepted_date__isnull=True),
-        'entries': queries['entries'].filter(cancelled=False).exclude(amount=F('credit_amount') + F('net_paid')),
+        # 与行内 pending 同一口径：未取消且余额非零，或已取消但仍有待退款（余额小于零）。
+        'entries': queries['entries']
+        .exclude(amount=F('credit_amount') + F('net_paid'))
+        .filter(Q(cancelled=False) | Q(amount__lt=F('credit_amount') + F('net_paid'))),
     }
     counts = [
         {'key': key, 'label': label, 'open': opened[key].count(), 'total': queries[key].count()}
@@ -301,6 +308,11 @@ def summary(user, project, params):
     if stopped:
         for row in rows:
             row['overdue'] = False
+            if row['record'].get('progress_status') == 'refund':
+                # 已取消项目可以直接退款，只有已结项项目须先重新打开。
+                if project.status == 'closed':
+                    row['hint'] = '项目已结项，须先由项目负责人重新打开，再由财务办理退款。'
+                continue
             row['hint'] = f'项目{project.get_status_display()}，先联系项目负责人确认是否需要重开。'
     return {
         'project': {
