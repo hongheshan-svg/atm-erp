@@ -72,7 +72,7 @@ def create(actor, key, data):
     )
 
 
-def action(actor, key, operation, sale_id, data, execute, *, project_first=False):
+def action(actor, key, operation, sale_id, data, execute, *, project_first=False, roles=None):
     def locked():
         if project_first:
             # 历史项目签约会改写项目；与项目编辑、补充协议保持“先项目后销售单”的全局锁序，
@@ -91,7 +91,7 @@ def action(actor, key, operation, sale_id, data, execute, *, project_first=False
         key=key,
         operation=operation,
         payload={'id': sale_id, 'data': data},
-        authorize=lambda user: require_sale(user, locked()),
+        authorize=lambda user: (roles and require_role(user, roles), require_sale(user, locked())),
         execute=lambda user: execute(user, locked()),
     )
 
@@ -218,3 +218,22 @@ def cancel(actor, key, sale_id, data):
         return audit(user, 'sale.cancel', sale, reason=reason)
 
     return action(actor, key, 'sale.cancel', sale_id, data, execute)
+
+
+def transfer(actor, key, sale_id, data):
+    def execute(user, sale):
+        fields(data, {'manager', 'reason'})
+        state(sale, {'signed'})
+        reason = text(data, 'reason', maximum=500)
+        target_id = identity(data.get('manager'), 'manager')
+        target = get_object_or_404(User.objects.select_for_update(), pk=target_id, is_active=True)
+        if not has_role(target, {'sales_manager'}):
+            raise ValidationError({'manager': '新负责人必须是启用的销售经理。'})
+        if target.pk == sale.manager_id:
+            raise ValidationError({'manager': '新负责人与当前负责人相同，无需转交。'})
+        before = sale.manager_id
+        sale.manager = target
+        save(sale, user)
+        return audit(user, 'sale.transfer', sale, before=before, after=target.pk, reason=reason)
+
+    return action(actor, key, 'sale.transfer', sale_id, data, execute, roles=MANAGERS)

@@ -279,6 +279,74 @@ class SalesTests(BusinessFixtures, TestCase):
         self.assertEqual(sale.project.status, 'active')
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '200', 'reason': '不允许改合同'}, status=409)
 
+    def signed_sale_of_sales_manager(self):
+        sale_id = self.sales_manager_order()
+        self.post('sales_manager', f'sales/{sale_id}/quote/', {'amount': '100', 'reason': '报价'})
+        self.post('sales_manager', f'sales/{sale_id}/sign/', {**self.signing(), 'manager': self.users['manager'].pk})
+        return SalesOrder.objects.get(pk=sale_id)
+
+    def test_transfer_signed_sale_owner_changes_scope_and_audits(self):
+        from apps.accounts.models import User
+
+        sale = self.signed_sale_of_sales_manager()
+        new_owner = User.objects.create_user(username='sm2', role='sales_manager')
+        from rest_framework.test import APIClient
+
+        new_client = APIClient()
+        new_client.force_authenticate(new_owner)
+        url = f'sales/{sale.pk}/transfer/'
+        project_before = (sale.project_id, sale.project.manager_id, sale.contract_amount)
+        self.assertEqual(new_client.get(f'/api/business/sales/{sale.pk}/').status_code, 404)
+        payload = {'manager': new_owner.pk, 'reason': '负责人离岗，交接给同事'}
+        result = self.post('manager', url, payload, key='transfer-1')
+        self.assertEqual(result, self.post('manager', url, payload, key='transfer-1'))
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, new_owner.pk)
+        self.assertEqual(sale.status, 'signed')
+        self.assertEqual(project_before, (sale.project_id, sale.project.manager_id, sale.contract_amount))
+        log = AuditLog.objects.get(operation='sale.transfer')
+        self.assertEqual(
+            (log.detail['before'], log.detail['after'], log.detail['reason']),
+            (self.users['sales_manager'].pk, new_owner.pk, payload['reason']),
+        )
+        self.assertEqual(AuditLog.objects.filter(operation='sale.transfer').count(), 1)
+        self.assertEqual(self.clients['sales_manager'].get(f'/api/business/sales/{sale.pk}/').status_code, 404)
+        self.assertEqual(new_client.get(f'/api/business/sales/{sale.pk}/').status_code, 200)
+
+    def test_transfer_rejections_leave_no_receipt_or_change(self):
+        from apps.accounts.models import User
+
+        sale = self.signed_sale_of_sales_manager()
+        other = User.objects.create_user(username='sm2', role='sales_manager')
+        inactive = User.objects.create_user(username='sm3', role='sales_manager', is_active=False)
+        url = f'sales/{sale.pk}/transfer/'
+        good = {'manager': other.pk, 'reason': '交接'}
+        receipts = ActionReceipt.objects.count()
+        self.post('sales_manager', url, good, status=403)
+        self.post('member', url, good, status=403)
+        self.post('manager', url, {**good, 'manager': self.users['manager'].pk}, status=400)
+        self.post('manager', url, {**good, 'manager': self.users['warehouse'].pk}, status=400)
+        self.post('manager', url, {**good, 'manager': inactive.pk}, status=404)
+        self.post('manager', url, {**good, 'manager': self.users['sales_manager'].pk}, status=400)
+        self.post('manager', url, {**good, 'reason': ''}, status=400)
+        self.post('manager', url, {**good, 'reason': 'x' * 501}, status=400)
+        self.post('manager', url, {**good, 'extra': 1}, status=400)
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['sales_manager'].pk)
+        self.assertFalse(AuditLog.objects.filter(operation='sale.transfer').exists())
+
+    def test_transfer_requires_signed_sale(self):
+        from apps.accounts.models import User
+
+        other = User.objects.create_user(username='sm2', role='sales_manager')
+        sale = self.sale()
+        self.post('manager', f'sales/{sale.pk}/transfer/', {'manager': other.pk, 'reason': '交接'}, status=409)
+        self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '报价'})
+        self.post('manager', f'sales/{sale.pk}/transfer/', {'manager': other.pk, 'reason': '交接'}, status=409)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['manager'].pk)
+
     def test_failed_finance_handoff_rolls_back_project_sale_and_number(self):
         sale = self.sale()
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '确认'})

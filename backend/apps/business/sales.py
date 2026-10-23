@@ -126,6 +126,10 @@ class SalesView(ImportableMixin, ReadView):
         return Response(sales.cancel(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['post'])
+    def transfer(self, request, pk=None):
+        return Response(sales.transfer(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'])
     def amend(self, request, pk=None):
         return Response(amendments.amend(request.user, key(request), self.get_object().pk, request.data))
 
