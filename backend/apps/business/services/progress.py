@@ -9,6 +9,7 @@ from rest_framework.exceptions import ValidationError
 from apps.accounts.models import User
 from apps.core.models import AuditLog
 from apps.core.permissions import (
+    ADMIN,
     FINANCE,
     MANAGERS,
     MONEY_READERS,
@@ -48,7 +49,7 @@ class Progress:
     def __init__(self, user, project):
         self.user, self.project = user, project
         # A small staff directory is shared by every row; no rates or contact details are returned.
-        self.staff = list(User.objects.filter(is_active=True))
+        self.staff = list(User.objects.filter(is_active=True).order_by('pk'))
         self.today = timezone.localdate()
         self.submitters = {}
         # 重名统计每次请求一次，所有行、候选人和项目负责人共用同一显示规则。
@@ -69,11 +70,13 @@ class Progress:
         self.submitters = {resources[resource]: actor for resource, actor in logs}
 
     def candidates(self, allowed, exclude=()):
-        return [
-            self.person(user)
-            for user in self.staff
-            if user.pk not in exclude and project_allowed(user, self.project, allowed)
+        selected = [
+            user for user in self.staff if user.pk not in exclude and project_allowed(user, self.project, allowed)
         ]
+        # 具体岗位人员在前；只因管理员身份入选的人员仍是合法候选，排在最后。
+        specific = allowed - ADMIN
+        selected.sort(key=lambda user: not (specific and project_allowed(user, self.project, specific)))
+        return [self.person(user) for user in selected]
 
     def row(self, obj, resource, title, status, pending, *, due=None, due_label='截止日期', record=None):
         operational = project_allowed(self.user, self.project)

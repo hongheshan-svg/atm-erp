@@ -537,3 +537,19 @@ class ProgressTests(BusinessFixtures, TestCase):
         self.assertEqual(rows[payable.pk], '采购 PROGRESS-PO')
         Entry.objects.filter(pk=entry.pk).update(title='')
         self.assertEqual(self.entry_row(entry)['title'], f'客户收款节点（到期日 {entry.due_date}）')
+
+    def test_role_holders_are_listed_before_admin_only_candidates(self):
+        admin = self.users['admin']
+        row = self.get(category='purchases')['results'][0]
+        ids = [person['id'] for person in row['handlers']]
+        self.assertEqual(ids[-1], admin.pk)
+        self.assertTrue({self.users['manager'].pk, self.users['purchase_manager'].pk} <= set(ids[:-1]))
+        entry = self.project.entries.get(kind='receivable')
+        ids = [person['id'] for person in self.entry_row(entry)['handlers']]
+        self.assertEqual(ids, [self.users['finance'].pk, admin.pk])
+        # 管理员兼任财务时按财务岗位人员排序，不再排在最后。
+        admin.additional_roles = ['finance']
+        admin.save()
+        late = User.objects.create_user(username='finance-2', role='finance')
+        ids = [person['id'] for person in self.entry_row(entry)['handlers']]
+        self.assertEqual(ids, [admin.pk, self.users['finance'].pk, late.pk])
