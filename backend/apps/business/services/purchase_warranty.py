@@ -134,8 +134,10 @@ def record(actor, key, purchase_id, data):
                 case.returned = lookup(
                     StockMove, data['returned'], 'returned', kind='purchase_return', source=case.receipt
                 )
-                if -case.returned.quantity < case.quantity:
-                    raise ValidationError({'returned': '关联的退货数量不能少于本质保单的报修数量。'})
+                if -case.returned.quantity > case.quantity:
+                    raise ValidationError(
+                        {'returned': '关联的退货数量不能超过本质保单的报修数量，请选择对应本单的退货记录。'}
+                    )
                 if PurchaseWarranty.objects.filter(returned=case.returned).exclude(pk=case.pk).exists():
                     raise Conflict('该退货流水已关联其他质保单，不能重复关联。')
             if data.get('expense'):

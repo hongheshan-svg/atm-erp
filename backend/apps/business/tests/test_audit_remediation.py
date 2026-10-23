@@ -416,17 +416,25 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
     def test_warranty_returned_move_cannot_be_shared_or_exceed_case_quantity(self):
         purchase, receipt = self.warranty_receipt()
         self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '1', 'reason': '退货'})
-        returned = StockMove.objects.get(kind='purchase_return')
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '2', 'reason': '退货'})
+        small, large = StockMove.objects.filter(kind='purchase_return').order_by('pk')
         first = self.warranty_case(purchase, receipt, '1')
-        big = self.warranty_case(purchase, receipt, '2')
-        error = self.update_case(purchase, big, status=400, returned=returned.pk)
-        self.assertIn('returned', error)
-        self.update_case(purchase, first, returned=returned.pk)
         second = self.warranty_case(purchase, receipt, '1')
-        error = self.update_case(purchase, second, status=409, returned=returned.pk)
+        error = self.update_case(purchase, first, status=400, returned=large.pk)
+        self.assertIn('returned', error)
+        self.update_case(purchase, first, returned=small.pk)
+        error = self.update_case(purchase, second, status=409, returned=small.pk)
         self.assertIn('已关联其他质保单', str(error['detail']))
         # 同一质保单可重复保存自己已关联的流水。
-        self.update_case(purchase, first, returned=returned.pk)
+        self.update_case(purchase, first, returned=small.pk)
+
+    # BP-06
+    def test_warranty_case_may_link_partial_return(self):
+        purchase, receipt = self.warranty_receipt()
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '1', 'reason': '退货'})
+        returned = StockMove.objects.get(kind='purchase_return')
+        case = self.warranty_case(purchase, receipt, '2')
+        self.update_case(purchase, case, returned=returned.pk)
 
     # BP-06
     def test_warranty_expense_cannot_be_shared_between_cases(self):
