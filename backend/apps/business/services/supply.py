@@ -40,6 +40,13 @@ def total(purchase):
     return sum((rounded(line.quantity * line.unit_price) for line in purchase.lines.all()), ZERO)
 
 
+def receiving_status(lines):
+    """已批准采购的收货状态：全部收完或取消为已收货/已取消；否则有合格收货或隔离中为部分收货，都没有回到已批准。"""
+    if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines):
+        return 'received' if any(line.received_quantity for line in lines) else 'cancelled'
+    return 'partial' if any(line.received_quantity or line.pending_quantity for line in lines) else 'approved'
+
+
 def _amount_changed(detail):
     """草稿编辑是否改了数量或单价（明细增删也算）；无法解析的历史记录按已修改处理。"""
     try:
@@ -368,11 +375,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             )
             line.received_quantity += qty
             save(line, user)
-        purchase.status = (
-            'received'
-            if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines.values())
-            else 'partial'
-        )
+        purchase.status = receiving_status(lines.values())
         save(purchase, user)
         return audit(
             user,
@@ -612,6 +615,9 @@ def quality_return(actor, key, purchase_id, data):
                 raise Conflict('退回数量超过隔离中的到货。')
             line.pending_quantity -= qty
             save(line, user)
+        # 隔离品退回后按合格已收与仍隔离数量重算；全部退回且无合格收货时回到已批准待收货。
+        purchase.status = receiving_status(purchase.lines.all())
+        save(purchase, user)
         return audit(user, 'purchase.quality_return', purchase, lines=data['lines'], reason=reason)
 
     return purchase_action(actor, key, 'purchase.quality_return', purchase_id, data, WAREHOUSE, execute)

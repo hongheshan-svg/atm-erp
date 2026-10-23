@@ -272,6 +272,52 @@ class ReviewRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(len(response.content.decode('utf-8-sig').splitlines()), 2002)
         self.assertLessEqual(len(queries), 8)
 
+    def test_returning_all_quarantined_goods_restores_status(self):
+        purchase = self.purchase(self.project, qty='5')
+        line = purchase.lines.get()
+        url = f'purchases/{purchase.pk}/'
+        quarantine = {
+            'location': '主仓',
+            'reason': '外观待检',
+            'lines': [{'line': line.pk, 'quantity': '0', 'pending_quantity': '5'}],
+        }
+        self.post('warehouse', url + 'receive/', quarantine)
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+        back = {'reason': '外观不合格退回', 'lines': [{'line': line.pk, 'quantity': '2'}]}
+        self.post('warehouse', url + 'quality-return/', back)
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+        self.post('warehouse', url + 'quality-return/', {**back, 'lines': [{'line': line.pk, 'quantity': '3'}]})
+        purchase.refresh_from_db()
+        line.refresh_from_db()
+        self.assertEqual((purchase.status, line.received_quantity, line.pending_quantity), ('approved', 0, 0))
+        self.assertFalse(StockMove.objects.filter(purchase_line=line).exists())
+        # 恢复待收货后与取消余量规则一致：没有合格收货的整单取消为已取消。
+        self.post('purchaser', url + 'cancel-remainder/', {'reason': '供应商无法补货'})
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'cancelled')
+        self.assertEqual(Entry.objects.get(purchase=purchase).credit_amount, 500)
+
+    def test_quality_return_keeps_partial_when_qualified_goods_were_received(self):
+        purchase = self.purchase(self.project, qty='5')
+        line = purchase.lines.get()
+        url = f'purchases/{purchase.pk}/'
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {
+                'location': '主仓',
+                'reason': '部分待检',
+                'lines': [{'line': line.pk, 'quantity': '2', 'pending_quantity': '3'}],
+            },
+        )
+        self.post(
+            'warehouse', url + 'quality-return/', {'reason': '不合格', 'lines': [{'line': line.pk, 'quantity': '3'}]}
+        )
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+
 
 class PartialReceiveTests(BusinessFixtures, TestCase):
     def setUp(self):
