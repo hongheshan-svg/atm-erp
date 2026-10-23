@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.business.models import BOMLine, Document, Project, PurchaseLine, PurchaseOrder, Task
+from apps.business.models import BOMLine, Document, Project, PurchaseLine, PurchaseOrder, SalesOrder, Task
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -76,6 +76,52 @@ class PermissionQueryTests(BusinessFixtures, TestCase):
             ]
         )
         self.assert_bounded('documents', flag='can_remove')
+
+    def test_sales_money_scope_is_bounded(self):
+        def create(projects, prefix):
+            SalesOrder.objects.bulk_create(
+                [
+                    SalesOrder(
+                        code=f'{prefix}{p.pk}',
+                        name='查询销售',
+                        customer=self.customer,
+                        manager=self.users['admin'],
+                        project=p,
+                        status='signed',
+                        quote_amount=100,
+                        contract_amount=100,
+                    )
+                    for p in projects
+                ]
+            )
+
+        create([*self.projects, self.outside], 'SQ')
+        counts = []
+        inside = {p.pk for p in self.projects}
+        for size in (20, 200):
+            with CaptureQueriesContext(connection) as queries:
+                response = self.clients['manager'].get('/api/business/sales/', {'page_size': size})
+            self.assertEqual(len(response.data['results']), size)
+            counts.append(len(queries))
+            for row in response.data['results']:
+                self.assertEqual(row['amounts_visible'], row['project'] in inside)
+                self.assertEqual('contract_amount' in row, row['project'] in inside)
+        self.assertEqual(counts[0], counts[1], f'sales 20/200行查询数: {counts}')
+        outside = self.clients['manager'].get(f'/api/business/sales/{self.outside.sale.pk}/').data
+        self.assertEqual((outside['amounts_visible'], 'contract_amount' in outside), (False, False))
+
+        exports = []
+        for extra in range(2):
+            with CaptureQueriesContext(connection) as queries:
+                response = self.clients['manager'].get('/api/business/sales/export/', {'file_format': 'csv'})
+            self.assertEqual(response.status_code, 200)
+            exports.append(len(queries))
+            more = [
+                Project(code=f'MORE{extra}-{i}', name='追加', customer=self.customer, manager=self.users['admin'])
+                for i in range(30)
+            ]
+            create(Project.objects.bulk_create(more), f'SM{extra}-')
+        self.assertEqual(exports[0], exports[1], f'sales 导出查询数: {exports}')
 
     def test_purchase_membership_and_prices_are_bounded(self):
         purchases = PurchaseOrder.objects.bulk_create(

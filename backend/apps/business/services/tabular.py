@@ -68,6 +68,7 @@ LABELS = {
     'note': '说明',
     'reason': '原因',
     'is_active': '启用',
+    'amounts_visible': '可查看金额',
     'contact': '联系人',
     'phone': '电话',
     'address': '地址',

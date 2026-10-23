@@ -44,9 +44,13 @@ def visible_documents(user, queryset):
         allowed |= direct
     if has_role(user, SALES_READERS):
         sales = SalesOrder.objects.all()
-        if not has_role(user, MONEY_READERS):
+        # 销售合同附件与合同额同一口径：未签约或本人负责的销售可见，关联项目后按该项目金额读取范围。
+        money = Q(sale__project__isnull=True) | Q(sale__manager=user)
+        if has_role(user, MONEY_READERS):
+            money |= Q(sale__project__in=projects_for(user, Project.objects.all(), MONEY_READERS))
+        else:
             sales = sales.filter(manager=user)
-        allowed |= Q(sale__in=sales)
+        allowed |= Q(sale__in=sales) & (~Q(category__in=MONEY_CATEGORIES) | money)
     if has_role(user, PURCHASERS | FINANCE):
         allowed |= Q(
             purchase__in=PurchaseOrder.objects.filter(
