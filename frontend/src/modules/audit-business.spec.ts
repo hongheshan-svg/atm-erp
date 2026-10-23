@@ -6,7 +6,7 @@ import { user } from '../session'
 import { actionCommand as purchaseAction, actionNames as purchaseActions, createCommand as purchaseCreate, receiptLines } from './purchases'
 import { actionCommand as projectAction } from './projects'
 import { bomCommand } from './bom'
-import { salesActions, salesCommand } from './sales'
+import { salesActions, salesColumns, salesCommand } from './sales'
 import type { Row } from '../types'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), write: vi.fn(), download: vi.fn() }))
@@ -174,4 +174,35 @@ it('整单取消入口只给采购权限且仅已批准或部分收货状态', (
     user.value = { id: 1, roles: [role] }
     expect(purchaseActions('purchases', { status: 'approved' })).not.toContain('整单取消未收余量')
   }
+})
+
+it('非参与项目的已签约销售显示“无权查看”，不出现空金额或失效的协议附件下载', async () => {
+  const contract = salesColumns.find(column => column.key === 'contract_amount')!
+  expect(contract.format?.({ id: 9, amounts_visible: false })).toBe('无权查看')
+  expect(contract.format?.({ id: 9, amounts_visible: true, contract_amount: '20000.00' })).toBe('20,000.00')
+  expect(contract.format?.({ id: 9, amounts_visible: true, contract_amount: null })).toBe('—')
+  user.value = { id: 1, roles: ['manager'] }
+  const hidden = { id: 9, manager: 2, project: 3, status: 'signed', amounts_visible: false }
+  expect(salesActions(hidden)).toEqual(expect.arrayContaining(['查看明细', '交付与回款', '补充协议记录']))
+  expect(salesActions(hidden)).not.toContain('签订补充协议')
+  expect(salesActions({ ...hidden, amounts_visible: true })).toContain('签订补充协议')
+
+  const view = await salesCommand(hidden, '查看明细')
+  expect([view.initial?.quote_amount, view.initial?.contract_amount, view.initial?.original_contract_amount]).toEqual(['无权查看', '无权查看', '无权查看'])
+
+  vi.mocked(read).mockResolvedValueOnce({ project_status: 'active', progress_project: null, deliveries: [], receivables: [], amounts_visible: false })
+  const progress = await salesCommand(hidden, '交付与回款')
+  expect(progress.fields.map(field => field.key)).toEqual(['project_status', 'deliveries', 'receivables_hidden'])
+  expect(progress.initial?.receivables_hidden).toContain('无权查看')
+
+  vi.mocked(read).mockResolvedValueOnce({ project_status: 'active', progress_project: 3, deliveries: [], amounts_visible: true, receivables: [{ title: '合同款', amount: '100.00', credit_amount: '0.00', paid: '0.00', balance: '100.00', due_date: '2026-10-20' }] })
+  const visible = await salesCommand({ ...hidden, amounts_visible: true }, '交付与回款')
+  expect(visible.fields.map(field => field.key)).toContain('receivables')
+  expect(visible.initial).not.toHaveProperty('receivables_hidden')
+
+  vi.mocked(read).mockResolvedValueOnce([{ id: 1, date: '2026-10-20', reason: '增加调试', before: { equipment_quantity: 1, warranty_months: 12 }, after: { equipment_quantity: 2, warranty_months: 12 }, document: null, document__original_name: null }])
+  const history = await salesCommand(hidden, '补充协议记录')
+  expect(history.actions).toEqual([])
+  expect(history.notice?.text).toContain('补充协议金额')
+  expect(history.initial?.lines[0]).toMatchObject({ before_text: '设备数量：1；质保月数：12', after_text: '设备数量：2；质保月数：12', document__original_name: '无权查看' })
 })
