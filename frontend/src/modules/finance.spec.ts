@@ -89,3 +89,13 @@ it('约定付款日独立显示且不把未收货约定转成可申请额度或�
   expect(application.initial?.approved_amount).toBe('')
   expect(application.fields.find(field => field.key === 'approved_amount')?.hint).toContain('0.00')
 })
+
+it('款项状态在已付超过合格收货净额时显示预付提示，金额只作展示', () => {
+  const status = columns.entries.find(col => col.key === 'status')!
+  const plain = { status: 'open', balance: '300.00' }
+  expect(status.format?.(plain)).toBe('未结')
+  expect(status.tip?.(plain)).toBeUndefined()
+  const prepaid = { ...plain, prepaid_excess: '200.00' }
+  expect(status.format?.(prepaid)).toBe('未结 · 已超付 200.00（预付）')
+  expect(status.tip?.(prepaid)).toBe('已付超过合格收货净额 200.00 元，视为预付；待后续到货或取消余量后再结算。')
+})

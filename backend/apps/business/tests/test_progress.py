@@ -414,20 +414,38 @@ class ProgressTests(BusinessFixtures, TestCase):
         self.purchase.payment_term = 'cash'
         self.purchase.save()
         entry = Entry.objects.create(
-            project=self.project, purchase=self.purchase, kind='payable', title='采购', amount=1000, credit_amount=200,
+            project=self.project,
+            purchase=self.purchase,
+            kind='payable',
+            title='采购',
+            amount=1000,
+            credit_amount=200,
             due_date=self.today + timedelta(days=30),
         )
         stock = Stock.objects.create(item=self.item, location='测试仓')
         receipt = StockMove.objects.create(
-            stock=stock, project=self.project, purchase_line=self.line, kind='receipt', quantity=5, value=500,
-            received_date=self.today, reason='合格收货',
+            stock=stock,
+            project=self.project,
+            purchase_line=self.line,
+            kind='receipt',
+            quantity=5,
+            value=500,
+            received_date=self.today,
+            reason='合格收货',
         )
         Payment.objects.create(entry=entry, amount=500, date=self.today)
         plain = self.entry_row(entry)
         self.assertNotIn('已付超过合格收货净额', plain['hint'])
         StockMove.objects.create(
-            stock=stock, project=self.project, purchase_line=self.line, kind='purchase_return', quantity=-2, value=0,
-            supplier_credit=200, source=receipt, reason='退货',
+            stock=stock,
+            project=self.project,
+            purchase_line=self.line,
+            kind='purchase_return',
+            quantity=-2,
+            value=0,
+            supplier_credit=200,
+            source=receipt,
+            reason='退货',
         )
         row = self.entry_row(entry)
         self.assertIn('已付超过合格收货净额 200.00 元，视为预付；待后续到货或取消余量后再结算。', row['hint'])

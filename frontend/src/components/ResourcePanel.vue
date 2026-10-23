@@ -400,7 +400,7 @@ async function inspect(row: Row) {
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
           <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">已逾期</strong></span>
-          <span v-else :title="col.format ? col.format(row) : undefined">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
+          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" :width="deletionAllowed ? 220 : 170"

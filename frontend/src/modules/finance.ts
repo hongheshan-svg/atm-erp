@@ -45,7 +45,17 @@ export const columns: Record<string, Column[]> = {
     C('partner_name', '往来单位'), C('project_name', '项目'),
     C('agreed_payment_date', '约定付款日'), C('due_date', '到期日'), C('due_amount', '当前到期金额'),
     C('balance', '待结算'), C('paid_amount', '已结算'),
-    { key: 'status', label: '状态', format: row => (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期' } as Record<string, string>)[String(row.status)] || '未结') },
+    {
+      key: 'status',
+      label: '状态',
+      format: row => {
+        const label = (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期' } as Record<string, string>)[String(row.status)] || '未结')
+        return row.prepaid_excess ? `${label} · 已超付 ${row.prepaid_excess}（预付）` : label
+      },
+      tip: row => row.prepaid_excess
+        ? `已付超过合格收货净额 ${row.prepaid_excess} 元，视为预付；待后续到货或取消余量后再结算。`
+        : undefined,
+    },
   ],
   payments: [
     C('entry_title', '款项'),
