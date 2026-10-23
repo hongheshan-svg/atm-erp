@@ -1,20 +1,9 @@
 from django.core.paginator import Paginator
-from django.db.models import (
-    CharField,
-    Count,
-    DecimalField,
-    F,
-    OuterRef,
-    Q,
-    Subquery,
-    Sum,
-    Value,
-)
-from django.db.models.functions import Cast, Coalesce, Concat
+from django.db.models import Count, DecimalField, F, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.core.models import AuditLog
 from apps.core.permissions import (
     ADMIN,
     FINANCE,
@@ -36,23 +25,7 @@ from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
 from .common import ZERO
 from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
-
-
-def _submitted_by(user):
-    """Purchases whose latest submission was made by this user (same rule as progress.candidates)."""
-    latest = (
-        AuditLog.objects.filter(
-            operation='purchase.submit', resource=Concat(Value('purchaseorder:'), Cast(OuterRef('pk'), CharField()))
-        )
-        .order_by('-id')
-        .values('actor_id')[:1]
-    )
-    return (
-        PurchaseOrder.objects.filter(status='submitted')
-        .annotate(_submitter=Subquery(latest))
-        .filter(_submitter=user.pk)
-        .values('pk')
-    )
+from .supply import applicants_by_purchase
 
 
 def summary(request):
@@ -152,14 +125,13 @@ def summary(request):
         approvals = purchases.filter(
             status='submitted', project__in=projects_for(user, Project.objects.all(), PURCHASE_APPROVERS)
         )
-        # 后端禁止申请人（创建人或最近一次提交人）审批自己的采购；管理员可按例外批准，保留并标注。
-        own = Q(created_by=user) | Q(pk__in=_submitted_by(user))
+        # 后端禁止申请人（创建、最近提交或改过数量/单价的人）审批自己的采购；管理员可按例外批准，保留并标注。
+        mine = {pk for pk, applicants in applicants_by_purchase(approvals).items() if user.pk in applicants}
         admin = has_role(user, ADMIN)
         if not admin:
-            approvals = approvals.exclude(own)
+            approvals = approvals.exclude(pk__in=mine)
         result['approvals'] = bucket(approvals, PurchaseSerializer, 'approvals')
         if admin and result['approvals'] is not None:
-            mine = set(approvals.filter(own).values_list('pk', flat=True))
             for row in result['approvals']['results']:
                 row['self_requested'] = row['id'] in mine
     if has_role(user, WAREHOUSE):

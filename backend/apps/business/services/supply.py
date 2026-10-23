@@ -39,6 +39,56 @@ def total(purchase):
     return sum((rounded(line.quantity * line.unit_price) for line in purchase.lines.all()), ZERO)
 
 
+def _amount_changed(detail):
+    """草稿编辑是否改了数量或单价（明细增删也算）；无法解析的历史记录按已修改处理。"""
+    try:
+        before = {str(row['id']): row for row in detail['before']}
+        after = {str(row['id']): row for row in detail['after']['lines']}
+        return set(before) != set(after) or any(
+            Decimal(str(before[pk][field])) != Decimal(str(after[pk][field]))
+            for pk in before
+            for field in ('quantity', 'unit_price')
+        )
+    except (KeyError, TypeError, AttributeError, ArithmeticError, ValueError):
+        return True
+
+
+def _applicants(creators):
+    result = {pk: {creator} if creator else set() for pk, creator in creators.items()}
+    resources = {f'purchaseorder:{pk}': pk for pk in creators}
+    submitters = {}
+    logs = (
+        AuditLog.objects.filter(resource__in=resources, operation__in=['purchase.submit', 'purchase.edit'])
+        .order_by('id')
+        .values_list('resource', 'operation', 'actor_id', 'detail')
+    )
+    for resource, operation, actor, detail in logs:
+        if operation == 'purchase.submit':
+            submitters[resources[resource]] = actor
+        elif _amount_changed(detail):
+            result[resources[resource]].add(actor)
+    for pk, actor in submitters.items():
+        result[pk].add(actor)
+    return result
+
+
+def purchase_applicants(purchase):
+    """单条采购的申请人ID集合：创建人、最近一次提交人、待审批前改过数量或单价的人。
+
+    申请人不能审批本单（管理员例外须填原因，见 approval.independent_approval）。
+    """
+    return _applicants({purchase.pk: purchase.created_by_id})[purchase.pk]
+
+
+def applicants_by_purchase(purchases):
+    """{采购ID: 申请人ID集合}，口径同 purchase_applicants；固定两次查询，供列表/工作台使用，避免逐行回查审计。"""
+    if hasattr(purchases, 'values_list'):
+        creators = dict(purchases.order_by().values_list('pk', 'created_by_id'))
+    else:
+        creators = {purchase.pk: purchase.created_by_id for purchase in purchases}
+    return _applicants(creators)
+
+
 def create_purchase(actor, key, data):
     def execute(user, project):
         fields(
@@ -158,13 +208,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
         state(purchase, {'submitted'})
         report = purchase_check(purchase)
         reason = text(data, 'reason', default='')
-        submitter = (
-            AuditLog.objects.filter(operation='purchase.submit', resource=f'purchaseorder:{purchase.pk}')
-            .order_by('-id')
-            .values_list('actor_id', flat=True)
-            .first()
-        )
-        self_approval = independent_approval(user, {purchase.created_by_id, submitter}, reason)
+        self_approval = independent_approval(user, purchase_applicants(purchase), reason)
         if override:
             reason = text(data, 'reason')
             if data.get('confirmed') is not True:
