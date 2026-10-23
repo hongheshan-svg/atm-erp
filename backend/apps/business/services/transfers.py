@@ -310,6 +310,8 @@ def resolve_person(value):
     explicit = re.fullmatch(r'(.+?)[（(]([^（）()]+)[）)]', value)
     if explicit:
         name, username = (part.strip() for part in explicit.groups())
+        # 列表与导出对重名人员显示“姓名（账号：xxx）”，原样导回时去掉“账号：”前缀。
+        username = re.sub(r'^账号\s*[:：]\s*', '', username)
         obj = User.objects.filter(username=username).first()
         candidates = [obj] if obj and (obj.display_name or obj.username) == name else []
     else:

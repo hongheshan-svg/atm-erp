@@ -22,6 +22,7 @@ from apps.core.permissions import (
 )
 
 from ..models import Delivery, Entry, PurchaseOrder, Reconciliation, Task
+from ..serializers import ambiguous_people, person_name
 from . import finance, payment_terms
 from . import reconciliation as statements
 from .common import ZERO
@@ -39,8 +40,8 @@ def readable_projects(user, queryset):
     return queryset.filter(scope).distinct()
 
 
-def person(user):
-    return {'id': user.pk, 'name': user.display_name or user.username, 'active': user.is_active} if user else None
+def person(user, ambiguous):
+    return {'id': user.pk, 'name': person_name(user, ambiguous), 'active': user.is_active} if user else None
 
 
 class Progress:
@@ -50,6 +51,11 @@ class Progress:
         self.staff = list(User.objects.filter(is_active=True))
         self.today = timezone.localdate()
         self.submitters = {}
+        # 重名统计每次请求一次，所有行、候选人和项目负责人共用同一显示规则。
+        self.ambiguous = ambiguous_people()
+
+    def person(self, user):
+        return person(user, self.ambiguous)
 
     def load_submitters(self, purchases):
         """Latest submitter of every submitted purchase on the page, read in one query."""
@@ -63,13 +69,10 @@ class Progress:
         self.submitters = {resources[resource]: actor for resource, actor in logs}
 
     def candidates(self, allowed, exclude=()):
-        selected = [
-            user for user in self.staff if user.pk not in exclude and project_allowed(user, self.project, allowed)
-        ]
-        names = [user.display_name or user.username for user in selected]
         return [
-            {**person(user), 'name': f'{name}（账号：{user.username}）' if names.count(name) > 1 else name}
-            for user, name in zip(selected, names, strict=True)
+            self.person(user)
+            for user in self.staff
+            if user.pk not in exclude and project_allowed(user, self.project, allowed)
         ]
 
     def row(self, obj, resource, title, status, pending, *, due=None, due_label='截止日期', record=None):
@@ -109,7 +112,7 @@ class Progress:
             due=task.due_date,
             record={'status': task.status},
         )
-        row.update(handlers=[person(task.assignee)], handler_label='执行人')
+        row.update(handlers=[self.person(task.assignee)], handler_label='执行人')
         row['hint'] = '由项目经理登记验收后完成。' if task.kind == 'acceptance' else '按任务要求完成后更新状态。'
         if not row['pending']:
             row['hint'] = '任务已结束，完成或取消记录保留。'
@@ -139,7 +142,9 @@ class Progress:
             due_label='交货日期',
             record={'status': purchase.status},
         )
-        row['handlers'] = [person(purchase.created_by)] if purchase.created_by else [person(self.project.manager)]
+        row['handlers'] = (
+            [self.person(purchase.created_by)] if purchase.created_by else [self.person(self.project.manager)]
+        )
         row['handler_label'] = '采购跟进人' if purchase.created_by else '项目负责人（待安排采购）'
         row['hint'] = '跟进供应商交货；到货后由仓管登记收货。'
         if purchase.status == 'draft':
@@ -158,7 +163,7 @@ class Progress:
                 f'有 {sum(line.pending_quantity > 0 for line in lines)} 条明细待检；确认合格后入库，不合格退回供应商。'
             )
             if dates:
-                buyer = person(purchase.created_by or self.project.manager)
+                buyer = self.person(purchase.created_by or self.project.manager)
                 row['handlers'] = list({item['id']: item for item in [buyer, *row['handlers']]}.values())
                 row['handler_label'] = '采购 / 待检跟进'
                 row['hint'] += '另有未到货物料，采购继续跟进交货。'
@@ -187,9 +192,9 @@ class Progress:
             due_label='安装 / 验收期限',
             record={'accepted_date': delivery.accepted_date, 'warranty_until': delivery.warranty_until},
         )
-        row['handlers'] = list({task.assignee_id: person(task.assignee) for task in following}.values())
+        row['handlers'] = list({task.assignee_id: self.person(task.assignee) for task in following}.values())
         if not row['handlers']:
-            row['handlers'] = [person(self.project.manager)]
+            row['handlers'] = [self.person(self.project.manager)]
         row['handler_label'] = '安装执行人' if install else '验收跟进人' if pending else '项目负责人'
         row['hint'] = (
             '安装完成后安排客户验收，由项目经理登记验收结果。' if pending else '已完成客户验收，后续按质保约定跟进。'
@@ -347,7 +352,7 @@ def summary(user, project, params):
             'code': project.code,
             'name': project.name,
             'status': project.status,
-            'manager': person(project.manager),
+            'manager': progress.person(project.manager),
             'due_date': project.due_date,
         },
         'groups': counts,

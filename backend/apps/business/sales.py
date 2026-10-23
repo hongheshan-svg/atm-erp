@@ -6,12 +6,13 @@ from apps.core.permissions import SALES, SALES_READERS, sales_for
 
 from .api.common import ImportableMixin, ReadView, key
 from .models import Project, SalesOrder
+from .serializers import PersonNameField
 from .services import amendments, finance, progress, sales
 
 
 class SalesSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    manager_name = serializers.CharField(source='manager.display_name', read_only=True)
+    manager_name = PersonNameField(source='manager')
     project_code = serializers.CharField(source='project.code', read_only=True, default=None)
     project_status = serializers.CharField(source='project.status', read_only=True, default=None)
 

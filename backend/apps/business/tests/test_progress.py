@@ -18,6 +18,7 @@ from apps.business.models import (
     Stock,
     StockMove,
     Task,
+    TimeEntry,
 )
 from apps.business.services import reconciliation as statements
 from apps.core.models import AuditLog
@@ -475,3 +476,47 @@ class ProgressTests(BusinessFixtures, TestCase):
     def test_purchase_submitters_are_loaded_once_per_page(self):
         self.get('manager', 'purchases')
         self.assertEqual(self.purchase_queries(20), self.purchase_queries(50))
+
+    def test_same_or_blank_names_show_account_in_progress_and_lists(self):
+        twin = User.objects.create_user(username='zhang-2', display_name='张师傅', role='member')
+        self.project.members.add(twin)
+        nameless = User.objects.create_user(username='nameless', role='member')
+        self.project.members.add(nameless)
+        Task.objects.create(project=self.project, title='调试', kind='design', assignee=twin)
+        Task.objects.create(project=self.project, title='无名', kind='design', assignee=nameless)
+        TimeEntry.objects.create(
+            task=self.task, user=twin, date=self.today, hours=1, hourly_cost=0, cost=0, reason='工时'
+        )
+        expected = {'安装设备': '张师傅（账号：member）', '调试': '张师傅（账号：zhang-2）', '无名': 'nameless'}
+        for active in (True, False):
+            with self.subTest(twin_active=active):
+                # 导入同样把停用人员计入重名，导出的姓名必须仍可唯一匹配。
+                User.objects.filter(pk=twin.pk).update(is_active=active)
+                result = self.get('manager', state='all')
+                self.assertEqual(result['project']['manager']['name'], 'manager')
+                names = {row['title'].split(' · ')[1]: row['handlers'][0]['name'] for row in result['results']}
+                self.assertEqual(names, expected)
+                listed = self.clients['manager'].get('/api/business/tasks/', {'project': self.project.pk}).data
+                self.assertEqual({row['title']: row['assignee_name'] for row in listed['results']}, expected)
+                project = self.clients['manager'].get(f'/api/business/projects/{self.project.pk}/').data
+                self.assertEqual(project['manager_name'], 'manager')
+                time = self.clients['manager'].get('/api/business/time/').data['results']
+                self.assertEqual([row['user_name'] for row in time], ['张师傅（账号：zhang-2）'])
+        User.objects.filter(pk=twin.pk).update(display_name='张工')
+        listed = self.clients['manager'].get('/api/business/tasks/', {'project': self.project.pk}).data
+        self.assertIn('张师傅', [row['assignee_name'] for row in listed['results']])
+
+    def test_person_names_do_not_add_queries_per_row(self):
+        def queries(extra):
+            for index in range(extra):
+                Task.objects.create(
+                    project=self.project, title=f'任务{extra}-{index}', kind='design', assignee=self.users['member']
+                )
+            with CaptureQueriesContext(connection) as captured:
+                response = self.clients['manager'].get('/api/business/tasks/', {'project': self.project.pk})
+            self.assertEqual(response.status_code, 200)
+            return len(captured)
+
+        User.objects.create_user(username='zhang-2', display_name='张师傅', role='member')
+        queries(0)
+        self.assertEqual(queries(3), queries(9))
