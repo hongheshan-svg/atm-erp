@@ -61,6 +61,8 @@ function target(key: string, row: Row) {
 function due(key: string, row: Row): string {
   if (!['sales', 'tasks', 'production_tasks', 'receipts', 'overdue_purchases', 'settlements'].includes(key)) return ''
   if (key === 'settlements' && Number(row.balance) < 0) return ''
+  // 交付逾期只统计执行中/交付中项目：已验收、已结项、已取消项目的销售单不再按交期标逾期。
+  if (key === 'sales' && row.project_status && !['active', 'delivering'].includes(String(row.project_status))) return ''
   return row.next_delivery_date || row.due_date || ''
 }
 function urgency(key: string, row: Row) {
@@ -83,7 +85,14 @@ function title(key: string, row: Row) { return key === 'bank_records' ? row.coun
 
 function amount(key: string, row: Row) {
   if (key === 'bank_records') return `${Number(row.amount) >= 0 ? '收入' : '支出'} · 待匹配 ${money(String(row.remaining_amount).replace(/^-/, ''), { currency: true })}`
-  if (key === 'settlements' && row.balance != null) return `${Number(row.balance) < 0 ? '待退款' : row.kind === 'receivable' ? '待收' : '待付'} ${money(String(row.balance).replace(/^-/, ''), { currency: true })}`
+  if (key === 'settlements' && row.balance != null) {
+    const abs = (value: unknown) => money(String(value).replace(/^-/, ''), { currency: true })
+    if (Number(row.balance) < 0) return `待退款 ${abs(row.balance)}`
+    // 优先显示当前到期金额，余额同时可见；分期未到期的部分不应被当作已到期待办。
+    if (row.due_amount != null && Number(row.due_amount) > 0) return `${row.kind === 'receivable' ? '到期待收' : '到期待付'} ${abs(row.due_amount)} · 余额 ${abs(row.balance)}`
+    return `${row.kind === 'receivable' ? '待收' : '待付'}余额 ${abs(row.balance)}`
+  }
+  if (key === 'approvals' && row.self_requested) return '本人申请，需填写例外原因'
   return ''
 }
 function context(key: string, row: Row) {

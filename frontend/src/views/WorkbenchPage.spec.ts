@@ -132,6 +132,35 @@ it('逾期销售单进入优先事项并带单号跳转，分类入口清掉上�
   wrapper.unmount()
 })
 
+it('已结项/已验收项目的销售单不按交期标逾期，未签约与执行中仍标', async () => {
+  vi.mocked(read).mockResolvedValue({
+    sales: bucket([
+      { id: 41, code: 'SO-41', name: '未签约', due_date: '2020-01-01', project_status: null },
+      { id: 42, code: 'SO-42', name: '执行中', due_date: '2020-01-01', project_status: 'active' },
+      { id: 43, code: 'SO-43', name: '已验收', due_date: '2020-01-01', project_status: 'warranty' },
+      { id: 44, code: 'SO-44', name: '已结项', due_date: '2020-01-01', project_status: 'closed' },
+    ]),
+  })
+  const wrapper = await render()
+  expect(rows(wrapper).map((row: any) => row.findAll('a')[0].text())).toEqual(['SO-41', 'SO-42'])
+  wrapper.unmount()
+})
+
+it('待结算优先显示到期金额并同时给出余额，本人申请的审批给出提示', async () => {
+  user.value = { id: 7, roles: ['finance'], display_name: '测试用户' }
+  vi.mocked(read).mockResolvedValue({
+    settlements: bucket([
+      { id: 1, title: '货款', kind: 'payable', balance: '1000.00', due_amount: '300.00', due_date: '2020-01-01', project_name: 'P' },
+    ]),
+    approvals: bucket([{ id: 3, code: 'PO-3', self_requested: true, due_date: '2020-01-01' }]),
+  })
+  const wrapper = await render()
+  const text = wrapper.get('.priority-table').text()
+  expect(text).toContain('到期待付 ¥ 300.00 · 余额 ¥ 1,000.00')
+  expect(text).toContain('本人申请，需填写例外原因')
+  wrapper.unmount()
+})
+
 it('无待办时保持中性配色、空态文案与错误提示', async () => {
   vi.mocked(read).mockResolvedValue({ tasks: { ...bucket([]), overdue_count: 0, today_count: 0 } })
   const wrapper = await render()
