@@ -11,7 +11,18 @@ from django.test import TestCase
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from apps.business.models import BOMLine, Entry, Item, PurchaseLine, PurchaseOrder, SalesOrder, Stock, Task
+from apps.business.models import (
+    BOMLine,
+    Entry,
+    Item,
+    PurchaseLine,
+    PurchaseOrder,
+    PurchaseWarranty,
+    SalesOrder,
+    Stock,
+    StockMove,
+    Task,
+)
 from apps.business.services.tabular import cell, export_rows
 from apps.core.models import AuditLog
 
@@ -308,6 +319,126 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         listing = self.get('purchaser', f'business/purchases/{purchase.pk}/warranty/').data
         self.assertEqual(listing['warranty_months'], 24)
         self.assertEqual(listing['receipts'][0]['warranty_end'], date(2028, 9, 9))
+
+    # BP-03
+    def test_purchase_return_of_shared_arrival_requires_confirmation(self):
+        mine, theirs = self.active_project(), self.active_project()
+        for project in (mine, theirs):
+            self.post(
+                'manager',
+                f'projects/{project.pk}/revise-bom/',
+                {'expected_revision': self.bom_version(project.pk), 'lines': [{'item': self.item.pk, 'quantity': '5'}]},
+            )
+        own = self.purchase(mine)
+        self.receive(own, '5')
+        stock = Stock.objects.get()
+        self.post(
+            'warehouse', 'stocks/issue/', {'project': mine.pk, 'stock': stock.pk, 'quantity': '5', 'reason': '领料'}
+        )
+        other = self.purchase(theirs)
+        self.receive(other, '5')
+        receipt = StockMove.objects.get(kind='receipt', project=mine)
+        url = f'moves/{receipt.pk}/return-purchase/'
+        conflict = self.post('warehouse', url, {'quantity': '2', 'reason': '退货'}, status=409)
+        self.assertIn(theirs.code, str(conflict['detail']))
+        self.assertIn('确认占用其他项目到货', str(conflict['detail']))
+        self.post('warehouse', url, {'quantity': '2', 'reason': '退货', 'confirm_shared': 'yes'}, status=400)
+        self.assertEqual(Stock.objects.get().quantity, Decimal('5'))
+        self.post('warehouse', url, {'quantity': '2', 'reason': '退货', 'confirm_shared': True})
+        self.assertEqual(Stock.objects.get().quantity, Decimal('3'))
+        log = AuditLog.objects.filter(operation='stock.return_purchase').first()
+        self.assertEqual(log.detail['shared_from'], [{'project': theirs.code, 'quantity': '5.000'}])
+
+    # BP-03
+    def test_purchase_return_of_own_unissued_arrival_needs_no_confirmation(self):
+        project = self.active_project()
+        self.post(
+            'manager',
+            f'projects/{project.pk}/revise-bom/',
+            {'expected_revision': self.bom_version(project.pk), 'lines': [{'item': self.item.pk, 'quantity': '5'}]},
+        )
+        self.receive(self.purchase(project), '5')
+        receipt = StockMove.objects.get(kind='receipt')
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '5', 'reason': '退货'})
+        log = AuditLog.objects.filter(operation='stock.return_purchase').first()
+        self.assertEqual(log.detail['shared_from'], [])
+
+    def warranty_receipt(self):
+        project = self.active_project()
+        purchase = self.purchase(project)
+        self.receive(purchase, '5')
+        return purchase, StockMove.objects.get(kind='receipt')
+
+    def warranty_case(self, purchase, receipt, qty):
+        self.post(
+            'purchaser',
+            f'purchases/{purchase.pk}/warranty/',
+            {
+                'receipt': receipt.pk,
+                'date': timezone.localdate().isoformat(),
+                'quantity': qty,
+                'description': '故障',
+            },
+        )
+        return PurchaseWarranty.objects.latest('pk')
+
+    def update_case(self, purchase, case, status=200, role='purchaser', **extra):
+        case.refresh_from_db()
+        return self.post(
+            role,
+            f'purchases/{purchase.pk}/warranty/',
+            {
+                'case': case.pk,
+                'expected_updated_at': case.updated_at.isoformat().replace('+00:00', 'Z'),
+                'status': 'repairing',
+                'response': '处理中',
+                **extra,
+            },
+            status=status,
+        )
+
+    # BP-06
+    def test_warranty_quantity_excludes_returned_goods(self):
+        purchase, receipt = self.warranty_receipt()
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '3', 'reason': '退货'})
+        url = f'purchases/{purchase.pk}/warranty/'
+        body = {
+            'receipt': receipt.pk,
+            'date': timezone.localdate().isoformat(),
+            'quantity': '3',
+            'description': '故障',
+        }
+        error = self.post('purchaser', url, body, status=409)
+        self.assertIn('扣除已退货', str(error['detail']))
+        self.post('purchaser', url, {**body, 'quantity': '2'})
+
+    # BP-06
+    def test_warranty_returned_move_cannot_be_shared_or_exceed_case_quantity(self):
+        purchase, receipt = self.warranty_receipt()
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '1', 'reason': '退货'})
+        returned = StockMove.objects.get(kind='purchase_return')
+        first = self.warranty_case(purchase, receipt, '1')
+        big = self.warranty_case(purchase, receipt, '2')
+        error = self.update_case(purchase, big, status=400, returned=returned.pk)
+        self.assertIn('returned', error)
+        self.update_case(purchase, first, returned=returned.pk)
+        second = self.warranty_case(purchase, receipt, '1')
+        error = self.update_case(purchase, second, status=409, returned=returned.pk)
+        self.assertIn('已关联其他质保单', str(error['detail']))
+        # 同一质保单可重复保存自己已关联的流水。
+        self.update_case(purchase, first, returned=returned.pk)
+
+    # BP-06
+    def test_warranty_expense_cannot_be_shared_between_cases(self):
+        purchase, receipt = self.warranty_receipt()
+        expense = Entry.objects.create(
+            project=purchase.project, kind='expense', title='返修运费', amount=Decimal('10'), due_date=timezone.localdate()
+        )
+        first = self.warranty_case(purchase, receipt, '1')
+        second = self.warranty_case(purchase, receipt, '1')
+        self.update_case(purchase, first, expense=expense.pk, role='admin')
+        error = self.update_case(purchase, second, status=409, expense=expense.pk, role='admin')
+        self.assertIn('已关联其他质保单', str(error['detail']))
 
     # 13
     def test_new_location_requires_confirmation_and_is_normalized(self):
