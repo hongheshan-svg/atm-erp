@@ -278,6 +278,57 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.accept(delivery)
         self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
 
+    def test_ship_writes_optional_install_and_acceptance_deadlines(self):
+        project = self.ready_project(equipment=2)
+        self.stock_and_issue(project)
+        shipped = date.fromisoformat(TODAY)
+        base = {
+            'date': TODAY,
+            'quantity': 1,
+            'installer': self.users['member'].pk,
+            'acceptor': self.users['manager'].pk,
+        }
+        before = Delivery.objects.count(), Task.objects.count(), ActionReceipt.objects.count()
+        for key in ('install_due_date', 'acceptance_due_date'):
+            with self.subTest(key=key):
+                early = (shipped - timedelta(days=1)).isoformat()
+                denied = self.post('manager', f'projects/{project.pk}/ship/', {**base, key: early}, status=400)
+                self.assertIn('不能早于发货日期', str(denied[key]))
+                self.post('manager', f'projects/{project.pk}/ship/', {**base, key: '2026/09/30'}, status=400)
+        self.assertEqual((Delivery.objects.count(), Task.objects.count(), ActionReceipt.objects.count()), before)
+        install_due, acceptance_due = shipped + timedelta(days=3), shipped + timedelta(days=10)
+        result = self.post(
+            'manager',
+            f'projects/{project.pk}/ship/',
+            {**base, 'install_due_date': install_due.isoformat(), 'acceptance_due_date': acceptance_due.isoformat()},
+        )
+        delivery = Delivery.objects.get(pk=result['id'])
+        self.assertEqual(
+            dict(delivery.tasks.values_list('kind', 'due_date')), {'install': install_due, 'acceptance': acceptance_due}
+        )
+
+        def progress_due():
+            rows = (
+                self.clients['manager']
+                .get(f'/api/business/projects/{project.pk}/progress/', {'category': 'deliveries'})
+                .data['results']
+            )
+            return next(str(row['due_date']) for row in rows if row['title'] == delivery.code)
+
+        # 流程进度交付行按未完成的安装任务取期限，安装完成后改看验收期限。
+        self.assertEqual(progress_due(), install_due.isoformat())
+        self.complete(delivery.tasks.get(kind='install'))
+        self.assertEqual(progress_due(), acceptance_due.isoformat())
+        # 期限可与发货同日；留空保持原样（不设期限）。
+        second = Delivery.objects.get(
+            pk=self.post(
+                'manager',
+                f'projects/{project.pk}/ship/',
+                {**base, 'install_due_date': TODAY, 'acceptance_due_date': ''},
+            )['id']
+        )
+        self.assertEqual(dict(second.tasks.values_list('kind', 'due_date')), {'install': shipped, 'acceptance': None})
+
     def test_partial_delivery_requires_proportional_materials(self):
         project = self.ready_project(equipment=2)
         stock = self.stock_and_issue(project, quantity='2')

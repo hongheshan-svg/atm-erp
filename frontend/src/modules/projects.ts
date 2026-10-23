@@ -219,6 +219,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       date(),
       person(c, 'installer', '安装人', scope),
       person(c, 'acceptor', '验收负责人', scope),
+      { ...date('install_due_date', '安装完成期限', true), hint: '可选，写入本批自动生成的安装任务；不得早于发货日期，留空则不设期限。' },
+      { ...date('acceptance_due_date', '验收期限', true), hint: '可选，写入本批验收任务；流程进度和工作台按期限提示逾期，不得早于发货日期。' },
       t('note', '说明', true),
       { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: shipMaterialOptions((await read(`/business/projects/${r.id}/demand/`)).lines) }, { ...qty, numeric: { scale: 3, min: 0.001 } }] },
     ]

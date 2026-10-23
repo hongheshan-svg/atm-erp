@@ -317,7 +317,19 @@ def delivered_materials(project):
 
 def ship(actor, key, project_id, data):
     def execute(user, project):
-        fields(data, {'quantity', 'date', 'installer', 'acceptor', 'note', 'materials'})
+        fields(
+            data,
+            {
+                'quantity',
+                'date',
+                'installer',
+                'acceptor',
+                'note',
+                'materials',
+                'install_due_date',
+                'acceptance_due_date',
+            },
+        )
         state(project, {'active', 'delivering'})
         for stage in STAGES:
             completed_stage(project, stage)
@@ -361,6 +373,15 @@ def ship(actor, key, project_id, data):
         date = event_date(data)
         if project.contract_date and date < project.contract_date:
             raise ValidationError({'date': '交付日期不能早于签约日期。'})
+        # 可选的安装、验收期限写入随批次生成的任务，流程进度与工作台据此提示逾期；留空则不设期限。
+        deadlines = {}
+        for kind, field, label in [
+            ('install', 'install_due_date', '安装完成期限'),
+            ('acceptance', 'acceptance_due_date', '验收期限'),
+        ]:
+            deadlines[kind] = day(data, field, optional=True)
+            if deadlines[kind] and deadlines[kind] < date:
+                raise ValidationError({field: f'{label}不能早于发货日期 {date.isoformat()}，请重新选择或留空。'})
         installer = assignee(project, data.get('installer', project.manager_id))
         acceptor = assignee(project, data.get('acceptor', project.manager_id))
         delivery = save(
@@ -384,6 +405,7 @@ def ship(actor, key, project_id, data):
                     kind=kind,
                     title=f'{delivery.code} {Task.Kind(kind).label}',
                     assignee=person,
+                    due_date=deadlines[kind],
                 ),
                 user,
             )

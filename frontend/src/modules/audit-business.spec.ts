@@ -100,6 +100,24 @@ it('质保期内收费售后须填写非质保责任原因，质保外或免费�
   expect(payload(command.fields, data)).not.toHaveProperty('charge_reason')
 })
 
+it('发货可选填安装完成期限与验收期限，留空不提交', async () => {
+  vi.mocked(read).mockResolvedValue({ lines: [] })
+  const command = industryCommand(await projectAction('projects', { id: 9, manager: 1, members: [], can_manage: true }, '发货'))
+  const install = command.fields.find(field => field.key === 'install_due_date')
+  const acceptance = command.fields.find(field => field.key === 'acceptance_due_date')
+  expect([install?.label, install?.type, install?.optional]).toEqual(['安装完成期限', 'date', true])
+  expect([acceptance?.label, acceptance?.type, acceptance?.optional]).toEqual(['验收期限', 'date', true])
+  expect(install?.hint).toContain('不得早于发货日期')
+  expect(acceptance?.hint).toContain('逾期')
+  const data = defaults(command.fields, command.initial)
+  expect(payload(command.fields, data)).not.toHaveProperty('install_due_date')
+  expect(payload(command.fields, data)).not.toHaveProperty('acceptance_due_date')
+  Object.assign(data, { install_due_date: '2026-10-25', acceptance_due_date: '2026-11-01' })
+  expect(payload(command.fields, data)).toMatchObject({ install_due_date: '2026-10-25', acceptance_due_date: '2026-11-01' })
+  data.install_due_date = '2026/10/25'
+  expect(fieldIssues(command.fields, data).map(issue => issue.path)).toContain('install_due_date')
+})
+
 it('管理员、项目经理、财务与本人销售均有已签约交付回款入口', () => {
   for (const role of ['admin', 'manager', 'finance', 'sales_manager']) {
     user.value = { id: 1, roles: [role] }
