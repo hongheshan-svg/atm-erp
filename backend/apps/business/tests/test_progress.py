@@ -436,3 +436,15 @@ class ProgressTests(BusinessFixtures, TestCase):
         row = self.get()['results'][0]
         self.assertFalse(row['overdue'])
         self.assertIn('已结项', row['hint'])
+
+    def test_stopped_project_only_asks_to_reopen_for_unfinished_rows(self):
+        done = Task.objects.create(
+            project=self.project, title='已完成设计', kind='design', assignee=self.users['member'], status='done'
+        )
+        for status, label in [('closed', '已结项'), ('cancelled', '已取消')]:
+            with self.subTest(status=status):
+                Project.objects.filter(pk=self.project.pk).update(status=status)
+                rows = {row['id']: row for row in self.get(state='all')['results']}
+                self.assertIn(f'项目{label}', rows[self.task.pk]['hint'])
+                self.assertIn('重开', rows[self.task.pk]['hint'])
+                self.assertEqual(rows[done.pk]['hint'], '任务已结束，完成或取消记录保留。')

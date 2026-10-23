@@ -323,6 +323,9 @@ def summary(user, project, params):
     if stopped:
         for row in rows:
             row['overdue'] = False
+            if not row['pending']:
+                # 已完成、已取消的记录保留各自的结束说明，不需要为它们重开项目。
+                continue
             if row['record'].get('progress_status') == 'refund':
                 # 已取消项目可以直接退款，只有已结项项目须先重新打开。
                 if project.status == 'closed':
