@@ -1,10 +1,22 @@
 from django.core.paginator import Paginator
-from django.db.models import Count, DecimalField, F, Q, Sum, Value
-from django.db.models.functions import Coalesce
+from django.db.models import (
+    CharField,
+    Count,
+    DecimalField,
+    F,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Cast, Coalesce, Concat
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.core.models import AuditLog
 from apps.core.permissions import (
+    ADMIN,
     FINANCE,
     MANAGERS,
     MONEY_READERS,
@@ -24,6 +36,23 @@ from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
 from .common import ZERO
 from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
+
+
+def _submitted_by(user):
+    """Purchases whose latest submission was made by this user (same rule as progress.candidates)."""
+    latest = (
+        AuditLog.objects.filter(
+            operation='purchase.submit', resource=Concat(Value('purchaseorder:'), Cast(OuterRef('pk'), CharField()))
+        )
+        .order_by('-id')
+        .values('actor_id')[:1]
+    )
+    return (
+        PurchaseOrder.objects.filter(status='submitted')
+        .annotate(_submitter=Subquery(latest))
+        .filter(_submitter=user.pk)
+        .values('pk')
+    )
 
 
 def summary(request):
@@ -84,7 +113,11 @@ def summary(request):
         sales = (
             sales_for(user, SalesOrder.objects.all()).select_related('project', 'customer', 'manager').order_by('-id')
         )
-        result['sales'] = bucket(sales.exclude(status='cancelled'), SalesSerializer, 'sales')
+        from .deletions import visible_rows
+
+        # 已结项/已取消项目的销售单与管理员移入“已删除记录”的销售单不再是待跟进事项。
+        sales = visible_rows(sales.exclude(status='cancelled').exclude(project__status__in=['closed', 'cancelled']))
+        result['sales'] = bucket(sales, SalesSerializer, 'sales')
     if not has_role(user, OPERATION_ROLES):
         return {key: value for key, value in result.items() if value is not None}
     projects = projects_for(user, Project.objects.all())
@@ -116,13 +149,19 @@ def summary(request):
         .order_by('due_date', 'pk')
     )
     if has_role(user, PURCHASE_APPROVERS):
-        result['approvals'] = bucket(
-            purchases.filter(
-                status='submitted', project__in=projects_for(user, Project.objects.all(), PURCHASE_APPROVERS)
-            ),
-            PurchaseSerializer,
-            'approvals',
+        approvals = purchases.filter(
+            status='submitted', project__in=projects_for(user, Project.objects.all(), PURCHASE_APPROVERS)
         )
+        # 后端禁止申请人（创建人或最近一次提交人）审批自己的采购；管理员可按例外批准，保留并标注。
+        own = Q(created_by=user) | Q(pk__in=_submitted_by(user))
+        admin = has_role(user, ADMIN)
+        if not admin:
+            approvals = approvals.exclude(own)
+        result['approvals'] = bucket(approvals, PurchaseSerializer, 'approvals')
+        if admin and result['approvals'] is not None:
+            mine = set(approvals.filter(own).values_list('pk', flat=True))
+            for row in result['approvals']['results']:
+                row['self_requested'] = row['id'] in mine
     if has_role(user, WAREHOUSE):
         result['receipts'] = bucket(
             purchases.filter(status__in=['approved', 'partial']), PurchaseSerializer, 'receipts'
@@ -166,7 +205,7 @@ def summary(request):
         if has_role(user, MANAGERS):
             prepayments = pending.filter(
                 kind='prepayment', entry__project__in=projects_for(user, Project.objects.all(), MANAGERS)
-            )
+            ).exclude(created_by=user)
             if prepayments.exists():
                 result['prepayments'] = bucket(prepayments, ReconciliationSerializer, 'prepayments')
         if has_role(user, FINANCE):
