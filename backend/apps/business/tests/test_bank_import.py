@@ -79,6 +79,21 @@ def reexport(stamp='2026-1-1 12:00:00', *, duplicate=False, missing=False):
     return SimpleUploadedFile('重新导出.xlsx', stream.getvalue())
 
 
+def huaxia(core='000123'):
+    rows = [
+        ['账号：', '123456789012'],
+        ['币种：', '人民币'],
+        [],
+        [],
+        [],
+        ['收入总金额：', '100', '收入总笔数：', '1'],
+        ['支出总金额：', '0', '支出总笔数：', '0'],
+        bank_import.HXB,
+        ['1', '2026-01-01', '12:00:00', '', '100', '1000', '001234567890', '客户', '银行', core, '货款'],
+    ]
+    return file(rows, name='华夏.xlsx')
+
+
 def legacy_fingerprint(account, value, source):
     identity = [
         source['bank'],
@@ -294,6 +309,78 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual(BankRecord.objects.count(), 2)
         self.assertEqual(BankRecord.objects.filter(import_fingerprint__isnull=True).count(), 0)
 
+    def manual(self, reference, amount='100.00'):
+        data = {
+            'amount': amount,
+            'date': '2026-01-01',
+            'account': '123456789012',
+            'reference': reference,
+            'counterparty': '客户',
+            'reason': '先手工登记到账',
+        }
+        return self.post('finance', 'bank-records/', data, status=201)['id']
+
+    def test_manual_record_with_same_bank_reference_is_the_imported_transaction(self):
+        bank = self.manual('000123')
+        preview = self.preview(huaxia())
+        self.assertTrue(preview['can_import'], preview['errors'])
+        self.assertEqual(preview['rows'][0]['status'], '已导入（跳过）')
+        self.assertEqual(self.confirm(preview['token']), {'count': 0, 'skipped': 1})
+        record = BankRecord.objects.get()
+        self.assertEqual(record.pk, bank)
+        self.assertEqual(record.source['original_reference'], '000123')
+        again = self.preview(huaxia())
+        self.assertEqual(self.confirm(again['token']), {'count': 0, 'skipped': 1})
+        self.assertEqual(BankRecord.objects.count(), 1)
+        self.post('finance', f'bank-records/{bank}/void/', {'reason': '测试同号不同金额'})
+        self.manual('000123', amount='90.00')
+        changed = self.preview(huaxia())
+        self.assertFalse(changed['can_import'])
+        self.assertIn('日期或金额不同', str(changed['errors']))
+
+    def test_manual_record_without_comparable_reference_blocks_import_until_voided(self):
+        # ICBC voucher numbers are shared by rows, so the manual reference cannot identify the transfer.
+        bank = self.manual('000000000')
+        preview = self.preview()
+        self.assertFalse(preview['can_import'])
+        self.assertIsNone(preview['token'])
+        self.assertEqual([error['row'] for error in preview['errors']], [3])
+        self.assertIn(f'手工银行记录 ID {bank}', preview['errors'][0]['message'])
+        self.assertIn('疑似同一笔', preview['errors'][0]['message'])
+        self.assertIn('作废误录的手工记录', preview['errors'][0]['message'])
+        self.post('finance', f'bank-records/{bank}/void/', {'reason': '与银行导入重复'})
+        preview = self.preview()
+        self.assertTrue(preview['can_import'], preview['errors'])
+        self.assertEqual(self.confirm(preview['token']), {'count': 2, 'skipped': 0})
+        self.assertEqual(BankRecord.objects.filter(void_reason='').count(), 2)
+
+    def test_manual_suspect_added_after_preview_blocks_confirmation_without_side_effects(self):
+        preview = self.preview()
+        self.manual('客户转账')
+        counts = (ActionReceipt.objects.count(), AuditLog.objects.count())
+        self.assertIn('疑似同一笔', str(self.confirm(preview['token'], status=400)))
+        self.assertEqual(BankRecord.objects.count(), 1)
+        self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), counts)
+
+    def test_huaxia_blank_manual_reference_blocks_until_a_different_reference_is_filled(self):
+        legacy = BankRecord.objects.create(
+            account='123456789012',
+            date='2026-01-01',
+            amount='100.00',
+            counterparty='客户',
+            reference='',
+            reason='旧版无流水号手工记录',
+        )
+        preview = self.preview(huaxia())
+        self.assertFalse(preview['can_import'])
+        self.assertIn(f'手工银行记录 ID {legacy.pk}', str(preview['errors']))
+        self.assertIn('补填银行流水号', str(preview['errors']))
+        BankRecord.objects.filter(pk=legacy.pk).update(reference='000999')
+        preview = self.preview(huaxia())
+        self.assertTrue(preview['can_import'], preview['errors'])
+        self.assertEqual(self.confirm(preview['token']), {'count': 1, 'skipped': 0})
+        self.assertEqual(BankRecord.objects.count(), 2)
+
     def test_permissions_token_binding_and_tamper(self):
         self.preview(role='member', status=403)
         preview = self.preview()
@@ -468,6 +555,47 @@ class BankImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
 
     def test_two_users_import_equivalent_timestamp_formats_concurrently(self):
         self.concurrent_imports([file(), reexport()])
+
+    def test_concurrent_confirmations_recheck_manual_bank_records(self):
+        from rest_framework.exceptions import ValidationError
+
+        tokens = {
+            name: [
+                (self.users[role], bank_import.preview(self.users[role], build())['token'])
+                for role in ['admin', 'finance']
+            ]
+            for name, build in [('icbc', file), ('huaxia', huaxia)]
+        }
+        manual = {
+            'amount': '100.00',
+            'date': '2026-01-01',
+            'account': '123456789012',
+            'reference': '000123',
+            'counterparty': '客户',
+            'reason': '先手工登记',
+        }
+        self.post('finance', 'bank-records/', manual, status=201)
+        counts = (ActionReceipt.objects.count(), AuditLog.objects.count())
+
+        def run(job):
+            close_old_connections()
+            try:
+                return bank_import.confirm(*job)
+            except ValidationError as exc:
+                return str(exc.detail)
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(run, tokens['icbc']))
+        self.assertTrue(all('疑似同一笔' in result for result in results), results)
+        self.assertEqual(BankRecord.objects.count(), 1)
+        self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), counts)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(run, tokens['huaxia']))
+        self.assertEqual(sorted(result['skipped'] for result in results), [1, 1], results)
+        self.assertEqual(sum(result['count'] for result in results), 0)
+        self.assertEqual(BankRecord.objects.get().source['original_reference'], '000123')
 
     def concurrent_imports(self, uploads):
         jobs = [

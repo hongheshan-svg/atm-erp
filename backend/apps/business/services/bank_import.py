@@ -132,12 +132,60 @@ def normalized(record):
     return {**record, 'fingerprint': canonical, 'data': {**record['data'], 'reference': reference}}
 
 
+def bank_reference(record):
+    """The bank's own transaction number, when this row's identity is built from it (Huaxia core reference)."""
+    source = record['source']
+    return source['original_reference'] if source['bank'] == 'HXB' else ''
+
+
+def manual_suspect(record, queryset):
+    """A manual bank record (no import evidence) that may be this row but cannot be compared by reference."""
+    data = record['data']
+    candidates = (
+        queryset.filter(
+            account=data['account'],
+            date=data['date'],
+            amount=data['amount'],
+            void_reason='',
+            import_fingerprint__isnull=True,
+        )
+        .exclude(source__has_key='bank')
+        # System import identities name one specific earlier imported row, so they are distinct references.
+        .exclude(reference__startswith='IMPORT-')
+        .order_by('pk')
+    )
+    if bank_reference(record):
+        # Huaxia rows carry a real bank number: a different manual number is a different transfer.
+        candidates = candidates.filter(reference='')
+    suspect = candidates.first()
+    if not suspect:
+        return
+    found = (
+        f'第 {record["row"]} 行：与手工银行记录 ID {suspect.pk}（{suspect.date}，{suspect.amount}，'
+        f'流水号“{suspect.reference or "未填写"}”）同账户、同日期、同金额，疑似同一笔交易，整批未导入。'
+    )
+    if bank_reference(record):
+        hint = (
+            '请先给手工记录补填银行流水号（相同即识别为同一笔，不同则不再视为重复），或作废误录的手工记录后重新预览。'
+        )
+    else:
+        hint = (
+            '该行银行原始流水没有可比对的流水号，无法自动确认；请核对后作废误录的手工记录'
+            '（已认领的先撤销匹配）再重新预览，以导入记录为准认领。'
+        )
+    raise ValidationError(found + hint)
+
+
 def existing(record, *, lock=False):
     data = record['data']
     queryset = BankRecord.objects.select_for_update() if lock else BankRecord.objects.all()
     direct = Q(import_fingerprint=record['fingerprint']) | Q(
         account=data['account'], reference__in=[data['reference'], record['legacy_reference']], void_reason=''
     )
+    if bank_reference(record):
+        # Huaxia identities are "date:core reference"; a manual record of that day typed with the bare
+        # core reference is the same transfer and follows the same date/amount/name checks below.
+        direct |= Q(account=data['account'], reference=bank_reference(record), date=data['date'], void_reason='')
     # Older fingerprints contain the raw timestamp. Rebuild from stored evidence, never from
     # the new file's spelling, and leave historical evidence/matches untouched (also when locked).
     historical = Q(account=data['account'], date=data['date'], amount=data['amount']) & (
@@ -169,6 +217,8 @@ def existing(record, *, lock=False):
         matches.append(found)
     if len(matches) > 1:
         raise ValidationError(f'第 {record["row"]} 行：存在多条相同交易的导入记录，请先核对原记录及认领情况。')
+    if not matches:
+        manual_suspect(record, queryset)
     return matches[0] if matches else None
 
 
