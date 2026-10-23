@@ -82,18 +82,6 @@ def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
         amount = number(data.get('amount'), 'amount', positive=True)
         account = text(data, 'account', default='', maximum=100)
         reference = text(data, 'reference', default='', maximum=100)
-        # Bank allocation is bounded by the bank record and re-checked there; manual entries are checked
-        # here under the entry lock. Splitting one transfer across different entries stays allowed.
-        incoming = (entry.kind == 'receivable') != refund
-        if (
-            not bank_allocation
-            and reference
-            and bank_identity_payments(account, reference, incoming=incoming).filter(entry=entry).exists()
-        ):
-            raise Conflict(
-                '此款项已登记同账户、同银行流水号的同方向收付款，请核对是否重复登记；'
-                '确为另一笔交易请核对流水号，原登记有误请先冲销。'
-            )
         remaining = balance(entry)
         if refund:
             if remaining >= 0 or amount > -remaining:
@@ -112,6 +100,18 @@ def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
             if data.get('document')
             else None
         )
+        # Input errors are reported first. Bank allocation is bounded by the bank record and re-checked there;
+        # manual entries are checked here under the entry lock. Splitting one transfer across entries stays allowed.
+        incoming = (entry.kind == 'receivable') != refund
+        if (
+            not bank_allocation
+            and reference
+            and bank_identity_payments(account, reference, incoming=incoming).filter(entry=entry).exists()
+        ):
+            raise Conflict(
+                '此款项已登记同账户、同银行流水号的同方向收付款，请核对是否重复登记；'
+                '确为另一笔交易请核对流水号，原登记有误请先冲销。'
+            )
         payment = save(
             Payment(
                 entry=entry,
