@@ -58,7 +58,7 @@ it('附件可由上传者撤回，被引用时由服务端拦截', async () => {
 })
 
 it('取消、作废、撤销、删除归入更正组，不和推进单据混在一起', () => {
-  for (const name of ['取消未收余量', '作废对账', '撤销银行匹配', '删除附件', '冲销付款', '退回修改'])
+  for (const name of ['整单取消未收余量', '取消未收余量', '作废对账', '撤销银行匹配', '删除附件', '冲销付款', '退回修改'])
     expect(actionGroup(name)).toBe('correct')
   for (const name of ['提交采购', '收货', '登记收付款']) expect(actionGroup(name)).toBe('advance')
   for (const name of ['查看明细', '处理记录', '附件']) expect(actionGroup(name)).toBe('reference')

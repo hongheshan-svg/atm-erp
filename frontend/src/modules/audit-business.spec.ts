@@ -3,7 +3,7 @@ import { all, read } from '../api'
 import { defaults, fieldIssues, payload } from '../forms'
 import { industryCommand } from '../industry-forms'
 import { user } from '../session'
-import { actionCommand as purchaseAction, createCommand as purchaseCreate, receiptLines } from './purchases'
+import { actionCommand as purchaseAction, actionNames as purchaseActions, createCommand as purchaseCreate, receiptLines } from './purchases'
 import { actionCommand as projectAction } from './projects'
 import { bomCommand } from './bom'
 import { salesActions, salesCommand } from './sales'
@@ -127,4 +127,51 @@ it('全部隔离突出已到货待检及精确数量，复检后继续显示剩�
   ] })).toBe('已到货待检 · 隔离 0.003')
   expect(receiptStatus({ status: 'partial', lines: [{ received_quantity: '1.000', pending_quantity: '2.000' }] })).toBe('部分收货 · 隔离 2.000')
   expect(receiptStatus({ status: 'received', lines: [{ received_quantity: '5', pending_quantity: '0' }] })).toBe('已收货')
+})
+
+it('整单取消只需一次原因，跨页明细全部交给后端计算，不提交前端数量', async () => {
+  vi.mocked(read).mockResolvedValue({ ...detail, code: 'PO0055', status: 'partial', lines: Array.from({ length: 55 }, (_, i) => ({ ...detail.lines[0], id: i + 1 })) })
+  const command = industryCommand(await purchaseAction('purchases', { id: 9 }, '整单取消未收余量'))
+  expect(command.subject).toBe('PO0055')
+  expect(command.notice?.text).toContain('55 条明细')
+  expect(command.fields.map(field => field.key)).toEqual(['reason'])
+  expect(command.blocked).toBeUndefined()
+  const data = defaults(command.fields)
+  expect(fieldIssues(command.fields, data).some(issue => issue.path === 'reason')).toBe(true)
+  data.reason = '供应商停止供货'
+  expect(command.prepare?.(payload(command.fields, data))).toEqual({ reason: '供应商停止供货' })
+  expect(command.submitLabel).toBe('确认整单取消未收余量')
+})
+
+it('整单取消有待检、无余量或订单已结束时明确阻止，不静默跳过明细', async () => {
+  for (const [data, expected] of [
+    [{ ...detail, status: 'partial' }, '待检'],
+    [{ ...detail, status: 'partial', lines: [] }, '没有可取消'],
+    [{ ...detail, status: 'cancelled', lines: [] }, '状态已变化'],
+  ] as const) {
+    vi.mocked(read).mockResolvedValue(data)
+    expect((await purchaseAction('purchases', { id: 9 }, '整单取消未收余量')).blocked).toContain(expected)
+  }
+})
+
+it('整单与明细取消可以相互切换，仍保留明细默认0的保护', async () => {
+  vi.mocked(read).mockResolvedValue({ ...detail, status: 'partial', lines: [detail.lines[0], detail.lines[2]] })
+  const partial = await purchaseAction('purchases', { id: 9 }, '取消未收余量')
+  const whole = await partial.alternatives![0]!.open()
+  expect(whole.title).toBe('整单取消未收余量')
+  const again = await whole.alternatives![0]!.open()
+  expect(again.title).toBe('取消未收余量')
+  expect(again.initial!.lines.map((line: Row) => line.quantity)).toEqual(['0', '0'])
+})
+
+it('整单取消入口只给采购权限且仅已批准或部分收货状态', () => {
+  for (const roles of [['purchaser'], ['member', 'purchaser'], ['admin']]) {
+    user.value = { id: 1, roles }
+    for (const status of ['approved', 'partial']) expect(purchaseActions('purchases', { status })).toContain('整单取消未收余量')
+    for (const status of ['draft', 'submitted', 'received', 'cancelled']) expect(purchaseActions('purchases', { status })).not.toContain('整单取消未收余量')
+  }
+  for (const role of ['warehouse', 'member', 'finance']) {
+    user.value = { id: 1, roles: [role] }
+    expect(purchaseActions('purchases', { status: 'approved' })).not.toContain('整单取消未收余量')
+  }
 })

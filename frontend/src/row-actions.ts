@@ -15,7 +15,7 @@ export const actionGroups = [
   { key: 'reference', label: '查看与资料' },
 ]
 const referenceActions = new Set(['处理记录', '补充协议记录', '交付与回款', '附件', '补录凭证'])
-const correctionActions = /^(取消|作废|撤销|删除|冲销|退回修改|更正|重开)/
+const correctionActions = /^(整单取消|取消|作废|撤销|删除|冲销|退回修改|更正|重开)/
 export function actionGroup(name: string) {
   if (name.includes('质保')) return 'warranty'
   if (/^(查看|下载|预览)/.test(name) || referenceActions.has(name)) return 'reference'

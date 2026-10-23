@@ -16,6 +16,12 @@ from scripts.ci.select_suites import SUITES, select
 
 
 class RoutingTests(unittest.TestCase):
+    def test_warehouse_detail_components_cover_receipt_and_issue_pages(self):
+        scope = plan(['frontend/src/components/WarehouseLines.vue', 'frontend/src/modules/warehouse-lines.ts'])
+        self.assertEqual(set(scope['modules']), {'purchases', 'inventory'})
+        self.assertIn('e2e/warehouse-lines.spec.ts', scope['browser_specs'])
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
     def test_process_progress_covers_its_read_projections(self):
         scope = plan(['backend/apps/business/services/progress.py', 'frontend/src/components/ProjectProgress.vue'])
         self.assertEqual(set(scope['modules']), {'sales', 'projects', 'purchases', 'finance'})

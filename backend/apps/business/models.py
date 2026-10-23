@@ -402,6 +402,7 @@ class StockMove(ImmutableLedger):
     supplier_credit = money()
     received_date = models.DateField(null=True, blank=True)
     reason = models.CharField(max_length=500)
+    remark = models.CharField(max_length=500, blank=True, default='')
 
     class Meta(LedgerModel.Meta):
         db_table = 'lean_stock_move'

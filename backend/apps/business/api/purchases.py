@@ -127,7 +127,7 @@ class PurchaseView(ImportableMixin, ReadView):
                         {
                             key: value
                             for key, value in row.items()
-                            if key in {'line', 'id', 'quantity', 'pending_quantity', 'due_date'}
+                            if key in {'line', 'id', 'quantity', 'pending_quantity', 'due_date', 'remark'}
                         }
                         for row in log.detail.get('lines', [])
                     ],

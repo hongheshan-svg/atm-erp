@@ -1,3 +1,4 @@
+import { materialDetails, warehouseLines } from './warehouse-lines'
 import { item } from './shared'
 import { project } from './shared'
 import { remote } from './shared'
@@ -84,16 +85,35 @@ export function actionNames(resource: string, r: Row): string[] {
     if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('更新到货计划')
     if (warehouse() && r.lines?.some((l: Row) => Number(l.pending_quantity) > 0)) a.push('隔离品合格入库', '隔离品退回供应商')
     if (buyer() && ['draft', 'submitted'].includes(r.status)) a.push('作废采购')
-    if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('取消未收余量')
+    if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('取消未收余量', '整单取消未收余量')
   }
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
+  if (name === '整单取消未收余量') {
+    const detail = await read(`${endpoint(resource)}${r.id}/`)
+    const remaining = detail.lines.filter((line: Row) => Number(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity)) > 0)
+    const pending = remaining.filter((line: Row) => Number(line.pending_quantity || 0) > 0)
+    const blocked = !['approved', 'partial'].includes(detail.status)
+      ? '采购状态已变化，请刷新列表；未批准采购可使用“作废采购”。'
+      : pending.length
+        ? `本单有 ${pending.length} 条明细仍在待检，请仓管先完成隔离品合格入库或退回供应商，再整单取消。也可按明细取消其他未收物料。`
+        : !remaining.length ? '本单没有可取消的未收余量，请刷新采购单。' : undefined
+    return {
+      title: name, subject: detail.code || r.code || `采购单 #${r.id}`,
+      path: `${endpoint(resource)}${r.id}/cancel-remainder/`,
+      submitLabel: '确认整单取消未收余量', fields: [reason], blocked,
+      prepare: data => ({ reason: data.reason }),
+      alternatives: [{ label: '改为按明细取消', open: () => actionCommand(resource, r, '取消未收余量') }],
+      notice: { type: 'warning', text: `将一次取消本 PO 全部 ${remaining.length} 条明细的未收余量，无需逐条填写数量。已收货、库存和付款流水保留，应付按取消金额冲减；提交时以最新未收余量为准。` },
+    }
+  }
   if (name === '取消未收余量') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
     const lines = detail.lines.filter((line: Row) => Number(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity)) > 0 && Number(line.pending_quantity || 0) === 0)
     return {
       title: name, path: `${endpoint(resource)}${r.id}/cancel-remainder/`,
+      alternatives: [{ label: '改为整单取消未收余量', open: () => actionCommand(resource, r, '整单取消未收余量') }],
       fields: [reason, { ...rows('lines', '本次取消明细', [
         { key: 'line', label: '明细ID', hidden: true },
         { key: 'item_label', label: '采购物料', readonly: true, displayOnly: true },
@@ -122,7 +142,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const detail = await read(`${endpoint(resource)}${r.id}/`)
     return { title: name, path: `${endpoint(resource)}${r.id}/delivery-plan/`, fields: [reason, { ...rows('lines', '未完成明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, date('due_date', '承诺到货日期')]), readonly: true }], initial: { lines: detail.lines.filter((l: Row) => Number(decimalDifference(l.quantity, l.received_quantity, l.cancelled_quantity)) > 0).map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, due_date: l.due_date })) }), notice: { type: 'info', text: '更新供应商承诺到货日期并留记录，不改变原应付期限。' } }
   }
-  if (name === '处理记录') return { title: name, path: '', readonly: true, initial: { lines: (await all(`/business/purchases/${r.id}/handling-history/`)).map(l => ({ ...l, quantity_summary: l.lines.map((row: Row) => `明细${row.line || row.id}：数量 ${row.quantity || '0'}，隔离 ${row.pending_quantity || '0'}`).join('；'), operation: ({ 'purchase.reject': '退回修改', 'purchase.edit': '修改采购', 'purchase.receive': '到货登记', 'purchase.quality_accept': '隔离品合格入库', 'purchase.quality_return': '隔离品退回供应商', 'purchase.delivery_plan': '更新到货计划' } as Record<string, string>)[l.operation] || l.operation })) }, fields: [rows('lines', '处理记录', [t('date', '时间'), t('actor', '操作人'), t('operation', '操作'), t('reason', '原因'), t('quantity_summary', '明细与数量'), t('next_step', '后续处理')])] }
+  if (name === '处理记录') return { title: name, path: '', readonly: true, initial: { lines: (await all(`/business/purchases/${r.id}/handling-history/`)).map(l => ({ ...l, quantity_summary: l.lines.map((row: Row) => `明细${row.line || row.id}：数量 ${row.quantity || '0'}，隔离 ${row.pending_quantity || '0'}${row.remark ? `，备注：${row.remark}` : ''}`).join('；'), operation: ({ 'purchase.reject': '退回修改', 'purchase.edit': '修改采购', 'purchase.receive': '到货登记', 'purchase.quality_accept': '隔离品合格入库', 'purchase.quality_return': '隔离品退回供应商', 'purchase.delivery_plan': '更新到货计划' } as Record<string, string>)[l.operation] || l.operation })) }, fields: [rows('lines', '处理记录', [t('date', '时间'), t('actor', '操作人'), t('operation', '操作'), t('reason', '原因'), t('quantity_summary', '明细与数量'), t('next_step', '后续处理')])] }
   if (name === '修改采购') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
     return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), ...termFields(true).map(f => ({ ...f, ...(f.key === 'payment_days' ? { visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'custom' } : {}), label: f.key === 'payment_term' ? '采购账期' : f.label, optional: true, hint: f.key === 'payment_term' ? '草稿阶段可调整；月结＝每批合格收货当月月底＋天数。' : f.hint })), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'manual', hint: '仅指定日期账期填写；现付/月结由实际收货自动计算。' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, { ...qty, numeric: { scale: 3, min: 0.001 } }, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, ...((data.payment_term || detail.payment_term) === 'manual' ? { payment_due_date: data.payment_due_date } : {}), ...(data.payment_term ? { payment_term: data.payment_term } : {}), ...(data.payment_days !== undefined && data.payment_days !== '' && data.payment_days !== null ? { payment_days: data.payment_days } : {}), note: data.note, warranty_months: data.warranty_months, reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
@@ -211,6 +231,17 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
             ...(name === '收货' ? { pending_quantity: '0' } : {}),
           }))
           .filter((l: Row) => Number(l.quantity) > 0),
+      }
+      if (name === '收货') {
+        const lines = detail.lines.map((line: Row) => ({
+          ...materialDetails(line), line: line.id, project_code: detail.project_code,
+          required_quantity: line.bom_quantity ?? line.quantity,
+          remaining: decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity, line.pending_quantity || '0'),
+          quantity: decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity, line.pending_quantity || '0'),
+          pending_quantity: '0', remark: '',
+        })).filter((line: Row) => Number(line.remaining) > 0)
+        fields[fields.length - 1] = warehouseLines('receipt', lines)
+        initial = { lines }
       }
     }
   }
