@@ -49,6 +49,18 @@ class Progress:
         # A small staff directory is shared by every row; no rates or contact details are returned.
         self.staff = list(User.objects.filter(is_active=True))
         self.today = timezone.localdate()
+        self.submitters = {}
+
+    def load_submitters(self, purchases):
+        """Latest submitter of every submitted purchase on the page, read in one query."""
+        resources = {f'purchaseorder:{p.pk}': p.pk for p in purchases if p.status == 'submitted'}
+        logs = (
+            AuditLog.objects.filter(operation='purchase.submit', resource__in=resources)
+            .order_by('id')
+            .values_list('resource', 'actor_id')
+        )
+        # 按 id 升序覆盖，保留每张采购单最近一次提交的人。
+        self.submitters = {resources[resource]: actor for resource, actor in logs}
 
     def candidates(self, allowed, exclude=()):
         selected = [
@@ -133,12 +145,7 @@ class Progress:
         if purchase.status == 'draft':
             row['hint'] = '完善采购草稿后提交审批。'
         elif purchase.status == 'submitted':
-            submitter = (
-                AuditLog.objects.filter(operation='purchase.submit', resource=f'purchaseorder:{purchase.pk}')
-                .order_by('-id')
-                .values_list('actor_id', flat=True)
-                .first()
-            )
+            submitter = self.submitters.get(purchase.pk)
             row['handlers'] = self.candidates(PURCHASE_APPROVERS, {purchase.created_by_id, submitter})
             row['handler_label'] = '可审批人员'
             row['hint'] = '由其他有权限的人员审批；超预算还需预算复核及人员分离校验。'
@@ -312,6 +319,8 @@ def summary(user, project, params):
         )
     selected = Paginator(query, size).get_page(page)
     progress = Progress(user, project)
+    if category == 'purchases':
+        progress.load_submitters(selected)
     build = {
         'tasks': progress.task,
         'purchases': progress.purchase,

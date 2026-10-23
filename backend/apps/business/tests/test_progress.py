@@ -448,3 +448,30 @@ class ProgressTests(BusinessFixtures, TestCase):
                 self.assertIn(f'项目{label}', rows[self.task.pk]['hint'])
                 self.assertIn('重开', rows[self.task.pk]['hint'])
                 self.assertEqual(rows[done.pk]['hint'], '任务已结束，完成或取消记录保留。')
+
+    def purchase_queries(self, total):
+        for index in range(PurchaseOrder.objects.filter(project=self.project).count(), total):
+            purchase = PurchaseOrder.objects.create(
+                project=self.project,
+                supplier=self.supplier,
+                code=f'PROGRESS-PO-{index}',
+                status='submitted',
+                due_date=self.today,
+                created_by=self.users['purchaser'],
+            )
+            PurchaseLine.objects.create(purchase=purchase, item=self.item, quantity=1, unit_price=1)
+            for actor in ['manager', 'purchase_manager']:  # 以最近一次提交人为准
+                AuditLog.objects.create(
+                    actor=self.users[actor], operation='purchase.submit', resource=f'purchaseorder:{purchase.pk}'
+                )
+        with CaptureQueriesContext(connection) as captured:
+            result = self.get('manager', 'purchases', page_size=50)
+        self.assertEqual(len(result['results']), total)
+        for row in result['results']:
+            ids = {person['id'] for person in row['handlers']}
+            self.assertEqual(self.users['purchase_manager'].pk in ids, row['id'] == self.purchase.pk)
+        return len(captured)
+
+    def test_purchase_submitters_are_loaded_once_per_page(self):
+        self.get('manager', 'purchases')
+        self.assertEqual(self.purchase_queries(20), self.purchase_queries(50))
