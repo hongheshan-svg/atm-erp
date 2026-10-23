@@ -223,9 +223,13 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
         location = location_value(data)
         reason = text(data, 'reason')
         lines = {line.pk: line for line in purchase.lines.select_for_update().order_by('item_id', 'pk')}
-        selected, seen = {}, set()
-        for row in rows(data):
-            fields(row, {'line', 'quantity', 'pending_quantity'})
+        selected, seen, remarks = {}, set(), {}
+        for index, row in enumerate(rows(data)):
+            fields(row, {'line', 'quantity', 'pending_quantity', 'remark'})
+            try:
+                remark = text(row, 'remark', default='')
+            except ValidationError as exc:
+                raise ValidationError({'lines': {index: exc.detail}}) from exc
             line_id = identity(row.get('line'), 'line')
             if line_id in seen or line_id not in lines:
                 raise ValidationError('收货明细重复或不属于此采购单。')
@@ -248,6 +252,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             line.pending_quantity += pending
             save(line, user)
             selected[line_id] = qty
+            remarks[line_id] = remark
         if not selected:
             raise ValidationError('请至少填写一条到货数量。')
         stocks = lock_stocks([lines[line_id].item_id for line_id, qty in selected.items() if qty], location, user)
@@ -272,6 +277,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
                     quantity=qty,
                     value=value,
                     reason=reason,
+                    remark=remarks[line_id],
                 ),
                 user,
             )

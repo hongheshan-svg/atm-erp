@@ -1,3 +1,4 @@
+import { materialDetails, warehouseLines } from './warehouse-lines'
 import { all, read } from '../api'
 import { can } from '../session'
 import type { Command } from '../types'
@@ -31,6 +32,7 @@ export const columns: Record<string, Column[]> = {
     C('quantity', '数量'),
     C('reason', '说明'),
     C('created_at', '时间'),
+    C('remark', '备注'),
   ],
 }
 export function createLabel(resource: string) {
@@ -83,6 +85,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (routes[name]) path += routes[name] + '/'
   if (name === '领料') {
     path = '/business/stocks/issue/'
+    const stock = await read(`/business/stocks/${r.id}/`)
+    const lines = [{ ...materialDetails(stock), stock: stock.id, remaining: stock.quantity, quantity: '', remark: '' }]
+    initial = { stock: stock.id, lines }
     const tasks = await all('/business/tasks/', { kind: 'service', status: 'open' })
     fields = [
       project(),
@@ -91,7 +96,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         // 只列所选项目的售后任务；别的项目的任务选了也会被服务端拒绝。
         optionsFor: (data) => tasks.filter((task) => String(task.project) === String(data.project)).map((task) => ({ value: task.id, label: task.title })),
       },
-      positiveQuantity,
+      warehouseLines('issue', lines),
       reason,
       {
         key: 'confirm_shared',
@@ -102,7 +107,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         hint: '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。',
       },
     ]
-    prepare = (data) => ({ ...data, stock: r.id })
+    prepare = ({ lines, ...data }) => ({ ...data, stock: r.id, quantity: lines[0].quantity, ...(lines[0].remark ? { remark: lines[0].remark } : {}) })
   }
   if (name === '盘点') {
     fields = [

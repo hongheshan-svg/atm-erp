@@ -45,6 +45,7 @@ it('操作审计显示操作人姓名', () => {
 })
 
 it('领料的售后任务只列所选项目，换项目后清空原选择', async () => {
+  vi.mocked(read).mockImplementation(async path => path.includes('stocks') ? { id: 5, item: 1, quantity: '3' } : { code: 'PRJ1', lines: [] })
   vi.mocked(all).mockResolvedValue([
     { id: 11, project: 1, title: '一号项目售后' },
     { id: 22, project: 2, title: '二号项目售后' },

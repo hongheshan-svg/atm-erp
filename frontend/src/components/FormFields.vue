@@ -6,6 +6,7 @@ import InlineDocumentField from './InlineDocumentField.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import InitialPasswordInput from './InitialPasswordInput.vue'
+import WarehouseLines from './WarehouseLines.vue'
 import { flowFor } from '../flows'
 const props = defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean; issues?: Record<string, string>; prefix?: string }>()
 const emit = defineEmits<{ touched: [path: string]; uploading: [value: boolean] }>()
@@ -18,7 +19,9 @@ const issue = (key: string) => props.issues?.[fieldPath(key)]
 async function focusPath(path: string) {
   const relative = props.prefix ? path.slice(props.prefix.length + 1) : path
   const [key, index] = relative.split('.')
-  if (index != null && /^\d+$/.test(index)) {
+  if (props.fields.find(field => field.key === key)?.warehouse) {
+    await children.get(key!)?.focusPath(path)
+  } else if (index != null && /^\d+$/.test(index)) {
     pages[key!] = Math.floor(Number(index) / 20)
     await nextTick()
     await children.get(`${key}.${index}`)?.focusPath(path)
@@ -54,7 +57,8 @@ function readonlyValue(field: Field) {
 <template>
   <div ref="root" class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
     <template v-for="field in visibleFields" :key="field.key">
-      <fieldset v-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
+      <WarehouseLines v-if="field.warehouse && !readonly" v-model="model[field.key]" :field="field" :context="model" :disabled="disabled" :prefix="fieldPath(field.key)" :issues="issues" :ref="(el: any) => { if (el) children.set(field.key, el); else children.delete(field.key) }" @touched="emit('touched', $event)" />
+      <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
         <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>

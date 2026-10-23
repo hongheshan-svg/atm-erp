@@ -14,6 +14,7 @@ export type Field = {
   initial?: any
   readonly?: boolean
   compact?: boolean
+  warehouse?: 'receipt' | 'issue'
   hidden?: boolean
   // 条件不满足时不展示、不校验、不提交；保留表单内输入以便切换回来。
   visibleWhen?: (data: Row) => boolean

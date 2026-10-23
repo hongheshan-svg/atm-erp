@@ -655,3 +655,22 @@
 - 前端11文件78项通过；人员折叠调整后组件7项复验通过。CI路由23项通过，新接口、组件和页面用例登记到销售、项目、采购、财务影响计划。Ruff/格式、Django及迁移检查、ESLint、类型检查、构建通过；无数据库迁移，构建保留既有组件动态/静态导入提示。日志：`/private/tmp/erp-progress-frontend-final.log`、`erp-progress-ui-verified.log`、`erp-progress-routing-final.log`、`erp-progress-checks-final.log`、`erp-progress-lint-final.log`、`erp-progress-typecheck-verified.log`、`erp-progress-build-final.log`。
 - 隔离数据库真实浏览器桌面1440px、手机390px各1项通过：工程人员跨部门只读流程、原采购详情403、独立审批后刷新变化、待起算付款、本人销售入口和金额隔离。截图核验后修复销售侧栏卡片过窄，补宽度及视口边界断言，最终双端2项通过；实际打开检查项目手机页面、销售桌面侧栏及手机页面。日志 `/private/tmp/erp-progress-browser-layout.log`，截图目录 `/private/tmp/erp-progress-browser-layout/`。
 - 本次为功能及关联模块验证，未运行完整业务链、正式发版验证、OTA或安装器；未操作生产数据，尚未提交GitHub、打tag或发布此功能。
+
+## 2026-10-23 采购整单取消未收余量
+
+- 已批准、部分收货采购单增加“整单取消未收余量”，填写一次原因即可；原按明细取消与整单取消窗口可直接切换。确认页显示采购单号、涉及明细数及已收货/库存/付款保留说明，沿用更正与撤销菜单分组及采购岗位并集权限。
+- 复用原 `cancel-remainder/` 接口，整单仅提交原因，不从当前页拼接数量；服务端继续在锁内核算所有剩余明细并校验状态、项目范围与待检限制。有待检明细整单拒绝，仍可切回按明细取消其他物料。未改变审批、库存、账款、审计或幂等规则，无新表或数据库迁移。
+- 后端17项相关回归通过，新增55条明细部分收货后整单取消、重复提交只冲减一次、越权拒绝及待检整批回滚；同时复用逐行取消与隔离处理用例。日志 `/private/tmp/erp-whole-po-backend.log`。
+- 前端4文件38项单测通过，覆盖整单/明细切换、原因必填、权限与状态、待检和空余量拦截、动作分组及通用表单/列表。Ruff/格式、ESLint、类型检查、构建和diff检查通过。日志 `/private/tmp/erp-whole-po-unit-final.log`、`erp-whole-po-lint.log`、`erp-whole-po-lint-final.log`、`erp-whole-po-types-accepted.log`、`erp-whole-po-build.log`。
+- 使用独立测试库、显式测试账号及 `http://127.0.0.1:18450`，真实浏览器桌面1440px和手机390px各1项通过：从采购操作打开整单取消，切至分页明细再切回，验证空原因阻止提交；55条物料共1100元、首项收货1件后整单取消，实际核对取消数量、原库存1件、应付冲减1090元及余额10元。初次用例的多提示定位、分页数量与收货物料排序断言修正后完整复验通过；未通过修改业务规则放宽校验。
+- 最终页面日志 `/private/tmp/erp-whole-po-browser-accepted.log`，截图目录 `/private/tmp/erp-whole-po-browser-accepted/`；已实际检查电脑与手机确认界面。验证范围为本动作及直接关联回归，不是全业务链或发版验证；未操作生产，未合并主分支、提交GitHub、打tag或发布。功能位于独立分支 `codex/po-cancel-all`，保留并行审计工作区。
+
+## 2026-10-23 收货与项目出库明细及备注
+
+- 用户确认范围为收货、项目出库操作界面。两处明细自动展示项目号、产品编号、零件名称、图号/型号、版本/品牌、单位、需求数量、零件类型，末列增加选填备注。收货保留同物料不同BOM单元，明确待收、本次合格及隔离数量；领料沿用原单库存出库动作，需求随项目读取并按物料汇总，售后仍按任务处理。
+- 新组件复用原业务表单字段、校验、草稿、权限和接口。每页20行，跨页填写和错误定位可用；草稿恢复通过稳定明细标识重新显示只读物料资料，产品编号保留前导零。三位小数使用整数合计，切换项目清除旧需求并忽略迟到响应；加载失败提供重试。桌面为横向滚动表，手机逐项显示；修复隐藏标签导致的桌面横向溢出。
+- 新增前向迁移 `0021_stockmove_remark`，仅给原不可覆盖库存流水增加默认空的500字符备注字段。各批合格收货和出库单独保存，库存流水列表可查看；仅待检到货保留原采购审计中的逐条备注并在处理记录显示。不建立新台账，不覆盖历史库存、金额或原因；原服务端锁、项目/BOM上限、隔离、角色、金额过滤和幂等继续生效。
+- 后端新增3项行为回归，涵盖物料资料/仓管金额隔离、同料分单元及分批备注、待检备注、超长/非法备注整批回滚、出库权限和数量限制、重复提交只记一次。20项直接相关用例通过（`/private/tmp/erp-warehouse-detail-backend.log`）。按共享模型/序列化的影响矩阵运行35个目标515项，514项首次通过；认证环境测试的子进程在仓库根目录找不到config，从backend目录复验认证31项全部通过，其余成功证据复用（`erp-warehouse-detail-regression.log`、`erp-warehouse-detail-auth-final.log`）。
+- 前端51文件406项单测通过；最终布局调整后相关2文件7项再次通过。ESLint、vue-tsc、构建、Ruff、Django和迁移一致性检查通过。新组件、辅助模块和浏览器用例登记到采购/库存影响计划，CI路由37项通过。日志 `/private/tmp/erp-warehouse-detail-all-unit.log`、`erp-warehouse-detail-component-accepted.log`、`erp-warehouse-detail-lint-final.log`、`erp-warehouse-detail-types-accepted.log`、`erp-warehouse-detail-build-final.log`、`erp-warehouse-detail-checks-final.log`、`erp-warehouse-detail-routing-final.log`。
+- 隔离数据库实际迁移通过。显式使用 `http://127.0.0.1:18450` 和独立仓管账号，桌面1440px/手机390px各1项通过：同料两单元填写不同备注，合格收货3件、待检1件，实际领料1件后可用库存2件；核对备注读回、仓管无成本字段和流水列表可见。日志 `/private/tmp/erp-warehouse-detail-browser-accepted.log`，已实际打开检查对应目录中的电脑明细/末列备注和手机出库截图。
+- 此为收货/出库及共享变更关联验证，未执行完整业务浏览器链、正式发版验证或OTA；未操作生产、未提交GitHub、合并、打tag或发布。沿用独立分支 `codex/po-cancel-all`，前一项整单取消修改保留，并行审计工作区未改动。

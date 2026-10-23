@@ -193,6 +193,17 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
 
+    specification = serializers.CharField(source='item.specification', read_only=True)
+    drawing_number = serializers.CharField(source='item.drawing_number', read_only=True)
+    drawing_revision = serializers.CharField(source='item.drawing_revision', read_only=True)
+    brand = serializers.CharField(source='item.brand', read_only=True)
+    product_category = serializers.CharField(source='item.product_category', read_only=True)
+    part_type = serializers.CharField(source='item.part_type', read_only=True)
+    unit = serializers.CharField(source='item.unit', read_only=True)
+    bom_quantity = serializers.DecimalField(
+        source='bom_line.quantity', max_digits=18, decimal_places=3, read_only=True, allow_null=True, default=None
+    )
+
     class Meta:
         model = PurchaseLine
         fields = [
@@ -200,6 +211,14 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
             'item',
             'item_code',
             'item_name',
+            'specification',
+            'drawing_number',
+            'drawing_revision',
+            'brand',
+            'product_category',
+            'part_type',
+            'unit',
+            'bom_quantity',
             'bom_line',
             'assembly_unit',
             'due_date',
@@ -224,6 +243,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
         return project_allowed(self.context['request'].user, obj.project, PURCHASE_APPROVERS)
 
     lines = PurchaseLineSerializer(many=True, read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     next_delivery_date = serializers.SerializerMethodField()
@@ -245,6 +265,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'code',
             'project',
             'project_name',
+            'project_code',
             'supplier',
             'supplier_name',
             'payment_due_date',
@@ -270,6 +291,10 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
     part_type = serializers.CharField(source='item.part_type', read_only=True)
     unit = serializers.CharField(source='item.unit', read_only=True)
 
+    drawing_number = serializers.CharField(source='item.drawing_number', read_only=True)
+    drawing_revision = serializers.CharField(source='item.drawing_revision', read_only=True)
+    product_category = serializers.CharField(source='item.product_category', read_only=True)
+
     class Meta:
         model = Stock
         fields = [
@@ -278,6 +303,9 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
             'item_code',
             'item_name',
             'specification',
+            'drawing_number',
+            'drawing_revision',
+            'product_category',
             'brand',
             'part_type',
             'unit',
@@ -312,6 +340,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'supplier_credit',
             'received_date',
             'reason',
+            'remark',
             'created_at',
             'created_by',
         ]

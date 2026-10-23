@@ -95,6 +95,165 @@ class AuditBusinessFixtures(BusinessFixtures):
 
 
 class AuditBusinessTests(AuditBusinessFixtures, TestCase):
+    def test_warehouse_details_and_per_receipt_remarks_remain_traceable(self):
+        self.item.drawing_number = 'A2608-01-00017'
+        self.item.drawing_revision = 'A'
+        self.item.specification = '板厚2mm'
+        self.item.brand = '指定品牌'
+        self.item.product_category = '12'
+        self.item.part_type = 'custom'
+        self.item.save()
+        order, (first, other) = self.multi_purchase()
+        bom = BOMLine.objects.create(project=self.project, item=self.item, quantity=5, assembly_unit='上料单元')
+        first.bom_line = bom
+        first.save()
+        url = f'purchases/{order.pk}/'
+        detail = self.clients['warehouse'].get('/api/business/' + url).data
+        line = next(row for row in detail['lines'] if row['id'] == first.pk)
+        self.assertEqual(detail['project_code'], self.project.code)
+        self.assertEqual(
+            (line['drawing_number'], line['drawing_revision'], line['unit']), ('A2608-01-00017', 'A', '件')
+        )
+        self.assertEqual(line['bom_quantity'], '5.000')
+        self.assertNotIn('unit_price', line)
+        payload = {
+            'reason': '送货单SH001',
+            'lines': [
+                {'line': first.pk, 'quantity': '2', 'remark': ' 首批外观合格 '},
+                {'line': other.pk, 'quantity': '0', 'pending_quantity': '1', 'remark': '孔位待复检'},
+            ],
+        }
+        key = str(uuid.uuid4())
+        result = self.post('warehouse', url + 'receive/', payload, key=key)
+        self.assertEqual(result, self.post('warehouse', url + 'receive/', payload, key=key))
+        move = StockMove.objects.get(kind='receipt')
+        self.assertEqual((move.reason, move.remark, move.quantity), ('送货单SH001', '首批外观合格', 2))
+        history = self.clients['warehouse'].get('/api/business/' + url + 'handling-history/').data['results']
+        arrival = next(row for row in history if row['operation'] == 'purchase.receive')
+        self.assertEqual(arrival['lines'][1]['remark'], '孔位待复检')
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {'reason': '第二批', 'lines': [{'line': first.pk, 'quantity': '1', 'remark': '第二批单独包装'}]},
+        )
+        self.assertEqual(
+            set(StockMove.objects.filter(kind='receipt').values_list('remark', flat=True)),
+            {'首批外观合格', '第二批单独包装'},
+        )
+        stock = Stock.objects.get(item=self.item)
+        data = self.clients['warehouse'].get(f'/api/business/stocks/{stock.pk}/').data
+        self.assertEqual(
+            (data['drawing_number'], data['drawing_revision'], data['product_category']), ('A2608-01-00017', 'A', '12')
+        )
+        self.assertNotIn('value', data)
+        move_data = self.clients['warehouse'].get(f'/api/business/moves/{move.pk}/').data
+        self.assertEqual(move_data['remark'], '首批外观合格')
+        self.assertNotIn('value', move_data)
+
+    def test_issue_remark_replay_permissions_and_quantity_limit(self):
+        BOMLine.objects.create(project=self.project, item=self.item, quantity=3)
+        stock = Stock.objects.create(item=self.item, quantity=3, value=30)
+        payload = {
+            'project': self.project.pk,
+            'stock': stock.pk,
+            'quantity': '1',
+            'reason': '装配领用',
+            'remark': '用于一号工位',
+        }
+        self.post('purchaser', 'stocks/issue/', payload, status=403)
+        key = str(uuid.uuid4())
+        result = self.post('warehouse', 'stocks/issue/', payload, key=key)
+        self.assertEqual(result, self.post('warehouse', 'stocks/issue/', payload, key=key))
+        move = StockMove.objects.get(kind='issue')
+        self.assertEqual((move.remark, move.reason, move.quantity, move.value), ('用于一号工位', '装配领用', -1, -10))
+        stock.refresh_from_db()
+        self.assertEqual((stock.quantity, stock.value), (2, 20))
+        self.post('warehouse', 'stocks/issue/', {**payload, 'quantity': '3', 'remark': '超量应拒绝'}, status=409)
+        self.assertEqual(StockMove.objects.filter(kind='issue').count(), 1)
+        self.post('warehouse', 'stocks/issue/', {**payload, 'remark': '字' * 501}, status=400)
+        self.assertEqual(StockMove.objects.filter(kind='issue').count(), 1)
+
+    def test_receipt_invalid_remark_rolls_back_all_lines(self):
+        order, (first, other) = self.multi_purchase()
+        for invalid in ['字' * 501, {'text': '不能传对象'}]:
+            self.post(
+                'warehouse',
+                f'purchases/{order.pk}/receive/',
+                {
+                    'reason': '整批校验',
+                    'lines': [
+                        {'line': first.pk, 'quantity': '1', 'remark': '有效'},
+                        {'line': other.pk, 'quantity': '1', 'remark': invalid},
+                    ],
+                },
+                status=400,
+            )
+            first.refresh_from_db()
+            self.assertEqual(first.received_quantity, 0)
+            self.assertFalse(StockMove.objects.exists())
+            self.assertFalse(Stock.objects.exists())
+            self.assertFalse(AuditLog.objects.filter(operation='purchase.receive').exists())
+
+    def test_whole_po_cancellation_handles_many_lines_and_preserves_received_facts(self):
+        items = Item.objects.bulk_create([Item(code=f'WHOLE-{i}', name=f'整单物料{i}') for i in range(55)])
+        created = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                'project': self.project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'lines': [{'item': item.pk, 'quantity': '2', 'unit_price': '10'} for item in items],
+            },
+            status=201,
+        )
+        order = PurchaseOrder.objects.get(pk=created['id'])
+        url = f'purchases/{order.pk}/'
+        self.post('purchaser', url + 'submit/')
+        self.post('manager', url + 'approve/')
+        first = order.lines.order_by('pk').first()
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {
+                'reason': '首项已收一件',
+                'lines': [{'line': first.pk, 'quantity': '1'}],
+            },
+        )
+        before_moves = list(StockMove.objects.values('id', 'quantity', 'value'))
+        payload = {'reason': '供应商停止其余供货'}
+        key = str(uuid.uuid4())
+        result = self.post('purchaser', url + 'cancel-remainder/', payload, key=key)
+        self.assertEqual(result, self.post('purchaser', url + 'cancel-remainder/', payload, key=key))
+        order.refresh_from_db()
+        first.refresh_from_db()
+        self.assertEqual(order.status, 'received')
+        self.assertEqual((first.received_quantity, first.cancelled_quantity), (1, 1))
+        self.assertEqual(order.lines.exclude(pk=first.pk).filter(cancelled_quantity=2).count(), 54)
+        self.assertEqual(Entry.objects.get(purchase=order).credit_amount, 1090)
+        self.assertEqual(Stock.objects.get().quantity, 1)
+        self.assertEqual(list(StockMove.objects.values('id', 'quantity', 'value')), before_moves)
+        self.assertEqual(len(AuditLog.objects.get(operation='purchase.cancel_remainder').detail['lines']), 55)
+
+    def test_whole_po_cancellation_with_quarantine_rejects_entire_order(self):
+        order, (first, other) = self.multi_purchase()
+        url = f'purchases/{order.pk}/'
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {
+                'reason': '一项待检',
+                'lines': [{'line': other.pk, 'quantity': '0', 'pending_quantity': '1'}],
+            },
+        )
+        self.post('warehouse', url + 'cancel-remainder/', {'reason': '越权'}, status=403)
+        self.post('purchaser', url + 'cancel-remainder/', {'reason': '整单停止'}, status=409)
+        first.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual((first.cancelled_quantity, other.cancelled_quantity, other.pending_quantity), (0, 0, 1))
+        self.assertEqual(Entry.objects.get(purchase=order).credit_amount, 0)
+        self.assertFalse(AuditLog.objects.filter(operation='purchase.cancel_remainder').exists())
+
     def test_partial_cancel_leaves_other_lines_and_quarantine_intact_and_replays_once(self):
         order, (first, other) = self.multi_purchase()
         url = f'purchases/{order.pk}/'

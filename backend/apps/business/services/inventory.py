@@ -104,7 +104,7 @@ def count(actor, key, stock_id, data):
 
 def issue(actor, key, data):
     def execute(user, project):
-        fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared'})
+        fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared', 'remark'})
         confirm_shared = data.get('confirm_shared', False)
         if not isinstance(confirm_shared, bool):
             raise ValidationError({'confirm_shared': '必须为布尔值。'})
@@ -127,6 +127,7 @@ def issue(actor, key, data):
             if qty > required - issued(project, source.item_id):
                 raise Conflict('领料超过 BOM 剩余需求，请先修订 BOM。')
         reason = text(data, 'reason')
+        remark = text(data, 'remark', default='')
         stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
         value = take_value(stock, qty)
         claims = claimed_by_others(project, source.item_id)
@@ -149,7 +150,14 @@ def issue(actor, key, data):
         save(stock, user)
         move = save(
             StockMove(
-                stock=stock, project=project, task=task, kind='issue', quantity=-qty, value=-value, reason=reason
+                stock=stock,
+                project=project,
+                task=task,
+                kind='issue',
+                quantity=-qty,
+                value=-value,
+                reason=reason,
+                remark=remark,
             ),
             user,
         )

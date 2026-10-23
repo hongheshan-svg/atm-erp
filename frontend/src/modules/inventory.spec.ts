@@ -10,7 +10,7 @@ vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn() }))
 beforeEach(() => {
   user.value = { id: 2, roles: ['warehouse'] }
   vi.mocked(all).mockResolvedValue([])
-  vi.mocked(read).mockResolvedValue(['主仓'])
+  vi.mocked(read).mockImplementation(async path => path.includes('locations') ? ['主仓'] : { id: 1, item: 1, quantity: '5.000' })
 })
 
 it.each([
@@ -24,7 +24,7 @@ it.each([
     ? await createCommand(resource)
     : await actionCommand(resource, { id: 1, quantity: '5.000' }, name))
   expect(command.path).toContain(`/${route}/`)
-  const fields = command.fields.filter(field => field.key === 'quantity')
+  const fields = (name === '领料' ? command.fields.find(field => field.key === 'lines')!.fields! : command.fields).filter(field => field.key === 'quantity')
   expect(fields).toHaveLength(1)
   for (const quantity of ['0', '0.000']) {
     expect(fieldIssues(fields, { quantity })).toEqual([
