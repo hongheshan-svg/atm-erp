@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
-from apps.business.models import BOMLine, Item, PurchaseLine, PurchaseOrder
+from apps.business.models import BOMLine, Item, PurchaseLine, PurchaseOrder, Stock, StockMove
 from apps.business.services import bom_import
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
@@ -149,3 +151,114 @@ class BOMSelectionTests(BusinessFixtures, TestCase):
         )
         upper.refresh_from_db()
         self.assertEqual(upper.assembly_unit, '')
+
+
+class MultiUnitReceiptAttributionTests(BusinessFixtures, TestCase):
+    """同物料多单元：关联 BOM 行的已收（扣除退货）先归属原行，单行上限计入已收。"""
+
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/revise-bom/',
+            {
+                'expected_revision': self.bom_version(self.project.pk),
+                'lines': [
+                    {'item': self.item.pk, 'quantity': '10', 'assembly_unit': '上料'},
+                    {'item': self.item.pk, 'quantity': '10', 'assembly_unit': '检测'},
+                ],
+            },
+        )
+        self.feed = BOMLine.objects.get(project=self.project, assembly_unit='上料')
+        self.check = BOMLine.objects.get(project=self.project, assembly_unit='检测')
+
+    def demand(self):
+        response = self.clients['purchaser'].get(f'/api/business/projects/{self.project.pk}/demand/')
+        self.assertEqual(response.status_code, 200, response.data)
+        return {row['bom_line']: row for row in response.data['lines']}
+
+    def shortage(self, rows):
+        return {unit: Decimal(rows[line.pk]['shortage']) for unit, line in (('上料', self.feed), ('检测', self.check))}
+
+    def buy(self, bom, qty, *, from_demand=True, status=201):
+        result = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                'project': self.project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'from_demand': from_demand,
+                'lines': [{'item': self.item.pk, 'bom_line': bom.pk, 'quantity': qty, 'unit_price': '5'}],
+            },
+            status=status,
+        )
+        if status != 201:
+            return result
+        purchase = PurchaseOrder.objects.get(pk=result['id'])
+        self.post('purchaser', f'purchases/{purchase.pk}/submit/')
+        self.post('manager', f'purchases/{purchase.pk}/approve/')
+        return purchase
+
+    def receive(self, purchase, qty):
+        self.post(
+            'warehouse',
+            f'purchases/{purchase.pk}/receive/',
+            {'lines': [{'line': purchase.lines.get().pk, 'quantity': qty}], 'reason': '到货'},
+        )
+
+    def test_receive_then_issue_keeps_received_quantity_on_its_bom_line(self):
+        purchase = self.buy(self.check, '10')
+        self.assertEqual(self.shortage(self.demand()), {'上料': Decimal('10'), '检测': Decimal('0')})
+        self.receive(purchase, '10')
+        rows = self.demand()
+        self.assertEqual(self.shortage(rows), {'上料': Decimal('10'), '检测': Decimal('0')})
+        self.assertEqual(Decimal(rows[self.check.pk]['available']), Decimal('10'))
+        # 检测行已收满，再按检测行下单（缺料或手工关联）都被拒绝，不能累计到 20。
+        self.buy(self.check, '1', status=409)
+        self.buy(self.check, '1', from_demand=False, status=409)
+        stock = Stock.objects.get(item=self.item)
+        self.post(
+            'warehouse',
+            'stocks/issue/',
+            {'project': self.project.pk, 'stock': stock.pk, 'quantity': '10', 'reason': '检测单元装配领料'},
+        )
+        rows = self.demand()
+        self.assertEqual(self.shortage(rows), {'上料': Decimal('10'), '检测': Decimal('0')})
+        self.assertEqual(Decimal(rows[self.check.pk]['issued']), Decimal('10'))
+        self.buy(self.check, '1', status=409)
+        self.buy(self.feed, '11', status=409)
+        self.buy(self.feed, '10')
+        self.assertEqual(
+            sum((line.quantity for line in PurchaseLine.objects.filter(bom_line=self.check)), Decimal('0')),
+            Decimal('10'),
+        )
+        self.assertEqual(sum(self.shortage(self.demand()).values()), Decimal('0'))
+
+    def test_purchase_return_releases_line_limit_for_repurchase(self):
+        purchase = self.buy(self.check, '10')
+        self.receive(purchase, '10')
+        receipt = StockMove.objects.get(kind='receipt', purchase_line__purchase=purchase)
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '4', 'reason': '质量退货'})
+        rows = self.demand()
+        self.assertEqual(self.shortage(rows), {'上料': Decimal('10'), '检测': Decimal('4')})
+        self.assertEqual(Decimal(rows[self.check.pk]['available']), Decimal('6'))
+        self.buy(self.check, '5', from_demand=False, status=409)
+        self.buy(self.check, '4')
+        self.assertEqual(self.shortage(self.demand()), {'上料': Decimal('10'), '检测': Decimal('0')})
+
+    def test_legacy_overreceived_line_shares_excess_and_blocks_more_on_that_line(self):
+        purchase = self.buy(self.check, '10')
+        self.receive(purchase, '10')
+        # 按行校验上线前的历史数据：检测行挂了 15 件且已全部到货。
+        PurchaseLine.objects.filter(purchase=purchase).update(quantity=Decimal('15'), received_quantity=Decimal('15'))
+        Stock.objects.filter(item=self.item).update(quantity=Decimal('15'))
+        rows = self.demand()
+        self.assertEqual(self.shortage(rows), {'上料': Decimal('5'), '检测': Decimal('0')})
+        self.assertEqual(Decimal(rows[self.check.pk]['available']), Decimal('10'))
+        self.assertEqual(Decimal(rows[self.feed.pk]['available']), Decimal('5'))
+        conflict = self.buy(self.check, '1', from_demand=False, status=409)
+        self.assertIn('检测', str(conflict['detail']))
+        self.buy(self.feed, '6', status=409)
+        self.buy(self.feed, '5')
