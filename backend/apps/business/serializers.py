@@ -33,6 +33,7 @@ from .models import (
 )
 from .services import payment_terms
 from .services.common import ZERO, rounded
+from .services.execution import stage_cancel_block
 from .services.finance import balance, paid
 
 
@@ -503,8 +504,14 @@ class TaskSerializer(serializers.ModelSerializer):
             and obj.status in {'open', 'done'}
             and obj.kind not in {'install', 'acceptance'}
             and self.can_change_service(obj)
-            and not (obj.kind in {'design', 'assembly', 'test'} and self.shipped(obj))
+            and (obj.kind not in {'design', 'assembly', 'test'} or self.can_cancel_stage(obj))
         )
+
+    def can_cancel_stage(self, obj):
+        # 已发货后只有首批发货后新建、未开工的阶段任务可取消，且由项目经理确认（与 change_task 一致）。
+        if not self.shipped(obj):
+            return True
+        return stage_cancel_block(obj) is None and project_allowed(self.context['request'].user, obj.project, MANAGERS)
 
     def get_can_reopen(self, obj):
         if not (self.get_can_manage(obj) and obj.status in {'done', 'cancelled'} and self.can_change_service(obj)):

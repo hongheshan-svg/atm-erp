@@ -465,3 +465,56 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '经理接手', 'assignee': self.users['manager'].pk})
         task.refresh_from_db()
         self.assertEqual((task.status, task.assignee_id), ('open', self.users['manager'].pk))
+
+    def test_unstarted_stage_task_created_after_first_shipment_can_be_cancelled_by_manager(self):
+        project = self.ready_project(equipment=2)
+        self.stock_and_issue(project)
+        self.deliver(project)
+        original = project.tasks.get(kind='test')
+        mistaken = self.task(project, 'test', '二批调试返工（误建）')
+        flags = {
+            row['id']: row['can_cancel']
+            for row in self.clients['manager'].get('/api/business/tasks/', {'project': project.pk}).data['results']
+        }
+        self.assertEqual((flags[original.pk], flags[mistaken.pk]), (False, True))
+        self.assertTrue(self.clients['manager'].get(f'/api/business/tasks/{mistaken.pk}/').data['can_cancel'])
+        # 首批发货前的阶段任务是已发货批次的依据，仍然不能取消。
+        self.post('manager', f'tasks/{original.pk}/cancel/', {'reason': '不能撤销已发货依据'}, status=409)
+        self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        self.post('manager', f'tasks/{mistaken.pk}/cancel/', {}, status=400)
+        self.post('manager', f'tasks/{mistaken.pk}/cancel/', {'reason': '误建的返工任务'})
+        mistaken.refresh_from_db()
+        self.assertEqual(mistaken.status, 'cancelled')
+        self.assertFalse(mistaken.is_deleted)
+        log = AuditLog.objects.get(operation='task.cancel', resource=f'task:{mistaken.pk}')
+        self.assertEqual(log.detail['reason'], '误建的返工任务')
+        self.assertFalse(self.clients['manager'].get(f'/api/business/tasks/{mistaken.pk}/').data['can_reopen'])
+        self.post('manager', f'tasks/{mistaken.pk}/reopen/', {'reason': '已有交付不能重开'}, status=409)
+        self.deliver(project)
+        self.assertEqual(project.deliveries.count(), 2)
+
+    def test_started_or_done_stage_task_after_first_shipment_stays_locked(self):
+        project = self.ready_project(equipment=2)
+        stock = self.stock_and_issue(project, quantity='2')
+        self.deliver(project)
+        timed = self.task(project, 'assembly', '二批装配')
+        self.time(timed)
+        reversed_time = self.task(project, 'assembly', '二批装配更正')
+        entry = self.time(reversed_time)['id']
+        self.post('member', f'time/{entry}/amend/', {'hours': '0', 'date': TODAY, 'reason': '误记撤销'})
+        picked = self.task(project, 'assembly', '二批领料')
+        self.post(
+            'warehouse',
+            'stocks/issue/',
+            {'project': project.pk, 'stock': stock.pk, 'task': picked.pk, 'quantity': '1', 'reason': '二批领料'},
+        )
+        done = self.task(project, 'design', '二批设计')
+        self.complete(done)
+        listed = self.clients['manager'].get('/api/business/tasks/', {'project': project.pk}).data['results']
+        flags = {row['id']: row['can_cancel'] for row in listed}
+        for task, status in ((timed, 'open'), (reversed_time, 'open'), (picked, 'open'), (done, 'done')):
+            with self.subTest(task=task.title):
+                self.assertFalse(flags[task.pk])
+                denied = self.post('manager', f'tasks/{task.pk}/cancel/', {'reason': '试图取消已开工任务'}, status=409)
+                self.assertIn('工时', str(denied))
+                self.assertEqual(Task.objects.get(pk=task.pk).status, status)

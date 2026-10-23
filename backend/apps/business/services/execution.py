@@ -1,7 +1,7 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Exists, OuterRef, Sum
+from django.db.models import Exists, Min, OuterRef, Subquery, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -19,7 +19,7 @@ from apps.core.permissions import (
     task_management_roles,
 )
 
-from ..models import Delivery, Entry, Task, TimeEntry
+from ..models import Delivery, Entry, StockMove, Task, TimeEntry
 from .bom import issued
 from .common import (
     ZERO,
@@ -50,11 +50,38 @@ def with_task_flags(queryset):
     """
     return queryset.annotate(
         project_shipped=Exists(Delivery.objects.filter(project=OuterRef('project_id'))),
+        project_first_shipped_at=Subquery(
+            Delivery.objects.filter(project=OuterRef('project_id')).order_by('created_at').values('created_at')[:1]
+        ),
+        task_has_time=Exists(TimeEntry.objects.filter(task=OuterRef('pk'))),
+        task_has_moves=Exists(StockMove.objects.filter(task=OuterRef('pk'))),
         project_assembly_done=Exists(
             Task.objects.filter(project=OuterRef('project_id'), kind='assembly', status='done')
         ),
         project_test_done=Exists(Task.objects.filter(project=OuterRef('project_id'), kind='test', status='done')),
     )
+
+
+def stage_cancel_block(task):
+    """已有交付时阶段任务是否还能取消；返回拒绝原因，None 表示可以取消。
+
+    首批发货前已存在的阶段任务是已发货批次的生产依据，已完成或已登记工时、领料的任务是已发生的事实，
+    都必须保留。首批发货后新建且尚未开工的任务（多为误建）取消后不影响任何已发生事实，
+    否则它会让下一批发货永远卡在「请先完成所有阶段任务」。列表行由 with_task_flags 预先注解。
+    """
+    if hasattr(task, 'project_first_shipped_at'):
+        first_shipped_at = task.project_first_shipped_at
+        has_work = task.task_has_time or task.task_has_moves
+    else:
+        first_shipped_at = task.project.deliveries.aggregate(first=Min('created_at'))['first']
+        has_work = task.time_entries.exists() or StockMove.objects.filter(task=task).exists()
+    if first_shipped_at is None:
+        return None
+    if task.created_at <= first_shipped_at:
+        return '已有交付，首批发货前的生产阶段任务是已发货批次的依据，不能取消。'
+    if task.status != 'open' or has_work:
+        return '此阶段任务已完成或已登记工时、领料，属于已开工任务，不能取消；请完成该任务后再安排后续发货。'
+    return None
 
 
 def participant(project, user, key='assignee'):
