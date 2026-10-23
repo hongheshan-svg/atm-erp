@@ -69,6 +69,42 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(BankMatch.objects.count(), 1)
 
+    def test_concurrent_manual_receipt_and_bank_allocation_record_one_payment(self):
+        from apps.business.models import BankMatch
+
+        bank = self.post(
+            'finance',
+            'bank-records/',
+            {
+                'amount': '3000',
+                'date': TODAY,
+                'account': 'A1',
+                'reference': 'R1',
+                'counterparty': '客户',
+                'reason': '实际到账',
+            },
+            status=201,
+        )['id']
+        entry = self.project.entries.get(kind='receivable')
+        manual = {
+            'amount': '3000',
+            'date': TODAY,
+            'method': 'bank',
+            'account': 'A1',
+            'reference': 'R1',
+            'reason': '手工登记到账',
+        }
+        claim = {'entry': entry.pk, 'amount': '3000', 'reason': '认领到账'}
+        results = self.together(
+            [('finance', f'entries/{entry.pk}/pay/', manual), ('finance', f'bank-records/{bank}/allocate/', claim)]
+        )
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(Payment.objects.get(entry=entry).amount, Decimal('3000'))
+        self.assertLessEqual(BankMatch.objects.count(), 1)
+        results = self.together([('finance', f'entries/{entry.pk}/pay/', {**manual, 'amount': '1000'})] * 2)
+        self.assertEqual([status for status, _ in results], [409, 409], results)
+        self.assertEqual(Payment.objects.filter(entry=entry).count(), 1)
+
     def test_concurrent_payments_cannot_overrun_confirmed_limit(self):
         entry = self.purchase(self.project).entry
         statement = self.post(

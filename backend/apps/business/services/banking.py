@@ -225,6 +225,23 @@ def match(actor, key, bank_id, data, *, allocate=False):
             amount = number(data.get('amount'), 'amount', positive=True)
             if amount > remaining(bank):
                 raise Conflict('认领金额超过银行待认领余额。')
+            # Re-checked after the entry and bank locks: a manual record of this same transfer must be
+            # matched, not claimed again. Matched records are already within the bank's remaining amount.
+            registered = (
+                finance.bank_identity_payments(bank.account, bank.reference, incoming=True)
+                .exclude(
+                    pk__in=BankMatch.objects.filter(reversal_of__isnull=True, reversal__isnull=True).values('payment')
+                )
+                .select_related('entry')
+                .order_by('pk')
+                .first()
+            )
+            if registered:
+                raise Conflict(
+                    f'该银行流水已在款项“{registered.entry.title}”手工登记过收付款（流水ID {registered.pk}），'
+                    '请先用“匹配已有收付款”把该笔匹配到此银行记录；匹配后若仍有待认领余额，可继续认领到其他款项。'
+                    '原登记有误请先冲销后再认领。'
+                )
             is_refund = entry.kind != 'receivable'
             inner_key = hashlib.sha256(f'{bank.pk}:{key}'.encode()).hexdigest()
             result = finance.pay(
@@ -241,6 +258,7 @@ def match(actor, key, bank_id, data, *, allocate=False):
                     **({'reconciliation': data['reconciliation']} if data.get('reconciliation') else {}),
                 },
                 refund=is_refund,
+                bank_allocation=True,
             )
             payment = Payment.objects.get(pk=result['id'])
         else:

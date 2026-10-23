@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -49,6 +49,18 @@ def balances(entries):
     return {key: str(rounded(value)) for key, value in totals.items()}
 
 
+def bank_identity_payments(account, reference, *, incoming):
+    """Unreversed payments carrying one bank transaction identity (account + reference) in one cash direction."""
+    received = Q(entry__kind='receivable', amount__gt=0) | (~Q(entry__kind='receivable') & Q(amount__lt=0))
+    return Payment.objects.filter(
+        received if incoming else ~received,
+        account=account,
+        reference=reference,
+        reversal_of__isnull=True,
+        reversal__isnull=True,
+    )
+
+
 def entry_action(actor, key, operation, entry_id, data, execute):
     entry = lookup(Entry, entry_id)
 
@@ -59,7 +71,7 @@ def entry_action(actor, key, operation, entry_id, data, execute):
     return project_action(actor, key, operation, entry.project_id, {'entry': entry.pk, 'data': data}, FINANCE, perform)
 
 
-def pay(actor, key, entry_id, data, *, refund=False):
+def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
     operation = 'entry.refund' if refund else 'entry.pay'
 
     def execute(user, entry):
@@ -68,6 +80,20 @@ def pay(actor, key, entry_id, data, *, refund=False):
         if entry.project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开。')
         amount = number(data.get('amount'), 'amount', positive=True)
+        account = text(data, 'account', default='', maximum=100)
+        reference = text(data, 'reference', default='', maximum=100)
+        # Bank allocation is bounded by the bank record and re-checked there; manual entries are checked
+        # here under the entry lock. Splitting one transfer across different entries stays allowed.
+        incoming = (entry.kind == 'receivable') != refund
+        if (
+            not bank_allocation
+            and reference
+            and bank_identity_payments(account, reference, incoming=incoming).filter(entry=entry).exists()
+        ):
+            raise Conflict(
+                '此款项已登记同账户、同银行流水号的同方向收付款，请核对是否重复登记；'
+                '确为另一笔交易请核对流水号，原登记有误请先冲销。'
+            )
         remaining = balance(entry)
         if refund:
             if remaining >= 0 or amount > -remaining:
@@ -94,8 +120,8 @@ def pay(actor, key, entry_id, data, *, refund=False):
                 date=event_date(data),
                 reason=text(data, 'reason'),
                 method=method,
-                account=text(data, 'account', default='', maximum=100),
-                reference=text(data, 'reference', default='', maximum=100),
+                account=account,
+                reference=reference,
                 document=document,
             ),
             user,

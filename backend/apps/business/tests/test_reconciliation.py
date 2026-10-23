@@ -452,6 +452,118 @@ class ReconciliationTests(BusinessFixtures, TestCase):
         self.assertEqual(banking.remaining(bank), 500)
         self.assertEqual(finance.balance(entry), 10000)
 
+    def bank_with(self, amount, reference, account='A1', project=True):
+        return self.request(
+            'finance',
+            'bank-records/',
+            {
+                'amount': amount,
+                'date': TODAY,
+                'account': account,
+                'reference': reference,
+                'counterparty': '客户银行户名',
+                'reason': '银行实际记录',
+                **({'project': self.project.pk} if project else {}),
+            },
+            201,
+        )['id']
+
+    def bank_pay(self, entry, amount, reference, account='A1', status=200, key=None, **extra):
+        return self.request(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {
+                'amount': amount,
+                'date': TODAY,
+                'reason': '手工登记到账',
+                'method': 'bank',
+                'account': account,
+                'reference': reference,
+                **extra,
+            },
+            status,
+            key,
+        )
+
+    def test_allocation_rejects_bank_transaction_already_registered_manually(self):
+        entry = self.project.entries.get(kind='receivable')
+        payment = self.bank_pay(entry, '3000', 'R1')['id']
+        bank = self.bank_with('3000', 'R1')
+        receipts = ActionReceipt.objects.count()
+        rejected = self.request(
+            'finance', f'bank-records/{bank}/allocate/', {'entry': entry.pk, 'amount': '3000', 'reason': '认领'}, 409
+        )
+        self.assertIn('匹配已有收付款', str(rejected['detail']))
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.assertEqual(Payment.objects.count(), 1)
+        self.assertFalse(BankMatch.objects.exists())
+        self.assertEqual(finance.balance(entry), 7000)
+        duplicate = self.bank_pay(entry, '1000', 'R1', status=409)
+        self.assertIn('重复登记', str(duplicate['detail']))
+        self.assertEqual(Payment.objects.count(), 1)
+        self.request('finance', f'bank-records/{bank}/match/', {'payment': payment, 'reason': '核对银行'})
+        self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(finance.balance(entry), 7000)
+        self.assertEqual(banking.remaining(BankRecord.objects.get(pk=bank)), 0)
+
+    def test_matched_manual_payment_lets_bank_remainder_be_split_to_other_entries(self):
+        entry = self.project.entries.get(kind='receivable')
+        other = self.active_project().entries.get(kind='receivable')
+        bank = self.bank_with('5000', 'R1', project=False)
+        payment = self.bank_pay(entry, '3000', 'R1')['id']
+        claim = {'entry': other.pk, 'amount': '2000', 'reason': '认领剩余'}
+        self.request('finance', f'bank-records/{bank}/allocate/', claim, 409)
+        self.request('finance', f'bank-records/{bank}/match/', {'payment': payment, 'reason': '核对银行'})
+        key = str(uuid.uuid4())
+        first = self.request('finance', f'bank-records/{bank}/allocate/', claim, key=key)
+        self.assertEqual(self.request('finance', f'bank-records/{bank}/allocate/', claim, key=key), first)
+        self.assertEqual(Payment.objects.filter(account='A1', reference='R1').count(), 2)
+        self.assertEqual(BankMatch.objects.count(), 2)
+        self.assertEqual(banking.remaining(BankRecord.objects.get(pk=bank)), 0)
+        self.assertEqual(finance.balance(entry), 7000)
+        self.assertEqual(finance.balance(other), 8000)
+
+    def test_manual_bank_reference_is_unique_per_entry_and_direction_but_may_split(self):
+        entry = self.project.entries.get(kind='receivable')
+        other = self.active_project().entries.get(kind='receivable')
+        key = str(uuid.uuid4())
+        first = self.bank_pay(entry, '3000', 'R1', key=key)
+        self.assertEqual(self.bank_pay(entry, '3000', 'R1', key=key), first)
+        receipts = ActionReceipt.objects.count()
+        rejected = self.bank_pay(entry, '1000', 'R1', status=409)
+        self.assertIn('核对流水号', str(rejected['detail']))
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        self.bank_pay(entry, '1000', 'R2')
+        self.bank_pay(entry, '1000', 'R1', account='A2')
+        self.bank_pay(other, '1000', 'R1')
+        self.pay(entry, '100')
+        self.pay(entry, '100')
+        self.assertEqual(finance.balance(entry), 4800)
+        self.assertEqual(finance.balance(other), 9000)
+        purchase = self.purchase_entry(receive=False)
+        self.bank_pay(purchase, '500', 'R9', **{'reconciliation': self.statement(purchase, kind='prepayment')})
+        self.post('purchaser', f'purchases/{purchase.purchase_id}/cancel-remainder/', {'reason': '停止采购'})
+        purchase.refresh_from_db()
+        statement = self.statement(purchase, kind='refund')
+        refund = {'amount': '100', 'date': TODAY, 'reason': '供应商退回', 'method': 'bank', 'account': 'A1'}
+        self.request(
+            'finance', f'entries/{purchase.pk}/refund/', {**refund, 'reference': 'R9', 'reconciliation': statement}
+        )
+        self.assertEqual(finance.balance(purchase), -400)
+
+    def test_reversed_payment_no_longer_blocks_reregistration_or_allocation(self):
+        entry = self.project.entries.get(kind='receivable')
+        first = self.bank_pay(entry, '3000', 'R1')['id']
+        self.request('finance', f'payments/{first}/reverse/', {'date': TODAY, 'reason': '登记金额有误'})
+        second = self.bank_pay(entry, '3000', 'R1')['id']
+        bank = self.bank_with('3000', 'R1')
+        claim = {'entry': entry.pk, 'amount': '3000', 'reason': '认领'}
+        self.request('finance', f'bank-records/{bank}/allocate/', claim, 409)
+        self.request('finance', f'payments/{second}/reverse/', {'date': TODAY, 'reason': '改为银行认领'})
+        self.request('finance', f'bank-records/{bank}/allocate/', claim)
+        self.assertEqual(finance.balance(entry), 7000)
+        self.assertEqual(banking.remaining(BankRecord.objects.get(pk=bank)), 0)
+
     def test_bank_direction_account_scope_and_permissions(self):
         bank = self.bank('-500')
         entry = self.project.entries.get(kind='receivable')
