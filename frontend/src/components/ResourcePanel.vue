@@ -27,7 +27,8 @@ import { user, operations } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
 import { scopedImportProject } from '../utils/import-context'
-import { resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
+import { isOverdueCell, resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
+import { today } from '../forms'
 import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
 import { buyer, labels } from '../modules/shared'
@@ -148,6 +149,7 @@ function menuGroups(row: Row) {
     .filter(group => group.actions.length)
 }
 const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'due_amount', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
+const day = today()
 function cell(row: Row, key: string) {
   if (!moneyKeys.has(key) || row[key] == null) return display(row[key], key)
   return money(row[key], { refund: key === 'balance' })
@@ -385,7 +387,7 @@ async function inspect(row: Row) {
         :key="col.key"
         :label="pairs[col.key] ? `${col.label} / ${labelOf(pairs[col.key])}` : col.label"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : ['status', 'is_active'].includes(col.key) ? 100 : 125"
+        :min-width="col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : col.key === 'status' && col.format ? 150 : col.key === 'payment_term' ? 150 : ['status', 'is_active'].includes(col.key) ? 100 : 125"
         show-overflow-tooltip
       >
         <template #default="{ row }"
@@ -393,11 +395,12 @@ async function inspect(row: Row) {
             row.name
           }}</router-link
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
-          ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" />
+          ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" :title="col.format?.(row)" :class="{ 'status-wrap': col.format }" />
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
-          <span v-else>{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
+          <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">已逾期</strong></span>
+          <span v-else :title="col.format ? col.format(row) : undefined">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" :width="deletionAllowed ? 220 : 170"

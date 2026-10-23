@@ -788,6 +788,8 @@ button:focus-visible {
 .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
 .resource-search .inline-check input { width: 16px; height: 16px; accent-color: var(--brand); }
 .record-link { border: 0; padding: 0; background: transparent; color: var(--brand); font-weight: 500; text-align: left; cursor: pointer; }
+.overdue-flag { display: block; color: var(--risk); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.el-table .status-badge.status-wrap { white-space: normal; max-width: 100%; line-height: 18px; }
 .record-secondary { display: block; font-size: 12px; color: var(--mute); margin-top: 5px; line-height: 1.5; }
 .role-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .el-table .selected-record > td.el-table__cell { background: var(--brand-wash) !important; }

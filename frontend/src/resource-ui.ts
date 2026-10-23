@@ -14,3 +14,12 @@ export const resourceFilters: Record<string, { key: string; label: string; optio
 }
 export const searchableResources = ['sales', 'projects', 'tasks', 'purchases', 'items', 'partners', 'documents', 'reconciliations', 'bank-records', 'users', 'stocks', 'entries', 'audit']
 export const sidePanelResources = ['sales', 'purchases', 'items', 'partners', 'users', 'company', 'codes', 'audit', 'stocks', 'tasks', 'deliveries', 'entries', 'reconciliations', 'bank-records', 'payments']
+
+// 未完成且早于今天（上海业务日期）的计划日期，与工作台逾期口径一致；只改展示，不改数据。
+export function isOverdueCell(resource: string, key: string, row: Record<string, unknown>, day: string) {
+  const date = String(row[key] || '')
+  if (!date || date >= day) return false
+  if (resource === 'purchases' && key === 'next_delivery_date') return !['received', 'cancelled', 'void'].includes(String(row.status))
+  if (resource === 'tasks' && key === 'due_date') return row.status === 'open'
+  return false
+}
