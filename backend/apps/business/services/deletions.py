@@ -153,6 +153,8 @@ def mode_for(obj, actor):
     if isinstance(obj, models.BOMLine):
         if obj.project.status in ENDED_PROJECT:
             return 'archive'
+        if obj.project.status == 'warranty':
+            raise Conflict('项目已验收，BOM 已锁定，不能删除；如需调整请联系项目经理按变更流程处理。')
         return 'bom'
     if isinstance(obj, models.Project):
         used = references(obj)

@@ -509,6 +509,16 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.remove('deliveries', [waiting.pk, warranty.pk])
         self.assertFalse({waiting.pk, warranty.pk} & self.listed('deliveries'))
 
+    def test_accepted_project_bom_rejection_explains_lock(self):
+        line = BOMLine.objects.create(project=self.project, item=self.item, quantity=2)
+        self.project.status = 'warranty'
+        self.project.save()
+        detail = str(self.remove('bom', [line.pk], status=409))
+        self.assertIn('项目已验收，BOM 已锁定', detail)
+        self.assertIn('变更流程', detail)
+        self.assertNotIn('当前状态不允许', detail)
+        self.assertFalse(AuditLog.objects.filter(operation__in=['record.delete', 'bom.remove']).exists())
+
 
 class DeletionConcurrencyTests(BusinessFixtures, TransactionTestCase):
     def setUp(self):
