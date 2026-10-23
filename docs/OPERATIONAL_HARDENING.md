@@ -27,3 +27,16 @@
 - 90天未动仅为呆滞候选，不推断减值。未来资金只含已有到期事实，不含未签合同或未收货月结的日期预测。
 - `backup_cycle.py` 用于 Docker 的现有主机调度，原生安装按 README 及宿主机规程备份。生产目录、异地挂载、告警接收方式未提供，未安装生产调度或发送告警。
 - 用户明确表示企业项目、人员和生产信息后续提供。模拟数据和自动测试不能替代企业现场签认；待填表见 OPERATIONS_AND_PILOT.md。
+
+## 按错误编号查日志
+
+员工看到“服务器处理失败……错误编号：xxxx（请把编号告诉管理员）”时，管理员用该编号检索同一请求。Nginx 访问日志行尾为 `request_id=编号`，后端日志每行为 `request_id=编号 user_id=用户ID`（未登录或请求外为 `-`），500 时 `ERROR django.request` 行后紧跟异常堆栈。日志不记录 Authorization、Cookie、请求体或密码。
+
+```bash
+# Docker（Nginx 与后端日志都在 app 容器输出中；旧 .env.lean 部署加 --env-file .env.lean）
+docker compose logs --no-log-prefix app | grep -A 40 '编号'
+# 原生安装（DATA_DIR 默认安装目录下 .native）
+grep -A 40 '编号' "$DATA_DIR/logs/daphne.log"; grep '编号' "$DATA_DIR/logs/nginx-access.log"
+```
+
+编号由 Nginx 生成并经 `X-Request-ID` 传给后端，响应头同样回写；请求自带安全格式（字母数字 `.` `_` `-`，不超过 64 位）的编号时沿用，否则重新生成。编号用于定位而非鉴权，客户端可自带编号，核对时结合时间与 user_id 判断。
