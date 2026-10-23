@@ -125,7 +125,8 @@ watch(() => props.command, async (value, old) => {
     if (!old) returnFocus = document.activeElement as HTMLElement
     await nextTick()
     const panel = panelHeading.value?.parentElement?.parentElement
-    if (panel && panel.getBoundingClientRect().top > window.innerHeight - 360) panel.scrollIntoView({ block: 'start' })
+    // 手机端详情面板从视口顶部展开，内部滚动区才有足够高度，首条记录不会被底部操作栏压住。
+    if (panel && (window.innerWidth <= 760 || panel.getBoundingClientRect().top > window.innerHeight - 360)) panel.scrollIntoView({ block: 'start' })
     fitPanel()
     panelHeading.value?.focus({ preventScroll: true })
   } else if (returnFocus?.isConnected) returnFocus.focus()
