@@ -12,6 +12,9 @@ core.register('company', CompanyView)
 core.register('codes', CodeView)
 core.register('audit', AuditView)
 
+# 未捕获异常返回中文 JSON 与请求编号，而不是 Django 的英文 HTML 错误页。
+handler500 = 'apps.core.request_id.server_error'
+
 urlpatterns = [
     path('api/core/setup/', SetupView.as_view()),
     path('api/core/upgrade/', UpgradeView.as_view()),

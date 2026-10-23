@@ -461,3 +461,125 @@ class InitializationTests(TestCase):
         self.assertEqual(CodeRule.objects.get(key='reconciliation').prefix, 'DZ')
         self.assertEqual(CodeRule.objects.get(key='project').counter, 1)
         self.assertEqual(AuditLog.objects.count(), 1)
+
+
+class RequestIDTests(TestCase):
+    """员工报出错误编号后，管理员要能在日志里找到同一请求、操作人和异常堆栈。"""
+
+    def setUp(self):
+        import logging
+
+        from rest_framework.test import APIClient
+
+        self.client = APIClient()
+        self.client.raise_request_exception = False
+        # 断言实际部署的 LOGGING 配置（格式与过滤器都挂在 stderr 处理器上），不替换成测试专用处理器。
+        handler = logging.getLogger('django.request').handlers[0]
+        self.log = io.StringIO()
+        previous = handler.setStream(self.log)
+        self.addCleanup(handler.setStream, previous)
+
+    def test_safe_inbound_id_is_echoed_and_missing_id_is_generated(self):
+        response = self.client.get('/api/health/', HTTP_X_REQUEST_ID='nginx-0f3a_9.B')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['X-Request-ID'], 'nginx-0f3a_9.B')
+        first = self.client.get('/api/health/')['X-Request-ID']
+        second = self.client.get('/api/health/')['X-Request-ID']
+        self.assertRegex(first, r'^[0-9a-f]{32}$')
+        self.assertNotEqual(first, second)
+        # 4xx 不改文案，但同样回写编号，方便按编号核对。
+        denied = self.client.get('/api/auth/me/', HTTP_X_REQUEST_ID='a' * 64)
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(denied['X-Request-ID'], 'a' * 64)
+        self.assertEqual(denied.json(), {'detail': '身份认证信息未提供。'})
+
+    def test_unsafe_inbound_ids_are_replaced(self):
+        for value in ['', 'a' * 65, 'bad id', 'x\nforged log line', '<script>', 'id;rm', '编号']:
+            with self.subTest(value=value):
+                response = self.client.get('/api/health/', HTTP_X_REQUEST_ID=value)
+                self.assertRegex(response['X-Request-ID'], r'^[0-9a-f]{32}$')
+
+    def test_server_error_reports_same_id_in_body_header_and_log_without_credentials(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        user = User.objects.create_user(username='request-id-user', password='Request-Id-Old-Pass-731', role='member')
+        token = str(AccessToken.for_user(user))
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.cookies['sessionid'] = 'cookie-secret-value-882'
+        body = {'old_password': 'Request-Id-Old-Pass-731', 'new_password': 'Request-Id-New-Pass-492'}
+        with patch.object(User, 'check_password', side_effect=RuntimeError('request-id-probe')):
+            response = self.client.post('/api/auth/password/', body, format='json', HTTP_X_REQUEST_ID='probe-500-id')
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertEqual(
+            response.json(), {'detail': '服务器处理失败，请稍后重试或联系管理员。', 'request_id': 'probe-500-id'}
+        )
+        self.assertEqual(response['X-Request-ID'], 'probe-500-id')
+        output = self.log.getvalue()
+        line = next(text for text in output.splitlines() if 'ERROR django.request' in text)
+        self.assertIn('request_id=probe-500-id', line)
+        self.assertIn(f'user_id={user.pk}', line)
+        self.assertIn('Traceback', output)
+        self.assertIn('RuntimeError: request-id-probe', output)
+        for secret in (
+            token,
+            'Bearer',
+            'cookie-secret-value-882',
+            'Request-Id-Old-Pass-731',
+            'Request-Id-New-Pass-492',
+        ):
+            self.assertNotIn(secret, output)
+
+    def test_anonymous_server_error_logs_placeholder_user(self):
+        with patch('apps.core.views.Response', side_effect=RuntimeError('health-probe')):
+            response = self.client.get('/api/health/')
+        self.assertEqual(response.status_code, 500)
+        request_id = response.json()['request_id']
+        self.assertEqual(response['X-Request-ID'], request_id)
+        line = next(text for text in self.log.getvalue().splitlines() if 'ERROR django.request' in text)
+        self.assertIn(f'request_id={request_id} user_id=-', line)
+
+    async def test_asgi_path_carries_id_into_view_logs_and_server_error(self):
+        # 正式部署走 Daphne（ASGI），视图内的业务日志靠上下文变量取得编号。
+        import logging
+
+        from django.test import AsyncClient
+        from rest_framework.response import Response
+
+        def logged(*args, **kwargs):
+            logging.getLogger('apps.core.views').info('inside-view')
+            return Response(*args, **kwargs)
+
+        client = AsyncClient(raise_request_exception=False)
+        with patch('apps.core.views.Response', side_effect=logged):
+            ok = await client.get('/api/health/', headers={'X-Request-ID': 'asgi-ok'})
+        self.assertEqual(ok['X-Request-ID'], 'asgi-ok')
+        self.assertIn('request_id=asgi-ok user_id=-: inside-view', self.log.getvalue())
+        with patch('apps.core.views.Response', side_effect=RuntimeError('asgi-probe')):
+            failed = await client.get('/api/health/', headers={'X-Request-ID': 'asgi-500'})
+        self.assertEqual(failed.status_code, 500)
+        self.assertEqual(failed.json()['request_id'], 'asgi-500')
+        self.assertEqual(failed['X-Request-ID'], 'asgi-500')
+        self.assertIn('request_id=asgi-500 user_id=-: Internal Server Error', self.log.getvalue())
+        logging.getLogger('apps.core.views').info('after-request')
+        self.assertIn('request_id=- user_id=-: after-request', self.log.getvalue())
+
+    def test_framework_server_error_keeps_message_and_adds_request_id(self):
+        from rest_framework.exceptions import APIException
+        from rest_framework.test import APIRequestFactory
+        from rest_framework.views import APIView
+
+        class BrokenView(APIView):
+            authentication_classes = permission_classes = throttle_classes = []
+
+            def get(self, request):
+                raise APIException('上游服务处理失败。')
+
+        request = APIRequestFactory().get('/')
+        request.request_id = 'drf-5xx-id'
+        with self.assertLogs('apps.core.api', level='ERROR') as logs:
+            response = BrokenView.as_view()(request)
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.data['detail'], '上游服务处理失败。')
+        self.assertEqual(response.data['request_id'], 'drf-5xx-id')
+        self.assertIsNotNone(logs.records[0].exc_info)

@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     'apps.business',
 ]
 MIDDLEWARE = [
+    # 最外层：所有响应（含其他中间件生成的）都回写 X-Request-ID，日志在整个请求内可取到编号。
+    'apps.core.request_id.RequestIDMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -101,6 +103,7 @@ SIMPLE_JWT = {
     'UPDATE_LAST_LOGIN': False,
 }
 CORS_ALLOWED_ORIGINS = [v.strip() for v in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if v.strip()]
+CORS_EXPOSE_HEADERS = ['X-Request-ID']
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True
@@ -115,11 +118,18 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 # Django 默认只把请求异常发给 ADMINS 邮件，没配邮件就等于丢弃 traceback。
 # 容器里 supervisord 收集 stderr，写到这里 docker logs 就能看到，不引入外部依赖。
+# 每行带请求编号与已登录用户 ID（请求外或未登录为 -），员工报出的错误编号可直接 grep。
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'formatters': {'plain': {'format': '[{asctime}] {levelname} {name}: {message}', 'style': '{'}},
-    'handlers': {'stderr': {'class': 'logging.StreamHandler', 'formatter': 'plain'}},
+    'filters': {'request': {'()': 'apps.core.request_id.RequestContextFilter'}},
+    'formatters': {
+        'plain': {
+            'format': '[{asctime}] {levelname} {name} request_id={request_id} user_id={user_id}: {message}',
+            'style': '{',
+        }
+    },
+    'handlers': {'stderr': {'class': 'logging.StreamHandler', 'formatter': 'plain', 'filters': ['request']}},
     'loggers': {
         'django': {'handlers': ['stderr'], 'level': 'INFO', 'propagate': False},
         'django.request': {'handlers': ['stderr'], 'level': 'ERROR', 'propagate': False},
