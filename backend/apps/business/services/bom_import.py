@@ -1,7 +1,10 @@
 import csv
 import io
+import lzma
 import re
+import struct
 import zipfile
+import zlib
 from datetime import date, datetime
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
@@ -17,7 +20,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.error_messages import chinese_error
 
 from ..models import BOMLine, Item, PurchaseLine
-from .bom import incoming, issued, revision
+from .bom import revision, total_shortfalls
 from .common import day, number, state
 from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
@@ -48,10 +51,16 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
             result = read_xlsx(content, max(len(headers), len(BOM_COLUMNS)))
         else:
             raise ValidationError({'file': '仅支持 UTF-8 CSV 或 XLSX。'})
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise ValidationError({'file': '文件损坏、编码不正确或不是受支持的表格。'}) from exc
     except (
-        UnicodeDecodeError,
-        csv.Error,
+        # XLSX 是 ZIP 包：部件压缩数据损坏、截断或加密时，解包会抛出这些底层异常。
         zipfile.BadZipFile,
+        zipfile.LargeZipFile,
+        zlib.error,
+        lzma.LZMAError,
+        struct.error,
+        EOFError,
         KeyError,
         ValueError,
         DefusedXmlException,
@@ -62,9 +71,10 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
         RuntimeError,
         NotImplementedError,
         OSError,
-        EOFError,
     ) as exc:
-        raise ValidationError({'file': '文件损坏、编码不正确或不是受支持的表格。'}) from exc
+        raise ValidationError(
+            {'file': '表格损坏、加密或格式不支持，请用 Excel 重新另存为 XLSX（不设密码）或下载模板后重新导入。'}
+        ) from exc
     if not result:
         raise ValidationError({'file': '表格不能为空。'})
     header = [str(value).strip() if value is not None else '' for value in result[0]]
@@ -243,17 +253,17 @@ def preview(project, upload):
             errors.append({'row': row_number, 'message': message(exc.detail)})
     if not lines and not errors:
         errors.append({'row': 2, 'message': '文件没有可导入的明细。'})
-    proposed = {key: line.quantity for key, line in current.items()}
-    proposed.update({(line['item'], line['assembly_unit']): number(line['quantity'], 'quantity', 3) for line in lines})
-    for item_id in {line['item'] for line in lines}:
-        total = sum(qty for (pk, unit), qty in proposed.items() if pk == item_id)
-        if total < issued(project, item_id) + incoming(project, item_id):
-            errors.append(
-                {
-                    'row': next(line['row'] for line in lines if line['item'] == item_id),
-                    'message': '物料各单元总量不能小于已领用和在途采购数量。',
-                }
-            )
+    updates = [
+        (current.get((line['item'], line['assembly_unit'])), line['item'], number(line['quantity'], 'quantity', 3))
+        for line in lines
+    ]
+    for problem in total_shortfalls(project, existing, updates):
+        errors.append(
+            {
+                'row': next(line['row'] for line in lines if line['item'] == problem['item']),
+                'message': problem['message'],
+            }
+        )
     return {
         'expected_revision': expected_revision,
         'lines': lines,

@@ -310,6 +310,8 @@ def resolve_person(value):
     explicit = re.fullmatch(r'(.+?)[（(]([^（）()]+)[）)]', value)
     if explicit:
         name, username = (part.strip() for part in explicit.groups())
+        # 列表与导出对重名人员显示“姓名（账号：xxx）”，原样导回时去掉“账号：”前缀。
+        username = re.sub(r'^账号\s*[:：]\s*', '', username)
         obj = User.objects.filter(username=username).first()
         candidates = [obj] if obj and (obj.display_name or obj.username) == name else []
     else:
@@ -337,6 +339,15 @@ def resolve(model, value, field='code'):
     return obj.pk
 
 
+def located(field, call, *args):
+    """Run a person lookup and tag its error with the template column, keeping the message text unchanged."""
+    try:
+        return call(*args)
+    except ValidationError as exc:
+        exc.import_field = field
+        raise
+
+
 def payload(raw, people=None):
     data = {key: value for key, value in raw.items() if value != ''}
     for field in ['item', 'customer', 'supplier', 'project']:
@@ -346,9 +357,11 @@ def payload(raw, people=None):
             )
     for field in ['manager', 'assignee', 'user', 'installer', 'acceptor']:
         if field in data:
-            data[field] = resolve(User, data[field], 'username')
+            data[field] = located(field, resolve, User, data[field], 'username')
     if 'members' in data:
-        data['members'] = [resolve_person(value) for value in re.split('[;；]', data['members']) if value.strip()]
+        data['members'] = located(
+            'members', lambda: [resolve_person(value) for value in re.split('[;；]', data['members']) if value.strip()]
+        )
     if people is not None:
         resolved = {key: data[key] for key in PERSON_LABELS if key in data}
         if people and people != resolved:
@@ -518,6 +531,9 @@ def run(actor, resource, records, *, preview=False):
                 )
                 labels = {key: label for label, key in schema(actor, resource)}
                 fields = [key for key in detail if key in labels] if isinstance(detail, dict) else []
+                tagged = getattr(exc, 'import_field', None)
+                if not fields and tagged in labels:
+                    fields = [tagged]
                 errors.append({'row': record['row'], 'message': message(detail, labels), 'fields': fields})
                 if not preview:
                     locate(errors, schema(actor, resource))

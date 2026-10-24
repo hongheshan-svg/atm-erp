@@ -2,9 +2,11 @@ import uuid
 from datetime import date
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
-from apps.business.models import Entry, PurchaseOrder, Reconciliation, StockMove
+from apps.business.models import Entry, Payment, PurchaseOrder, Reconciliation, StockMove
 from apps.business.services import payment_terms, reports
 
 from .test_commercial_chain import TODAY, BusinessFixtures
@@ -220,3 +222,56 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         expense_entry = Entry.objects.get(pk=expense['id'])
         self.assertIsNone(self.detail(expense_entry)['agreed_payment_date'])
         self.assertEqual(str(self.detail(expense_entry)['due_date']), TODAY)
+
+    def prepaid_case(self, price='100.00'):
+        purchase = self.purchase(self.project, qty='10.000', price=price)
+        self.receive(purchase, '5', str(TODAY))
+        entry = Entry.objects.get(purchase=purchase)
+        statement = self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': 'settlement',
+                'counterparty_balance': '1000.00',
+                'approved_amount': '500.00',
+                'reason': '收货对账',
+            },
+            status=201,
+        )
+        self.post('finance', f'reconciliations/{statement["id"]}/confirm/', {'reason': '确认'})
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '500.00', 'date': str(TODAY), 'reason': '付已收货', 'reconciliation': statement['id']},
+        )
+        return purchase, entry
+
+    def test_return_after_payment_flags_prepaid_excess_without_changing_amounts(self):
+        purchase, entry = self.prepaid_case()
+        before = self.detail(entry)
+        self.assertIsNone(before['prepaid_excess'])
+        receipt = StockMove.objects.get(purchase_line__purchase=purchase, kind='receipt')
+        self.post('warehouse', f'moves/{receipt.pk}/return-purchase/', {'quantity': '2', 'reason': '不良退货'})
+        row = self.detail(entry)
+        self.assertEqual(row['prepaid_excess'], '200.00')
+        self.assertEqual(row['balance'], '300.00')
+        self.assertEqual(row['due_amount'], '0.00')
+        self.assertEqual(row['paid_amount'], '500.00')
+        listed = next(
+            r for r in self.clients['finance'].get('/api/business/entries/').data['results'] if r['id'] == entry.pk
+        )
+        self.assertEqual(listed['prepaid_excess'], '200.00')
+
+    def test_prepaid_excess_query_count_does_not_grow_with_rows(self):
+        def queries(extra):
+            for _ in range(extra):
+                other = self.purchase(self.project, qty='2.000')
+                Payment.objects.create(entry=other.entry, amount=50, date=TODAY)
+            with CaptureQueriesContext(connection) as captured:
+                response = self.clients['finance'].get('/api/business/entries/?page_size=100')
+            self.assertEqual(response.status_code, 200, response.data)
+            return len(captured)
+
+        first = queries(1)
+        self.assertEqual(first, queries(4))

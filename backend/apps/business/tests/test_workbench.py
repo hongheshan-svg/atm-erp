@@ -87,3 +87,104 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         result = self.get('finance')['settlements']
         self.assertEqual(result['count'], 1)
         self.assertEqual(result['results'][0]['balance'], '-50.00')
+
+    def test_sales_bucket_hides_closed_cancelled_and_removed_orders(self):
+        from apps.business.models import SalesOrder
+        from apps.core.models import AuditLog
+
+        live = SalesOrder.objects.get(project=self.project)
+        SalesOrder.objects.filter(pk=live.pk).update(manager=self.users['sales_manager'])
+        closed_project = Project.objects.create(
+            code='CLOSED', name='已结项', customer=self.customer, manager=self.users['manager'], status='closed'
+        )
+        cancelled_project = Project.objects.create(
+            code='CANC', name='已取消', customer=self.customer, manager=self.users['manager'], status='cancelled'
+        )
+        closed = SalesOrder.objects.create(
+            code='SO-C',
+            name='结项单',
+            customer=self.customer,
+            project=closed_project,
+            manager=self.users['sales_manager'],
+        )
+        cancelled = SalesOrder.objects.create(
+            code='SO-X',
+            name='取消项目单',
+            customer=self.customer,
+            project=cancelled_project,
+            manager=self.users['sales_manager'],
+        )
+        removed = SalesOrder.objects.create(
+            code='SO-R', name='已删除单', customer=self.customer, manager=self.users['sales_manager']
+        )
+        AuditLog.objects.create(
+            actor=self.users['admin'], operation='record.delete', resource=f'salesorder:{removed.pk}', detail={}
+        )
+        open_quote = SalesOrder.objects.create(
+            code='SO-Q', name='报价中', customer=self.customer, manager=self.users['sales_manager']
+        )
+        sales = self.get('sales_manager')['sales']
+        ids = {row['id'] for row in sales['results']}
+        self.assertIn(live.pk, ids)
+        self.assertIn(open_quote.pk, ids)
+        self.assertFalse(ids & {closed.pk, cancelled.pk, removed.pk})
+        self.assertEqual(sales['count'], 2)
+
+    def own_submitted_purchase(self, creator, submitter=None):
+        from apps.core.models import AuditLog
+
+        purchase = PurchaseOrder.objects.create(
+            code=f'PO-{creator.username}',
+            project=self.project,
+            supplier=self.supplier,
+            due_date=timezone.localdate(),
+            status='submitted',
+            created_by=creator,
+        )
+        AuditLog.objects.create(
+            actor=submitter or creator, operation='purchase.submit', resource=f'purchaseorder:{purchase.pk}', detail={}
+        )
+        return purchase
+
+    def test_approvals_exclude_own_requests_but_admin_sees_flagged_exception(self):
+        from apps.core.models import AuditLog
+
+        mine = self.own_submitted_purchase(self.users['manager'])
+        by_purchaser = self.own_submitted_purchase(self.users['purchaser'])
+        # 创建人是别人，但最近一次提交人是经理：经理同样不能审批。
+        resubmitted = self.own_submitted_purchase(self.users['finance'], submitter=self.users['manager'])
+        approvals = self.get('manager')['approvals']
+        ids = {row['id'] for row in approvals['results']}
+        self.assertEqual(ids, {by_purchaser.pk})
+        self.assertEqual(approvals['count'], 1)
+        self.post('manager', f'purchases/{by_purchaser.pk}/approve/')
+        rows = {row['id']: row for row in self.get('admin')['approvals']['results']}
+        self.assertEqual(set(rows), {mine.pk, resubmitted.pk})
+        self.assertTrue(all(row['self_requested'] is False for row in rows.values()))
+        AuditLog.objects.create(
+            actor=self.users['admin'], operation='purchase.submit', resource=f'purchaseorder:{mine.pk}', detail={}
+        )
+        rows = {row['id']: row for row in self.get('admin')['approvals']['results']}
+        self.assertTrue(rows[mine.pk]['self_requested'])
+        self.assertFalse(rows[resubmitted.pk]['self_requested'])
+
+    def test_prepayments_exclude_own_applications(self):
+        from apps.business.models import Reconciliation
+
+        entry = self.purchase(self.project).entry
+        statement = self.post(
+            'finance',
+            'reconciliations/',
+            {
+                'entry': entry.pk,
+                'kind': 'prepayment',
+                'counterparty_balance': '500',
+                'approved_amount': '100',
+                'basis': '合同预付20%',
+                'reason': '预付核准',
+            },
+            status=201,
+        )['id']
+        self.assertEqual(self.get('manager')['prepayments']['count'], 1)
+        Reconciliation.objects.filter(pk=statement).update(created_by=self.users['manager'])
+        self.assertNotIn('prepayments', self.get('manager'))

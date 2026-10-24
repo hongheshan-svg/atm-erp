@@ -70,6 +70,7 @@ export function actionNames(resource: string, r: Row): string[] {
   }
   return a
 }
+const sharedArrival: Field = { key: 'confirm_shared', label: '确认占用其他项目到货', type: 'boolean', initial: false, optional: true }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
@@ -98,14 +99,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       },
       warehouseLines('issue', lines),
       reason,
-      {
-        key: 'confirm_shared',
-        label: '确认占用其他项目到货',
-        type: 'boolean',
-        initial: false,
-        optional: true,
-        hint: '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。',
-      },
+      { ...sharedArrival, hint: '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。' },
     ]
     prepare = ({ lines, ...data }) => ({ ...data, stock: r.id, quantity: lines[0].quantity, ...(lines[0].remark ? { remark: lines[0].remark } : {}) })
   }
@@ -122,6 +116,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       expected_updated_at: r.updated_at,
     })
   }
-  if (['退料', '采购退货'].includes(name)) fields = [positiveQuantity, reason]
+  if (name === '退料') fields = [positiveQuantity, reason]
+  if (name === '采购退货') fields = [positiveQuantity, reason, { ...sharedArrival, hint: '库存不按项目预留。系统提示本次退货会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。' }]
   return { title: name, path, fields, initial, method, readonly, prepare }
 }

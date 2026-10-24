@@ -2,13 +2,13 @@ import hashlib
 import re
 from decimal import Decimal
 
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
 from apps.core.permissions import BOM_WRITERS, require_project
 
-from ..models import BOMLine, PurchaseLine, Stock, StockMove
+from ..models import BOMLine, Item, PurchaseLine, Stock, StockMove
 from .common import (
     ZERO,
     audit,
@@ -47,10 +47,18 @@ def linked_incoming(bom_line, *, exclude_line=None):
 
 
 def check_line_limit(bom_line, quantity, *, exclude_line=None):
-    """多单元同物料时，采购必须落到实际需要它的那一行，不能借用其他单元的用量。"""
-    if quantity > bom_line.quantity - linked_incoming(bom_line, exclude_line=exclude_line):
+    """多单元同物料时，采购必须落到实际需要它的那一行，不能借用其他单元的用量。
+
+    该行已占用 = 关联未收在途 + 关联已收（扣除已退货、仍计入本项目已领或库存的部分），与缺料表同一口径。
+    """
+    _, plan = allocation(bom_line.project_id, item_id=bom_line.item_id, exclude_line=exclude_line)
+    entry = plan.get(bom_line.pk, {'linked': ZERO, 'received': ZERO})
+    pending, received = entry['linked'], entry['received']
+    remaining = bom_line.quantity - pending - received
+    if quantity > remaining:
         raise Conflict(
-            f'采购数量超过该 BOM 行（{bom_line.assembly_unit or "未分单元"}）的剩余需求；'
+            f'采购数量超过该 BOM 行（{bom_line.assembly_unit or "未分单元"}）的剩余需求：用量 {bom_line.quantity}，'
+            f'已收 {received}、在途 {pending}，最多还可采购 {max(ZERO, remaining)}；'
             '其他单元的用量请分别挂到对应 BOM 行。'
         )
 
@@ -62,6 +70,38 @@ def issued(project, item_id):
         .aggregate(total=Sum('quantity'))['total']
         or ZERO
     )
+
+
+def total_shortfalls(project, existing, updates):
+    """本次实际改动数量的物料，各单元合计不得低于已领用与在途；BOM 修订、修订预览和导入预览共用。
+
+    existing 为当前 BOM 行，updates 为 [(原 BOM 行或 None, 物料, 新数量)]。只核对数量有变化或新增的物料，
+    其他物料即使历史上已超量也不连带拒绝；返回 [{'item', 'message'}]。
+    """
+    totals = {}
+    for line in existing:
+        totals[line.item_id] = totals.get(line.item_id, ZERO) + line.quantity
+    changed = set()
+    for current, item_id, qty in updates:
+        totals[item_id] = totals.get(item_id, ZERO) + qty - (current.quantity if current else ZERO)
+        if current is None or qty != current.quantity:
+            changed.add(item_id)
+    shortfalls = []
+    for item_id in sorted(changed):
+        used, pending = issued(project, item_id) + ZERO, incoming(project, item_id) + ZERO
+        if totals[item_id] < used + pending:
+            shortfalls.append((item_id, used, pending))
+    names = Item.objects.in_bulk([item_id for item_id, _, _ in shortfalls]) if shortfalls else {}
+    return [
+        {
+            'item': item_id,
+            'minimum': used + pending,
+            'message': f'物料 {names[item_id].code} {names[item_id].name} 的各单元需求数量合计 {totals[item_id]} '
+            f'小于已领用 {used} 与在途采购 {pending} 之和，最低可改为 {used + pending}；'
+            '请先取消采购余量或退回未用材料后再减少。',
+        }
+        for item_id, used, pending in shortfalls
+    ]
 
 
 def revision(project):
@@ -147,49 +187,95 @@ def claimed_by_others(project, item_id):
     return result
 
 
-def demand(project):
-    result = []
-    lines = list(BOMLine.objects.filter(project=project).select_related('item').order_by('item_id', 'pk'))
+def allocation(project, *, item_id=None, exclude_line=None):
+    """把本项目已领、在途和共享库存分摊到 BOM 行，只用于展示缺口和单行采购上限，不是第二本账。
+
+    每种物料先按原规则算出已领、共享在途和库存可计入的总量，再分到各行：关联本行的未收采购计入本行在途
+    （超出行用量的转为共享），关联本行的已收采购（扣除已退货）先归属本行，其余按行顺序分摊。
+    """
+    lines = BOMLine.objects.filter(project=project).select_related('item').order_by('item_id', 'pk')
+    if item_id is not None:
+        lines = lines.filter(item_id=item_id)
+    lines = list(lines)
     item_ids = {line.item_id for line in lines}
-    competing = competing_demand(project, item_ids)
-    remaining_used = {pk: ZERO for pk in item_ids}
-    remaining_stock = {pk: ZERO for pk in item_ids}
-    remaining_incoming = {pk: ZERO for pk in item_ids}
-    line_incoming = {}
     line_ids = {line.pk for line in lines}
+    used_pool = {pk: ZERO for pk in item_ids}
+    stock_pool = {pk: ZERO for pk in item_ids}
+    shared_pool = {pk: ZERO for pk in item_ids}
+    line_incoming, line_received = {}, {}
     for row in (
         StockMove.objects.filter(project=project, stock__item_id__in=item_ids, kind__in=['issue', 'return'])
         .exclude(task__kind='service')
         .values('stock__item_id')
         .annotate(total=Sum('quantity'))
     ):
-        remaining_used[row['stock__item_id']] = -row['total']
+        used_pool[row['stock__item_id']] = -row['total']
     for row in Stock.objects.filter(item_id__in=item_ids).values('item_id').annotate(total=Sum('quantity')):
-        remaining_stock[row['item_id']] = row['total']
-    for row in (
-        PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id__in=item_ids)
-        .exclude(purchase__status='cancelled')
-        .values('item_id', 'bom_line_id')
-        .annotate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))
+        stock_pool[row['item_id']] = row['total']
+    purchases = PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id__in=item_ids)
+    if exclude_line is not None:
+        purchases = purchases.exclude(pk=exclude_line)
+    for row in purchases.values('item_id', 'bom_line_id').annotate(
+        pending=Sum(
+            F('quantity') - F('received_quantity') - F('cancelled_quantity'), filter=~Q(purchase__status='cancelled')
+        ),
+        received=Sum(F('received_quantity') - F('returned_quantity')),
     ):
+        pending = row['pending'] or ZERO
         if row['bom_line_id'] in line_ids:
-            line_incoming[row['bom_line_id']] = row['total']
+            line_incoming[row['bom_line_id']] = pending
+            line_received[row['bom_line_id']] = row['received'] or ZERO
         else:
-            remaining_incoming[row['item_id']] += row['total']
+            shared_pool[row['item_id']] += pending
+    plan, rooms = {}, {pk: ZERO for pk in item_ids}
     for line in lines:
         # 按行校验之前的历史采购可能在某一行上挂超；多出的在途仍是同一物料，交给其他单元共享。
-        excess = line_incoming.get(line.pk, ZERO) - line.quantity
-        if excess > ZERO:
-            remaining_incoming[line.item_id] += excess
+        linked = line_incoming.get(line.pk, ZERO)
+        assigned = min(line.quantity, linked)
+        shared_pool[line.item_id] += max(ZERO, linked - assigned)
+        rooms[line.item_id] += line.quantity - assigned
+        plan[line.pk] = {
+            'linked': linked,
+            'assigned': assigned,
+            'used': ZERO,
+            'shared': ZERO,
+            'available': ZERO,
+            'received': ZERO,
+        }
+    budgets = {}
+    for pk in item_ids:
+        used = min(max(ZERO, used_pool[pk]), rooms[pk])
+        shared = min(max(ZERO, shared_pool[pk]), rooms[pk] - used)
+        budgets[pk] = {'used': used, 'shared': shared, 'available': min(stock_pool[pk], rooms[pk] - used - shared)}
+
+    def take(line, keys, want):
+        entry, budget = plan[line.pk], budgets[line.item_id]
+        taken = ZERO
+        for key in keys:
+            amount = min(want - taken, budget[key])
+            budget[key] -= amount
+            entry[key] += amount
+            taken += amount
+        return taken
+
     for line in lines:
-        assigned = min(line.quantity, line_incoming.get(line.pk, ZERO))
-        used = min(line.quantity - assigned, remaining_used[line.item_id])
-        remaining_used[line.item_id] -= used
-        shared = min(line.quantity - used - assigned, remaining_incoming[line.item_id])
-        ordered = assigned + shared
-        remaining_incoming[line.item_id] -= shared
-        available = min(line.quantity - used - ordered, remaining_stock[line.item_id])
-        remaining_stock[line.item_id] -= available
+        # 关联本行的到货先归属本行：已领走的计入已领，仍在库的计入库存；到货被挪用后不再计入。
+        want = min(line.quantity - plan[line.pk]['assigned'], max(ZERO, line_received.get(line.pk, ZERO)))
+        plan[line.pk]['received'] = take(line, ('used', 'available'), want)
+    for line in lines:
+        entry = plan[line.pk]
+        left = line.quantity - entry['assigned'] - entry['used'] - entry['available']
+        take(line, ('used', 'shared', 'available'), left)
+    return lines, plan
+
+
+def demand(project):
+    result = []
+    lines, plan = allocation(project)
+    competing = competing_demand(project, {line.item_id for line in lines})
+    for line in lines:
+        entry = plan[line.pk]
+        used, ordered, available = entry['used'], entry['assigned'] + entry['shared'], entry['available']
         needed = max(ZERO, line.quantity - used)
         result.append(
             {
@@ -308,7 +394,7 @@ def impact(project):
         'purchases': list(
             project.purchases.exclude(status__in=['received', 'cancelled']).values('id', 'code', 'status')
         ),
-        'note': '减少总量前先取消采购余量、处理隔离到货和退回未用材料；替换型号请新增物料行。已交付所需材料不能退回。单元的已领、在途和库存为按行顺序分摊显示，不代表单元专属库存。',
+        'note': '减少总量前先取消采购余量、处理隔离到货和退回未用材料；替换型号请新增物料行。已交付所需材料不能退回。单元的已领、在途和库存优先计入关联该行的采购（已收扣除退货），其余按行顺序分摊显示，不代表单元专属库存。',
     }
 
 
@@ -355,9 +441,6 @@ def revise_bom(actor, key, project_id, data):
                 raise ValidationError('同一物料在同一单元只能出现一次。')
             planned[line_key] = row
         items = lock_items({item_id for item_id, unit in planned})
-        totals = {}
-        for line in existing:
-            totals[line.item_id] = totals.get(line.item_id, ZERO) + line.quantity
         prepared = []
         seen_ids = set()
         for index, ((item_id, unit), row) in enumerate(planned.items()):
@@ -388,11 +471,12 @@ def revise_bom(actor, key, project_id, data):
             if current:
                 if qty < linked_incoming(current):
                     raise Conflict('单元用量不能小于该 BOM 行在途采购，请先取消相关余量。')
-            totals[item_id] = totals.get(item_id, ZERO) + qty - (current.quantity if current else ZERO)
             prepared.append((item_id, unit, qty, note, current))
-        for item_id, qty in totals.items():
-            if qty < issued(project, item_id) + incoming(project, item_id):
-                raise Conflict('BOM 数量不能小于已领用和在途采购数量，请先处理相关单据。')
+        problems = total_shortfalls(
+            project, existing, [(current, item_id, qty) for item_id, _, qty, _, current in prepared]
+        )
+        if problems:
+            raise Conflict('；'.join(problem['message'] for problem in problems))
         for item_id, unit, qty, note, current in prepared:
             before = str(current.quantity) if current else None
             line = current or BOMLine(project=project, item=items[item_id])

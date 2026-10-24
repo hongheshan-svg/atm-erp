@@ -53,7 +53,7 @@ export type Command = {
   flow?: Flow | null
   progressProject?: number
 }
-export type Column = { key: string; label: string; format?: (row: Row) => string }
+export type Column = { key: string; label: string; format?: (row: Row) => string; tip?: (row: Row) => string | undefined }
 export type FlowNode = { key: string; label: string; hint?: string }
 export type Flow = {
   label: string

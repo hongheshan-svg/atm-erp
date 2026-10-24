@@ -40,6 +40,8 @@ describe('业务流程节点定位', () => {
     expect(labels('entries', { amount: '100.00', credit_amount: '0.00', paid_amount: '100.00', balance: '0.00' }).at).toBe('已结清')
     expect(labels('entries', { amount: '100.00', paid_amount: '120.00', balance: '-20.00' }).aborted).toBe('待退款')
     expect(labels('entries', { cancelled: true, balance: '100.00' }).aborted).toBe('已取消')
+    expect(labels('entries', { cancelled: true, balance: '0.00' }).aborted).toBe('已取消')
+    expect(labels('entries', { cancelled: true, balance: '-500.00' }).aborted).toBe('待退款')
   })
 
   it('银行流水按未匹配金额定位，待核实户名留在已登记', () => {

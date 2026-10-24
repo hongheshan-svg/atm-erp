@@ -1,16 +1,31 @@
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
-from threading import Barrier
+from threading import Barrier, Event
 from unittest.mock import patch
 
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, connections, transaction
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
-from apps.business.models import Delivery, Entry, Payment, Stock, StockMove, Task, TimeEntry
+from apps.business.models import (
+    Delivery,
+    Document,
+    Entry,
+    Payment,
+    Project,
+    PurchaseLine,
+    PurchaseOrder,
+    SalesOrder,
+    Stock,
+    StockMove,
+    Task,
+    TimeEntry,
+)
+from apps.business.services import amendments, corrections, documents, sales, supply
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -68,6 +83,42 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
         )
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(BankMatch.objects.count(), 1)
+
+    def test_concurrent_manual_receipt_and_bank_allocation_record_one_payment(self):
+        from apps.business.models import BankMatch
+
+        bank = self.post(
+            'finance',
+            'bank-records/',
+            {
+                'amount': '3000',
+                'date': TODAY,
+                'account': 'A1',
+                'reference': 'R1',
+                'counterparty': '客户',
+                'reason': '实际到账',
+            },
+            status=201,
+        )['id']
+        entry = self.project.entries.get(kind='receivable')
+        manual = {
+            'amount': '3000',
+            'date': TODAY,
+            'method': 'bank',
+            'account': 'A1',
+            'reference': 'R1',
+            'reason': '手工登记到账',
+        }
+        claim = {'entry': entry.pk, 'amount': '3000', 'reason': '认领到账'}
+        results = self.together(
+            [('finance', f'entries/{entry.pk}/pay/', manual), ('finance', f'bank-records/{bank}/allocate/', claim)]
+        )
+        self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
+        self.assertEqual(Payment.objects.get(entry=entry).amount, Decimal('3000'))
+        self.assertLessEqual(BankMatch.objects.count(), 1)
+        results = self.together([('finance', f'entries/{entry.pk}/pay/', {**manual, 'amount': '1000'})] * 2)
+        self.assertEqual([status for status, _ in results], [409, 409], results)
+        self.assertEqual(Payment.objects.filter(entry=entry).count(), 1)
 
     def test_concurrent_payments_cannot_overrun_confirmed_limit(self):
         entry = self.purchase(self.project).entry
@@ -177,6 +228,148 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
 
         with ThreadPoolExecutor(max_workers=len(requests)) as pool:
             return list(pool.map(perform, requests))
+
+    def wait_for_lock(self, pid):
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s', [pid])
+                if cursor.fetchone() == ('Lock',):
+                    return
+            time.sleep(0.02)
+        self.fail('并发会话未进入预期的数据库锁等待。')
+
+    def while_project_locked(self, project, waiting, competing):
+        """主线程先锁项目（project_action 的第一步），另一会话进入锁等待后，主线程再执行完整的项目内操作。
+
+        锁序与“项目 → 单据”相反的一方会在真实 PostgreSQL 上形成锁环（40P01），两边结果都原样返回。
+        """
+        ready, context, outcome = Event(), {}, {}
+
+        def session():
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET statement_timeout = '12s'")
+                    cursor.execute('SELECT pg_backend_pid()')
+                    context['pid'] = cursor.fetchone()[0]
+                ready.set()
+                return waiting()
+            except Exception as exc:  # Keep the real database error as test evidence.
+                return exc
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with transaction.atomic():
+                Project.objects.select_for_update().get(pk=project.pk)
+                future = pool.submit(session)
+                self.assertTrue(ready.wait(5))
+                self.wait_for_lock(context['pid'])
+                try:
+                    with transaction.atomic():
+                        outcome['main'] = competing()
+                except Exception as exc:  # Keep the real database error as test evidence.
+                    outcome['main'] = exc
+            outcome['other'] = future.result(timeout=30)
+        return outcome['main'], outcome['other']
+
+    def attachment(self, user, category='other', **owner):
+        return Document.objects.create(
+            **owner,
+            category=category,
+            original_name='误传附件.pdf',
+            file='test',
+            size=1,
+            sha256=uuid.uuid4().hex * 2,
+            created_by=user,
+            updated_by=user,
+        )
+
+    def remove_attachment(self, user, document):
+        return lambda: documents.remove(
+            User.objects.get(pk=user.pk), str(uuid.uuid4()), document.pk, {'reason': '传错文件'}
+        )
+
+    def test_purchase_attachment_removal_and_submit_lock_project_first(self):
+        purchaser = self.users['purchaser']
+        purchase = PurchaseOrder.objects.create(
+            project=self.project, supplier=self.supplier, code='LOCK-PO', status='draft', due_date=TODAY
+        )
+        PurchaseLine.objects.create(purchase=purchase, item=self.item, quantity=1, unit_price=1)
+        document = self.attachment(purchaser, purchase=purchase)
+        submitted, removed = self.while_project_locked(
+            self.project,
+            self.remove_attachment(purchaser, document),
+            lambda: supply.submit(purchaser, str(uuid.uuid4()), purchase.pk, {}),
+        )
+        self.assertIsInstance(submitted, dict, repr(submitted))
+        self.assertIsInstance(removed, dict, repr(removed))
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'submitted')
+        self.assertTrue(Document.all_objects.get(pk=document.pk).is_deleted)
+
+    def test_sale_attachment_removal_and_amendment_lock_project_first(self):
+        manager = self.users['manager']
+        sale = self.project.sale
+        contract = self.attachment(manager, project=self.project, category='contract')
+        document = self.attachment(manager, sale=sale)
+        payload = {
+            'expected_updated_at': sale.updated_at.isoformat(),
+            'reason': '追加设备费用',
+            'date': TODAY,
+            'document': contract.pk,
+            'amount': '10100',
+            'equipment_quantity': 1,
+            'warranty_months': 12,
+            'milestones': [{'title': '追加', 'amount': '100', 'due_date': TODAY}],
+        }
+        amended, removed = self.while_project_locked(
+            self.project,
+            self.remove_attachment(manager, document),
+            lambda: amendments.amend(manager, str(uuid.uuid4()), sale.pk, payload),
+        )
+        self.assertIsInstance(amended, dict, repr(amended))
+        self.assertIsInstance(removed, dict, repr(removed))
+        sale.refresh_from_db()
+        self.assertEqual(sale.contract_amount, Decimal('10100'))
+        self.assertTrue(Document.all_objects.get(pk=document.pk).is_deleted)
+
+    def test_historical_project_signing_and_project_edit_lock_project_first(self):
+        manager = self.users['manager']
+        project = Project.objects.create(
+            code='LEGACY-LOCK', name='历史未签约项目', customer=self.customer, manager=manager, status='quoted'
+        )
+        sale = SalesOrder.objects.create(
+            code='OLD-LOCK',
+            name=project.name,
+            customer=self.customer,
+            manager=manager,
+            project=project,
+            status='quoted',
+            quote_amount=100,
+        )
+        edited, signed = self.while_project_locked(
+            project,
+            lambda: sales.sign(
+                User.objects.get(pk=manager.pk),
+                str(uuid.uuid4()),
+                sale.pk,
+                {'date': TODAY, 'milestones': [{'title': '合同款', 'amount': '100', 'due_date': TODAY}]},
+            ),
+            lambda: corrections.edit_project(
+                manager,
+                str(uuid.uuid4()),
+                project.pk,
+                {'members': [self.users['member'].pk], 'reason': '补充执行成员'},
+            ),
+        )
+        self.assertIsInstance(edited, dict, repr(edited))
+        self.assertIsInstance(signed, dict, repr(signed))
+        project.refresh_from_db()
+        sale.refresh_from_db()
+        self.assertEqual((project.status, sale.status), ('active', 'signed'))
+        self.assertEqual(list(project.members.values_list('pk', flat=True)), [self.users['member'].pk])
 
     def test_concurrent_approvals_create_one_payable(self):
         purchase = self.purchase(self.project, approve=False)

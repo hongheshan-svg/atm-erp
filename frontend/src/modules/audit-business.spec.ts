@@ -6,7 +6,7 @@ import { user } from '../session'
 import { actionCommand as purchaseAction, actionNames as purchaseActions, createCommand as purchaseCreate, receiptLines } from './purchases'
 import { actionCommand as projectAction } from './projects'
 import { bomCommand } from './bom'
-import { salesActions, salesCommand } from './sales'
+import { salesActions, salesColumns, salesCommand } from './sales'
 import type { Row } from '../types'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), write: vi.fn(), download: vi.fn() }))
@@ -80,6 +80,42 @@ it('收费售后独立填写客户付款期限，免费时不校验也不发送'
   data.fee = '0'
   expect(fieldIssues(command.fields, data).some(issue => issue.path === 'fee_due_date')).toBe(false)
   expect(payload(command.fields, data)).not.toHaveProperty('fee_due_date')
+})
+
+it('质保期内收费售后须填写非质保责任原因，质保外或免费时不显示', async () => {
+  vi.mocked(all).mockImplementation(async path => path.includes('deliveries') ? [{ id: 5, accepted_date: '2026-09-01', warranty_until: '2027-09-01' }, { id: 6, accepted_date: '2025-01-01', warranty_until: '2026-01-01' }] : [{ id: 1, roles: ['admin'] }])
+  const command = industryCommand(await projectAction('projects', { id: 9, manager: 1, members: [], can_manage: true }, '登记售后'))
+  expect(command.fields.find(field => field.key === 'fee')?.hint).toContain('非质保责任')
+  const data = defaults(command.fields)
+  Object.assign(data, { delivery: 5, date: '2026-10-20', title: '客户误操作撞机', assignee: 1, fee: '800', fee_due_date: '2026-11-20' })
+  expect(fieldIssues(command.fields, data).map(issue => issue.path)).toContain('charge_reason')
+  expect(command.fields.find(field => field.key === 'charge_reason')?.hint).toContain('客户误操作')
+  data.charge_reason = '客户误操作撞机'
+  expect(fieldIssues(command.fields, data)).toEqual([])
+  expect(payload(command.fields, data)).toMatchObject({ fee: '800', charge_reason: '客户误操作撞机' })
+  data.fee = '0'
+  expect(payload(command.fields, data)).not.toHaveProperty('charge_reason')
+  Object.assign(data, { delivery: 6, fee: '800' })
+  expect(fieldIssues(command.fields, data).map(issue => issue.path)).not.toContain('charge_reason')
+  expect(payload(command.fields, data)).not.toHaveProperty('charge_reason')
+})
+
+it('发货可选填安装完成期限与验收期限，留空不提交', async () => {
+  vi.mocked(read).mockResolvedValue({ lines: [] })
+  const command = industryCommand(await projectAction('projects', { id: 9, manager: 1, members: [], can_manage: true }, '发货'))
+  const install = command.fields.find(field => field.key === 'install_due_date')
+  const acceptance = command.fields.find(field => field.key === 'acceptance_due_date')
+  expect([install?.label, install?.type, install?.optional]).toEqual(['安装完成期限', 'date', true])
+  expect([acceptance?.label, acceptance?.type, acceptance?.optional]).toEqual(['验收期限', 'date', true])
+  expect(install?.hint).toContain('不得早于发货日期')
+  expect(acceptance?.hint).toContain('逾期')
+  const data = defaults(command.fields, command.initial)
+  expect(payload(command.fields, data)).not.toHaveProperty('install_due_date')
+  expect(payload(command.fields, data)).not.toHaveProperty('acceptance_due_date')
+  Object.assign(data, { install_due_date: '2026-10-25', acceptance_due_date: '2026-11-01' })
+  expect(payload(command.fields, data)).toMatchObject({ install_due_date: '2026-10-25', acceptance_due_date: '2026-11-01' })
+  data.install_due_date = '2026/10/25'
+  expect(fieldIssues(command.fields, data).map(issue => issue.path)).toContain('install_due_date')
 })
 
 it('管理员、项目经理、财务与本人销售均有已签约交付回款入口', () => {
@@ -174,4 +210,63 @@ it('整单取消入口只给采购权限且仅已批准或部分收货状态', (
     user.value = { id: 1, roles: [role] }
     expect(purchaseActions('purchases', { status: 'approved' })).not.toContain('整单取消未收余量')
   }
+})
+
+it('非参与项目的已签约销售显示“无权查看”，不出现空金额或失效的协议附件下载', async () => {
+  const contract = salesColumns.find(column => column.key === 'contract_amount')!
+  expect(contract.format?.({ id: 9, amounts_visible: false })).toBe('无权查看')
+  expect(contract.format?.({ id: 9, amounts_visible: true, contract_amount: '20000.00' })).toBe('20,000.00')
+  expect(contract.format?.({ id: 9, amounts_visible: true, contract_amount: null })).toBe('—')
+  user.value = { id: 1, roles: ['manager'] }
+  const hidden = { id: 9, manager: 2, project: 3, status: 'signed', amounts_visible: false }
+  expect(salesActions(hidden)).toEqual(expect.arrayContaining(['查看明细', '交付与回款', '补充协议记录']))
+  expect(salesActions(hidden)).not.toContain('签订补充协议')
+  expect(salesActions({ ...hidden, amounts_visible: true })).toContain('签订补充协议')
+
+  const view = await salesCommand(hidden, '查看明细')
+  expect([view.initial?.quote_amount, view.initial?.contract_amount, view.initial?.original_contract_amount]).toEqual(['无权查看', '无权查看', '无权查看'])
+
+  vi.mocked(read).mockResolvedValueOnce({ project_status: 'active', progress_project: null, deliveries: [], receivables: [], amounts_visible: false })
+  const progress = await salesCommand(hidden, '交付与回款')
+  expect(progress.fields.map(field => field.key)).toEqual(['project_status', 'deliveries', 'receivables_hidden'])
+  expect(progress.initial?.receivables_hidden).toContain('无权查看')
+
+  vi.mocked(read).mockResolvedValueOnce({ project_status: 'active', progress_project: 3, deliveries: [], amounts_visible: true, receivables: [{ title: '合同款', amount: '100.00', credit_amount: '0.00', paid: '0.00', balance: '100.00', due_date: '2026-10-20' }] })
+  const visible = await salesCommand({ ...hidden, amounts_visible: true }, '交付与回款')
+  expect(visible.fields.map(field => field.key)).toContain('receivables')
+  expect(visible.initial).not.toHaveProperty('receivables_hidden')
+
+  vi.mocked(read).mockResolvedValueOnce([{ id: 1, date: '2026-10-20', reason: '增加调试', before: { equipment_quantity: 1, warranty_months: 12 }, after: { equipment_quantity: 2, warranty_months: 12 }, document: null, document__original_name: null }])
+  const history = await salesCommand(hidden, '补充协议记录')
+  expect(history.actions).toEqual([])
+  expect(history.notice?.text).toContain('补充协议金额')
+  expect(history.initial?.lines[0]).toMatchObject({ before_text: '设备数量：1；质保月数：12', after_text: '设备数量：2；质保月数：12', document__original_name: '无权查看' })
+})
+
+it('已签约销售单仅管理员与该项目负责人可见转交负责人，表单只含新负责人与原因且不能选自己', async () => {
+  const row = { id: 9, manager: 3, status: 'signed', can_transfer: true }
+  for (const role of ['admin', 'manager']) {
+    user.value = { id: 1, roles: [role] }
+    expect(salesActions(row)).toContain('转交负责人')
+  }
+  // 后端按“管理员或该项目负责人”给出 can_transfer；未负责该项目的经理不显示入口。
+  user.value = { id: 1, roles: ['manager', 'sales_manager'] }
+  expect(salesActions({ ...row, can_transfer: false })).not.toContain('转交负责人')
+  for (const role of ['finance', 'sales_manager']) {
+    user.value = { id: 3, roles: [role] }
+    expect(salesActions(row)).not.toContain('转交负责人')
+  }
+  user.value = { id: 1, roles: ['manager'] }
+  expect(salesActions({ id: 9, manager: 3, status: 'quoted' })).not.toContain('转交负责人')
+  vi.mocked(all).mockResolvedValue([
+    { id: 1, username: 'me', display_name: '本人', roles: ['manager', 'sales_manager'] },
+    { id: 3, username: 'old', display_name: '原负责人', roles: ['sales_manager'] },
+    { id: 4, username: 'new', display_name: '新负责人', roles: ['sales_manager'] },
+    { id: 5, username: 'pm', display_name: '经理', roles: ['manager'] },
+  ])
+  const command = await salesCommand(row, '转交负责人')
+  expect(command.path).toBe('/business/sales/9/transfer/')
+  expect(command.fields.map(field => field.key)).toEqual(['manager', 'reason'])
+  expect(command.fields[0].options).toEqual([{ value: 4, label: '新负责人（new）' }])
+  expect(command.notice?.text).toContain('只更换销售负责人，不改变合同与回款')
 })

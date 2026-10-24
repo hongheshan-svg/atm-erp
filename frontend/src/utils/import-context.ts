@@ -15,7 +15,7 @@ export function scopedImportProject(params?: Row, projectId?: number) {
 const exportTitles: Record<string, string> = {
   ...importTitles, stocks: '现有库存', moves: '库存流水', entries: '应收应付与费用', payments: '收付款流水',
   time: '工时记录', deliveries: '交付批次', reconciliations: '业务对账', documents: '附件资料', reports: '经营报表',
-  'bank-claims': '银行认领', 'bank-matches': '银行匹配', 'bank-offsets': '银行冲抵',
+  'bank-claims': '银行认领', 'bank-matches': '银行匹配', 'bank-offsets': '银行冲抵', 'data-checks': '历史数据核查',
 }
 
 export function exportFilename(resource: string, format: string, now = new Date()) {

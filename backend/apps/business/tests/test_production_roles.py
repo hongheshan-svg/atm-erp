@@ -179,6 +179,22 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         delivery.refresh_from_db()
         self.assertEqual(delivery.accepted_date, self.today)
 
+    def test_post_shipment_stage_task_cancel_is_left_to_project_manager(self):
+        before_shipment = self.task('assembly')
+        self.delivery()
+        mistaken = self.task('assembly')
+        self.assertTrue(self.get(f'tasks/{mistaken.pk}/')['can_manage'])
+        self.assertFalse(self.get(f'tasks/{mistaken.pk}/')['can_cancel'])
+        before = ActionReceipt.objects.count(), AuditLog.objects.count()
+        self.post(
+            'production_manager', f'tasks/{mistaken.pk}/cancel/', {'reason': '生产不能取消发货后任务'}, status=403
+        )
+        self.post('production_manager', f'tasks/{before_shipment.pk}/cancel/', {'reason': '发货依据'}, status=409)
+        self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), before)
+        self.assertEqual(Task.objects.get(pk=mistaken.pk).status, 'open')
+        self.post('manager', f'tasks/{mistaken.pk}/cancel/', {'reason': '项目经理确认误建'})
+        self.assertEqual(Task.objects.get(pk=mistaken.pk).status, 'cancelled')
+
     def test_production_manager_team_hours_amend_preserves_cost_snapshot_and_hides_money(self):
         task = self.task()
         entry_id = self.post(
@@ -252,7 +268,20 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.post(
             'production_manager', f'projects/{self.project.pk}/service/', self.service_data(delivery, '100'), status=403
         )
+        # 质保期内收费需写明非质保责任原因，但仍只能由项目经理确认；生产经理写了原因也不能收费。
+        self.post(
+            'production_manager',
+            f'projects/{self.project.pk}/service/',
+            {**self.service_data(delivery, '100'), 'charge_reason': '客户误操作'},
+            status=403,
+        )
         self.assertEqual((Task.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()), before)
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/service/',
+            {**self.service_data(delivery, '100'), 'charge_reason': '客户误操作'},
+        )
+        self.assertEqual(Entry.objects.count(), before[1] + 1)
 
     def test_production_manager_cannot_create_out_of_warranty_service_even_with_zero_fee(self):
         delivery = self.delivery(accepted=True, expired=True)

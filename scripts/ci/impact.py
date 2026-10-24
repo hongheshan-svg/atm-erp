@@ -174,6 +174,15 @@ SHARED_PATHS = (
         ),
         ('masterdata', 'sales', 'projects', 'purchases', 'inventory', 'finance', 'reports', 'bom'),
     ),
+    (
+        # 管理员历史数据只读核查：读取收付款、银行、采购质保与交付的在办规则，入口在设置页。
+        (
+            'backend/apps/business/services/data_checks.py',
+            'backend/apps/business/api/data_checks.py',
+            'frontend/src/components/DataChecks.vue',
+        ),
+        ('finance', 'purchases', 'projects', 'accounts'),
+    ),
     (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
     (('frontend/src/components/ProjectAttention.vue',), ('projects', 'bom', 'purchases')),
     (('frontend/src/industry-forms.ts',), ('sales', 'projects')),

@@ -64,6 +64,22 @@ def schedule(entry):
     return result
 
 
+def prepaid_excess(entry):
+    """已付超过合格收货净额的部分（只用于提示）：净付款 - (收货金额 - 退货贷项)，与对账额度同一口径。"""
+    from .finance import balance, paid
+
+    if not entry.purchase_id or entry.kind != 'payable' or entry.cancelled or balance(entry) <= ZERO:
+        return ZERO
+    received = ZERO
+    for line in entry.purchase.lines.all():
+        for move in line.stockmove_set.all():
+            if move.kind == 'receipt':
+                received += move.value
+            elif move.kind == 'purchase_return':
+                received -= move.supplier_credit
+    return max(ZERO, paid(entry) - max(ZERO, received))
+
+
 def next_due(entry):
     rows = schedule(entry)
     return rows[0]['due_date'] if rows else None

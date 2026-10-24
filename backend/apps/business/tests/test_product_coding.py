@@ -197,6 +197,51 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         self.post('purchaser', 'items/', {'name': '旧自定义', 'code': '000123'}, status=201)
         self.assertTrue(Item.objects.filter(code='000123').exists())
 
+    def test_deleted_unreferenced_item_releases_drawing_but_keeps_code(self):
+        # 管理员删除的误建物料不可见也不能恢复，不应继续占用图号版本；物料编码仍全局唯一（含软删除）。
+        data = {
+            'name': '安装支架',
+            'specification': 'Q235 5mm',
+            'product_category': '12',
+            'drawing_number': 'DN-PA-1',
+            'drawing_revision': 'A',
+        }
+        created = self.post('purchaser', 'items/', data, status=201)
+        self.post('admin', 'record-deletions/', {'resource': 'items', 'ids': [created['id']], 'reason': '误建'})
+        self.assertTrue(Item.all_objects.get(pk=created['id']).is_deleted)
+        recreated = self.post(
+            'purchaser', 'items/', {**data, 'drawing_number': 'dn-pa-1', 'drawing_revision': 'a'}, status=201
+        )
+        deleted_code = Item.all_objects.get(pk=created['id']).code
+        self.assertNotEqual(Item.objects.get(pk=recreated['id']).code, deleted_code)
+        # 停用但未删除的物料仍占用图号，提示复用。
+        Item.objects.filter(pk=recreated['id']).update(is_active=False)
+        rejected = self.post('purchaser', 'items/', {**data, 'name': '另一支架'}, status=400)
+        self.assertIn('drawing_number', rejected)
+        rejected = self.post('purchaser', 'items/', {'name': '误建编码', 'code': deleted_code}, status=400)
+        self.assertIn('code', rejected)
+        # 物料导入与 BOM 物料导入沿用同一判重：再删除后可按同一图号版本重建。
+        self.post('admin', 'record-deletions/', {'resource': 'items', 'ids': [recreated['id']], 'reason': '误建'})
+        content = (
+            '物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因\n'
+            ',安装支架,Q235 5mm,DN-PA-1,A,有图·钣金,,,件,\n'
+        )
+        response = self.clients['purchaser'].post(
+            '/api/business/items/import-file/',
+            {'file': SimpleUploadedFile('items.csv', content.encode())},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['can_import'], response.data)
+        project = self.active_project()
+        row = ['', '', '1', '新增', '', '', '', '安装支架', 'Q235 5mm', 'DN-PA-1', 'A', '12', '', '', '件']
+        preview = self.auto_preview(project, [row])
+        self.assertTrue(preview['can_import'], preview)
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+        imported = Item.objects.get(drawing_number='DN-PA-1')
+        self.assertEqual(BOMLine.objects.get(project=project).item, imported)
+        self.assertEqual(Item.all_objects.filter(drawing_number__iexact='DN-PA-1').count(), 3)
+
     def test_new_bom_template_dates_and_legacy_preservation(self):
         project = self.active_project()
         raw = ','.join(bom_import.HEADERS) + f'\n{self.item.code},上料,2,新增,2026-10-01,2026-09-11,设计员\n'

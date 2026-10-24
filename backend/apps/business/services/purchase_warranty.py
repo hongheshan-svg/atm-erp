@@ -83,8 +83,14 @@ def record(actor, key, purchase_id, data):
                 )['total']
                 or ZERO
             )
-            if qty > receipt.quantity - occupied:
-                raise Conflict('本批次待处理报修数量超过原收货数量，请先处理已有质保单。')
+            returned = -(
+                StockMove.objects.filter(source=receipt, kind='purchase_return').aggregate(total=Sum('quantity'))[
+                    'total'
+                ]
+                or ZERO
+            )
+            if qty > receipt.quantity - returned - occupied:
+                raise Conflict('报修数量超过本批次可报修数量（原收货数量扣除已退货和待处理报修），请先处理已有质保单。')
             case = save(
                 PurchaseWarranty(receipt=receipt, date=date, quantity=qty, description=text(data, 'description')), user
             )
@@ -128,11 +134,19 @@ def record(actor, key, purchase_id, data):
                 case.returned = lookup(
                     StockMove, data['returned'], 'returned', kind='purchase_return', source=case.receipt
                 )
+                if -case.returned.quantity > case.quantity:
+                    raise ValidationError(
+                        {'returned': '关联的退货数量不能超过本质保单的报修数量，请选择对应本单的退货记录。'}
+                    )
+                if PurchaseWarranty.objects.filter(returned=case.returned).exclude(pk=case.pk).exists():
+                    raise Conflict('该退货流水已关联其他质保单，不能重复关联。')
             if data.get('expense'):
                 require_role(user, MONEY_READERS)
                 case.expense = lookup(
                     Entry, data['expense'], 'expense', kind='expense', project=purchase.project, cancelled=False
                 )
+                if PurchaseWarranty.objects.filter(expense=case.expense).exclude(pk=case.pk).exists():
+                    raise Conflict('该费用已关联其他质保单，不能重复关联。')
             save(case, user)
         return audit(user, 'purchase.warranty', case, data=data)
 

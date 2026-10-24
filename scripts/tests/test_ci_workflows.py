@@ -29,6 +29,17 @@ class RoutingTests(unittest.TestCase):
         self.assertIn('e2e/process-progress.spec.ts', scope['browser_specs'])
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
 
+    def test_data_checks_cover_the_modules_whose_rules_they_read(self):
+        scope = plan(['backend/apps/business/services/data_checks.py', 'backend/apps/business/api/data_checks.py'])
+        self.assertEqual(set(scope['modules']), {'finance', 'purchases', 'projects', 'accounts'})
+        for target in ('reconciliation', 'deletions', 'bank_import', 'transfers'):
+            self.assertIn(f'apps.business.tests.test_{target}', scope['backend_targets'])
+        page = plan(['frontend/src/components/DataChecks.vue'])
+        self.assertEqual(page['modules'], scope['modules'])
+        self.assertIn('src/components/DataChecks.spec.ts', page['frontend_tests'])
+        self.assertIn('e2e/settings.spec.ts', page['browser_specs'])
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
     def test_import_helpers_include_scope_and_concurrency_regressions(self):
         for helper in ('import_dedup', 'import_locks'):
             scope = plan([f'backend/apps/business/services/{helper}.py'])

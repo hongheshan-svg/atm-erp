@@ -835,3 +835,78 @@ class AuditConfirmedRulesTests(AuditBusinessFixtures, TestCase):
             self.assertEqual(project.status, 'active')
         self.assertFalse(Entry.objects.filter(project=standalone).exists())
         self.assertFalse(Entry.objects.get(project=self.project).cancelled)
+
+    def edit_draft(self, role, purchase, *, quantity=None, price=None, note=''):
+        purchase.refresh_from_db()
+        line = purchase.lines.get()
+        self.post(
+            role,
+            f'purchases/{purchase.pk}/edit/',
+            {
+                'expected_updated_at': purchase.updated_at.isoformat(),
+                'reason': '按供应商最新报价调整',
+                'due_date': TODAY,
+                'note': note,
+                'lines': [
+                    {
+                        'id': line.pk,
+                        'quantity': quantity or str(line.quantity),
+                        'unit_price': price or str(line.unit_price),
+                        'due_date': str(line.due_date),
+                    }
+                ],
+            },
+        )
+
+    def returned_for_edit(self, qty='1', price='10'):
+        purchase = self.purchase(self.project, qty=qty, price=price, approve=False)
+        self.post('purchase_manager', f'purchases/{purchase.pk}/reject/', {'reason': '单价待确认'})
+        return purchase
+
+    def approval_ids(self, role):
+        response = self.clients[role].get('/api/business/workbench/')
+        self.assertEqual(response.status_code, 200, response.data)
+        return {row['id']: row for row in response.data['approvals']['results']}
+
+    def test_draft_amount_editor_cannot_approve_and_is_hidden_from_workbench(self):
+        purchase = self.returned_for_edit()
+        url = f'purchases/{purchase.pk}/'
+        self.edit_draft('purchase_manager', purchase, price='95')
+        self.post('purchaser', url + 'submit/')
+        self.assertNotIn(purchase.pk, self.approval_ids('purchase_manager'))
+        self.assertIn(purchase.pk, self.approval_ids('manager'))
+        key = str(uuid.uuid4())
+        rejected = self.post('purchase_manager', url + 'approve/', key=key, status=403)
+        self.assertIn('申请人不能审批自己的单据', str(rejected))
+        self.post('purchase_manager', url + 'approve/', {'reason': '我已核对报价'}, status=403)
+        self.assertFalse(ActionReceipt.objects.filter(key=key).exists())
+        self.assertFalse(Entry.objects.filter(purchase=purchase).exists())
+        self.post('manager', url + 'approve/')
+        self.assertEqual(Entry.objects.get(purchase=purchase).amount, Decimal('95.00'))
+        log = AuditLog.objects.filter(operation='purchase.approve', resource=f'purchaseorder:{purchase.pk}').first()
+        self.assertFalse(log.detail['self_approval'])
+
+    def test_admin_quantity_editor_approves_only_with_exception_reason(self):
+        purchase = self.returned_for_edit()
+        url = f'purchases/{purchase.pk}/'
+        self.edit_draft('admin', purchase, quantity='3')
+        self.post('purchaser', url + 'submit/')
+        self.assertTrue(self.approval_ids('admin')[purchase.pk]['self_requested'])
+        self.post('admin', url + 'approve/', status=400)
+        self.assertFalse(Entry.objects.filter(purchase=purchase).exists())
+        self.post('admin', url + 'approve/', {'reason': '供应商限时报价，例外批准'})
+        log = AuditLog.objects.filter(operation='purchase.approve', resource=f'purchaseorder:{purchase.pk}').first()
+        self.assertTrue(log.detail['self_approval'])
+        self.assertEqual(Entry.objects.get(purchase=purchase).amount, Decimal('30.00'))
+
+    def test_non_amount_draft_edits_do_not_make_editor_an_applicant(self):
+        purchase = self.returned_for_edit()
+        url = f'purchases/{purchase.pk}/'
+        # 只改备注，数量/单价按不同写法原样提交，均不改变金额。
+        self.edit_draft('purchase_manager', purchase, quantity='1', price='10.0', note='请随货附检验报告')
+        self.post('purchaser', url + 'submit/')
+        self.assertIn(purchase.pk, self.approval_ids('purchase_manager'))
+        self.assertFalse(self.approval_ids('admin')[purchase.pk]['self_requested'])
+        self.post('purchase_manager', url + 'approve/')
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'approved')

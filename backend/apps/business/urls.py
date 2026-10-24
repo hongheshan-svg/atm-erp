@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .api.bom import BOMView
+from .api.data_checks import DataCheckView
 from .api.deletions import DeletionView
 from .api.execution import DeliveryView, TaskView, TimeView
 from .api.finance import EntryView, PaymentView
@@ -34,4 +35,9 @@ router.register('tasks', TaskView)
 router.register('deliveries', DeliveryView)
 router.register('time', TimeView)
 router.register('documents', DocumentView)
-urlpatterns = [path('workbench/', WorkbenchView.as_view()), path('reports/', ReportsView.as_view()), *router.urls]
+urlpatterns = [
+    path('workbench/', WorkbenchView.as_view()),
+    path('reports/', ReportsView.as_view()),
+    path('data-checks/', DataCheckView.as_view()),
+    *router.urls,
+]

@@ -278,6 +278,57 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.accept(delivery)
         self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
 
+    def test_ship_writes_optional_install_and_acceptance_deadlines(self):
+        project = self.ready_project(equipment=2)
+        self.stock_and_issue(project)
+        shipped = date.fromisoformat(TODAY)
+        base = {
+            'date': TODAY,
+            'quantity': 1,
+            'installer': self.users['member'].pk,
+            'acceptor': self.users['manager'].pk,
+        }
+        before = Delivery.objects.count(), Task.objects.count(), ActionReceipt.objects.count()
+        for key in ('install_due_date', 'acceptance_due_date'):
+            with self.subTest(key=key):
+                early = (shipped - timedelta(days=1)).isoformat()
+                denied = self.post('manager', f'projects/{project.pk}/ship/', {**base, key: early}, status=400)
+                self.assertIn('不能早于发货日期', str(denied[key]))
+                self.post('manager', f'projects/{project.pk}/ship/', {**base, key: '2026/09/30'}, status=400)
+        self.assertEqual((Delivery.objects.count(), Task.objects.count(), ActionReceipt.objects.count()), before)
+        install_due, acceptance_due = shipped + timedelta(days=3), shipped + timedelta(days=10)
+        result = self.post(
+            'manager',
+            f'projects/{project.pk}/ship/',
+            {**base, 'install_due_date': install_due.isoformat(), 'acceptance_due_date': acceptance_due.isoformat()},
+        )
+        delivery = Delivery.objects.get(pk=result['id'])
+        self.assertEqual(
+            dict(delivery.tasks.values_list('kind', 'due_date')), {'install': install_due, 'acceptance': acceptance_due}
+        )
+
+        def progress_due():
+            rows = (
+                self.clients['manager']
+                .get(f'/api/business/projects/{project.pk}/progress/', {'category': 'deliveries'})
+                .data['results']
+            )
+            return next(str(row['due_date']) for row in rows if row['title'] == delivery.code)
+
+        # 流程进度交付行按未完成的安装任务取期限，安装完成后改看验收期限。
+        self.assertEqual(progress_due(), install_due.isoformat())
+        self.complete(delivery.tasks.get(kind='install'))
+        self.assertEqual(progress_due(), acceptance_due.isoformat())
+        # 期限可与发货同日；留空保持原样（不设期限）。
+        second = Delivery.objects.get(
+            pk=self.post(
+                'manager',
+                f'projects/{project.pk}/ship/',
+                {**base, 'install_due_date': TODAY, 'acceptance_due_date': ''},
+            )['id']
+        )
+        self.assertEqual(dict(second.tasks.values_list('kind', 'due_date')), {'install': shipped, 'acceptance': None})
+
     def test_partial_delivery_requires_proportional_materials(self):
         project = self.ready_project(equipment=2)
         stock = self.stock_and_issue(project, quantity='2')
@@ -427,6 +478,42 @@ class ExecutionTests(ExecutionFixtures, TestCase):
                 status=400,
             )
 
+    def test_in_warranty_chargeable_service_requires_non_warranty_reason(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        delivery = self.deliver(project)
+        self.accept(delivery)
+        payment_due = date.fromisoformat(TODAY) + timedelta(days=30)
+        payload = {
+            'delivery': delivery.pk,
+            'date': TODAY,
+            'title': '客户误操作撞机维修',
+            'assignee': self.users['member'].pk,
+            'fee': '800',
+            'fee_due_date': payment_due.isoformat(),
+        }
+        before = Task.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()
+        for reason in (None, '  '):
+            with self.subTest(reason=reason):
+                data = payload if reason is None else {**payload, 'charge_reason': reason}
+                denied = self.post('manager', f'projects/{project.pk}/service/', data, status=400)
+                self.assertIn('非质保责任原因', str(denied['charge_reason']))
+        self.assertEqual((Task.objects.count(), Entry.objects.count(), ActionReceipt.objects.count()), before)
+        task_id = self.post(
+            'manager', f'projects/{project.pk}/service/', {**payload, 'charge_reason': '客户误操作撞机，非质保责任'}
+        )['id']
+        entry = Entry.objects.get(task_id=task_id)
+        self.assertEqual((entry.kind, entry.amount, entry.due_date), ('receivable', Decimal('800'), payment_due))
+        log = AuditLog.objects.get(operation='service.create', resource=f'task:{task_id}')
+        self.assertEqual(log.detail['charge_reason'], '客户误操作撞机，非质保责任')
+        self.assertEqual(Decimal(log.detail['fee']), Decimal('800'))
+        free = {key: value for key, value in payload.items() if key not in {'fee', 'fee_due_date'}}
+        free_id = self.post('manager', f'projects/{project.pk}/service/', {**free, 'title': '质保换件'})['id']
+        self.assertFalse(Entry.objects.filter(task_id=free_id).exists())
+        self.assertEqual(
+            AuditLog.objects.get(operation='service.create', resource=f'task:{free_id}').detail['charge_reason'], ''
+        )
+
     def test_installed_and_accepted_tasks_cannot_be_deleted_or_reopened(self):
         project = self.ready_project()
         self.stock_and_issue(project)
@@ -465,3 +552,56 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '经理接手', 'assignee': self.users['manager'].pk})
         task.refresh_from_db()
         self.assertEqual((task.status, task.assignee_id), ('open', self.users['manager'].pk))
+
+    def test_unstarted_stage_task_created_after_first_shipment_can_be_cancelled_by_manager(self):
+        project = self.ready_project(equipment=2)
+        self.stock_and_issue(project)
+        self.deliver(project)
+        original = project.tasks.get(kind='test')
+        mistaken = self.task(project, 'test', '二批调试返工（误建）')
+        flags = {
+            row['id']: row['can_cancel']
+            for row in self.clients['manager'].get('/api/business/tasks/', {'project': project.pk}).data['results']
+        }
+        self.assertEqual((flags[original.pk], flags[mistaken.pk]), (False, True))
+        self.assertTrue(self.clients['manager'].get(f'/api/business/tasks/{mistaken.pk}/').data['can_cancel'])
+        # 首批发货前的阶段任务是已发货批次的依据，仍然不能取消。
+        self.post('manager', f'tasks/{original.pk}/cancel/', {'reason': '不能撤销已发货依据'}, status=409)
+        self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        self.post('manager', f'tasks/{mistaken.pk}/cancel/', {}, status=400)
+        self.post('manager', f'tasks/{mistaken.pk}/cancel/', {'reason': '误建的返工任务'})
+        mistaken.refresh_from_db()
+        self.assertEqual(mistaken.status, 'cancelled')
+        self.assertFalse(mistaken.is_deleted)
+        log = AuditLog.objects.get(operation='task.cancel', resource=f'task:{mistaken.pk}')
+        self.assertEqual(log.detail['reason'], '误建的返工任务')
+        self.assertFalse(self.clients['manager'].get(f'/api/business/tasks/{mistaken.pk}/').data['can_reopen'])
+        self.post('manager', f'tasks/{mistaken.pk}/reopen/', {'reason': '已有交付不能重开'}, status=409)
+        self.deliver(project)
+        self.assertEqual(project.deliveries.count(), 2)
+
+    def test_started_or_done_stage_task_after_first_shipment_stays_locked(self):
+        project = self.ready_project(equipment=2)
+        stock = self.stock_and_issue(project, quantity='2')
+        self.deliver(project)
+        timed = self.task(project, 'assembly', '二批装配')
+        self.time(timed)
+        reversed_time = self.task(project, 'assembly', '二批装配更正')
+        entry = self.time(reversed_time)['id']
+        self.post('member', f'time/{entry}/amend/', {'hours': '0', 'date': TODAY, 'reason': '误记撤销'})
+        picked = self.task(project, 'assembly', '二批领料')
+        self.post(
+            'warehouse',
+            'stocks/issue/',
+            {'project': project.pk, 'stock': stock.pk, 'task': picked.pk, 'quantity': '1', 'reason': '二批领料'},
+        )
+        done = self.task(project, 'design', '二批设计')
+        self.complete(done)
+        listed = self.clients['manager'].get('/api/business/tasks/', {'project': project.pk}).data['results']
+        flags = {row['id']: row['can_cancel'] for row in listed}
+        for task, status in ((timed, 'open'), (reversed_time, 'open'), (picked, 'open'), (done, 'done')):
+            with self.subTest(task=task.title):
+                self.assertFalse(flags[task.pk])
+                denied = self.post('manager', f'tasks/{task.pk}/cancel/', {'reason': '试图取消已开工任务'}, status=409)
+                self.assertIn('工时', str(denied))
+                self.assertEqual(Task.objects.get(pk=task.pk).status, status)

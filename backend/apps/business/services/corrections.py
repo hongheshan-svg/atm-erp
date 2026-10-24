@@ -16,7 +16,7 @@ from apps.core.permissions import (
 from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
 from .bom import incoming, issued
 from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
-from .execution import STAGES, assignee, task_action
+from .execution import STAGES, assignee, stage_cancel_block, task_action
 from .finance import balance
 
 
@@ -234,6 +234,15 @@ def change_task(actor, key, task_id, data, operation):
             and Entry.objects.filter(task=task).exists()
         ):
             raise PermissionDenied('收费售后的取消与重开涉及账款，请由项目经理处理。')
+        if (
+            operation == 'cancel'
+            and task.kind in STAGES
+            and task.project.deliveries.exists()
+            and stage_cancel_block(task) is None
+            and not project_allowed(user, task.project, MANAGERS)
+        ):
+            # 发货后误建任务的取消会放开后续发货的阶段门槛，由项目经理确认；发货前的生产调整范围不变。
+            raise PermissionDenied('首批发货后新建的阶段任务需由项目经理确认后取消。')
 
     def execute(user, project, task):
         fields(data, {'reason', 'assignee'} if operation in {'assign', 'reopen'} else {'reason'})
@@ -245,8 +254,9 @@ def change_task(actor, key, task_id, data, operation):
             state(task, {'open', 'done'})
             if task.kind in {'install', 'acceptance'}:
                 raise Conflict('交付关联的安装和验收任务不能取消。')
-            if task.kind in STAGES and project.deliveries.exists():
-                raise Conflict('已有交付，不能取消原生产阶段任务。')
+            blocked = stage_cancel_block(task) if task.kind in STAGES else None
+            if blocked:
+                raise Conflict(blocked)
             task.status = 'cancelled'
             if task.kind == 'service':
                 entry = Entry.objects.select_for_update().filter(task=task).first()

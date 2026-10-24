@@ -1,7 +1,7 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Exists, OuterRef, Sum
+from django.db.models import Exists, Min, OuterRef, Subquery, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -19,7 +19,7 @@ from apps.core.permissions import (
     task_management_roles,
 )
 
-from ..models import Delivery, Entry, Task, TimeEntry
+from ..models import Delivery, Entry, StockMove, Task, TimeEntry
 from .bom import issued
 from .common import (
     ZERO,
@@ -50,11 +50,38 @@ def with_task_flags(queryset):
     """
     return queryset.annotate(
         project_shipped=Exists(Delivery.objects.filter(project=OuterRef('project_id'))),
+        project_first_shipped_at=Subquery(
+            Delivery.objects.filter(project=OuterRef('project_id')).order_by('created_at').values('created_at')[:1]
+        ),
+        task_has_time=Exists(TimeEntry.objects.filter(task=OuterRef('pk'))),
+        task_has_moves=Exists(StockMove.objects.filter(task=OuterRef('pk'))),
         project_assembly_done=Exists(
             Task.objects.filter(project=OuterRef('project_id'), kind='assembly', status='done')
         ),
         project_test_done=Exists(Task.objects.filter(project=OuterRef('project_id'), kind='test', status='done')),
     )
+
+
+def stage_cancel_block(task):
+    """已有交付时阶段任务是否还能取消；返回拒绝原因，None 表示可以取消。
+
+    首批发货前已存在的阶段任务是已发货批次的生产依据，已完成或已登记工时、领料的任务是已发生的事实，
+    都必须保留。首批发货后新建且尚未开工的任务（多为误建）取消后不影响任何已发生事实，
+    否则它会让下一批发货永远卡在「请先完成所有阶段任务」。列表行由 with_task_flags 预先注解。
+    """
+    if hasattr(task, 'project_first_shipped_at'):
+        first_shipped_at = task.project_first_shipped_at
+        has_work = task.task_has_time or task.task_has_moves
+    else:
+        first_shipped_at = task.project.deliveries.aggregate(first=Min('created_at'))['first']
+        has_work = task.time_entries.exists() or StockMove.objects.filter(task=task).exists()
+    if first_shipped_at is None:
+        return None
+    if task.created_at <= first_shipped_at:
+        return '已有交付，首批发货前的生产阶段任务是已发货批次的依据，不能取消。'
+    if task.status != 'open' or has_work:
+        return '此阶段任务已完成或已登记工时、领料，属于已开工任务，不能取消；请完成该任务后再安排后续发货。'
+    return None
 
 
 def participant(project, user, key='assignee'):
@@ -290,7 +317,19 @@ def delivered_materials(project):
 
 def ship(actor, key, project_id, data):
     def execute(user, project):
-        fields(data, {'quantity', 'date', 'installer', 'acceptor', 'note', 'materials'})
+        fields(
+            data,
+            {
+                'quantity',
+                'date',
+                'installer',
+                'acceptor',
+                'note',
+                'materials',
+                'install_due_date',
+                'acceptance_due_date',
+            },
+        )
         state(project, {'active', 'delivering'})
         for stage in STAGES:
             completed_stage(project, stage)
@@ -334,6 +373,15 @@ def ship(actor, key, project_id, data):
         date = event_date(data)
         if project.contract_date and date < project.contract_date:
             raise ValidationError({'date': '交付日期不能早于签约日期。'})
+        # 可选的安装、验收期限写入随批次生成的任务，流程进度与工作台据此提示逾期；留空则不设期限。
+        deadlines = {}
+        for kind, field, label in [
+            ('install', 'install_due_date', '安装完成期限'),
+            ('acceptance', 'acceptance_due_date', '验收期限'),
+        ]:
+            deadlines[kind] = day(data, field, optional=True)
+            if deadlines[kind] and deadlines[kind] < date:
+                raise ValidationError({field: f'{label}不能早于发货日期 {date.isoformat()}，请重新选择或留空。'})
         installer = assignee(project, data.get('installer', project.manager_id))
         acceptor = assignee(project, data.get('acceptor', project.manager_id))
         delivery = save(
@@ -357,6 +405,7 @@ def ship(actor, key, project_id, data):
                     kind=kind,
                     title=f'{delivery.code} {Task.Kind(kind).label}',
                     assignee=person,
+                    due_date=deadlines[kind],
                 ),
                 user,
             )
@@ -411,7 +460,18 @@ def service(actor, key, project_id, data):
     def execute(user, project):
         fields(
             data,
-            {'delivery', 'date', 'title', 'description', 'assignee', 'due_date', 'fee', 'fee_due_date', 'free_reason'},
+            {
+                'delivery',
+                'date',
+                'title',
+                'description',
+                'assignee',
+                'due_date',
+                'fee',
+                'fee_due_date',
+                'free_reason',
+                'charge_reason',
+            },
         )
         state(project, {'delivering', 'warranty'})
         delivery = lookup(Delivery, data.get('delivery'), 'delivery', project=project)
@@ -422,8 +482,13 @@ def service(actor, key, project_id, data):
             raise ValidationError({'date': '售后日期不能早于验收日期。'})
         free = date <= delivery.warranty_until
         fee = number(data.get('fee', 0 if free else None), 'fee')
-        if free and fee:
-            raise ValidationError({'fee': '质保内售后免费，不能生成收费应收。'})
+        # 质保内默认免费；客户误操作、人为损坏等非质保责任可收费，但必须写明原因留审计。
+        # 授权已限定只有项目经理/管理员能登记收费售后，生产经理仍只建质保内免费售后。
+        charge_reason = text(data, 'charge_reason', default='', maximum=500) if fee else ''
+        if free and fee and not charge_reason:
+            raise ValidationError(
+                {'charge_reason': '质保期内收费请填写非质保责任原因，例如客户误操作、人为损坏；否则请按免费售后登记。'}
+            )
         # 过保后的商务赠送、延保等免费服务同样要能派工，但必须写明免费依据；授权已限定由项目经理登记。
         free_reason = text(data, 'free_reason', default='', maximum=500)
         if not free and not fee and not free_reason:
@@ -465,6 +530,7 @@ def service(actor, key, project_id, data):
             fee=str(fee),
             fee_due_date=fee_due_date.isoformat() if fee_due_date else None,
             free_reason=free_reason,
+            charge_reason=charge_reason,
         )
 
     return project_action(

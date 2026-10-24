@@ -102,6 +102,26 @@ def count(actor, key, stock_id, data):
     )
 
 
+def shared_arrival(project, item_id, qty, confirm_shared, action):
+    """库存不按项目预留：领料、采购退货扣减后若不足以覆盖其他项目已到货未领用量，须确认并留痕。"""
+    claims = claimed_by_others(project, item_id)
+    claimed = sum(claims.values(), ZERO)
+    on_hand = Stock.objects.filter(item_id=item_id).aggregate(total=Sum('quantity'))['total'] or ZERO
+    if on_hand - qty >= claimed:
+        return []
+    shared = [
+        {'project': code, 'quantity': str(claims[pk])}
+        for pk, code in Project.objects.filter(pk__in=claims).order_by('code').values_list('pk', 'code')
+    ]
+    if not confirm_shared:
+        summary = '、'.join(f'{row["project"]} {row["quantity"]}' for row in shared)
+        raise Conflict(
+            f'本次{action}会占用其他项目已到货、尚未领用的物料（{summary}）。'
+            '确认挪用请勾选「确认占用其他项目到货」后重新提交，并通知相关项目补采。'
+        )
+    return shared
+
+
 def issue(actor, key, data):
     def execute(user, project):
         fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared', 'remark'})
@@ -130,21 +150,7 @@ def issue(actor, key, data):
         remark = text(data, 'remark', default='')
         stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
         value = take_value(stock, qty)
-        claims = claimed_by_others(project, source.item_id)
-        claimed = sum(claims.values(), ZERO)
-        on_hand = Stock.objects.filter(item_id=source.item_id).aggregate(total=Sum('quantity'))['total'] or ZERO
-        shared = []
-        if on_hand - qty < claimed:
-            shared = [
-                {'project': code, 'quantity': str(claims[pk])}
-                for pk, code in Project.objects.filter(pk__in=claims).order_by('code').values_list('pk', 'code')
-            ]
-            if not confirm_shared:
-                summary = '、'.join(f'{row["project"]} {row["quantity"]}' for row in shared)
-                raise Conflict(
-                    f'本次领料会占用其他项目已到货、尚未领用的物料（{summary}）。'
-                    '确认挪用请勾选「确认占用其他项目到货」后重新提交，并通知相关项目补采。'
-                )
+        shared = shared_arrival(project, source.item_id, qty, confirm_shared, '领料')
         stock.quantity -= qty
         stock.value -= value
         save(stock, user)
@@ -223,7 +229,10 @@ def return_purchase(actor, key, source_id, data):
     source = lookup(StockMove, source_id, kind='receipt')
 
     def execute(user, project):
-        fields(data, {'quantity', 'reason'})
+        fields(data, {'quantity', 'reason', 'confirm_shared'})
+        confirm_shared = data.get('confirm_shared', False)
+        if not isinstance(confirm_shared, bool):
+            raise ValidationError({'confirm_shared': '必须为布尔值。'})
         state(project, {'active', 'delivering', 'warranty'})
         original = get_object_or_404(StockMove.objects, pk=source.pk, project=project, kind='receipt')
         purchase = PurchaseOrder.objects.select_for_update().get(pk=original.purchase_line.purchase_id, project=project)
@@ -235,6 +244,7 @@ def return_purchase(actor, key, source_id, data):
             raise Conflict('采购退货数量超过原收货可退余量。')
         stock = lock_stocks([original.stock.item_id], original.stock.location, user)[original.stock.item_id]
         value = take_value(stock, qty)
+        shared = shared_arrival(project, original.stock.item_id, qty, confirm_shared, '采购退货')
         credit = rounded(original.value * (returned + qty) / original.quantity) - rounded(
             original.value * returned / original.quantity
         )
@@ -259,7 +269,7 @@ def return_purchase(actor, key, source_id, data):
             ),
             user,
         )
-        return audit(user, 'stock.return_purchase', move)
+        return audit(user, 'stock.return_purchase', move, shared_from=shared)
 
     return project_action(
         actor, key, 'stock.return_purchase', source.project_id, {'source': source.pk, 'data': data}, WAREHOUSE, execute

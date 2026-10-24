@@ -183,9 +183,10 @@ describe('模块边界', () => {
   })
 
   it('签约后仅经理可签补充协议，财务仍只读', () => {
-    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '交付与回款', '补充协议记录', '签订补充协议', '附件'])
+    expect(actionNames('sales', { status: 'signed', can_transfer: true })).toEqual(['查看明细', '交付与回款', '补充协议记录', '签订补充协议', '转交负责人', '附件'])
+    expect(actionNames('sales', { status: 'signed', can_transfer: false })).toEqual(['查看明细', '交付与回款', '补充协议记录', '签订补充协议', '附件'])
     user.value = { role: 'finance' }
-    expect(actionNames('sales', { status: 'signed' })).toEqual(['查看明细', '交付与回款', '补充协议记录', '附件'])
+    expect(actionNames('sales', { status: 'signed', can_transfer: true })).toEqual(['查看明细', '交付与回款', '补充协议记录', '附件'])
     expect(actionNames('sales', { status: 'quoted' })).toEqual(['查看明细', '附件'])
   })
 })

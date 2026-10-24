@@ -1,6 +1,9 @@
+from collections import Counter
+
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.accounts.models import User
 from apps.core.permissions import (
     BOM_WRITERS,
     MANAGERS,
@@ -30,7 +33,37 @@ from .models import (
 )
 from .services import payment_terms
 from .services.common import ZERO, rounded
+from .services.execution import stage_cancel_block
 from .services.finance import balance, paid
+
+
+def ambiguous_people():
+    """姓名或账号能对应多名人员的称呼；与导入人员时的匹配口径一致，停用人员也计入。"""
+    matches = Counter()
+    for username, display_name in User.objects.values_list('username', 'display_name'):
+        matches.update({username, display_name} - {''})
+    return {name for name, count in matches.items() if count > 1}
+
+
+def person_name(user, ambiguous):
+    """人员统一显示：姓名为空回落账号；重名或与他人账号相同时附上账号，导出后仍可原样导回。"""
+    if user is None:
+        return ''
+    name = user.display_name or user.username
+    return f'{name}（账号：{user.username}）' if name in ambiguous else name
+
+
+class PersonNameField(serializers.Field):
+    """一次序列化（含整页列表）只统计一次重名，查询数不随行数增长。"""
+
+    def __init__(self, **kwargs):
+        super().__init__(read_only=True, **kwargs)
+
+    def to_representation(self, user):
+        root = self.root
+        if not hasattr(root, '_ambiguous_people'):
+            root._ambiguous_people = ambiguous_people()
+        return person_name(user, root._ambiguous_people)
 
 
 class MoneyFilter:
@@ -113,7 +146,7 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     contract_date = serializers.DateField(read_only=True)
     sensitive_fields = ('quote_amount', 'contract_amount')
     customer_name = serializers.CharField(source='customer.name', read_only=True)
-    manager_name = serializers.CharField(source='manager.display_name', read_only=True)
+    manager_name = PersonNameField(source='manager')
 
     class Meta:
         model = Project
@@ -356,6 +389,11 @@ class EntrySerializer(serializers.ModelSerializer):
     due_amount = serializers.SerializerMethodField()
     partner_name = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    prepaid_excess = serializers.SerializerMethodField()
+
+    def get_prepaid_excess(self, obj):
+        value = payment_terms.prepaid_excess(obj)
+        return str(rounded(value)) if value > 0 else None
 
     def get_partner_name(self, obj):
         if obj.purchase_id:
@@ -370,13 +408,14 @@ class EntrySerializer(serializers.ModelSerializer):
         return obj._payment_schedule
 
     def get_status(self, obj):
-        if obj.cancelled:
-            return 'cancelled'
         remaining = balance(obj)
-        if remaining == 0:
-            return 'closed'
+        # 取消只冲减原金额，已收已付仍需退回：余额小于零优先显示待退款，退完才显示已取消。
         if remaining < 0:
             return 'refund'
+        if obj.cancelled:
+            return 'cancelled'
+        if remaining == 0:
+            return 'closed'
         # 与到期明细同一口径：只有已经起算的批次逾期才算逾期，未到货的采购不算。
         today = timezone.localdate()
         return 'overdue' if any(row['due_date'] < today for row in self.schedule(obj)) else 'open'
@@ -423,6 +462,7 @@ class EntrySerializer(serializers.ModelSerializer):
             'payment_schedule',
             'due_amount',
             'balance',
+            'prepaid_excess',
             'due_date',
             'agreed_payment_date',
             'cancelled',
@@ -434,7 +474,7 @@ class TaskSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
     can_reopen = serializers.SerializerMethodField()
-    assignee_name = serializers.CharField(source='assignee.display_name', read_only=True)
+    assignee_name = PersonNameField(source='assignee')
     project_name = serializers.CharField(source='project.name', read_only=True)
 
     def get_can_manage(self, obj):
@@ -470,8 +510,14 @@ class TaskSerializer(serializers.ModelSerializer):
             and obj.status in {'open', 'done'}
             and obj.kind not in {'install', 'acceptance'}
             and self.can_change_service(obj)
-            and not (obj.kind in {'design', 'assembly', 'test'} and self.shipped(obj))
+            and (obj.kind not in {'design', 'assembly', 'test'} or self.can_cancel_stage(obj))
         )
+
+    def can_cancel_stage(self, obj):
+        # 已发货后只有首批发货后新建、未开工的阶段任务可取消，且由项目经理确认（与 change_task 一致）。
+        if not self.shipped(obj):
+            return True
+        return stage_cancel_block(obj) is None and project_allowed(self.context['request'].user, obj.project, MANAGERS)
 
     def get_can_reopen(self, obj):
         if not (self.get_can_manage(obj) and obj.status in {'done', 'cancelled'} and self.can_change_service(obj)):
@@ -526,7 +572,7 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
     can_amend = serializers.SerializerMethodField()
     reversed_by = serializers.IntegerField(source='reversal.pk', read_only=True, default=None)
     sensitive_fields = ('hourly_cost', 'cost')
-    user_name = serializers.CharField(source='user.display_name', read_only=True)
+    user_name = PersonNameField(source='user')
     project = serializers.IntegerField(source='task.project_id', read_only=True)
     project_name = serializers.CharField(source='task.project.name', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)

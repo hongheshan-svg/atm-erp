@@ -108,7 +108,7 @@ for (const identity of identities) {
       await expect(page).toHaveURL(new RegExp(`/erp/${route}(?:\\?|$)`))
       await expect(page.locator('h1')).toBeVisible()
       const tabCount: Record<string, number> = {
-        settings: identity.key === 'admin' ? 6 : 1,
+        settings: identity.key === 'admin' ? 7 : 1,
         masterdata: identity.key === 'sales_manager' ? 1 : 2,
         inventory: ['admin', 'warehouse'].includes(identity.key) ? 3 : 2,
         projects: 3,

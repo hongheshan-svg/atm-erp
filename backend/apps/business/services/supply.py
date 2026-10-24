@@ -1,3 +1,5 @@
+import copy
+from datetime import date
 from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
@@ -37,6 +39,111 @@ from .payment_terms import terms
 
 def total(purchase):
     return sum((rounded(line.quantity * line.unit_price) for line in purchase.lines.all()), ZERO)
+
+
+def receiving_status(lines):
+    """已批准采购的收货状态：全部收完或取消为已收货/已取消；否则有合格收货或隔离中为部分收货，都没有回到已批准。"""
+    if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines):
+        return 'received' if any(line.received_quantity for line in lines) else 'cancelled'
+    return 'partial' if any(line.received_quantity or line.pending_quantity for line in lines) else 'approved'
+
+
+def quarantine_arrivals(purchase):
+    """{明细ID: 最近一次隔离到货日期}，取自收货审计（隔离到货不产生库存流水）。"""
+    result = {}
+    logs = AuditLog.objects.filter(operation='purchase.receive', resource=f'purchaseorder:{purchase.pk}')
+    for detail, created_at in logs.values_list('detail', 'created_at'):
+        try:
+            arrived = date.fromisoformat(detail['received_date'])
+        except (KeyError, TypeError, ValueError):
+            arrived = timezone.localdate(created_at)
+        for row in detail.get('lines') or []:
+            try:
+                line_id, pending = int(row['line']), Decimal(str(row.get('pending_quantity', '0')))
+            except (KeyError, TypeError, ValueError, ArithmeticError):
+                continue
+            if pending > ZERO and arrived > result.get(line_id, date.min):
+                result[line_id] = arrived
+    return result
+
+
+def _amount_changed(detail):
+    """草稿编辑是否改了数量或单价（明细增删也算）；无法解析的历史记录按已修改处理。"""
+    try:
+        before = {str(row['id']): row for row in detail['before']}
+        after = {str(row['id']): row for row in detail['after']['lines']}
+        return set(before) != set(after) or any(
+            Decimal(str(before[pk][field])) != Decimal(str(after[pk][field]))
+            for pk in before
+            for field in ('quantity', 'unit_price')
+        )
+    except (KeyError, TypeError, AttributeError, ArithmeticError, ValueError):
+        return True
+
+
+def _applicants(creators):
+    result = {pk: {creator} if creator else set() for pk, creator in creators.items()}
+    resources = {f'purchaseorder:{pk}': pk for pk in creators}
+    submitters = {}
+    logs = (
+        AuditLog.objects.filter(resource__in=resources, operation__in=['purchase.submit', 'purchase.edit'])
+        .order_by('id')
+        .values_list('resource', 'operation', 'actor_id', 'detail')
+    )
+    for resource, operation, actor, detail in logs:
+        if operation == 'purchase.submit':
+            submitters[resources[resource]] = actor
+        elif _amount_changed(detail):
+            result[resources[resource]].add(actor)
+    for pk, actor in submitters.items():
+        result[pk].add(actor)
+    return result
+
+
+def purchase_applicants(purchase):
+    """单条采购的申请人ID集合：创建人、最近一次提交人、待审批前改过数量或单价的人。
+
+    申请人不能审批本单（管理员例外须填原因，见 approval.independent_approval）。
+    """
+    return _applicants({purchase.pk: purchase.created_by_id})[purchase.pk]
+
+
+def review_budget_adjusters(purchase, amount):
+    """本单首次提交后调整过本项目预算、且按调整前预算本单会超预算的人（普通批准时视同申请人）。
+
+    提交前的预算调整不受影响；待审期间与本单是否超预算无关的调整也不限制调整人。
+    """
+    from .budgets import CATEGORIES, analysis
+
+    resource = f'purchaseorder:{purchase.pk}'
+    first = AuditLog.objects.filter(operation='purchase.submit', resource=resource).order_by('id').first()
+    if first is None:
+        return set()
+    revisions = list(
+        AuditLog.objects.filter(operation='project.budget', resource=f'project:{purchase.project_id}', id__gt=first.pk)
+        .order_by('id')
+        .values_list('actor_id', 'detail')
+    )
+    adjusters = {actor for actor, _ in revisions}
+    if not revisions:
+        return adjusters
+    before = revisions[0][1].get('before')
+    if not isinstance(before, dict) or not set(CATEGORIES) <= set(before):
+        return adjusters
+    baseline = copy.copy(purchase.project)
+    for category in CATEGORIES:
+        value = before[category]
+        setattr(baseline, f'budget_{category}', None if value in (None, 'None') else Decimal(value))
+    return adjusters if analysis(baseline, amount)['over_budget'] else set()
+
+
+def applicants_by_purchase(purchases):
+    """{采购ID: 申请人ID集合}，口径同 purchase_applicants；固定两次查询，供列表/工作台使用，避免逐行回查审计。"""
+    if hasattr(purchases, 'values_list'):
+        creators = dict(purchases.order_by().values_list('pk', 'created_by_id'))
+    else:
+        creators = {purchase.pk: purchase.created_by_id for purchase in purchases}
+    return _applicants(creators)
 
 
 def create_purchase(actor, key, data):
@@ -158,13 +265,8 @@ def approve(actor, key, purchase_id, data, *, override=False):
         state(purchase, {'submitted'})
         report = purchase_check(purchase)
         reason = text(data, 'reason', default='')
-        submitter = (
-            AuditLog.objects.filter(operation='purchase.submit', resource=f'purchaseorder:{purchase.pk}')
-            .order_by('-id')
-            .values_list('actor_id', flat=True)
-            .first()
-        )
-        self_approval = independent_approval(user, {purchase.created_by_id, submitter}, reason)
+        self_approval = independent_approval(user, purchase_applicants(purchase), reason)
+        budget_adjuster_approval = False
         if override:
             reason = text(data, 'reason')
             if data.get('confirmed') is not True:
@@ -180,6 +282,15 @@ def approve(actor, key, purchase_id, data, *, override=False):
         elif report['over_budget']:
             warnings = purchase_visibility(user, report, purchase.project)['warnings']
             raise Conflict('；'.join(warnings) + '。请重新打开审批，填写超预算批准原因。')
+        else:
+            budget_adjuster_approval = independent_approval(
+                user,
+                review_budget_adjusters(purchase, Decimal(report['purchase_amount'])),
+                reason,
+                denied='你在本单提交后调整过项目预算，按调整前预算本单会超预算，不能由你批准；'
+                '请交由其他有权限的人员审批，管理员例外须填写原因。',
+                reason_required='管理员调整预算后批准本单，必须填写例外审批原因并保留审计。',
+            )
         save(
             Entry(
                 project=purchase.project,
@@ -200,6 +311,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
             over_budget=override,
             reason=reason,
             self_approval=self_approval,
+            budget_adjuster_approval=budget_adjuster_approval,
             budget_check=report,
         )
 
@@ -255,6 +367,17 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             remarks[line_id] = remark
         if not selected:
             raise ValidationError('请至少填写一条到货数量。')
+        if from_quarantine:
+            arrivals = quarantine_arrivals(purchase)
+            for line_id in selected:
+                arrived = arrivals.get(line_id)
+                if arrived and received_date < arrived:
+                    raise ValidationError(
+                        {
+                            'received_date': f'合格入库日期不能早于{lines[line_id].item.name}的隔离到货日期 '
+                            f'{arrived.isoformat()}，请填写该日期当天或之后的检验合格日期。'
+                        }
+                    )
         stocks = lock_stocks([lines[line_id].item_id for line_id, qty in selected.items() if qty], location, user)
         for line_id, qty in selected.items():
             if not qty:
@@ -283,11 +406,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             )
             line.received_quantity += qty
             save(line, user)
-        purchase.status = (
-            'received'
-            if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines.values())
-            else 'partial'
-        )
+        purchase.status = receiving_status(lines.values())
         save(purchase, user)
         return audit(
             user,
@@ -527,6 +646,9 @@ def quality_return(actor, key, purchase_id, data):
                 raise Conflict('退回数量超过隔离中的到货。')
             line.pending_quantity -= qty
             save(line, user)
+        # 隔离品退回后按合格已收与仍隔离数量重算；全部退回且无合格收货时回到已批准待收货。
+        purchase.status = receiving_status(purchase.lines.all())
+        save(purchase, user)
         return audit(user, 'purchase.quality_return', purchase, lines=data['lines'], reason=reason)
 
     return purchase_action(actor, key, 'purchase.quality_return', purchase_id, data, WAREHOUSE, execute)

@@ -1,10 +1,12 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from apps.business.models import (
     BOMLine,
@@ -271,6 +273,90 @@ class ReviewRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.content.decode('utf-8-sig').splitlines()), 2002)
         self.assertLessEqual(len(queries), 8)
+
+    def test_returning_all_quarantined_goods_restores_status(self):
+        purchase = self.purchase(self.project, qty='5')
+        line = purchase.lines.get()
+        url = f'purchases/{purchase.pk}/'
+        quarantine = {
+            'location': '主仓',
+            'reason': '外观待检',
+            'lines': [{'line': line.pk, 'quantity': '0', 'pending_quantity': '5'}],
+        }
+        self.post('warehouse', url + 'receive/', quarantine)
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+        back = {'reason': '外观不合格退回', 'lines': [{'line': line.pk, 'quantity': '2'}]}
+        self.post('warehouse', url + 'quality-return/', back)
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+        self.post('warehouse', url + 'quality-return/', {**back, 'lines': [{'line': line.pk, 'quantity': '3'}]})
+        purchase.refresh_from_db()
+        line.refresh_from_db()
+        self.assertEqual((purchase.status, line.received_quantity, line.pending_quantity), ('approved', 0, 0))
+        self.assertFalse(StockMove.objects.filter(purchase_line=line).exists())
+        # 恢复待收货后与取消余量规则一致：没有合格收货的整单取消为已取消。
+        self.post('purchaser', url + 'cancel-remainder/', {'reason': '供应商无法补货'})
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'cancelled')
+        self.assertEqual(Entry.objects.get(purchase=purchase).credit_amount, 500)
+
+    def test_quality_return_keeps_partial_when_qualified_goods_were_received(self):
+        purchase = self.purchase(self.project, qty='5')
+        line = purchase.lines.get()
+        url = f'purchases/{purchase.pk}/'
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {
+                'location': '主仓',
+                'reason': '部分待检',
+                'lines': [{'line': line.pk, 'quantity': '2', 'pending_quantity': '3'}],
+            },
+        )
+        self.post(
+            'warehouse', url + 'quality-return/', {'reason': '不合格', 'lines': [{'line': line.pk, 'quantity': '3'}]}
+        )
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.status, 'partial')
+
+    def test_quality_accept_date_cannot_precede_latest_quarantine_arrival(self):
+        today = timezone.localdate()
+        first, latest = today - timedelta(days=5), today - timedelta(days=2)
+        purchase = self.purchase(self.project, qty='5')
+        line = purchase.lines.get()
+        url = f'purchases/{purchase.pk}/'
+        for arrived in (first, latest):
+            self.post(
+                'warehouse',
+                url + 'receive/',
+                {
+                    'location': '主仓',
+                    'reason': '到货待检',
+                    'received_date': arrived.isoformat(),
+                    'backfill_reason': '补录纸质到货单',
+                    'lines': [{'line': line.pk, 'quantity': '0', 'pending_quantity': '2'}],
+                },
+            )
+        accept = {
+            'location': '主仓',
+            'reason': '检验合格',
+            'backfill_reason': '补录检验记录',
+            'lines': [{'line': line.pk, 'quantity': '1'}],
+        }
+        counts = (ActionReceipt.objects.count(), StockMove.objects.count())
+        for early in (today - timedelta(days=40), latest - timedelta(days=1)):
+            rejected = self.post(
+                'warehouse', url + 'quality-accept/', {**accept, 'received_date': early.isoformat()}, status=400
+            )
+            self.assertIn(latest.isoformat(), str(rejected['received_date']))
+        self.assertEqual((ActionReceipt.objects.count(), StockMove.objects.count()), counts)
+        line.refresh_from_db()
+        self.assertEqual(line.pending_quantity, 4)
+        self.post('warehouse', url + 'quality-accept/', {**accept, 'received_date': latest.isoformat()})
+        self.assertEqual(StockMove.objects.get(kind='receipt').received_date, latest)
+        self.post('warehouse', url + 'quality-accept/', {**accept, 'backfill_reason': ''})
+        self.assertEqual(StockMove.objects.filter(kind='receipt').latest('id').received_date, today)
 
 
 class PartialReceiveTests(BusinessFixtures, TestCase):

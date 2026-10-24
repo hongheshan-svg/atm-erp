@@ -4,6 +4,10 @@ import { can, manager, user, salesOnly, hasRoles } from '../session'
 import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
 import { customer, display } from './shared'
+import { money } from '../utils/money'
+// 已签约销售关联未参与的项目时，后端按项目金额范围不返回合同额、回款与协议附件（amounts_visible=false）。
+const HIDDEN = '无权查看'
+const amountsHidden = (row?: Row) => row?.amounts_visible === false
 // 列表按 1440px 可视宽度精简：执行项目作为销售单号的副行、客户作为销售名称的副行，实际表头为 4 列。
 // 合同编号可直接搜索、报价金额与合同编号都在「查看明细」中，故不再单独占列。
 export const salesColumns: Column[] = [
@@ -12,7 +16,7 @@ export const salesColumns: Column[] = [
   { key: 'customer_name', label: '客户' },
   // 取消项目不改写销售单的签约事实（重新打开要恢复原合同），列表按执行项目状态标注。
   { key: 'status', label: '状态', format: row => row.status === 'signed' && row.project_status === 'cancelled' ? '已签约 · 项目已取消' : display(row.status) },
-  { key: 'contract_amount', label: '合同金额' },
+  { key: 'contract_amount', label: '合同金额', format: row => amountsHidden(row) ? HIDDEN : money(row.contract_amount) },
   { key: 'project_code', label: '执行项目' },
 ]
 export function salesActions(row: Row): string[] {
@@ -22,7 +26,7 @@ export function salesActions(row: Row): string[] {
 function salesBusinessActions(row: Row): string[] {
   if (salesOnly() && row.manager === user.value?.id) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
   if (!can(['admin', 'manager', 'finance'])) return []
-  if (row.status === 'signed') return ['查看明细', '交付与回款', '补充协议记录', ...(manager() ? ['签订补充协议'] : [])]
+  if (row.status === 'signed') return ['查看明细', '交付与回款', '补充协议记录', ...(manager() && !amountsHidden(row) ? ['签订补充协议'] : []), ...(manager() && row.can_transfer ? ['转交负责人'] : [])]
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
@@ -36,16 +40,20 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   const path = '/business/sales/'
   if (row && action === '交付与回款') {
     const data = await read(`${path}${row.id}/progress/`)
-    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status) }, fields: [
+    const hidden = amountsHidden(data)
+    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
       { key: 'project_status', label: '项目状态' },
       { key: 'deliveries', label: '交付批次', type: 'rows', fields: [{ key: 'code', label: '批次' }, { key: 'quantity', label: '数量' }, { key: 'shipped_date', label: '发货日期' }, { key: 'accepted_date', label: '验收日期' }] },
-      { key: 'receivables', label: '应收与回款', type: 'rows', fields: [{ key: 'title', label: '款项' }, { key: 'balance', label: '待收 / 待退' }, { key: 'paid', label: '净回款' }, { key: 'amount', label: '原应收' }, { key: 'credit_amount', label: '已抵减' }, { key: 'due_date', label: '到期日' }] },
+      hidden
+        ? { key: 'receivables_hidden', label: '应收与回款' }
+        : { key: 'receivables', label: '应收与回款', type: 'rows', fields: [{ key: 'title', label: '款项' }, { key: 'balance', label: '待收 / 待退' }, { key: 'paid', label: '净回款' }, { key: 'amount', label: '原应收' }, { key: 'credit_amount', label: '已抵减' }, { key: 'due_date', label: '到期日' }] },
     ], notice: { type: 'info', text: '复用交付和财务记录；负余额表示待退款。销售经理只读，收款登记与纠错由财务处理。' } }
   }
   if (row && action === '补充协议记录') {
     const records = await read(`${path}${row.id}/amendments/`)
     const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${value}`).join('；')
-    return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after) })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], actions: records.map((r: Row) => ({ label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } })) }
+    const hidden = amountsHidden(row)
+    return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after), document__original_name: r.document ? r.document__original_name : HIDDEN })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], ...(hidden ? { notice: { type: 'info' as const, text: '未参与该项目：补充协议金额与协议附件不显示，设备数量与质保变更仍可查看。' } } : {}), actions: records.filter((r: Row) => r.document).map((r: Row) => ({ label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } })) }
   }
   if (row && action === '签订补充协议') {
     const [detail, docs, entries] = await Promise.all([read(`${path}${row.id}/`), all('/business/documents/', { project: row.project, category: 'contract' }), all('/business/entries/', { project: row.project, kind: 'receivable' })])
@@ -57,8 +65,15 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
     ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
   }
+  if (row && action === '转交负责人') {
+    const users = await all('/auth/directory/')
+    return { title: action, path: `${path}${row.id}/transfer/`, fields: [
+      { key: 'manager', label: '新销售负责人', type: 'select', options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager && u.id !== user.value?.id)) },
+      { key: 'reason', label: '转交原因', hint: '必填，最多 500 字，记入操作审计。' },
+    ], notice: { type: 'info', text: '只更换销售负责人，不改变合同与回款。原负责人立即失去本人范围内的查看权限，新负责人立即获得。' } }
+  }
   if (row && action === '查看明细') return {
-    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: row,
+    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN } : row,
     fields: [
       { key: 'code', label: '销售单号' }, { key: 'name', label: '销售名称' },
       { key: 'customer_name', label: '客户' }, { key: 'manager_name', label: '负责人' },

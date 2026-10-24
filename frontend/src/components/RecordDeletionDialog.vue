@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Row } from '../types'
 import { read, write } from '../api'
 import { columns, display } from '../business'
-import { deletionLabel, deletionNotice, canDeleteRecords } from '../modules/deletions'
+import { deletionLabel, deletionNotice, canDeleteRecords, canRestoreRecords, restoreNotice } from '../modules/deletions'
 import { message, requestKey } from '../utils/request'
 import ListPagination from './ListPagination.vue'
 import { pageSize } from '../pagination'
@@ -38,6 +38,28 @@ async function submit() {
   } catch (e) { error.value = message(e) }
   finally { busy.value = false }
 }
+// 恢复只针对账号：恢复后仍停用，需管理员在用户管理中确认角色后再启用。
+const restoring = ref<Row | null>(null), restoreReason = ref('')
+let restoreKey = requestKey()
+watch(restoreReason, () => { restoreKey = requestKey() })
+const time = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false })
+function startRestore(record: Row) { restoring.value = record; restoreReason.value = ''; restoreKey = requestKey(); error.value = '' }
+async function restore() {
+  const record = restoring.value
+  if (busy.value || !record || !canRestoreRecords(props.resource)) return
+  if (!restoreReason.value.trim()) { error.value = '请填写恢复原因。'; return }
+  busy.value = true; error.value = ''
+  let done = false
+  try {
+    await write('/business/record-deletions/restore/', { resource: props.resource, id: record.detail.record.id, reason: restoreReason.value.trim() }, restoreKey)
+    done = true
+  } catch (e) { error.value = message(e) }
+  finally { busy.value = false }
+  if (!done) return
+  restoring.value = null; restoreReason.value = ''
+  emit('saved')
+  await load()
+}
 function close() { if (!busy.value) emit('close') }
 </script>
 <template>
@@ -50,7 +72,7 @@ function close() { if (!busy.value) emit('close') }
       <form class="deletion-form" @submit.prevent="submit">
         <label for="deletion-reason">删除原因</label>
         <textarea id="deletion-reason" v-model="reason" maxlength="500" rows="3" :disabled="busy" placeholder="说明为什么删除，便于以后追溯" required />
-        <label class="deletion-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />我已核对所选记录，并了解本次删除的影响</label>
+        <label class="deletion-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />{{ resource === 'users' ? '我已核对所选账号，了解删除后不能通过普通编辑恢复，原用户名不能再次使用；误删需在“已删除记录”中恢复账号' : '我已核对所选记录，并了解本次删除的影响' }}</label>
         <div class="deletion-buttons"><el-button :disabled="busy" @click="close">取消</el-button><el-button type="danger" native-type="submit" :loading="busy" :disabled="!reason.trim() || !confirmed">确认删除 {{ rows?.length }} 条</el-button></div>
       </form>
     </template>
@@ -60,10 +82,18 @@ function close() { if (!busy.value) emit('close') }
       <p v-else-if="!records.length && !error">暂无已删除记录。</p>
       <article v-for="record in records" :key="record.id" class="deletion-history">
         <strong>{{ deletionLabel(record.detail.record) }}</strong>
-        <p>{{ record.actor_name }} · {{ new Date(record.created_at).toLocaleString('zh-CN', { hour12: false }) }}</p>
+        <p>{{ record.actor_name }} · {{ time(record.created_at) }}</p>
         <p>删除原因：{{ record.detail.reason }}</p>
+        <p v-if="record.restored" class="deletion-restored">已恢复 · {{ record.restored_by }} · {{ time(record.restored_at) }}</p>
         <el-button @click="detail = detail?.id === record.id ? null : record">{{ detail?.id === record.id ? '收起内容' : '查看删除时内容' }}</el-button>
         <el-button v-if="showOriginal && record.detail.mode === 'archive'" @click="emit('open', record.detail.record.id)">查看原始记录</el-button>
+        <el-button v-if="!record.restored && canRestoreRecords(resource)" type="primary" plain :disabled="busy" @click="startRestore(record)">恢复账号</el-button>
+        <form v-if="restoring?.id === record.id" class="deletion-form" @submit.prevent="restore">
+          <el-alert :title="restoreNotice" type="info" :closable="false" show-icon />
+          <label :for="`restore-reason-${record.id}`">恢复原因</label>
+          <textarea :id="`restore-reason-${record.id}`" v-model="restoreReason" maxlength="500" rows="3" :disabled="busy" placeholder="说明为什么恢复，便于以后追溯" required />
+          <div class="deletion-buttons"><el-button :disabled="busy" @click="restoring = null">取消</el-button><el-button type="primary" native-type="submit" :loading="busy" :disabled="!restoreReason.trim()">确认恢复</el-button></div>
+        </form>
         <dl v-if="detail?.id === record.id" class="deletion-details"><template v-for="col in columns[resource]" :key="col.key"><dt>{{ col.label }}</dt><dd>{{ col.format ? col.format(record.detail.record) : display(record.detail.record[col.key], col.key) }}</dd></template></dl>
       </article>
       <ListPagination :page="page" :total="count" @change="page = $event; load()" />
@@ -79,6 +109,7 @@ function close() { if (!busy.value) emit('close') }
 .deletion-buttons { display: flex; justify-content: flex-end; gap: 8px; }
 .deletion-history { padding: 14px 0; border-bottom: 1px solid var(--field-line); overflow-wrap: anywhere; }
 .deletion-history p { margin: 8px 0; }
+.deletion-restored { color: var(--el-color-success); }
 .deletion-details { display: grid; grid-template-columns: minmax(80px, 130px) minmax(0, 1fr); gap: 8px; }
 .deletion-details dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

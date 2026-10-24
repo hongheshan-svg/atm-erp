@@ -181,6 +181,8 @@ class TransferTests(BusinessFixtures, TestCase):
             [project.code, 'design', '按姓名指派', '', '  吴兴广  ', TODAY],
             [project.code, 'design', '明确同名人员', '', '吴兴广（wuxingguang）', TODAY],
             [project.code, 'design', '英文括号', '', '吴兴广(wuxingguang)', TODAY],
+            # 列表和导出对重名人员显示“姓名（账号：xxx）”，原样导回必须仍能匹配本人。
+            [project.code, 'design', '导出格式', '', '吴兴广（账号：wuxingguang）', TODAY],
         ]
         preview = self.preview('tasks', rows, xlsx=True)
         self.assertTrue(preview.data['can_import'], preview.data)
@@ -188,10 +190,10 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertEqual(ActionReceipt.objects.count(), receipts)
         self.assertEqual(AuditLog.objects.count(), audits)
         result = self.commit('tasks', preview)
-        self.assertEqual(result['count'], 4)
+        self.assertEqual(result['count'], 5)
         self.assertEqual(set(project.tasks.values_list('assignee_id', flat=True)), {user.pk})
         self.assertEqual(self.commit('tasks', preview), result)
-        self.assertEqual(project.tasks.count(), 4)
+        self.assertEqual(project.tasks.count(), 5)
 
     def test_duplicate_names_and_account_name_collisions_require_explicit_identity(self):
         project = self.active_project()

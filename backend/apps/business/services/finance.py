@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -49,6 +49,46 @@ def balances(entries):
     return {key: str(rounded(value)) for key, value in totals.items()}
 
 
+def bank_identity_payments(account, reference, *, incoming):
+    """Unreversed payments carrying one bank transaction identity (account + reference) in one cash direction."""
+    received = Q(entry__kind='receivable', amount__gt=0) | (~Q(entry__kind='receivable') & Q(amount__lt=0))
+    return Payment.objects.filter(
+        received if incoming else ~received,
+        account=account,
+        reference=reference,
+        reversal_of__isnull=True,
+        reversal__isnull=True,
+    )
+
+
+def duplicate_bank_payment(entry, account, reference, amount, *, incoming):
+    """Reject a manual record of a bank transfer that is already registered and not yet matched to the bank.
+
+    Payments already matched to a bank record are bounded by that record, so a remainder of the same transfer
+    may still be registered and matched; the bank remainder caps how much more can be recorded.
+    """
+    from ..models import BankMatch, BankRecord
+    from .banking import remaining
+
+    matched = BankMatch.objects.filter(reversal_of__isnull=True, reversal__isnull=True).values('payment')
+    unmatched = bank_identity_payments(account, reference, incoming=incoming).exclude(pk__in=matched)
+    if unmatched.filter(entry=entry).exists():
+        raise Conflict(
+            '此款项已登记同账户、同银行流水号的同方向收付款，请核对是否重复登记；'
+            '确为另一笔交易请核对流水号，原登记有误请先冲销。'
+        )
+    direction = Q(amount__gt=0) if incoming else Q(amount__lt=0)
+    banks = BankRecord.objects.filter(direction, account=account, reference=reference, void_reason='')
+    if banks.exists():
+        pending = sum((abs(payment.amount) for payment in unmatched), ZERO)
+        left = sum((remaining(bank) for bank in banks), ZERO) - pending
+        if amount > left:
+            raise Conflict(
+                f'该银行流水尚未匹配的金额只剩 {max(left, ZERO):.2f} 元，不足以再登记 {amount:.2f} 元；'
+                '请核对是否重复登记，已到账部分请在银行流水中“认领到账”或“匹配已有收付款”。'
+            )
+
+
 def entry_action(actor, key, operation, entry_id, data, execute):
     entry = lookup(Entry, entry_id)
 
@@ -59,7 +99,7 @@ def entry_action(actor, key, operation, entry_id, data, execute):
     return project_action(actor, key, operation, entry.project_id, {'entry': entry.pk, 'data': data}, FINANCE, perform)
 
 
-def pay(actor, key, entry_id, data, *, refund=False):
+def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
     operation = 'entry.refund' if refund else 'entry.pay'
 
     def execute(user, entry):
@@ -68,13 +108,15 @@ def pay(actor, key, entry_id, data, *, refund=False):
         if entry.project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开。')
         amount = number(data.get('amount'), 'amount', positive=True)
+        account = text(data, 'account', default='', maximum=100)
+        reference = text(data, 'reference', default='', maximum=100)
         remaining = balance(entry)
         if refund:
             if remaining >= 0 or amount > -remaining:
                 raise Conflict('退款超过当前应退余额。')
             amount = -amount
         elif remaining <= 0 or amount > remaining:
-            raise Conflict('付款超过当前未结余额。')
+            raise Conflict('收款超过当前未收余额。' if entry.kind == 'receivable' else '付款超过当前未付余额。')
         from .reconciliation import authorize_payment
 
         statement = authorize_payment(entry, data, amount, refund)
@@ -86,6 +128,12 @@ def pay(actor, key, entry_id, data, *, refund=False):
             if data.get('document')
             else None
         )
+        # Input errors are reported first. Bank allocation is bounded by the bank record and re-checked there;
+        # manual entries are checked here under the entry lock. Splitting one transfer across entries stays allowed.
+        if not bank_allocation and reference:
+            duplicate_bank_payment(
+                entry, account, reference, abs(amount), incoming=(entry.kind == 'receivable') != refund
+            )
         payment = save(
             Payment(
                 entry=entry,
@@ -94,8 +142,8 @@ def pay(actor, key, entry_id, data, *, refund=False):
                 date=event_date(data),
                 reason=text(data, 'reason'),
                 method=method,
-                account=text(data, 'account', default='', maximum=100),
-                reference=text(data, 'reference', default='', maximum=100),
+                account=account,
+                reference=reference,
                 document=document,
             ),
             user,

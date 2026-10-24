@@ -279,6 +279,116 @@ class SalesTests(BusinessFixtures, TestCase):
         self.assertEqual(sale.project.status, 'active')
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '200', 'reason': '不允许改合同'}, status=409)
 
+    def signed_sale_of_sales_manager(self):
+        sale_id = self.sales_manager_order()
+        self.post('sales_manager', f'sales/{sale_id}/quote/', {'amount': '100', 'reason': '报价'})
+        self.post('sales_manager', f'sales/{sale_id}/sign/', {**self.signing(), 'manager': self.users['manager'].pk})
+        return SalesOrder.objects.get(pk=sale_id)
+
+    def test_transfer_signed_sale_owner_changes_scope_and_audits(self):
+        from apps.accounts.models import User
+
+        sale = self.signed_sale_of_sales_manager()
+        new_owner = User.objects.create_user(username='sm2', role='sales_manager')
+        from rest_framework.test import APIClient
+
+        new_client = APIClient()
+        new_client.force_authenticate(new_owner)
+        url = f'sales/{sale.pk}/transfer/'
+        project_before = (sale.project_id, sale.project.manager_id, sale.contract_amount)
+        self.assertEqual(new_client.get(f'/api/business/sales/{sale.pk}/').status_code, 404)
+        payload = {'manager': new_owner.pk, 'reason': '负责人离岗，交接给同事'}
+        result = self.post('manager', url, payload, key='transfer-1')
+        self.assertEqual(result, self.post('manager', url, payload, key='transfer-1'))
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, new_owner.pk)
+        self.assertEqual(sale.status, 'signed')
+        self.assertEqual(project_before, (sale.project_id, sale.project.manager_id, sale.contract_amount))
+        log = AuditLog.objects.get(operation='sale.transfer')
+        self.assertEqual(
+            (log.detail['before'], log.detail['after'], log.detail['reason']),
+            (self.users['sales_manager'].pk, new_owner.pk, payload['reason']),
+        )
+        self.assertEqual(AuditLog.objects.filter(operation='sale.transfer').count(), 1)
+        self.assertEqual(self.clients['sales_manager'].get(f'/api/business/sales/{sale.pk}/').status_code, 404)
+        self.assertEqual(new_client.get(f'/api/business/sales/{sale.pk}/').status_code, 200)
+
+    def test_transfer_rejections_leave_no_receipt_or_change(self):
+        from apps.accounts.models import User
+
+        sale = self.signed_sale_of_sales_manager()
+        other = User.objects.create_user(username='sm2', role='sales_manager')
+        inactive = User.objects.create_user(username='sm3', role='sales_manager', is_active=False)
+        url = f'sales/{sale.pk}/transfer/'
+        good = {'manager': other.pk, 'reason': '交接'}
+        receipts = ActionReceipt.objects.count()
+        self.post('sales_manager', url, good, status=403)
+        self.post('member', url, good, status=403)
+        self.post('manager', url, {**good, 'manager': self.users['manager'].pk}, status=400)
+        self.post('manager', url, {**good, 'manager': self.users['warehouse'].pk}, status=400)
+        self.post('manager', url, {**good, 'manager': inactive.pk}, status=404)
+        self.post('manager', url, {**good, 'manager': self.users['sales_manager'].pk}, status=400)
+        self.post('manager', url, {**good, 'reason': ''}, status=400)
+        self.post('manager', url, {**good, 'reason': 'x' * 501}, status=400)
+        self.post('manager', url, {**good, 'extra': 1}, status=400)
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['sales_manager'].pk)
+        self.assertFalse(AuditLog.objects.filter(operation='sale.transfer').exists())
+
+    def test_transfer_requires_signed_sale(self):
+        from apps.accounts.models import User
+
+        other = User.objects.create_user(username='sm2', role='sales_manager')
+        sale = self.sale()
+        self.post('manager', f'sales/{sale.pk}/transfer/', {'manager': other.pk, 'reason': '交接'}, status=409)
+        self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '报价'})
+        self.post('manager', f'sales/{sale.pk}/transfer/', {'manager': other.pk, 'reason': '交接'}, status=409)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['manager'].pk)
+
+    def test_transfer_limited_to_admin_or_project_owner_and_never_to_self(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        sale = self.signed_sale_of_sales_manager()
+        other = User.objects.create_user(username='sm2', role='sales_manager')
+        # 兼任销售经理、未负责该项目的项目经理：转给自己即可借负责人身份读到被隐藏的金额，必须拒绝。
+        dual = User.objects.create_user(username='pm2', role='manager', additional_roles=['sales_manager'])
+        self.clients['pm2'] = APIClient()
+        self.clients['pm2'].force_authenticate(dual)
+        url = f'sales/{sale.pk}/transfer/'
+        receipts = ActionReceipt.objects.count()
+        row = self.clients['pm2'].get(f'/api/business/sales/{sale.pk}/').data
+        self.assertEqual((row['amounts_visible'], row['can_transfer']), (False, False))
+        self.post('pm2', url, {'manager': dual.pk, 'reason': '转给自己'}, status=403)
+        self.post('pm2', url, {'manager': other.pk, 'reason': '代为交接'}, status=403)
+        # 参与项目不等于项目负责人。
+        sale.project.members.add(dual)
+        self.assertFalse(self.clients['pm2'].get(f'/api/business/sales/{sale.pk}/').data['can_transfer'])
+        self.post('pm2', url, {'manager': other.pk, 'reason': '代为交接'}, status=403)
+        # 项目负责人与管理员兼任销售经理时也不能转给自己。
+        for role in ('manager', 'admin'):
+            self.users[role].additional_roles = ['sales_manager']
+            self.users[role].save()
+            self.assertTrue(self.clients[role].get(f'/api/business/sales/{sale.pk}/').data['can_transfer'])
+            response = self.post(role, url, {'manager': self.users[role].pk, 'reason': '转给自己'}, status=400)
+            self.assertIn('manager', response)
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['sales_manager'].pk)
+        self.assertFalse(AuditLog.objects.filter(operation='sale.transfer').exists())
+        # 管理员不负责该项目也可以转交；项目负责人换人后，原负责人的旧请求回放被拒绝。
+        self.post('admin', url, {'manager': other.pk, 'reason': '管理员交接'})
+        payload = {'manager': self.users['sales_manager'].pk, 'reason': '交回原负责人'}
+        self.post('manager', url, payload, key='transfer-back')
+        Project.objects.filter(pk=sale.project_id).update(manager=dual)
+        self.post('manager', url, payload, key='transfer-back', status=403)
+        sale.refresh_from_db()
+        self.assertEqual(sale.manager_id, self.users['sales_manager'].pk)
+        self.assertEqual(AuditLog.objects.filter(operation='sale.transfer').count(), 2)
+
     def test_failed_finance_handoff_rolls_back_project_sale_and_number(self):
         sale = self.sale()
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '确认'})

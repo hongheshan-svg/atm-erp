@@ -6,7 +6,7 @@ from apps.accounts.models import User
 from apps.core.actions import perform
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import MANAGERS, SALES, has_role, require_role, require_sale
+from apps.core.permissions import ADMIN, MANAGERS, SALES, has_role, require_role, require_sale
 
 from ..models import Partner, Project, SalesOrder
 from . import finance, projects
@@ -72,18 +72,35 @@ def create(actor, key, data):
     )
 
 
-def action(actor, key, operation, sale_id, data, execute):
+def action(actor, key, operation, sale_id, data, execute, *, project_first=False, roles=None, check=None):
+    def locked():
+        if project_first:
+            # 历史项目签约会改写项目；与项目编辑、补充协议保持“先项目后销售单”的全局锁序，
+            # 先无锁读出关联项目并加锁，再锁销售单并复核关联未变，避免与同项目操作形成死锁。
+            initial = get_object_or_404(SalesOrder.objects, pk=identity(sale_id))
+            if initial.project_id:
+                get_object_or_404(Project.objects.select_for_update(), pk=initial.project_id)
+            sale = get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
+            if sale.project_id and sale.project_id != initial.project_id:
+                raise Conflict('销售单关联的项目已变化，请刷新后重试。')
+            return sale
+        return get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
+
+    def authorize(user):
+        if roles:
+            require_role(user, roles)
+        sale = locked()
+        require_sale(user, sale)
+        if check:
+            check(user, sale)
+
     return perform(
         actor=actor,
         key=key,
         operation=operation,
         payload={'id': sale_id, 'data': data},
-        authorize=lambda user: require_sale(
-            user, get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
-        ),
-        execute=lambda user: execute(
-            user, get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
-        ),
+        authorize=authorize,
+        execute=lambda user: execute(user, locked()),
     )
 
 
@@ -196,7 +213,7 @@ def sign(actor, key, sale_id, data):
         )
         return {**result, 'project': project.pk}
 
-    return action(actor, key, 'sale.sign', sale_id, data, execute)
+    return action(actor, key, 'sale.sign', sale_id, data, execute, project_first=True)
 
 
 def cancel(actor, key, sale_id, data):
@@ -209,3 +226,38 @@ def cancel(actor, key, sale_id, data):
         return audit(user, 'sale.cancel', sale, reason=reason)
 
     return action(actor, key, 'sale.cancel', sale_id, data, execute)
+
+
+def may_transfer(user, sale):
+    # 转交只限管理员或签约项目的负责人：兼任销售经理的项目经理不能把未参与项目的销售单转给自己，
+    # 借本人负责的身份读到按项目范围隐藏的合同额与回款。
+    return has_role(user, ADMIN) or (
+        has_role(user, MANAGERS) and sale.project_id is not None and sale.project.manager_id == user.pk
+    )
+
+
+def transfer(actor, key, sale_id, data):
+    def check(user, sale):
+        # 未签约销售单没有项目，交由 execute 按状态返回 409；回放时同样重验当前项目负责人。
+        if sale.project_id and not may_transfer(user, sale):
+            raise PermissionDenied('只有管理员或该项目负责人可以转交销售单。')
+
+    def execute(user, sale):
+        fields(data, {'manager', 'reason'})
+        state(sale, {'signed'})
+        reason = text(data, 'reason', maximum=500)
+        target_id = identity(data.get('manager'), 'manager')
+        target = get_object_or_404(User.objects.select_for_update(), pk=target_id, is_active=True)
+        if not has_role(target, {'sales_manager'}):
+            raise ValidationError({'manager': '新负责人必须是启用的销售经理。'})
+        if target.pk == user.pk:
+            raise ValidationError({'manager': '不能把销售单转交给自己。'})
+        if target.pk == sale.manager_id:
+            raise ValidationError({'manager': '新负责人与当前负责人相同，无需转交。'})
+        before = sale.manager_id
+        sale.manager = target
+        save(sale, user)
+        return audit(user, 'sale.transfer', sale, before=before, after=target.pk, reason=reason)
+
+    # 先锁项目再锁销售单：负责人校验读取项目经理，与项目编辑的改负责人互斥。
+    return action(actor, key, 'sale.transfer', sale_id, data, execute, project_first=True, roles=MANAGERS, check=check)
