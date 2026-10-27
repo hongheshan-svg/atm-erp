@@ -15,7 +15,7 @@ from ..models import (
 from ..serializers import (
     PurchaseSerializer,
 )
-from ..services import budgets, supply
+from ..services import budgets, purchase_changes, supply
 from .common import ImportableMixin, ReadView, key
 
 
@@ -82,6 +82,14 @@ class PurchaseView(ImportableMixin, ReadView):
     def reject(self, request, pk=None):
         return Response(supply.reject(request.user, key(request), self.get_object().pk, request.data))
 
+    @action(detail=True, methods=['post'], url_path='request-change')
+    def request_change(self, request, pk=None):
+        return Response(purchase_changes.request_change(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'], url_path='review-change')
+    def review_change(self, request, pk=None):
+        return Response(purchase_changes.review_change(request.user, key(request), self.get_object().pk, request.data))
+
     @action(detail=True, methods=['post'])
     def edit(self, request, pk=None):
         return Response(supply.edit(request.user, key(request), self.get_object().pk, request.data))
@@ -112,6 +120,8 @@ class PurchaseView(ImportableMixin, ReadView):
                 'purchase.quality_accept',
                 'purchase.quality_return',
                 'purchase.delivery_plan',
+                'purchase.request_change',
+                'purchase.review_change',
             ],
         ).select_related('actor')
         page = self.paginate_queryset(logs)
@@ -123,6 +133,8 @@ class PurchaseView(ImportableMixin, ReadView):
                     'actor': log.actor.display_name,
                     'operation': log.operation,
                     'reason': log.detail.get('reason', ''),
+                    'decision': log.detail.get('decision', ''),
+                    'request_id': log.detail.get('request_id'),
                     'lines': [
                         {
                             key: value

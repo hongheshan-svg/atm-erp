@@ -699,3 +699,49 @@
 - 前端51文件406项单测通过；最终布局调整后相关2文件7项再次通过。ESLint、vue-tsc、构建、Ruff、Django和迁移一致性检查通过。新组件、辅助模块和浏览器用例登记到采购/库存影响计划，CI路由37项通过。日志 `/private/tmp/erp-warehouse-detail-all-unit.log`、`erp-warehouse-detail-component-accepted.log`、`erp-warehouse-detail-lint-final.log`、`erp-warehouse-detail-types-accepted.log`、`erp-warehouse-detail-build-final.log`、`erp-warehouse-detail-checks-final.log`、`erp-warehouse-detail-routing-final.log`。
 - 隔离数据库实际迁移通过。显式使用 `http://127.0.0.1:18450` 和独立仓管账号，桌面1440px/手机390px各1项通过：同料两单元填写不同备注，合格收货3件、待检1件，实际领料1件后可用库存2件；核对备注读回、仓管无成本字段和流水列表可见。日志 `/private/tmp/erp-warehouse-detail-browser-accepted.log`，已实际打开检查对应目录中的电脑明细/末列备注和手机出库截图。
 - 此为收货/出库及共享变更关联验证，未执行完整业务浏览器链、正式发版验证或OTA；未操作生产、未提交GitHub、合并、打tag或发布。沿用独立分支 `codex/po-cancel-all`，前一项整单取消修改保留，并行审计工作区未改动。
+
+
+## 2026-10-26 统一附件在线预览
+
+- 采购、销售、项目附件和单据详情侧栏增加可直接打开的预览入口；收付款原始/补录凭证、补充协议、对账附件、表单内已选附件和采购签署文件复用同一个窗口。保留原文件下载，预览不提交业务表单、消耗核准额度或更改原文件。新增员工说明 `docs/ATTACHMENT_PREVIEW.md`。
+- XLSX/XLS/CSV支持可见工作表、100行分页、原始行号、常见数值日期与前导零、当前页查找；DOCX显示正文段落和表格，TXT支持常见中文编码，图片可缩放，PDF可翻页缩放并查看本页文字。Office为数据/正文预览，明确提示不还原完整排版、图表、嵌入图片及未计算公式；超限、加密、损坏和不支持格式均有中文说明与原件下载。
+- 两个只读预览接口复用原Document读取范围，每次重新鉴权；原下载不改变类型或原字节。所有预览响应包括错误均private/no-store、nosniff，二进制仅允许文件签名匹配的图片和PDF，拒绝HTML/SVG伪装；解析禁用外部实体和链接，限制原文件、解压大小、结构、行列和文字量。不新增模型、迁移、持久预览缓存或业务状态，文件不送第三方网站。切换文件、路由和会话时清理旧内容、释放临时地址并忽略迟到响应。
+- PDF worker随前端构建成.js，避免原生Nginx将.mjs按下载类型返回；采用PDF.js的JavaScript解码回退，兼容现行不允许动态代码和WebAssembly执行的CSP。所需字体、CMap及解码文件全部随前端目录分发。真实Nginx验证采用仓库Docker安全头及原生安装的严格MIME表，未放宽生产安全配置或修改部署脚本。
+- 新增17项后端解析/接口测试通过，覆盖所有现有角色及兼岗、各附件归属、敏感分类、未参与项目、撤权/删除、文件损坏与缺失、分页边界、XML与解压限制、无写入及下载原字节。按共享路径影响矩阵运行36个后端目标共618项通过；Ruff、Django与迁移一致性检查通过，无新增迁移。日志 `/private/tmp/erp-preview-backend-regression.log`、`erp-preview-checks-final.log`。
+- 最终前端55文件432项单元测试、ESLint、vue-tsc和构建通过，CI路由39项通过，新接口、组件、静态PDF资源和浏览器夹具均已登记。初次单测的一条旧“仅下载”动作断言已适配预览入口。日志 `/private/tmp/erp-preview-unit-final2.log`、`erp-preview-lint-csp.log`、`erp-preview-types-verified.log`、`erp-preview-build-verified.log`、`erp-preview-routing-accepted.log`。构建保留既有ActionDialog动态/静态导入提示。
+- 真实文件专项在桌面1440px和手机390px各3项通过，核对采购/销售人员Excel切表分页、编码前导零、文字原样显示，项目图片、TXT、DOCX及两页PDF实际像素/文字、原件逐字节下载和越权拒绝。截图检查促成手机窗口高度、固定关闭按钮和翻页区域调整，补充视口边界断言。最终构建的附件、合同归档、付款表单/凭证记录和资料选择器合计16项通过；真实Nginx环境6项通过，最终PDF组件调整后关联2项再次通过。日志 `/private/tmp/erp-preview-browser-accepted.log`、`erp-preview-nginx-browser.log`、`erp-preview-nginx-final.log`。
+- 共享页面回归选择38个页面文件（不含完整业务链），桌面和手机共152项：首次138项通过，BOM键盘2项、测试服务刷新中断1项和测试项目两位流水耗尽9项失败，另2项串行用例未执行。诊断发现原RemoteSelect在父表单重绘时因同值params对象重新创建而清空选项并重新请求，短暂原生校验阻止提交；改为逐项比较实际上下文并保留首次已有值，新增组件测试先复现后通过，BOM/资料选择器双端4项及最终构建16项通过。通过正常管理员接口仅将隔离测试库项目流水改为6位，保留原计数与记录；稳定构建上关联手机15项全部复验通过，覆盖另外10项失败及2项未执行用例。其余成功证据复用，不将首次失败记录算作通过。日志 `/private/tmp/erp-preview-browser-regression.log`、`erp-preview-select-red.log`、`erp-preview-selection-browser.log`、`erp-preview-regression-rechecked.log`。
+- 已实际查看电脑Excel、手机Excel和手机PDF效果，最终截图位于 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/attachment-preview/`。测试均在新建独立数据库和显式账号上执行；未操作生产、未运行完整业务链、正式发版验证、OTA或安装器。本次功能位于 `codex/attachment-preview`，版本仍为1.8.19，未提交GitHub、合并、打tag或发布。
+
+
+## 2026-10-27 待审批采购申请修改
+
+- 用户确认只覆盖采购订单（PO）的待审批阶段，已批准订单保持原取消余量、更正方式。新增“申请修改”和“处理修改申请”：采购填写原因，独立审批人填写意见并同意退回草稿或驳回；同意后修改原草稿并重新提交、批准，驳回保留原数量、价格和状态。原草稿字段边界不扩大，供应商/物料选错时退回后作废重建。
+- 申请及处理结果直接复用不可删除的采购审计，不增加审批表、角色或可配置工作流，无数据库迁移。服务端在原项目锁、采购单锁及幂等操作中验证状态和申请编号，普通/超预算批准及旧退回接口不能绕过待处理申请。待审批单直接编辑、作废、删除（含管理员批量删除）被阻止；旧退回也执行创建人、最近提交人、数量/单价编辑人的审批分离。修改申请的处理额外排除当前修改申请人，管理员例外须填写意见并记录。
+- 采购列表、手机摘要、流程节点、工作台待办及项目只读进度显示“修改申请待处理”；有权人员看到处理入口，申请人可查看原因与时间。处理记录中文展示申请、同意、驳回及双方原因。列表批量获取申请和审批资格，查询数不随记录数量逐行增加；项目协作投影只显示状态和跟进人，不输出申请中的自由文本。
+- 新增11项后端用例（含2项并发）覆盖申请/驳回/同意、草稿修改后重新批准生成应付、重复及过时申请、角色与项目范围、兼岗自批、管理员例外、已结束项目/已批准订单、批量删除回滚、待办与流程投影及批量查询。首轮相关模块95项通过；查询优化后复验采购、工作台、项目进度和既有自批限制51项通过，复用其余成功证据。日志 `/private/tmp/erp-purchase-changes-regression.log`、`erp-purchase-changes-backend-final.log`。
+- 前端3文件24项相关单测、ESLint、vue-tsc与构建通过；后端Ruff、Django和迁移历史一致性检查通过。初次静态检查使用测试设置时默认连接的 lean_test_runner 库不存在；改用已存在的隔离预览库复验，无警告且无待生成迁移。新增源码及浏览器用例登记采购影响计划，CI路由40项通过。日志 `/private/tmp/erp-purchase-changes-unit-final.log`、`erp-purchase-changes-lint-final.log`、`erp-purchase-changes-types-verified.log`、`erp-purchase-changes-build-final.log`、`erp-purchase-changes-checks-final.log`、`erp-purchase-changes-routing-final.log`；构建保留既有ActionDialog动态/静态导入提示。
+- 电脑1440px、手机390px使用独立采购员和采购经理在真实界面完成申请→驳回→再次申请→同意→修改数量→重新提交→批准，核对保存后数量与状态及中文历史。初次浏览器断言错误假设新单必定在工作台首5条中，实际被旧测试数据占据；修正测试定位，不改业务排序或删除历史夹具。开发页面2项通过；最终编译页面在隔离Nginx与最终后端上2项通过（`/private/tmp/erp-purchase-changes-browser-final.log`）。已实际查看电脑和手机截图，保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/purchase-changes/`。
+- 本次仅验证采购及直接受影响读取方，未重跑附件预览、完整业务链、正式发版验证、OTA或安装器；未操作生产。沿用功能分支 `codex/attachment-preview`，保留之前附件预览未提交改动；版本仍为1.8.19，未提交GitHub、打tag或发布。
+
+## 2026-10-27 采购完整合同与非标自动化条款
+
+- 采购合同改为一个连续页面，完整显示双方信息、全部物料及图号版次、交付结算、合同条款、长补充约定和签章区；取消正文/附件切换及整套打印勾选，不再摘要或截短资料。打印直接输出整份合同，A4自动分页并重复明细表头；手机明细横向滑动，正文正常换行。截图检查后调整表格列宽，避免数量、金额、日期及序号被挤成多行，并限制版本选择框宽度。
+- 模板版本2增加图纸/技术协议适用范围、材质公差及关键工艺、标准件与替代料、首件和不合格处理、接口与性能验收、变更费用和交期、程序参数/技术资料交付、现场服务、保密及知识产权约定。具体技术指标、程序交付范围和服务时限由双方另行明确；条款参考民法典买卖及承揽合同规则，签署前按实际项目复核，员工说明见 [采购合同查看与打印](PURCHASE_CONTRACT_PREVIEW.md)。
+- 复用原采购明细、金额和不可覆盖签署快照，无新台账或数据库迁移；既有质保、采购权限与项目范围不变。历史归档保持原明细和原条款，新模板不注入历史；当前资料及以后确认的新归档使用新条款。切换采购单/版本时忽略旧响应，避免错显合同。
+- 后端新增4项及关联归档、质保共6项通过；前端合同4项通过，涵盖32项明细与长文本、旧版本、当前归档哈希及切换响应。Ruff、格式、Django、迁移检查、ESLint、类型检查、构建通过；构建保留既有ActionDialog动态/静态导入提示。新增用例登记采购测试矩阵及浏览器影响计划，CI路由41项通过。日志 `/private/tmp/erp-contract-unified-{backend,unit,checks,types,routing,lint-final,build-final}.log`。
+- 真实隔离Nginx编译页面：签署归档及历史资料保持的电脑/手机2项通过；完整合同专项电脑1440px、手机390px最终2项通过。核对32条唯一物料、长地址/规格/备注、整份PDF每页非空、所有物料编码和关键条款/签章都存在、工具栏未打印。初次专项失败分别为测试夹具图号重复、PDF解析对象释放方法错误和CJK兼容字符比较未规范化；仅修正测试，不放宽业务检查。最终日志 `/private/tmp/erp-contract-unified-browser-verified.log`，归档成功证据见 `erp-contract-unified-browser.log`。已实际检查电脑/手机截图及PDF首页、条款和末页，示例位于 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/purchase-contract/`。
+- 采购账期、图号版次和物料编码相关浏览器回归电脑/手机另6项通过（`/private/tmp/erp-contract-unified-related-browser.log`），验证现有页面进入完整合同的显示与打印。合同与归档相关浏览器累计10项通过，未运行完整业务链、正式发版验证、OTA或安装器；未操作生产。保留此前附件预览和采购修改申请改动，版本仍为1.8.19，未提交GitHub、打tag或发布。
+
+- 后续按用户要求，默认合同标题与质保条款明确显示“12个月”（原新单默认值已经为12），更新演示合同及PDF为默认12个月，从各批货物验收合格之日起算。另有约定的采购月数仍来自原单，历史归档条款不回写。合同相关后端5项、前端4项、电脑/手机完整合同及PDF 2项通过，ESLint与构建通过；日志 `/private/tmp/erp-contract-12-months-{backend,unit,browser,lint,build}.log`。已更新并查看示例截图；未发布。
+
+
+## 2026-10-27 BOM按勾选与筛选范围导出
+
+- 根因是BOM页面仅向通用导出传入项目编号，品牌/单元/类别/搜索/缺料筛选及勾选行号均未传递，因而选中81项标准件仍导出整个项目。现明确提供“已选N项”和“筛选结果N项”的Excel/CSV入口，导出覆盖所有分页；跨筛选保留采购选择时提示筛选外数量，避免误把此前选择混入当前类别。空结果禁用，切换项目清空旧数据；同时修复视图单选按钮被全局输入框样式撑宽而竖排的问题。
+- 复用BOM读取范围、稳定行号、原物料及项目事实。只读POST导出把行号放正文，支持大量跨页选择而不受URL长度限制；服务端重新获取已授权且未删除的明细，空/重复/非法格式拒绝，跨项目/不可见/已删除的行使整份导出拒绝，不静默回退成全项目或部分文件。不增加业务表、金额、库存、审计或幂等回执。GET原筛选入口仍可用。
+- 文件固定业务列，包含项目编号名称、物料编码名称、规格图号版本、中文分类、品牌单元单位、需求数量/日期、申请日期人员及变更说明，去掉内部ID、权限标记与更新时间。同料多单元保留独立行，编码前导零保留，数量可求和，沿用公式转义。导入继续使用专用模板。
+- 后端导出、原BOM选料及通用导出相关17项通过；补充非法格式形状后导出5项复验通过。前端BOM需求、下载与采购选择器共23项通过；筛选外选择计数优化后相关13项复验通过。初次组件用例用全页status定位，被新增导出范围提示匹配；改为定位导入弹窗内的状态，不改变业务逻辑。日志 `/private/tmp/erp-bom-export-{backend,backend-final,unit-final,unit-verified}.log`。
+- Ruff/格式、Django、迁移一致性、ESLint、类型检查和构建通过；无数据库迁移，构建仅保留既有ActionDialog动态/静态导入提示。新服务、下载API、后端及浏览器用例登记到BOM影响计划；专用API路径不扩大为所有模块，共享通用API映射保持原样。CI路由全文件42项通过；初次路由测试错误要求仅修改e2e文件也选后端模块，改为核对既定直接选择该浏览器文件的行为。日志 `/private/tmp/erp-bom-export-{checks-final,lint-final,types,build-final,routing-final}.log`。
+- 真实隔离Nginx页面电脑1440px、手机390px共6项通过：81项标准件全部跨页选中，实际CSV和XLSX均为81项；手工取消一个单元后为80项且另一单元保留；保留原81项选择再按非标筛选导出只有3项；品牌/单元/类别/搜索组合导出只有1项；空结果禁用。另回归跨页采购选择、键盘及布局、按准确金额保存草稿。初次手机夹具重用桌面物料身份触发原防重复规则，改为唯一名称，不放宽规则。最终代码与编译页面的导出专项2项再次通过。日志 `/private/tmp/erp-bom-export-browser-final.log`、`erp-bom-export-browser-verified.log`。
+- 已实际查看电脑与手机导出页面截图，下载并解析Excel/CSV核对内容；截图及81项测试样例保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/bom-export/`。本次仅BOM导出及选料关联验证，未运行完整业务链、正式发版验证、OTA或安装器，未操作生产；保留此前附件、修改申请和合同未提交改动，版本仍为1.8.19，未提交GitHub或发布。

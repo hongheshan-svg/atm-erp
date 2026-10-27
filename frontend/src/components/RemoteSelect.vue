@@ -201,7 +201,8 @@ async function created(row: Row) {
   } catch (e) { if (current === selectedGeneration) selectedError.value = `资料已保存，但未能选回：${message(e)}` }
   finally { if (current === selectedGeneration) selecting.value = false }
 }
-watch(() => [props.path, JSON.stringify(props.params ?? {}), referenceSession.value], (_now, before) => {
+// 父组件重绘会新建同值 params；逐项比较上下文，避免填写其他字段时清空已选资料。
+watch([() => props.path, () => JSON.stringify(props.params ?? {}), () => referenceSession.value], (_now, before) => {
   cancelSearch()
   selectedGeneration++
   selected.value = undefined
@@ -209,7 +210,7 @@ watch(() => [props.path, JSON.stringify(props.params ?? {}), referenceSession.va
   selecting.value = false
   rows.value = []; recentRows.value = []; search.value = ''; editing.value = false
   // 切换账号不能把上一位使用者的选中记录带入新会话。
-  if (before && before[2] !== referenceSession.value) { model.value = ''; close() }
+  if (before.length && before[2] !== referenceSession.value) { model.value = ''; close() }
   void load()
   void resolveSelected()
 }, { immediate: true, flush: 'sync' })

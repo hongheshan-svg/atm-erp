@@ -42,6 +42,19 @@ afterEach(() => {
 })
 
 describe('单一远程搜索组合框', () => {
+  it('父表单重绘但筛选条件不变时，保留已选资料和原生表单有效性', async () => {
+    vi.mocked(read).mockImplementation(url => Promise.resolve(url === `${path}1/` ? item(1) : { results: [item(1)] }))
+    const wrapper = open({ modelValue: 1, required: true, params: { is_active: true } })
+    await flushPromises()
+    expect(control(wrapper).element.value).toBe('物料1 · M001')
+    vi.mocked(read).mockClear()
+    vi.mocked(read).mockReturnValue(deferred().promise)
+    await wrapper.setProps({ params: { is_active: true } })
+    expect(read).not.toHaveBeenCalled()
+    expect(control(wrapper).element.value).toBe('物料1 · M001')
+    expect(control(wrapper).element.validity.valid).toBe(true)
+  })
+
   it('只保留一个组合框，转发字段错误属性，重名通过编号和键盘选择稳定ID', async () => {
     vi.mocked(read).mockResolvedValue({ results: [item(1, '同名电机'), item(2, '同名电机')], next: null })
     const wrapper = open({ inputId: 'line-item', invalid: true, describedBy: 'line-error' })

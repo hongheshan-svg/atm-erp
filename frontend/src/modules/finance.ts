@@ -1,3 +1,4 @@
+import { previewAction } from '../document-preview'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
@@ -94,7 +95,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
 export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (resource === 'entries') a.push('查看收付流水', '查看到期明细')
-  if (resource === 'payments' && r.document) a.push('下载凭证')
+  if (resource === 'payments' && r.document) a.push('预览凭证', '下载凭证')
   if (resource === 'payments') a.push('查看凭证')
   if (resource === 'payments' && finance()) a.push('补录凭证')
   if (resource === 'entries' && finance()) {
@@ -116,7 +117,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '查看凭证') {
     const detail = await read(`/business/payments/${r.id}/`)
-    return { title: name, path: '', readonly: true, initial: { lines: detail.evidence }, fields: [{ key: 'lines', label: '凭证记录', type: 'rows', fields: [t('name', '文件'), t('reason', '说明'), t('actor', '补录人'), t('date', '补录时间')] }], actions: detail.evidence.map((d: Row) => ({ label: `下载 ${d.name}`, run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } })) }
+    return { title: name, path: '', readonly: true, initial: { lines: detail.evidence }, fields: [{ key: 'lines', label: '凭证记录', type: 'rows', fields: [t('name', '文件'), t('reason', '说明'), t('actor', '补录人'), t('date', '补录时间')] }], actions: detail.evidence.flatMap((d: Row) => [previewAction(d.document, d.name), { label: `下载 ${d.name}`, run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } }]) }
   }
   if (name === '查看收付流水') return { title: name, path: '', readonly: true, initial: { amount: r.amount, credit_amount: r.credit_amount, lines: await all('/business/payments/', { entry: r.id }) }, fields: [
     // 余额的三个来源都在这里：原金额减冲减、再减下面的流水合计。列表只留待结算。

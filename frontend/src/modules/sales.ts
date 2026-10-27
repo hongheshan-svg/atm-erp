@@ -1,3 +1,4 @@
+import { previewAction } from '../document-preview'
 import { all, read, download } from '../api'
 import { options } from '../catalog'
 import { can, manager, user, salesOnly, hasRoles } from '../session'
@@ -53,7 +54,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     const records = await read(`${path}${row.id}/amendments/`)
     const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${value}`).join('；')
     const hidden = amountsHidden(row)
-    return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after), document__original_name: r.document ? r.document__original_name : HIDDEN })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], ...(hidden ? { notice: { type: 'info' as const, text: '未参与该项目：补充协议金额与协议附件不显示，设备数量与质保变更仍可查看。' } } : {}), actions: records.filter((r: Row) => r.document).map((r: Row) => ({ label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } })) }
+    return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after), document__original_name: r.document ? r.document__original_name : HIDDEN })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], ...(hidden ? { notice: { type: 'info' as const, text: '未参与该项目：补充协议金额与协议附件不显示，设备数量与质保变更仍可查看。' } } : {}), actions: records.filter((r: Row) => r.document).flatMap((r: Row) => [previewAction(r.document, r.document__original_name), { label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } }]) }
   }
   if (row && action === '签订补充协议') {
     const [detail, docs, entries] = await Promise.all([read(`${path}${row.id}/`), all('/business/documents/', { project: row.project, category: 'contract' }), all('/business/entries/', { project: row.project, kind: 'receivable' })])

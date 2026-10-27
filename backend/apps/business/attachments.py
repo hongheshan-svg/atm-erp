@@ -1,3 +1,5 @@
+import io
+
 from django.http import FileResponse
 from rest_framework import serializers
 from rest_framework.decorators import action
@@ -7,6 +9,7 @@ from rest_framework.response import Response
 
 from apps.core.permissions import ALL_ROLES
 
+from . import document_preview
 from .api.common import ReadView, key
 from .models import Document
 from .services import documents
@@ -74,6 +77,15 @@ class DocumentView(ReadView):
     filterset_fields = ['sale', 'purchase', 'category']
     search_fields = ['original_name']
 
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        if self.action in {'preview', 'preview_file'}:
+            response['Cache-Control'] = 'private, no-store'
+            response['X-Content-Type-Options'] = 'nosniff'
+        if self.action == 'preview_file':
+            response['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'; sandbox"
+        return response
+
     def get_queryset(self):
         scoped = documents.visible_documents(self.request.user, super().get_queryset())
         if self.request.query_params.get('project'):
@@ -118,3 +130,18 @@ class DocumentView(ReadView):
         response['Cache-Control'] = 'private, no-store'
         response['X-Content-Type-Options'] = 'nosniff'
         return response
+
+    @action(detail=True, methods=['get'])
+    def preview(self, request, pk=None):
+        return Response(document_preview.preview(self.get_object(), request.query_params))
+
+    @action(detail=True, methods=['get'], url_path='preview-file')
+    def preview_file(self, request, pk=None):
+        document = self.get_object()
+        content = document_preview.read_content(document)
+        return FileResponse(
+            io.BytesIO(content),
+            as_attachment=False,
+            filename=document.original_name,
+            content_type=document_preview.inline_type(document.original_name, content),
+        )

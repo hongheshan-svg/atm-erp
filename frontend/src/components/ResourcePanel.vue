@@ -34,6 +34,7 @@ import { flowFor } from '../flows'
 import { buyer, labels } from '../modules/shared'
 import { canDeleteRecords } from '../modules/deletions'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
+import { openDocumentPreview } from '../document-preview'
 const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
@@ -155,6 +156,7 @@ function cell(row: Row, key: string) {
   return money(row[key], { refund: key === 'balance' })
 }
 function mobileSummary(row: Row) {
+  if (props.resource === 'purchases' && row.change_request) return '修改申请待处理'
   if (props.resource === 'entries') return `待结算 ${cell(row, 'balance')} · ${display(row.kind)}`
   if (props.resource === 'payments') return `${cell(row, 'amount')} 元 · ${row.date}`
   return [row.status ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : ''].filter(Boolean).join(' · ')
@@ -245,7 +247,9 @@ async function action(row: Row, name: string) {
       attachmentRow.value = row
       return
     }
-    if (name === '下载') await download(row.download_url, row.original_name)
+    if (name === '预览附件') openDocumentPreview(row.id, row.original_name)
+    else if (name === '预览凭证') openDocumentPreview(row.document, row.document_name)
+    else if (name === '下载') await download(row.download_url, row.original_name)
     else if (name === '下载凭证') {
       const doc = await read(`/business/documents/${row.document}/`)
       await download(doc.download_url, doc.original_name)

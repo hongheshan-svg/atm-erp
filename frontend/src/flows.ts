@@ -154,5 +154,9 @@ export function flowFor(resource: string, row: Row | null | undefined): Flow | n
   const aborted = definition.aborted?.[stage]
   if (aborted) return { label: definition.label, nodes: definition.nodes, current: -1, aborted }
   const current = definition.nodes.findIndex(item => item.key === stage)
+  if (resource === 'purchases' && stage === 'submitted' && row.change_request) {
+    return { label: definition.label, current, nodes: definition.nodes.map(item => item.key === 'submitted'
+      ? node('submitted', '修改申请待处理', '先处理申请，同意后退回草稿修改并重新审批') : item) }
+  }
   return current < 0 ? null : { label: definition.label, nodes: definition.nodes, current }
 }

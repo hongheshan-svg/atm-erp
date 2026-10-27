@@ -5,6 +5,7 @@ import { read, download } from '../api'
 import { display } from '../business'
 import { message } from '../utils/request'
 import type { Row } from '../types'
+import { openDocumentPreview } from '../document-preview'
 const props = defineProps<{ resource: string; record: Row }>()
 const emit = defineEmits<{ attachments: [] }>()
 const rows = ref<Row[]>([]), error = ref(''), loading = ref(false)
@@ -36,7 +37,7 @@ onBeforeUnmount(() => { generation++ })
     <template v-for="row in rows" :key="row.id">
       <div v-if="resource === 'stocks'" class="stock-history-row"><span>{{ display(row.kind) }}<small>{{ row.created_at?.slice(0, 10) }}</small></span><strong>{{ row.quantity }}</strong></div>
       <div v-else-if="resource === 'entries'" class="stock-history-row"><span><router-link :to="{ path: '/finance', query: { section: 'reconciliations', resource: 'reconciliations', focus: row.id } }">{{ row.code }}</router-link><small>{{ row.valid ? `剩余核准额度 ¥ ${row.remaining_amount}` : '原业务已变化，请重新核对' }}</small></span></div>
-      <div v-else class="file-summary"><el-icon><Document /></el-icon><span>{{ row.original_name }}<small>{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB · {{ row.created_at?.slice(0, 10) }}</small></span><el-button :icon="Download" text :aria-label="`下载 ${row.original_name}`" @click="downloadFile(row)" /></div>
+      <div v-else class="file-summary"><el-icon><Document /></el-icon><span><button class="preview-link" :aria-label="`预览 ${row.original_name}`" @click="openDocumentPreview(row.id, row.original_name)">{{ row.original_name }}</button><small>{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB · {{ row.created_at?.slice(0, 10) }}</small></span><el-button text type="primary" @click="openDocumentPreview(row.id, row.original_name)">预览</el-button><el-button :icon="Download" text :aria-label="`下载 ${row.original_name}`" @click="downloadFile(row)" /></div>
     </template>
   </section>
 </template>
@@ -49,4 +50,5 @@ onBeforeUnmount(() => { generation++ })
 .file-summary > span, .stock-history-row > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .file-summary > .el-icon { color: var(--brand); font-size: 20px; flex-shrink: 0; }
 small { display: block; font-size: 11px; margin-top: 6px; }
+.preview-link { border: 0; background: none; padding: 0; color: var(--el-color-primary); cursor: pointer; text-align: left; overflow-wrap: anywhere; font: inherit; }
 </style>

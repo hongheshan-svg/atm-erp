@@ -12,6 +12,7 @@ from apps.core.permissions import (
     PURCHASE_APPROVERS,
     PURCHASERS,
     can_manage_task,
+    has_role,
     project_allowed,
     project_read_allowed,
 )
@@ -267,7 +268,30 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
 class PurchaseSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
     can_approve = serializers.SerializerMethodField()
+    change_request = serializers.SerializerMethodField()
+    can_review_change = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
+
+    def get_change_request(self, obj):
+        from .services.purchase_changes import pending_requests
+
+        if not hasattr(self, '_pending_changes'):
+            page = self.parent.instance if isinstance(self.parent, serializers.ListSerializer) else [obj]
+            self._pending_changes = pending_requests(page)
+        return self._pending_changes.get(obj.pk)
+
+    def get_can_review_change(self, obj):
+        from .services.supply import applicants_by_purchase
+
+        if not self.get_change_request(obj) or not self.get_can_approve(obj):
+            return False
+        user = self.context['request'].user
+        if has_role(user, {'admin'}):
+            return True
+        if not hasattr(self, '_change_applicants'):
+            page = self.parent.instance if isinstance(self.parent, serializers.ListSerializer) else [obj]
+            self._change_applicants = applicants_by_purchase(page)
+        return user.pk not in self._change_applicants[obj.pk]
 
     def get_can_manage(self, obj):
         return project_allowed(self.context['request'].user, obj.project, MANAGERS)
@@ -294,6 +318,8 @@ class PurchaseSerializer(serializers.ModelSerializer):
         fields = [
             'can_manage',
             'can_approve',
+            'change_request',
+            'can_review_change',
             'id',
             'code',
             'project',

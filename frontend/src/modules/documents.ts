@@ -57,7 +57,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
 }
 export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
-  if (resource === 'documents') a.push('下载')
+  if (resource === 'documents') a.push('预览附件', '下载')
   if (resource === 'documents' && r.can_remove) a.push('删除附件')
   return a
 }

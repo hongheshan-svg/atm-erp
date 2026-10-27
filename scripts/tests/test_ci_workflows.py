@@ -16,6 +16,33 @@ from scripts.ci.select_suites import SUITES, select
 
 
 class RoutingTests(unittest.TestCase):
+    def test_bom_export_paths_select_scoped_export_and_selection_checks(self):
+        for path in (
+            'backend/apps/business/services/bom_export.py',
+            'frontend/src/api/bom.ts',
+        ):
+            scope = plan([path])
+            self.assertEqual(scope['modules'], ['bom'])
+            self.assertIn('apps.business.tests.test_bom_export', scope['backend_targets'])
+            self.assertIn('e2e/bom-export.spec.ts', scope['browser_specs'])
+            self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+        self.assertEqual(plan(['frontend/e2e/bom-export.spec.ts'])['browser_specs'], ['e2e/bom-export.spec.ts'])
+
+    def test_attachment_preview_covers_all_document_consumers(self):
+        for path in (
+            'backend/apps/business/document_preview.py',
+            'frontend/src/document-preview.ts',
+            'frontend/src/components/DocumentPreview.vue',
+            'frontend/src/components/PdfPreview.vue',
+            'frontend/pdf-assets.ts',
+            'frontend/e2e/fixtures/document-preview/comparison.xlsx',
+        ):
+            scope = plan([path])
+            self.assertEqual(set(scope['modules']), {'sales', 'projects', 'purchases', 'finance'}, path)
+            self.assertIn('apps.business.tests.test_document_preview', scope['backend_targets'], path)
+            self.assertIn('e2e/document-preview.spec.ts', scope['browser_specs'], path)
+            self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'], path)
+
     def test_warehouse_detail_components_cover_receipt_and_issue_pages(self):
         scope = plan(['frontend/src/components/WarehouseLines.vue', 'frontend/src/modules/warehouse-lines.ts'])
         self.assertEqual(set(scope['modules']), {'purchases', 'inventory'})
@@ -39,6 +66,22 @@ class RoutingTests(unittest.TestCase):
         self.assertIn('src/components/DataChecks.spec.ts', page['frontend_tests'])
         self.assertIn('e2e/settings.spec.ts', page['browser_specs'])
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
+    def test_purchase_change_requests_select_purchase_regressions(self):
+        scope = plan(['backend/apps/business/services/purchase_changes.py'])
+        self.assertEqual(scope['modules'], ['purchases'])
+        self.assertIn('apps.business.tests.test_purchase_changes', scope['backend_targets'])
+        self.assertIn('e2e/purchase-changes.spec.ts', scope['browser_specs'])
+        self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+
+    def test_purchase_contract_template_selects_complete_preview_and_archive_checks(self):
+        scope = plan(
+            ['backend/apps/business/services/contract_clauses.py', 'frontend/src/views/PurchaseContractPage.vue']
+        )
+        self.assertEqual(scope['modules'], ['purchases'])
+        self.assertIn('apps.business.tests.test_purchase_contract', scope['backend_targets'])
+        self.assertIn('e2e/purchase-contract.spec.ts', scope['browser_specs'])
+        self.assertIn('src/views/PurchaseContractPage.audit.spec.ts', scope['frontend_tests'])
 
     def test_import_helpers_include_scope_and_concurrency_regressions(self):
         for helper in ('import_dedup', 'import_locks'):

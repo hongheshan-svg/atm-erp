@@ -66,6 +66,7 @@ function due(key: string, row: Row): string {
   return row.next_delivery_date || row.due_date || ''
 }
 function urgency(key: string, row: Row) {
+  if (key === 'approvals' && row.change_request) return { text: '修改申请待处理', tone: 'warning', rank: 2 }
   const date = due(key, row)
   if (key === 'overdue_purchases' || (date && date < day.value)) return { text: '已逾期', tone: 'danger', rank: 0 }
   if (date === day.value) return { text: '今日到期', tone: 'warning', rank: 1 }
@@ -84,6 +85,7 @@ const emptyTaskNote = computed(() => can(['mechanical_engineer', 'electrical_eng
 function title(key: string, row: Row) { return key === 'bank_records' ? row.counterparty || '待核实户名' : row.title || row.code || row.reference || '待处理事项' }
 
 function amount(key: string, row: Row) {
+  if (key === 'approvals' && row.change_request) return row.self_requested ? '本人修改申请，需填写例外原因' : '先处理修改申请，再继续采购审批'
   if (key === 'bank_records') return `${Number(row.amount) >= 0 ? '收入' : '支出'} · 待匹配 ${money(String(row.remaining_amount).replace(/^-/, ''), { currency: true })}`
   if (key === 'settlements' && row.balance != null) {
     const abs = (value: unknown) => money(String(value).replace(/^-/, ''), { currency: true })

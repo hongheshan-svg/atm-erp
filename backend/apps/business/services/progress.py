@@ -27,6 +27,7 @@ from . import finance, payment_terms
 from . import reconciliation as statements
 from .common import ZERO, rounded
 from .deletions import visible_rows
+from .purchase_changes import pending_requests
 from .supply import applicants_by_purchase
 
 GROUPS = {'tasks': '任务执行', 'purchases': '采购到货', 'deliveries': '交付验收', 'entries': '收付款进度'}
@@ -52,6 +53,7 @@ class Progress:
         self.staff = list(User.objects.filter(is_active=True).order_by('pk'))
         self.today = timezone.localdate()
         self.applicants = {}
+        self.change_requests = {}
         # 重名统计每次请求一次，所有行、候选人和项目负责人共用同一显示规则。
         self.ambiguous = ambiguous_people()
 
@@ -61,6 +63,7 @@ class Progress:
     def load_applicants(self, purchases):
         """Applicants of every submitted purchase on the page (creator, latest submitter, amount editors)."""
         self.applicants = applicants_by_purchase([p for p in purchases if p.status == 'submitted'])
+        self.change_requests = pending_requests(purchases)
 
     def candidates(self, allowed, exclude=()):
         selected = [
@@ -126,6 +129,8 @@ class Progress:
         ]
         quarantine = sum((line.pending_quantity for line in lines), ZERO)
         status = purchase.get_status_display()
+        if purchase.pk in self.change_requests:
+            status = '修改申请待处理'
         if quarantine > 0:
             status = '已到货待检' if not any(line.received_quantity for line in lines) else '部分入库 · 尚有待检'
         row = self.row(
@@ -150,6 +155,8 @@ class Progress:
             row['handlers'] = self.candidates(PURCHASE_APPROVERS, applicants)
             row['handler_label'] = '可审批人员'
             row['hint'] = '由其他有权限的人员审批；超预算还需预算复核及人员分离校验。'
+            if purchase.pk in self.change_requests:
+                row['hint'] = '先处理采购修改申请；同意后退回草稿，修改后须重新提交审批。'
             if not row['handlers']:
                 row['hint'] = '暂无独立审批人员，请联系管理员安排；管理员处理本人申请须说明例外原因。'
         elif quarantine > 0:
