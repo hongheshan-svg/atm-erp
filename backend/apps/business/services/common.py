@@ -10,7 +10,7 @@ from apps.core.api import Conflict
 from apps.core.models import AuditLog
 from apps.core.permissions import require_project, require_role
 
-from ..models import Item, Project, Stock
+from ..models import Entry, Item, Project, Stock
 
 ZERO = Decimal('0')
 
@@ -102,11 +102,19 @@ def save(obj, actor):
     from apps.core.periods import check_record
 
     check_record(obj)
-    if obj._state.adding:
+    adding = obj._state.adding
+    if adding:
         obj.created_by = actor
     obj.updated_by = actor
     obj.full_clean()
     obj.save()
+    if isinstance(obj, Entry) and not adding:
+        from .deletions import restore_entry_activity
+        from .finance import balance
+
+        # Contract/service changes can reopen a hidden balance without calling finance.pay/reverse.
+        if balance(obj) != ZERO:
+            restore_entry_activity(actor, obj)
     return obj
 
 

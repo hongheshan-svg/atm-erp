@@ -10,7 +10,7 @@ import json
 import uuid
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import CharField, Exists, OuterRef, Value
+from django.db.models import CharField, Exists, OuterRef, Q, Value
 from django.db.models.functions import Cast, Concat
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
@@ -48,7 +48,7 @@ RESOURCES = {
     'documents': (models.Document, '附件'),
     'users': (User, '用户'),
 }
-# Only accounts come back: a restored user stays disabled until an admin reviews its roles.
+# Manual restoration only supports accounts; business actions can restore reopened financial work.
 RESTORABLE = {'users'}
 
 
@@ -62,6 +62,25 @@ def unrestored(removals):
     """Deletion logs not followed by a restore of the same record (audit ids only grow)."""
     later = AuditLog.objects.filter(operation=RESTORE, resource=OuterRef('resource'), pk__gt=OuterRef('pk'))
     return removals.alias(_restored=Exists(later)).filter(_restored=False)
+
+
+def restore_entry_activity(user, entry):
+    """A legitimate financial action reopened this entry; preserve deletion and append restoration audits."""
+    removals = AuditLog.objects.filter(operation=OPERATION).filter(
+        Q(resource=f'entry:{entry.pk}') | Q(detail__resource='payments', detail__record__entry=entry.pk)
+    )
+    for deletion in unrestored(removals).order_by('pk'):
+        AuditLog.objects.create(
+            actor=user,
+            operation=RESTORE,
+            resource=deletion.resource,
+            detail={
+                'resource': deletion.detail['resource'],
+                'deletion': deletion.pk,
+                'automatic': True,
+                'reason': '业务更正后重新出现待结算或待退款，恢复款项及相关收付流水显示。',
+            },
+        )
 
 
 def removed(model):

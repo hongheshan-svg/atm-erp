@@ -12,7 +12,7 @@ from apps.core.api import Conflict
 from apps.core.permissions import FINANCE, require_role
 
 from ..models import BankMatch, BankOffset, BankRecord, Entry, Payment, Project, Reconciliation
-from . import finance
+from . import bank_identity, finance
 from .common import ZERO, audit, event_date, fields, lookup, number, project_action, save, text
 from .reconciliation import signed_number
 
@@ -93,6 +93,7 @@ def create(actor, key, data, *, import_evidence=None):
             raise Conflict('银行金额不能为零，收入填正数，支出填负数。')
         account = text(data, 'account', maximum=100)
         reference = text(data, 'reference', maximum=100)
+        bank_identity.lock_accounts([account])
         if BankRecord.objects.filter(account=account, reference=reference, void_reason='').exists():
             raise Conflict(duplicate)
         bank = save(
@@ -140,6 +141,9 @@ def return_unclaimed(actor, key, bank_id, data, *, reverse=False):
         fields(data, {'offset', 'reason'} if reverse else {'returned', 'amount', 'reason'})
         original = lookup(BankOffset, data.get('offset'), 'offset', source_id=bank_id) if reverse else None
         returned_id = original.returned_id if original else lookup(BankRecord, data.get('returned'), 'returned').pk
+        bank_identity.lock_accounts(
+            BankRecord.objects.filter(pk__in=[bank_id, returned_id]).values_list('account', flat=True)
+        )
         records = {
             b.pk: b for b in BankRecord.objects.select_for_update().filter(pk__in=[bank_id, returned_id]).order_by('pk')
         }
@@ -163,6 +167,15 @@ def return_unclaimed(actor, key, bank_id, data, *, reverse=False):
                 raise Conflict('退回记录属于其他项目。')
             if amount > min(remaining(source), remaining(returned)):
                 raise Conflict('退回金额超过原未认领款或实际支出的未匹配余额。')
+            for bank in (source, returned):
+                reserved = sum(
+                    (abs(p.amount) for p in bank_identity.unmatched(bank_identity.bank_payments(bank))), ZERO
+                )
+                if amount > remaining(bank) - reserved:
+                    raise Conflict(
+                        '该银行流水已有手工登记但尚未匹配的收付款，本次退回会占用已登记金额；'
+                        '请先匹配已有收付款，原登记有误请先冲销，仅未使用的余款可关联退回。'
+                    )
         offset = save(
             BankOffset(source=source, returned=returned, amount=amount, reason=reason, reversal_of=original), user
         )
@@ -180,6 +193,7 @@ def return_unclaimed(actor, key, bank_id, data, *, reverse=False):
 def void(actor, key, bank_id, data):
     def execute(user):
         fields(data, {'reason'})
+        bank_identity.lock_accounts([lookup(BankRecord, bank_id).account])
         bank = BankRecord.objects.select_for_update().get(pk=bank_id)
         if bank.void_reason or remaining(bank) != abs(bank.amount):
             raise Conflict('银行记录已作废或还有有效匹配，请先撤销匹配。')
@@ -203,8 +217,13 @@ def match_record(user, bank, payment, reason):
         raise Conflict('银行方向或未匹配金额与收付款不一致。')
     if payment.method != 'bank' or payment.account != bank.account:
         raise Conflict('请核对收付款的银行结算方式和账户标识。')
-    if payment.reference and payment.reference != bank.reference:
+    if payment.reference and not bank_identity.reference_matches(bank, payment.reference, payment.date):
         raise Conflict('银行流水号不一致，请核对原始记录。')
+    reserved = sum(
+        (abs(p.amount) for p in bank_identity.unmatched(bank_identity.bank_payments(bank)).exclude(pk=payment.pk)), ZERO
+    )
+    if abs(cash) > remaining(bank) - reserved:
+        raise Conflict('银行余额还需匹配同笔已登记收付款，请先核对这些记录，不能重复占用其金额。')
     result = save(BankMatch(bank=bank, payment=payment, amount=abs(cash), reason=reason), user)
     return audit(user, 'bank.match', result)
 
@@ -216,6 +235,7 @@ def match(actor, key, bank_id, data, *, allocate=False):
     def execute(user, project):
         fields(data, {'entry', 'amount', 'reason', 'reconciliation'} if allocate else {'payment', 'reason'})
         Entry.objects.select_for_update().get(pk=entry.pk)
+        bank_identity.lock_accounts([lookup(BankRecord, bank_id).account])
         bank = BankRecord.objects.select_for_update().get(pk=bank_id)
         check_review(bank)
         reason = text(data, 'reason')
@@ -228,10 +248,7 @@ def match(actor, key, bank_id, data, *, allocate=False):
             # Re-checked after the entry and bank locks: a manual record of this same transfer must be
             # matched, not claimed again. Matched records are already within the bank's remaining amount.
             registered = (
-                finance.bank_identity_payments(bank.account, bank.reference, incoming=True)
-                .exclude(
-                    pk__in=BankMatch.objects.filter(reversal_of__isnull=True, reversal__isnull=True).values('payment')
-                )
+                bank_identity.unmatched(bank_identity.bank_payments(bank))
                 .select_related('entry')
                 .order_by('pk')
                 .first()
@@ -284,6 +301,7 @@ def unmatch(actor, key, match_id, data):
         if project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开后撤销银行匹配。')
         Entry.objects.select_for_update().get(pk=initial.payment.entry_id)
+        bank_identity.lock_accounts([initial.bank.account])
         bank = BankRecord.objects.select_for_update().get(pk=initial.bank_id)
         if (bank.project_id and bank.project.status == 'closed') or bank.matches.filter(
             payment__entry__project__status='closed'

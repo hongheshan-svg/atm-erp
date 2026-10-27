@@ -14,7 +14,7 @@ test('项目相关人员和销售可查看流程节点与跟进人员，原单�
     return response.json()
   }
   const staff: Record<string, { id: number; username: string }> = {}
-  for (const [role, name] of [['mechanical_engineer', '设计张工'], ['purchase_manager', '采购李经理'], ['sales_manager', '销售王经理']]) {
+  for (const [role, name] of [['mechanical_engineer', '设计张工'], ['purchase_manager', '采购李经理'], ['sales_manager', '销售王经理'], ['finance', '财务赵会计']]) {
     staff[role!] = await post('auth/users/', { username: `flow-${role}-${suffix}`, display_name: name, role, password })
   }
   const meResponse = await page.request.get('/api/auth/me/', { headers })
@@ -63,6 +63,27 @@ test('项目相关人员和销售可查看流程节点与跟进人员，原单�
   await progress.getByRole('button', { name: /收付款进度/ }).click()
   await expect(progress).toContainText('待起算付款')
   await expect(progress).not.toContainText('123.45')
+
+  // Real prepayment used to leak its exact excess through the shared progress hint.
+  const entriesResponse = await page.request.get(`/api/business/entries/?project=${project}`, { headers })
+  expect(entriesResponse.ok()).toBeTruthy()
+  const payable = (await entriesResponse.json()).results.find((entry: { purchase: number }) => entry.purchase === purchase.id)
+  expect(payable).toBeTruthy()
+  const finance = await post('auth/login/', { username: staff.finance!.username, password }, { Authorization: '', 'Idempotency-Key': '' })
+  const financeHeaders = { Authorization: `Bearer ${finance.access}`, 'Idempotency-Key': '' }
+  const prepayment = await post('business/reconciliations/', {
+    entry: payable.id, kind: 'prepayment', counterparty_balance: '123.45', approved_amount: '100',
+    basis: '隔离测试合同约定预付100元', reason: '申请预付款',
+  }, financeHeaders)
+  await post(`business/reconciliations/${prepayment.id}/confirm/`, { reason: '项目负责人核对合同后批准' })
+  await post(`business/entries/${payable.id}/pay/`, {
+    amount: '100', date: today, method: 'cash', reconciliation: prepayment.id, reason: '实际预付款',
+  }, financeHeaders)
+  await progress.getByRole('button', { name: '刷新进度', exact: true }).click()
+  await expect(progress).toContainText('存在预付款，待后续到货或取消余量后再结算。')
+  await expect(progress).not.toContainText('100.00')
+  await expect(progress).not.toContainText('123.45')
+  await page.screenshot({ path: info.outputPath('prepayment-progress-no-amount.png'), fullPage: true, animations: 'disabled' })
 
   await page.evaluate(() => localStorage.clear())
   await login(page, staff.sales_manager!.username, password)

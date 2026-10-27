@@ -1,4 +1,4 @@
-from django.db.models import Q, Sum
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -7,6 +7,7 @@ from apps.core.api import Conflict
 from apps.core.permissions import FINANCE
 
 from ..models import Document, Entry, Payment, PaymentEvidence, StockMove, TimeEntry
+from . import bank_identity
 from .common import ZERO, audit, day, event_date, fields, lookup, number, project_action, rounded, save, state, text
 from .payment_terms import due_amount
 
@@ -49,37 +50,22 @@ def balances(entries):
     return {key: str(rounded(value)) for key, value in totals.items()}
 
 
-def bank_identity_payments(account, reference, *, incoming):
-    """Unreversed payments carrying one bank transaction identity (account + reference) in one cash direction."""
-    received = Q(entry__kind='receivable', amount__gt=0) | (~Q(entry__kind='receivable') & Q(amount__lt=0))
-    return Payment.objects.filter(
-        received if incoming else ~received,
-        account=account,
-        reference=reference,
-        reversal_of__isnull=True,
-        reversal__isnull=True,
-    )
-
-
-def duplicate_bank_payment(entry, account, reference, amount, *, incoming):
+def duplicate_bank_payment(entry, account, reference, amount, date, *, incoming):
     """Reject a manual record of a bank transfer that is already registered and not yet matched to the bank.
 
     Payments already matched to a bank record are bounded by that record, so a remainder of the same transfer
     may still be registered and matched; the bank remainder caps how much more can be recorded.
     """
-    from ..models import BankMatch, BankRecord
     from .banking import remaining
 
-    matched = BankMatch.objects.filter(reversal_of__isnull=True, reversal__isnull=True).values('payment')
-    unmatched = bank_identity_payments(account, reference, incoming=incoming).exclude(pk__in=matched)
+    banks, payments = bank_identity.manual_context(account, reference, date, incoming=incoming)
+    unmatched = bank_identity.unmatched(payments)
     if unmatched.filter(entry=entry).exists():
         raise Conflict(
             '此款项已登记同账户、同银行流水号的同方向收付款，请核对是否重复登记；'
             '确为另一笔交易请核对流水号，原登记有误请先冲销。'
         )
-    direction = Q(amount__gt=0) if incoming else Q(amount__lt=0)
-    banks = BankRecord.objects.filter(direction, account=account, reference=reference, void_reason='')
-    if banks.exists():
+    if banks:
         pending = sum((abs(payment.amount) for payment in unmatched), ZERO)
         left = sum((remaining(bank) for bank in banks), ZERO) - pending
         if amount > left:
@@ -94,7 +80,12 @@ def entry_action(actor, key, operation, entry_id, data, execute):
 
     def perform(user, project):
         current = get_object_or_404(Entry.objects.select_for_update(), pk=entry.pk, project=project)
-        return execute(user, current)
+        result = execute(user, current)
+        if balance(current) != ZERO:
+            from .deletions import restore_entry_activity
+
+            restore_entry_activity(user, current)
+        return result
 
     return project_action(actor, key, operation, entry.project_id, {'entry': entry.pk, 'data': data}, FINANCE, perform)
 
@@ -128,18 +119,21 @@ def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
             if data.get('document')
             else None
         )
-        # Input errors are reported first. Bank allocation is bounded by the bank record and re-checked there;
-        # manual entries are checked here under the entry lock. Splitting one transfer across entries stays allowed.
+        date = event_date(data)
+        # Project/entry locks alone do not serialize the same bank transfer split across projects.
+        # Allocation already holds this account lock; transaction advisory locks are reentrant.
+        if reference or method == 'bank':
+            bank_identity.lock_accounts([account])
         if not bank_allocation and reference:
             duplicate_bank_payment(
-                entry, account, reference, abs(amount), incoming=(entry.kind == 'receivable') != refund
+                entry, account, reference, abs(amount), date, incoming=(entry.kind == 'receivable') != refund
             )
         payment = save(
             Payment(
                 entry=entry,
                 reconciliation=statement,
                 amount=amount,
-                date=event_date(data),
+                date=date,
                 reason=text(data, 'reason'),
                 method=method,
                 account=account,
@@ -179,6 +173,8 @@ def reverse(actor, key, payment_id, data):
         fields(data, {'date', 'reason'})
         if entry.project.status == 'closed':
             raise Conflict('项目已结项，请先重新打开。')
+        if original.reference or original.method == 'bank':
+            bank_identity.lock_accounts([original.account])
         source = get_object_or_404(Payment.objects.select_for_update(), pk=original.pk, entry=entry)
         if source.reversal_of_id or Payment.objects.filter(reversal_of=source).exists():
             raise Conflict('此流水不能再次冲销。')

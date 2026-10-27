@@ -826,6 +826,37 @@ class BankReferenceConcurrencyTests(BusinessFixtures, TransactionTestCase):
     def setUp(self):
         self.setup_business()
 
+    def test_concurrent_bank_creation_serializes_and_rejects_duplicate(self):
+        barrier = Barrier(2)
+        payload = {
+            'amount': '100',
+            'date': TODAY,
+            'account': 'SERIALIZED',
+            'reference': 'SAME',
+            'counterparty': '客户',
+            'reason': '同时登记同一银行事实',
+        }
+        counts = (ActionReceipt.objects.count(), AuditLog.objects.count())
+
+        def run(role):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=10)
+                try:
+                    banking.create(self.users[role], str(uuid.uuid4()), payload)
+                    return 201
+                except Conflict:
+                    return 409
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(sorted(pool.map(run, ['admin', 'finance'])), [201, 409])
+        self.assertEqual(BankRecord.objects.count(), 1)
+        self.assertEqual(ActionReceipt.objects.count(), counts[0] + 1)
+        self.assertEqual(AuditLog.objects.count(), counts[1] + 1)
+        self.assertFalse(Payment.objects.exists())
+
     def test_real_unique_constraint_race_returns_reference_conflict_without_side_effects(self):
         barrier = Barrier(2)
         original_save = BankRecord.save
@@ -857,7 +888,13 @@ class BankReferenceConcurrencyTests(BusinessFixtures, TransactionTestCase):
             finally:
                 close_old_connections()
 
-        with patch.object(BankRecord, 'save', synchronized_save), ThreadPoolExecutor(max_workers=2) as pool:
+        # Exercise the DB-constraint fallback for an unsynchronized/legacy writer. Normal API account
+        # serialization is covered separately; otherwise the barrier inside INSERT would deadlock by design.
+        with (
+            patch('apps.business.services.bank_identity.lock_accounts'),
+            patch.object(BankRecord, 'save', synchronized_save),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
             results = list(pool.map(run, ['admin', 'finance']))
         self.assertEqual(sorted(status for status, _ in results), [201, 409])
         failure = next(detail for status, detail in results if status == 409)

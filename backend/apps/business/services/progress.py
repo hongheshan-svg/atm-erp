@@ -25,7 +25,7 @@ from ..models import Delivery, Entry, PurchaseOrder, Reconciliation, Task
 from ..serializers import ambiguous_people, person_name
 from . import finance, payment_terms
 from . import reconciliation as statements
-from .common import ZERO, rounded
+from .common import ZERO
 from .deletions import visible_rows
 from .purchase_changes import pending_requests
 from .supply import applicants_by_purchase
@@ -273,9 +273,7 @@ class Progress:
             row['status_label'] = '对账待确认'
         excess = payment_terms.prepaid_excess(entry) if pending else 0
         if excess > 0:
-            row['hint'] = (
-                f'{row["hint"]}已付超过合格收货净额 {rounded(excess)} 元，视为预付；待后续到货或取消余量后再结算。'
-            )
+            row['hint'] += '存在预付款，待后续到货或取消余量后再结算。'
         if not pending:
             row['hint'] = '本节点已结束，原始收付记录保留。'
         return row

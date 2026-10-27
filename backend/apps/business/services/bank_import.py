@@ -18,7 +18,7 @@ from apps.core.actions import perform
 from apps.core.permissions import FINANCE, require_role
 
 from ..models import BankRecord
-from . import banking
+from . import bank_identity, banking
 from .bom_import import MAX_BYTES, message, read_xlsx
 from .common import audit, save
 
@@ -392,6 +392,7 @@ def confirm(actor, token):
         # Serialize imports across users/files; fingerprints also have a DB unique constraint.
         with transaction.get_connection().cursor() as cursor:
             cursor.execute('SELECT pg_advisory_xact_lock(%s)', [731960911])
+        bank_identity.lock_accounts({record['data']['account'] for record in batch['records']})
         created = skipped = 0
         for original in batch['records']:
             # Old, unfinished previews must use today's identity under the same import lock.

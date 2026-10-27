@@ -57,6 +57,7 @@ MODULE_FILES = {
         'finance',
         'monthly',
         'banking',
+        'bank_identity',
         'bank_import',
         'reconciliation',
         'settlement',

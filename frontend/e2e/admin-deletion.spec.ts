@@ -1,4 +1,55 @@
-import { test, expect, login } from './fixtures'
+import { test, expect, login, openRowAction } from './fixtures'
+
+test('已整理的收款冲销后重新出现在待收列表并保留删除和恢复记录', async ({ page }, info) => {
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const token = await page.evaluate(() => localStorage.getItem('access_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const suffix = `${Date.now()}-${info.project.name}`
+  const title = `冲销恢复${suffix}`
+  const today = new Date().toISOString().slice(0, 10)
+  const get = async (path: string) => {
+    const response = await page.request.get(`/api/${path}`, { headers })
+    expect(response.ok(), await response.text()).toBeTruthy()
+    return response.json()
+  }
+  const post = async (path: string, data: object) => {
+    const response = await page.request.post(`/api/business/${path}`, {
+      headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data,
+    })
+    expect(response.ok(), await response.text()).toBeTruthy()
+    return response.json()
+  }
+  const me = await get('auth/me/')
+  const customer = await post('partners/', { name: title, kind: 'customer' })
+  const sale = await post('sales/', { name: title, customer: customer.id, manager: me.id })
+  await post(`sales/${sale.id}/quote/`, { amount: '100', reason: '隔离验收' })
+  const signed = await post(`sales/${sale.id}/sign/`, {
+    date: today, manager: me.id, milestones: [{ title, amount: '100', due_date: today }],
+  })
+  const entry = (await get(`business/entries/?project=${signed.project}`)).results[0]
+  const payment = await post(`entries/${entry.id}/pay/`, { amount: '100', date: today, method: 'cash', reason: '原始收款' })
+  await post('record-deletions/', { resource: 'payments', ids: [payment.id], reason: '已结清流水整理' })
+  await post('record-deletions/', { resource: 'entries', ids: [entry.id], reason: '已结清款项整理' })
+  await page.goto(`/erp/projects/${signed.project}?tab=finance&section=entries`)
+  const rows = page.locator('.el-table__body tr:visible').filter({ hasText: title })
+  await expect(rows).toHaveCount(0)
+  await post(`payments/${payment.id}/reverse/`, { date: today, reason: '核对发现收款误录' })
+  await page.reload()
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText('100.00')
+  await openRowAction(page, rows, '查看收付流水')
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('原始收款')
+  await expect(dialog).toContainText('核对发现收款误录')
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '已删除记录', exact: true }).click()
+  await expect(dialog).toContainText('已结清款项整理')
+  await expect(dialog).toContainText('已恢复')
+  await page.screenshot({ path: info.outputPath('reopened-entry-history.png'), animations: 'disabled' })
+  const payments = (await get(`business/payments/?entry=${entry.id}`)).results
+  expect(payments).toHaveLength(2)
+  expect(payments.reduce((sum: number, row: { amount: string }) => sum + Number(row.amount), 0)).toBe(0)
+})
 
 test('管理员批量删除后可核对记录，普通岗位没有删除入口', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)

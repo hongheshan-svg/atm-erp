@@ -14,7 +14,7 @@ from django.test import TransactionTestCase
 from rest_framework.exceptions import APIException, PermissionDenied
 
 from apps.accounts.models import User
-from apps.business.models import BOMLine, Entry, Item, Partner, Project, Stock, StockMove, Task, TimeEntry
+from apps.business.models import BOMLine, Entry, Item, Partner, Payment, Project, Stock, StockMove, Task, TimeEntry
 from apps.business.services import bom_import, bom_material_import, execution, masterdata, supply, transfers
 from apps.core.api import Conflict
 from apps.core.models import ActionReceipt, AuditLog
@@ -102,6 +102,62 @@ class ImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
         errors = self.race_batches()
         self.assertEqual(errors, [], repr(errors))
         self.assertEqual(Entry.objects.filter(kind='expense').count(), 4)
+
+    def test_payment_batches_with_reversed_accounts_prelock_before_first_write(self):
+        first_entry, second_entry = self.first.entries.get(), self.second.entries.get()
+
+        def preview(entry, accounts):
+            stream = io.StringIO()
+            writer = csv.writer(stream)
+            writer.writerow([label for label, _ in transfers.SCHEMAS['payments'][1]])
+            for account in accounts:
+                writer.writerow([entry.pk, '10', TODAY, '批量收款', 'bank', account, f'{entry.pk}-{account}', '', ''])
+            result = transfers.preview(
+                self.users['finance'], 'payments', SimpleUploadedFile('payments.csv', stream.getvalue().encode())
+            )
+            self.assertTrue(result['can_import'], result)
+            return result['token']
+
+        first_token = preview(first_entry, ['ACCOUNT-A', 'ACCOUNT-B'])
+        second_token = preview(second_entry, ['ACCOUNT-B', 'ACCOUNT-A'])
+        first_write, release, started = Event(), Event(), Event()
+        backend = {}
+        original_save = Payment.save
+
+        def hold_first(payment, *args, **kwargs):
+            if payment.entry_id == first_entry.pk and not first_write.is_set():
+                first_write.set()
+                if not release.wait(12):
+                    raise AssertionError('首批收款未收到释放信号。')
+            return original_save(payment, *args, **kwargs)
+
+        def confirm(token, competing=False):
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET statement_timeout = '12s'")
+                    if competing:
+                        cursor.execute('SELECT pg_backend_pid()')
+                        backend['pid'] = cursor.fetchone()[0]
+                        started.set()
+                return transfers.confirm(self.users['finance'], 'payments', token)
+            finally:
+                connections.close_all()
+
+        with patch.object(Payment, 'save', hold_first), ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(confirm, first_token)
+            try:
+                self.assertTrue(first_write.wait(8))
+                second = pool.submit(confirm, second_token, True)
+                self.assertTrue(started.wait(8))
+                self.wait_for_lock(backend['pid'])
+            finally:
+                release.set()
+            self.assertEqual(first.result(timeout=15)['count'], 2)
+            self.assertEqual(second.result(timeout=15)['count'], 2)
+        self.assertEqual(Payment.objects.count(), 4)
+        for entry in [first_entry, second_entry]:
+            self.assertEqual(sum(entry.payments.values_list('amount', flat=True)), Decimal('20'))
 
     def test_issue_import_prelocks_all_projects_before_item_lock_during_receipt(self):
         stock = Stock.objects.create(item=self.item, location='主仓', quantity=10, value=100)
