@@ -13,7 +13,7 @@ from apps.core.permissions import MONEY_READERS, PURCHASERS, require_project, re
 
 from ..models import Document, PurchaseContractVersion
 from .common import ZERO, audit, fields, lookup, rounded, save, state, text
-from .contract_clauses import clauses
+from .contract_clauses import TEMPLATE_VERSION, clauses
 from .supply import purchase_action, total
 
 
@@ -32,7 +32,7 @@ def preview(actor, purchase):
         ZERO,
     )
     return {
-        'template_version': 1,
+        'template_version': TEMPLATE_VERSION,
         'clauses': clauses(purchase.warranty_months),
         'warranty_months': purchase.warranty_months,
         'id': purchase.pk,
@@ -99,7 +99,7 @@ def archive(actor, key, purchase_id, data):
         if data.get('expected_snapshot') != fingerprint(current):
             raise Conflict('采购或主体资料已变化，请刷新合同后重新确认签署版本。')
         if data.get('confirmed') is not True:
-            raise ValidationError({'confirmed': '请确认上传的签署文件与当前正文及附件一致。'})
+            raise ValidationError({'confirmed': '请确认上传的签署文件与当前完整合同、明细及条款一致。'})
         for party in ('buyer', 'supplier'):
             if not all(current[party].get(field, '').strip() for field in ('name', 'address', 'phone')):
                 raise ValidationError('归档前请补齐双方名称、地址、电话，并重新核对合同。')

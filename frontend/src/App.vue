@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { ElConfigProvider } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { useRoute, useRouter } from 'vue-router'
 import { user, logout } from './session'
 import { navigation } from './navigation'
 import SystemUpgrade from './components/SystemUpgrade.vue'
+import { documentPreview, closeDocumentPreview } from './document-preview'
+const DocumentPreview = defineAsyncComponent(() => import('./components/DocumentPreview.vue'))
 const menuOpen = ref(false)
 const route = useRoute()
-watch(() => route.path, () => { menuOpen.value = false })
+watch(() => route.fullPath, () => { menuOpen.value = false; closeDocumentPreview() })
 const router = useRouter()
 const currentModule = computed(() => navigation().find(item => route.path.startsWith('/' + item.key))?.label || '工作台')
 watch(user, (value) => {
+  closeDocumentPreview()
   if (!value && route.path !== '/login') void router.replace('/login')
 })
 </script>
 <template>
   <ElConfigProvider :locale="zhCn">
+    <DocumentPreview v-if="user && documentPreview" :document="documentPreview" @close="closeDocumentPreview" />
     <router-view v-if="['/login', '/setup'].includes(route.path)" />
     <div v-else class="shell">
       <button v-if="menuOpen" class="nav-backdrop" aria-label="关闭导航" @click="menuOpen = false" />

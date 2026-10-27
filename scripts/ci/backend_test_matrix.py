@@ -22,6 +22,9 @@ TARGETS = {
         'apps.business.tests.test_inventory',
         'apps.business.tests.test_execution',
         'apps.business.tests.test_import_documents',
+        'apps.business.tests.test_document_preview',
+        'apps.business.tests.test_purchase_changes',
+        'apps.business.tests.test_purchase_contract',
         'apps.business.tests.test_import_feedback',
         'apps.business.tests.test_import_dedup',
         'apps.business.tests.test_money_scope',
@@ -30,6 +33,7 @@ TARGETS = {
         'apps.business.tests.test_reports',
         'apps.business.tests.test_transfers',
         'apps.business.tests.test_bom_selection',
+        'apps.business.tests.test_bom_export',
         'apps.business.tests.test_product_coding',
         'apps.business.tests.test_review_remediation',
         'apps.business.tests.test_operational_review',
@@ -56,6 +60,7 @@ TARGETS = {
 # concurrency 同时匹配 core 与 business 的并发用例。
 MODULE_TESTS = {
     'sales': (
+        'document_preview',
         'progress',
         'deletions',
         'audit_business',
@@ -70,6 +75,7 @@ MODULE_TESTS = {
         'import_concurrency',
     ),
     'projects': (
+        'document_preview',
         'progress',
         'deletions',
         'audit_business',
@@ -91,6 +97,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'bom': (
+        'bom_export',
         'deletions',
         'audit_business',
         'import_dedup',
@@ -107,6 +114,9 @@ MODULE_TESTS = {
         'audit_fixes',
     ),
     'purchases': (
+        'purchase_changes',
+        'purchase_contract',
+        'document_preview',
         'progress',
         'deletions',
         'audit_business',
@@ -142,6 +152,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'finance': (
+        'document_preview',
         'progress',
         'deletions',
         'audit_business',

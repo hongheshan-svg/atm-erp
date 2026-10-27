@@ -1,0 +1,2 @@
+# Preserve PDF cross-reference bytes; do not treat this fixture as text.
+*.pdf binary

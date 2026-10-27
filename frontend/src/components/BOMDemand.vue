@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { read, write, download } from '../api'
+import { downloadBOM } from '../api/bom'
 import { bomCommand, permission } from '../business'
 import { bomEditor, engineer, purchaseReader } from '../session'
 import type { Row, Command } from '../types'
 import { message, requestKey } from '../utils/request'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
-import TransferTools from './TransferTools.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
 import { pageSize } from '../pagination'
 import { productCategories } from '../product-categories'
@@ -82,6 +82,25 @@ const filtered = computed(() => demand.value.lines.filter((line: Row) =>
   [line.item_code, line.item_name, line.specification].join(' ').toLowerCase().includes(search.value.trim().toLowerCase()),
 ))
 const eligible = (line: Row) => Number(line.shortage) > 0 && line.is_active !== false
+const exporting = ref(false)
+const exportSelection = computed<number[]>(() => view.value === 'purchase' ? selected.value : deletionSelection.value.map(row => row.bom_line))
+const hiddenSelectionCount = computed(() => {
+  const visibleIds = new Set(filtered.value.map((line: Row) => line.bom_line))
+  return exportSelection.value.filter(id => !visibleIds.has(id)).length
+})
+async function exportRows(command: string) {
+  if (exporting.value || deletionLoading.value || busy.value) return
+  const [scope, format] = command.split(':')
+  if (!['selected', 'filtered'].includes(scope || '') || !['xlsx', 'csv'].includes(format || '')) return
+  const ids = scope === 'selected' ? [...exportSelection.value] : filtered.value.map((line: Row) => line.bom_line)
+  if (!ids.length) return
+  const project = props.projectId
+  exporting.value = true; error.value = ''
+  try {
+    await downloadBOM(project, ids, format as 'xlsx' | 'csv', `BOM_${scope === 'selected' ? '已选' : '筛选结果'}${ids.length}项.${format}`)
+  } catch (e) { if (project === props.projectId) error.value = message(e) }
+  finally { exporting.value = false }
+}
 function toggle(line: Row) { selected.value = selected.value.includes(line.bom_line) ? selected.value.filter(id => id !== line.bom_line) : [...selected.value, line.bom_line] }
 function purchase(event: MouseEvent) { openedFromSelection = (event.currentTarget as HTMLElement)?.textContent?.trim() === '按缺料采购'; pickingBom.value = true }
 const impact = ref<Row | null>(null)
@@ -92,7 +111,7 @@ const page = ref(1)
 const visibleLines = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
 watch([pageSize, () => demand.value.lines], () => { page.value = 1 })
 watch([search, brand, unit, partType, shortageOnly], () => { page.value = 1 })
-watch(() => props.projectId, () => { selected.value = []; search.value = ''; brand.value = ''; unit.value = ''; partType.value = ''; shortageOnly.value = view.value === 'purchase'; projectContext.value = null })
+watch(() => props.projectId, () => { selected.value = []; demand.value = { lines: [] }; search.value = ''; brand.value = ''; unit.value = ''; partType.value = ''; shortageOnly.value = view.value === 'purchase'; projectContext.value = null })
 let generation = 0
 async function load() {
   deletionSelection.value = []
@@ -227,7 +246,17 @@ function saved() {
         <el-button v-if="canPurchase && view === 'purchase'" ref="purchaseTrigger" type="primary" :disabled="busy" @click="purchase">从 BOM 多选下单</el-button>
         <el-button v-if="canMaintain" :disabled="busy" @click="openImport">导入 BOM</el-button>
         <el-button v-if="canMaintain" @click="inspectImpact">变更影响与处理</el-button>
-        <TransferTools resource="bom" path="/business/bom/" :params="{ project: projectId }" />
+        <el-dropdown :disabled="busy || deletionLoading || exporting || (!filtered.length && !exportSelection.length)" @command="exportRows">
+          <el-button aria-label="导出BOM" :loading="exporting" :disabled="busy || deletionLoading || (!filtered.length && !exportSelection.length)">导出{{ exportSelection.length ? `已选 ${exportSelection.length} 项` : `筛选结果 ${filtered.length} 项` }} ▾</el-button>
+          <template #dropdown><el-dropdown-menu>
+            <template v-if="exportSelection.length">
+              <el-dropdown-item command="selected:xlsx">已选 {{ exportSelection.length }} 项 · Excel</el-dropdown-item>
+              <el-dropdown-item command="selected:csv">已选 {{ exportSelection.length }} 项 · CSV</el-dropdown-item>
+            </template>
+            <el-dropdown-item command="filtered:xlsx" :divided="Boolean(exportSelection.length)" :disabled="!filtered.length">筛选结果 {{ filtered.length }} 项 · Excel</el-dropdown-item>
+            <el-dropdown-item command="filtered:csv" :disabled="!filtered.length">筛选结果 {{ filtered.length }} 项 · CSV</el-dropdown-item>
+          </el-dropdown-menu></template>
+        </el-dropdown>
         <el-button @click="load">刷新需求</el-button>
         <el-button v-if="deletionAllowed && view === 'prepare'" type="danger" plain :disabled="busy || deletionLoading || !deletionSelection.length" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
         <el-button v-if="deletionAllowed" :disabled="busy" @click="deletionHistory = true">已删除记录</el-button>
@@ -241,6 +270,7 @@ function saved() {
     <p v-if="view === 'prepare'" class="muted">按单元核对物料规格、需求数量和需求日期；切换采购缺料可查看库存、在途及缺口。</p>
     <p v-else class="muted">库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。</p>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
+    <p class="muted" role="status" aria-label="BOM导出范围">当前筛选 {{ filtered.length }} 项，导出包含所有分页。<template v-if="exportSelection.length">已选 {{ exportSelection.length }} 项，可单独导出已选项。</template><strong v-if="hiddenSelectionCount">其中 {{ hiddenSelectionCount }} 项在当前筛选外；只需当前类别时请选择“筛选结果”导出。</strong></p>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
       <template v-if="impact"><p>{{ impact.note }}</p><el-table :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></el-table><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
@@ -307,7 +337,8 @@ function saved() {
 </template>
 <style scoped>
 .bom-view-switch { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-.bom-view-switch label { display: flex; gap: 6px; align-items: center; }
+.bom-view-switch label { display: flex; gap: 6px; align-items: center; white-space:nowrap; }
+.bom-view-switch input[type='radio'] { width:16px; height:16px; min-height:0; padding:0; flex:0 0 16px; }
 .bom-item-code { display: block; color: var(--mute); font-weight: normal; }
 .bom-import-steps { padding-left: 22px; }
 .bom-import-steps li { margin-bottom: 14px; }

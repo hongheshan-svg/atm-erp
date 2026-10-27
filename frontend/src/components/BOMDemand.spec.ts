@@ -4,8 +4,40 @@ import ElementPlus from 'element-plus'
 import BOMDemand from './BOMDemand.vue'
 import { user } from '../session'
 import { download, read, write } from '../api'
+import { downloadBOM } from '../api/bom'
+vi.mock('../api/bom', () => ({ downloadBOM: vi.fn() }))
 vi.mock('../api', () => ({ read: vi.fn().mockResolvedValue({ lines: [] }), all: vi.fn().mockResolvedValue([]), write: vi.fn(), download: vi.fn() }))
 afterEach(() => { user.value = null; vi.clearAllMocks(); vi.restoreAllMocks() })
+
+it('导出筛选跨页81项及所选子集，不夹带非标件；切换类别明确提示筛选外选择', async () => {
+  user.value = { roles: ['purchaser'] }
+  const standards = Array.from({ length: 81 }, (_, i) => ({ bom_line: i + 1, item_code: `S${i}`, item_name: '标准件', part_type: 'standard', brand: '品牌A', assembly_unit: i % 2 ? '单元A' : '单元B', shortage: '1' }))
+  vi.mocked(read).mockResolvedValueOnce({ lines: [...standards, { bom_line: 90, part_type: 'custom', item_code: 'C1', shortage: '1' }, { bom_line: 91, part_type: 'standard', item_code: 'S91', shortage: '0' }] })
+  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { template: '<div />' } } } })
+  await flushPromises()
+  await wrapper.get('[aria-label="筛选类别"]').setValue('standard')
+  expect(wrapper.get('[aria-label="BOM导出范围"]').text()).toContain('当前筛选 81 项')
+  const dropdown = wrapper.getComponent({ name: 'ElDropdown' })
+  dropdown.vm.$emit('command', 'filtered:xlsx')
+  await flushPromises()
+  expect(downloadBOM).toHaveBeenLastCalledWith(1, standards.map(row => row.bom_line), 'xlsx', 'BOM_筛选结果81项.xlsx')
+  await wrapper.findAll('el-button-stub').find(button => button.text() === '全选筛选结果')!.trigger('click')
+  dropdown.vm.$emit('command', 'selected:csv')
+  await flushPromises()
+  expect(downloadBOM).toHaveBeenLastCalledWith(1, standards.map(row => row.bom_line), 'csv', 'BOM_已选81项.csv')
+  await wrapper.get('[aria-label="筛选类别"]').setValue('custom')
+  expect(wrapper.get('[aria-label="BOM导出范围"]').text()).toContain('81 项在当前筛选外')
+  dropdown.vm.$emit('command', 'filtered:csv')
+  await flushPromises()
+  expect(downloadBOM).toHaveBeenLastCalledWith(1, [90], 'csv', 'BOM_筛选结果1项.csv')
+  await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('不存在')
+  dropdown.vm.$emit('command', 'filtered:xlsx')
+  await flushPromises()
+  expect(downloadBOM).toHaveBeenCalledTimes(3)
+  await wrapper.setProps({ projectId: 2 })
+  expect(wrapper.get('[aria-label="BOM导出范围"]').text()).not.toContain('已选 81')
+  wrapper.unmount()
+})
 
 it('工程师BOM维护和导入取当前项目权限，兼采购全局可读项目不扩写权限', async () => {
   user.value = { roles: ['mechanical_engineer', 'purchaser'] }
@@ -57,7 +89,7 @@ it('选择文件立即打开预览并显示处理状态，取消后重新选同�
   const wrapper = mountImport()
   await uploadFile(wrapper)
   expect(wrapper.get('[role="dialog"]').attributes('aria-label')).toBe('导入BOM')
-  expect(wrapper.get('[role="status"]').text()).toContain('正在读取文件')
+  expect(wrapper.get('[role="dialog"] [role="status"]').text()).toContain('正在读取文件')
   expect(wrapper.findAll('el-button-stub').find(button => button.text() === '确认导入')!.attributes('disabled')).toBe('true')
   await wrapper.findAll('el-button-stub').find(button => button.text() === '关闭')!.trigger('click')
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
@@ -66,7 +98,7 @@ it('选择文件立即打开预览并显示处理状态，取消后重新选同�
   await flushPromises()
   finish({ can_import: false, lines: [], errors: [{ message: '旧请求错误' }] })
   await flushPromises()
-  expect(wrapper.get('[role="status"]').text()).toContain('校验通过，共 1 条明细')
+  expect(wrapper.get('[role="dialog"] [role="status"]').text()).toContain('校验通过，共 1 条明细')
   expect(wrapper.text()).not.toContain('旧请求错误')
   await wrapper.findAll('el-button-stub').find(button => button.text() === '确认导入')!.trigger('click')
   expect(wrapper.find('[role="dialog"]').exists()).toBe(false)

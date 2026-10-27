@@ -1,4 +1,5 @@
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.core.permissions import (
@@ -12,8 +13,8 @@ from ..models import (
 from ..serializers import (
     BOMSerializer,
 )
-from ..services import corrections
-from .common import ReadView, key
+from ..services import bom_export, corrections, tabular
+from .common import ExportThrottle, ReadView, key
 
 
 class BOMView(ReadView):
@@ -23,6 +24,19 @@ class BOMView(ReadView):
 
     def get_queryset(self):
         return super().get_queryset().filter(project__in=projects_for(self.request.user, Project.objects.all()))
+
+    @action(detail=False, methods=['get', 'post'], throttle_classes=[ExportThrottle])
+    def export(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        if request.method == 'POST':
+            lines = bom_export.selected_rows(queryset, request.data)
+            file_format = request.data.get('file_format', 'xlsx')
+        else:
+            if queryset.count() > tabular.MAX_EXPORT:
+                raise ValidationError('导出超过20000条，请缩小筛选范围。')
+            lines = queryset
+            file_format = request.query_params.get('file_format', 'csv')
+        return bom_export.document(lines, file_format)
 
     @action(detail=True, methods=['post'])
     def remove(self, request, pk=None):

@@ -20,7 +20,17 @@ MODULE_FILES = {
         'progress',
         'ProjectProgress',
     ),
-    'bom': ('bom', 'bom_import', 'bom_material_import', 'BOMPage', 'BOMDemand', 'BOMPurchasePicker', 'bom-purchase'),
+    'bom': (
+        'bom',
+        'bom_export',
+        'bom-export',
+        'bom_import',
+        'bom_material_import',
+        'BOMPage',
+        'BOMDemand',
+        'BOMPurchasePicker',
+        'bom-purchase',
+    ),
     'purchases': (
         'progress',
         'ProjectProgress',
@@ -31,6 +41,8 @@ MODULE_FILES = {
         'WarehouseLines',
         'purchase_contract',
         'purchase_warranty',
+        'purchase_changes',
+        'purchase-changes',
         'contract_clauses',
         'payment_terms',
         'payment-terms',
@@ -67,6 +79,7 @@ MODULE_FILES = {
 }
 BROWSERS = {
     'sales': (
+        'document-preview',
         'process-progress',
         'admin-deletion',
         'sales-role',
@@ -75,6 +88,7 @@ BROWSERS = {
         'import-surface-audit',
     ),
     'projects': (
+        'document-preview',
         'process-progress',
         'admin-deletion',
         'import-audit-real',
@@ -86,8 +100,18 @@ BROWSERS = {
         'specialist-roles',
         'import-surface-audit',
     ),
-    'bom': ('admin-deletion', 'bom-selection', 'bom-purchase-layout', 'specialist-roles', 'import-feedback'),
+    'bom': (
+        'bom-export',
+        'admin-deletion',
+        'bom-selection',
+        'bom-purchase-layout',
+        'specialist-roles',
+        'import-feedback',
+    ),
     'purchases': (
+        'purchase-changes',
+        'purchase-contract',
+        'document-preview',
         'process-progress',
         'admin-deletion',
         'payment-terms',
@@ -100,6 +124,7 @@ BROWSERS = {
     ),
     'inventory': ('cancel-actions-audit', 'import-surface-audit', 'warehouse-lines'),
     'finance': (
+        'document-preview',
         'process-progress',
         'admin-deletion',
         'reconciliation',
@@ -143,6 +168,8 @@ SHARED_UI_BROWSERS = (
 # 经过审阅的共享路径映射：这些文件被多个模块直接调用，改动时运行所列模块的全部关联用例。
 # 按前缀匹配、先匹配先用；只在文件名未命中 MODULE_FILES 时使用。新增的未登记路径仍然失败，不静默漏测。
 SHARED_PATHS = (
+    # This API only downloads BOM rows; generic request/download paths remain shared below.
+    (('frontend/src/api/bom.ts', 'frontend/src/api/bom.spec.ts'), ('bom',)),
     (
         (
             'backend/apps/business/services/deletions.py',
@@ -156,6 +183,12 @@ SHARED_PATHS = (
         (
             'backend/apps/business/services/documents.py',
             'backend/apps/business/attachments.py',
+            'backend/apps/business/document_preview.py',
+            'frontend/src/document-preview.ts',
+            'frontend/src/components/DocumentPreview.vue',
+            'frontend/src/components/PdfPreview.vue',
+            'frontend/pdf-assets.ts',
+            'frontend/e2e/fixtures/document-preview/',
             'frontend/src/components/AttachmentDialog.vue',
             'frontend/src/components/InlineDocumentField.vue',
             'frontend/src/modules/documents.ts',

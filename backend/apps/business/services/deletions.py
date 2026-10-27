@@ -181,6 +181,8 @@ def mode_for(obj, actor):
             raise Conflict('销售单已关联项目，请先取消或结项项目；删除不会撤销合同或应收款。')
         return 'archive'
     elif isinstance(obj, models.PurchaseOrder):
+        if obj.status == 'submitted':
+            raise Conflict('待审批采购不能直接删除，请先申请修改，经审批退回草稿后再处理。')
         if obj.status in {'approved', 'partial'}:
             raise Conflict('采购单仍有收货业务，请先完成收货或取消未收余量，再删除。')
         if obj.status in {'received', 'cancelled'}:

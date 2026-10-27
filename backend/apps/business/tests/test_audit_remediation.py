@@ -308,11 +308,11 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         preview = self.get(
             'purchaser', f'business/purchases/{purchase.pk}/contract-preview/', {'version': 'current'}
         ).data
-        self.assertIn('验收合格之日起24个月', preview['clauses']['quality'][2])
+        self.assertIn('验收合格之日起24个月', ''.join(preview['clauses']['quality']))
         default_preview = self.get(
             'purchaser', f'business/purchases/{default.pk}/contract-preview/', {'version': 'current'}
         ).data
-        self.assertIn('验收合格之日起一年', default_preview['clauses']['quality'][2])
+        self.assertIn('验收合格之日起12个月', ''.join(default_preview['clauses']['quality']))
         self.post('purchaser', f'purchases/{purchase.pk}/submit/')
         self.post('manager', f'purchases/{purchase.pk}/approve/')
         self.receive(purchase, '5', received_date=TODAY, backfill_reason='根据历史签收单补录质保起算日期')

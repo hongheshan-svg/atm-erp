@@ -1,0 +1,97 @@
+import { test, expect, login, openRowAction, observePage, type Page } from './fixtures'
+
+async function api(page: Page, path: string, data?: object, status = 200) {
+  const token = await page.evaluate(() => localStorage.getItem('access_token'))
+  const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }
+  const response = data === undefined
+    ? await page.request.get('/api/' + path, { headers })
+    : await page.request.post('/api/' + path, { headers, data })
+  expect(response.status(), await response.text()).toBe(status)
+  return response.json()
+}
+const row = (page: Page, code: string) => page.locator('.el-table__body tr:visible').filter({ hasText: code }).first()
+async function save(page: Page, title: string, path: string) {
+  const dialog = page.getByRole('dialog', { name: title, exact: true })
+  const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/business/' + path && r.request().method() === 'POST')
+  await dialog.locator('button[type="submit"]').click()
+  const response = await pending
+  expect(response.status(), await response.text()).toBe(200)
+  await expect(dialog).not.toBeVisible()
+}
+
+test('采购主动申请修改：独立审批人驳回或退回，修改后重新审批', async ({ page, browser }, info) => {
+  const suffix = String(Date.now()), password = 'PurchaseChange-QA-2026-only'
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const buyer = await api(page, 'auth/users/', { username: `changebuyer${suffix}`, display_name: '采购申请人', roles: ['purchaser'], password }, 201)
+  const reviewer = await api(page, 'auth/users/', { username: `changereviewer${suffix}`, display_name: '采购审批人', roles: ['purchase_manager'], password }, 201)
+  const me = await api(page, 'auth/me/')
+  const partner = await api(page, 'business/partners/', { name: `修改申请单位${suffix}`, kind: 'both' }, 201)
+  const project = await api(page, 'business/projects/', { name: `采购修改验收${suffix}`, customer: partner.id, manager: me.id }, 201)
+  const material = await api(page, 'business/items/', { name: `修改验收电机${suffix}`, unit: '件' }, 201)
+  await login(page, buyer.username, password)
+  const day = new Date().toISOString().slice(0, 10)
+  const purchase = await api(page, 'business/purchases/', { project: project.id, supplier: partner.id, due_date: day, lines: [{ item: material.id, quantity: '5', unit_price: '80' }] }, 201)
+  await api(page, `business/purchases/${purchase.id}/submit/`, {})
+  const detail = await api(page, `business/purchases/${purchase.id}/`)
+  const location = `/erp/projects/${project.id}?tab=purchases`
+  await page.goto(location)
+  await openRowAction(page, row(page, detail.code), '申请修改')
+  let form = page.getByRole('dialog', { name: '申请修改', exact: true })
+  await form.getByLabel('修改原因', { exact: true }).fill('第1项数量填错，应由5改为3')
+  await expect(form.getByRole('button', { name: '提交修改申请', exact: true })).toBeInViewport()
+  await page.screenshot({ path: info.outputPath('purchase-request-change.png'), fullPage: true })
+  await save(page, '申请修改', `purchases/${purchase.id}/request-change/`)
+  await expect(row(page, detail.code)).toContainText('修改申请待处理')
+  expect((await api(page, `business/purchases/${purchase.id}/`)).lines[0].quantity).toBe('5.000')
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: info.project.use.viewport, isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch })
+  const reviewPage = await context.newPage(), errors: string[] = []
+  observePage(reviewPage, errors)
+  try {
+    await login(reviewPage, reviewer.username, password)
+    // Workbench only shows its first five items; older isolated fixtures may occupy that page.
+    expect((await api(reviewPage, `business/purchases/${purchase.id}/`)).can_review_change).toBe(true)
+    await reviewPage.goto(location)
+    await openRowAction(reviewPage, row(reviewPage, detail.code), '处理修改申请')
+    let review = reviewPage.getByRole('dialog', { name: '处理修改申请', exact: true })
+    await expect(review.getByLabel('修改原因', { exact: true })).toHaveValue('第1项数量填错，应由5改为3')
+    await review.getByLabel('处理结果', { exact: true }).selectOption('reject')
+    await review.getByLabel('处理意见', { exact: true }).fill('请补充供应商确认依据后再申请')
+    await save(reviewPage, '处理修改申请', `purchases/${purchase.id}/review-change/`)
+    expect((await api(reviewPage, `business/purchases/${purchase.id}/`)).change_request).toBeNull()
+    await page.reload()
+    await openRowAction(page, row(page, detail.code), '处理记录')
+    await expect(page.getByRole('dialog', { name: '处理记录', exact: true })).toContainText('驳回修改申请')
+    await page.getByRole('dialog', { name: '处理记录', exact: true }).getByRole('button', { name: '关闭', exact: true }).click()
+    await openRowAction(page, row(page, detail.code), '申请修改')
+    form = page.getByRole('dialog', { name: '申请修改', exact: true })
+    await form.getByLabel('修改原因', { exact: true }).fill('供应商已确认：第1项数量应为3')
+    await save(page, '申请修改', `purchases/${purchase.id}/request-change/`)
+    await reviewPage.reload()
+    await openRowAction(reviewPage, row(reviewPage, detail.code), '处理修改申请')
+    review = reviewPage.getByRole('dialog', { name: '处理修改申请', exact: true })
+    await review.getByLabel('处理结果', { exact: true }).selectOption('approve')
+    await review.getByLabel('处理意见', { exact: true }).fill('已核实，同意退回修改，修改后重新提交')
+    await review.getByRole('button', { name: '确认处理申请', exact: true }).scrollIntoViewIfNeeded()
+    await expect(review.getByRole('button', { name: '确认处理申请', exact: true })).toBeInViewport()
+    await reviewPage.screenshot({ path: info.outputPath('purchase-review-change.png'), fullPage: true })
+    await save(reviewPage, '处理修改申请', `purchases/${purchase.id}/review-change/`)
+    expect((await api(page, `business/purchases/${purchase.id}/`)).status).toBe('draft')
+    await page.reload()
+    await openRowAction(page, row(page, detail.code), '修改采购')
+    const edit = page.getByRole('dialog', { name: '修改采购', exact: true })
+    await edit.getByLabel('数量', { exact: true }).fill('3')
+    await edit.getByLabel('原因 / 说明', { exact: true }).fill('按已同意的申请更正数量')
+    await save(page, '修改采购', `purchases/${purchase.id}/edit/`)
+    await openRowAction(page, row(page, detail.code), '提交采购')
+    await save(page, '提交采购', `purchases/${purchase.id}/submit/`)
+    await reviewPage.reload()
+    await openRowAction(reviewPage, row(reviewPage, detail.code), '批准采购')
+    await save(reviewPage, '批准采购', `purchases/${purchase.id}/approve/`)
+    const final = await api(page, `business/purchases/${purchase.id}/`)
+    expect(final.status).toBe('approved')
+    expect(final.lines[0].quantity).toBe('3.000')
+    expect(final.change_request).toBeNull()
+    expect(errors).toEqual([])
+  } finally { await context.close() }
+})

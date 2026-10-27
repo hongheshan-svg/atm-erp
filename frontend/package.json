@@ -1,6 +1,6 @@
 {
   "name": "atm-erp-lean",
-  "version": "1.8.19",
+  "version": "1.8.20",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src e2e playwright.config.ts vite.config.ts --max-warnings=0",
+    "lint": "eslint src e2e playwright.config.ts vite.config.ts pdf-assets.ts --max-warnings=0",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test"
@@ -17,6 +17,7 @@
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.20.0",
     "element-plus": "^2.14.5",
+    "pdfjs-dist": "6.4.299",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },

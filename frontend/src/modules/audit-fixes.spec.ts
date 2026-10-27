@@ -49,8 +49,8 @@ it('BOM 单行修改只提交这一行并带上当前版本', async () => {
 })
 
 it('附件可由上传者撤回，被引用时由服务端拦截', async () => {
-  expect(actionNames('documents', { id: 1, can_remove: false })).toEqual(['下载'])
-  expect(actionNames('documents', { id: 1, can_remove: true })).toEqual(['下载', '删除附件'])
+  expect(actionNames('documents', { id: 1, can_remove: false })).toEqual(['预览附件', '下载'])
+  expect(actionNames('documents', { id: 1, can_remove: true })).toEqual(['预览附件', '下载', '删除附件'])
   const command = await actionCommand('documents', { id: 1, can_remove: true, original_name: '图纸.pdf' }, '删除附件')
   expect(command.path).toBe('/business/documents/1/remove/')
   expect(command.fields.map(f => f.key)).toEqual(['reason'])

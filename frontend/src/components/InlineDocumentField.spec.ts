@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import InlineDocumentField from './InlineDocumentField.vue'
-import { read, readBlob, write } from '../api'
+import { documentPreview, closeDocumentPreview } from '../document-preview'
+import { write } from '../api'
 
 vi.mock('../api', () => ({ write: vi.fn(), read: vi.fn(), readBlob: vi.fn(), download: vi.fn() }))
-afterEach(() => { vi.restoreAllMocks(); vi.resetAllMocks() })
+afterEach(() => { closeDocumentPreview(); vi.restoreAllMocks(); vi.resetAllMocks() })
 function open() {
   return mount(InlineDocumentField, { props: { field: { key: 'document', label: '结算凭证', upload: { context: { project: 8 }, category: 'receipt' } } }, global: { stubs: { ElButton: { template: '<button><slot /></button>' }, ElDialog: true } } })
 }
@@ -79,17 +80,14 @@ it('本地读取失败保留既有重传键且解除忙碌，不产生上传请�
   expect(vi.mocked(write).mock.calls[1]![2]).toBe(vi.mocked(write).mock.calls[0]![2])
   wrapper.unmount()
 })
-it('附件预览通过鉴权下载，不直接嵌入原下载地址；不支持格式给出下载说明', async () => {
+it('选中凭证打开统一预览，关闭表单清理当前预览且不提交业务', async () => {
   const wrapper = open()
   await wrapper.setProps({ modelValue: 18 })
-  vi.mocked(read).mockResolvedValue({ download_url: '/api/business/documents/18/download/', original_name: '图纸.dwg' })
-  vi.mocked(readBlob).mockResolvedValue(new Blob(['drawing'], { type: 'application/octet-stream' }))
   await wrapper.findAll('button').find(b => b.text() === '预览附件')!.trigger('click')
-  await flushPromises()
-  expect(readBlob).toHaveBeenCalledWith('/api/business/documents/18/download/')
-  expect(wrapper.text()).toContain('该格式请下载')
-  expect(wrapper.find('iframe').exists()).toBe(false)
+  expect(documentPreview.value?.id).toBe(18)
+  expect(write).not.toHaveBeenCalled()
   wrapper.unmount()
+  expect(documentPreview.value).toBeNull()
 })
 it('同一文件上传失败后重传复用同一幂等键，成功后与换文件均使用新键', async () => {
   const wrapper = open()

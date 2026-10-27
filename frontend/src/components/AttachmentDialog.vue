@@ -10,6 +10,7 @@ import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { canDeleteRecords } from '../modules/deletions'
+import { openDocumentPreview } from '../document-preview'
 
 const props = defineProps<{ owner: 'sale' | 'purchase'; record: Row }>()
 const emit = defineEmits<{ close: [] }>()
@@ -57,11 +58,11 @@ watch([() => props.owner, () => props.record.id, pageSize], () => { page.value =
     <div class="toolbar"><el-button :loading="loading" @click="load">刷新</el-button><el-button v-if="writable" type="primary" @click="upload">上传附件</el-button><el-button v-if="deletionAllowed" type="danger" plain :disabled="loading || !selection.length" @click="deleting = [...selection]">批量删除{{ selection.length ? `（${selection.length}）` : '' }}</el-button><el-button v-if="deletionAllowed" @click="deletionHistory = true">已删除记录</el-button></div>
     <el-table :data="records" :aria-busy="loading" max-height="420" @selection-change="selection = $event">
       <el-table-column v-if="deletionAllowed" type="selection" width="44" />
-      <el-table-column prop="original_name" label="文件" min-width="220" />
+      <el-table-column prop="original_name" label="文件" min-width="220"><template #default="{ row }"><button class="attachment-name" @click="openDocumentPreview(row.id, row.original_name)">{{ row.original_name }}</button></template></el-table-column>
       <el-table-column label="分类" min-width="80"><template #default="{ row }">{{ display(row.category, 'category') }}</template></el-table-column>
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB</template></el-table-column>
       <el-table-column label="上传时间" min-width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template></el-table-column>
-      <el-table-column label="操作" :width="deletionAllowed ? 140 : 80" fixed="right"><template #default="{ row }"><el-button size="small" @click="downloadFile(row)">下载</el-button><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="loading" @click="deleting = [row]">删除</el-button></template></el-table-column>
+      <el-table-column label="操作" :width="deletionAllowed ? 200 : 140" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" @click="openDocumentPreview(row.id, row.original_name)">预览</el-button><el-button size="small" @click="downloadFile(row)">下载</el-button><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="loading" @click="deleting = [row]">删除</el-button></template></el-table-column>
     </el-table>
     <ListPagination :page="page" :total="total" @change="page = $event; load()" />
     <template #footer><el-button @click="emit('close')">关闭</el-button></template>
@@ -71,4 +72,5 @@ watch([() => props.owner, () => props.record.id, pageSize], () => { page.value =
 </template>
 <style scoped>
 .toolbar { margin-bottom: 12px; }
+.attachment-name { border: 0; background: none; padding: 0; color: var(--el-color-primary); cursor: pointer; text-align: left; overflow-wrap: anywhere; font: inherit; }
 </style>

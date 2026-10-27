@@ -35,5 +35,11 @@ export async function download(path: string, name: string, params: Row = {}) {
 }
 
 export async function readBlob(path: string): Promise<Blob> {
-  return (await request.get(path.replace(/^\/api\//, '/'), { responseType: 'blob' })).data
+  try { return (await request.get(path.replace(/^\/api\//, '/'), { responseType: 'blob' })).data }
+  catch (error: any) {
+    if (error.response?.data instanceof Blob) {
+      try { error.response.data = JSON.parse(await error.response.data.text()) } catch { /* retain original error */ }
+    }
+    throw error
+  }
 }

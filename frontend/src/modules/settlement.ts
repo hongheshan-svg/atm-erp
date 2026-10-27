@@ -1,3 +1,4 @@
+import { previewAction } from '../document-preview'
 import { all, download, read } from '../api'
 import { can } from '../session'
 import type { Column, Command, Row } from '../types'
@@ -72,7 +73,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         { key: 'payments', label: '原资金流水', type: 'rows', fields: [t('id', '流水ID'), t('amount', '金额'), t('reversal_of', '冲销原记录')] },
         { key: 'deliveries', label: '交付快照', type: 'rows', fields: [t('code', '批次'), t('quantity', '数量'), t('accepted_date', '验收日期')] },
       ], notice: { type: d.valid ? 'info' : 'warning', text: d.valid ? '以下为生成时的原业务快照。确认后的分次收付消耗额度；其他业务变化需重新核对。' : '原业务已变化或此对账单已作废，不能用于新的付款。' },
-      actions: d.document ? [{ label: '下载对账附件', run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } }] : [] }
+      actions: d.document ? [previewAction(d.document, '对账附件'), { label: '下载对账附件', run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } }] : [] }
   }
   const path = `/business/bank-records/${r.id}/`
   if (name === '核实对方户名') return { title: name, path: path + 'review/', fields: [t('counterparty', '核实后的对方户名'), reason], notice: { type: 'info', text: '根据银行回单核实真实户名并填写依据。原始文件内容仍保留在银行明细，核实操作记录审计日志，不自动核销。' } }

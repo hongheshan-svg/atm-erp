@@ -35,6 +35,7 @@ from .common import (
     text,
 )
 from .payment_terms import terms
+from .purchase_changes import pending_requests, require_no_request
 
 
 def total(purchase):
@@ -105,7 +106,7 @@ def purchase_applicants(purchase):
 
     申请人不能审批本单（管理员例外须填原因，见 approval.independent_approval）。
     """
-    return _applicants({purchase.pk: purchase.created_by_id})[purchase.pk]
+    return applicants_by_purchase([purchase])[purchase.pk]
 
 
 def review_budget_adjusters(purchase, amount):
@@ -138,12 +139,14 @@ def review_budget_adjusters(purchase, amount):
 
 
 def applicants_by_purchase(purchases):
-    """{采购ID: 申请人ID集合}，口径同 purchase_applicants；固定两次查询，供列表/工作台使用，避免逐行回查审计。"""
+    """{采购ID: 申请人ID集合}，含当前修改申请人；批量回查审计，供列表/工作台使用。"""
     if hasattr(purchases, 'values_list'):
-        creators = dict(purchases.order_by().values_list('pk', 'created_by_id'))
-    else:
-        creators = {purchase.pk: purchase.created_by_id for purchase in purchases}
-    return _applicants(creators)
+        purchases = purchases.only('id', 'created_by_id', 'status').select_related(None).prefetch_related(None)
+    purchases = list(purchases)
+    result = _applicants({purchase.pk: purchase.created_by_id for purchase in purchases})
+    for pk, pending in pending_requests(purchases).items():
+        result[pk].add(pending['requested_by_id'])
+    return result
 
 
 def create_purchase(actor, key, data):
@@ -263,6 +266,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
         fields(data, {'reason', 'expected_snapshot', 'confirmed'} if override else {'reason'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'submitted'})
+        require_no_request(purchase)
         report = purchase_check(purchase)
         reason = text(data, 'reason', default='')
         self_approval = independent_approval(user, purchase_applicants(purchase), reason)
@@ -434,7 +438,9 @@ def cancel_remainder(actor, key, purchase_id, data):
         fields(data, {'reason', 'lines'})
         reason = text(data, 'reason')
         state(purchase.project, {'active', 'delivering', 'warranty'})
-        state(purchase, {'draft', 'submitted', 'approved', 'partial'})
+        if purchase.status == 'submitted':
+            raise Conflict('待审批采购不能直接作废，请先申请修改，经审批退回草稿后再处理。')
+        state(purchase, {'draft', 'approved', 'partial'})
         lines = list(purchase.lines.select_for_update().order_by('item_id', 'pk'))
         by_id = {line.pk: line for line in lines}
         selected = {}
@@ -497,10 +503,12 @@ def reject(actor, key, purchase_id, data):
         fields(data, {'reason'})
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'submitted'})
+        require_no_request(purchase)
         reason = text(data, 'reason')
+        self_approval = independent_approval(user, purchase_applicants(purchase), reason)
         purchase.status = 'draft'
         save(purchase, user)
-        return audit(user, 'purchase.reject', purchase, reason=reason)
+        return audit(user, 'purchase.reject', purchase, reason=reason, self_approval=self_approval)
 
     return purchase_action(actor, key, 'purchase.reject', purchase_id, data, PURCHASE_APPROVERS, execute)
 

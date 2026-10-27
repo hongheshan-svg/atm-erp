@@ -8,6 +8,11 @@ const labels = (resource: string, row: Record<string, unknown>) => {
 const isoDays = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
 
 describe('业务流程节点定位', () => {
+  it('采购修改申请沿用待审批节点并提示先处理申请，不改变其他采购的流程', () => {
+    const flow = flowFor('purchases', { status: 'submitted', change_request: { id: 1 } })!
+    expect(flow.nodes[flow.current]?.label).toBe('修改申请待处理')
+    expect(labels('purchases', { status: 'submitted' }).at).toBe('待批准')
+  })
   it('销售、项目、采购、对账、任务按状态定位当前节点', () => {
     expect(labels('sales', { status: 'quoted' }).at).toBe('已报价')
     expect(labels('sales', { status: 'quoted' }).steps).toEqual(['需求中', '已报价', '已签约'])
