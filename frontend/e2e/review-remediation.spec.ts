@@ -167,10 +167,14 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(purchaser, '原因 / 说明', '记录供应商原承诺日期并跟进逾期')
   await save(purchaser)
   await purchaser.goto('/erp/workbench')
-  // 逾期采购排在「今天要处理的」最前面，分类块只剩计数入口。
+  // 概览每类只取前5条；共享测试安装积累更多逾期单时，新单不保证出现在概览中。
+  // 从完整列表定位本单，验证入口、明细和真实保存结果，不依赖其他测试留下多少待办。
   await purchaser.getByRole('heading', { name: '今天要处理的', exact: true }).waitFor()
-  await expect(purchaser.getByRole('link', { name: '查看全部采购明细逾期', exact: true })).toBeVisible()
-  await purchaser.getByRole('region', { name: '今天要处理的', exact: true }).getByRole('link').filter({ hasText: order.code }).click()
+  await purchaser.getByRole('link', { name: '查看全部采购明细逾期', exact: true }).click()
+  await purchaser.locator('input[type="search"]').fill(order.code)
+  await purchaser.locator('form.resource-search').evaluate((form: HTMLFormElement) => form.requestSubmit())
+  await expect(row(purchaser, order.code)).toBeVisible()
+  await action(purchaser, row(purchaser, order.code), '查看明细')
   await expect(dialog(purchaser).getByRole('heading', { name: '查看明细', exact: true })).toBeVisible()
   await dialog(purchaser).getByRole('button', { name: '关闭', exact: true }).click()
   await warehouse.goto(`/erp/projects/${id}?tab=purchases`)

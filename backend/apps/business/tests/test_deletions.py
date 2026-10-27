@@ -36,6 +36,55 @@ from .test_commercial_chain import BusinessFixtures
 
 
 class DeletionTests(BusinessFixtures, TestCase):
+    def test_business_cancellation_restores_hidden_settled_entry_as_refund(self):
+        entry = self.project.entries.get()
+        payment = self.post(
+            'finance', f'entries/{entry.pk}/pay/', {'amount': str(entry.amount), 'date': '2026-09-09', 'reason': '收清'}
+        )
+        self.remove('entries', [entry.pk])
+        self.remove('payments', [payment['id']])
+        self.post('manager', f'projects/{self.project.pk}/cancel/', {'reason': '合同终止需退款'})
+        entry.refresh_from_db()
+        self.assertEqual(balance(entry), -entry.amount)
+        self.assertIn(entry.pk, self.listed('entries', 'finance'))
+        self.assertIn(payment['id'], self.listed('payments', 'finance'))
+        self.assertEqual(AuditLog.objects.filter(operation='record.restore').count(), 2)
+
+    def test_reversal_restores_hidden_entry_and_payments_with_audit_and_replay(self):
+        entry = self.project.entries.get()
+        # A future due date makes the ordinary unsettled list the primary finance entry point.
+        entry.due_date = timezone.localdate() + timedelta(days=30)
+        entry.save()
+        data = self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': str(entry.amount), 'date': '2026-09-09', 'reason': '登记收清'},
+        )
+        self.remove('entries', [entry.pk])
+        self.remove('payments', [data['id']])
+        self.assertNotIn(entry.pk, self.listed('entries', 'finance'))
+        key = str(uuid.uuid4())
+        payload = {'date': '2026-09-09', 'reason': '误登收款冲销'}
+        result = self.post('finance', f'payments/{data["id"]}/reverse/', payload, key=key)
+        self.assertEqual(self.post('finance', f'payments/{data["id"]}/reverse/', payload, key=key), result)
+        self.assertEqual(balance(entry), entry.amount)
+        self.assertIn(entry.pk, self.listed('entries', 'finance'))
+        self.assertIn(data['id'], self.listed('payments', 'finance'))
+        progress = (
+            self.clients['member']
+            .get(f'/api/business/projects/{self.project.pk}/progress/', {'category': 'entries'})
+            .data
+        )
+        self.assertIn(entry.pk, [row['id'] for row in progress['results']])
+        exported = self.clients['finance'].get('/api/business/entries/export/', {'file_format': 'csv'})
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn(entry.title, exported.content.decode('utf-8-sig'))
+        for resource in ['entries', 'payments']:
+            self.assertTrue(self.history(resource)[0]['restored'])
+        self.assertEqual(AuditLog.objects.filter(operation='record.restore').count(), 2)
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 2)
+        self.assertEqual(Payment.objects.count(), 2)
+
     def setUp(self):
         self.setup_business()
         self.project = self.active_project()

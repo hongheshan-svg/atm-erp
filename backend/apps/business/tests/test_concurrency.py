@@ -25,12 +25,120 @@ from apps.business.models import (
     Task,
     TimeEntry,
 )
-from apps.business.services import amendments, corrections, documents, sales, supply
+from apps.business.services import amendments, corrections, documents, finance, sales, supply
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
 
 class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
+    def test_cross_project_bank_operations_wait_for_manual_payment_and_recheck_funds(self):
+        """Hold the first real validation open, and observe the competing PG session waiting for a lock."""
+        from apps.business.models import BankOffset, BankRecord
+        from apps.business.services.banking import remaining
+
+        other = self.active_project().entries.get()
+        entry = self.project.entries.get()
+        for action in ['pay', 'allocate', 'return-unclaimed', 'split']:
+            with self.subTest(action=action):
+                reference = f'CROSS-{action}'
+                bank_amount = '200' if action == 'split' else '100'
+                source = self.post(
+                    'finance',
+                    'bank-records/',
+                    {
+                        'amount': bank_amount,
+                        'date': TODAY,
+                        'account': 'AUDIT-BANK',
+                        'reference': reference,
+                        'counterparty': '客户',
+                        'reason': '实际到账',
+                    },
+                    status=201,
+                )['id']
+                manual_data = {
+                    'amount': '100',
+                    'date': TODAY,
+                    'method': 'bank',
+                    'account': 'AUDIT-BANK',
+                    'reference': reference,
+                    'reason': '实际收款',
+                }
+                if action in ['pay', 'split']:
+                    competing_path, competing_data = f'entries/{other.pk}/pay/', manual_data
+                elif action == 'allocate':
+                    competing_path = f'bank-records/{source}/allocate/'
+                    competing_data = {'entry': other.pk, 'amount': '100', 'reason': '认领'}
+                else:
+                    returned = self.post(
+                        'finance',
+                        'bank-records/',
+                        {
+                            'amount': '-100',
+                            'date': TODAY,
+                            'account': 'AUDIT-BANK',
+                            'reference': f'RETURN-{reference}',
+                            'counterparty': '客户',
+                            'reason': '实际退款',
+                        },
+                        status=201,
+                    )['id']
+                    competing_path = f'bank-records/{source}/return-unclaimed/'
+                    competing_data = {'returned': returned, 'amount': '100', 'reason': '未认领退回'}
+                checked, release, started = Event(), Event(), Event()
+                backend = {}
+                original = finance.duplicate_bank_payment
+
+                def hold_first(*args, **kwargs):
+                    result = original(*args, **kwargs)
+                    if args[0].pk == entry.pk:
+                        checked.set()
+                        if not release.wait(12):
+                            raise AssertionError('主线程没有释放首笔收款。')
+                    return result
+
+                def request(path, data, competing=False):
+                    close_old_connections()
+                    try:
+                        if competing:
+                            with connection.cursor() as cursor:
+                                cursor.execute('SELECT pg_backend_pid()')
+                                backend['pid'] = cursor.fetchone()[0]
+                            started.set()
+                        client = APIClient()
+                        client.force_authenticate(self.users['finance'])
+                        result = client.post(
+                            '/api/business/' + path, data, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4())
+                        )
+                        return result.status_code, result.data
+                    finally:
+                        close_old_connections()
+
+                before = Payment.objects.count()
+                with (
+                    patch.object(finance, 'duplicate_bank_payment', hold_first),
+                    ThreadPoolExecutor(max_workers=2) as pool,
+                ):
+                    first = pool.submit(request, f'entries/{entry.pk}/pay/', manual_data)
+                    try:
+                        self.assertTrue(checked.wait(8))
+                        second = pool.submit(request, competing_path, competing_data, True)
+                        self.assertTrue(started.wait(8))
+                        self.wait_for_lock(backend['pid'])
+                    finally:
+                        release.set()
+                    self.assertEqual(first.result(timeout=10)[0], 200)
+                    status, detail = second.result(timeout=10)
+                    self.assertEqual(status, 200 if action == 'split' else 409, detail)
+                count = 2 if action == 'split' else 1
+                self.assertEqual(Payment.objects.count(), before + count)
+                self.assertEqual(
+                    list(Payment.objects.filter(reference=reference).values_list('amount', flat=True)),
+                    [Decimal('100')] * count,
+                )
+                self.assertEqual(remaining(BankRecord.objects.get(pk=source)), Decimal(bank_amount))
+                self.assertFalse(BankOffset.objects.filter(source_id=source).exists())
+                self.assertEqual(finance.balance(other), 9900 if action == 'split' else 10000)
+
     def test_concurrent_bank_allocations_cannot_overclaim(self):
         from apps.business.models import BankMatch, BankRecord
         from apps.business.services.banking import remaining

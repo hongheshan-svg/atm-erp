@@ -448,7 +448,13 @@ class ProgressTests(BusinessFixtures, TestCase):
             reason='退货',
         )
         row = self.entry_row(entry)
-        self.assertIn('已付超过合格收货净额 200.00 元，视为预付；待后续到货或取消余量后再结算。', row['hint'])
+        self.assertIn('存在预付款，待后续到货或取消余量后再结算。', row['hint'])
+        for role in ['member', 'mechanical_engineer', 'production_manager']:
+            projected = self.entry_row(entry, role)
+            self.assertIsNone(projected['path'])
+            for amount in ['200.00', '500.00', '1000.00', ' 元']:
+                self.assertNotIn(amount, str(projected))
+            self.assertEqual(self.clients[role].get(f'/api/business/entries/{entry.pk}/').status_code, 403)
         self.assertEqual(row['status_label'], plain['status_label'])
         self.assertEqual(row['handlers'], plain['handlers'])
 

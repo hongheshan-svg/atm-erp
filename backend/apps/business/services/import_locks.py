@@ -32,6 +32,10 @@ def lock_batch(actor, resource, records):
     mutation_lock()
     projects = list(batch_projects(resource, records).order_by('pk').select_for_update())
     rows = [record['data'] for record in records]
+    if resource == 'payments':
+        from .bank_identity import lock_accounts
+
+        lock_accounts({str(row.get('account') or '').strip() for row in rows})
     item_ids = set()
     if resource == 'moves':
         item_ids.update(
