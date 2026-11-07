@@ -29,7 +29,7 @@ test('BOM 同屏采购跨页筛选保留草稿编辑，按准确含税金额保�
   const partner = await importRows(page, '客户与供应商', `名称,类型,联系人,电话,地址\n${tag},both,,,\n`)
   const partnerRow = await read(page, `partners/${partner.results[0].id}/`)
   await page.getByRole('tab', { name: '物料', exact: true }).click()
-  const items = await importRows(page, '物料', '物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因\n' + Array.from({ length: 13 }, (_, i) => `${tag}-${i},测试件${tag}-${i},规格,${i < 12 ? '' : `A26-E-05-P-${tag.slice(-6)}`},${i < 12 ? '' : 'A'},${i < 12 ? '21' : '11'},${i < 12 ? '品牌A' : '品牌B'},${i < 12 ? 'standard' : 'custom'},件,`).join('\n'))
+  const items = await importRows(page, '物料', '物料编码,物料名称,规格,图号,图档版本,产品编码类别,品牌,物料类别,单位,独立建码原因\n' + Array.from({ length: 13 }, (_, i) => `${tag}-${i},测试件${tag}-${i},型号-${tag}-${i},${i < 12 ? '' : `A26-E-05-P-${tag.slice(-6)}`},${i < 12 ? '' : 'A'},${i < 12 ? '21' : '11'},${i < 12 ? '品牌A' : '品牌B'},${i < 12 ? 'standard' : 'custom'},件,`).join('\n'))
   await page.goto('/erp/projects')
   const project = await importRows(page, '项目列表', `名称,客户编码,负责人账号,需求说明,计划交期,设备数量,质保月数,成员账号（分号分隔）\n${tag},${partnerRow.code},admin,,,1,12,\n`)
   const projectId = project.results[0].id

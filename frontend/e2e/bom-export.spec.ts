@@ -16,7 +16,7 @@ test('BOM筛选81项标准件跨页导出保持准确，勾选与筛选范围分
   const project = await post('projects/', { name: `BOM按选择导出${suffix}`, customer: partner.id, manager: me.id })
   const lines = []
   for (let i = 0; i < 83; i++) {
-    const item = await post('items/', { code: `00${suffix}-${i}`, name: `导出测试物料${i}-${suffix}`, specification: '按图加工', unit: '件', brand: i < 80 ? '标准品牌' : '非标品牌', part_type: i < 80 ? 'standard' : 'custom', product_category: i < 80 ? '21' : '11', ...(i < 80 ? {} : { drawing_number: `DRAW-${suffix}-${i}` }) })
+    const item = await post('items/', { code: `00${suffix}-${i}`, name: `导出测试物料${i}-${suffix}`, specification: `MODEL-${suffix}-${i}`, unit: '件', brand: i < 80 ? '标准品牌' : '非标品牌', part_type: i < 80 ? 'standard' : 'custom', product_category: i < 80 ? '21' : '11', ...(i < 80 ? {} : { drawing_number: `DRAW-${suffix}-${i}` }) })
     lines.push({ item: item.id, quantity: '2.5', assembly_unit: '上料单元' })
   }
   lines.push({ ...lines[0]!, assembly_unit: '检测单元' })
