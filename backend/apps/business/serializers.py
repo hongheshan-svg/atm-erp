@@ -36,6 +36,7 @@ from .services import payment_terms
 from .services.common import ZERO, rounded
 from .services.execution import stage_cancel_block
 from .services.finance import balance, paid
+from .task_milestones import AUTOMATIC, PRE_SHIPMENT, node_label, stage_label
 
 
 def ambiguous_people():
@@ -497,6 +498,19 @@ class EntrySerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    milestone_label = serializers.SerializerMethodField()
+    stage_label = serializers.SerializerMethodField()
+    system_managed = serializers.SerializerMethodField()
+
+    def get_milestone_label(self, obj):
+        return node_label(obj)
+
+    def get_stage_label(self, obj):
+        return stage_label(obj)
+
+    def get_system_managed(self, obj):
+        return obj.milestone in AUTOMATIC
+
     can_manage = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
     can_reopen = serializers.SerializerMethodField()
@@ -521,22 +535,14 @@ class TaskSerializer(serializers.ModelSerializer):
             return obj.project_shipped
         return obj.project.deliveries.exists()
 
-    def later_stage_done(self, obj):
-        stages = ('design', 'assembly', 'test')
-        remaining = stages[stages.index(obj.kind) + 1 :]
-        if not remaining:
-            return False
-        if hasattr(obj, 'project_assembly_done'):
-            return any(getattr(obj, f'project_{stage}_done') for stage in remaining)
-        return obj.project.tasks.filter(kind__in=remaining, status='done').exists()
-
     def get_can_cancel(self, obj):
         return (
             self.get_can_manage(obj)
             and obj.status in {'open', 'done'}
             and obj.kind not in {'install', 'acceptance'}
             and self.can_change_service(obj)
-            and (obj.kind not in {'design', 'assembly', 'test'} or self.can_cancel_stage(obj))
+            and not (obj.milestone in AUTOMATIC and obj.status == 'done')
+            and (obj.kind not in PRE_SHIPMENT or obj.milestone in AUTOMATIC or self.can_cancel_stage(obj))
         )
 
     def can_cancel_stage(self, obj):
@@ -550,8 +556,9 @@ class TaskSerializer(serializers.ModelSerializer):
             return False
         if obj.kind == 'acceptance' or (obj.kind == 'install' and obj.delivery.accepted_date):
             return False
-        stages = ('design', 'assembly', 'test')
-        return obj.kind not in stages or not (self.shipped(obj) or self.later_stage_done(obj))
+        if obj.milestone in AUTOMATIC:
+            return obj.status == 'cancelled'
+        return obj.kind not in PRE_SHIPMENT or not self.shipped(obj)
 
     class Meta:
         model = Task
@@ -564,6 +571,10 @@ class TaskSerializer(serializers.ModelSerializer):
             'project_name',
             'delivery',
             'kind',
+            'milestone',
+            'milestone_label',
+            'stage_label',
+            'system_managed',
             'title',
             'description',
             'assignee',

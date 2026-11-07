@@ -49,13 +49,13 @@ def create(actor, key, data):
             raise PermissionDenied('销售经理只能为自己建立销售单。')
 
     def execute(user):
-        fields(data, DETAIL_FIELDS)
+        fields(data, DETAIL_FIELDS | {'code'})
         values = detail_values(data)
         if not has_role(user, MANAGERS) and values['manager'].pk != user.pk:
             raise ValidationError({'manager': '销售经理只能为自己建立销售单。'})
         sale = save(
             SalesOrder(
-                code=CodeRule.generate_code('sale'),
+                code=CodeRule.generate_code('sale', custom=text(data, 'code', default='', maximum=30)),
                 **values,
             ),
             user,
@@ -152,7 +152,7 @@ def edit(actor, key, sale_id, data):
 
 def sign(actor, key, sale_id, data):
     def execute(user, sale):
-        fields(data, {'date', 'milestones', 'manager', 'members', 'contract_number'})
+        fields(data, {'date', 'milestones', 'manager', 'members', 'contract_number', 'project_code'})
         state(sale, {'quoted'})
         # Serialize contract identifiers with the existing sales numbering lock.
         CodeRule.objects.select_for_update().get(key='sale')
@@ -176,6 +176,8 @@ def sign(actor, key, sale_id, data):
             # Forward-migrated pre-contract records retain their original project identity and members.
             project = get_object_or_404(Project.objects.select_for_update(), pk=sale.project_id)
             state(project, {'draft', 'quoted'})
+            if data.get('project_code') and data['project_code'] != project.code:
+                raise ValidationError({'project_code': '历史项目编号已确定，不能在签约时更换。'})
             if 'manager' in data or 'members' in data:
                 raise ValidationError('历史项目请先在项目中维护执行人员。')
             for field in DETAIL_FIELDS - {'manager'}:
@@ -186,6 +188,7 @@ def sign(actor, key, sale_id, data):
             project = projects.create_record(
                 user,
                 {
+                    'code': text(data, 'project_code', default='', maximum=30),
                     'name': sale.name,
                     'customer': sale.customer_id,
                     'manager': data.get('manager', sale.manager_id),

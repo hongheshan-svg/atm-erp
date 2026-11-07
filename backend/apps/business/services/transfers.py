@@ -1,3 +1,5 @@
+from ..task_milestones import NODES, PHASES
+
 """Batch creation through existing services, with rollback-only preview and signed confirmation."""
 
 import re
@@ -34,7 +36,7 @@ from apps.core.permissions import (
 )
 
 from ..models import Document, Entry, Item, Partner, Project, Reconciliation, Stock, Task
-from . import execution, finance, inventory, masterdata, projects, sales, supply
+from . import execution, finance, inventory, masterdata, projects, reconciliation, sales, supply
 from .bom_import import message, read_file
 from .common import identity
 from .import_dedup import DUPLICATE_MESSAGE, content_digest, imported, normalized_record, receipt_payload
@@ -152,6 +154,20 @@ LEGACY_SCHEMAS = {
         [('项目编号', 'project'), ('库存ID', 'stock'), ('任务ID', 'task'), ('数量', 'quantity'), ('原因', 'reason')],
     ),
 }
+LEGACY_SCHEMAS['reconciliations'] = (
+    FINANCE,
+    [
+        ('对账单号', 'code'),
+        ('款项ID', 'entry'),
+        ('对账类型', 'kind'),
+        ('对方确认余额', 'counterparty_balance'),
+        ('核准金额', 'approved_amount'),
+        ('合同及核对依据', 'basis'),
+        ('附件ID', 'document'),
+        ('核对说明', 'reason'),
+        ('结算月份', 'settlement_month'),
+    ],
+)
 # Keep old downloads readable by their original headers, never by the new column position.
 LABEL_OVERRIDES = {
     'items': {'name': '物料名称'},
@@ -232,6 +248,20 @@ for resource, (roles, old_columns) in LEGACY_SCHEMAS.items():
     PREVIOUS_SCHEMAS[resource] = previous
     SCHEMAS[resource] = (roles, [(PERSON_LABELS.get(key, label), key) for label, key in previous])
 
+PREVIOUS_TASK_COLUMNS = SCHEMAS['tasks'][1][:]
+SCHEMAS['tasks'][1].append(('里程碑节点', 'milestone'))
+
+MANUAL_CODE_LABELS = {
+    'partners': '往来单位编码',
+    'sales': '销售单号',
+    'projects': '项目编号',
+    'purchases': '采购单号',
+    'deliveries': '交付单号',
+}
+PREVIOUS_CODE_COLUMNS = {resource: SCHEMAS[resource][1][:] for resource in MANUAL_CODE_LABELS}
+for resource, label in MANUAL_CODE_LABELS.items():
+    SCHEMAS[resource][1].append((label, 'code'))
+
 TABLE_KEYS = {
     'item': ['item_code', 'item_name'],
     'project': ['project_name'],
@@ -293,6 +323,10 @@ def layout(actor, resource):
                     hint='生产经理仅可选择装配、调试（兼容assembly/test）；不能导入设计任务。',
                     source='Excel下拉选择装配或调试。',
                 )
+    if resource == 'tasks' and not has_role(actor, MANAGERS):
+        for column in result['columns']:
+            if column['key'] == 'milestone':
+                column['options'] = [title for _, kind, title, _ in NODES if kind in {'assembly', 'test'}]
     for column in result['columns']:
         key = column['key']
         column['table_keys'] = (
@@ -398,6 +432,8 @@ def check_references(actor, resource, data):
         if entry is not None:
             need('document', Document, project=entry.project, category='receipt')
             need('reconciliation', Reconciliation, entry=entry)
+    elif resource == 'reconciliations':
+        need('entry', Entry)
     elif resource == 'moves':
         need('stock', Stock)
         if data.get('project'):
@@ -419,6 +455,7 @@ def execute_row(actor, resource, raw, key, people=None):
         'tasks': execution.create_task,
         'stocks': inventory.opening,
         'entries': finance.expense,
+        'reconciliations': reconciliation.create,
         'moves': inventory.issue,
     }
     if resource in simple:
@@ -441,6 +478,8 @@ def accepted_schemas(resource):
     return [
         SCHEMAS[resource][1],
         PREVIOUS_SCHEMAS[resource],
+        *([PREVIOUS_CODE_COLUMNS[resource]] if resource in PREVIOUS_CODE_COLUMNS else []),
+        *([PREVIOUS_TASK_COLUMNS] if resource == 'tasks' else []),
         old,
         *[old[:size] for size in sizes.get(resource, [])],
         *([PREVIOUS_ITEM_COLUMNS] if resource == 'items' else []),
@@ -468,7 +507,7 @@ def parse(actor, resource, upload, *, with_source=False):
             elif isinstance(value, date):
                 value = value.isoformat()
             values.append('' if value is None else str(value).strip())
-        raw = dict(zip([key for _, key in source_columns], values, strict=True))
+        raw = dict(zip([key for _, key in source_columns], values[: len(source_columns)], strict=True))
         records.append({'row': index, 'data': {key: raw.get(key, '') for _, key in columns}})
     if not records:
         raise ValidationError('文件没有可导入明细。请在“数据”页第2行起填写真实业务数据；“填写说明”页和示例不参与导入。')
@@ -486,8 +525,17 @@ def executable_records(resource, records):
         kinds = (
             {'客户': 'customer', '供应商': 'supplier', '客户及供应商': 'both'}
             if resource == 'partners'
-            else {'设计': 'design', '装配': 'assembly', '调试': 'test'}
+            else {
+                **{label: key for key, label in PHASES},
+                **{label.removesuffix('阶段'): key for key, label in PHASES},
+                '装配': 'assembly',
+            }
         )
+        if resource == 'reconciliations':
+            kinds = {'普通结算': 'settlement', '预付款核准': 'prepayment', '退款对账': 'refund'}
+        if resource == 'tasks' and data.get('milestone'):
+            node_codes = {title: code for code, _, title, _ in NODES}
+            data['milestone'] = node_codes.get(data['milestone'], data['milestone'])
         if 'kind' in data:
             data['kind'] = kinds.get(data['kind'], data['kind'])
     if resource == 'purchases':

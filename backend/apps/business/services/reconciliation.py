@@ -202,6 +202,7 @@ def create(actor, key, data):
                 'document',
                 'reason',
                 'settlement_month',
+                'code',
             },
         )
         if project.status == 'closed':
@@ -236,7 +237,7 @@ def create(actor, key, data):
             raise ValidationError({'basis': '请填写合同编号、预付条款及比例或金额依据。'})
         CodeRule.objects.get_or_create(key='reconciliation', defaults={'prefix': 'DZ'})
         statement = Reconciliation(
-            code=CodeRule.generate_code('reconciliation'),
+            code=CodeRule.generate_code('reconciliation', custom=text(data, 'code', default='', maximum=30)),
             entry=source,
             kind=kind,
             settlement_month=month,

@@ -1,4 +1,3 @@
-import { cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -140,11 +139,12 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const assembly = await createTask('assembly', assemblyTitle)
   const commissioning = await createTask('test', testTitle)
   await action(page, row(page, testTitle), '完成任务')
-  await reason(page, '装配未完成时不应提前完成调试')
-  await save(page, `business/tasks/${commissioning.id}/complete/`, 409)
-  await expect(dialog(page).getByRole('alert')).toContainText('装配')
-  expect((await api(admin, `business/tasks/${commissioning.id}/`)).status).toBe('open')
-  await cancelEditing(dialog(page))
+  await reason(page, '允许装配和调试交叉推进')
+  await save(page, 'business/tasks/' + commissioning.id + '/complete/')
+  expect((await api(admin, 'business/tasks/' + commissioning.id + '/')).status).toBe('done')
+  await action(page, row(page, testTitle), '重开任务')
+  await reason(page, '调试计划调整后继续执行')
+  await save(page, 'business/tasks/' + commissioning.id + '/reopen/')
   await action(page, row(page, assemblyTitle), '取消任务')
   await reason(page, '排程暂缓后恢复同一任务')
   await save(page, `business/tasks/${assembly.id}/cancel/`)

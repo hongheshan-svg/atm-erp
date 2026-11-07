@@ -267,8 +267,9 @@ def remove(request, key, data):
     resource = data.get('resource')
     model, label = resource_definition(resource)
     ids = data.get('ids')
-    if not isinstance(ids, list) or not 1 <= len(ids) <= 200 or any(type(i) is not int or i < 1 for i in ids):
-        raise ValidationError({'ids': '请勾选 1 至 200 条有效记录。'})
+    maximum = 1000
+    if not isinstance(ids, list) or not 1 <= len(ids) <= maximum or any(type(i) is not int or i < 1 for i in ids):
+        raise ValidationError({'ids': f'请勾选 1 至 {maximum} 条有效记录。'})
     if len(ids) != len(set(ids)):
         raise ValidationError({'ids': '勾选记录不能重复。'})
     reason = text(data, 'reason')

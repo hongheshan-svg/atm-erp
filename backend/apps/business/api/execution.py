@@ -1,4 +1,5 @@
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.core.permissions import (
@@ -16,7 +17,8 @@ from ..serializers import (
     TaskSerializer,
     TimeSerializer,
 )
-from ..services import corrections, execution
+from ..services import corrections, execution, milestones
+from ..task_milestones import PHASES
 from .common import ImportableMixin, ReadView, key
 
 
@@ -25,14 +27,33 @@ class TaskView(ImportableMixin, ReadView):
         Task.objects.select_related('assignee', 'project', 'delivery', 'entry').prefetch_related('project__members')
     )
     serializer_class = TaskSerializer
-    filterset_fields = ['project', 'kind', 'status', 'assignee', 'delivery']
+    filterset_fields = ['project', 'kind', 'milestone', 'status', 'assignee', 'delivery']
     search_fields = ['title', 'project__code', 'project__name', 'assignee__display_name']
 
     def get_queryset(self):
-        return super().get_queryset().filter(project__in=projects_for(self.request.user, Project.objects.all()))
+        queryset = super().get_queryset().filter(project__in=projects_for(self.request.user, Project.objects.all()))
+        phase = self.request.query_params.get('phase')
+        if phase:
+            if phase not in dict(PHASES):
+                raise ValidationError({'phase': '请选择有效的项目阶段。'})
+            kinds = [phase, 'install', 'acceptance'] if phase == 'site' else [phase]
+            queryset = queryset.filter(kind__in=kinds)
+        return queryset
 
     def create(self, request):
         return Response(execution.create_task(request.user, key(request), request.data), status=201)
+
+    @action(detail=False, methods=['get'], url_path='milestone-template')
+    def milestone_template(self, request):
+        return Response(milestones.template(request.user, request.query_params.get('project')))
+
+    @action(detail=False, methods=['get'], url_path='milestone-summary')
+    def milestone_summary(self, request):
+        return Response(milestones.summary(request.user, request.query_params.get('project')))
+
+    @action(detail=False, methods=['post'], url_path='apply-milestones')
+    def apply_milestones(self, request):
+        return Response(milestones.apply_template(request.user, key(request), request.data), status=201)
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):

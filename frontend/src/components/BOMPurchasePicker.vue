@@ -216,6 +216,7 @@ async function save() {
         </header>
         <form @submit.prevent="save">
           <div class="draft-fields">
+            <label>采购单号<input v-model="form.code" aria-label="采购单号" maxlength="30" placeholder="可自编，留空自动生成" :disabled="saving || !project" /></label>
             <label>供应商 <span class="required">*</span><RemoteSelect v-model="form.supplier" path="/business/partners/" :params="{ is_active: true }" :accept="row => row.kind !== 'customer'" label="供应商" :disabled="saving || !project" required /></label>
             <div class="draft-field-row"><label>计划交期 <span class="required">*</span><input v-model="form.due_date" type="date" aria-label="交期" required :disabled="saving || !project" /></label><label>结算方式<select v-model="form.payment_term" aria-label="结算方式" :disabled="saving || !project"><option value="">{{ supplierInfo ? `沿用供应商：${termLabel(supplierInfo)}` : '沿用供应商' }}</option><option v-for="(label, value) in termLabels" :key="value" :value="value">{{ label }}</option></select></label></div>
             <small>{{ termHint }}</small>

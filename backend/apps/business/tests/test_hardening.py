@@ -68,6 +68,7 @@ class HardeningTests(BusinessFixtures, TestCase):
             'payments',
             'time',
             'deliveries',
+            'reconciliations',
         }
         exposed = {
             prefix
@@ -77,7 +78,7 @@ class HardeningTests(BusinessFixtures, TestCase):
         self.assertEqual(exposed, importable)
         self.assertEqual(
             {prefix for prefix, _, _ in router.registry} - exposed,
-            {'bom', 'reconciliations', 'bank-records', 'bank-matches', 'documents', 'record-deletions'},
+            {'bom', 'bank-records', 'bank-matches', 'documents', 'record-deletions'},
         )
 
     def test_ledger_rows_cannot_be_hidden_by_flipping_the_deleted_flag(self):
@@ -184,7 +185,7 @@ class HardeningTests(BusinessFixtures, TestCase):
     def test_duplicate_material_requires_reason_and_custom_code_is_preserved(self):
         data = {'code': 'CUSTOM-A', 'name': '  Ｍotor ', 'specification': 'X1', 'brand': 'Brand', 'unit': '件'}
         first = self.post('purchaser', 'items/', data, status=201)
-        self.assertEqual(Item.objects.get(pk=first['id']).name, 'Motor')
+        self.assertEqual(Item.objects.get(pk=first['id']).name, 'Ｍotor')
         self.post('purchaser', 'items/', {**data, 'code': 'CUSTOM-B', 'name': 'motor'}, status=400)
         second = self.post(
             'purchaser',
@@ -804,7 +805,7 @@ class RoleResponsibilityTests(BusinessFixtures, TestCase):
                         '',
                         role,
                         f'{role}导入传感器',
-                        'ENG-SPEC',
+                        f'ENG-SPEC-{role}',
                         '',
                         '',
                         '21',

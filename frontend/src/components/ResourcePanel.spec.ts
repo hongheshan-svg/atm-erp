@@ -4,6 +4,8 @@ import { shallowMount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import ResourcePanel from './ResourcePanel.vue'
 import { user } from '../session'
+import { endpoint } from '../business'
+import { removableResources } from '../modules/deletions'
 import { read } from '../api'
 import { pageSize, setPageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
@@ -24,11 +26,12 @@ describe('列表创建入口', () => {
   beforeEach(() => { route.query = {}; sessionStorage.clear(); vi.clearAllMocks() })
   it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
     user.value = { roles: ['finance', 'admin'] }
+    vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 21, title: '费用' }], next: null })
     const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } } } })
     await flushPromises()
     expect(wrapper.text()).toContain('批量删除')
     expect(wrapper.text()).toContain('已删除记录')
-    wrapper.findComponent({ name: 'ElTable' }).vm.$emit('selection-change', [{ id: 21, title: '费用' }])
+    await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '全选筛选结果（1项，跨页）')!.trigger('click')
     await flushPromises()
     const button = wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text().includes('批量删除'))!
     expect(button.props('disabled')).toBe(false)
@@ -44,6 +47,7 @@ describe('列表创建入口', () => {
     expect(wrapper.text()).not.toContain('批量删除')
     expect(wrapper.text()).not.toContain('已删除记录')
     wrapper.unmount()
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
   })
   it('项目范围变化时关闭原表单，避免乙项目页面继续提交甲项目内容', async () => {
     user.value = { id: 1, role: 'admin' }
@@ -167,4 +171,88 @@ describe('列表创建入口', () => {
     expect(wrapper.text()).not.toContain('新建项目')
     wrapper.unmount()
   })
+})
+
+it('物料全选按当前筛选跨页加载，翻页保留，刷新清空', async () => {
+  user.value = { roles: ['admin'] }
+  pageSize.value = 10
+  route.query = {}
+  sessionStorage.clear()
+  const items = Array.from({ length: 427 }, (_, i) => ({ id: i + 1, code: 'B' + i, name: '批量物料' }))
+  vi.mocked(read).mockImplementation(async (_url, params = {}) => ({
+    count: items.length, results: items.slice((Number(params.page) - 1) * Number(params.page_size), Number(params.page) * Number(params.page_size)),
+    next: Number(params.page) * Number(params.page_size) < items.length ? 'next' : null,
+  }))
+  const wrapper = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料', params: { part_type: 'standard' } }, global: {
+    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } },
+  } })
+  await flushPromises()
+  await wrapper.findAllComponents({ name: 'ElButton' }).find(b => b.text() === '全选筛选结果（427项，跨页）')!.trigger('click')
+  await flushPromises()
+  expect(read).toHaveBeenCalledWith('/business/items/', { part_type: 'standard', page: 3, page_size: 200, search: '' })
+  expect(wrapper.get('[aria-label="物料批量选择"]').text()).toContain('已选 427')
+  wrapper.getComponent(ListPagination).vm.$emit('change', 2)
+  await flushPromises()
+  expect(wrapper.get('[aria-label="物料批量选择"]').text()).toContain('已选 427')
+  await wrapper.findAllComponents({ name: 'ElButton' }).find(b => b.text() === '批量删除（427）')!.trigger('click')
+  expect(wrapper.getComponent(RecordDeletionDialog).props('rows')).toHaveLength(427)
+  wrapper.getComponent(RecordDeletionDialog).vm.$emit('close')
+  await wrapper.setProps({ revision: 1 })
+  await flushPromises()
+  expect(wrapper.get('[aria-label="物料批量选择"]').text()).toContain('已选 0')
+  wrapper.unmount()
+  vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+})
+
+it('物料全选加载期间切换筛选，旧请求不能勾选新列表', async () => {
+  user.value = { roles: ['admin'] }
+  sessionStorage.clear()
+  let finish!: (value: object) => void
+  vi.mocked(read).mockResolvedValue({ count: 427, results: [{ id: 1 }], next: null })
+  const wrapper = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料' }, global: {
+    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } },
+  } })
+  await flushPromises()
+  vi.mocked(read).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  await wrapper.findAllComponents({ name: 'ElButton' }).find(b => b.text() === '全选筛选结果（427项，跨页）')!.trigger('click')
+  await wrapper.setProps({ params: { part_type: 'custom' } })
+  await flushPromises()
+  finish({ results: [{ id: 99 }], next: null })
+  await flushPromises()
+  expect(wrapper.get('[aria-label="物料批量选择"]').text()).toContain('已选 0')
+  wrapper.unmount()
+  vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+})
+
+it.each([...removableResources].filter(resource => resource !== 'bom'))('%s全选最多1000项，分页保留且切换资源清空', async resource => {
+  user.value = { roles: ['admin'] }
+  pageSize.value = 10
+  route.query = {}
+  sessionStorage.clear()
+  const rows = Array.from({ length: 1001 }, (_, i) => ({ id: i + 1, name: '记录' + i }))
+  vi.mocked(read).mockClear().mockImplementation(async (_url, params = {}) => ({
+    count: rows.length, results: rows.slice((Number(params.page) - 1) * Number(params.page_size), Number(params.page) * Number(params.page_size)),
+    next: Number(params.page) * Number(params.page_size) < rows.length ? 'next' : null,
+  }))
+  const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '测试记录' }, global: {
+    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } },
+  } })
+  await flushPromises()
+  await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '选择筛选结果前1000项（跨页）')!.trigger('click')
+  await flushPromises()
+  expect(read).toHaveBeenLastCalledWith(endpoint(resource), { page: 5, page_size: 200, search: '' })
+  expect(wrapper.get('[aria-label="测试记录批量选择"]').text()).toContain('已选 1000')
+  wrapper.getComponent(ListPagination).vm.$emit('change', 2)
+  await flushPromises()
+  expect(wrapper.get('[aria-label="测试记录批量选择"]').text()).toContain('已选 1000')
+  await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '批量删除（1000）')!.trigger('click')
+  await flushPromises()
+  expect(wrapper.getComponent(RecordDeletionDialog).props('rows')).toHaveLength(1000)
+  expect(wrapper.getComponent(RecordDeletionDialog).props('resource')).toBe(resource)
+  await wrapper.setProps({ resource: resource === 'items' ? 'partners' : 'items' })
+  await flushPromises()
+  expect(wrapper.findComponent(RecordDeletionDialog).exists()).toBe(false)
+  expect(wrapper.get('[aria-label="测试记录批量选择"]').text()).toContain('已选 0')
+  wrapper.unmount()
+  vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
 })

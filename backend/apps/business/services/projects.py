@@ -22,6 +22,7 @@ def create_record(user, data):
     fields(
         data,
         {
+            'code',
             'name',
             'customer',
             'manager',
@@ -45,7 +46,7 @@ def create_record(user, data):
         raise ValidationError({'members': '包含不存在或已停用的成员。'})
     project = save(
         Project(
-            code=CodeRule.generate_code('project'),
+            code=CodeRule.generate_code('project', custom=text(data, 'code', default='', maximum=30)),
             status='active',
             name=text(data, 'name', maximum=150),
             customer=customer,

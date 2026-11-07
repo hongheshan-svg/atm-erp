@@ -1,3 +1,4 @@
+import { codeField } from './shared'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
@@ -53,19 +54,20 @@ export async function createCommand(resource: string, projectId?: number): Promi
   let path = endpoint(resource)
   if (resource === 'items')
     fields = [
-      t('code', '物料编码（留空自动生成）', true),
+      codeField('物料编码（留空自动生成）'),
       t('name', '物料名称'),
-      t('specification', '规格', true),
+      { ...t('specification', '规格', true), hint: '标准件填写经厂家或供应商确认的完整型号；原文保存，不自动补全或修改。' },
       { ...t('drawing_number', '图号', true), hint: '有图产品必填；工程图示例 A26-E-05-P-000001，模具子图 ATM-T1-P-000001。历史图号可保留。' },
       t('drawing_revision', '图档版本', true),
-      { ...select('product_category', '产品编码类别', choices(productCategories), true), hint: '选择类别后自动生成10位编码：有图使用当年年份，无图固定99，流水六位。未分类沿用普通编号规则；版本升级须新增物料。' },
+      { ...select('product_category', '产品编码类别', choices(productCategories), true), hint: '编码留空时按类别自动生成10位编码：有图使用当年年份，无图固定99，流水六位。未分类沿用普通编号规则；版本升级须新增物料。' },
       t('brand', '品牌', true),
       select('part_type', '物料类别', choices({ standard: '标准件', custom: '非标件' }), true),
       { key: 'unit', label: '单位', initial: '件' },
-      { ...t('duplicate_reason', '相同物料独立编码原因', true), hint: '名称、规格、品牌、单位和类别完全相同时必填；优先使用现有编码。' },
+      { ...t('duplicate_reason', '相同物料独立编码原因', true), hint: '名称或型号疑似重复时，先核对厂家完整型号；确认是不同物料后填写独立建码原因。' },
     ]
   if (resource === 'partners')
     fields = [
+      codeField('往来单位编码'),
       t('name', '单位名称'),
       select(
         'kind',

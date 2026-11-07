@@ -12,6 +12,9 @@ MODULE_FILES = {
     'projects': (
         'projects',
         'execution',
+        'milestones',
+        'task_milestones',
+        'ProjectMilestones',
         'budgets',
         'ProjectsPage',
         'ProjectPage',
@@ -65,7 +68,7 @@ MODULE_FILES = {
         'FinanceTotals',
         'business-date',
     ),
-    'masterdata': ('masterdata', 'product-categories', 'MasterdataPage'),
+    'masterdata': ('manual-codes', 'masterdata', 'product-categories', 'MasterdataPage'),
     'accounts': (
         'settings',
         'SettingsPage',
@@ -89,6 +92,7 @@ BROWSERS = {
         'import-surface-audit',
     ),
     'projects': (
+        'project-milestones',
         'document-preview',
         'process-progress',
         'admin-deletion',
@@ -134,7 +138,14 @@ BROWSERS = {
         'import-audit-real',
         'usability-finance',
     ),
-    'masterdata': ('admin-deletion', 'product-coding', 'account-masterdata-audit', 'transfers', 'import-surface-audit'),
+    'masterdata': (
+        'manual-codes',
+        'admin-deletion',
+        'product-coding',
+        'account-masterdata-audit',
+        'transfers',
+        'import-surface-audit',
+    ),
     'accounts': (
         'admin-deletion',
         'initial-password',
@@ -191,6 +202,7 @@ SHARED_PATHS = (
             'frontend/pdf-assets.ts',
             'frontend/e2e/fixtures/document-preview/',
             'frontend/src/components/AttachmentDialog.vue',
+            'frontend/src/components/AttachmentDialog.spec.ts',
             'frontend/src/components/InlineDocumentField.vue',
             'frontend/src/modules/documents.ts',
         ),
@@ -217,6 +229,7 @@ SHARED_PATHS = (
         ),
         ('finance', 'purchases', 'projects', 'accounts'),
     ),
+    (('frontend/src/utils/batch-selection.ts', 'frontend/src/utils/batch-selection.spec.ts'), BUSINESS),
     (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
     (('frontend/src/components/ProjectAttention.vue',), ('projects', 'bom', 'purchases')),
     (('frontend/src/industry-forms.ts',), ('sales', 'projects')),

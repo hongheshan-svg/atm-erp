@@ -148,7 +148,7 @@ describe('模块边界', () => {
     expect(customerField.remoteFilter?.({ kind: 'supplier' })).toBe(false)
     const sign = await actionCommand('sales', { id: 7, manager: 2, quote_amount: '100' }, '签约')
     expect(sign.path).toBe('/business/sales/7/sign/')
-    expect(sign.fields.map((f) => f.key)).toEqual(['date', 'contract_number', 'manager', 'members', 'milestones', 'early_due_notice'])
+    expect(sign.fields.map((f) => f.key)).toEqual(['date', 'contract_number', 'project_code', 'manager', 'members', 'milestones', 'early_due_notice'])
     expect(actionNames('projects', { status: 'quoted' })).not.toContain('签约')
     expect(actionNames('sales', { status: 'quoted' })).toContain('签约')
   })

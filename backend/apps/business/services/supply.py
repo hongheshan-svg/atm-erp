@@ -163,6 +163,7 @@ def create_purchase(actor, key, data):
                 'note',
                 'lines',
                 'from_demand',
+                'code',
                 'warranty_months',
             },
         )
@@ -187,7 +188,7 @@ def create_purchase(actor, key, data):
         shortage = {row['bom_line']: Decimal(row['shortage']) for row in demand(project)} if from_demand else {}
         purchase = save(
             PurchaseOrder(
-                code=CodeRule.generate_code('purchase'),
+                code=CodeRule.generate_code('purchase', custom=text(data, 'code', default='', maximum=30)),
                 project=project,
                 supplier=supplier,
                 due_date=day(data, 'due_date'),

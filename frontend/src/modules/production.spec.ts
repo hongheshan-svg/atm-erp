@@ -16,7 +16,9 @@ const projects: Record<number, Row> = {
 beforeEach(() => {
   vi.clearAllMocks()
   user.value = { id: 8, roles: ['production_manager', 'purchaser'] }
-  vi.mocked(read).mockImplementation(async path => projects[Number(path.split('/')[3])] ?? {})
+  vi.mocked(read).mockImplementation(async path => path.includes('milestone-template') ? {
+    stages: ['design', 'purchase', 'assembly', 'test', 'shipping', 'site'].map(value => ({ value, label: value })), nodes: [],
+  } : projects[Number(path.split('/')[3])] ?? {})
   vi.mocked(all).mockImplementation(async path => path === '/auth/directory/' ? [{ id: 9, display_name: '装配员' }] : [])
 })
 afterEach(() => { user.value = null })
@@ -37,7 +39,7 @@ describe('生产经理任务与售后权限', () => {
     const limited = await createCommand('tasks', 1)
     expect(limited.fields.find(field => field.key === 'kind')?.options?.map(option => option.value)).toEqual(['assembly', 'test'])
     const managerCommand = await createCommand('tasks', 4)
-    expect(managerCommand.fields.find(field => field.key === 'kind')?.options?.map(option => option.value)).toEqual(['design', 'assembly', 'test'])
+    expect(managerCommand.fields.find(field => field.key === 'kind')?.options?.map(option => option.value)).toEqual(['design', 'purchase', 'assembly', 'test', 'shipping', 'site'])
   })
 
   it('可为授权生产任务派工完成和补团队工时，不能操作其他项目或设计验收任务', async () => {

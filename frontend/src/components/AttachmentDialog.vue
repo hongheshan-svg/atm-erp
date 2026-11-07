@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { read, download } from '../api'
 import { can, purchasing } from '../session'
 import { display } from '../business'
@@ -9,7 +9,8 @@ import type { Row, Command } from '../types'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
-import { canDeleteRecords } from '../modules/deletions'
+import { useBatchSelection } from '../utils/batch-selection'
+import { canDeleteRecords, deletionLimit, deletionLabel } from '../modules/deletions'
 import { openDocumentPreview } from '../document-preview'
 
 const props = defineProps<{ owner: 'sale' | 'purchase'; record: Row }>()
@@ -24,9 +25,30 @@ const error = ref('')
 const command = ref<Command | null>(null)
 const deletionAllowed = computed(() => canDeleteRecords('documents'))
 const selection = ref<Row[]>([]), deleting = ref<Row[] | null>(null), deletionHistory = ref(false)
+const batch = useBatchSelection(selection, 'id', () => deletionLimit('documents'))
+const selectingAll = ref(false)
+let selectionGeneration = 0
 let generation = 0
-async function load() {
-  selection.value = []
+function cancelSelection() { selectionGeneration++; selectingAll.value = false; selection.value = [] }
+onBeforeUnmount(() => { generation++; cancelSelection() })
+watch(deletionAllowed, allowed => { if (!allowed) { cancelSelection(); deleting.value = null; deletionHistory.value = false } })
+async function selectFilteredRows() {
+  if (!deletionAllowed.value || loading.value || selectingAll.value) return
+  const current = ++selectionGeneration
+  const params = { [props.owner]: props.record.id }
+  selectingAll.value = true; error.value = ''
+  try {
+    await batch.replacePages(
+      (page, page_size) => read('/business/documents/', { ...params, page, page_size }),
+      () => current === selectionGeneration && deletionAllowed.value,
+    )
+  } catch (e) { if (current === selectionGeneration) error.value = message(e) }
+  finally { if (current === selectionGeneration) selectingAll.value = false }
+}
+function saved() { page.value = 1; void load() }
+async function load(preserveSelection: unknown = false) {
+  selectionGeneration++; selectingAll.value = false
+  if (preserveSelection !== true) selection.value = []
   const current = ++generation
   loading.value = true
   error.value = ''
@@ -49,28 +71,38 @@ async function downloadFile(row: Row) {
   try { await download(row.download_url, row.original_name) }
   catch (e) { error.value = message(e) }
 }
-watch([() => props.owner, () => props.record.id, pageSize], () => { page.value = 1; deleting.value = null; deletionHistory.value = false; void load() }, { immediate: true })
+watch([() => props.owner, () => props.record.id], () => { page.value = 1; deleting.value = null; deletionHistory.value = false; void load() }, { immediate: true })
+watch(pageSize, () => { page.value = 1; void load(true) })
 </script>
 <template>
   <el-dialog class="transfer-dialog" :model-value="true" :title="title" width="min(800px, 94vw)" append-to-body @close="emit('close')">
     <p class="muted">附件关联当前单据，项目中自动汇总。仅有权限的人员可查看和下载。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <div class="toolbar"><el-button :loading="loading" @click="load">刷新</el-button><el-button v-if="writable" type="primary" @click="upload">上传附件</el-button><el-button v-if="deletionAllowed" type="danger" plain :disabled="loading || !selection.length" @click="deleting = [...selection]">批量删除{{ selection.length ? `（${selection.length}）` : '' }}</el-button><el-button v-if="deletionAllowed" @click="deletionHistory = true">已删除记录</el-button></div>
-    <el-table :data="records" :aria-busy="loading" max-height="420" @selection-change="selection = $event">
-      <el-table-column v-if="deletionAllowed" type="selection" width="44" />
+    <div class="toolbar"><el-button :loading="loading" @click="load">刷新</el-button><el-button v-if="writable" type="primary" @click="upload">上传附件</el-button><el-button v-if="deletionAllowed" type="danger" plain :disabled="loading || selectingAll || !selection.length" @click="deleting = [...selection]">批量删除{{ selection.length ? `（${selection.length}）` : '' }}</el-button><el-button v-if="deletionAllowed" @click="deletionHistory = true">已删除记录</el-button></div>
+    <div v-if="deletionAllowed" class="attachment-batch-selection" aria-label="附件批量选择">
+      <span>已选 <strong>{{ selection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit('documents') }} 项</span>
+      <el-button :loading="selectingAll" :disabled="loading || !total" @click="selectFilteredRows">{{ total > deletionLimit('documents') ? '选择筛选结果前' + deletionLimit('documents') + '项（跨页）' : '全选筛选结果（' + total + '项，跨页）' }}</el-button>
+      <el-button text :disabled="loading || selectingAll || !selection.length" @click="selection = []">清空选择</el-button>
+    </div>
+    <el-table :data="records" :aria-busy="loading" max-height="420" row-key="id">
+      <el-table-column v-if="deletionAllowed" label="选择" width="44">
+        <template #header><input type="checkbox" aria-label="选择本页附件" :checked="batch.all(records)" :indeterminate="batch.some(records)" :disabled="loading || selectingAll || !records.length || (selection.length >= deletionLimit('documents') && !batch.all(records))" @change="batch.togglePage(records)" /></template>
+        <template #default="{ row }"><input type="checkbox" :aria-label="'选择附件 ' + deletionLabel(row)" :checked="batch.has(row)" :disabled="loading || selectingAll || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
+      </el-table-column>
       <el-table-column prop="original_name" label="文件" min-width="220"><template #default="{ row }"><button class="attachment-name" @click="openDocumentPreview(row.id, row.original_name)">{{ row.original_name }}</button></template></el-table-column>
       <el-table-column label="分类" min-width="80"><template #default="{ row }">{{ display(row.category, 'category') }}</template></el-table-column>
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB</template></el-table-column>
       <el-table-column label="上传时间" min-width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template></el-table-column>
-      <el-table-column label="操作" :width="deletionAllowed ? 200 : 140" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" @click="openDocumentPreview(row.id, row.original_name)">预览</el-button><el-button size="small" @click="downloadFile(row)">下载</el-button><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="loading" @click="deleting = [row]">删除</el-button></template></el-table-column>
+      <el-table-column label="操作" :width="deletionAllowed ? 200 : 140" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" @click="openDocumentPreview(row.id, row.original_name)">预览</el-button><el-button size="small" @click="downloadFile(row)">下载</el-button><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="loading || selectingAll" @click="deleting = [row]">删除</el-button></template></el-table-column>
     </el-table>
-    <ListPagination :page="page" :total="total" @change="page = $event; load()" />
+    <ListPagination :page="page" :total="total" @change="page = $event; load(true)" />
     <template #footer><el-button @click="emit('close')">关闭</el-button></template>
   </el-dialog>
-  <ActionDialog :command="command" @close="command = null" @saved="load" />
-  <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" resource="documents" title="附件" :rows="deleting || undefined" :sale-id="owner === 'sale' ? record.id : undefined" :purchase-id="owner === 'purchase' ? record.id : undefined" :show-original="false" @close="deleting = null; deletionHistory = false" @saved="load" />
+  <ActionDialog :command="command" @close="command = null" @saved="saved" />
+  <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" resource="documents" title="附件" :rows="deleting || undefined" :sale-id="owner === 'sale' ? record.id : undefined" :purchase-id="owner === 'purchase' ? record.id : undefined" :show-original="false" @close="deleting = null; deletionHistory = false" @saved="saved" />
 </template>
 <style scoped>
+.attachment-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
 .toolbar { margin-bottom: 12px; }
 .attachment-name { border: 0; background: none; padding: 0; color: var(--el-color-primary); cursor: pointer; text-align: left; overflow-wrap: anywhere; font: inherit; }
 </style>

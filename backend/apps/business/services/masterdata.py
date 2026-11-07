@@ -1,6 +1,7 @@
 import unicodedata
 
-from django.db.models.functions import Lower, Trim
+from django.db.models import CharField, Func, Q, Value
+from django.db.models.functions import Lower
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
@@ -21,23 +22,98 @@ def normalized(value):
     return ' '.join(unicodedata.normalize('NFKC', value).split())
 
 
+def comparison_key(value):
+    """用于查找候选，绝不写回供应商型号或名称。"""
+    return ''.join(normalized(str(value)).split()).casefold()
+
+
+def comparison_expression(field):
+    # PostgreSQL 中先映射全角 ASCII，再消除空白；最终身份核对仍使用完整字段。
+    translated = Func(
+        field,
+        Value(''.join(chr(i) for i in range(0xFF01, 0xFF5F)) + '\u3000'),
+        Value(''.join(chr(i) for i in range(0x21, 0x7F)) + ' '),
+        function='TRANSLATE',
+        output_field=CharField(),
+    )
+    return Lower(
+        Func(
+            translated,
+            Value('[[:space:]]+'),
+            Value(''),
+            Value('g'),
+            function='REGEXP_REPLACE',
+            output_field=CharField(),
+        )
+    )
+
+
+def candidates(data):
+    return Item.objects.annotate(
+        comparison_name=comparison_expression('name'),
+        comparison_specification=comparison_expression('specification'),
+    )
+
+
+def similar(data):
+    name, specification = comparison_key(data.get('name', '')), comparison_key(data.get('specification', ''))
+    query = Q(comparison_name__contains=name) if name else Q(pk__in=[])
+    if specification:
+        query |= Q(comparison_specification=specification)
+    return candidates(data).filter(query).order_by('code')[:10]
+
+
 def duplicates(data, exclude=None):
     name = normalized(str(data.get('name', '')))
     if not name:
         return []
-    candidates = (
-        Item.objects.annotate(clean_name=Lower(Trim('name'))).filter(clean_name=name.lower()).exclude(pk=exclude)
+    items = candidates(data).filter(comparison_name=comparison_key(name)).exclude(pk=exclude)
+    keys = (
+        'name',
+        'specification',
+        'brand',
+        'unit',
+        'part_type',
+        'product_category',
+        'drawing_number',
+        'drawing_revision',
     )
-    keys = ('specification', 'brand', 'unit', 'part_type', 'product_category', 'drawing_number', 'drawing_revision')
     return [
         item
-        for item in candidates
+        for item in items
         if all(
             normalized(getattr(item, key)).casefold()
             == normalized(str(data.get(key, '件' if key == 'unit' else ''))).casefold()
             for key in keys
         )
     ]
+
+
+def suspected_duplicates(data, exclude=None):
+    """相似只阻止未经核对的新建，不用于 BOM 自动复用。"""
+    specification = comparison_key(data.get('specification', ''))
+    if not specification:
+        return duplicates(data, exclude)
+    items = candidates(data).filter(comparison_specification=specification).exclude(pk=exclude)
+    result = []
+    for item in items:
+        if comparison_key(item.unit) != comparison_key(data.get('unit', '件')):
+            continue
+        brand = comparison_key(data.get('brand', ''))
+        if comparison_key(item.brand) != brand:
+            continue
+        if comparison_key(item.name) != comparison_key(data.get('name', '')) and not brand:
+            continue
+        # 图号或版本明确不同时，按不同图档处理。
+        if any(
+            data.get(key) and getattr(item, key) and comparison_key(data[key]) != comparison_key(getattr(item, key))
+            for key in ('drawing_number', 'drawing_revision')
+        ):
+            continue
+        result.append(item)
+        if len(result) == 10:
+            break
+    return result
 
 
 IDENTITY_FIELDS = {'unit': '单位', 'specification': '规格', 'drawing_number': '图号', 'drawing_revision': '图档版本'}
@@ -85,7 +161,7 @@ def masterdata(actor, key, model, data, object_id=None):
         if model is Item
         else {'kind', 'contact', 'phone', 'address', 'payment_term', 'payment_days'}
     )
-    if model is Item and not object_id:
+    if not object_id:
         allowed.add('code')
     if model is Item:
         allowed.add('duplicate_reason')
@@ -148,12 +224,10 @@ def masterdata(actor, key, model, data, object_id=None):
         ):
             raise PermissionDenied('销售经理只能维护纯客户资料，不能修改供应商或双用途往来单位。')
         if not object_id:
-            # Manual and automatic item codes share the CodeRule('item') lock taken above.
-            custom = text(data, 'code', default='', maximum=30) if model is Item else ''
-            if custom and Item.all_objects.filter(code=custom).exists():
-                raise ValidationError({'code': '物料编码已使用，包括停用或已删除记录。'})
-            obj.code = custom or CodeRule.generate_code(
-                'item' if model is Item else 'partner', product_category=category
+            obj.code = CodeRule.generate_code(
+                'item' if model is Item else 'partner',
+                product_category=category,
+                custom=text(data, 'code', default='', maximum=30),
             )
         if model is Partner:
             from .payment_terms import terms
@@ -197,9 +271,7 @@ def masterdata(actor, key, model, data, object_id=None):
                         'drawing_number': '此图号及版本已由其他物料使用，包括历史停用记录；请复用该物料，图档升级需填写新版本并新建编码。'
                     }
                 )
-            for field in ('name', 'specification', 'brand', 'unit'):
-                setattr(obj, field, normalized(getattr(obj, field)))
-            repeated = duplicates(
+            repeated = suspected_duplicates(
                 {
                     field: getattr(obj, field)
                     for field in (
@@ -220,7 +292,7 @@ def masterdata(actor, key, model, data, object_id=None):
                 if not duplicate_reason:
                     raise ValidationError(
                         {
-                            'duplicate_reason': f'名称、规格、品牌、单位和类别与现有物料 {", ".join(item.code for item in repeated[:10])} 相同。请优先复用；确需独立编码请说明差异原因。'
+                            'duplicate_reason': f'名称、规格、品牌、单位和类别与现有物料 {", ".join(item.code for item in repeated[:10])} 相同或相似（已忽略空格及全角差异）。请核对厂家完整型号后优先复用；确需独立编码请在基础资料中说明差异原因。'
                         }
                     )
         save(obj, user)

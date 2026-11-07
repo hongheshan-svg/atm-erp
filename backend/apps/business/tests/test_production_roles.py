@@ -83,18 +83,13 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             self.assertTrue(detail['can_manage'])
             self.assertTrue(detail['can_cancel'])
             self.assertFalse(detail['can_reopen'])
-        before = ActionReceipt.objects.count()
-        self.post('production_manager', f'tasks/{tasks["assembly"]}/complete/', {'reason': '设计尚未完成'}, status=409)
-        self.assertEqual(ActionReceipt.objects.count(), before)
+        self.post('production_manager', f'tasks/{tasks["test"]}/complete/', {'reason': '调试可交叉推进'})
+        self.post('production_manager', f'tasks/{tasks["assembly"]}/complete/', {'reason': '装配复核完成'})
         self.post('member', f'tasks/{design.pk}/complete/', {'reason': '设计确认'})
-        self.post('production_manager', f'tasks/{tasks["test"]}/complete/', {'reason': '装配尚未完成'}, status=409)
-        self.post('production_manager', f'tasks/{tasks["assembly"]}/complete/', {'reason': '装配完毕复核'})
-        self.post('production_manager', f'tasks/{tasks["test"]}/complete/', {'reason': '调试完毕复核'})
         self.assertEqual(Task.objects.get(pk=tasks['assembly']).status, 'done')
         self.assertEqual(Task.objects.get(pk=tasks['test']).status, 'done')
-        self.post(
-            'production_manager', f'tasks/{tasks["assembly"]}/reopen/', {'reason': '不能越过已完成调试'}, status=409
-        )
+        self.post('production_manager', f'tasks/{tasks["assembly"]}/reopen/', {'reason': '并行调整装配任务'})
+        self.assertEqual(Task.objects.get(pk=tasks['assembly']).status, 'open')
 
     def test_production_manager_reassigns_cancels_and_reopens_production_tasks_only(self):
         for kind in ('assembly', 'test'):

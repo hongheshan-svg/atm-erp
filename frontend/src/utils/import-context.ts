@@ -2,7 +2,7 @@ import { canImportResource, engineer, manager } from '../session'
 import type { Row } from '../types'
 
 export const importTitles: Record<string, string> = {
-  items: '物料', partners: '往来单位', sales: '销售', projects: '项目', tasks: '项目任务',
+  reconciliations: '业务对账', items: '物料', partners: '往来单位', sales: '销售', projects: '项目', tasks: '项目任务',
   purchases: '采购', stocks: '期初库存', moves: '项目领料', entries: '费用', payments: '收付款',
   time: '工时', deliveries: '发货', bom: 'BOM', 'bank-records': '银行流水',
 }
@@ -29,7 +29,7 @@ export function importResultDestination(resource: string, result: Row) {
   const paths: Record<string, string> = {
     items: '/masterdata', partners: '/masterdata', sales: '/sales', projects: '/projects',
     tasks: '/projects', time: '/projects', purchases: '/purchases', moves: '/inventory',
-    entries: '/finance', payments: '/finance', 'bank-records': '/finance',
+    entries: '/finance', reconciliations: '/finance', payments: '/finance', 'bank-records': '/finance',
   }
   const id = Number(result.results?.[0]?.id)
   const hasRecord = result.resource === target && Number.isSafeInteger(id) && id > 0
@@ -57,7 +57,7 @@ export function importDestination(resource: string, project?: number) {
   const paths: Record<string, string> = {
     items: '/masterdata', partners: '/masterdata', projects: '/projects', tasks: '/projects', time: '/projects',
     sales: '/sales', purchases: '/purchases', moves: '/inventory',
-    entries: '/finance', payments: '/finance',
+    entries: '/finance', reconciliations: '/finance', payments: '/finance',
   }
   return paths[resource] ? { path: paths[resource], query: { resource } } : null
 }

@@ -1,3 +1,4 @@
+import { codeField } from './shared'
 import { previewAction } from '../document-preview'
 import { all, read, download } from '../api'
 import { options } from '../catalog'
@@ -95,6 +96,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       initial: row,
       prepare: row ? data => ({ ...data, expected_updated_at: row.updated_at }) : undefined,
       fields: [
+        ...(!row ? [codeField('销售单号')] : []),
         { key: 'name', label: '销售名称' },
         customer(),
         { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
@@ -125,6 +127,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       { key: 'contract_number', label: '合同编号（按签署合同填写）', optional: true },
       ...(!row.project
         ? [
+            codeField('项目编号', 'project_code'),
             {
               key: 'manager',
               label: '项目负责人',

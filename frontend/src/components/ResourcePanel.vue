@@ -32,7 +32,8 @@ import { today } from '../forms'
 import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
 import { buyer, labels } from '../modules/shared'
-import { canDeleteRecords } from '../modules/deletions'
+import { canDeleteRecords, deletionLimit, deletionLabel } from '../modules/deletions'
+import { useBatchSelection } from '../utils/batch-selection'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { openDocumentPreview } from '../document-preview'
 const route = useRoute()
@@ -93,6 +94,27 @@ const selectedId = ref<number | null>(null)
 const selectedRow = ref<Row | null>(null)
 const deletionAllowed = computed(() => canDeleteRecords(props.resource))
 const deletionSelection = ref<Row[]>([])
+const batch = useBatchSelection(deletionSelection, 'id', () => deletionLimit(props.resource))
+const selectingAll = ref(false)
+let selectionGeneration = 0
+onBeforeUnmount(() => { selectionGeneration++ })
+watch(deletionAllowed, allowed => {
+  if (!allowed) { selectionGeneration++; selectingAll.value = false; deletionSelection.value = [] }
+})
+async function selectFilteredRows() {
+  if (!deletionAllowed.value || loading.value || actionBusy.value || selectingAll.value) return
+  const current = ++selectionGeneration
+  const params = { ...props.params, ...filterParams.value, search: appliedSearch.value }
+  selectingAll.value = true; error.value = ''
+  try {
+    const path = endpoint(props.resource)
+    await batch.replacePages(
+      (page, page_size) => read(path, { ...params, page, page_size }),
+      () => current === selectionGeneration && deletionAllowed.value,
+    )
+  } catch (e) { if (current === selectionGeneration) error.value = message(e) }
+  finally { if (current === selectionGeneration) selectingAll.value = false }
+}
 const deleting = ref<Row[] | null>(null)
 const deletionHistory = ref(false)
 async function openDeletion(rows: Row[]) {
@@ -161,8 +183,9 @@ function mobileSummary(row: Row) {
   if (props.resource === 'payments') return `${cell(row, 'amount')} 元 · ${row.date}`
   return [row.status ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : ''].filter(Boolean).join(' · ')
 }
-async function load() {
-  deletionSelection.value = []
+async function load(preserveSelection: unknown = false) {
+  selectionGeneration++; selectingAll.value = false
+  if (preserveSelection !== true) deletionSelection.value = []
   if (!active.value) { dirty = true; return }
   dirty = false
   const current = ++generation
@@ -212,7 +235,7 @@ watch(
   },
   { immediate: true },
 )
-watch(pageSize, () => { page.value = 1; void load() })
+watch(pageSize, () => { page.value = 1; void load(true) })
 watch(() => props.revision, () => { void load() })
 watch(active, value => { if (value && dirty) void load() })
 watch([() => route.query.focus, () => route.query.resource], () => {
@@ -351,7 +374,7 @@ async function inspect(row: Row) {
         }}</el-button>
         <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :project-id="scopedImportProject(params, projectId)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
-        <el-button v-if="deletionAllowed" type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
+        <el-button v-if="deletionAllowed" type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy || selectingAll" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
         <el-button v-if="deletionAllowed" :disabled="actionBusy" @click="openDeletionHistory">已删除记录</el-button>
       </div></Teleport>
     </header>
@@ -374,6 +397,11 @@ async function inspect(row: Row) {
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
     <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!createLabel(resource) || !allowCreate">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
+    <div v-if="deletionAllowed" class="record-batch-selection" :aria-label="title + '批量选择'">
+      <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit(resource) }} 项</span>
+      <el-button :loading="selectingAll" :disabled="loading || actionBusy || !count" @click="selectFilteredRows">{{ count > deletionLimit(resource) ? '选择筛选结果前' + deletionLimit(resource) + '项（跨页）' : '全选筛选结果（' + count + '项，跨页）' }}</el-button>
+      <el-button text :disabled="selectingAll || loading || actionBusy || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
+    </div>
     <el-table v-show="records.length || loading"
       v-loading="loading"
       :data="records"
@@ -383,9 +411,11 @@ async function inspect(row: Row) {
       :row-class-name="({ row }: { row: Row }) => row.id === selectedId ? 'selected-record' : ''"
       empty-text="暂无记录"
       style="width: 100%"
-      @selection-change="deletionSelection = $event"
     >
-      <el-table-column v-if="deletionAllowed" type="selection" width="44" :selectable="() => !actionBusy && !loading" />
+      <el-table-column v-if="deletionAllowed" label="选择" width="44">
+        <template #header><input type="checkbox" :aria-label="'选择本页' + title" :checked="batch.all(records)" :indeterminate="batch.some(records)" :disabled="actionBusy || loading || selectingAll || !records.length || (deletionSelection.length >= deletionLimit(resource) && !batch.all(records))" @change="batch.togglePage(records)" /></template>
+        <template #default="{ row }"><input type="checkbox" :aria-label="'选择' + title + ' ' + deletionLabel(row)" :checked="batch.has(row)" :disabled="actionBusy || loading || selectingAll || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
+      </el-table-column>
       <el-table-column
         v-for="col in shownColumns"
         :key="col.key"
@@ -432,10 +462,14 @@ async function inspect(row: Row) {
         ></el-table-column
       >
     </el-table>
-    <ListPagination :page="page" :total="count" @change="page = $event; load()" />
+    <ListPagination :page="page" :total="count" @change="page = $event; load(true)" />
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" :resource="resource" :title="title" :rows="deleting || undefined" :project-id="scopedImportProject(params, projectId)" @close="deleting = null; deletionHistory = false" @saved="deleted" @open="openRemoved" />
   </section>
   <ActionDialog ref="actionDialog" :command="command" @replace="command = $event" :inline="sidePanel" @busy="actionBusy = $event" @close="closeCommand" @saved="saved"><template #context><RecordContext v-if="selectedRow && (['stocks', 'entries'].includes(resource) || (['sales', 'purchases'].includes(resource) && actionNames(resource, selectedRow).includes('附件')))" :resource="resource" :record="selectedRow" @attachments="action(selectedRow!, '附件')" /></template></ActionDialog>
   </div>
 </template>
+
+<style scoped>
+.record-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+</style>

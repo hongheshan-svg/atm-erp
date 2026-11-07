@@ -1,3 +1,5 @@
+from ..task_milestones import AUTOMATIC, DEFINITIONS, stage_label
+
 """Read-only collaboration projection; never exposes commercial payloads or grants actions."""
 
 from django.core.paginator import Paginator
@@ -105,7 +107,7 @@ class Progress:
         row = self.row(
             task,
             'tasks',
-            f'{task.get_kind_display()} · {task.title}',
+            f'{stage_label(task)} · {task.title}',
             task.get_status_display(),
             task.status == 'open',
             due=task.due_date,
@@ -113,6 +115,8 @@ class Progress:
         )
         row.update(handlers=[self.person(task.assignee)], handler_label='执行人')
         row['hint'] = '由项目经理登记验收后完成。' if task.kind == 'acceptance' else '按任务要求完成后更新状态。'
+        if task.milestone in AUTOMATIC:
+            row['hint'] = DEFINITIONS[task.milestone]['description']
         if not row['pending']:
             row['hint'] = '任务已结束，完成或取消记录保留。'
         elif not task.assignee.is_active:

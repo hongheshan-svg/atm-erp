@@ -10,6 +10,7 @@ from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.business.models import (
     BankMatch,
     BankRecord,
@@ -29,6 +30,7 @@ from apps.business.models import (
     Task,
     TimeEntry,
 )
+from apps.business.services.deletions import RESOURCES
 from apps.business.services.finance import balance, costs
 from apps.core.models import ActionReceipt, AuditLog, Company
 
@@ -145,6 +147,105 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertEqual(history[0]['detail']['record']['name'], '气缸')
         self.assertEqual(history[0]['actor_name'], 'admin')
 
+    def test_material_batch_accepts_1000_records_and_replays_without_extra_audits(self):
+        items = Item.objects.bulk_create([Item(code=f'BULK-{i}', name=f'批量物料{i}') for i in range(1000)])
+        ids = [item.pk for item in items]
+        key = str(uuid.uuid4())
+        self.remove('items', ids, role='manager', status=403)
+        result = self.remove('items', ids, key=key)
+        self.assertEqual(result['count'], 1000)
+        self.assertFalse(Item.objects.filter(pk__in=ids).exists())
+        self.assertEqual(Item.all_objects.filter(pk__in=ids, is_deleted=True).count(), 1000)
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
+        self.assertEqual(self.remove('items', ids, key=key), result)
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
+
+    def test_bom_batch_accepts_1000_distinct_units_preserving_item_and_audits(self):
+        lines = BOMLine.objects.bulk_create(
+            [BOMLine(project=self.project, item=self.item, assembly_unit=f'单元{i}', quantity=1) for i in range(1000)]
+        )
+        result = self.remove('bom', [line.pk for line in lines])
+        self.assertEqual(result['count'], 1000)
+        self.assertFalse(BOMLine.objects.filter(project=self.project).exists())
+        self.assertEqual(BOMLine.all_objects.filter(project=self.project, is_deleted=True).count(), 1000)
+        self.assertTrue(Item.objects.filter(pk=self.item.pk).exists())
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
+
+    def test_bulk_material_reference_failure_rolls_back_all_rows(self):
+        items = Item.objects.bulk_create([Item(code=f'ROLL-{i}', name=f'回滚物料{i}') for i in range(201)])
+        BOMLine.objects.create(project=self.project, item=items[-1], quantity=1)
+        key = str(uuid.uuid4())
+        self.remove('items', [item.pk for item in items], key=key, status=409)
+        self.assertEqual(Item.objects.filter(pk__in=[item.pk for item in items]).count(), 201)
+        self.assertFalse(AuditLog.objects.filter(operation='record.delete').exists())
+        self.assertFalse(ActionReceipt.objects.filter(key=key).exists())
+
+    def test_all_resource_batch_limits_reject_1001_before_mutation(self):
+        for resource in RESOURCES:
+            limit = 1000
+            with self.subTest(resource=resource):
+                result = self.remove(resource, list(range(1, limit + 2)), status=400)
+                self.assertIn(str(limit), str(result))
+        self.assertFalse(AuditLog.objects.filter(operation='record.delete').exists())
+        self.assertTrue(Item.objects.filter(pk=self.item.pk).exists())
+
+    def test_archive_1000_time_records_preserves_hours_costs_and_replay(self):
+        task = Task.objects.create(project=self.project, title='装配', kind='assembly', assignee=self.users['member'])
+        rows = TimeEntry.objects.bulk_create(
+            [
+                TimeEntry(
+                    task=task,
+                    user=self.users['member'],
+                    date=timezone.localdate() - timedelta(days=i),
+                    hours='2',
+                    hourly_cost='30',
+                    cost='60',
+                    reason='隔离测试',
+                )
+                for i in range(1000)
+            ]
+        )
+        before = costs([self.project.pk])
+        key = str(uuid.uuid4())
+        result = self.remove('time', [row.pk for row in rows], key=key)
+        self.assertEqual(result['count'], 1000)
+        self.assertEqual(TimeEntry.objects.filter(task=task, is_deleted=False).count(), 1000)
+        self.assertEqual(costs([self.project.pk]), before)
+        self.assertEqual(self.clients['admin'].get('/api/business/time/').data['count'], 0)
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
+        self.assertEqual(self.remove('time', [row.pk for row in rows], key=key), result)
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
+
+    def test_batch_201_purchase_drafts_soft_delete_their_lines(self):
+        orders = PurchaseOrder.objects.bulk_create(
+            [
+                PurchaseOrder(
+                    code=f'BATCH-PO-{i}', project=self.project, supplier=self.supplier, due_date=timezone.localdate()
+                )
+                for i in range(201)
+            ]
+        )
+        PurchaseLine.objects.bulk_create(
+            [PurchaseLine(purchase=order, item=self.item, quantity='1', unit_price='10') for order in orders]
+        )
+        result = self.remove('purchases', [order.pk for order in orders])
+        self.assertEqual(result['count'], 201)
+        self.assertEqual(PurchaseOrder.objects.count(), 0)
+        self.assertEqual(PurchaseLine.objects.count(), 0)
+        self.assertEqual(PurchaseLine.all_objects.filter(is_deleted=True).count(), 201)
+        self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 201)
+
+    def test_batch_201_users_disabled_and_audited_without_passwords(self):
+        users = User.objects.bulk_create([User(username=f'batch-user-{i}', password='!') for i in range(201)])
+        result = self.remove('users', [user.pk for user in users])
+        self.assertEqual(result['count'], 201)
+        self.assertEqual(User.objects.filter(pk__in=[user.pk for user in users], is_active=False).count(), 201)
+        self.assertTrue(User.objects.get(pk=self.users['admin'].pk).is_active)
+        logs = AuditLog.objects.filter(operation='record.delete')
+        self.assertEqual(logs.count(), 201)
+        for log in logs:
+            self.assertNotIn('password', log.detail['record'])
+
     def test_reference_failure_rolls_back_whole_batch_and_receipt(self):
         unused = Partner.objects.create(code='EMPTY', name='未使用客户', kind='customer')
         # Sorting makes the unused row run before the referenced one.
@@ -180,7 +281,7 @@ class DeletionTests(BusinessFixtures, TestCase):
             ('items', [], '原因'),
             ('items', [True], '原因'),
             ('items', [self.item.pk] * 2, '原因'),
-            ('items', list(range(1, 202)), '原因'),
+            ('items', list(range(1, 1002)), '原因'),
             ('items', [self.item.pk], '  '),
         ]:
             with self.subTest(resource=resource, ids=len(ids)):

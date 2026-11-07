@@ -427,6 +427,9 @@ class TransferTests(BusinessFixtures, TestCase):
             for row in rows:
                 book['数据'].append([row.get(label, '') for label in headers])
             if previous:
+                previous_width = len(transfers.PREVIOUS_SCHEMAS[resource])
+                if book['数据'].max_column > previous_width:
+                    book['数据'].delete_cols(previous_width + 1, book['数据'].max_column - previous_width)
                 for column, (label, _) in enumerate(transfers.PREVIOUS_SCHEMAS[resource], 1):
                     book['数据'].cell(1, column).value = label
             stream = io.BytesIO()
@@ -497,6 +500,12 @@ class TransferTests(BusinessFixtures, TestCase):
                 '验收人姓名或账号': 'manager',
             },
             'moves': {'库存ID': str(stock.pk), '数量': '1', '说明': '生产领料', '项目编号': project.code},
+        }
+        samples['reconciliations'] = {
+            '款项ID': str(entry.pk),
+            '对方确认余额': '100',
+            '核准金额': '100',
+            '核对说明': '核对费用',
         }
         self.assertEqual(set(samples), set(transfers.SCHEMAS))
         for resource, row in samples.items():
@@ -626,7 +635,7 @@ class TransferTests(BusinessFixtures, TestCase):
                 '月结120天',
                 '自定义月结',
             ],
-            ('tasks', 'kind'): ['设计', '装配', '调试'],
+            ('tasks', 'kind'): ['设计阶段', '采购阶段', '组装阶段', '调试阶段', '发货阶段', '客户终验收阶段'],
             ('payments', 'method'): ['银行转账', '现金', '其他'],
         }
         for (resource, key), options in expected.items():

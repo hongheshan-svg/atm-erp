@@ -16,6 +16,23 @@ from scripts.ci.select_suites import SUITES, select
 
 
 class RoutingTests(unittest.TestCase):
+    def test_project_milestones_select_project_browser_and_backend_regressions(self):
+        paths = [
+            'backend/apps/business/services/milestones.py',
+            'backend/apps/business/task_milestones.py',
+            'frontend/src/components/ProjectMilestones.vue',
+            'frontend/src/modules/milestones.ts',
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                scope = plan([path])
+                self.assertIn('projects', scope['modules'])
+                self.assertIn('e2e/project-milestones.spec.ts', scope['browser_specs'])
+                self.assertIn('apps.business.tests.test_milestones', scope['backend_targets'])
+        self.assertEqual(
+            plan(['frontend/e2e/project-milestones.spec.ts'])['browser_specs'], ['e2e/project-milestones.spec.ts']
+        )
+
     def test_bom_export_paths_select_scoped_export_and_selection_checks(self):
         for path in (
             'backend/apps/business/services/bom_export.py',

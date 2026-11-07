@@ -4,7 +4,7 @@ import ElementPlus from 'element-plus'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { read, write } from '../api'
 import { user } from '../session'
-import { deletionLabel, deletionNotice } from '../modules/deletions'
+import { deletionLabel, deletionNotice, deletionLimit, removableResources } from '../modules/deletions'
 
 vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn(), all: vi.fn().mockResolvedValue([]), download: vi.fn() }))
 const props = { resource: 'items', title: '物料', rows: [{ id: 12, code: 'MAT12', name: '气缸' }, { id: 13, name: '导轨' }] }
@@ -144,4 +144,25 @@ it('已删除记录按项目过滤，显示操作原因和快照，保留原始�
   await wrapper.findAll('button').find(button => button.text() === '查看原始记录')!.trigger('click')
   expect(wrapper.emitted('open')).toEqual([[12]])
   wrapper.unmount()
+})
+
+it.each([['items', 1000], ['bom', 1000], ['partners', 1000]] as const)('%s确认删除遵守数量上限，超限不提交', async (resource, limit) => {
+  const rows = Array.from({ length: limit + 1 }, (_, i) => ({ id: i + 1, name: '待核对记录' + i }))
+  const wrapper = make({ resource, rows })
+  await wrapper.get('textarea').setValue('批量清理测试')
+  await wrapper.get('input[type="checkbox"]').setValue(true)
+  await wrapper.get('form').trigger('submit')
+  expect(write).not.toHaveBeenCalled()
+  expect(wrapper.get('[role="alert"]').text()).toContain('每批最多删除 ' + limit + ' 条')
+  await wrapper.setProps({ rows: rows.slice(0, limit) })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(write).toHaveBeenCalledTimes(1)
+  expect(vi.mocked(write).mock.calls[0]![1]).toEqual({ resource, ids: rows.slice(0, limit).map(row => row.id), reason: '批量清理测试' })
+  wrapper.unmount()
+})
+
+it('全部可删除表单统一1000项，公司、编号及审计不提供批量删除', () => {
+  for (const resource of removableResources) expect(deletionLimit(resource)).toBe(1000)
+  for (const resource of ['company', 'codes', 'audit']) expect(deletionLimit(resource)).toBe(0)
 })

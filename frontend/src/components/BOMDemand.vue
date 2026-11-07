@@ -14,7 +14,8 @@ import { productCategories } from '../product-categories'
 import ImportFeedback from './ImportFeedback.vue'
 import { importDestination, templateMismatch } from '../utils/import-context'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
-import { canDeleteRecords } from '../modules/deletions'
+import { canDeleteRecords, deletionLimit } from '../modules/deletions'
+import { useBatchSelection } from '../utils/batch-selection'
 const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
@@ -55,6 +56,9 @@ const selected = ref<number[]>([])
 const deletionAllowed = computed(() => canDeleteRecords('bom'))
 const deletionSelection = ref<Row[]>([]), deleting = ref<Row[] | null>(null), deletionHistory = ref(false)
 const deletionLoading = ref(false)
+const deletionMax = deletionLimit('bom')
+const batch = useBatchSelection(deletionSelection, 'bom_line', () => deletionMax)
+watch(deletionAllowed, allowed => { if (!allowed) { deletionSelection.value = []; deleting.value = null } })
 function openDeletion(rows: Row[]) { deleting.value = rows.map(row => ({ ...row, id: row.bom_line })) }
 watch([() => props.projectId, search, brand, unit, partType, shortageOnly, view], () => { deletionSelection.value = []; deleting.value = null; deletionHistory.value = false })
 const pickingBom = ref(false)
@@ -271,13 +275,21 @@ function saved() {
     <p v-else class="muted">库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。</p>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <p class="muted" role="status" aria-label="BOM导出范围">当前筛选 {{ filtered.length }} 项，导出包含所有分页。<template v-if="exportSelection.length">已选 {{ exportSelection.length }} 项，可单独导出已选项。</template><strong v-if="hiddenSelectionCount">其中 {{ hiddenSelectionCount }} 项在当前筛选外；只需当前类别时请选择“筛选结果”导出。</strong></p>
+    <div v-if="deletionAllowed && view === 'prepare'" class="bom-batch-selection" aria-label="BOM批量选择">
+      <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionMax }} 项</span>
+      <el-button :disabled="busy || deletionLoading || !filtered.length" @click="batch.replace(filtered)">{{ filtered.length > deletionMax ? '选择筛选结果前' + deletionMax + '项（跨页）' : '全选筛选结果（' + filtered.length + '项，跨页）' }}</el-button>
+      <el-button text :disabled="busy || deletionLoading || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
+    </div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
       <template v-if="impact"><p>{{ impact.note }}</p><el-table :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></el-table><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
     </el-dialog>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <el-table :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'" @selection-change="deletionSelection = $event">
-      <el-table-column v-if="deletionAllowed && view === 'prepare'" type="selection" width="44" fixed="left" />
+    <el-table :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'">
+      <el-table-column v-if="deletionAllowed && view === 'prepare'" label="选择" width="44" fixed="left">
+        <template #header><input type="checkbox" aria-label="选择本页BOM明细" :checked="batch.all(visibleLines)" :indeterminate="batch.some(visibleLines)" :disabled="busy || deletionLoading || !visibleLines.length || (deletionSelection.length >= deletionMax && !batch.all(visibleLines))" @change="batch.togglePage(visibleLines)" /></template>
+        <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM明细 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="batch.has(row)" :disabled="busy || deletionLoading || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
+      </el-table-column>
       <el-table-column v-if="canPurchase && view === 'purchase'" label="选择" width="60" fixed><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
       <el-table-column label="物料名称 / 编码" min-width="180" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small></template></el-table-column>
       <el-table-column v-if="view === 'prepare'" prop="specification" label="规格" min-width="140" />
@@ -311,7 +323,7 @@ function saved() {
         <p><strong>目标项目：{{ projectContext?.name ? `${projectContext.name}（${projectContext.code}）` : '当前页面所选项目' }}</strong> · 用于编制或修订本项目用料。预览不会保存业务数据。</p>
         <ol class="bom-import-steps">
           <li><strong>下载并填写模板</strong><div class="toolbar"><el-button :disabled="busy" @click="template()">下载 Excel 模板</el-button><el-button :disabled="busy" @click="template('html')">下载填写说明</el-button><details><summary>更多格式</summary><el-button :disabled="busy" @click="template('csv')">下载 CSV 模板</el-button></details></div>
-            <details class="import-help"><summary>导入模板填写说明</summary><p>Excel 模板自带“填写说明”页和表头提示。产品编码类别、标准/非标可下拉选择，单位可选择或手填；缺少必填内容会标红。已有物料填写编码，后方资料留空或与现有资料一致；新物料编码留空，填写名称、规格、产品编码类别和单位，有图件再填图号。相同物料自动复用，多重匹配须明确编码。需求、单元和申请信息按项目填写，已有 BOM 修改须填写变更说明。旧版模板仍可使用。</p></details>
+            <details class="import-help"><summary>导入模板填写说明</summary><p>Excel 模板自带“填写说明”页和表头提示。产品编码类别、标准/非标可下拉选择，单位可选择或手填；缺少必填内容会标红。已有物料填写编码，后方资料留空或与现有资料一致；新物料可填自编编码，并填写名称、完整型号和单位；编码留空时还须选择产品编码类别自动生成，有图件再填图号。型号按厂家确认原文保存，不自动补全。完全相同物料可复用，疑似重复先人工核对，多重匹配须明确编码。需求、单元和申请信息按项目填写，已有 BOM 修改须填写变更说明。旧版模板仍可使用。</p></details>
           </li>
           <li><strong>上传并检查问题</strong><label class="file-button">{{ preview ? '重新选择文件并预览' : '选择文件并预览' }}<input type="file" accept=".csv,.xlsx" :disabled="busy" @change="importFile" /></label></li>
           <li><strong>核对后确认导入</strong> · 任一行失败整批不保存，修正后重新上传。</li>
@@ -354,6 +366,7 @@ function saved() {
 .import-preview { min-width: 0; }
 .import-filename { overflow-wrap: anywhere; }
 .import-preview .import-errors { max-height: 160px; overflow: auto; }
+.bom-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
 .bom-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--brand-wash-2); padding: 14px 18px; border: 1px solid var(--brand-line); border-radius: 8px; margin-top: 18px; z-index: 5; }
 .bom-selection-bar > .el-button--primary { margin-left: auto; }
 @media (max-width: 760px) { .bom-demand-filters > label { flex: 1 1 140px; } }

@@ -42,7 +42,7 @@ export function canImportResource(resource: string) {
   const roles: Record<string, string[]> = {
     'bank-records': ['admin', 'finance'], sales: ['admin', 'manager', 'sales_manager'],
     projects: ['admin', 'manager'], tasks: ['admin', 'manager', 'production_manager'], stocks: ['admin'],
-    entries: ['admin', 'finance'], payments: ['admin', 'finance'],
+    reconciliations: ['admin', 'finance'], entries: ['admin', 'finance'], payments: ['admin', 'finance'],
     moves: ['admin', 'warehouse'], deliveries: ['admin', 'manager'],
   }
   return !!roles[resource] && can(roles[resource]!)

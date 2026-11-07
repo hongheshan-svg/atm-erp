@@ -17,6 +17,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import ProcessSteps from '../components/ProcessSteps.vue'
 import ProjectAttention from '../components/ProjectAttention.vue'
 import ProjectProgress from '../components/ProjectProgress.vue'
+import ProjectMilestones from '../components/ProjectMilestones.vue'
 import { revealActiveTab } from '../utils/tabs'
 import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
@@ -64,7 +65,8 @@ const command = ref<Command | null>(null)
 const attention = computed(() => String(route.query.attention || ''))
 const taskAttention = computed(() => tab.value === 'tasks' && (!route.query.section || route.query.section === 'tasks') && ['open-tasks', 'acceptance'].includes(attention.value))
 const purchaseAttention = computed(() => tab.value === 'purchases' && ['submitted', 'approved', 'partial'].includes(attention.value))
-const taskParams = computed(() => ({ project: id, ...(taskAttention.value ? { status: 'open', ...(attention.value === 'acceptance' ? { kind: 'acceptance' } : {}) } : {}) }))
+const phase = ref('')
+const taskParams = computed(() => ({ project: id, ...(phase.value ? { phase: phase.value } : {}), ...(taskAttention.value ? { status: 'open', ...(attention.value === 'acceptance' ? { kind: 'acceptance' } : {}) } : {}) }))
 const purchaseParams = computed(() => ({ project: id, ...(purchaseAttention.value ? { status: attention.value } : {}) }))
 const attentionLabel = computed(() => ({ 'open-tasks': '未完成任务', acceptance: '待验收任务', submitted: '待批准采购', approved: '待收货采购', partial: '部分收货采购' }[attention.value]))
 function clearAttention() {
@@ -158,7 +160,7 @@ onMounted(load)
     <p v-if="taskAttention || purchaseAttention" class="attention-filter" role="status">当前项目 · {{ attentionLabel }}<el-button text @click="clearAttention">查看全部</el-button><router-link v-if="taskAttention && attention === 'acceptance' && manager() && project.can_manage !== false" :to="{ path: `/projects/${id}`, query: { tab: 'deliveries', section: 'deliveries' } }">前往交付批次登记验收</router-link></p>
     <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab" :before-leave="confirmFormNavigation"
       ><el-tab-pane label="流程进度" name="progress" lazy><ProjectProgress v-if="tab === 'progress'" :project-id="id" :revision="revision" /></el-tab-pane><el-tab-pane label="任务与工时" name="tasks"
-        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ProjectMilestones :project-id="id" :revision="revision" :phase="phase" @phase="value => { phase = value; clearAttention() }" @changed="load" /><ResourcePanel
           resource="tasks"
           :key="`tasks-${attention}`"
           :class="{ 'attention-list': taskAttention }"

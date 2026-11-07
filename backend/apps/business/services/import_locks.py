@@ -14,7 +14,7 @@ def ids(values):
 
 def batch_projects(resource, records):
     rows = [record['data'] for record in records]
-    if resource == 'payments':
+    if resource in {'payments', 'reconciliations'}:
         return Project.objects.filter(
             pk__in=Entry.objects.filter(pk__in=ids(r.get('entry') for r in rows)).values('project_id')
         )

@@ -143,3 +143,5 @@ export function display(value: any, key?: string) {
   if (key && !ENUM_KEYS.has(key)) return String(value)
   return labels[String(value)] || String(value)
 }
+
+export const codeField = (label = '编号', key = 'code'): Field => ({ key, label, optional: true, hint: '可自行编号，最多30字符；留空自动生成。已用编号不可重复，前导零会保留。' })

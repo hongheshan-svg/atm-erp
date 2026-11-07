@@ -20,6 +20,7 @@ from apps.core.permissions import (
 )
 
 from ..models import Delivery, Entry, StockMove, Task, TimeEntry
+from ..task_milestones import AUTOMATIC, DEFINITIONS, PHASES
 from .bom import issued
 from .common import (
     ZERO,
@@ -46,7 +47,7 @@ OPEN_PROJECT = {'active', 'delivering', 'warranty'}
 def with_task_flags(queryset):
     """Annotate the project facts TaskSerializer needs, so listing N tasks costs no extra query.
 
-    是否已发货、后续阶段是否完工，对同一项目的每行任务答案相同；不注解的话序列化每行都要反查一次。
+    是否已发货和首批发货时间由原交付记录投影；不注解的话序列化每行都要反查一次。
     """
     return queryset.annotate(
         project_shipped=Exists(Delivery.objects.filter(project=OuterRef('project_id'))),
@@ -55,10 +56,6 @@ def with_task_flags(queryset):
         ),
         task_has_time=Exists(TimeEntry.objects.filter(task=OuterRef('pk'))),
         task_has_moves=Exists(StockMove.objects.filter(task=OuterRef('pk'))),
-        project_assembly_done=Exists(
-            Task.objects.filter(project=OuterRef('project_id'), kind='assembly', status='done')
-        ),
-        project_test_done=Exists(Task.objects.filter(project=OuterRef('project_id'), kind='test', status='done')),
     )
 
 
@@ -107,27 +104,45 @@ def completed_stage(project, kind):
         raise Conflict(f'请先完成所有{Task.Kind(kind).label}任务。')
 
 
+def task_values(project, data):
+    fields(data, {'project', 'kind', 'milestone', 'title', 'description', 'assignee', 'due_date'})
+    kind = text(data, 'kind', maximum=20)
+    if kind not in dict(PHASES):
+        raise ValidationError(
+            {'kind': '请选择设计、采购、组装、调试、发货或客户终验收阶段。批次安装和验收仍随交付创建。'}
+        )
+    milestone = text(data, 'milestone', default='', maximum=40)
+    definition = DEFINITIONS.get(milestone)
+    if milestone and (not definition or definition['kind'] != kind):
+        raise ValidationError({'milestone': '里程碑节点与阶段不匹配，请重新选择。'})
+    title = text(data, 'title', default='', maximum=150) or (definition['title'] if definition else '')
+    if not title:
+        raise ValidationError({'title': '自定义任务请填写任务名称，或选择里程碑节点。'})
+    return {
+        'project': project,
+        'kind': kind,
+        'milestone': milestone,
+        'title': title,
+        'description': text(
+            data, 'description', default=definition['description'] if definition else '', maximum=20000
+        ),
+        'assignee': assignee(project, data.get('assignee')),
+        'due_date': day(data, 'due_date', optional=True),
+    }
+
+
 def create_task(actor, key, data):
     def execute(user, project):
-        fields(data, {'project', 'kind', 'title', 'description', 'assignee', 'due_date'})
         state(project, {'active', 'delivering'})
-        kind = text(data, 'kind', maximum=20)
-        if kind not in STAGES:
-            raise ValidationError(
-                {'kind': '这里只能创建设计、装配或调试任务。安装验收随交付创建，售后请从交付批次创建。'}
-            )
-        task = save(
-            Task(
-                project=project,
-                kind=kind,
-                title=text(data, 'title', maximum=150),
-                description=text(data, 'description', default='', maximum=20000),
-                assignee=assignee(project, data.get('assignee')),
-                due_date=day(data, 'due_date', optional=True),
-            ),
-            user,
-        )
-        return audit(user, 'task.create', task)
+        values = task_values(project, data)
+        if values['milestone'] and project.tasks.filter(milestone=values['milestone']).exists():
+            raise Conflict('该里程碑节点已存在，请调整原任务，不要重复创建。')
+        task = save(Task(**values), user)
+        result = audit(user, 'task.create', task)
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        return result
 
     return project_action(
         actor, key, 'task.create', data.get('project'), data, task_management_roles(data.get('kind')), execute
@@ -167,15 +182,16 @@ def complete_task(actor, key, task_id, data):
     def execute(user, project, task):
         fields(data, {'reason'})
         state(task, {'open'})
-        if task.kind == 'acceptance':
-            raise Conflict('验收必须从交付批次登记，不能直接完成验收任务。')
-        if task.kind in STAGES:
-            for prior in STAGES[: STAGES.index(task.kind)]:
-                completed_stage(project, prior)
+        if task.kind == 'acceptance' or task.milestone in AUTOMATIC:
+            raise Conflict('此节点由实际发货、安装或验收记录同步，请从对应业务办理，不能直接完成。')
         reason = text(data, 'reason')
         task.status, task.completed_at = 'done', timezone.now()
         save(task, user)
-        return audit(user, 'task.complete', task, reason=reason)
+        result = audit(user, 'task.complete', task, reason=reason)
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        return result
 
     return task_action(actor, key, 'task.complete', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
 
@@ -188,6 +204,8 @@ def log_time(actor, key, task_id, data):
 
     def execute(user, project, task):
         fields(data, {'user', 'date', 'hours', 'reason'})
+        if task.milestone in AUTOMATIC:
+            raise Conflict('此节点是业务汇总，请在具体执行任务登记工时，避免重复计费。')
         state(task, {'open', 'done'})
         person_id = identity(data.get('user', user.pk), 'user')
         # Keep daily totals/rates serialized without blocking actor/audit FK KEY SHARE
@@ -326,6 +344,7 @@ def ship(actor, key, project_id, data):
                 'acceptor',
                 'note',
                 'materials',
+                'code',
                 'install_due_date',
                 'acceptance_due_date',
             },
@@ -333,6 +352,12 @@ def ship(actor, key, project_id, data):
         state(project, {'active', 'delivering'})
         for stage in STAGES:
             completed_stage(project, stage)
+        if (
+            project.tasks.filter(kind__in=['purchase', 'shipping'], status='open')
+            .exclude(milestone__in=AUTOMATIC)
+            .exists()
+        ):
+            raise Conflict('请先完成已安排的采购跟进、客户预验收和整改任务，再登记发货。')
         qty = integer(data, 'quantity', None, minimum=1)
         shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
         if shipped + qty > project.equipment_quantity:
@@ -386,7 +411,7 @@ def ship(actor, key, project_id, data):
         acceptor = assignee(project, data.get('acceptor', project.manager_id))
         delivery = save(
             Delivery(
-                code=CodeRule.generate_code('delivery'),
+                code=CodeRule.generate_code('delivery', custom=text(data, 'code', default='', maximum=30)),
                 project=project,
                 quantity=qty,
                 shipped_date=date,
@@ -411,7 +436,11 @@ def ship(actor, key, project_id, data):
             )
         project.status = 'delivering'
         save(project, user)
-        return audit(user, 'delivery.ship', delivery, quantity=qty)
+        result = audit(user, 'delivery.ship', delivery, quantity=qty)
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        return result
 
     return project_action(actor, key, 'delivery.ship', project_id, data, MANAGERS, execute)
 
@@ -442,7 +471,11 @@ def accept(actor, key, delivery_id, data):
         if shipped == project.equipment_quantity and not project.deliveries.filter(accepted_date__isnull=True).exists():
             project.status = 'warranty'
             save(project, user)
-        return audit(user, 'delivery.accept', delivery, date=date.isoformat(), reason=reason)
+        result = audit(user, 'delivery.accept', delivery, date=date.isoformat(), reason=reason)
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        return result
 
     return project_action(
         actor, key, 'delivery.accept', source.project_id, {'delivery': source.pk, 'data': data}, MANAGERS, execute

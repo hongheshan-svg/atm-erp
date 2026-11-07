@@ -349,6 +349,9 @@ class Delivery(BaseModel):
 class Task(BaseModel):
     class Kind(models.TextChoices):
         DESIGN = 'design', '设计'
+        PURCHASE = 'purchase', '采购'
+        SHIPPING = 'shipping', '发货'
+        SITE = 'site', '客户终验收'
         ASSEMBLY = 'assembly', '装配'
         TEST = 'test', '调试'
         INSTALL = 'install', '安装'
@@ -363,6 +366,7 @@ class Task(BaseModel):
     project = models.ForeignKey(Project, models.PROTECT, related_name='tasks')
     delivery = models.ForeignKey(Delivery, models.PROTECT, null=True, blank=True, related_name='tasks')
     kind = models.CharField(max_length=20, choices=Kind.choices)
+    milestone = models.CharField(max_length=40, blank=True, default='')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True)
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT)
@@ -373,6 +377,13 @@ class Task(BaseModel):
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_task'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'milestone'],
+                condition=Q(is_deleted=False) & ~Q(milestone=''),
+                name='lean_task_project_milestone',
+            ),
+        ]
         indexes = [
             # 工作台按「我参与的项目 + 我 + 待完成」取待办；阶段完工判定按项目 + 阶段取。
             models.Index(

@@ -5,6 +5,7 @@ export const removableResources = new Set([
   'items', 'partners', 'sales', 'projects', 'bom', 'purchases', 'stocks', 'moves',
   'entries', 'payments', 'reconciliations', 'bank-records', 'tasks', 'deliveries', 'time', 'documents', 'users',
 ])
+export const deletionLimit = (resource: string) => removableResources.has(resource) ? 1000 : 0
 export const canDeleteRecords = (resource: string) => can(['admin']) && removableResources.has(resource)
 // 与后端 services/deletions.py 的 RESTORABLE 一致：只有误删的账号可以恢复，其他已删除记录仅保留历史。
 export const restorableResources = new Set(['users'])

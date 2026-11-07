@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Row } from '../types'
 import { read, write } from '../api'
 import { columns, display } from '../business'
-import { deletionLabel, deletionNotice, canDeleteRecords, canRestoreRecords, restoreNotice } from '../modules/deletions'
+import { deletionLabel, deletionNotice, canDeleteRecords, canRestoreRecords, restoreNotice, deletionLimit } from '../modules/deletions'
 import { message, requestKey } from '../utils/request'
 import ListPagination from './ListPagination.vue'
 import { pageSize } from '../pagination'
@@ -31,6 +31,7 @@ watch(pageSize, () => { page.value = 1; void load() })
 async function submit() {
   if (busy.value || !canDeleteRecords(props.resource)) return
   if (!props.rows?.length || !reason.value.trim() || !confirmed.value) { error.value = '请填写删除原因，并勾选确认。'; return }
+  if (props.rows.length > deletionLimit(props.resource)) { error.value = '每批最多删除 ' + deletionLimit(props.resource) + ' 条，请减少勾选数量。'; return }
   busy.value = true; error.value = ''
   try {
     await write('/business/record-deletions/', { resource: props.resource, ids: props.rows.map(row => row.id), reason: reason.value.trim() }, key)

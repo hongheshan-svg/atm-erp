@@ -9,7 +9,7 @@ from apps.core.permissions import FINANCE, MANAGERS, MONEY_READERS
 
 from ..models import BankMatch, BankOffset, BankRecord, Reconciliation
 from ..services import bank_import, banking, reconciliation
-from .common import ReadView, key
+from .common import ImportableMixin, ReadView, key
 
 
 class ReconciliationSerializer(serializers.ModelSerializer):
@@ -58,7 +58,7 @@ class ReconciliationSerializer(serializers.ModelSerializer):
         ]
 
 
-class ReconciliationView(ReadView):
+class ReconciliationView(ImportableMixin, ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE | MANAGERS
     queryset = reconciliation.with_snapshot_sources(Reconciliation.objects.all()).order_by('-id')

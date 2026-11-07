@@ -14,9 +14,10 @@ from apps.core.permissions import (
 )
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
+from ..task_milestones import AUTOMATIC, PRE_SHIPMENT
 from .bom import incoming, issued
 from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
-from .execution import STAGES, assignee, stage_cancel_block, task_action
+from .execution import assignee, stage_cancel_block, task_action
 from .finance import balance
 
 
@@ -236,7 +237,8 @@ def change_task(actor, key, task_id, data, operation):
             raise PermissionDenied('收费售后的取消与重开涉及账款，请由项目经理处理。')
         if (
             operation == 'cancel'
-            and task.kind in STAGES
+            and task.kind in PRE_SHIPMENT
+            and task.milestone not in AUTOMATIC
             and task.project.deliveries.exists()
             and stage_cancel_block(task) is None
             and not project_allowed(user, task.project, MANAGERS)
@@ -245,16 +247,34 @@ def change_task(actor, key, task_id, data, operation):
             raise PermissionDenied('首批发货后新建的阶段任务需由项目经理确认后取消。')
 
     def execute(user, project, task):
-        fields(data, {'reason', 'assignee'} if operation in {'assign', 'reopen'} else {'reason'})
+        fields(
+            data,
+            {'reason', 'assignee', 'due_date'}
+            if operation == 'assign'
+            else {'reason', 'assignee'}
+            if operation == 'reopen'
+            else {'reason'},
+        )
         reason = text(data, 'reason')
         if operation == 'assign':
             state(task, {'open'})
             task.assignee = assignee(project, data.get('assignee'))
+            if 'due_date' in data:
+                task.due_date = day(data, 'due_date', optional=True)
+                if (
+                    task.delivery_id
+                    and task.kind in {'install', 'acceptance'}
+                    and task.due_date
+                    and task.due_date < task.delivery.shipped_date
+                ):
+                    raise ValidationError({'due_date': '安装或验收截止日期不能早于本批发货日期。'})
         elif operation == 'cancel':
             state(task, {'open', 'done'})
-            if task.kind in {'install', 'acceptance'}:
-                raise Conflict('交付关联的安装和验收任务不能取消。')
-            blocked = stage_cancel_block(task) if task.kind in STAGES else None
+            if task.kind in {'install', 'acceptance'} or (task.milestone in AUTOMATIC and task.status == 'done'):
+                raise Conflict('实际安装、验收任务及已完成的业务汇总节点不能取消。')
+            blocked = (
+                stage_cancel_block(task) if task.kind in PRE_SHIPMENT and task.milestone not in AUTOMATIC else None
+            )
             if blocked:
                 raise Conflict(blocked)
             task.status = 'cancelled'
@@ -266,13 +286,15 @@ def change_task(actor, key, task_id, data, operation):
         elif operation == 'reopen':
             state(task, {'done', 'cancelled'})
             task.assignee = assignee(project, data.get('assignee', task.assignee_id))
-            if task.kind == 'acceptance' or (task.kind == 'install' and task.delivery.accepted_date):
-                raise Conflict('已验收事实不能通过重新打开任务撤销，请登记售后。')
-            if task.kind in STAGES:
+            if (
+                task.kind == 'acceptance'
+                or (task.kind == 'install' and task.delivery.accepted_date)
+                or (task.milestone in AUTOMATIC and task.status == 'done')
+            ):
+                raise Conflict('实际交付或验收事实不能通过重开汇总节点撤销；已验收后的问题请登记售后。')
+            if task.kind in PRE_SHIPMENT and task.milestone not in AUTOMATIC:
                 if project.deliveries.exists():
                     raise Conflict('已有交付，不能重新打开原生产阶段任务。')
-                if project.tasks.filter(kind__in=STAGES[STAGES.index(task.kind) + 1 :], status='done').exists():
-                    raise Conflict('请先重新打开后续阶段任务。')
             task.status, task.completed_at = 'open', None
             if task.kind == 'service':
                 entry = Entry.objects.select_for_update().filter(task=task, cancelled=True).first()
@@ -282,7 +304,11 @@ def change_task(actor, key, task_id, data, operation):
         else:
             raise ValidationError('不支持的任务操作。')
         save(task, user)
-        return audit(user, f'task.{operation}', task, reason=reason)
+        result = audit(user, f'task.{operation}', task, reason=reason)
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        return result
 
     return task_action(
         actor,

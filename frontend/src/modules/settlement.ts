@@ -1,3 +1,4 @@
+import { codeField } from './shared'
 import { previewAction } from '../document-preview'
 import { all, download, read } from '../api'
 import { can } from '../session'
@@ -28,7 +29,7 @@ export async function reconciliationCommand(entry: Row, prepayment = false): Pro
   const docs = (await all('/business/documents/', { project: entry.project })).filter(d => d.sale || d.purchase || ['contract', 'receipt'].includes(d.category))
   const kind = prepayment ? 'prepayment' : Number(entry.balance) < 0 ? 'refund' : 'settlement'
   return { title: prepayment ? '申请预付款核准' : '生成对账单', path: '/business/reconciliations/', draftScope: `entry:${entry.id}:${kind}`, subject: entry.title || `款项 ${entry.id}`,
-    fields: [t('counterparty_balance', '对方确认余额（待退款填负数）'), t('approved_amount', '本次申请额度（元）'),
+    fields: [codeField('对账单号'), t('counterparty_balance', '对方确认余额（待退款填负数）'), t('approved_amount', '本次申请额度（元）'),
       { key: 'basis', label: '合同编号及付款条款依据', optional: !prepayment },
       { key: 'document', label: '对账或合同附件', type: 'select', upload: { context: { project: entry.project }, category: 'receipt' }, optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason],
     initial: { counterparty_balance: String(entry.balance), approved_amount: String(Math.abs(Number(entry.balance))) },

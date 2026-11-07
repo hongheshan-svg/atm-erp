@@ -138,11 +138,34 @@ class CodeRule(models.Model):
         db_table = 'lean_code_rule'
 
     @classmethod
-    def generate_code(cls, key, *, product_category=''):
+    def generate_code(cls, key, *, product_category='', custom=''):
         from django.apps import apps
 
         with transaction.atomic():
             rule = cls.objects.select_for_update().get(key=key)
+            model = apps.get_model(
+                'business',
+                {
+                    'project': 'Project',
+                    'sale': 'SalesOrder',
+                    'purchase': 'PurchaseOrder',
+                    'delivery': 'Delivery',
+                    'item': 'Item',
+                    'partner': 'Partner',
+                    'reconciliation': 'Reconciliation',
+                }[key],
+            )
+            if not isinstance(custom, str):
+                raise ValidationError({'code': '编号请按文本填写，保留前导零。'})
+            custom = custom.strip()
+            if custom:
+                if len(custom) > 30 or not custom.isprintable():
+                    raise ValidationError({'code': '编号最多30个字符，不能包含换行、制表符或不可见字符。'})
+                if model.all_objects.filter(code=custom).exists():
+                    raise ValidationError(
+                        {'code': '编号已使用，包括停用或已删除记录；请核对原记录，不会自动覆盖或另编号码。'}
+                    )
+                return custom
             stamp = timezone.localdate().strftime('%Y%m%d')
             if product_category:
                 item_model = apps.get_model('business', 'Item')
@@ -165,18 +188,6 @@ class CodeRule(models.Model):
                 rule.counter = 0
                 rule.period = period
             date = stamp[2:4] if rule.date_format == 'YY' else stamp[: len(rule.date_format)]
-            model = apps.get_model(
-                'business',
-                {
-                    'project': 'Project',
-                    'sale': 'SalesOrder',
-                    'purchase': 'PurchaseOrder',
-                    'delivery': 'Delivery',
-                    'item': 'Item',
-                    'partner': 'Partner',
-                    'reconciliation': 'Reconciliation',
-                }[key],
-            )
             while True:
                 rule.counter += 1
                 if (

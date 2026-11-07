@@ -1,8 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { flushPromises, shallowMount } from '@vue/test-utils'
+import { flushPromises, shallowMount, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import BOMDemand from './BOMDemand.vue'
 import { user } from '../session'
+import ListPagination from './ListPagination.vue'
+import RecordDeletionDialog from './RecordDeletionDialog.vue'
+import { pageSize } from '../pagination'
 import { download, read, write } from '../api'
 import { downloadBOM } from '../api/bom'
 vi.mock('../api/bom', () => ({ downloadBOM: vi.fn() }))
@@ -211,7 +214,7 @@ it('编制与采购视图使用相同BOM行，关键列优先且选择保留稳�
     stubs: { RouterLink: true, ElTableColumn: { template: '<div class="col" />' } },
   } })
   await flushPromises()
-  expect(wrapper.findAll('.col').filter(col => col.attributes('type') !== 'selection').slice(0, 6).map(col => col.attributes('label'))).toEqual(['物料名称 / 编码', '规格', '单元', '需求数量', '单位', '需求日期'])
+  expect(wrapper.findAll('.col').filter(col => col.attributes('label') !== '选择').slice(0, 6).map(col => col.attributes('label'))).toEqual(['物料名称 / 编码', '规格', '单元', '需求数量', '单位', '需求日期'])
   expect(wrapper.text()).not.toContain('从 BOM 多选下单')
   await wrapper.get('input[value=purchase]').setValue()
   const labels = wrapper.findAll('.col').map(col => col.attributes('label'))
@@ -221,4 +224,37 @@ it('编制与采购视图使用相同BOM行，关键列优先且选择保留稳�
   await wrapper.findAll('el-button-stub').find(button => button.text() === '按缺料采购')!.trigger('click')
   expect(wrapper.getComponent({ name: 'BOMPurchasePicker' }).props('initialSelection')).toEqual([41, 42])
   wrapper.unmount()
+})
+
+it('管理员跨页选择427项BOM，切换筛选或项目清空旧选择', async () => {
+  user.value = { roles: ['admin'] }
+  pageSize.value = 10
+  const lines = Array.from({ length: 427 }, (_, i) => ({ bom_line: i + 1, item_code: 'I1', item_name: '同一物料', assembly_unit: '单元' + i, quantity: '1', part_type: i === 426 ? 'custom' : 'standard' }))
+  vi.mocked(read).mockResolvedValue({ lines })
+  const wrapper = mount(BOMDemand, { props: { projectId: 1, status: 'active', canEditBom: true }, global: {
+    plugins: [ElementPlus], stubs: { RecordDeletionDialog: true, ActionDialog: true, BOMPurchasePicker: true, ImportFeedback: true, RouterLink: true },
+  } })
+  await flushPromises()
+  await wrapper.get('[aria-label="选择本页BOM明细"]').setValue(true)
+  wrapper.getComponent(ListPagination).vm.$emit('change', 2)
+  await flushPromises()
+  await wrapper.get('[aria-label="选择本页BOM明细"]').setValue(true)
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('20')
+  wrapper.getComponent(ListPagination).vm.$emit('change', 1)
+  await flushPromises()
+  expect((wrapper.get('[aria-label="选择本页BOM明细"]').element as HTMLInputElement).checked).toBe(true)
+  await wrapper.get('[aria-label="选择本页BOM明细"]').setValue(false)
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('10')
+  await wrapper.findAll('button').find(b => b.text() === '全选筛选结果（427项，跨页）')!.trigger('click')
+  await wrapper.findAll('button').find(b => b.text() === '批量删除（427）')!.trigger('click')
+  expect(wrapper.getComponent(RecordDeletionDialog).props('rows')!.map(row => row.id)).toEqual(lines.map(row => row.bom_line))
+  wrapper.getComponent(RecordDeletionDialog).vm.$emit('close')
+  await wrapper.get('[aria-label="筛选类别"]').setValue('custom')
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('已选 0')
+  await wrapper.findAll('button').find(b => b.text() === '全选筛选结果（1项，跨页）')!.trigger('click')
+  await wrapper.setProps({ projectId: 2 })
+  await flushPromises()
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('已选 0')
+  wrapper.unmount()
+  vi.mocked(read).mockResolvedValue({ lines: [] })
 })

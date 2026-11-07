@@ -1,3 +1,4 @@
+import { codeField } from './shared'
 import { materialDetails, warehouseLines } from './warehouse-lines'
 import { item } from './shared'
 import { project } from './shared'
@@ -5,6 +6,7 @@ import { remote } from './shared'
 import { date } from './shared'
 import { termFields, termLabel } from './payment-terms'
 export const purchaseFields = (): Field[] => [
+  codeField('采购单号'),
   project(),
   remote('supplier', '供应商', '/business/partners/', {
     remoteParams: { is_active: true },

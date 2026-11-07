@@ -196,7 +196,7 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
             self.assertNotIn(name, str(result.data))
         book = self.workbook(result.data)
         self.assertEqual(book.sheetnames, ['数据'])
-        self.assertEqual([cell.value or '' for cell in book.active[2]], rows[0])
+        self.assertEqual([cell.value or '' for cell in book.active[2]], rows[0] + [''] * (len(headers) - len(rows[0])))
         comments = '\n'.join(cell.comment.text for row in book.active for cell in row if cell.comment)
         self.assertNotIn(self.project.name, comments)
         self.assertNotIn(self.users['member'].display_name, comments)
@@ -221,7 +221,9 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
         book = self.workbook(result.data)
         self.assertEqual(book.sheetnames, ['数据'])
         for index, source in enumerate(rows, 2):
-            self.assertEqual([cell.value or '' for cell in book.active[index]], source)
+            self.assertEqual(
+                [cell.value or '' for cell in book.active[index]], source + [''] * (len(headers) - len(source))
+            )
         comments = '\n'.join(cell.comment.text for row in book.active for cell in row if cell.comment)
         self.assertNotIn('后台匹配名称', comments)
         book.close()

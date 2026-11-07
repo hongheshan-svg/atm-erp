@@ -23,5 +23,5 @@ const tabs = [{ key: 'entries', label: '应收应付与费用' }, { key: 'reconc
       :project-id="projectId"
       :revision="revision"
       @changed="refresh"
-  /></template><template #reconciliations><p class="muted">从款项操作生成对账单。先查看明细核对差异，再确认；预付款由项目经理或管理员核准。</p><ResourcePanel resource="reconciliations" title="业务对账" :params="{ entry__project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template><template #bank><ResourcePanel resource="bank-records" title="银行到账与认领" :params="{ project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template></ModuleTabs></ModulePage>
+  /></template><template #reconciliations><p class="muted">从款项操作生成对账单，也可导入对账草稿（编号可手填）。先查看明细核对差异，再确认；预付款由项目经理或管理员核准。</p><ResourcePanel resource="reconciliations" title="业务对账" :params="{ entry__project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template><template #bank><ResourcePanel resource="bank-records" title="银行到账与认领" :params="{ project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template></ModuleTabs></ModulePage>
 </template>

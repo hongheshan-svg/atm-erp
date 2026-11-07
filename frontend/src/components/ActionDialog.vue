@@ -136,13 +136,13 @@ const recovery = ref<{ label: string; path: string }[]>([])
 const preview = ref<Row | null>(null)
 const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
 const similarItems = ref<Row[]>([])
-watch(() => [props.command?.path, data.value.name], async (_, __, onCleanup) => {
+watch(() => [props.command?.path, data.value.name, data.value.specification], async (_, __, onCleanup) => {
   similarItems.value = []
-  if (!props.command?.path.startsWith('/business/items/') || !data.value.name) return
+  if (!props.command?.path.startsWith('/business/items/') || (!data.value.name && !data.value.specification)) return
   let active = true
   const timer = setTimeout(async () => {
     try {
-      const items = await read('/business/items/similar/', { name: data.value.name })
+      const items = await read('/business/items/similar/', { name: data.value.name, specification: data.value.specification })
       if (active) similarItems.value = items.filter((item: Row) => item.id !== props.command?.initial?.id)
     } catch { /* Suggestions are optional; saving still validates duplicates on the server. */ }
   }, 300)
@@ -265,7 +265,7 @@ async function submit() {
       <slot v-if="command.readonly" name="context" />
       <ProjectProgress v-if="command.readonly && command.progressProject" :project-id="command.progressProject" />
       <section v-if="similarItems.length" aria-label="相似物料">
-        <p>发现相似物料，请核对后优先复用现有编码：</p>
+        <p>发现名称或型号相似的物料，请核对厂家完整型号后复用编码；系统不会自动合并或改写型号：</p>
         <p v-for="item in similarItems" :key="item.id"><router-link :to="{ path: '/masterdata', query: { section: 'items', resource: 'items', focus: item.id } }">{{ item.code }} · {{ item.name }} · {{ item.specification }} · {{ item.brand }} · {{ item.unit }}</router-link></p>
       </section>
       <el-alert v-if="roleChange" :title="roleChange" type="warning" :closable="false" role="status" />

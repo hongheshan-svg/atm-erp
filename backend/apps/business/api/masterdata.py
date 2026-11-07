@@ -50,8 +50,7 @@ class ItemView(MasterView):
 
     @action(detail=False, methods=['get'])
     def similar(self, request):
-        name = masterdata.normalized(request.query_params.get('name', ''))[:150]
-        items = Item.objects.filter(name__icontains=name).order_by('code')[:10] if name else []
+        items = masterdata.similar({key: request.query_params.get(key, '')[:2000] for key in ('name', 'specification')})
         return Response(self.get_serializer(items, many=True).data)
 
 

@@ -1,8 +1,9 @@
+import { codeField } from './shared'
+import { milestoneFields } from './milestones'
 import type { Catalog } from '../catalog'
 import { customer } from './shared'
 import { participants } from './shared'
 import { project } from './shared'
-import { choices } from './shared'
 export const projectFields = (c: Catalog): Field[] => [
   t('name', '项目名称'),
   customer(),
@@ -18,13 +19,9 @@ const taskProject = (): Field =>
   project({
     remoteFilter: (row: Row) => ['active', 'delivering'].includes(String(row.status)) && productionProject(row),
   })
-export const taskFields = (c: Catalog, canDesign = manager(), scope?: Row | null): Field[] => [
+export const taskFields = (c: Catalog, canDesign = manager(), scope?: Row | null, metadata: Row = { stages: [], nodes: [] }): Field[] => [
   taskProject(),
-  select('kind', '阶段', choices(canDesign ? { design: '设计', assembly: '装配', test: '调试' } : { assembly: '装配', test: '调试' })),
-  t('title', '任务名称'),
-  t('description', '说明', true),
-  person(c, 'assignee', '执行人', scope),
-  date('due_date', '截止日期', true),
+  ...milestoneFields(c, metadata, scope, canDesign),
 ]
 import { all, read } from '../api'
 import { catalog } from '../catalog'
@@ -55,7 +52,8 @@ export const columns: Record<string, Column[]> = {
   tasks: [
     C('title', '任务名称'),
     C('project_name', '项目'),
-    C('kind', '阶段'),
+    C('stage_label', '阶段'),
+    C('milestone_label', '里程碑节点'),
     C('assignee_name', '执行人'),
     C('status', '状态'),
     C('due_date', '截止日期'),
@@ -93,12 +91,13 @@ export async function createCommand(resource: string, projectId?: number): Promi
   const c = await catalog(['users'])
   let fields: Field[] = []
   const path = endpoint(resource)
-  if (resource === 'projects') fields = projectFields(c)
+  if (resource === 'projects') fields = [codeField('项目编号'), ...projectFields(c)]
   if (resource === 'tasks') {
     const scope = projectId ? await read(`/business/projects/${projectId}/`) : null
     if (scope && !productionProject(scope)) throw new Error('没有当前项目的生产派工权限，请刷新项目后重试。')
     const canDesign = manager() && (scope ? scope.can_manage !== false : true)
-    fields = taskFields(c, canDesign, scope).map(field => field.key === 'project' && projectId ? { ...field, readonly: true } : field)
+    const metadata = await read('/business/tasks/milestone-template/', projectId ? { project: projectId } : {})
+    fields = taskFields(c, canDesign, scope, metadata).map(field => field.key === 'project' && projectId ? { ...field, readonly: true } : field)
   }
   return {
     title: String(createLabel(resource)),
@@ -122,7 +121,7 @@ export function actionNames(resource: string, r: Row): string[] {
     if (serviceRegistrar(r) && ['delivering', 'warranty'].includes(r.status)) a.push('登记售后')
   }
   if (resource === 'tasks') {
-    if ((taskManager(r) || r.assignee === user.value?.id) && ['open', 'done'].includes(r.status)) {
+    if (!r.system_managed && (taskManager(r) || r.assignee === user.value?.id) && ['open', 'done'].includes(r.status)) {
       a.push('登记工时')
       if (r.status === 'open' && r.kind !== 'acceptance') a.push('完成任务')
     }
@@ -215,6 +214,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '发货') {
     fields = [
+      codeField('交付单号'),
       qty,
       date(),
       person(c, 'installer', '安装人', scope),
@@ -284,13 +284,17 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ]
     initial = r
   }
-  if (name === '重新分配') fields = [person(c, 'assignee', '执行人', scope), reason]
+  if (name === '重新分配') {
+    fields = [person(c, 'assignee', '执行人', scope), date('due_date', '截止日期', true), reason]
+    initial = { assignee: inScope(r.assignee) ? r.assignee : '', due_date: r.due_date || '' }
+  }
   if (name === '重开任务') {
     // 重开时必须确认执行人：原执行人可能已经被移出项目，沿用旧值只会在服务端被拒。
     fields = [person(c, 'assignee', '执行人', scope), reason]
     initial = { assignee: inScope(r.assignee) ? r.assignee : '' }
   }
   return { title: name, path, fields, initial, method, readonly,
+    ...(name === '重新分配' ? { prepare: (data: Row) => ({ ...data, due_date: data.due_date || null }) } : {}),
     ...(name === '编辑项目' && ['draft', 'quoted'].includes(r.status) ? { notice: { type: 'warning' as const, text: '历史未签约项目修改需求后将清除原报价，请到关联销售单重新报价并签约。' } } : {}),
   }
 }

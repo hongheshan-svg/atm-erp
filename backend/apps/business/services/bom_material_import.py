@@ -38,25 +38,24 @@ SALT = 'lean-bom-material-import-v1'
 def material(actor, row):
     from .transfers import ENUMS
 
-    data = {
-        field: masterdata.normalized(str(value or '')) for field, value in zip(MATERIAL_FIELDS, row[7:], strict=True)
-    }
+    data = {field: str(value or '').strip() for field, value in zip(MATERIAL_FIELDS, row[7:], strict=True)}
     for field in ('product_category', 'part_type'):
         data[field] = ENUMS[field].get(data[field], data[field])
     code = row[0].strip()
     if code:
         item = Item.objects.filter(code=code, is_active=True).first()
-        if item is None:
-            raise ValidationError('填写的物料编码不存在或已停用；新增物料请留空编码并填写物料资料。')
-        if any(
-            value and masterdata.normalized(getattr(item, field)).casefold() != value.casefold()
-            for field, value in data.items()
-        ):
-            raise ValidationError('所填物料资料与编码对应的现有物料不一致，请核对编码；导入不会覆盖物料主数据。')
-        return item, '使用已有编码'
-    errors = {
-        field: '新增物料时必填。' for field in ('name', 'specification', 'product_category', 'unit') if not data[field]
-    }
+        if item:
+            if any(
+                value
+                and masterdata.normalized(getattr(item, field)).casefold() != masterdata.normalized(value).casefold()
+                for field, value in data.items()
+            ):
+                raise ValidationError('所填物料资料与编码对应的现有物料不一致，请核对编码；导入不会覆盖物料主数据。')
+            return item, '使用已有编码'
+        if Item.all_objects.filter(code=code).exists():
+            raise ValidationError('填写的物料编码已停用或已删除，请先核对主数据，不能重复占用该编码。')
+    required = ('name', 'specification', 'unit') + (() if code else ('product_category',))
+    errors = {field: '新增物料时必填。' for field in required if not data[field]}
     if data['product_category'] and data['product_category'] not in Item.ProductCategory.values:
         errors['product_category'] = '请按填写说明选择，例如“无图·标准件”（21）、“有图·机加”（11）、“有图·钣金”（12）。'
     if data['product_category'].startswith('1') and not data['drawing_number']:
@@ -65,6 +64,9 @@ def material(actor, row):
         errors['part_type'] = '请填写标准件或非标件，未分类可留空；机加、钣金属于产品编码类别。'
     if errors:
         raise ValidationError(errors)
+    if code:
+        result = masterdata.masterdata(actor, str(uuid.uuid4()), Item, {**data, 'code': code})
+        return Item.objects.get(pk=result['id']), '按填写编码新建物料'
     matches = masterdata.duplicates(data)
     if len(matches) > 1:
         raise ValidationError('存在多个相同物料，请明确填写要复用的物料编码。')
@@ -94,7 +96,7 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
             # Preserve source row numbers when validating the remaining BOM lines.
             output.append([''] * 7)
             continue
-        if action == '自动新建物料':
+        if action in {'自动新建物料', '按填写编码新建物料'}:
             new_ids.add(item.pk)
         output.append([item.code, *row[1:7]])
         actions.append((index, action, item.pk in new_ids))
@@ -189,11 +191,11 @@ def preview(actor, project, upload):
             'expected_revision': expected,
         }
     result['note'] = (
-        '预览不占用编号；新物料编号在确认时生成。物料与BOM整批保存，已有相同物料自动复用；任一行失败全部撤销。'
+        '预览不占用编号；自编编号原样保留，留空才在确认时自动生成。型号不会自动补全或改写。物料与BOM整批保存，完全相同物料可复用；任一行失败全部撤销。'
     )
     for line in result['lines']:
         if line.get('new_material'):
-            line['item_code'] = '确认时自动生成'
+            line['item_code'] = records[line['row'] - 2][0] or '确认时自动生成'
             line.pop('item', None)
     if result['can_import']:
         result['token'] = signing.dumps(

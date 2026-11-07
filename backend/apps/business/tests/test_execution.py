@@ -258,10 +258,9 @@ class ExecutionTests(ExecutionFixtures, TestCase):
     def test_stage_gates_shipping_and_acceptance(self):
         project = self.active_project()
         assembly = self.task(project, 'assembly')
-        self.complete(assembly, status=409)
+        self.complete(assembly)  # 阶段可交叉推进，发货仍校验所有必需阶段。
         design = self.task(project)
         self.complete(design)
-        self.complete(assembly)
         self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
         self.complete(self.task(project, 'test'))
         self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
