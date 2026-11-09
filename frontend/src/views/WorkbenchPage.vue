@@ -5,7 +5,7 @@ import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-p
 import { ElSkeleton } from 'element-plus'
 import { read } from '../api'
 import { today } from '../forms'
-import { can, user } from '../session'
+import { can, operations, user } from '../session'
 import TaskNotices from '../components/TaskNotices.vue'
 import RoleTaskGuide from '../components/RoleTaskGuide.vue'
 import { message } from '../utils/request'
@@ -150,7 +150,7 @@ onBeforeUnmount(() => { generation++ })
         <p v-if="idleNote" class="muted work-idle">{{ idleNote }}</p>
       </section>
     </template>
-    <TaskNotices />
+    <TaskNotices v-if="operations()" />
     <RoleTaskGuide />
   </div>
 </template>

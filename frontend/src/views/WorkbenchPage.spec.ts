@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import WorkbenchPage from './WorkbenchPage.vue'
+import TaskNotices from '../components/TaskNotices.vue'
 import { read } from '../api'
 import { today } from '../forms'
 import { user } from '../session'
@@ -25,6 +26,17 @@ async function render() {
 }
 const rows = (wrapper: any) => wrapper.get('.priority-table').findAll('.el-table__body-wrapper tbody tr')
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); user.value = { id: 7, roles: ['member'], display_name: '测试用户' }; vi.mocked(read).mockResolvedValue(data()) })
+
+it.each([
+  { roles: ['sales_manager'], visible: false },
+  { roles: ['sales_manager', 'member'], visible: true },
+  { roles: ['sales_manager', 'purchaser'], visible: true },
+])('任务提醒仅向可访问项目的岗位展示，兼岗按并集判断：$roles', async ({ roles, visible }) => {
+  user.value = { id: 7, roles }
+  const wrapper = await render()
+  expect(wrapper.findComponent(TaskNotices).exists()).toBe(visible)
+  wrapper.unmount()
+})
 
 it('三个指标合并全部风险提示，分类入口直达完整列表', async () => {
   const wrapper = await render()
