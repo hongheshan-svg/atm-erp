@@ -1,5 +1,61 @@
 import { test, expect, login } from './fixtures'
 
+test('业务列表序号跨页连续，宽表左右可查看且勾选仍对应原记录', async ({ page }, info) => {
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const token = await page.evaluate(() => localStorage.getItem('access_token'))
+  const headers = { Authorization: 'Bearer ' + token }
+  const prefix = '表格验收' + Date.now() + info.project.name
+  for (let i = 1; i <= 21; i++) {
+    const response = await page.request.post('/api/business/partners/', { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { name: prefix + '-' + i, kind: 'supplier' } })
+    expect(response.ok(), await response.text()).toBeTruthy()
+  }
+  await page.goto('/erp/masterdata?resource=partners')
+  await page.getByRole('tab', { name: '客户与供应商', exact: true }).click()
+  const panel = page.getByRole('region', { name: '客户与供应商', exact: true })
+  const search = panel.getByRole('searchbox', { name: '搜索客户与供应商', exact: true })
+  await search.fill(prefix)
+  await panel.getByRole('button', { name: '搜索', exact: true }).click()
+  const rows = panel.locator('.el-table__body tr')
+  await expect(rows).toHaveCount(10)
+  const sequence = panel.locator('td.business-row-number')
+  await expect(sequence).toHaveText(Array.from({ length: 10 }, (_, i) => String(i + 1)))
+  await panel.getByRole('button', { name: '下一页', exact: true }).click()
+  await expect(sequence).toHaveText(Array.from({ length: 10 }, (_, i) => String(i + 11)))
+  await expect(rows.first().getByRole('checkbox')).toBeEnabled()
+  const selectedName = await rows.first().getByRole('checkbox').getAttribute('aria-label')
+  await rows.first().getByRole('checkbox').check()
+  await panel.getByRole('button', { name: '下一页', exact: true }).click()
+  await expect(sequence).toHaveText(['21'])
+  await panel.getByRole('button', { name: '上一页', exact: true }).click()
+  await expect(rows.first().getByRole('checkbox')).toHaveAttribute('aria-label', selectedName!)
+  await expect(rows.first().getByRole('checkbox')).toBeChecked()
+  await panel.getByLabel('每页显示条目', { exact: true }).selectOption('50')
+  await expect(sequence).toHaveText(Array.from({ length: 21 }, (_, i) => String(i + 1)))
+
+  const wrap = panel.locator('.el-table__body-wrapper .el-scrollbar__wrap')
+  const tools = panel.getByRole('group', { name: '客户与供应商左右查看', exact: true })
+  await expect(tools).toBeVisible()
+  const right = tools.getByRole('button', { name: '向右查看 →', exact: true })
+  await right.click()
+  await expect.poll(() => wrap.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+  if (info.project.name === 'mobile') {
+    expect(await panel.locator('td.el-table-fixed-column--right').first().evaluate(el => getComputedStyle(el).position)).toBe('static')
+  }
+  await tools.getByRole('button', { name: '← 向左查看', exact: true }).click()
+  await expect.poll(() => wrap.evaluate(el => el.scrollLeft)).toBe(0)
+  const bar = panel.locator('.el-scrollbar__bar.is-horizontal')
+  await expect(bar).toBeVisible()
+  await wrap.evaluate(el => { el.scrollTop = el.scrollHeight })
+  await page.screenshot({ path: info.outputPath('numbered-business-table.png'), animations: 'disabled' })
+
+  // 过滤后显示序号重新开始，业务编码仍由服务端保留；不执行删除。
+  await search.fill(prefix + '-21')
+  await panel.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(sequence).toHaveText(['1'])
+  await expect(rows.first()).toContainText(prefix + '-21')
+  await expect(rows.first()).toContainText('供应商')
+})
+
 test('每页数量跨页面保存，长表格内部滚动且桌面侧栏背景覆盖到底', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const first = page.waitForResponse(r => r.url().includes('/api/business/reports/'))

@@ -7,7 +7,7 @@ from apps.core.permissions import ALL_ROLES, MANAGERS, project_allowed, require_
 from ..models import Project, Task
 from ..task_milestones import AUTOMATIC, DEFINITIONS, NODES, PHASES
 from .common import audit, fields, lookup, project_action, save, state
-from .execution import task_values
+from .execution import save_new_task, task_values
 
 
 def sync_milestones(user, project):
@@ -63,7 +63,7 @@ def apply_template(actor, key, data):
         for index, row in enumerate(lines):
             if not isinstance(row, dict):
                 raise ValidationError({'lines': '每项任务必须包含阶段、负责人和任务内容。'})
-            fields(row, {'kind', 'milestone', 'title', 'description', 'assignee', 'due_date'})
+            fields(row, {'kind', 'milestone', 'title', 'description', 'assignee', 'assignees', 'due_date'})
             try:
                 values = task_values(project, row)
             except ValidationError as error:
@@ -76,8 +76,14 @@ def apply_template(actor, key, data):
                 if project.tasks.filter(milestone=code).exists():
                     skipped.append(code)
                     continue
-            task = save(Task(**values), user)
-            audit(user, 'task.create', task, source='milestone-template')
+            task = save_new_task(user, values)
+            audit(
+                user,
+                'task.create',
+                task,
+                source='milestone-template',
+                assignees=[person.pk for person in task.assigned_people()],
+            )
             created.append(task.pk)
         sync_milestones(user, project)
         audit(user, 'project.milestones', project, created=created, skipped=skipped)

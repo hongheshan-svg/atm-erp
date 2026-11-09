@@ -1,3 +1,4 @@
+import { selectExecutors } from './fixtures'
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption, clearRemote } from './remote-select-helpers'
 import { readFile } from 'node:fs/promises'
@@ -41,8 +42,8 @@ test('人员可按姓名选择并导入，重名明确账号', async ({ page }, 
   const form = page.getByRole('dialog', { name: '新建任务', exact: true })
   await form.getByLabel('阶段', { exact: true }).selectOption('design')
   await form.getByLabel('任务名称', { exact: true }).fill('按姓名选择执行人')
-  await form.getByLabel('执行人', { exact: true }).selectOption({ label: `${displayName}（${username}）` })
-  await expect(form.getByLabel('执行人', { exact: true })).toHaveValue(String(member.id))
+  await selectExecutors(page, form, [`${displayName}（${username}）`])
+  await expect(form.locator('.el-select__tags-text')).toContainText(displayName)
   await form.getByLabel('执行人', { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: info.outputPath('person-name-selection.png'), animations: 'disabled' })
   await form.locator('button[type="submit"]').click()
@@ -287,7 +288,7 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
     await expect(dialog.getByText('② 最少填什么：', { exact: true })).toBeVisible()
     await dialog.getByText('更多格式', { exact: true }).click()
     await dialog.getByText('模板字段与页面列对应说明', { exact: true }).click()
-    const fieldLabels = dialog.locator('.import-field-guide .el-table__body tr td:first-child')
+    const fieldLabels = dialog.locator('.import-field-guide .el-table__body td.import-template-field')
     await expect(fieldLabels.first()).toBeVisible()
     const labels = (await fieldLabels.allTextContents()).map(s => s.trim())
     expect(labels.length).toBeGreaterThan(0)

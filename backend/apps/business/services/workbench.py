@@ -95,9 +95,10 @@ def summary(request):
         return {key: value for key, value in result.items() if value is not None}
     projects = projects_for(user, Project.objects.all())
     tasks = with_task_flags(
-        Task.objects.filter(project__in=projects, assignee=user, status='open')
+        Task.objects.filter(Q(assignee=user) | Q(co_assignees=user), project__in=projects, status='open')
+        .distinct()
         .select_related('project', 'assignee', 'delivery', 'entry')
-        .prefetch_related('project__members')
+        .prefetch_related('project__members', 'co_assignees')
         .exclude(project__status__in=['closed', 'cancelled'])
         .order_by(F('due_date').asc(nulls_last=True), 'pk')
     )
@@ -111,7 +112,7 @@ def summary(request):
             )
             .exclude(project__status__in=['closed', 'cancelled'])
             .select_related('project', 'assignee', 'delivery', 'entry')
-            .prefetch_related('project__members')
+            .prefetch_related('project__members', 'co_assignees')
             .order_by(F('due_date').asc(nulls_last=True), 'pk')
         )
         result['production_tasks'] = bucket(production_tasks, TaskSerializer, 'production_tasks')

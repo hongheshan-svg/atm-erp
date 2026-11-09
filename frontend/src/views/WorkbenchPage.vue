@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from '../components/BusinessTable.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-plus/icons-vue'
 import { ElSkeleton } from 'element-plus'
@@ -125,13 +126,13 @@ onBeforeUnmount(() => { generation++ })
       <div class="work-main" :class="{ 'no-priority': !priority.length }">
       <section class="panel work-priority" aria-labelledby="priority-heading">
         <header><h2 id="priority-heading">今天要处理的</h2><span class="muted">按逾期、今日到期、待审批排序，最多 7 项</span></header>
-        <el-table v-if="priority.length" :data="priority" :max-height="420" class="priority-table">
+        <BusinessTable label="待办事项" v-if="priority.length" :data="priority" :max-height="420" class="priority-table">
           <el-table-column label="事项 / 关联项目" min-width="220"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)">{{ title(item.key, item.row) }}</router-link><small class="record-secondary">{{ context(item.key, item.row) }}</small></template></el-table-column>
           <el-table-column label="类型" min-width="110"><template #default="{ row: item }">{{ labels[item.key] }}</template></el-table-column>
           <el-table-column label="截止 / 到期日期" width="135"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
           <el-table-column label="状态" width="95"><template #default="{ row: item }"><span class="work-status" :class="`tone-${item.tone}`">{{ item.text }}</span></template></el-table-column>
           <el-table-column label="操作" width="60" fixed="right"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)" :aria-label="`处理${title(item.key, item.row)}`">处理</router-link></template></el-table-column>
-        </el-table>
+        </BusinessTable>
         <p v-else class="priority-empty muted">今天没有需要优先处理的事项</p>
       </section>
       <section v-if="work.tasks" class="panel work-ongoing" aria-labelledby="ongoing-heading">

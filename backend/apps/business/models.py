@@ -370,10 +370,18 @@ class Task(BaseModel):
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True)
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT)
+    # 旧接口的单执行人作为首个成员保留，其余成员不重复存储。
+    co_assignees = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='coassigned_tasks')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     due_date = models.DateField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     service_date = models.DateField(null=True, blank=True)
+
+    def assigned_people(self):
+        return [self.assignee, *self.co_assignees.all()]
+
+    def is_assigned_to(self, user):
+        return self.assignee_id == user.pk or any(person.pk == user.pk for person in self.co_assignees.all())
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_task'

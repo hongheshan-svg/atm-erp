@@ -514,8 +514,17 @@ class TaskSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
     can_reopen = serializers.SerializerMethodField()
-    assignee_name = PersonNameField(source='assignee')
+    assignee_name = serializers.SerializerMethodField()
+    assignees = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
+
+    def get_assignees(self, obj):
+        return [person.pk for person in obj.assigned_people()]
+
+    def get_assignee_name(self, obj):
+        if not hasattr(self.root, '_ambiguous_people'):
+            self.root._ambiguous_people = ambiguous_people()
+        return '；'.join(person_name(person, self.root._ambiguous_people) for person in obj.assigned_people())
 
     def get_can_manage(self, obj):
         return obj.project.status in {'active', 'delivering', 'warranty'} and can_manage_task(
@@ -578,6 +587,7 @@ class TaskSerializer(serializers.ModelSerializer):
             'title',
             'description',
             'assignee',
+            'assignees',
             'assignee_name',
             'status',
             'due_date',

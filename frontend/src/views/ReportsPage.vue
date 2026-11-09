@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from '../components/BusinessTable.vue'
 import { onMounted, ref, watch } from 'vue'
 import { read } from '../api'
 import { message } from '../utils/request'
@@ -81,7 +82,7 @@ watch(pageSize, () => load())
     </section>
     <section class="panel" aria-label="项目经营明细">
       <header class="panel-heading"><h2>项目经营明细 <span class="record-count">{{ data.count }}</span></h2><small class="muted">更新于 {{ new Date(data.generated_at).toLocaleString('zh-CN') }}</small></header>
-      <el-table :data="data.results" :max-height="560" stripe empty-text="没有符合筛选条件的项目">
+      <BusinessTable label="项目经营明细" :row-offset="(data.page - 1) * pageSize" :data="data.results" :max-height="560" stripe empty-text="没有符合筛选条件的项目">
         <el-table-column label="项目" min-width="190" fixed><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="`/projects/${row.id}`">{{ row.name }}</component><small class="report-code">{{ row.code }} · {{ row.manager }}</small></template></el-table-column>
         <el-table-column label="状态" min-width="100"><template #default="{ row }"><StatusBadge :value="row.status" /></template></el-table-column>
         <el-table-column label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>
@@ -89,7 +90,7 @@ watch(pageSize, () => load())
         <el-table-column label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'finance', section: 'entries' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</component></template></el-table-column>
         <el-table-column label="关注" width="85"><template #default="{ row }">{{ row.over_budget ? '超预算' : row.overdue ? '逾期' : row.unbudgeted ? '未设预算' : '—' }}</template></el-table-column>
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
-      </el-table>
+      </BusinessTable>
       <ListPagination :page="data.page" :total="data.count" @change="load" />
       <p class="muted report-basis">人民币含税经营口径；全部指标按当前筛选项目累计，不是期间收入或会计利润。合同额不等于已收款，未完成项目的实际成本不代表完工成本。已承诺采购仅含未收货采购，人工和费用使用实际记录，采购净额超材料预算同样计入超预算项目。取消项目不计合同额，但其待退款仍保留，退款与正向待收待付分别展示。</p>
     </section>

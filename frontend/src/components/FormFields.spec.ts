@@ -3,6 +3,19 @@ import { describe, expect, it } from 'vitest'
 import FormFields from './FormFields.vue'
 
 describe('明细表单编辑', () => {
+  it('多人选项联动保留仍在范围内的执行人，只清除失效人员', async () => {
+    const data = { project: 1, assignees: [1, 2] }
+    const wrapper = mount(FormFields, { props: { modelValue: data, fields: [{
+      key: 'assignees', label: '执行人', type: 'multi', optionsFor: row => row.project === 1
+        ? [{ value: 1, label: '张工' }, { value: 2, label: '李工' }]
+        : [{ value: 2, label: '李工' }, { value: 3, label: '王工' }],
+    }] } })
+    expect(data.assignees).toEqual([1, 2])
+    const changed = { project: 2, assignees: [1, 2] }
+    await wrapper.setProps({ modelValue: changed })
+    expect(changed.assignees).toEqual([2])
+    wrapper.unmount()
+  })
   it('在分页列表添加行后显示新增行，保留已有页的数据', async () => {
     const data = { lines: Array.from({ length: 21 }, (_, i) => ({ quantity: String(i + 1) })) }
     const wrapper = mount(FormFields, {
@@ -18,7 +31,7 @@ describe('明细表单编辑', () => {
     expect(data.lines[0]?.quantity).toBe('1')
   })
 
-  it('紧凑模式隐藏行号标题，仍可正常编辑与移除', async () => {
+  it('紧凑模式也显示行号，仍可正常编辑与移除', async () => {
     const data = { lines: [{ item_name: '伺服电机', quantity: '2' }] }
     const wrapper = mount(FormFields, {
       props: { modelValue: data, fields: [{ key: 'lines', label: '采购明细', type: 'rows', compact: true, fields: [
@@ -28,7 +41,7 @@ describe('明细表单编辑', () => {
       global: { stubs: { ElButton: { template: '<button type="button"><slot /></button>' } } },
     })
     expect(wrapper.find('.line-fields-compact').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('第 1 行')
+    expect(wrapper.get('.line-number').text()).toBe('第 1 行')
     await wrapper.get('input[aria-label="数量"]').setValue('5')
     expect(data.lines[0]?.quantity).toBe('5')
     await wrapper.findAll('button').find(button => button.text() === '移除此行')!.trigger('click')

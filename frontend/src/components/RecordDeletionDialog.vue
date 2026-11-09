@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Row } from '../types'
 import { read, write } from '../api'
 import { columns, display } from '../business'
@@ -12,6 +12,18 @@ const emit = defineEmits<{ close: []; saved: []; open: [number] }>()
 const history = computed(() => props.rows === undefined)
 const reason = ref(''), confirmed = ref(false), busy = ref(false), error = ref('')
 const records = ref<Row[]>([]), detail = ref<Row | null>(null), page = ref(1), count = ref(0)
+const selectionSearch = ref(''), blockedId = ref<number | null>(null), selectionList = ref<HTMLElement>()
+const blockedRow = computed(() => props.rows?.find(row => row.id === blockedId.value))
+const visibleSelection = computed(() => (props.rows || []).map((row, index) => ({ row, number: index + 1 }))
+  .filter(({ row }) => deletionLabel(row).toLocaleLowerCase().includes(selectionSearch.value.trim().toLocaleLowerCase())))
+async function locateBlocked() {
+  if (!blockedRow.value) return
+  selectionSearch.value = ''
+  await nextTick()
+  const target = selectionList.value?.querySelector<HTMLElement>(`[data-record-id="${blockedId.value}"]`)
+  target?.scrollIntoView?.({ block: 'nearest' })
+  target?.focus({ preventScroll: true })
+}
 let key = requestKey(), generation = 0
 onBeforeUnmount(() => { generation++ })
 watch(reason, () => { key = requestKey() })
@@ -32,11 +44,16 @@ async function submit() {
   if (busy.value || !canDeleteRecords(props.resource)) return
   if (!props.rows?.length || !reason.value.trim() || !confirmed.value) { error.value = '请填写删除原因，并勾选确认。'; return }
   if (props.rows.length > deletionLimit(props.resource)) { error.value = '每批最多删除 ' + deletionLimit(props.resource) + ' 条，请减少勾选数量。'; return }
-  busy.value = true; error.value = ''
+  busy.value = true; error.value = ''; blockedId.value = null
   try {
     await write('/business/record-deletions/', { resource: props.resource, ids: props.rows.map(row => row.id), reason: reason.value.trim() }, key)
     emit('saved'); emit('close')
-  } catch (e) { error.value = message(e) }
+  } catch (e) {
+    error.value = message(e)
+    const id = Number((e as { response?: { data?: { blocked_id?: unknown } } } | null)?.response?.data?.blocked_id)
+    blockedId.value = Number.isSafeInteger(id) && props.rows.some(row => row.id === id) ? id : null
+    await locateBlocked()
+  }
   finally { busy.value = false }
 }
 // 恢复只针对账号：恢复后仍停用，需管理员在用户管理中确认角色后再启用。
@@ -64,12 +81,22 @@ async function restore() {
 function close() { if (!busy.value) emit('close') }
 </script>
 <template>
-  <el-dialog :model-value="true" :title="history ? `${title} · 已删除记录` : `确认删除 ${rows?.length || 0} 条${title}`" width="min(900px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" @close="close">
+  <el-dialog class="record-deletion-dialog" :model-value="true" :title="history ? `${title} · 已删除记录` : `确认删除 ${rows?.length || 0} 条${title}`" width="min(900px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" @close="close">
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <template v-if="!history">
       <el-alert :title="deletionNotice(resource)" type="warning" :closable="false" show-icon />
       <p>仅删除下列已勾选记录；任何一条不能处理，整批都不会删除。</p>
-      <ul class="deletion-records"><li v-for="row in rows" :key="row.id">{{ deletionLabel(row) }}</li></ul>
+      <div class="deletion-search">
+        <label>搜索已选记录<input v-model="selectionSearch" type="search" placeholder="输入编码、名称或单元" /></label>
+        <el-button v-if="blockedRow" type="danger" plain @click="locateBlocked">定位不能删除的记录</el-button>
+      </div>
+      <p class="muted">显示 {{ visibleSelection.length }} / {{ rows?.length || 0 }} 条；序号为本次勾选顺序。</p>
+      <ol ref="selectionList" class="deletion-records" aria-label="本次删除记录">
+        <li v-for="{ row, number } in visibleSelection" :key="row.id" :data-record-id="row.id" :value="number" :class="{ 'deletion-blocked': row.id === blockedId }" tabindex="-1">
+          <strong v-if="row.id === blockedId" class="deletion-blocked-label">不能删除：</strong>{{ deletionLabel(row) }}
+        </li>
+      </ol>
+      <p v-if="!visibleSelection.length">没有匹配的已选记录，请更换关键词。</p>
       <form class="deletion-form" @submit.prevent="submit">
         <label for="deletion-reason">删除原因</label>
         <textarea id="deletion-reason" v-model="reason" maxlength="500" rows="3" :disabled="busy" placeholder="说明为什么删除，便于以后追溯" required />
@@ -81,8 +108,8 @@ function close() { if (!busy.value) emit('close') }
       <p>保留删除时的内容、操作人、时间和原因。历史流水继续参与库存、账款及成本核算。</p>
       <p v-if="busy" role="status">正在加载…</p>
       <p v-else-if="!records.length && !error">暂无已删除记录。</p>
-      <article v-for="record in records" :key="record.id" class="deletion-history">
-        <strong>{{ deletionLabel(record.detail.record) }}</strong>
+      <article v-for="(record, index) in records" :key="record.id" class="deletion-history">
+        <span class="muted">序号 {{ (page - 1) * pageSize + index + 1 }} · </span><strong>{{ deletionLabel(record.detail.record) }}</strong>
         <p>{{ record.actor_name }} · {{ time(record.created_at) }}</p>
         <p>删除原因：{{ record.detail.reason }}</p>
         <p v-if="record.restored" class="deletion-restored">已恢复 · {{ record.restored_by }} · {{ time(record.restored_at) }}</p>
@@ -102,8 +129,16 @@ function close() { if (!busy.value) emit('close') }
   </el-dialog>
 </template>
 <style scoped>
-.deletion-records { max-height: 220px; overflow: auto; padding-left: 24px; }
-.deletion-records li { padding: 4px 0; overflow-wrap: anywhere; }
+:global(.record-deletion-dialog) { display: flex; flex-direction: column; max-height: 92dvh; margin: 4dvh auto; }
+:global(.record-deletion-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; }
+:global(.record-deletion-dialog .el-dialog__header) { flex-shrink: 0; }
+.deletion-search { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.deletion-search label { display: grid; gap: 6px; flex: 1; min-width: 180px; }
+.deletion-search input { width: 100%; box-sizing: border-box; padding: 8px; font: inherit; border: 1px solid var(--field-line); border-radius: 6px; }
+.deletion-records { max-height: 220px; overflow: auto; padding: 4px 8px 4px 44px; }
+.deletion-records li { padding: 6px 8px; overflow-wrap: anywhere; }
+.deletion-blocked { background: var(--el-color-danger-light-9); outline: 2px solid var(--el-color-danger); outline-offset: -2px; }
+.deletion-blocked-label { color: var(--el-color-danger); }
 .deletion-form { display: grid; gap: 12px; margin-top: 16px; }
 .deletion-form textarea { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; }
 .deletion-confirm { display: flex; gap: 8px; align-items: start; }

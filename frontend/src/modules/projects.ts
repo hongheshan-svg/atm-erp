@@ -1,5 +1,5 @@
 import { codeField } from './shared'
-import { milestoneFields } from './milestones'
+import { executorField, milestoneFields, taskAssignees } from './milestones'
 import type { Catalog } from '../catalog'
 import { customer } from './shared'
 import { participants } from './shared'
@@ -121,7 +121,7 @@ export function actionNames(resource: string, r: Row): string[] {
     if (serviceRegistrar(r) && ['delivering', 'warranty'].includes(r.status)) a.push('登记售后')
   }
   if (resource === 'tasks') {
-    if (!r.system_managed && (taskManager(r) || r.assignee === user.value?.id) && ['open', 'done'].includes(r.status)) {
+    if (!r.system_managed && (taskManager(r) || taskAssignees(r).includes(user.value?.id)) && ['open', 'done'].includes(r.status)) {
       a.push('登记工时')
       if (r.status === 'open' && r.kind !== 'acceptance') a.push('完成任务')
     }
@@ -274,7 +274,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '登记工时') {
     fields = [date(), t('hours', '工时'), reason, ...(taskManager(r) ? [person(c, 'user', '人员', scope)] : [])]
     // 原执行人若已被移出项目，就不预选一个注定被服务端拒绝的人。
-    initial = { user: inScope(r.assignee) ? r.assignee : '' }
+    initial = { user: taskAssignees(r).includes(user.value?.id) ? user.value?.id : inScope(r.assignee) ? r.assignee : '' }
   }
   if (name === '更正工时') {
     fields = [
@@ -285,13 +285,13 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     initial = r
   }
   if (name === '重新分配') {
-    fields = [person(c, 'assignee', '执行人', scope), date('due_date', '截止日期', true), reason]
-    initial = { assignee: inScope(r.assignee) ? r.assignee : '', due_date: r.due_date || '' }
+    fields = [executorField(c, scope), date('due_date', '截止日期', true), reason]
+    initial = { assignees: taskAssignees(r).filter(inScope), due_date: r.due_date || '' }
   }
   if (name === '重开任务') {
     // 重开时必须确认执行人：原执行人可能已经被移出项目，沿用旧值只会在服务端被拒。
-    fields = [person(c, 'assignee', '执行人', scope), reason]
-    initial = { assignee: inScope(r.assignee) ? r.assignee : '' }
+    fields = [executorField(c, scope), reason]
+    initial = { assignees: taskAssignees(r).filter(inScope) }
   }
   return { title: name, path, fields, initial, method, readonly,
     ...(name === '重新分配' ? { prepare: (data: Row) => ({ ...data, due_date: data.due_date || null }) } : {}),

@@ -16,7 +16,7 @@ it('导出筛选跨页81项及所选子集，不夹带非标件；切换类别�
   user.value = { roles: ['purchaser'] }
   const standards = Array.from({ length: 81 }, (_, i) => ({ bom_line: i + 1, item_code: `S${i}`, item_name: '标准件', part_type: 'standard', brand: '品牌A', assembly_unit: i % 2 ? '单元A' : '单元B', shortage: '1' }))
   vi.mocked(read).mockResolvedValueOnce({ lines: [...standards, { bom_line: 90, part_type: 'custom', item_code: 'C1', shortage: '1' }, { bom_line: 91, part_type: 'standard', item_code: 'S91', shortage: '0' }] })
-  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { template: '<div />' } } } })
+  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { template: '<div />' } } } })
   await flushPromises()
   await wrapper.get('[aria-label="筛选类别"]').setValue('standard')
   expect(wrapper.get('[aria-label="BOM导出范围"]').text()).toContain('当前筛选 81 项')
@@ -44,7 +44,7 @@ it('导出筛选跨页81项及所选子集，不夹带非标件；切换类别�
 
 it('工程师BOM维护和导入取当前项目权限，兼采购全局可读项目不扩写权限', async () => {
   user.value = { roles: ['mechanical_engineer', 'purchaser'] }
-  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active', canEditBom: false }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ImportFeedback: false, RouterLink: true, ElTable: { template: '<div />' } } } })
+  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active', canEditBom: false }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ImportFeedback: false, RouterLink: true, BusinessTable: { template: '<div />' } } } })
   await flushPromises()
   expect(wrapper.text()).not.toContain('维护 BOM')
   expect(wrapper.text()).not.toContain('下载填写说明')
@@ -74,7 +74,7 @@ function mountImport() {
   user.value = { roles: ['admin'] }
   return shallowMount(BOMDemand, { props: { projectId: 1, revision: 1, status: 'active', canEditBom: true }, global: {
     plugins: [ElementPlus], renderStubDefaultSlot: true,
-    stubs: { ImportFeedback: false, RouterLink: true, ElDialog: dialogStub, ElTable: { template: '<div />' } },
+    stubs: { ImportFeedback: false, RouterLink: true, ElDialog: dialogStub, BusinessTable: { template: '<div />' } },
   } })
 }
 async function uploadFile(wrapper: ReturnType<typeof mountImport>) {
@@ -187,7 +187,7 @@ it('BOM导入错误逐行显示中文，保留行号且不输出原始数据字�
     { row: 2, message: '需求数量：请输入正数。' },
     { message: '请重新上传文件。' },
   ] })
-  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active', canEditBom: true }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ImportFeedback: false, RouterLink: true, ElTable: { template: '<div />' } } } })
+  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active', canEditBom: true }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ImportFeedback: false, RouterLink: true, BusinessTable: { template: '<div />' } } } })
   await flushPromises()
   await wrapper.findAll('el-button-stub').find(button => button.text() === '导入 BOM')!.trigger('click')
   await flushPromises()

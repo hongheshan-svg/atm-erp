@@ -95,7 +95,7 @@ describe('导入模板与预览', () => {
     Object.defineProperty(input.element, 'files', { value: [new File(['csv'], 'rows.csv')], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    const tables = wrapper.findAll('el-table-stub')
+    const tables = wrapper.findAll('business-table-stub')
     const preview = tables[tables.length - 1]!
     expect(preview.findAll('.column-stub').map(c => c.attributes('label'))).toEqual(['文件行号', '分组号', '物料编码', '数量'])
     expect(wrapper.text()).toContain('文件 2 行明细合并为 1 张采购草稿')

@@ -43,7 +43,7 @@ const results = [
 const payload = { summary, results, count: 2, page: 1, page_size: 20, generated_at: '2026-09-09T00:00:00Z' }
 // 表格桩件展开列定义与行内容，便于断言列数与合并后的成本单元格。
 const tableStubs: Record<string, Component> = {
-  ElTable: defineComponent({
+  BusinessTable: defineComponent({
     props: { data: { type: Array, default: () => [] } },
     provide() { return { tableRows: this.data } },
     template: '<div class="table"><slot /></div>',
@@ -96,7 +96,7 @@ describe('经营报表', () => {
   })
   it('筛选提交到接口，失败清除旧经营金额', async () => {
     vi.mocked(read).mockResolvedValue(payload)
-    const wrapper = mountPage({ ElTable: { template: '<div />' }, ElAlert: tableStubs.ElAlert })
+    const wrapper = mountPage({ BusinessTable: { template: '<div />' }, ElAlert: tableStubs.ElAlert })
     await flushPromises()
     expect(wrapper.text()).toContain('12,345,678,901,234,567.89')
     await wrapper.get('[aria-label="搜索项目"]').setValue('装配线')

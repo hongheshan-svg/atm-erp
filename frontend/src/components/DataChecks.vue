@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TableScroll from './TableScroll.vue'
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { read } from '../api'
 import { can } from '../session'
@@ -56,10 +57,11 @@ void load()
     <div class="toolbar"><el-button :loading="busy" @click="load">刷新</el-button><TransferTools v-if="category" resource="data-checks" path="/business/data-checks/" export-path="/business/data-checks/" :params="{ category }" :allow-import="false" /></div>
     <p v-if="busy && !rows.length" role="status">正在核查…</p>
     <p v-else-if="!rows.length && !error && categories.length" role="status">该类别暂无需要核对的记录。</p>
-    <table v-if="rows.length" class="data-check-table">
-      <thead><tr><th scope="col">记录类型</th><th scope="col">编号/标题</th><th scope="col">项目编号</th><th scope="col">金额</th><th scope="col">问题说明</th><th scope="col">原单</th></tr></thead>
+    <TableScroll v-if="rows.length" label="历史数据核查"><div data-table-scroll><table class="data-check-table">
+      <thead><tr><th scope="col">序号</th><th scope="col">记录类型</th><th scope="col">编号/标题</th><th scope="col">项目编号</th><th scope="col">金额</th><th scope="col">问题说明</th><th scope="col">原单</th></tr></thead>
       <tbody>
-        <tr v-for="row in rows" :key="`${row.record_type}-${row.record_id}`">
+        <tr v-for="(row, index) in rows" :key="`${row.record_type}-${row.record_id}`">
+          <td data-label="序号">{{ (page - 1) * pageSize + index + 1 }}</td>
           <td data-label="记录类型">{{ row.record_type_label }} · ID {{ row.record_id }}</td>
           <td data-label="编号/标题">{{ row.title }}</td>
           <td data-label="项目编号">{{ row.project_code || '—' }}</td>
@@ -68,7 +70,7 @@ void load()
           <td data-label="原单"><router-link :to="row.path">打开原单</router-link></td>
         </tr>
       </tbody>
-    </table>
+    </table></div></TableScroll>
     <ListPagination v-if="count" :page="page" :total="count" @change="page = $event; load()" />
   </section>
 </template>

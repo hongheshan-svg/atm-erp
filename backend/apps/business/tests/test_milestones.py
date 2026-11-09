@@ -10,9 +10,11 @@ from django.db import close_old_connections, connections
 from django.test import TestCase, TransactionTestCase
 
 from apps.accounts.models import User
-from apps.business.services import milestones, transfers
+from apps.business.models import Task, TimeEntry
+from apps.business.services import execution, milestones, transfers
 from apps.business.task_milestones import AUTOMATIC, NODES
-from apps.core.models import AuditLog
+from apps.core.api import Conflict
+from apps.core.models import ActionReceipt, AuditLog
 
 from .test_execution import ExecutionFixtures
 
@@ -235,6 +237,264 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         self.assertEqual(self.project.tasks.get(milestone='purchase_long_lead').title, '长交期跟进')
         self.assertEqual(self.project.tasks.get(title='旧任务').milestone, '')
 
+    def shared_task(self, **extra):
+        people = [self.users['member'].pk, self.users['production_manager'].pk]
+        result = self.post(
+            'manager',
+            'tasks/',
+            {
+                'project': self.project.pk,
+                'kind': 'design',
+                'title': '多人评审',
+                'assignees': people,
+                **extra,
+            },
+            status=201,
+        )
+        return Task.objects.get(pk=result['id'])
+
+    def test_all_executors_see_task_workbench_and_progress_without_duplicate_rows(self):
+        task = self.shared_task()
+        for role in ('member', 'production_manager'):
+            person = self.users[role]
+            rows = self.get(role, f'?project={self.project.pk}&assignee={person.pk}')
+            self.assertEqual(rows['count'], 1)
+            row = rows['results'][0]
+            self.assertEqual(set(row['assignees']), {self.users['member'].pk, self.users['production_manager'].pk})
+            self.assertIn('member', row['assignee_name'])
+            self.assertIn('production_manager', row['assignee_name'])
+            response = self.clients[role].get('/api/business/workbench/')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data['tasks']['count'], 1)
+            self.assertEqual(response.data['tasks']['results'][0]['id'], task.pk)
+        response = self.clients['member'].get(f'/api/business/projects/{self.project.pk}/progress/?category=tasks')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn('production_manager', str(response.data))
+        self.assertIn('member', str(response.data))
+        found = self.get('manager', f'?project={self.project.pk}&search=production_manager')
+        self.assertEqual(found['count'], 1)
+
+    def test_coexecutor_logs_own_time_and_completes_once_without_expanding_management(self):
+        task = self.shared_task()
+        self.post(
+            'production_manager',
+            f'tasks/{task.pk}/time/',
+            {
+                'date': '2026-09-09',
+                'hours': '2',
+                'reason': '本人设计工作',
+            },
+        )
+        self.assertEqual(TimeEntry.objects.get(task=task).user_id, self.users['production_manager'].pk)
+        self.post(
+            'production_manager',
+            f'tasks/{task.pk}/time/',
+            {
+                'date': '2026-09-09',
+                'hours': '3',
+                'reason': '不能代记设计',
+                'user': self.users['member'].pk,
+            },
+            status=403,
+        )
+        self.post(
+            'production_manager',
+            f'tasks/{task.pk}/assign/',
+            {
+                'assignees': [self.users['production_manager'].pk],
+                'reason': '无设计管理权限',
+            },
+            status=403,
+        )
+        key = str(uuid.uuid4())
+        self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '共同检查完成'}, key=key)
+        self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '共同检查完成'}, key=key)
+        self.complete(task, status=409)
+        task.refresh_from_db()
+        self.assertEqual(task.status, 'done')
+        self.assertEqual(AuditLog.objects.filter(operation='task.complete', resource=f'task:{task.pk}').count(), 1)
+        self.assertEqual(TimeEntry.objects.filter(task=task).count(), 1)
+        self.assertEqual(self.clients['member'].get('/api/business/workbench/').data['tasks']['count'], 0)
+
+    def test_shared_names_remain_unambiguous_and_can_be_imported(self):
+        for role in ('member', 'production_manager'):
+            User.objects.filter(pk=self.users[role].pk).update(display_name='张工')
+        task = self.shared_task()
+        row = self.get('member', f'{task.pk}/')
+        self.assertEqual(row['assignee_name'], '张工（账号：member）；张工（账号：production_manager）')
+        resolved = transfers.payload({'assignee': row['assignee_name']})
+        self.assertEqual(set(resolved['assignees']), set(row['assignees']))
+
+    def test_reassignment_replaces_group_and_reopen_retains_everyone(self):
+        task = self.shared_task()
+        self.complete(task)
+        self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '复核'})
+        task.refresh_from_db()
+        self.assertEqual(len(task.assigned_people()), 2)
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/assign/',
+            {
+                'assignees': [self.users['manager'].pk],
+                'reason': '经理接手',
+            },
+        )
+        self.assertFalse(task.co_assignees.exists())
+        self.complete(task, status=403)
+        self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '已移出'}, status=403)
+        self.post('manager', f'tasks/{task.pk}/complete/', {'reason': '完成'})
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/reopen/',
+            {
+                'assignees': [self.users['member'].pk, self.users['production_manager'].pk],
+                'reason': '再次协作',
+            },
+        )
+        task.refresh_from_db()
+        self.assertEqual(
+            {p.pk for p in task.assigned_people()}, {self.users['member'].pk, self.users['production_manager'].pk}
+        )
+
+    def test_multi_assignment_rejects_invalid_people_atomically(self):
+        outsider = self.users['electrical_engineer']
+        disabled = self.users['production_manager']
+        disabled.is_active = False
+        disabled.save()
+        base = self.users['member'].pk
+        counts = (Task.objects.count(), AuditLog.objects.count(), ActionReceipt.objects.count())
+        for values in ([], [base, base], [base, outsider.pk], [base, disabled.pk], [base, 999999], 'member'):
+            with self.subTest(values=values):
+                self.post(
+                    'manager',
+                    'tasks/',
+                    {
+                        'project': self.project.pk,
+                        'kind': 'design',
+                        'title': '非法执行人',
+                        'assignees': values,
+                    },
+                    status=400,
+                )
+                self.assertEqual(
+                    (Task.objects.count(), AuditLog.objects.count(), ActionReceipt.objects.count()), counts
+                )
+        task = self.task(self.project)
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/assign/',
+            {
+                'assignees': [self.users['manager'].pk, outsider.pk],
+                'reason': '应整体失败',
+            },
+            status=400,
+        )
+        task.refresh_from_db()
+        self.assertEqual(task.assignee_id, base)
+        self.assertFalse(task.co_assignees.exists())
+
+    def test_open_coexecutor_cannot_be_removed_and_automatic_nodes_still_use_facts(self):
+        task = self.shared_task(milestone='design_review')
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/edit/',
+            {
+                'members': [self.users['member'].pk],
+                'reason': '还有共同任务',
+            },
+            status=409,
+        )
+        self.assertTrue(self.project.members.filter(pk=self.users['production_manager'].pk).exists())
+        auto = self.shared_task(kind='shipping', milestone='shipping_dispatch')
+        self.post('production_manager', f'tasks/{auto.pk}/complete/', {'reason': '不能手动完成'}, status=409)
+        self.post(
+            'production_manager',
+            f'tasks/{auto.pk}/time/',
+            {
+                'date': '2026-09-09',
+                'hours': 1,
+                'reason': '汇总不能记工时',
+            },
+            status=409,
+        )
+        self.project.members.remove(self.users['production_manager'])
+        self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '已移出项目'}, status=404)
+
+    def test_stage_and_node_order_precedes_pagination_and_export(self):
+        self.apply(list(reversed(self.rows())))
+        expected = [code for code, *_ in NODES]
+        first = self.get('member', f'?project={self.project.pk}&page_size=10&page=1')
+        second = self.get('member', f'?project={self.project.pk}&page_size=10&page=2')
+        self.assertEqual([row['milestone'] for row in first['results'] + second['results']], expected)
+        response = self.clients['manager'].get(f'/api/business/tasks/export/?project={self.project.pk}&file_format=csv')
+        self.assertEqual(response.status_code, 200)
+        rows = list(csv.reader(io.StringIO(response.content.decode('utf-8-sig'))))
+        titles = [title for _, _, title, _ in NODES]
+        positions = [next(i for i, row in enumerate(rows) if title in row) for title in titles]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_multi_person_import_preview_confirm_and_error_column(self):
+        columns = transfers.SCHEMAS['tasks'][1]
+
+        def preview(people):
+            stream = io.StringIO()
+            writer = csv.writer(stream)
+            writer.writerow([label for label, _ in columns])
+            writer.writerow(['多人导入', '设计阶段', people, '', self.project.code, '', '3D评审'])
+            upload = SimpleUploadedFile('tasks.csv', stream.getvalue().encode('utf-8-sig'), content_type='text/csv')
+            result = self.clients['manager'].post(
+                '/api/business/tasks/import-file/', {'file': upload}, format='multipart'
+            )
+            self.assertEqual(result.status_code, 200, result.data)
+            return result.data
+
+        bad = preview('member；electrical_engineer')
+        self.assertEqual(bad['errors'][0]['fields'], ['assignee'])
+        self.assertFalse(self.project.tasks.exists())
+        good = preview('member；production_manager')
+        self.assertFalse(good.get('errors'), good)
+        self.assertFalse(self.project.tasks.exists())
+        self.post('manager', 'tasks/import-confirm/', {'token': good['token']})
+        task = self.project.tasks.get()
+        self.assertEqual(
+            {p.pk for p in task.assigned_people()}, {self.users['member'].pk, self.users['production_manager'].pk}
+        )
+
+    def test_coexecutor_time_import_rechecks_assignment_at_confirmation(self):
+        task = self.shared_task()
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow([label for label, _ in transfers.SCHEMAS['time'][1]])
+        writer.writerow([task.pk, 'production_manager', '2026-09-09', '1.5', '共同执行人工时'])
+        upload = SimpleUploadedFile('time.csv', stream.getvalue().encode('utf-8-sig'), content_type='text/csv')
+        result = self.clients['production_manager'].post(
+            '/api/business/time/import-file/', {'file': upload}, format='multipart'
+        )
+        self.assertEqual(result.status_code, 200, result.data)
+        self.assertFalse(result.data.get('errors'), result.data)
+        token = result.data['token']
+        self.assertFalse(TimeEntry.objects.filter(task=task).exists())
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/assign/',
+            {
+                'assignees': [self.users['member'].pk],
+                'reason': '预览后交接',
+            },
+        )
+        self.post('production_manager', 'time/import-confirm/', {'token': token}, status=403)
+        self.assertFalse(TimeEntry.objects.filter(task=task).exists())
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/assign/',
+            {
+                'assignees': [self.users['member'].pk, self.users['production_manager'].pk],
+                'reason': '恢复协作',
+            },
+        )
+        self.post('production_manager', 'time/import-confirm/', {'token': token})
+        self.assertEqual(TimeEntry.objects.get(task=task).user_id, self.users['production_manager'].pk)
+
 
 class MilestoneConcurrencyTests(ExecutionFixtures, TransactionTestCase):
     def setUp(self):
@@ -264,3 +524,38 @@ class MilestoneConcurrencyTests(ExecutionFixtures, TransactionTestCase):
             results = list(pool.map(lambda _: apply(), range(2)))
         self.assertEqual(sorted(row['count'] for row in results), [0, 20])
         self.assertEqual(project.tasks.count(), 20)
+
+    def test_two_executors_concurrently_complete_one_shared_task(self):
+        project = self.active_project()
+        project.members.add(self.users['production_manager'])
+        task_id = self.post(
+            'manager',
+            'tasks/',
+            {
+                'project': project.pk,
+                'kind': 'design',
+                'title': '共同确认',
+                'assignees': [self.users['member'].pk, self.users['production_manager'].pk],
+            },
+            status=201,
+        )['id']
+        barrier = Barrier(2)
+
+        def complete(actor_id):
+            close_old_connections()
+            try:
+                actor = User.objects.get(pk=actor_id)
+                barrier.wait(timeout=10)
+                try:
+                    execution.complete_task(actor, str(uuid.uuid4()), task_id, {'reason': '协作完成'})
+                    return 200
+                except Conflict:
+                    return 409
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(complete, [self.users['member'].pk, self.users['production_manager'].pk]))
+        self.assertEqual(sorted(results), [200, 409])
+        self.assertEqual(Task.objects.get(pk=task_id).status, 'done')
+        self.assertEqual(AuditLog.objects.filter(operation='task.complete', resource=f'task:{task_id}').count(), 1)

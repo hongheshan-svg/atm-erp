@@ -140,7 +140,17 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   const bounds = await attachments.boundingBox()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(purchaser.viewportSize()!.width)
-  await expect(attachments.getByRole('button', { name: '下载', exact: true })).toBeInViewport()
+  const horizontalTools = attachments.getByRole('group', { name: '附件左右查看', exact: true })
+  if (await horizontalTools.isVisible()) {
+    const right = horizontalTools.getByRole('button', { name: '向右查看 →', exact: true })
+    for (let step = 0; step < 10 && await right.isEnabled(); step++) await right.click()
+    await expect(right).toBeDisabled()
+  }
+  const downloadButton = attachments.getByRole('button', { name: '下载', exact: true })
+  await expect(downloadButton).toBeInViewport()
+  const downloading = purchaser.waitForEvent('download')
+  await downloadButton.click()
+  expect((await downloading).suggestedFilename()).toBe(filename)
   const aggregate = await read(manager, `documents/?project=${id}`)
   expect(aggregate.results.some((d: { original_name: string; purchase: number }) => d.original_name === filename && d.purchase === order.id)).toBe(true)
   await purchaser.screenshot({ path: info.outputPath('purchase-attachments.png'), animations: 'disabled' })

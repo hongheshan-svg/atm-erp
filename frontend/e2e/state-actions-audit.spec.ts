@@ -1,3 +1,4 @@
+import { selectExecutors } from './fixtures'
 import { cancelEditing } from './fixtures'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
@@ -215,7 +216,7 @@ test('项目经理重新分配、取消和重开任务，执行人权限与完�
   const member = await session(browser, info, second)
   await manager.goto(`/erp/projects/${current.id}?tab=tasks&section=tasks`)
   await action(manager, row(manager, title), '重新分配')
-  await dialog(manager).getByLabel('执行人', { exact: true }).selectOption(String(second.id))
+  await selectExecutors(manager, dialog(manager), [second.display_name])
   await reason(manager, '设计工作交接给另一成员')
   await submit(manager, `business/tasks/${task.id}/assign/`)
   expect(await api(page, `business/tasks/${task.id}/`)).toMatchObject({ status: 'open', assignee: second.id })

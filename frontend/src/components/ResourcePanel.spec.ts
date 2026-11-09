@@ -27,7 +27,7 @@ describe('列表创建入口', () => {
   it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
     user.value = { roles: ['finance', 'admin'] }
     vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 21, title: '费用' }], next: null })
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'ElTable', template: '<div />' } } } })
     await flushPromises()
     expect(wrapper.text()).toContain('批量删除')
     expect(wrapper.text()).toContain('已删除记录')
@@ -51,7 +51,7 @@ describe('列表创建入口', () => {
   })
   it('项目范围变化时关闭原表单，避免乙项目页面继续提交甲项目内容', async () => {
     user.value = { id: 1, role: 'admin' }
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 }, projectId: 3 }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '费用', params: { project: 3 }, projectId: 3 }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
     await flushPromises()
     await (wrapper.vm as any).create()
     expect(wrapper.findComponent(ActionDialog).props('command')?.initial?.project).toBe(3)
@@ -66,7 +66,7 @@ describe('列表创建入口', () => {
     user.value = { id: 1, role: 'finance' }
     route.query = { resource: 'payments', focus: '25' }
     vi.mocked(read).mockImplementation(async path => path.endsWith('/25/') ? { id: 25, entry_title: '采购款', amount: '50.00', date: '2026-10-21', evidence: [] } : { count: 0, results: [] })
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'payments', title: '收付款流水' }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'payments', title: '收付款流水' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
     await flushPromises()
     const command = wrapper.findComponent(ActionDialog).props('command')
     expect(command?.title).toBe('收付款流水详情')
@@ -80,7 +80,7 @@ describe('列表创建入口', () => {
     route.query = { resource, focus: '25' }
     vi.mocked(read).mockImplementation(async path => path.endsWith('/25/') ? { id: 25, project: 7, entry_title: '甲项目款项', amount: '50.00', evidence: [] } : { count: 0, results: [] })
     const projectParam = resource === 'time' ? 'task__project' : 'entry__project'
-    const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '导入明细', params: { [projectParam]: 8 } }, global: { plugins: [ElementPlus], stubs: { ElTable: true } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '导入明细', params: { [projectParam]: 8 } }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
     await flushPromises()
     expect(read).toHaveBeenCalledWith(`/business/${resource}/25/`)
     expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
@@ -95,7 +95,7 @@ describe('列表创建入口', () => {
     user.value = { id: 8, role: 'sales_manager' }
     sessionStorage.setItem('resource-search-8-sales-{}', '原来搜索')
     route.query.search = 'SALE-ONE'
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
     await flushPromises()
     expect(wrapper.get('input[type="search"]').element).toHaveProperty('value', 'SALE-ONE')
     expect(read).toHaveBeenLastCalledWith('/business/sales/', { page: 1, page_size: pageSize.value, search: 'SALE-ONE' })
@@ -113,7 +113,7 @@ describe('列表创建入口', () => {
   })
   it('状态筛选从第一页查询，分页和导出沿用同一筛选', async () => {
     user.value = { role: 'admin' }
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
     await flushPromises()
     wrapper.findComponent(ListPagination).vm.$emit('change', 3)
     await flushPromises()
@@ -128,7 +128,7 @@ describe('列表创建入口', () => {
   })
   it('把项目页上下文透传给导入导出工具，不依赖参数名', async () => {
     user.value = { role: 'admin' }
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'time', title: '工时记录', params: { task__project: 7 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'time', title: '工时记录', params: { task__project: 7 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
     await flushPromises()
     expect(wrapper.findComponent(TransferTools).props('projectId')).toBe(7)
     wrapper.unmount()
@@ -138,7 +138,7 @@ describe('列表创建入口', () => {
     vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) })
     user.value = { role: 'admin' }
     setPageSize(10)
-    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], stubs: { RouterLink: true, ElTable: { template: '<div />' } } } })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
     await flushPromises()
     wrapper.findComponent(ListPagination).vm.$emit('change', 3)
     await flushPromises()
@@ -159,7 +159,7 @@ describe('列表创建入口', () => {
     user.value = { role: 'manager' }
     const wrapper = shallowMount(ResourcePanel, {
       props: { resource: 'projects', title: '项目' },
-      global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { template: '<div />' } } },
+      global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { template: '<div />' } } },
     })
     await flushPromises()
     expect(wrapper.text()).toContain('新建项目')
@@ -184,7 +184,7 @@ it('物料全选按当前筛选跨页加载，翻页保留，刷新清空', asyn
     next: Number(params.page) * Number(params.page_size) < items.length ? 'next' : null,
   }))
   const wrapper = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料', params: { part_type: 'standard' } }, global: {
-    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } },
+    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'ElTable', template: '<div />' } },
   } })
   await flushPromises()
   await wrapper.findAllComponents({ name: 'ElButton' }).find(b => b.text() === '全选筛选结果（427项，跨页）')!.trigger('click')
@@ -210,7 +210,7 @@ it('物料全选加载期间切换筛选，旧请求不能勾选新列表', asyn
   let finish!: (value: object) => void
   vi.mocked(read).mockResolvedValue({ count: 427, results: [{ id: 1 }], next: null })
   const wrapper = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料' }, global: {
-    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } },
+    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'ElTable', template: '<div />' } },
   } })
   await flushPromises()
   vi.mocked(read).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
@@ -235,7 +235,7 @@ it.each([...removableResources].filter(resource => resource !== 'bom'))('%s全�
     next: Number(params.page) * Number(params.page_size) < rows.length ? 'next' : null,
   }))
   const wrapper = shallowMount(ResourcePanel, { props: { resource, title: '测试记录' }, global: {
-    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElTable: { name: 'ElTable', template: '<div />' } },
+    plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'ElTable', template: '<div />' } },
   } })
   await flushPromises()
   await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '选择筛选结果前1000项（跨页）')!.trigger('click')

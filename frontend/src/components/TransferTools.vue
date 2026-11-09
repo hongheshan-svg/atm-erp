@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { download, read, write } from '../api'
 import { canImportResource } from '../session'
@@ -170,7 +171,7 @@ async function confirm() {
         <p>{{ layout.note }}</p>
         <p>Excel 模板自带“填写说明”页和表头提示，打开先看操作指引，点击“开始填写”进入数据页。固定取值可下拉选择：单击第2行起的空白格，再点右侧▼；也可从说明页点“▼点此选择”跳过去。缺少必填内容会标红，CSV 不保留下拉选项。</p>
         <details class="import-field-guide"><summary>模板字段与页面列对应说明</summary>
-          <el-table :data="mappings" max-height="260"><el-table-column prop="label" label="模板字段" min-width="160" /><el-table-column prop="required" label="是否必填" min-width="160" /><el-table-column prop="source" label="去哪找 / 怎么选" min-width="280" /><el-table-column prop="hint" label="填写说明" min-width="320" /><el-table-column prop="example" label="格式示例（请替换）" min-width="180" /><el-table-column prop="table" label="对应页面列" min-width="150" /></el-table>
+          <BusinessTable label="模板填写说明" :data="mappings" max-height="260"><el-table-column prop="label" label="模板字段" class-name="import-template-field" min-width="160" /><el-table-column prop="required" label="是否必填" min-width="160" /><el-table-column prop="source" label="去哪找 / 怎么选" min-width="280" /><el-table-column prop="hint" label="填写说明" min-width="320" /><el-table-column prop="example" label="格式示例（请替换）" min-width="180" /><el-table-column prop="table" label="对应页面列" min-width="150" /></BusinessTable>
           <p v-if="generatedColumns">页面中的 {{ generatedColumns }} 由系统生成或业务操作维护，无需填写到新增模板中。</p>
         </details>
       </template>

@@ -631,7 +631,10 @@ class DeletionTests(BusinessFixtures, TestCase):
         )
         PurchaseLine.objects.create(purchase=purchase, item=self.item, bom_line=protected, quantity=1, unit_price=10)
         key = str(uuid.uuid4())
-        self.remove('bom', [unused.pk, protected.pk], status=409, key=key)
+        response = self.remove('bom', [protected.pk, unused.pk], status=409, key=key)
+        self.assertEqual(str(response['blocked_id']), str(protected.pk))
+        for fragment in [self.item.code, self.item.name, '单元：B', self.project.code, '整批未删除']:
+            self.assertIn(fragment, str(response['detail']))
         self.assertEqual(BOMLine.objects.filter(pk__in=[unused.pk, protected.pk]).count(), 2)
         self.assertFalse(AuditLog.objects.filter(operation__in=['record.delete', 'bom.remove']).exists())
         self.assertFalse(ActionReceipt.objects.filter(key=key).exists())

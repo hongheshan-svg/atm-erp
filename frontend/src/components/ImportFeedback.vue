@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Row } from '../types'
 import { pageSize } from '../pagination'
@@ -55,13 +56,13 @@ function downloadErrors() {
       </p>
     </div>
     <p v-if="errorFile" class="muted">红色单元格的批注说明填写问题。修改后保存并重新上传，整批重新校验；保留原表头和全部数据行。</p>
-    <el-table ref="table" :data="visible" :max-height="360" row-key="row" empty-text="没有符合条件的预览行">
+    <BusinessTable ref="table" label="导入预览" :numbered="false" :data="visible" :max-height="360" row-key="row" empty-text="没有符合条件的预览行">
       <el-table-column prop="row" label="文件行号" width="100" fixed="left" />
       <el-table-column v-if="errors.length" label="填写问题" min-width="230"><template #default="{ row }">{{ issues(row.row).map(issue => issue.message).join('；') || '—' }}</template></el-table-column>
       <el-table-column v-for="column in columns" :key="column.key" :label="column.label" min-width="150">
         <template #default="{ row }"><span tabindex="-1" :data-import-row="row.row" :data-import-field="column.key" :class="{ 'error-cell': cellIssues(row.row, column.key).length, 'located-cell': focusedRow === row.row }" :title="cellIssues(row.row, column.key).map(issue => issue.message).join('；')">{{ row.data[column.key] ?? '—' }}<small v-if="row.matches?.[column.key]" class="matched-reference">已对应：{{ row.matches[column.key] }}</small></span></template>
       </el-table-column>
-    </el-table>
+    </BusinessTable>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
   </div>
 </template>

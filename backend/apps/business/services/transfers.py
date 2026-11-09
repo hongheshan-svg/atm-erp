@@ -391,6 +391,12 @@ def payload(raw, people=None):
             )
     for field in ['manager', 'assignee', 'user', 'installer', 'acceptor']:
         if field in data:
+            if field == 'assignee' and (';' in str(data[field]) or '；' in str(data[field])):
+                data['assignees'] = located(
+                    field, lambda: [resolve_person(value) for value in re.split('[;；]', data[field]) if value.strip()]
+                )
+                del data[field]
+                continue
             data[field] = located(field, resolve, User, data[field], 'username')
     if 'members' in data:
         data['members'] = located(
@@ -398,6 +404,8 @@ def payload(raw, people=None):
         )
     if people is not None:
         resolved = {key: data[key] for key in PERSON_LABELS if key in data}
+        if 'assignees' in data:
+            resolved['assignee'] = data['assignees']
         if people and people != resolved:
             raise ValidationError('人员对应关系已变化，请重新预览文件并核对人员后再确认。')
         people.update(resolved)
@@ -578,6 +586,8 @@ def run(actor, resource, records, *, preview=False):
                     else getattr(exc, 'detail', '记录不存在或无权访问。')
                 )
                 labels = {key: label for label, key in schema(actor, resource)}
+                if resource == 'tasks' and isinstance(detail, dict) and 'assignees' in detail:
+                    detail = {('assignee' if key == 'assignees' else key): value for key, value in detail.items()}
                 fields = [key for key in detail if key in labels] if isinstance(detail, dict) else []
                 tagged = getattr(exc, 'import_field', None)
                 if not fields and tagged in labels:
@@ -707,7 +717,7 @@ def confirm(actor, resource, token, *, allow_duplicate=False, key=None):
                 task = Task.objects.filter(pk=int(Decimal(data['task']))).first()
                 if task is None:
                     raise ValidationError({'task': UNREACHABLE})
-                if not can_manage_task(user, task) and (data['user'] != user.pk or task.assignee_id != user.pk):
+                if not can_manage_task(user, task) and (data['user'] != user.pk or not task.is_assigned_to(user)):
                     raise PermissionDenied('只能为自己的任务登记本人工时，或登记管理范围内的生产与售后工时。')
 
     def execute(user):
