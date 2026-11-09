@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TableScroll from './TableScroll.vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { download, read, readBlob } from '../api'
 import { message } from '../utils/request'
@@ -55,10 +56,10 @@ onBeforeUnmount(() => { generation++; release(); window.removeEventListener('erp
         <div v-if="data.kind === 'spreadsheet'" class="sheet-preview">
           <div class="preview-toolbar"><label>工作表 <select v-model.number="sheet" aria-label="工作表" @change="changePage(1)"><option v-for="entry in data.sheets" :key="entry.index" :value="entry.index">{{ entry.name }}</option></select></label><label>查找当前页 <input v-model="search" type="search" aria-label="查找当前页" placeholder="物料、型号或金额" /></label><span>共 {{ data.total_rows }} 行</span></div>
           <p class="preview-notice">左右滚动查看全部列，上下滚动查看本页内容。</p>
-          <div class="preview-scroll" tabindex="0" aria-label="表格预览，可左右滚动"><table aria-label="附件表格"><thead><tr><th scope="col">行号</th><th v-for="col in data.columns" :key="col" scope="col">{{ col }}</th></tr></thead><tbody><tr v-for="row in rows" :key="row.number"><th scope="row">{{ row.number }}</th><td v-for="(cell, index) in row.cells" :key="index">{{ cell }}</td></tr></tbody></table></div>
+          <TableScroll label="附件表格"><div data-table-scroll class="preview-scroll" tabindex="0" aria-label="表格预览，可左右滚动"><table aria-label="附件表格"><thead><tr><th scope="col">行号</th><th v-for="col in data.columns" :key="col" scope="col">{{ col }}</th></tr></thead><tbody><tr v-for="row in rows" :key="row.number"><th scope="row">{{ row.number }}</th><td v-for="(cell, index) in row.cells" :key="index">{{ cell }}</td></tr></tbody></table></div></TableScroll>
           <p v-if="!rows.length">{{ search ? '本页未找到匹配内容，可清空搜索或切换页码。' : '此工作表没有可显示的内容。' }}</p>
         </div>
-        <div v-else-if="data.kind === 'document'" class="word-preview preview-scroll" tabindex="0" aria-label="文档内容"><template v-for="(block, index) in data.blocks" :key="index"><p v-if="block.kind === 'paragraph'">{{ block.text }}</p><table v-else-if="block.kind === 'table'" aria-label="文档表格"><tbody><tr v-for="(row, rowIndex) in block.rows" :key="rowIndex"><td v-for="(cell, colIndex) in row" :key="colIndex">{{ cell }}</td></tr></tbody></table></template><p v-if="!data.blocks?.length">文档没有可显示的文字。</p></div>
+        <TableScroll v-else-if="data.kind === 'document'" label="文档内容"><div data-table-scroll class="word-preview preview-scroll" tabindex="0" aria-label="文档内容"><template v-for="(block, index) in data.blocks" :key="index"><p v-if="block.kind === 'paragraph'">{{ block.text }}</p><table v-else-if="block.kind === 'table'" aria-label="文档表格"><tbody><tr v-for="(row, rowIndex) in block.rows" :key="rowIndex"><td v-for="(cell, colIndex) in row" :key="colIndex">{{ cell }}</td></tr></tbody></table></template><p v-if="!data.blocks?.length">文档没有可显示的文字。</p></div></TableScroll>
         <pre v-else-if="data.kind === 'text'" class="text-preview preview-scroll" tabindex="0">{{ data.text }}</pre>
         <template v-else-if="data.kind === 'image' && imageUrl"><div class="preview-toolbar"><el-button :disabled="zoom <= 50" @click="zoom -= 25">缩小图片</el-button><span>{{ zoom }}%</span><el-button :disabled="zoom >= 300" @click="zoom += 25">放大图片</el-button><el-button @click="zoom = 100">适合窗口</el-button></div><div class="preview-scroll image-preview" tabindex="0"><img :src="imageUrl" :alt="data.name" :style="{ width: `${zoom}%` }" @error="error = '图片无法显示，请确认文件完整或下载原文件查看。'" /></div></template>
         <PdfPreview v-else-if="data.kind === 'pdf' && binary" :file="binary" />

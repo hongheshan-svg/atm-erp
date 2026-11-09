@@ -1,3 +1,4 @@
+import { selectExecutors } from './fixtures'
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption, clearRemote } from './remote-select-helpers'
 import { readFile } from 'node:fs/promises'
@@ -41,8 +42,8 @@ test('人员可按姓名选择并导入，重名明确账号', async ({ page }, 
   const form = page.getByRole('dialog', { name: '新建任务', exact: true })
   await form.getByLabel('阶段', { exact: true }).selectOption('design')
   await form.getByLabel('任务名称', { exact: true }).fill('按姓名选择执行人')
-  await form.getByLabel('执行人', { exact: true }).selectOption({ label: `${displayName}（${username}）` })
-  await expect(form.getByLabel('执行人', { exact: true })).toHaveValue(String(member.id))
+  await selectExecutors(page, form, [`${displayName}（${username}）`])
+  await expect(form.locator('.el-select__tags-text')).toContainText(displayName)
   await form.getByLabel('执行人', { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: info.outputPath('person-name-selection.png'), animations: 'disabled' })
   await form.locator('button[type="submit"]').click()

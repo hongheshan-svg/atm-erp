@@ -113,14 +113,14 @@ class Progress:
             due=task.due_date,
             record={'status': task.status},
         )
-        row.update(handlers=[self.person(task.assignee)], handler_label='执行人')
+        row.update(handlers=[self.person(person) for person in task.assigned_people()], handler_label='执行人')
         row['hint'] = '由项目经理登记验收后完成。' if task.kind == 'acceptance' else '按任务要求完成后更新状态。'
         if task.milestone in AUTOMATIC:
             row['hint'] = DEFINITIONS[task.milestone]['description']
         if not row['pending']:
             row['hint'] = '任务已结束，完成或取消记录保留。'
-        elif not task.assignee.is_active:
-            row['hint'] = '执行人已停用，请联系项目负责人重新派工。'
+        elif any(not person.is_active for person in task.assigned_people()):
+            row['hint'] = '有执行人已停用，请联系项目负责人重新派工。'
         return row
 
     def purchase(self, purchase):
@@ -199,7 +199,9 @@ class Progress:
             due_label='安装 / 验收期限',
             record={'accepted_date': delivery.accepted_date, 'warranty_until': delivery.warranty_until},
         )
-        row['handlers'] = list({task.assignee_id: self.person(task.assignee) for task in following}.values())
+        row['handlers'] = list(
+            {person.pk: self.person(person) for task in following for person in task.assigned_people()}.values()
+        )
         if not row['handlers']:
             row['handlers'] = [self.person(self.project.manager)]
         row['handler_label'] = '安装执行人' if install else '验收跟进人' if pending else '项目负责人'
@@ -323,11 +325,15 @@ def summary(user, project, params):
     query = (opened if state == 'open' else queries)[category]
     query = query.select_related('created_by', 'updated_by')
     if category == 'tasks':
-        query = query.select_related('assignee').order_by(F('due_date').asc(nulls_last=True), 'pk')
+        query = (
+            query.select_related('assignee')
+            .prefetch_related('co_assignees')
+            .order_by(F('due_date').asc(nulls_last=True), 'pk')
+        )
     elif category == 'purchases':
         query = query.prefetch_related('lines').order_by('due_date', 'pk')
     elif category == 'deliveries':
-        query = query.prefetch_related('tasks__assignee').order_by('shipped_date', 'pk')
+        query = query.prefetch_related('tasks__assignee', 'tasks__co_assignees').order_by('shipped_date', 'pk')
     else:
         drafts = statements.with_snapshot_sources(Reconciliation.objects.filter(status='draft')).order_by('pk')
         query = (

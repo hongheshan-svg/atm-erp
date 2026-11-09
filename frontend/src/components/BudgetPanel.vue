@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { ref, watch } from 'vue'
 import { read } from '../api'
 import { manager } from '../session'
@@ -59,14 +60,14 @@ function estimate() {
     <template v-if="report">
       <el-alert v-if="!report.configured" title="尚未设置预算，当前仅展示成本，不拦截采购审批。" type="info" :closable="false" />
       <el-alert v-else-if="report.over_budget" :title="report.warnings.join('；')" type="warning" :closable="false" show-icon role="alert" />
-      <el-table :data="report.rows" style="width:100%">
+      <BusinessTable label="项目预算" :data="report.rows" style="width:100%">
         <el-table-column prop="label" label="类别" min-width="95" />
         <el-table-column label="预算（元）" min-width="135" align="right"><template #default="{row}">{{ amount(row.budget) }}</template></el-table-column>
         <el-table-column prop="actual" :formatter="(row: Row) => amount(row.actual)" label="实际成本" min-width="135" align="right" />
         <el-table-column prop="committed" :formatter="(row: Row) => amount(row.committed)" label="已承诺（在途）" min-width="145" align="right" />
         <el-table-column prop="occupied" :formatter="(row: Row) => amount(row.occupied)" label="实际＋在途" min-width="140" align="right" />
         <el-table-column label="预算余量" min-width="135" align="right"><template #default="{row}"><span :class="{ 'budget-overrun': Number(row.remaining) < 0 }">{{ amount(row.remaining) }}</span></template></el-table-column>
-      </el-table>
+      </BusinessTable>
       <div class="budget-totals"><span>预算合计 <strong>{{ amount(report.budget_total) }}</strong></span><span>实际＋在途合计 <strong>{{ money(report.occupied_total, { currency: true }) }}</strong></span><span>累计采购净额 <strong>{{ money(report.purchase_net, { currency: true }) }}</strong></span></div>
       <p class="muted budget-basis">已承诺仅含已批准未收货采购；实际材料含退货价差。人工、费用仅计已有实际记录，未付款费用不重复计入承诺。累计采购净额另与材料预算比较，收货不会释放采购额度；以上不代表完工成本预测。</p>
       <div class="budget-totals"><span>预计剩余材料 {{ money(report.remaining_materials, { placeholder: '未估算' }) }}</span><span>预计剩余人工 {{ money(report.remaining_labor, { placeholder: '未估算' }) }}</span><span>预计剩余费用 {{ money(report.remaining_expenses, { placeholder: '未估算' }) }}</span><strong :class="{ 'budget-overrun': report.configured && report.forecast_total != null && Number(report.forecast_total) > Number(report.budget_total) }">预计完工成本 {{ money(report.forecast_total, { placeholder: '未完整估算' }) }}</strong><el-button v-if="manager() && canManage !== false && ['active', 'delivering', 'warranty'].includes(status)" @click="estimate" :disabled="Boolean(error)">更新完工估算</el-button></div>

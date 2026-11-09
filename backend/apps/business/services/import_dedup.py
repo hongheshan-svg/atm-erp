@@ -33,6 +33,13 @@ def normalized_record(actor, resource, raw, people):
         data['members'] = sorted(set(data.get('members', [])))
     if resource == 'time':
         data.setdefault('user', actor.pk)
+    if resource == 'tasks' and 'assignees' in data:
+        people = sorted(data['assignees'])
+        if len(people) == 1:
+            data['assignee'] = people[0]
+            del data['assignees']
+        else:
+            data['assignees'] = people
     if resource == 'deliveries':
         manager = Project.objects.get(pk=data['project']).manager_id
         data.setdefault('installer', manager)

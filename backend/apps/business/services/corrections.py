@@ -17,7 +17,7 @@ from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
 from ..task_milestones import AUTOMATIC, PRE_SHIPMENT
 from .bom import incoming, issued
 from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
-from .execution import assignee, stage_cancel_block, task_action
+from .execution import assigned_people, stage_cancel_block, task_action
 from .finance import balance
 
 
@@ -111,20 +111,17 @@ def edit_project(actor, key, project_id, data):
             members_to_set = None
         if member_ids is not None or project.manager_id != old_manager_id:
             keep = set(member_ids) if member_ids is not None else set(project.members.values_list('pk', flat=True))
-            stranded = (
-                project.tasks.filter(status='open')
-                .exclude(assignee_id__in=keep | {project.manager_id})
-                .select_related('assignee')
-            )
+            stranded = project.tasks.filter(status='open').select_related('assignee').prefetch_related('co_assignees')
             for task in stranded:
-                if has_role(task.assignee, GLOBAL_PROJECT_ROLES):
-                    continue
-                if task.assignee_id == old_manager_id:
-                    raise Conflict(
-                        f'原负责人 {task.assignee.display_name or task.assignee.username} 还有未完成任务，'
-                        '请先重新分配，或把其保留为项目成员。'
-                    )
-                raise Conflict('移除的成员还有未完成任务，请先重新分配或取消任务。')
+                for person in task.assigned_people():
+                    if person.pk in keep | {project.manager_id} or has_role(person, GLOBAL_PROJECT_ROLES):
+                        continue
+                    if person.pk == old_manager_id:
+                        raise Conflict(
+                            f'原负责人 {person.display_name or person.username} 还有未完成任务，'
+                            '请先重新分配，或把其保留为项目成员。'
+                        )
+                    raise Conflict('移除的成员还有未完成任务，请先重新分配或取消任务。')
         if members_to_set is not None:
             project.members.set(members_to_set)
         for field, maximum in [('name', 150), ('requirements', 20000)]:
@@ -249,16 +246,19 @@ def change_task(actor, key, task_id, data, operation):
     def execute(user, project, task):
         fields(
             data,
-            {'reason', 'assignee', 'due_date'}
+            {'reason', 'assignee', 'assignees', 'due_date'}
             if operation == 'assign'
-            else {'reason', 'assignee'}
+            else {'reason', 'assignee', 'assignees'}
             if operation == 'reopen'
             else {'reason'},
         )
         reason = text(data, 'reason')
+        people = None
+        previous = [person.pk for person in task.assigned_people()]
         if operation == 'assign':
             state(task, {'open'})
-            task.assignee = assignee(project, data.get('assignee'))
+            people = assigned_people(project, data)
+            task.assignee = people[0]
             if 'due_date' in data:
                 task.due_date = day(data, 'due_date', optional=True)
                 if (
@@ -285,7 +285,8 @@ def change_task(actor, key, task_id, data, operation):
                     save(entry, user)
         elif operation == 'reopen':
             state(task, {'done', 'cancelled'})
-            task.assignee = assignee(project, data.get('assignee', task.assignee_id))
+            people = assigned_people(project, data, task)
+            task.assignee = people[0]
             if (
                 task.kind == 'acceptance'
                 or (task.kind == 'install' and task.delivery.accepted_date)
@@ -304,7 +305,16 @@ def change_task(actor, key, task_id, data, operation):
         else:
             raise ValidationError('不支持的任务操作。')
         save(task, user)
-        result = audit(user, f'task.{operation}', task, reason=reason)
+        if people is not None:
+            task.co_assignees.set(people[1:])
+        result = audit(
+            user,
+            f'task.{operation}',
+            task,
+            reason=reason,
+            previous_assignees=previous,
+            assignees=[person.pk for person in task.assigned_people()],
+        )
         from .milestones import sync_milestones
 
         sync_milestones(user, project)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { read, download } from '../api'
 import { can, purchasing } from '../session'
@@ -84,7 +85,7 @@ watch(pageSize, () => { page.value = 1; void load(true) })
       <el-button :loading="selectingAll" :disabled="loading || !total" @click="selectFilteredRows">{{ total > deletionLimit('documents') ? '选择筛选结果前' + deletionLimit('documents') + '项（跨页）' : '全选筛选结果（' + total + '项，跨页）' }}</el-button>
       <el-button text :disabled="loading || selectingAll || !selection.length" @click="selection = []">清空选择</el-button>
     </div>
-    <el-table :data="records" :aria-busy="loading" max-height="420" row-key="id">
+    <BusinessTable label="附件" :row-offset="(page - 1) * pageSize" :data="records" :aria-busy="loading" max-height="420" row-key="id">
       <el-table-column v-if="deletionAllowed" label="选择" width="44">
         <template #header><input type="checkbox" aria-label="选择本页附件" :checked="batch.all(records)" :indeterminate="batch.some(records)" :disabled="loading || selectingAll || !records.length || (selection.length >= deletionLimit('documents') && !batch.all(records))" @change="batch.togglePage(records)" /></template>
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择附件 ' + deletionLabel(row)" :checked="batch.has(row)" :disabled="loading || selectingAll || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
@@ -94,7 +95,7 @@ watch(pageSize, () => { page.value = 1; void load(true) })
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB</template></el-table-column>
       <el-table-column label="上传时间" min-width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template></el-table-column>
       <el-table-column label="操作" :width="deletionAllowed ? 200 : 140" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" @click="openDocumentPreview(row.id, row.original_name)">预览</el-button><el-button size="small" @click="downloadFile(row)">下载</el-button><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="loading || selectingAll" @click="deleting = [row]">删除</el-button></template></el-table-column>
-    </el-table>
+    </BusinessTable>
     <ListPagination :page="page" :total="total" @change="page = $event; load(true)" />
     <template #footer><el-button @click="emit('close')">关闭</el-button></template>
   </el-dialog>

@@ -107,6 +107,7 @@ LABELS = {
     'user_name': '用户姓名',
     'hours': '工时',
     'assignee': '执行人ID',
+    'assignees': '全部执行人ID',
     'assignee_name': '执行人',
     'milestone': '里程碑节点代码',
     'milestone_label': '里程碑节点',

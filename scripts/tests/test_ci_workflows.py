@@ -229,6 +229,14 @@ class RoutingTests(unittest.TestCase):
         self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
         self.assertFalse(scope['ota'] or scope['installers'])
 
+    def test_shared_business_tables_cover_all_modules_without_full_chain(self):
+        for name in ('BusinessTable', 'TableScroll'):
+            scope = plan([f'frontend/src/components/{name}.vue'])
+            self.assertEqual(scope['modules'], sorted(BUSINESS))
+            self.assertIn('e2e/pagination-layout.spec.ts', scope['browser_specs'])
+            self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
+            self.assertFalse(scope['ota'] or scope['installers'])
+
     def test_config_settings_uses_shared_mapping_not_accounts_stem(self):
         scope = plan(['backend/config/settings.py'])
         self.assertEqual(scope['modules'], sorted(BUSINESS))

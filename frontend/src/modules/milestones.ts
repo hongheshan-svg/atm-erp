@@ -4,6 +4,17 @@ import { date, person, select, t } from './shared'
 import type { Catalog } from '../catalog'
 import type { Command, Field, Row } from '../types'
 
+export const taskAssignees = (row: Row): number[] => row.assignees ?? (row.assignee ? [row.assignee] : [])
+export function executorField(c: Catalog, scope?: Row | null): Field {
+  return { ...person(c, 'assignees', '执行人', scope), type: 'multi', searchableMulti: true,
+    hint: '可选择多人共同执行。任一执行人或有权限的经理确认后，整项任务完成；工时按各人分别登记。' }
+}
+export function taskSyncHint(row: Row): string {
+  if (row.kind === 'acceptance') return '按批次验收记录完成'
+  if (!row.system_managed) return ''
+  return ({ shipping_dispatch: '按实际发货记录同步', site_install: '按批次安装任务同步', site_acceptance: '按实际验收记录同步' } as Record<string, string>)[row.milestone] || '按实际业务记录同步'
+}
+
 export function milestoneFields(c: Catalog, metadata: Row, scope?: Row | null, canDesign = true): Field[] {
   const stages = metadata.stages.filter((stage: Row) => canDesign || ['assembly', 'test'].includes(stage.value))
   const nodes: Row[] = metadata.nodes
@@ -17,7 +28,7 @@ export function milestoneFields(c: Catalog, metadata: Row, scope?: Row | null, c
       hint: '先选阶段，再选节点；留空可新增自定义任务。',
     },
     { ...t('title', '任务名称', true), hint: '选定节点后可留空，自动使用节点名称；自定义任务请填写名称。' },
-    person(c, 'assignee', '执行人', scope),
+    executorField(c, scope),
     date('due_date', '截止日期', true),
     { ...t('description', '完成要求', true), hint: '写明图档版本、交付物或验收标准。发货、现场安装接线、现场验收按实际业务记录同步。' },
   ]
@@ -37,7 +48,7 @@ export async function milestoneTemplateCommand(projectId: number): Promise<Comma
     fields: [{ key: 'lines', label: '项目里程碑', type: 'rows', compact: true, fields: milestoneFields(c, metadata, scope).map(field => ({ ...field, hint: '', ...(field.key === 'description' ? { type: 'text' as const, wide: false } : {}) })) }],
     initial: { lines: nodes.map(node => ({
       kind: node.kind, milestone: node.milestone, title: node.title, description: node.description,
-      assignee: metadata.assignee, due_date: '',
+      assignees: [metadata.assignee], due_date: '',
     })) },
     prepare: data => {
       if (!data.lines?.length) throw new Error('请至少保留一个节点，或添加自定义任务。')

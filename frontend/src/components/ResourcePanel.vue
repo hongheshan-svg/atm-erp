@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
+import { taskSyncHint } from '../modules/milestones'
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { read, download } from '../api'
@@ -402,7 +404,7 @@ async function inspect(row: Row) {
       <el-button :loading="selectingAll" :disabled="loading || actionBusy || !count" @click="selectFilteredRows">{{ count > deletionLimit(resource) ? '选择筛选结果前' + deletionLimit(resource) + '项（跨页）' : '全选筛选结果（' + count + '项，跨页）' }}</el-button>
       <el-button text :disabled="selectingAll || loading || actionBusy || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
     </div>
-    <el-table v-show="records.length || loading"
+    <BusinessTable :label="title" :row-offset="(page - 1) * pageSize" v-show="records.length || loading"
       v-loading="loading"
       :data="records"
       :max-height="560"
@@ -458,10 +460,10 @@ async function inspect(row: Row) {
                 ></template
               ></el-dropdown
             ><span v-else-if="!primaryAction(row) && !deletionAllowed" class="muted">—</span><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
-          ></template
+          ><small v-if="resource === 'tasks' && taskSyncHint(row)" class="task-sync-hint">{{ taskSyncHint(row) }}<router-link :to="{ path: `/projects/${row.project}`, query: { tab: 'deliveries', section: 'deliveries' } }">查看交付进度</router-link></small></template
         ></el-table-column
       >
-    </el-table>
+    </BusinessTable>
     <ListPagination :page="page" :total="count" @change="page = $event; load(true)" />
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" :resource="resource" :title="title" :rows="deleting || undefined" :project-id="scopedImportProject(params, projectId)" @close="deleting = null; deletionHistory = false" @saved="deleted" @open="openRemoved" />
@@ -472,4 +474,5 @@ async function inspect(row: Row) {
 
 <style scoped>
 .record-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+.task-sync-hint { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; line-height: 1.5; color: var(--el-text-color-secondary); }
 </style>

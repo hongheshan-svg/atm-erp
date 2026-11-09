@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { read, write, download } from '../api'
 import { downloadBOM } from '../api/bom'
@@ -281,16 +282,16 @@ function saved() {
       <el-button text :disabled="busy || deletionLoading || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
     </div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" width="min(900px, 94vw)" @close="impact = null">
-      <template v-if="impact"><p>{{ impact.note }}</p><el-table :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></el-table><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
+      <template v-if="impact"><p>{{ impact.note }}</p><BusinessTable label="BOM变更影响" :data="impact.items" max-height="360"><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途/草稿" /><el-table-column prop="minimum" label="当前最低可改量" /></BusinessTable><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
     </el-dialog>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <el-table :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'">
+    <BusinessTable label="BOM" :row-offset="(page - 1) * pageSize" class="bom-details-table" :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'">
       <el-table-column v-if="deletionAllowed && view === 'prepare'" label="选择" width="44" fixed="left">
         <template #header><input type="checkbox" aria-label="选择本页BOM明细" :checked="batch.all(visibleLines)" :indeterminate="batch.some(visibleLines)" :disabled="busy || deletionLoading || !visibleLines.length || (deletionSelection.length >= deletionMax && !batch.all(visibleLines))" @change="batch.togglePage(visibleLines)" /></template>
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM明细 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="batch.has(row)" :disabled="busy || deletionLoading || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
       </el-table-column>
-      <el-table-column v-if="canPurchase && view === 'purchase'" label="选择" width="60" fixed><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
+      <el-table-column v-if="canPurchase && view === 'purchase'" label="选择" width="60" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
       <el-table-column label="物料名称 / 编码" min-width="180" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small></template></el-table-column>
       <el-table-column v-if="view === 'prepare'" prop="specification" label="规格" min-width="140" />
       <el-table-column prop="assembly_unit" label="单元" min-width="100" />
@@ -314,7 +315,8 @@ function saved() {
         <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column prop="available" label="可用库存" /><el-table-column prop="shortage" label="缺料" /></template>
       </template>
       <el-table-column v-if="deletionAllowed" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button></template></el-table-column>
-    </el-table>
+      <template #tools><el-button v-if="!fullColumns" @click="fullColumns = true">展开完整列（图号、品牌等）</el-button></template>
+    </BusinessTable>
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" resource="bom" title="BOM明细" :rows="deleting || undefined" :project-id="projectId" :show-original="false" @close="deleting = null; deletionHistory = false" @saved="saved" />
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <footer v-if="canPurchase && view === 'purchase'" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { all, read } from '../api'
 import { message } from '../utils/request'
@@ -47,7 +48,7 @@ function saved(result: Row) {
       <p>当前报告：{{ suppliers.find(s => s.id === data!.supplier)?.name }} · {{ data.month }}</p>
       <p>截至 {{ data.through }}；期初 {{ data.totals.opening }} ＋ 收货 {{ data.totals.received }} － 退货 {{ data.totals.returned }} － 净付款 {{ data.totals.paid }} ＝ 期末 {{ data.totals.closing }} 元。</p>
       <p class="muted">按该供应商跨项目汇总，不受外层项目筛选影响；经理仅查看负责或参与项目。以合格收货及退货供应商贷项计账，隔离品、未收货合同额不计入；负余额表示预付净额。历史无收货日期的记录沿用创建日。</p>
-      <el-table :data="data.rows" max-height="450" stripe><el-table-column prop="project_name" label="项目" /><el-table-column prop="code" label="采购单" /><el-table-column v-for="(label, key) in { opening: '期初', received: '收货', returned: '退货', paid: '净付款', closing: '期末' }" :key="key" :prop="key" :label="label" /><el-table-column label="原单"><template #default="{ row }"><router-link :to="{ path: '/finance', query: { section: 'entries', resource: 'entries', focus: row.entry } }">核对应付</router-link></template></el-table-column></el-table>
+      <BusinessTable label="供应商月结" :data="data.rows" max-height="450" stripe><el-table-column prop="project_name" label="项目" /><el-table-column prop="code" label="采购单" /><el-table-column v-for="(label, key) in { opening: '期初', received: '收货', returned: '退货', paid: '净付款', closing: '期末' }" :key="key" :prop="key" :label="label" /><el-table-column label="原单"><template #default="{ row }"><router-link :to="{ path: '/finance', query: { section: 'entries', resource: 'entries', focus: row.entry } }">核对应付</router-link></template></el-table-column></BusinessTable>
       <el-button v-if="can(['admin', 'finance']) && data.rows.length" type="primary" @click="confirm">确认月度对账</el-button>
     </template>
     <ActionDialog :command="command" @close="command = null" @saved="saved" />

@@ -63,6 +63,21 @@ test('仓管收货及项目出库展示完整物料资料并逐条保存备注',
     expect(viewport.body, JSON.stringify(viewport)).toBeLessThanOrEqual(viewport.visible)
     await dialog(wh).locator('.warehouse-scroll').evaluate(el => { el.scrollLeft = 0 })
     await dialog(wh).locator('.action-fields').evaluate(el => { const details = el.querySelector('.warehouse-lines')!; el.scrollTop += details.getBoundingClientRect().top - el.getBoundingClientRect().top })
+    if (info.project.name === 'desktop') {
+      const wrap = dialog(wh).locator('.warehouse-scroll')
+      const bar = dialog(wh).locator('.table-scroll-native .el-scrollbar__bar.is-horizontal')
+      await expect(bar).toBeVisible()
+      const thumb = await bar.locator('.el-scrollbar__thumb').boundingBox()
+      await wh.mouse.move(thumb!.x + thumb!.width / 2, thumb!.y + thumb!.height / 2)
+      await wh.mouse.down()
+      await wh.mouse.move(thumb!.x + thumb!.width / 2 + 120, thumb!.y + thumb!.height / 2, { steps: 8 })
+      await wh.mouse.up()
+      await expect.poll(() => wrap.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+      await dialog(wh).getByRole('button', { name: '← 向左查看', exact: true }).click()
+      await expect.poll(() => wrap.evaluate(el => el.scrollLeft)).toBe(0)
+      await wh.mouse.move(0, 0)
+      await expect(bar).toBeVisible()
+    }
     await wh.screenshot({ path: info.outputPath('receipt-details.png'), fullPage: true, animations: 'disabled' })
     if (info.project.name === 'desktop') {
       await dialog(wh).locator('.warehouse-scroll').evaluate(el => { el.scrollLeft = el.scrollWidth })

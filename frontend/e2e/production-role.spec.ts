@@ -1,3 +1,4 @@
+import { selectExecutors } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -131,7 +132,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
     await expect(projectField).toHaveValue(new RegExp(`生产交付验收${suffix}`))
     await dialog(page).getByLabel('阶段', { exact: true }).selectOption(kind)
     await dialog(page).getByLabel('任务名称', { exact: true }).fill(title)
-    await dialog(page).getByLabel('执行人', { exact: true }).selectOption(String(first.id))
+    await selectExecutors(page, dialog(page), [first.display_name])
     await dialog(page).getByLabel('截止日期', { exact: true }).fill(date())
     return save(page, 'business/tasks/', 201)
   }
@@ -165,7 +166,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await expect(page).toHaveURL(new RegExp(`/erp/projects/${current.id}\\?.*focus=${assembly.id}`))
   await expect(dialog(page).getByLabel('任务', { exact: true })).toHaveValue(assemblyTitle)
   await dialog(page).getByRole('button', { name: '重新分配', exact: true }).click()
-  await dialog(page).getByLabel('执行人', { exact: true }).selectOption(String(second.id))
+  await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '生产经理将装配交接给第二名成员')
   await save(page, `business/tasks/${assembly.id}/assign/`)
   expect(await api(admin, `business/tasks/${assembly.id}/`)).toMatchObject({ assignee: second.id, status: 'open' })
@@ -216,7 +217,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const installation = (await api(admin, `business/tasks/?project=${current.id}&kind=install`)).results[0]
   await page.reload()
   await action(page, row(page, installation.title), '重新分配')
-  await dialog(page).getByLabel('执行人', { exact: true }).selectOption(String(second.id))
+  await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '安装排班交给第二名成员')
   await save(page, `business/tasks/${installation.id}/assign/`)
   await complete(installation.title, installation.id)
@@ -242,7 +243,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await page.getByRole('tab', { name: '交付与售后', exact: true }).click()
   await page.getByRole('tab', { name: '售后任务', exact: true }).click()
   await action(page, row(page, serviceTitle), '重新分配')
-  await dialog(page).getByLabel('执行人', { exact: true }).selectOption(String(second.id))
+  await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '售后由现场熟悉设备的成员处理')
   await save(page, `business/tasks/${service.id}/assign/`)
   await complete(serviceTitle, service.id)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TableScroll from './TableScroll.vue'
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { read } from '../api'
 import { sumQuantities } from '../modules/warehouse-lines'
@@ -61,7 +62,7 @@ defineExpose({ focusPath })
     <p class="form-hint">{{ field.hint }}</p>
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="loadProject">重试</button></p>
     <p class="table-guide">电脑上左右滚动可查看全部列；手机上按每款物料逐项填写。</p>
-    <div class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
+    <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
       <table :aria-label="`${field.label}明细`">
         <thead><tr><th scope="col">序号</th><th v-for="column in columns" :key="column.key" scope="col">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
         <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock">
@@ -77,7 +78,7 @@ defineExpose({ focusPath })
           </td>
         </tr></tbody>
       </table>
-    </div>
+    </div></TableScroll>
     <div v-if="model.length > 20" class="warehouse-pages"><button type="button" :disabled="start === 0" @click="page--">上一页明细</button><span>{{ start + 1 }}–{{ Math.min(start + 20, model.length) }} / {{ model.length }}</span><button type="button" :disabled="start + 20 >= model.length" @click="page++">下一页明细</button></div>
   </fieldset>
 </template>

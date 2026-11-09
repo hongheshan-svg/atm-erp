@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { matchedRouteKey, onBeforeRouteLeave, onBeforeRouteUpdate, routerKey } from 'vue-router'
 import { user } from '../session'
@@ -271,7 +272,7 @@ async function submit() {
       <el-alert v-if="roleChange" :title="roleChange" type="warning" :closable="false" role="status" />
       <section v-if="preview" aria-label="变更影响预览">
         <el-alert :title="preview.can_apply ? '本次预览可通过；保存时仍会重新校验。' : preview.blockers.join('；')" :type="preview.can_apply ? 'info' : 'warning'" :closable="false" />
-        <el-table :data="preview.items" max-height="300"><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" /></el-table>
+        <BusinessTable label="变更影响" :data="preview.items" max-height="300"><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" /></BusinessTable>
         <router-link v-for="purchase in preview.purchases" :key="purchase.id" :to="{ path: `/projects/${preview.project}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }">{{ purchase.code }} · 处理关联采购 </router-link>
       </section>
       <p v-if="!command.fields.length && !command.blocked && !command.readonly">确认执行“{{ command.title }}”。</p>

@@ -1,3 +1,5 @@
+from django.db.models import Q
+from django_filters import rest_framework as filters
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -18,17 +20,40 @@ from ..serializers import (
     TimeSerializer,
 )
 from ..services import corrections, execution, milestones
-from ..task_milestones import PHASES
+from ..services.common import identity
+from ..task_milestones import PHASES, ordered_tasks
 from .common import ImportableMixin, ReadView, key
+
+
+class TaskFilter(filters.FilterSet):
+    assignee = filters.NumberFilter(method='filter_assignee')
+
+    def filter_assignee(self, queryset, name, value):
+        person = identity(value, 'assignee')
+        return queryset.filter(Q(assignee_id=person) | Q(co_assignees__pk=person)).distinct()
+
+    class Meta:
+        model = Task
+        fields = ['project', 'kind', 'milestone', 'status', 'assignee', 'delivery']
 
 
 class TaskView(ImportableMixin, ReadView):
     queryset = execution.with_task_flags(
-        Task.objects.select_related('assignee', 'project', 'delivery', 'entry').prefetch_related('project__members')
+        Task.objects.select_related('assignee', 'project', 'delivery', 'entry').prefetch_related(
+            'project__members', 'co_assignees'
+        )
     )
     serializer_class = TaskSerializer
-    filterset_fields = ['project', 'kind', 'milestone', 'status', 'assignee', 'delivery']
-    search_fields = ['title', 'project__code', 'project__name', 'assignee__display_name']
+    filterset_class = TaskFilter
+    search_fields = [
+        'title',
+        'project__code',
+        'project__name',
+        'assignee__display_name',
+        'assignee__username',
+        'co_assignees__display_name',
+        'co_assignees__username',
+    ]
 
     def get_queryset(self):
         queryset = super().get_queryset().filter(project__in=projects_for(self.request.user, Project.objects.all()))
@@ -38,7 +63,7 @@ class TaskView(ImportableMixin, ReadView):
                 raise ValidationError({'phase': '请选择有效的项目阶段。'})
             kinds = [phase, 'install', 'acceptance'] if phase == 'site' else [phase]
             queryset = queryset.filter(kind__in=kinds)
-        return queryset
+        return ordered_tasks(queryset)
 
     def create(self, request):
         return Response(execution.create_task(request.user, key(request), request.data), status=201)

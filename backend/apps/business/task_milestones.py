@@ -37,6 +37,29 @@ AUTOMATIC = {'shipping_dispatch', 'site_install', 'site_acceptance'}
 PRE_SHIPMENT = ('design', 'purchase', 'assembly', 'test', 'shipping')
 
 
+def ordered_tasks(queryset):
+    """在数据库分页前排列六阶段，保持列表、分页和导出使用同一顺序。"""
+    from django.db.models import Case, IntegerField, Value, When
+
+    phases = {kind: index for index, (kind, _) in enumerate(PHASES)}
+    phases.update(install=phases['site'], acceptance=phases['site'])
+    ranks = {code: index for index, (code, *_) in enumerate(NODES)}
+    return queryset.annotate(
+        phase_order=Case(
+            *[When(kind=kind, then=Value(index)) for kind, index in phases.items()],
+            default=Value(len(PHASES)),
+            output_field=IntegerField(),
+        ),
+        node_order=Case(
+            *[When(milestone=code, then=Value(index)) for code, index in ranks.items()],
+            When(kind='install', then=Value(ranks['site_install'])),
+            When(kind='acceptance', then=Value(ranks['site_acceptance'])),
+            default=Value(len(NODES)),
+            output_field=IntegerField(),
+        ),
+    ).order_by('project_id', 'phase_order', 'node_order', 'pk')
+
+
 def stage_label(task):
     return dict(PHASES).get(
         task.kind, '客户终验收阶段' if task.kind in {'install', 'acceptance'} else task.get_kind_display()

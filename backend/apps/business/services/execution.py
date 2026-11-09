@@ -1,7 +1,7 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Exists, Min, OuterRef, Subquery, Sum
+from django.db.models import Exists, Min, OuterRef, Subquery, Sum, prefetch_related_objects
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -98,6 +98,36 @@ def assignee(project, value):
     return participant(project, lookup(User, value, 'assignee', is_active=True))
 
 
+def assigned_people(project, data, task=None):
+    if 'assignees' in data:
+        if 'assignee' in data:
+            raise ValidationError({'assignees': '请只提交多人执行人列表，不要同时提交旧版单执行人字段。'})
+        values = data['assignees']
+        if not isinstance(values, list) or not 1 <= len(values) <= 500:
+            raise ValidationError({'assignees': '请至少选择一名执行人，最多500人。'})
+        ids = [identity(value, 'assignees') for value in values]
+        if len(set(ids)) != len(ids):
+            raise ValidationError({'assignees': '执行人不能重复选择。'})
+        people = User.objects.filter(pk__in=ids, is_active=True).in_bulk()
+        if len(people) != len(ids):
+            raise ValidationError({'assignees': '包含不存在或已停用的执行人，请重新选择。'})
+        prefetch_related_objects([project], 'members')
+        return [participant(project, people[pk], 'assignees') for pk in ids]
+    if 'assignee' in data or task is None:
+        return [assignee(project, data.get('assignee'))]
+    if not task.co_assignees.exists():
+        return [assignee(project, task.assignee_id)]
+    return assigned_people(project, {'assignees': [person.pk for person in task.assigned_people()]})
+
+
+def save_new_task(user, values):
+    additional = values.pop('co_assignees', [])
+    task = save(Task(**values), user)
+    if additional:
+        task.co_assignees.set(additional)
+    return task
+
+
 def completed_stage(project, kind):
     tasks = project.tasks.filter(kind=kind).exclude(status='cancelled')
     if not tasks.exists() or tasks.exclude(status='done').exists():
@@ -105,7 +135,7 @@ def completed_stage(project, kind):
 
 
 def task_values(project, data):
-    fields(data, {'project', 'kind', 'milestone', 'title', 'description', 'assignee', 'due_date'})
+    fields(data, {'project', 'kind', 'milestone', 'title', 'description', 'assignee', 'assignees', 'due_date'})
     kind = text(data, 'kind', maximum=20)
     if kind not in dict(PHASES):
         raise ValidationError(
@@ -118,6 +148,7 @@ def task_values(project, data):
     title = text(data, 'title', default='', maximum=150) or (definition['title'] if definition else '')
     if not title:
         raise ValidationError({'title': '自定义任务请填写任务名称，或选择里程碑节点。'})
+    people = assigned_people(project, data)
     return {
         'project': project,
         'kind': kind,
@@ -126,7 +157,8 @@ def task_values(project, data):
         'description': text(
             data, 'description', default=definition['description'] if definition else '', maximum=20000
         ),
-        'assignee': assignee(project, data.get('assignee')),
+        'assignee': people[0],
+        'co_assignees': people[1:],
         'due_date': day(data, 'due_date', optional=True),
     }
 
@@ -137,8 +169,8 @@ def create_task(actor, key, data):
         values = task_values(project, data)
         if values['milestone'] and project.tasks.filter(milestone=values['milestone']).exists():
             raise Conflict('该里程碑节点已存在，请调整原任务，不要重复创建。')
-        task = save(Task(**values), user)
-        result = audit(user, 'task.create', task)
+        task = save_new_task(user, values)
+        result = audit(user, 'task.create', task, assignees=[person.pk for person in task.assigned_people()])
         from .milestones import sync_milestones
 
         sync_milestones(user, project)
@@ -176,7 +208,7 @@ def task_action(actor, key, operation, task_id, data, roles, execute, *, authori
 
 def complete_task(actor, key, task_id, data):
     def authorize(user, task):
-        if not can_manage_task(user, task) and task.assignee_id != user.pk:
+        if not can_manage_task(user, task) and not task.is_assigned_to(user):
             raise PermissionDenied('只能完成分配给自己的任务，或管理范围内的生产与售后任务。')
 
     def execute(user, project, task):
@@ -199,7 +231,7 @@ def complete_task(actor, key, task_id, data):
 def log_time(actor, key, task_id, data):
     def authorize(user, task):
         person_id = identity(data.get('user', user.pk), 'user')
-        if not can_manage_task(user, task) and (person_id != user.pk or task.assignee_id != user.pk):
+        if not can_manage_task(user, task) and (person_id != user.pk or not task.is_assigned_to(user)):
             raise PermissionDenied('只能为自己的任务登记本人工时，或登记管理范围内的生产与售后工时。')
 
     def execute(user, project, task):

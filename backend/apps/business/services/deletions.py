@@ -258,6 +258,19 @@ def snapshot(obj, request):
     return json.loads(json.dumps(data, cls=DjangoJSONEncoder))
 
 
+def record_label(obj):
+    if isinstance(obj, models.BOMLine):
+        return f'{obj.item.code} · {obj.item.name} · 单元：{obj.assembly_unit or "未分单元"} · 项目：{obj.project.code}'
+    parts = [
+        getattr(obj, 'code', None) or getattr(obj, 'reference', None) or getattr(obj, 'username', None),
+        getattr(obj, 'title', None)
+        or getattr(obj, 'name', None)
+        or getattr(obj, 'original_name', None)
+        or getattr(obj, 'display_name', None),
+    ]
+    return ' · '.join(str(part) for part in parts if part) or f'记录编号：{obj.pk}'
+
+
 def remove(request, key, data):
     actor = request.user
     require_role(actor, ADMIN)
@@ -312,8 +325,12 @@ def remove(request, key, data):
             except (ValidationError, Conflict) as exc:
                 from .bom_import import message
 
-                name = getattr(obj, 'code', None) or getattr(obj, 'title', None) or getattr(obj, 'name', None)
-                raise Conflict(f'{label}「{name or obj.pk}」不能删除：{message(exc.detail)}整批未删除。') from exc
+                raise Conflict(
+                    {
+                        'detail': f'{label}「{record_label(obj)}」不能删除：{message(exc.detail)}整批未删除。',
+                        'blocked_id': str(obj.pk),
+                    }
+                ) from exc
         return {'count': len(results), 'records': results}
 
     return perform(actor=actor, key=key, operation=OPERATION, payload=data, authorize=authorize, execute=execute)

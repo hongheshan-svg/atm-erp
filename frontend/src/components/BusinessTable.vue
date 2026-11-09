@@ -1,0 +1,21 @@
+<script setup lang="ts">
+import { useSlots } from 'vue'
+import TableScroll from './TableScroll.vue'
+
+defineOptions({ inheritAttrs: false })
+const props = withDefaults(defineProps<{ label?: string; rowOffset?: number; numbered?: boolean }>(), { label: '表格', rowOffset: 0, numbered: true })
+const slots = useSlots()
+const numberOf = (index: number) => props.rowOffset + index + 1
+</script>
+<template>
+  <TableScroll :label="label">
+    <template #default="{ narrow }">
+      <el-table v-bind="$attrs" scrollbar-always-on>
+        <el-table-column v-if="numbered" type="index" label="序号" width="70" :index="numberOf" :fixed="narrow ? undefined : 'left'" class-name="business-row-number" />
+        <slot />
+        <template v-for="name in Object.keys(slots).filter(key => !['default', 'tools'].includes(key))" :key="name" #[name]="scope"><slot :name="name" v-bind="scope || {}" /></template>
+      </el-table>
+    </template>
+    <template v-if="$slots.tools" #tools><slot name="tools" /></template>
+  </TableScroll>
+</template>

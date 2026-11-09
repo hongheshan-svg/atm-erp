@@ -298,6 +298,8 @@ SHARED_PATHS = (
             'frontend/src/modules/shared.ts',
             'frontend/src/components/ActionDialog.vue',
             'frontend/src/components/FormFields.vue',
+            'frontend/src/components/BusinessTable.vue',
+            'frontend/src/components/TableScroll.vue',
             'frontend/src/components/ListPagination.vue',
             'frontend/src/components/ModulePage.vue',
             'frontend/src/components/ModuleTabs.vue',

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TableScroll from '../components/TableScroll.vue'
 import { openDocumentPreview } from '../document-preview'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -104,7 +105,7 @@ async function archive() {
       <p v-if="data.delivery_address">收货地址：{{ data.delivery_address }}</p>
       <h2>一、采购明细（CNY 人民币，含税）</h2>
       <p>共 {{ data.lines.length }} 项物料，全部明细如下。</p>
-      <div class="contract-table-wrap" role="region" aria-label="完整采购明细" tabindex="0"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td>{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td>{{ line.specification || '—' }}<template v-if="line.drawing_number || line.drawing_revision"><br>图号：{{ line.drawing_number || '—' }}；版次：{{ line.drawing_revision || '—' }}</template><br>{{ line.brand }}</td><td>{{ line.unit }}</td><td>{{ line.quantity }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ line.cancelled_quantity }}</small></td><td>{{ line.unit_price }}</td><td>{{ line.amount }}</td><td>{{ line.due_date }}</td></tr></tbody></table></div>
+      <TableScroll label="采购合同"><div data-table-scroll class="contract-table-wrap" role="region" aria-label="完整采购明细" tabindex="0"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td>{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td>{{ line.specification || '—' }}<template v-if="line.drawing_number || line.drawing_revision"><br>图号：{{ line.drawing_number || '—' }}；版次：{{ line.drawing_revision || '—' }}</template><br>{{ line.brand }}</td><td>{{ line.unit }}</td><td>{{ line.quantity }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ line.cancelled_quantity }}</small></td><td>{{ line.unit_price }}</td><td>{{ line.amount }}</td><td>{{ line.due_date }}</td></tr></tbody></table></div></TableScroll>
       <p class="contract-total">订单原含税合计：人民币 ¥ {{ data.total }}</p>
       <section v-for="(section, index) in sections" :key="section.key" class="contract-clauses" :aria-label="section.title">
         <h2>{{ sectionNumber(index + 1) }}、{{ section.title }}</h2>

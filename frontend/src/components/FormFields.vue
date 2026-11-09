@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BusinessTable from './BusinessTable.vue'
+import { ElSelect, ElOption } from 'element-plus'
 import type { Field, Row } from '../types'
 import { applicableFields, defaults } from '../forms'
 import { computed, nextTick, reactive, ref, useId, watchEffect } from 'vue'
@@ -13,6 +15,7 @@ const emit = defineEmits<{ touched: [path: string]; uploading: [value: boolean] 
 const uid = useId()
 const root = ref<HTMLElement>()
 const children = new Map<string, { focusPath: (path: string) => Promise<void> }>()
+const multiSelects = new Map<string, { blur: () => void }>()
 const fieldPath = (key: string) => props.prefix ? `${props.prefix}.${key}` : key
 const fieldId = (key: string) => `${uid}-${key}`
 const issue = (key: string) => props.issues?.[fieldPath(key)]
@@ -41,7 +44,11 @@ watchEffect(() => {
   for (const field of visibleFields.value) {
     if (!field.optionsFor) continue
     const value = model.value[field.key]
-    if (value !== '' && value != null && !field.optionsFor(model.value).some(option => String(option.value) === String(value))) model.value[field.key] = ''
+    const allowed = field.optionsFor(model.value).map(option => String(option.value))
+    if (Array.isArray(value)) {
+      const retained = value.filter(item => allowed.includes(String(item)))
+      if (retained.length !== value.length) model.value[field.key] = retained
+    } else if (value !== '' && value != null && !allowed.includes(String(value))) model.value[field.key] = ''
   }
 })
 const pages = reactive<Record<string, number>>({})
@@ -61,15 +68,15 @@ function readonlyValue(field: Field) {
       <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
-        <el-table v-if="readonly" :data="model[field.key]" max-height="430" stripe>
+        <BusinessTable v-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
           <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : 140" :show-overflow-tooltip="!column.flow"
             ><template v-if="column.flow" #default="{ row }"
               ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
             ></el-table-column
           >
-        </el-table>
+        </BusinessTable>
         <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields" :class="{ 'line-fields-compact': field.compact }">
-          <p v-if="!field.compact" class="line-number">第 {{ i + 1 }} 行</p>
+          <p class="line-number">第 {{ i + 1 }} 行</p>
           <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" :compact="field.compact" :prefix="`${fieldPath(field.key)}.${i}`" :issues="issues" :ref="(el: any) => { if (el) children.set(`${field.key}.${i}`, el); else children.delete(`${field.key}.${i}`) }" @touched="emit('touched', $event)" @uploading="emit('uploading', $event)" />
           <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
@@ -89,6 +96,10 @@ function readonlyValue(field: Field) {
         <InlineDocumentField v-else-if="field.upload" v-model="model[field.key]" :field="field" :disabled="disabled || field.readonly" :id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" @busy="emit('uploading', $event)" />
         <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :describe="field.remoteLabel" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" :input-id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" />
         <InitialPasswordInput v-else-if="field.type === 'password' && field.randomPassword" v-model="model[field.key]" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
+        <ElSelect v-else-if="field.type === 'multi' && field.searchableMulti" v-model="model[field.key]" :ref="(el: any) => { if (el) multiSelects.set(field.key, el); else multiSelects.delete(field.key) }" multiple filterable fit-input-width popper-class="executor-options" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" :id="fieldId(field.key)" :aria-label="field.label" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly" placeholder="可搜索姓名并选择多人" no-match-text="没有匹配的人员" no-data-text="暂无可选人员">
+          <ElOption v-for="option in optionsOf(field)" :key="option.value" :label="option.label" :value="option.value" />
+          <template #footer><div class="executor-options-footer"><span>已选 {{ model[field.key]?.length || 0 }} 人</span><el-button size="small" type="primary" @click="multiSelects.get(field.key)?.blur()">完成选择</el-button></div></template>
+        </ElSelect>
         <select
           :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
           v-else-if="field.type === 'select' || field.type === 'multi'"

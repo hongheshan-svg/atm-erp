@@ -43,6 +43,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 ## 管理员删除与已删除记录
 
 - `POST /api/business/record-deletions/`：`resource`、`ids`（1～1000个不重复的正整数，所有支持删除的资源使用同一上限）、`reason`（必填，最多500字），必须提供 `Idempotency-Key`。仅管理员含兼任管理员可调用，每次回放重新检查启用状态和权限。单条与勾选批量共用此接口；事务内按编号锁定，关联检查与业务写入互斥，任何一条拒绝则整批回滚，不留下删除审计或成功回执。
+- 删除关联检查拒绝时返回409，`detail`显示业务编号和名称；BOM包含物料编码、名称、单元及项目编号。`blocked_id`为不能删除的记录ID（字符串），仅用于定位本次已选记录，不是列表序号。确认框自动定位、高亮并支持按编码、名称或单元搜索，不自动跳过或删除其他明细。
 - 支持物料、往来单位、销售、项目、BOM、采购、库存余额、库存流水、应收应付及费用、收付款、对账、银行流水及匹配、任务、交付、工时、附件和用户。公司资料、编号规则和审计日志不提供删除入口。
 - 未被使用的普通记录调用原有软删除；采购草稿同时软删除自有明细；BOM沿用原移除服务，仍检查领用和在途采购。基础资料有引用时拒绝。执行中的关联项目、已签约销售及尚待收货的采购须先完成或取消业务；已结项/取消项目与相关销售、已收货/取消采购、已完成任务移入历史，保留原始事实及子记录。
 - 仍在办理的记录拒绝移入“已删除记录”，整批回滚：应收应付或费用余额不为0（含已取消但待退款）或有草稿对账；收付款流水所属款项余额不为0；对账单为草稿，或已确认但仍有未使用核准额度（需先作废剩余额度）；银行流水未作废且待复核户名或仍有未认领/未匹配金额；银行匹配所属银行流水仍在办；交付批次在项目未结项/未取消时未验收，或已验收但仍在质保期内（质保最后一天仍算在办）。项目已结项或取消后，其交付可整理。
@@ -186,13 +187,14 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 ## 任务、交付、售后
 
-- `tasks/` POST：project/kind(design/purchase/assembly/test/shipping/site)/milestone?/title?/description/assignee/due_date。六阶段分别为设计、采购、组装、调试、发货、客户终验收；旧 design/assembly/test 数据原样保留，安装/验收/售后仍沿用原 kind 和业务关联。milestone 为固定20节点代码，可空；非空时须与阶段匹配，同项目同节点在未软删除任务中唯一。title 留空时使用节点标题，自定义任务须填 title。项目经理创建六阶段任务；生产经理仍仅在参与项目创建assembly/test，新增采购/发货/site不扩权。批量导入末列增加选填“里程碑节点”，兼容原六列表头；阶段和节点提供中文下拉。预览、确认及凭据重放均重新授权。
+- `tasks/` POST：project/kind(design/purchase/assembly/test/shipping/site)/milestone?/title?/description/assignees/due_date（兼容单人assignee）。六阶段分别为设计、采购、组装、调试、发货、客户终验收；旧 design/assembly/test 数据原样保留，安装/验收/售后仍沿用原 kind 和业务关联。milestone 为固定20节点代码，可空；非空时须与阶段匹配，同项目同节点在未软删除任务中唯一。title 留空时使用节点标题，自定义任务须填 title。项目经理创建六阶段任务；生产经理仍仅在参与项目创建assembly/test，新增采购/发货/site不扩权。批量导入末列增加选填“里程碑节点”，兼容原六列表头；阶段和节点提供中文下拉。预览、确认及凭据重放均重新授权。
 - `tasks/milestone-template/?project={id}` GET 返回六阶段、20节点、自动汇总标记、已存在节点及生成权限；`milestone-summary/?project={id}` GET 返回阶段计划数、完成数和逾期数，不包含金额。阶段计划不计已取消节点及实际交付自动生成的批次安装/验收任务，批次任务仍在原列表执行。任务列表phase参数按六阶段筛选，site同时包含install/acceptance，方便直接处理批次安装；原kind筛选不变。
-- `tasks/apply-milestones/` POST project/lines[{kind,milestone?,title?,description?,assignee,due_date?}]；项目经理/管理员在执行中或交付中项目生成1～100项计划，项目加锁、ActionReceipt幂等、整批校验与回滚。固定模板20节点，可移除不需要节点或追加自定义任务；同项目已有节点（含已取消）跳过，不覆盖负责人、日期或状态。旧任务不自动匹配或改写。复用Task，无独立可配置流程或里程碑台账。
-- `tasks/{id}/complete/`：reason，执行人或有权任务管理者完成；六阶段允许交叉推进，不以其他阶段完成作为手动任务完成/重开的前置条件。`assign/`：assignee/reason/due_date?；省略日期保留原值，null清空，实际批次安装/验收期限不得早于发货日。`cancel/`、`reopen/`：reason。生产经理仅管理assembly/test/install/service，验收仍必须从交付登记；安装不可取消，已验收安装及已交付生产阶段不可重开。
+- `tasks/apply-milestones/` POST project/lines[{kind,milestone?,title?,description?,assignees,due_date?}]（兼容单人assignee）；项目经理/管理员在执行中或交付中项目生成1～100项计划，项目加锁、ActionReceipt幂等、整批校验与回滚。固定模板20节点，可移除不需要节点或追加自定义任务；同项目已有节点（含已取消）跳过，不覆盖负责人、日期或状态。旧任务不自动匹配或改写。复用Task，无独立可配置流程或里程碑台账。
+- 任务支持多人共同执行：创建、模板生成、重新分配与重开接受 `assignees: [人员ID,...]`，至少一名、不得重复、均须已启用且有项目访问权限。兼容原单人 `assignee`，两种输入不得同时传入。响应保留首位 `assignee`，增加完整 `assignees`，`assignee_name` 展示全部姓名。我的任务筛选、工作台及进度人员展示包含每位执行人；仍按项目权限过滤。任务列表及导出先按项目、六阶段、模板节点顺序排序再分页，自定义任务排在所属阶段固定节点之后。
+- `tasks/{id}/complete/`：reason，任一执行人或有权任务管理者确认整项完成；六阶段允许交叉推进，不以其他阶段完成作为手动任务完成/重开的前置条件。`assign/`：assignees（兼容assignee）/reason/due_date?；省略日期保留原值，null清空，实际批次安装/验收期限不得早于发货日。`cancel/`：reason；`reopen/`：reason、assignees?，省略执行人时保留并重验全部原执行人。重新分配替换完整执行人集合，审计保留变更前后人员；同一任务多人同时确认仍仅完成一次。生产经理仅管理assembly/test/install/service，验收仍必须从交付登记；安装不可取消，已验收安装及已交付生产阶段不可重开。
 - 已有交付时，首批发货前已存在、已完成或已登记工时/领料的发货前阶段任务不能取消；首批发货后新建且未开工的阶段任务可由项目经理/管理员填写 `reason` 取消（生产经理403），取消后不再阻断后续发货。
 - 固定节点shipping_dispatch/site_install/site_acceptance分别由全部设备实际发货、全部批次安装任务完成、全部批次实际验收同步状态。不能手动完成或记工时，不能取消/重开已完成汇总节点；取消待办只退出计划，不撤销业务事实。实际发货、安装完成/重开、验收与模板生成在项目锁内同步。自动节点的跟进负责人不替代实际批次安装/验收责任人。
-- `tasks/{id}/time/`：date/hours/reason/user?；本人登记，项目经理可代录，生产经理仅代录参与项目生产/安装/售后任务工时及更正。每日净工时≤24，按当时费率快照计成本；生产经理响应隐藏hourly_cost/cost。
+- `tasks/{id}/time/`：date/hours/reason/user?；任一执行人仅登记本人工时，项目经理可代录，生产经理仅代录参与项目生产/安装/售后任务工时及更正。每日净工时≤24，按当时费率快照计成本；生产经理响应隐藏hourly_cost/cost。
 - `time/{id}/amend/`：date/hours/reason，原人员或经理更正，hours=0 撤销。冲销+替代记录保留历史与原费率，重复更正拒绝。
 - `projects/{id}/ship/`：quantity/date/installer/acceptor/note，原设计/装配/调试必需阶段全部完成，已安排的采购跟进和发货前手动任务完成或取消，且累计领料覆盖本批数量后才可发货，创建安装与验收任务。可选 `install_due_date`、`acceptance_due_date`（不得早于发货日期），写入自动生成的安装/验收任务期限；留空保持无期限。
 - `deliveries/{id}/accept/`：date/reason，经理确认安装完成后的验收；每批独立保修截止日。
@@ -229,6 +231,8 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 过滤字段以各 View 的 filterset_fields 为准。列表与动作都由后端执行角色和项目范围校验。采购价格仓管不可见，普通成员不可访问采购、库存、收付款或成本接口。
 
 ### 列表界面筛选补充（2026-09-10）
+
+- 全部业务列表、报表及表单明细统一显示序号：分页列表按当前筛选/排序结果连续计数，单据明细按当前行顺序计数；序号仅供界面定位，不作为记录ID或业务编号，不参与提交和导出映射。导入及表格附件沿用原文件行号，合同沿用原明细序号。宽表统一提供横向滚动条及左右查看按钮，窄屏解除固定列遮挡；编辑卡片显示行/项序号，不挤压输入字段。复用 `BusinessTable` / `TableScroll`，后续业务表格沿用同一控件。
 
 - 用户列表支持 `search`（账号、姓名）、`is_active` 和 `role`；角色匹配主岗位及兼任岗位，管理员选项包含超级管理员。仍仅管理员可读取和维护用户。
 - 库存列表支持 `search`（物料编码、名称、规格、品牌），以及 `location`、`item__brand`、`item__part_type`。响应中的 `specification/brand/part_type/unit` 只读派生自物料，不重复维护，库存金额仍按岗位过滤。

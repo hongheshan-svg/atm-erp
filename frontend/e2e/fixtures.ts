@@ -98,3 +98,18 @@ export async function cancelEditing(dialog: Locator) {
   if (await discard.isVisible()) await discard.click()
   await expect(form).not.toBeVisible()
 }
+
+// Select every executor by its visible label; replace the existing selection using tag close buttons.
+export async function selectExecutors(page: Page, form: Locator, names: string[]) {
+  const field = form.locator('.field').filter({ has: page.getByRole('combobox', { name: '执行人', exact: true }) }).first()
+  const input = field.getByLabel('执行人', { exact: true })
+  await expect(input).toBeVisible()
+  while (await field.locator('.el-tag__close').count()) await field.locator('.el-tag__close').first().click()
+  await expect(field.locator('.el-tag__close')).toHaveCount(0)
+  for (const name of names) {
+    await input.fill(name)
+    await page.getByRole('option', { name, exact: false }).click()
+  }
+  await page.locator('.executor-options:visible').getByRole('button', { name: '完成选择', exact: true }).click()
+  await expect(page.locator('.executor-options:visible')).toHaveCount(0)
+}

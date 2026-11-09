@@ -400,6 +400,8 @@ h3 {
 .dialog-footer > .el-button + .el-button { margin-left: 0; }
 .el-dropdown-menu { padding: 6px; }
 .el-dropdown-menu__item { border-radius: var(--r-xs); }
+.executor-options .el-select-dropdown__item { white-space: normal; overflow-wrap: anywhere; height: auto; min-height: 34px; line-height: 1.5; padding-top: 6px; padding-bottom: 6px; }
+.executor-options-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .el-dialog {
   border-radius: var(--r-modal);
   padding: 24px;
@@ -508,6 +510,7 @@ button:focus-visible {
   margin-bottom: 0;
 }
 .line-fields-compact > .fields-inline { display: contents; }
+.line-fields-compact > .line-number { grid-column: 1 / -1; margin: 0; }
 .line-fields-compact > .fields-inline > .field:first-child { grid-column: 1 / -1; }
 .line-fields-compact > .el-button { grid-column: 1 / -1; justify-self: start; margin-top: 0; }
 .dialog-footer {
