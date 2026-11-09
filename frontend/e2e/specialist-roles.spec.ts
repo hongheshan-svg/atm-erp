@@ -68,14 +68,17 @@ for (const [role, label, category] of [
   ['mechanical_engineer', '机械工程师', 'drawing'],
   ['electrical_engineer', '电气工程师', 'other'],
 ]) {
-  test(`${label}维护参与项目BOM和技术附件、完成本人任务，管理与金额权限隔离`, async ({ page: admin, browser }, info) => {
+  test(`${label}维护参与项目BOM和技术附件，指定主管后确认任务，管理与金额权限隔离`, async ({ page: admin, browser }, info) => {
     const suffix = String(Date.now())
     const person = await account(admin, role, label, suffix)
     const current = await project(admin, label + '设计验收' + suffix, [person.id])
     const outside = await project(admin, '其他项目' + suffix)
-    const task = await api(admin, 'business/tasks/', { project: current.id, kind: 'design', title: label + '设计任务' + suffix, assignee: person.id }, 201)
+    const discipline = role === 'mechanical_engineer' ? 'mechanical' : 'electrical'
+    const task = await api(admin, 'business/tasks/', { project: current.id, kind: 'design', discipline, title: label + '设计任务' + suffix, assignee: person.id }, 201)
     const page = await session(browser, info, person.username)
     expect((await api(page, 'auth/me/')).roles).toEqual([role])
+    await api(page, `business/tasks/${task.id}/complete/`, { reason: '尚未指定主管' }, 403)
+    await api(admin, `business/projects/${current.id}/task-supervisors/`, { supervisors: { [discipline]: person.id }, expected_revision: 0, reason: '指定专业主管负责核对' })
     const nav = page.getByRole('navigation', { name: '主导航', includeHidden: true })
     for (const title of ['项目', 'BOM', '基础资料']) await expect(nav.getByRole('link', { name: title, exact: true, includeHidden: true })).toHaveCount(1)
     for (const title of ['销售', '采购', '库存', '收付款', '经营报表']) await expect(nav.getByRole('link', { name: title, exact: true, includeHidden: true })).toHaveCount(0)
@@ -105,6 +108,7 @@ for (const [role, label, category] of [
     await categories.selectOption(category)
     const filename = `${label}-${suffix}.txt`, content = `${label}项目技术资料，版本A。`
     await d(page).getByLabel('文件', { exact: true }).setInputFiles({ name: filename, mimeType: 'text/plain', buffer: Buffer.from(content) })
+    await expect.poll(() => d(page).getByLabel('项目', { exact: true }).evaluate(el => (el as HTMLInputElement).validationMessage)).toBe('')
     const doc = await save(page, 'business/documents/', 201)
     await row(page, filename).getByRole('button', { name: '操作 ▾', exact: true }).click()
     const downloadEvent = page.waitForEvent('download')

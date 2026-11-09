@@ -112,9 +112,16 @@ export async function selectExecutors(page: Page, form: Locator, names: string[]
   while (await field.locator('.el-tag__close').count()) await field.locator('.el-tag__close').first().click()
   await expect(field.locator('.el-tag__close')).toHaveCount(0)
   for (const name of names) {
+    await input.click()
     await input.fill(name)
-    await page.getByRole('option', { name, exact: false }).click()
+    const option = page.getByRole('option', { name, exact: false })
+    await expect(option).toBeVisible()
+    await expect(page.locator('.el-select__popper.executor-options:visible')).not.toHaveClass(/-enter-active/)
+    await option.click()
+    await expect(option).toHaveAttribute('aria-selected', 'true')
+    await expect(field.locator('.el-tag').filter({ hasText: name })).toHaveCount(1)
   }
   await page.locator('.executor-options:visible').getByRole('button', { name: '完成选择', exact: true }).click()
   await expect(page.locator('.executor-options:visible')).toHaveCount(0)
+  await expect(field.locator('.el-tag__close')).toHaveCount(names.length)
 }

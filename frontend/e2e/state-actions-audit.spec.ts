@@ -204,7 +204,7 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
   await warehouse.screenshot({ path: info.outputPath('purchase-warranty-closed.png'), animations: 'disabled' })
 })
 
-test('项目经理重新分配、取消和重开任务，执行人权限与完成状态同步', async ({ page, browser }, info) => {
+test('项目经理重新分配、取消、重开并确认任务，员工只查看完成状态', async ({ page, browser }, info) => {
   const suffix = String(Date.now())
   const owner = await account(page, 'manager', suffix)
   const first = await account(page, 'member', `${suffix}a`)
@@ -226,18 +226,20 @@ test('项目经理重新分配、取消和重开任务，执行人权限与完�
   await submit(manager, `business/tasks/${task.id}/cancel/`)
   await expect(row(manager, title)).toContainText('已取消')
   expect(await api(page, `business/tasks/${task.id}/`)).toMatchObject({ status: 'cancelled', assignee: second.id })
-  await api(member, `business/tasks/${task.id}/time/`, { date: day(), hours: '1', reason: '已取消任务不可写工时' }, 409)
+  await api(member, `business/tasks/${task.id}/time/`, { date: day(), hours: '1', reason: '员工不可登记工时' }, 403)
+  await api(manager, `business/tasks/${task.id}/time/`, { date: day(), hours: '1', reason: '已取消任务不可写工时' }, 409)
   expect((await api(page, `business/time/?task=${task.id}`)).count).toBe(0)
   await member.goto(`/erp/projects/${current.id}?tab=tasks&section=tasks`)
-  await expect(row(member, title).getByRole('button', { name: '操作 ▾', exact: true })).toHaveCount(0)
+  await expect(row(member, title).getByRole('button', { name: '完成任务', exact: true })).toHaveCount(0)
   await action(manager, row(manager, title), '重开任务')
   await reason(manager, '恢复原设计范围')
   await submit(manager, `business/tasks/${task.id}/reopen/`)
   expect(await api(page, `business/tasks/${task.id}/`)).toMatchObject({ status: 'open', assignee: second.id, completed_at: null })
   await member.reload()
-  await action(member, row(member, title), '完成任务')
-  await reason(member, '新执行人完成设计确认')
-  await submit(member, `business/tasks/${task.id}/complete/`)
+  await api(member, `business/tasks/${task.id}/complete/`, { reason: '执行人不能直接确认完成' }, 403)
+  await action(manager, row(manager, title), '完成任务')
+  await reason(manager, '项目经理核对新执行人的设计成果')
+  await submit(manager, `business/tasks/${task.id}/complete/`)
   const done = await api(page, `business/tasks/${task.id}/`)
   expect(done.status).toBe('done')
   expect(done.completed_at).toBeTruthy()
@@ -250,11 +252,12 @@ test('项目经理重新分配、取消和重开任务，执行人权限与完�
   await manager.screenshot({ path: info.outputPath('task-reopened.png'), animations: 'disabled' })
 })
 
-test('管理员页面锁账阻止成员跨期工时，重开后补录并保留审计', async ({ page, browser }, info) => {
+test('管理员页面锁账阻止专业主管跨期工时，重开后补录并保留审计', async ({ page, browser }, info) => {
   const suffix = String(Date.now())
   const person = await account(page, 'member', suffix)
   const admin = await api(page, 'auth/me/')
   const current = await project(page, suffix, admin.id, [person.id])
+  await api(page, `business/projects/${current.id}/task-supervisors/`, { supervisors: { mechanical: person.id }, expected_revision: 0, reason: '指定专业主管核对工时' })
   const title = `跨期设计工时${suffix}`
   const task = await api(page, 'business/tasks/', { project: current.id, kind: 'design', title, assignee: person.id }, 201)
   const company = (await api(page, 'core/company/')).results[0]
