@@ -288,7 +288,7 @@ test('十二种批量导入入口的模板字段、页面映射和错误文件�
     await expect(dialog.getByText('② 最少填什么：', { exact: true })).toBeVisible()
     await dialog.getByText('更多格式', { exact: true }).click()
     await dialog.getByText('模板字段与页面列对应说明', { exact: true }).click()
-    const fieldLabels = dialog.locator('.import-field-guide .el-table__body tr td:first-child')
+    const fieldLabels = dialog.locator('.import-field-guide .el-table__body td.import-template-field')
     await expect(fieldLabels.first()).toBeVisible()
     const labels = (await fieldLabels.allTextContents()).map(s => s.trim())
     expect(labels.length).toBeGreaterThan(0)
