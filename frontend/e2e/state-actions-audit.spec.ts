@@ -1,5 +1,5 @@
 import { selectExecutors } from './fixtures'
-import { cancelEditing } from './fixtures'
+import { businessDate, cancelEditing } from './fixtures'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
 
@@ -167,15 +167,18 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
   await warehouse.screenshot({ path: info.outputPath('purchase-return-rejected.png'), animations: 'disabled' })
   await cancelEditing(dialog(warehouse))
   await warehouse.goto(`/erp/projects/${current.id}?tab=purchases`)
+  // 默认报修日取打开表单时的中国业务日期，不是采购单创建日；跨零点时两者可以不同。
+  const beforeOpen = businessDate()
   await action(warehouse, row(warehouse, order.code), '登记采购质保')
-  await expect(dialog(warehouse).getByLabel('报修日期', { exact: true })).toHaveValue(order.created_at.slice(0, 10))
+  const reportDate = await dialog(warehouse).getByLabel('报修日期', { exact: true }).inputValue()
+  expect([beforeOpen, businessDate()]).toContain(reportDate)
   await dialog(warehouse).getByLabel('原收货批次', { exact: true }).selectOption(String(receipt.id))
   await dialog(warehouse).getByLabel('数量', { exact: true }).fill('1')
   await dialog(warehouse).getByLabel('故障描述', { exact: true }).fill('气缸密封失效，与供应商核对退货责任')
   await warehouse.screenshot({ path: info.outputPath('warranty-default-date.png'), animations: 'disabled' })
   await submit(warehouse, `business/purchases/${purchase.id}/warranty/`)
   const warranty = (await api(page, `business/purchases/${purchase.id}/warranty/`)).cases[0]
-  expect(warranty).toMatchObject({ status: '待响应', date: order.created_at.slice(0, 10), quantity: '1.000', receipt: receipt.id, within_warranty: true })
+  expect(warranty).toMatchObject({ status: '待响应', date: reportDate, quantity: '1.000', receipt: receipt.id, within_warranty: true })
   for (const [status, label, response] of [
     ['repairing', '维修中', '供应商已接收故障反馈，正在检查密封组件'],
     ['closed', '已关闭', '双方确认原批次退货退款完成，关闭质保事项'],

@@ -4,6 +4,13 @@ import { primaryActions } from '../src/row-actions'
 
 const expectedHttpErrors = new WeakMap<Page, { url: string; status: number }[]>()
 
+// 业务日期独立于 CI 主机和浏览器时区；UTC 日期在中国午夜后会落后一天。
+export function businessDate(offset = 0) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(Date.now() + offset * 86400000))
+}
+
 export function expectHttpError(page: Page, path: string, status: number) {
   const expected = expectedHttpErrors.get(page) || []
   const rule = { url: new URL(path, page.url()).href, status }

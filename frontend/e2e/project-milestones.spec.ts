@@ -1,4 +1,4 @@
-import { selectExecutors } from './fixtures'
+import { businessDate, selectExecutors } from './fixtures'
 import { test, expect, login, openRowAction } from './fixtures'
 
 test('项目六阶段模板支持一键生成、并行任务、日期调整和增删节点', async ({ page }, info) => {
@@ -17,7 +17,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
     expect(response.ok(), await response.text()).toBeTruthy()
     return response.json()
   }
-  const today = new Date().toISOString().slice(0, 10)
+  const today = businessDate()
   const name = '六阶段里程碑验收-' + Date.now() + '-' + info.project.name
   const me = await get('auth/me/')
   const customer = await post('partners/', { name, kind: 'customer' })
@@ -69,7 +69,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await expect(dialog).toHaveCount(0)
   await expect(row).toContainText('2026-12-18')
   await openRowAction(page, row, '开始任务')
-  const actualStart = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10)
+  const actualStart = businessDate(-2)
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(actualStart)
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('补录实际开始跟进日期')
   await dialog.locator('button[type="submit"]').click()
@@ -77,6 +77,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await expect(row).toContainText('3 天（进行中）')
   await expect(row.getByRole('button', { name: '开始任务', exact: true })).toHaveCount(0)
   await openRowAction(page, row, '完成任务')
+  await dialog.getByLabel('实际完成日期', { exact: true }).fill(today)
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('长交期先行，设计仍在进行')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
@@ -85,7 +86,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   expect(tasks.find((row: any) => row.milestone === 'design_3d').status).toBe('open')
   expect(tasks.find((row: any) => row.milestone === 'purchase_long_lead').completed_date).toBe(today)
   await openRowAction(page, row, '更正完成日期')
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const yesterday = businessDate(-1)
   await dialog.getByLabel('实际完成日期', { exact: true }).fill(yesterday)
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('按采购确认邮件核对实际完成日')
   await dialog.locator('button[type="submit"]').click()
@@ -102,7 +103,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await row.getByText(yesterday, { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: info.outputPath('actual-completion-date.png'), animations: 'disabled' })
   await openRowAction(page, row, '更正开始日期')
-  const earlierStart = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10)
+  const earlierStart = businessDate(-3)
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(earlierStart)
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('依据启动会议记录更正开工日期')
   await dialog.locator('button[type="submit"]').click()
@@ -175,7 +176,7 @@ test('任务登记工时后可查看保存回执、累计和更正明细', async
     return response.json()
   }
   const me = await (await page.request.get('/api/auth/me/', { headers })).json()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = businessDate()
   const name = '工时核对-' + Date.now() + '-' + info.project.name
   const customer = await post('partners/', { name, kind: 'customer' })
   const sale = await post('sales/', { name, customer: customer.id, manager: me.id })
@@ -236,7 +237,7 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   const head = await post('auth/users/', { username: 'head_' + id, display_name: '机械主管' + id, roles: ['mechanical_engineer'], password })
   const worker = await post('auth/users/', { username: 'worker_' + id, display_name: '设计员工' + id, roles: ['member'], password })
   const me = await (await page.request.get('/api/auth/me/', { headers })).json()
-  const today = new Date().toISOString().slice(0, 10), name = '主管协作验证-' + id
+  const today = businessDate(), name = '主管协作验证-' + id
   const customer = await post('business/partners/', { name, kind: 'customer' })
   const sale = await post('business/sales/', { name, customer: customer.id, manager: me.id })
   await post(`business/sales/${sale.id}/quote/`, { amount: '100', reason: '隔离验证' })

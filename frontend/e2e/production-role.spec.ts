@@ -1,4 +1,4 @@
-import { selectExecutors } from './fixtures'
+import { businessDate, selectExecutors } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -10,10 +10,7 @@ const contexts: BrowserContext[] = []
 const errors: string[] = []
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, title: string) => page.locator('.el-table__body tr:visible').filter({ hasText: title })
-const date = () => {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
+const date = businessDate
 async function api(page: Page, path: string, data?: Record<string, unknown>, status = 200) {
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }
