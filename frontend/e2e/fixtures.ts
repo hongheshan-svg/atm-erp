@@ -112,7 +112,7 @@ export async function selectExecutors(page: Page, form: Locator, names: string[]
   while (await field.locator('.el-tag__close').count()) await field.locator('.el-tag__close').first().click()
   await expect(field.locator('.el-tag__close')).toHaveCount(0)
   for (const name of names) {
-    await input.click()
+    await field.locator('.el-select__wrapper').click()
     await input.fill(name)
     const option = page.getByRole('option', { name, exact: false })
     await expect(option).toBeVisible()
