@@ -111,8 +111,9 @@ export async function selectExecutors(page: Page, form: Locator, names: string[]
   await expect(input).toBeVisible()
   while (await field.locator('.el-tag__close').count()) await field.locator('.el-tag__close').first().click()
   await expect(field.locator('.el-tag__close')).toHaveCount(0)
+  // 多选后下拉保持打开；再次点击整个选择框的中心可能正好点击已选人员的删除图标。
+  await field.locator('.el-select__wrapper').click()
   for (const name of names) {
-    await field.locator('.el-select__wrapper').click()
     await input.fill(name)
     const option = page.getByRole('option', { name, exact: false })
     await expect(option).toBeVisible()

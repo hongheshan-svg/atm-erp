@@ -161,6 +161,9 @@ test('采购经理从工作台审核采购与超预算摘要，本人申请仍�
     const purchase = await api(actor, `business/purchases/${created.id}/`)
     await action(actor, row(actor, purchase.code), '提交采购')
     await save(actor, `business/purchases/${created.id}/submit/`)
+    // 对话框先关闭、列表随后刷新；等待新状态，避免在旧草稿行上查找审批按钮。
+    await expect(row(actor, purchase.code).getByRole('cell', { name: '待批准', exact: true })).toBeVisible()
+    await expect(row(actor, purchase.code).getByRole('button', { name: '提交采购', exact: true })).toHaveCount(0)
     return purchase
   }
   const first = await order(applicant, '10')
