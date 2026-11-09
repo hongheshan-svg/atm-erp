@@ -19,6 +19,286 @@ from apps.core.models import ActionReceipt, AuditLog
 from .test_execution import ExecutionFixtures
 
 
+class TaskCompletionDateTests(ExecutionFixtures, TestCase):
+    def setUp(self):
+        self.setup_execution()
+        self.project = self.active_project()
+        self.project.members.add(self.users['production_manager'])
+        self.project.task_supervisors = {'production': self.users['production_manager'].pk}
+        self.project.save(update_fields=['task_supervisors'])
+
+    def detail(self, task):
+        response = self.clients['member'].get(f'/api/business/tasks/{task.pk}/')
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def test_start_counts_inclusive_days_and_variance_without_labor_cost(self):
+        task = self.task(self.project)
+        Task.objects.filter(pk=task.pk).update(due_date='2026-09-08')
+        key = str(uuid.uuid4())
+        data = {'started_date': '2026-09-01', 'reason': '补录实际开始'}
+        self.post('manager', f'tasks/{task.pk}/start/', data, key=key)
+        self.post('manager', f'tasks/{task.pk}/start/', data, key=key)
+        self.post('manager', f'tasks/{task.pk}/start/', data, status=409)
+        current = self.detail(task)
+        self.assertEqual((current['elapsed_days'], current['schedule_variance_days']), (9, 1))
+        self.assertEqual(AuditLog.objects.filter(operation='task.start').count(), 1)
+        self.post('manager', f'tasks/{task.pk}/complete/', {'completed_date': '2026-09-07', 'reason': '提前完成'})
+        current = self.detail(task)
+        self.assertEqual((current['elapsed_days'], current['schedule_variance_days']), (7, -1))
+        self.assertFalse(TimeEntry.objects.exists())
+        self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '返工'})
+        current = self.detail(task)
+        self.assertEqual(current['started_date'], '2026-09-01')
+        self.assertEqual(current['elapsed_days'], 9)
+        self.assertIsNone(current['completed_date'])
+
+    def test_same_day_missing_dates_and_cancelled_tasks(self):
+        task = self.task(self.project)
+        self.assertIsNone(self.detail(task)['elapsed_days'])
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/complete/',
+            {'started_date': '2026-09-09', 'completed_date': '2026-09-09', 'reason': '当天完成'},
+        )
+        self.assertEqual(self.detail(task)['elapsed_days'], 1)
+        self.assertIsNone(self.detail(task)['schedule_variance_days'])
+        self.post('manager', f'tasks/{task.pk}/cancel/', {'reason': '退出计划'})
+        self.assertIsNone(self.detail(task)['elapsed_days'])
+        self.assertIsNone(self.detail(task)['schedule_variance_days'])
+        old = self.task(self.project, title='历史任务')
+        self.complete(old)
+        self.assertIsNone(self.detail(old)['elapsed_days'])
+        self.post(
+            'manager',
+            f'tasks/{old.pk}/start-date/',
+            {'started_date': '2026-09-02', 'expected_started_date': None, 'reason': '历史开工日期补录'},
+        )
+        self.assertEqual(self.detail(old)['elapsed_days'], 8)
+
+    def test_invalid_start_and_completion_are_atomic(self):
+        task = self.task(self.project)
+        before = (AuditLog.objects.count(), ActionReceipt.objects.count())
+        for value in ('2026-09-10', 'invalid', None):
+            self.post('manager', f'tasks/{task.pk}/start/', {'started_date': value, 'reason': '无效'}, status=400)
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/complete/',
+            {'started_date': '2026-09-09', 'completed_date': '2026-09-08', 'reason': '日期倒置'},
+            status=400,
+        )
+        task.refresh_from_db()
+        self.assertIsNone(task.started_date)
+        self.assertIsNone(task.started_at)
+        self.assertEqual(task.status, 'open')
+        self.assertEqual((AuditLog.objects.count(), ActionReceipt.objects.count()), before)
+        self.post('manager', f'tasks/{task.pk}/start/', {'started_date': '2026-09-08', 'reason': '开工'})
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/complete/',
+            {'completed_date': '2026-09-07', 'reason': '不能早于开工'},
+            status=400,
+        )
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/complete/',
+            {'started_date': '2026-09-01', 'reason': '不能偷偷覆盖开工'},
+            status=409,
+        )
+
+    def test_start_permissions_and_manager_correction_keep_history(self):
+        task = self.task(self.project)
+        for role in ('production_manager', 'purchaser'):
+            self.post(role, f'tasks/{task.pk}/start/', {'started_date': '2026-09-08', 'reason': '越权'}, status=403)
+        self.post('manager', f'tasks/{task.pk}/start/', {'started_date': '2026-09-08', 'reason': '开工'})
+        task.refresh_from_db()
+        submitted_at = task.started_at
+        change = {'started_date': '2026-09-07', 'expected_started_date': '2026-09-08', 'reason': '核对更正'}
+        self.post('member', f'tasks/{task.pk}/start-date/', change, status=403)
+        self.post('manager', f'tasks/{task.pk}/start-date/', change)
+        self.post('manager', f'tasks/{task.pk}/start-date/', change, status=409)
+        task.refresh_from_db()
+        self.assertEqual(task.started_at, submitted_at)
+        self.assertEqual(AuditLog.objects.get(operation='task.start-date').detail['before'], '2026-09-08')
+        assembly = self.task(self.project, 'assembly')
+        self.post(
+            'production_manager',
+            f'tasks/{assembly.pk}/start/',
+            {'started_date': '2026-09-08', 'reason': '参与项目生产管理'},
+        )
+        self.project.members.remove(self.users['member'])
+        self.post(
+            'member', f'tasks/{assembly.pk}/start/', {'started_date': '2026-09-08', 'reason': '已退出项目'}, status=404
+        )
+
+    def test_business_nodes_cannot_be_manually_started(self):
+        from apps.business.models import Delivery
+
+        node = Task.objects.create(
+            project=self.project,
+            kind='shipping',
+            milestone='shipping_dispatch',
+            title='发货汇总',
+            assignee=self.users['member'],
+        )
+        self.post(
+            'manager', f'tasks/{node.pk}/start/', {'started_date': '2026-09-08', 'reason': '不能手动'}, status=409
+        )
+        delivery = Delivery.objects.create(
+            code='START-DATE', project=self.project, quantity=1, shipped_date='2026-09-08'
+        )
+        install = Task.objects.create(
+            project=self.project, delivery=delivery, kind='install', title='安装', assignee=self.users['member']
+        )
+        self.post(
+            'manager', f'tasks/{install.pk}/start/', {'started_date': '2026-09-07', 'reason': '早于发货'}, status=400
+        )
+        self.post('manager', f'tasks/{install.pk}/start/', {'started_date': '2026-09-08', 'reason': '安装开工'})
+
+    def test_started_tasks_preserve_existing_time_cost_and_cannot_be_deleted_as_unused(self):
+        task = self.task(self.project)
+        self.time(task, '2')
+        original = list(TimeEntry.objects.values('id', 'hours', 'cost', 'hourly_cost'))
+        self.post('manager', f'tasks/{task.pk}/start/', {'started_date': '2026-09-08', 'reason': '补录开工'})
+        self.post(
+            'admin', 'record-deletions/', {'resource': 'tasks', 'ids': [task.pk], 'reason': '未结束不可删'}, status=409
+        )
+        self.complete(task)
+        self.assertEqual(list(TimeEntry.objects.values('id', 'hours', 'cost', 'hourly_cost')), original)
+        new = self.task(self.project, title='仅开始没有工时')
+        self.post('manager', f'tasks/{new.pk}/start/', {'started_date': '2026-09-09', 'reason': '开工'})
+        self.post('admin', 'record-deletions/', {'resource': 'tasks', 'ids': [new.pk], 'reason': '已开工'}, status=409)
+        self.post('manager', f'tasks/{new.pk}/cancel/', {'reason': '无需继续'})
+        self.post('admin', 'record-deletions/', {'resource': 'tasks', 'ids': [new.pk], 'reason': '取消后归档'})
+        self.assertTrue(Task.objects.filter(pk=new.pk).exists())
+
+    def test_completion_keeps_actual_date_separate_from_submission_and_cost(self):
+        task = self.task(self.project)
+        key = str(uuid.uuid4())
+        data = {'completed_date': '2026-09-08', 'reason': '补录昨天实际完成'}
+        self.post('manager', f'tasks/{task.pk}/complete/', data, key=key)
+        task.refresh_from_db()
+        self.assertEqual(task.completed_date, date(2026, 9, 8))
+        self.assertIsNotNone(task.completed_at)
+        submitted_at = task.completed_at
+        self.post('manager', f'tasks/{task.pk}/complete/', data, key=key)
+        task.refresh_from_db()
+        self.assertEqual(task.completed_at, submitted_at)
+        self.assertEqual(AuditLog.objects.filter(operation='task.complete', resource=f'task:{task.pk}').count(), 1)
+        self.assertFalse(TimeEntry.objects.exists())
+        response = self.clients['member'].get(f'/api/business/tasks/{task.pk}/')
+        self.assertEqual(response.data['completed_date'], '2026-09-08')
+        exported = self.clients['member'].get('/api/business/tasks/export/?file_format=csv')
+        self.assertEqual(exported.status_code, 200)
+        csv_rows = list(csv.DictReader(io.StringIO(exported.content.decode('utf-8-sig'))))
+        self.assertIn('计划完成日期', csv_rows[0])
+        self.assertEqual(csv_rows[0]['实际完成日期'], '2026-09-08')
+        self.post('manager', f'tasks/{task.pk}/reopen/', {'reason': '补充设计'})
+        task.refresh_from_db()
+        self.assertIsNone(task.completed_date)
+        self.assertIsNone(task.completed_at)
+
+    def test_invalid_date_permission_and_rollback(self):
+        task = self.task(self.project)
+        before = (AuditLog.objects.count(), ActionReceipt.objects.count())
+        for value in ('2026-09-10', '2026/09/09', '', None):
+            self.post('manager', f'tasks/{task.pk}/complete/', {'completed_date': value, 'reason': '无效'}, status=400)
+        self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '设计无权限'}, status=403)
+        task.refresh_from_db()
+        self.assertEqual(task.status, 'open')
+        self.assertIsNone(task.completed_date)
+        self.assertEqual((AuditLog.objects.count(), ActionReceipt.objects.count()), before)
+
+    def test_manager_backfill_and_correction_preserve_submission_time_and_audit(self):
+        task = self.task(self.project)
+        self.complete(task)
+        task.refresh_from_db()
+        submitted_at = task.completed_at
+        Task.objects.filter(pk=task.pk).update(completed_date=None)
+        data = {'completed_date': '2026-09-08', 'expected_completed_date': None, 'reason': '核对交付图档补录'}
+        for role in ('member', 'production_manager'):
+            self.post(role, f'tasks/{task.pk}/completion-date/', data, status=403)
+        self.post('manager', f'tasks/{task.pk}/completion-date/', data)
+        self.post('manager', f'tasks/{task.pk}/completion-date/', {**data, 'completed_date': '2026-09-07'}, status=409)
+        task.refresh_from_db()
+        self.assertEqual(task.completed_date, date(2026, 9, 8))
+        self.assertEqual(task.completed_at, submitted_at)
+        log = AuditLog.objects.get(operation='task.completion-date', resource=f'task:{task.pk}')
+        self.assertEqual(log.detail['after'], '2026-09-08')
+        self.assertIsNone(log.detail['before'])
+        self.assertFalse(TimeEntry.objects.exists())
+
+    def test_migration_backfills_only_actual_business_dates(self):
+        from importlib import import_module
+        from types import SimpleNamespace
+
+        from django.apps import apps
+        from django.db import connection
+
+        from apps.business.models import Delivery
+
+        task = self.task(self.project)
+        self.complete(task)
+        Task.objects.filter(pk=task.pk).update(completed_date=None)
+        delivery = Delivery.objects.create(
+            code='HISTORY-DATE', project=self.project, quantity=1, shipped_date='2026-09-07', accepted_date='2026-09-08'
+        )
+        acceptance = Task.objects.create(
+            project=self.project,
+            delivery=delivery,
+            kind='acceptance',
+            title='历史验收',
+            status='done',
+            assignee=self.users['manager'],
+        )
+        import_module('apps.business.migrations.0024_task_completed_date').restore_business_dates(
+            apps, SimpleNamespace(connection=connection)
+        )
+        task.refresh_from_db()
+        acceptance.refresh_from_db()
+        self.assertIsNone(task.completed_date)
+        self.assertEqual(acceptance.completed_date, date(2026, 9, 8))
+
+    def test_install_and_automatic_nodes_use_business_dates(self):
+        from apps.business.models import Delivery
+
+        self.project.status = 'delivering'
+        self.project.save()
+        delivery = Delivery.objects.create(code='DATE-DEL', project=self.project, quantity=1, shipped_date='2026-09-07')
+        install = Task.objects.create(
+            project=self.project, delivery=delivery, kind='install', title='安装', assignee=self.users['member']
+        )
+        acceptance = Task.objects.create(
+            project=self.project, delivery=delivery, kind='acceptance', title='验收', assignee=self.users['manager']
+        )
+        for code in AUTOMATIC:
+            Task.objects.create(
+                project=self.project, kind='site', milestone=code, title=code, assignee=self.users['manager']
+            )
+        self.post(
+            'manager',
+            f'tasks/{install.pk}/complete/',
+            {'completed_date': '2026-09-06', 'reason': '早于发货'},
+            status=400,
+        )
+        self.post('manager', f'tasks/{install.pk}/complete/', {'completed_date': '2026-09-08', 'reason': '安装确认'})
+        self.assertEqual(self.project.tasks.get(milestone='shipping_dispatch').completed_date, date(2026, 9, 7))
+        self.assertEqual(self.project.tasks.get(milestone='site_install').completed_date, date(2026, 9, 8))
+        self.post(
+            'manager', f'deliveries/{delivery.pk}/accept/', {'date': '2026-09-07', 'reason': '早于安装'}, status=400
+        )
+        self.post('manager', f'deliveries/{delivery.pk}/accept/', {'date': '2026-09-09', 'reason': '客户确认'})
+        acceptance.refresh_from_db()
+        self.assertEqual(acceptance.completed_date, date(2026, 9, 9))
+        self.assertEqual(self.project.tasks.get(milestone='site_acceptance').completed_date, date(2026, 9, 9))
+        self.post(
+            'manager',
+            f'tasks/{acceptance.pk}/completion-date/',
+            {'completed_date': '2026-09-08', 'reason': '不可改'},
+            status=409,
+        )
+
+
 class MilestoneTests(ExecutionFixtures, TestCase):
     def setUp(self):
         self.setup_execution()
@@ -274,8 +554,11 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         found = self.get('manager', f'?project={self.project.pk}&search=production_manager')
         self.assertEqual(found['count'], 1)
 
-    def test_coexecutor_logs_own_time_and_completes_once_without_expanding_management(self):
+    def test_coexecutor_needs_explicit_supervisor_before_confirmation_and_hours(self):
         task = self.shared_task()
+        self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '仅执行人'}, status=403)
+        self.project.task_supervisors = {'mechanical': self.users['production_manager'].pk}
+        self.project.save(update_fields=['task_supervisors'])
         self.post(
             'production_manager',
             f'tasks/{task.pk}/time/',
@@ -292,10 +575,9 @@ class MilestoneTests(ExecutionFixtures, TestCase):
             {
                 'date': '2026-09-09',
                 'hours': '3',
-                'reason': '不能代记设计',
+                'reason': '主管按人员代记设计',
                 'user': self.users['member'].pk,
             },
-            status=403,
         )
         self.post(
             'production_manager',
@@ -313,7 +595,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         task.refresh_from_db()
         self.assertEqual(task.status, 'done')
         self.assertEqual(AuditLog.objects.filter(operation='task.complete', resource=f'task:{task.pk}').count(), 1)
-        self.assertEqual(TimeEntry.objects.filter(task=task).count(), 1)
+        self.assertEqual(TimeEntry.objects.filter(task=task).count(), 2)
         self.assertEqual(self.clients['member'].get('/api/business/workbench/').data['tasks']['count'], 0)
 
     def test_shared_names_remain_unambiguous_and_can_be_imported(self):
@@ -340,7 +622,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
             },
         )
         self.assertFalse(task.co_assignees.exists())
-        self.complete(task, status=403)
+        self.post('member', f'tasks/{task.pk}/complete/', {'reason': '员工只读'}, status=403)
         self.post('production_manager', f'tasks/{task.pk}/complete/', {'reason': '已移出'}, status=403)
         self.post('manager', f'tasks/{task.pk}/complete/', {'reason': '完成'})
         self.post(
@@ -406,9 +688,9 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         )
         self.assertTrue(self.project.members.filter(pk=self.users['production_manager'].pk).exists())
         auto = self.shared_task(kind='shipping', milestone='shipping_dispatch')
-        self.post('production_manager', f'tasks/{auto.pk}/complete/', {'reason': '不能手动完成'}, status=409)
+        self.post('manager', f'tasks/{auto.pk}/complete/', {'reason': '不能手动完成'}, status=409)
         self.post(
-            'production_manager',
+            'manager',
             f'tasks/{auto.pk}/time/',
             {
                 'date': '2026-09-09',
@@ -460,8 +742,10 @@ class MilestoneTests(ExecutionFixtures, TestCase):
             {p.pk for p in task.assigned_people()}, {self.users['member'].pk, self.users['production_manager'].pk}
         )
 
-    def test_coexecutor_time_import_rechecks_assignment_at_confirmation(self):
+    def test_supervisor_time_import_rechecks_assignment_at_confirmation(self):
         task = self.shared_task()
+        self.project.task_supervisors = {'mechanical': self.users['production_manager'].pk}
+        self.project.save(update_fields=['task_supervisors'])
         stream = io.StringIO()
         writer = csv.writer(stream)
         writer.writerow([label for label, _ in transfers.SCHEMAS['time'][1]])
@@ -482,6 +766,8 @@ class MilestoneTests(ExecutionFixtures, TestCase):
                 'reason': '预览后交接',
             },
         )
+        self.project.task_supervisors = {}
+        self.project.save(update_fields=['task_supervisors'])
         self.post('production_manager', 'time/import-confirm/', {'token': token}, status=403)
         self.assertFalse(TimeEntry.objects.filter(task=task).exists())
         self.post(
@@ -492,6 +778,8 @@ class MilestoneTests(ExecutionFixtures, TestCase):
                 'reason': '恢复协作',
             },
         )
+        self.project.task_supervisors = {'mechanical': self.users['production_manager'].pk}
+        self.project.save(update_fields=['task_supervisors'])
         self.post('production_manager', 'time/import-confirm/', {'token': token})
         self.assertEqual(TimeEntry.objects.get(task=task).user_id, self.users['production_manager'].pk)
 
@@ -499,6 +787,38 @@ class MilestoneTests(ExecutionFixtures, TestCase):
 class MilestoneConcurrencyTests(ExecutionFixtures, TransactionTestCase):
     def setUp(self):
         self.setup_execution()
+
+    def test_manager_and_supervisor_start_only_once(self):
+        project = self.active_project()
+        project.members.add(self.users['production_manager'])
+        project.task_supervisors = {'mechanical': self.users['production_manager'].pk}
+        project.save(update_fields=['task_supervisors'])
+        task = self.task(project)
+        task.co_assignees.add(self.users['production_manager'])
+        barrier = Barrier(2)
+
+        def start(actor_id):
+            close_old_connections()
+            try:
+                actor = User.objects.get(pk=actor_id)
+                barrier.wait(timeout=10)
+                try:
+                    execution.start_task(
+                        actor, str(uuid.uuid4()), task.pk, {'started_date': '2026-09-08', 'reason': '共同开工'}
+                    )
+                    return 200
+                except Conflict:
+                    return 409
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(start, [self.users['manager'].pk, self.users['production_manager'].pk]))
+        self.assertEqual(sorted(results), [200, 409])
+        task.refresh_from_db()
+        self.assertEqual(task.started_date, date(2026, 9, 8))
+        self.assertEqual(AuditLog.objects.filter(operation='task.start', resource=f'task:{task.pk}').count(), 1)
+        self.assertFalse(TimeEntry.objects.exists())
 
     def test_two_template_requests_create_each_node_only_once(self):
         project = self.active_project()
@@ -525,9 +845,11 @@ class MilestoneConcurrencyTests(ExecutionFixtures, TransactionTestCase):
         self.assertEqual(sorted(row['count'] for row in results), [0, 20])
         self.assertEqual(project.tasks.count(), 20)
 
-    def test_two_executors_concurrently_complete_one_shared_task(self):
+    def test_manager_and_supervisor_concurrently_complete_one_shared_task(self):
         project = self.active_project()
         project.members.add(self.users['production_manager'])
+        project.task_supervisors = {'mechanical': self.users['production_manager'].pk}
+        project.save(update_fields=['task_supervisors'])
         task_id = self.post(
             'manager',
             'tasks/',
@@ -555,7 +877,7 @@ class MilestoneConcurrencyTests(ExecutionFixtures, TransactionTestCase):
                 connections.close_all()
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(complete, [self.users['member'].pk, self.users['production_manager'].pk]))
+            results = list(pool.map(complete, [self.users['manager'].pk, self.users['production_manager'].pk]))
         self.assertEqual(sorted(results), [200, 409])
         self.assertEqual(Task.objects.get(pk=task_id).status, 'done')
         self.assertEqual(AuditLog.objects.filter(operation='task.complete', resource=f'task:{task_id}').count(), 1)

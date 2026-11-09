@@ -103,6 +103,23 @@ LABELS = {
     'credit_amount': '抵减金额',
     'task': '任务ID',
     'task_title': '任务',
+    'discipline': '负责专业代码',
+    'discipline_label': '负责专业',
+    'supervisor': '负责主管ID',
+    'supervisor_name': '负责主管',
+    'task_supervisors': '项目专业主管对应ID',
+    'supervisor_revision': '主管设置版本',
+    'can_confirm': '可确认任务',
+    'can_record_time': '可登记工时',
+    'completed_date': '实际完成日期',
+    'completed_at': '完成提交时间',
+    'started_date': '实际开始日期',
+    'started_at': '开始登记时间',
+    'logged_hours': '已登记净工时（小时）',
+    'time_entry_count': '工时流水条数（含冲销）',
+    'archived': '已移至已删除记录',
+    'elapsed_days': '任务历时（自然日，含首尾日）',
+    'schedule_variance_days': '计划偏差天数（正数延期、负数提前）',
     'user': '用户ID',
     'user_name': '用户姓名',
     'hours': '工时',
@@ -129,6 +146,10 @@ LABELS = {
 NUMBER = re.compile(r'-?\d{1,18}(\.\d{1,6})?')
 # xlsx 里按数值写入的金额和数量列。编码、账号、流水号即使全是数字也保持文本，避免丢前导零或变成科学计数。
 NUMERIC_KEYS = {
+    'logged_hours',
+    'time_entry_count',
+    'elapsed_days',
+    'schedule_variance_days',
     'amount',
     'approved_amount',
     'actual_cost',
@@ -242,7 +263,7 @@ def export_rows(name, rows, file_format='csv', fields=None):
     keys = list(dict.fromkeys(key for row in rows for key in row)) if rows else list(fields or [])
     return document(
         name,
-        [LABELS.get(key, key) for key in keys],
+        ['计划完成日期' if name in {'task', 'tasks'} and key == 'due_date' else LABELS.get(key, key) for key in keys],
         [[row.get(key) for key in keys] for row in rows],
         file_format,
         numeric={index for index, key in enumerate(keys) if key in NUMERIC_KEYS},

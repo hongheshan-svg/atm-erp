@@ -21,6 +21,11 @@ class RoutingTests(unittest.TestCase):
             'backend/apps/business/services/milestones.py',
             'backend/apps/business/task_milestones.py',
             'frontend/src/components/ProjectMilestones.vue',
+            'frontend/src/components/TaskTimeRecords.vue',
+            'frontend/src/components/ProjectTaskSupervisors.vue',
+            'frontend/src/components/TaskNotices.vue',
+            'backend/apps/business/services/task_supervision.py',
+            'backend/apps/business/api/task_notices.py',
             'frontend/src/modules/milestones.ts',
         ]
         for path in paths:
@@ -29,6 +34,7 @@ class RoutingTests(unittest.TestCase):
                 self.assertIn('projects', scope['modules'])
                 self.assertIn('e2e/project-milestones.spec.ts', scope['browser_specs'])
                 self.assertIn('apps.business.tests.test_milestones', scope['backend_targets'])
+                self.assertIn('apps.business.tests.test_task_supervision', scope['backend_targets'])
         self.assertEqual(
             plan(['frontend/e2e/project-milestones.spec.ts'])['browser_specs'], ['e2e/project-milestones.spec.ts']
         )

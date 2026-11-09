@@ -19,7 +19,7 @@ const data = () => ({
 })
 async function render() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
-  const wrapper = mount(WorkbenchPage, { global: { plugins: [ElementPlus, router] } })
+  const wrapper = mount(WorkbenchPage, { global: { plugins: [ElementPlus, router], stubs: { TaskNotices: true } } })
   await flushPromises()
   return wrapper
 }
@@ -88,12 +88,12 @@ it('优先事项按逾期、今日到期、待审批排序并最多展示 7 条'
   wrapper.unmount()
 })
 
-it('未到期任务直接展示项目、截止日期和继续处理入口，工程师不出现仓储资金入口', async () => {
+it('未到期任务直接展示项目、计划完成日期和继续处理入口，工程师不出现仓储资金入口', async () => {
   user.value = { id: 9, roles: ['mechanical_engineer'] }
   vi.mocked(read).mockResolvedValue({ tasks: bucket([{ id: 8, project: 4, project_name: '自动检测线', title: '机械设计', due_date: '2999-10-30' }]) })
   const wrapper = await render()
   expect(wrapper.get('.work-ongoing').text()).toContain('自动检测线')
-  expect(wrapper.get('.work-ongoing').text()).toContain('截止日期：2999-10-30')
+  expect(wrapper.get('.work-ongoing').text()).toContain('计划完成日期：2999-10-30')
   expect(wrapper.get('[aria-label="继续处理机械设计"]').attributes('href')).toBe('/projects/4?tab=tasks&resource=tasks&focus=8')
   expect(wrapper.find('[aria-label="日常库存入口"]').exists()).toBe(false)
   expect(wrapper.text()).not.toContain('登记收付款')

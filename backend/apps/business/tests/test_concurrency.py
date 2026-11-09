@@ -683,7 +683,14 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
             for project in (self.project, second)
         ]
         results = self.together(
-            [('member', f'tasks/{task}/time/', {'date': TODAY, 'hours': '15', 'reason': '并发填报'}) for task in tasks]
+            [
+                (
+                    'manager',
+                    f'tasks/{task}/time/',
+                    {'user': self.users['member'].pk, 'date': TODAY, 'hours': '15', 'reason': '并发填报'},
+                )
+                for task in tasks
+            ]
         )
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(sum(TimeEntry.objects.values_list('hours', flat=True)), Decimal('15'))
@@ -696,7 +703,7 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
                 {'project': self.project.pk, 'kind': kind, 'title': kind, 'assignee': self.users['member'].pk},
                 status=201,
             )['id']
-            self.post('member', f'tasks/{task}/complete/', {'reason': '检查完成'})
+            self.post('manager', f'tasks/{task}/complete/', {'reason': '检查完成'})
         self.post(
             'manager',
             f'projects/{self.project.pk}/revise-bom/',
@@ -725,9 +732,13 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
             {'project': self.project.pk, 'kind': 'design', 'title': '设计', 'assignee': self.users['member'].pk},
             status=201,
         )['id']
-        entry = self.post('member', f'tasks/{task}/time/', {'date': TODAY, 'hours': '3', 'reason': '原填报'})['id']
+        entry = self.post(
+            'manager',
+            f'tasks/{task}/time/',
+            {'user': self.users['member'].pk, 'date': TODAY, 'hours': '3', 'reason': '原填报'},
+        )['id']
         results = self.together(
-            [('member', f'time/{entry}/amend/', {'date': TODAY, 'hours': '2', 'reason': '并发更正'})] * 2
+            [('manager', f'time/{entry}/amend/', {'date': TODAY, 'hours': '2', 'reason': '并发更正'})] * 2
         )
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(TimeEntry.objects.count(), 3)

@@ -36,6 +36,7 @@ from .services import payment_terms
 from .services.common import ZERO, rounded
 from .services.execution import stage_cancel_block
 from .services.finance import balance, paid
+from .services.task_supervision import can_confirm_task, supervisor_id
 from .task_milestones import AUTOMATIC, PRE_SHIPMENT, node_label, stage_label
 
 
@@ -165,6 +166,8 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
             'manager',
             'manager_name',
             'members',
+            'task_supervisors',
+            'supervisor_revision',
             'status',
             'requirements',
             'due_date',
@@ -498,6 +501,51 @@ class EntrySerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    discipline_label = serializers.CharField(source='get_discipline_display', read_only=True)
+    supervisor = serializers.SerializerMethodField()
+    supervisor_name = serializers.SerializerMethodField()
+    can_confirm = serializers.SerializerMethodField()
+    can_record_time = serializers.SerializerMethodField()
+
+    def get_supervisor(self, obj):
+        return supervisor_id(obj)
+
+    def get_supervisor_name(self, obj):
+        if not hasattr(self.root, '_supervisor_people'):
+            self.root._supervisor_people = {
+                person.pk: person for person in User.objects.only('id', 'username', 'display_name', 'is_active')
+            }
+            self.root._supervisor_ambiguous = ambiguous_people()
+        person = self.root._supervisor_people.get(supervisor_id(obj))
+        name = person_name(person, self.root._supervisor_ambiguous) if person else '主管不存在'
+        return name + ('（已停用，请调整）' if person and not person.is_active else '')
+
+    def get_can_confirm(self, obj):
+        return obj.project.status in {'active', 'delivering', 'warranty'} and can_confirm_task(
+            self.context['request'].user, obj
+        )
+
+    def get_can_record_time(self, obj):
+        return self.get_can_confirm(obj) and obj.status in {'open', 'done'} and obj.milestone not in AUTOMATIC
+
+    logged_hours = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    time_entry_count = serializers.IntegerField(read_only=True)
+    elapsed_days = serializers.SerializerMethodField()
+    schedule_variance_days = serializers.SerializerMethodField()
+
+    def get_elapsed_days(self, obj):
+        if obj.status == 'cancelled' or not obj.started_date:
+            return None
+        end = obj.completed_date if obj.status == 'done' else timezone.localdate()
+        return (end - obj.started_date).days + 1 if end and end >= obj.started_date else None
+
+    def get_schedule_variance_days(self, obj):
+        if obj.status == 'cancelled' or not obj.due_date:
+            return None
+        if obj.status == 'done':
+            return (obj.completed_date - obj.due_date).days if obj.completed_date else None
+        return max(0, (timezone.localdate() - obj.due_date).days)
+
     milestone_label = serializers.SerializerMethodField()
     stage_label = serializers.SerializerMethodField()
     system_managed = serializers.SerializerMethodField()
@@ -583,6 +631,12 @@ class TaskSerializer(serializers.ModelSerializer):
             'milestone',
             'milestone_label',
             'stage_label',
+            'discipline',
+            'discipline_label',
+            'supervisor',
+            'supervisor_name',
+            'can_confirm',
+            'can_record_time',
             'system_managed',
             'title',
             'description',
@@ -591,7 +645,14 @@ class TaskSerializer(serializers.ModelSerializer):
             'assignee_name',
             'status',
             'due_date',
+            'completed_date',
             'completed_at',
+            'started_date',
+            'started_at',
+            'elapsed_days',
+            'schedule_variance_days',
+            'logged_hours',
+            'time_entry_count',
             'service_date',
             'created_at',
             'updated_at',
@@ -616,6 +677,7 @@ class DeliverySerializer(serializers.ModelSerializer):
 
 
 class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
+    archived = serializers.BooleanField(read_only=True, default=False)
     can_amend = serializers.SerializerMethodField()
     reversed_by = serializers.IntegerField(source='reversal.pk', read_only=True, default=None)
     sensitive_fields = ('hourly_cost', 'cost')
@@ -628,7 +690,7 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
         user = self.context['request'].user
         return (
             obj.task.project.status in {'active', 'delivering', 'warranty'}
-            and (obj.user_id == user.pk or can_manage_task(user, obj.task))
+            and can_confirm_task(user, obj.task)
             and obj.hours > 0
             and not obj.reversal_of_id
             and not getattr(obj, 'reversal', None)
@@ -654,6 +716,7 @@ class TimeSerializer(MoneyFilter, serializers.ModelSerializer):
             'correction_of',
             'reversed_by',
             'created_at',
+            'archived',
         ]
 
 

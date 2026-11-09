@@ -96,7 +96,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 新增 `purchase_manager`、`mechanical_engineer`、`electrical_engineer`、`production_manager`，原七岗职责保留，完整分工见 [ROLE_RESPONSIBILITIES.md](ROLE_RESPONSIBILITIES.md)。下列职责扩展同步适用于下文对应接口的角色说明：
 
 - 采购经理加入采购读写及普通/超预算批准、退回、合同归档、供应商/物料维护和工作台待审批集合，可跨项目处理采购。本人申请不能审批，不获得项目管理、完整成本、销售、预付款核准、收付款或库存写入权限。
-- 机械/电气工程师可维护共享物料（含编码与表格导入），只对参与项目维护 BOM（含影响预览、增改删除、导入预览及确认）、上传/下载项目技术附件、完成本人任务和登记/更正本人工时。不能维护供应商或因工程岗位访问其他项目、采购合同、资金/成本、项目预算/派工/结项。两个工程岗位共用工程权限，无专业独占BOM行。
+- 机械/电气工程师可维护共享物料（含编码与表格导入），只对参与项目维护 BOM（含影响预览、增改删除、导入预览及确认）、上传/下载项目技术附件、查看本人任务及工时；被指定为专业主管后可确认其负责专业任务并代录/更正人员工时。不能维护供应商或因工程岗位访问其他项目、采购合同、资金/成本、项目预算/派工/结项。两个工程岗位共用工程权限，无专业独占BOM行。
 - 项目与BOM行返回 `can_edit_bom`，采购返回 `can_approve`；按动作所需角色计算项目范围，不能用全局采购读取权限代替BOM编辑或项目管理权限。原 `can_manage` 保留项目管理含义。
 - `purchases/{id}/budget-check/` 对不具有完整金额读取权限的采购经理返回 `scope=purchasing/configured/over_budget/snapshot/purchase/purchase_amount/purchase_net/materials_budget/materials_occupied/warnings`。材料超额可显示金额，非材料超额仅提示项目负责人复核，不包含人工/费用/总预算/总成本。审批快照仍来自完整核算，普通批准失败提示同样裁剪；批准时服务器继续对全部预算、当前快照及人员分离检查，未放宽门槛。
 - 生产经理只在参与项目创建装配/调试任务，管理装配/调试/安装/售后派工、完成及团队工时。项目返回 `can_manage_production`、`can_register_service`；任务返回 `can_manage`、`can_cancel`、`can_reopen`；工时返回 `can_amend`，均按动作所需角色和项目范围计算。任务 `can_manage` 表示该任务的管理权限，不授予项目管理；项目原 `can_manage` 仍只表示项目管理。取消/重开还需符合阶段、交付与收费约束。角色撤销或移出项目后，幂等重放仍重新授权。
@@ -191,14 +191,20 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - `tasks/milestone-template/?project={id}` GET 返回六阶段、20节点、自动汇总标记、已存在节点及生成权限；`milestone-summary/?project={id}` GET 返回阶段计划数、完成数和逾期数，不包含金额。阶段计划不计已取消节点及实际交付自动生成的批次安装/验收任务，批次任务仍在原列表执行。任务列表phase参数按六阶段筛选，site同时包含install/acceptance，方便直接处理批次安装；原kind筛选不变。
 - `tasks/apply-milestones/` POST project/lines[{kind,milestone?,title?,description?,assignees,due_date?}]（兼容单人assignee）；项目经理/管理员在执行中或交付中项目生成1～100项计划，项目加锁、ActionReceipt幂等、整批校验与回滚。固定模板20节点，可移除不需要节点或追加自定义任务；同项目已有节点（含已取消）跳过，不覆盖负责人、日期或状态。旧任务不自动匹配或改写。复用Task，无独立可配置流程或里程碑台账。
 - 任务支持多人共同执行：创建、模板生成、重新分配与重开接受 `assignees: [人员ID,...]`，至少一名、不得重复、均须已启用且有项目访问权限。兼容原单人 `assignee`，两种输入不得同时传入。响应保留首位 `assignee`，增加完整 `assignees`，`assignee_name` 展示全部姓名。我的任务筛选、工作台及进度人员展示包含每位执行人；仍按项目权限过滤。任务列表及导出先按项目、六阶段、模板节点顺序排序再分页，自定义任务排在所属阶段固定节点之后。
-- `tasks/{id}/complete/`：reason，任一执行人或有权任务管理者确认整项完成；六阶段允许交叉推进，不以其他阶段完成作为手动任务完成/重开的前置条件。`assign/`：assignees（兼容assignee）/reason/due_date?；省略日期保留原值，null清空，实际批次安装/验收期限不得早于发货日。`cancel/`：reason；`reopen/`：reason、assignees?，省略执行人时保留并重验全部原执行人。重新分配替换完整执行人集合，审计保留变更前后人员；同一任务多人同时确认仍仅完成一次。生产经理仅管理assembly/test/install/service，验收仍必须从交付登记；安装不可取消，已验收安装及已交付生产阶段不可重开。
+- `tasks/{id}/complete/`：reason/completed_date?/started_date?（仅未记录开始日期时允许同时补录），实际完成日期不能晚于今天，旧客户端省略时用确认当天；completed_at仍保留系统提交时刻，对应专业主管或有权项目经理/管理员确认整项完成；六阶段允许交叉推进，不以其他阶段完成作为手动任务完成/重开的前置条件。`assign/`：assignees（兼容assignee）/reason/due_date?/discipline?；省略日期保留原值，null清空，实际批次安装/验收期限不得早于发货日。`cancel/`：reason；`reopen/`：reason、assignees?，省略执行人时保留并重验全部原执行人。重新分配替换完整执行人集合，审计保留变更前后人员；同一任务多人同时确认仍仅完成一次。生产经理仅管理assembly/test/install/service，验收仍必须从交付登记；安装不可取消，已验收安装及已交付生产阶段不可重开。
+- `tasks/{id}/start/` 接受 started_date/reason，对应专业主管或有权项目经理/管理员记录手动任务的实际开工日；仅待完成且未开始可用。`start-date/` 接受 started_date/expected_started_date/reason，由对应专业主管或有权项目经理/管理员补录已完成任务或更正未结束/已完成任务开始日，快照过时拒绝覆盖。started_at为首次登记时刻；更正保留该时刻和前后日期审计。不能晚于今天或已知实际完成日；安装不早于发货，售后不早于售后发生日。汇总节点与批次验收从实际业务办理，不提供手动开始。
+- 列表、详情及导出返回 started_date/started_at/elapsed_days/schedule_variance_days。历时为实际完成日减实际开始日加1（自然日含首尾，同日为1天）；待完成任务算至今天，已完成缺少任一实际日期时为空，已取消任务不再计算。计划偏差为实际完成日减计划完成日，正数延期、负数提前、0按期；待完成任务只显示已逾期天数或未逾期，不显示虚构提前。未设置计划日期则不计算偏差。由日期实时派生，不按人数乘算，不新增人天、TimeEntry或人工成本。重开保留原开始日期，清空完成日期后历时继续累计，包含返工。已开始任务不再作为未使用记录直接删除，须结束后按原归档规则处理；发货后已开工的生产阶段任务不能通过取消绕过后续发货校验。
+- 任务的 due_date 在页面与导出中显示为“计划完成日期”，其后展示 completed_date“实际完成日期”。旧手动任务不从点击时间推算实际日期；迁移只从实际交付/验收记录补齐对应业务节点。`tasks/{id}/completion-date/` 接受 completed_date/expected_completed_date/reason，由对应专业主管或有权项目经理/管理员为已完成的手动任务补录或更正；原值不一致拒绝并提示刷新，保留原完成提交时间和日期前后值审计。重开清空当前完成日期，原值保留在完成及更正审计中。
+- 安装实际完成日期不能早于本批发货、不能晚于已登记的验收；验收不能早于已知安装实际完成日。售后完成不能早于售后发生日，不受原批次验收日上限限制。三个自动汇总节点分别取全部发货、全部安装完成、全部验收的最晚实际日期；历史安装日期未齐时保持日期空值。更正安装日期同步更新汇总，不能直接修改自动汇总或批次验收的完成日期。日期登记本身不产生工时或人工成本。
 - 已有交付时，首批发货前已存在、已完成或已登记工时/领料的发货前阶段任务不能取消；首批发货后新建且未开工的阶段任务可由项目经理/管理员填写 `reason` 取消（生产经理403），取消后不再阻断后续发货。
 - 固定节点shipping_dispatch/site_install/site_acceptance分别由全部设备实际发货、全部批次安装任务完成、全部批次实际验收同步状态。不能手动完成或记工时，不能取消/重开已完成汇总节点；取消待办只退出计划，不撤销业务事实。实际发货、安装完成/重开、验收与模板生成在项目锁内同步。自动节点的跟进负责人不替代实际批次安装/验收责任人。
-- `tasks/{id}/time/`：date/hours/reason/user?；任一执行人仅登记本人工时，项目经理可代录，生产经理仅代录参与项目生产/安装/售后任务工时及更正。每日净工时≤24，按当时费率快照计成本；生产经理响应隐藏hourly_cost/cost。
-- `time/{id}/amend/`：date/hours/reason，原人员或经理更正，hours=0 撤销。冲销+替代记录保留历史与原费率，重复更正拒绝。
+- `tasks/{id}/time/`：date/hours/reason/user?；仅对应专业主管或有权项目经理/管理员统一登记，按实际人员和工作日代录，不要求主管是执行人；员工不能自录，导入和更正遵循同一权限。每日净工时≤24，按当时费率快照计成本；生产经理响应隐藏hourly_cost/cost。
+- 工时登记成功回执返回 `id/task/date/hours/user_name`，沿用幂等请求回放；前端显示本次实际保存值，直接打开任务工时明细。
+- 任务列表、详情、导出返回 `logged_hours`（净小时）和 `time_entry_count`（含冲销的流水条数），从原工时聚合，无逐行查询。`GET tasks/{id}/time-records/` 按任务项目范围鉴权，支持分页及 `mine=true`；返回工时原记录、冲销、更正和 `archived` 标记，按提交时间倒序。`summary.logged_hours/my_hours` 为整项/当前人员全部分页净工时，含移出默认列表的历史事实；不按任务历时生成工时，金额仍按原岗位过滤。
+- `time/{id}/amend/`：date/hours/reason，对应专业主管或有权项目经理/管理员更正，hours=0 撤销。冲销+替代记录保留历史与原费率，重复更正拒绝。
 - `projects/{id}/ship/`：quantity/date/installer/acceptor/note，原设计/装配/调试必需阶段全部完成，已安排的采购跟进和发货前手动任务完成或取消，且累计领料覆盖本批数量后才可发货，创建安装与验收任务。可选 `install_due_date`、`acceptance_due_date`（不得早于发货日期），写入自动生成的安装/验收任务期限；留空保持无期限。
 - `deliveries/{id}/accept/`：date/reason，经理确认安装完成后的验收；每批独立保修截止日。
-- `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee/fee_due_date?。due_date 为维修截止日，收费时页面独立填写客户付款到期日 fee_due_date，保存到原售后应收；旧客户端省略时以售后业务日期兼容，不再使用维修期限。任务保留完整标题，应收摘要按字段长度截取并保留任务关联。质保期内（含截止当天）可登记收费售后，仅项目经理/管理员，且须填写 `charge_reason`（非质保责任原因，记审计）；期外收费为正数并生成应收，期外免费（fee=0）须由项目经理填写 free_reason 并记入审计，不生成应收。生产经理仅可为参与项目已验收保内批次创建fee=0售后；过保或非零费用请求403，由项目经理确认。生产经理可派工和完成既有收费售后，但其取消/重开涉及账款，必须由项目经理操作。售后材料、工时纳入实际成本。
+- `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee/fee_due_date?。due_date 为维修截止日，收费时页面独立填写客户付款到期日 fee_due_date，保存到原售后应收；旧客户端省略时以售后业务日期兼容，不再使用维修期限。任务保留完整标题，应收摘要按字段长度截取并保留任务关联。质保期内（含截止当天）可登记收费售后，仅项目经理/管理员，且须填写 `charge_reason`（非质保责任原因，记审计）；期外收费为正数并生成应收，期外免费（fee=0）须由项目经理填写 free_reason 并记入审计，不生成应收。生产经理仅可为参与项目已验收保内批次创建fee=0售后；过保或非零费用请求403，由项目经理确认。生产经理可派工既有收费售后，指定为该专业主管后可确认完成，但其取消/重开涉及账款，必须由项目经理操作。售后材料、工时纳入实际成本。
 
 ## 收付款与附件
 
@@ -322,3 +328,11 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 库位：库位统一全半角并合并多余空白。`receive/`、`quality-accept/` 增加可选 `new_location`（布尔），首次使用除“主仓”外的新库位必须为 true；`stocks/opening/` 由管理员在上线时建立库位，不需确认。`stocks/locations/` GET 返回已用库位列表，供表单候选。
 - 操作审计：`/api/core/audit/` 返回 `actor_name`，支持 `actor`、`operation`、`resource`、`date_from`、`date_to`（本地日期）筛选及 `search`（操作、对象、操作人账号或姓名）。
 - 部署：Docker 与原生安装的 nginx 在 server 级和 `/erp/index.html` location 同时下发 X-Frame-Options、X-Content-Type-Options、Referrer-Policy 与 Content-Security-Policy（仅同源脚本、禁止被嵌入）。
+
+### 项目专业主管与站内提醒
+
+- `POST projects/{id}/task-supervisors/`：supervisors（固定mechanical/electrical/purchasing/production/delivery键到用户ID）、expected_revision、reason。仅原项目管理权限可设置，启用项目成员/负责人可选；空值清除并回落项目经理。设置与任务动作均持项目锁，校验版本并保留前后审计；不增设角色/工作流。更改成员时不能移除尚在专业设置中的主管。停用主管不可操作，项目经理可代办或调整。
+- 任务增加discipline、discipline_label、supervisor、supervisor_name、can_confirm、can_record_time。创建/模板可选择专业；旧导入格式保持兼容，按阶段及固定节点推断，需变更时重新分配。历史任务迁移推断专业，保留已登记日期/工时，不补造历史提醒。默认设计→机械，采购→采购，组装/安装/售后→生产，调试→电气，发货/现场/验收→交付；电气BOM、接线、现场调试→电气，整改→生产。
+- 新建（含模板、导入、交付/售后派生）、重新分配/重开/取消、专业主管变更，在同一事务向负责主管写TaskNotice；幂等回放不重复创建，失败回滚。主管变更通知受影响未完成任务，经理更换时通知代管任务。
+- `GET task-notices/?unread=true|false` 返回当前收件人且仍可访问项目的提醒，分页与unread_count；默认未读。`POST task-notices/{id}/read/` 空body、幂等键，记录read_at并审计；不改变任务状态。任务软删除后提醒不再展示，提醒不阻碍误建任务软删除。
+- 工作台`supervised_tasks`为当前主管负责的未完成任务；`tasks/?supervisor=用户ID`沿用项目可见范围过滤。工作台显示未读提醒、查看全部及直接定位任务，页面每分钟及重新聚焦刷新，不发送外部消息。确认与代录每次重验当前专业归属，包括幂等回放及导入确认；更换主管立即撤销旧主管的该项权限。

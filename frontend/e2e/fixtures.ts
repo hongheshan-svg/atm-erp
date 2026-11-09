@@ -45,7 +45,7 @@ export async function openRowAction(page: Page, row: Locator, name: string) {
   await expect(direct.or(menu).first()).toBeVisible()
   // The same registry the list renders from decides where to look, so a save that reloads the row
   // is waited out on the right control instead of by clicking the menu toggle in a retry loop.
-  if (primaryActions.includes(name)) {
+  if (primaryActions.includes(name) && await direct.isVisible()) {
     await direct.click()
     return
   }

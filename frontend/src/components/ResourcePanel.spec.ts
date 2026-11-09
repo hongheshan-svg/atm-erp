@@ -11,6 +11,7 @@ import { pageSize, setPageSize } from '../pagination'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import ActionDialog from './ActionDialog.vue'
+import TaskTimeRecords from './TaskTimeRecords.vue'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 const route = reactive<{ query: Record<string, string> }>({ query: {} })
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace: vi.fn() }) }))
@@ -24,6 +25,26 @@ vi.mock('../api', () => ({
 
 describe('列表创建入口', () => {
   beforeEach(() => { route.query = {}; sessionStorage.clear(); vi.clearAllMocks() })
+  it('登记工时回执显示真实小时数，并直接打开所属任务明细', async () => {
+    user.value = { id: 1, role: 'admin' }
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'tasks', title: '任务' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'BusinessTable', template: '<div />' } } } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.command = { title: '登记工时', path: '/business/tasks/7/time/', fields: [] }
+    await flushPromises()
+    wrapper.findComponent(ActionDialog).vm.$emit('saved', { id: 25, task: 7, hours: '9.00', date: '2026-11-09', user_name: '刘工' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('工时已提交：刘工 · 2026-11-09 · 9.00 小时')
+    wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '查看工时明细')!.vm.$emit('click')
+    await flushPromises()
+    expect(wrapper.findComponent(TaskTimeRecords).props('taskId')).toBe(7)
+    await wrapper.setProps({ projectId: 9 })
+    await flushPromises()
+    expect(wrapper.findComponent(TaskTimeRecords).exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('工时已提交')
+    wrapper.unmount()
+  })
   it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
     user.value = { roles: ['finance', 'admin'] }
     vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 21, title: '费用' }], next: null })

@@ -111,6 +111,8 @@ def edit_project(actor, key, project_id, data):
             members_to_set = None
         if member_ids is not None or project.manager_id != old_manager_id:
             keep = set(member_ids) if member_ids is not None else set(project.members.values_list('pk', flat=True))
+            if set(project.task_supervisors.values()) - (keep | {project.manager_id}):
+                raise Conflict('移除的成员仍是项目专业主管，请先调整专业主管设置。')
             stranded = project.tasks.filter(status='open').select_related('assignee').prefetch_related('co_assignees')
             for task in stranded:
                 for person in task.assigned_people():
@@ -136,6 +138,16 @@ def edit_project(actor, key, project_id, data):
         if 'warranty_months' in data:
             project.warranty_months = integer(data, 'warranty_months', None, maximum=120)
         save(project, user)
+        if project.manager_id != old_manager_id:
+            from .task_supervision import notify_task
+
+            for task in (
+                project.tasks.filter(status='open')
+                .exclude(discipline__in=project.task_supervisors)
+                .select_related('project', 'assignee')
+                .prefetch_related('co_assignees')
+            ):
+                notify_task(user, task, '项目负责人已调整')
         synced = sync_sale(user, project)
         after = project_snapshot(project)
         changed = sorted(field for field in before if before[field] != after[field])
@@ -246,7 +258,7 @@ def change_task(actor, key, task_id, data, operation):
     def execute(user, project, task):
         fields(
             data,
-            {'reason', 'assignee', 'assignees', 'due_date'}
+            {'reason', 'assignee', 'assignees', 'due_date', 'discipline'}
             if operation == 'assign'
             else {'reason', 'assignee', 'assignees'}
             if operation == 'reopen'
@@ -255,8 +267,13 @@ def change_task(actor, key, task_id, data, operation):
         reason = text(data, 'reason')
         people = None
         previous = [person.pk for person in task.assigned_people()]
+        previous_discipline = task.discipline
         if operation == 'assign':
             state(task, {'open'})
+            if 'discipline' in data:
+                from .task_supervision import discipline_value
+
+                task.discipline = discipline_value(data, task.kind, task.milestone)
             people = assigned_people(project, data)
             task.assignee = people[0]
             if 'due_date' in data:
@@ -297,6 +314,7 @@ def change_task(actor, key, task_id, data, operation):
                 if project.deliveries.exists():
                     raise Conflict('已有交付，不能重新打开原生产阶段任务。')
             task.status, task.completed_at = 'open', None
+            task.completed_date = None
             if task.kind == 'service':
                 entry = Entry.objects.select_for_update().filter(task=task, cancelled=True).first()
                 if entry:
@@ -313,11 +331,16 @@ def change_task(actor, key, task_id, data, operation):
             task,
             reason=reason,
             previous_assignees=previous,
+            previous_discipline=previous_discipline,
+            discipline=task.discipline,
             assignees=[person.pk for person in task.assigned_people()],
         )
         from .milestones import sync_milestones
 
         sync_milestones(user, project)
+        from .task_supervision import notify_task
+
+        notify_task(user, task, {'assign': '任务分配已调整', 'reopen': '任务已重开', 'cancel': '任务已取消'}[operation])
         return result
 
     return task_action(

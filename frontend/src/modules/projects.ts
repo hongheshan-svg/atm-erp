@@ -1,5 +1,7 @@
+import { disciplineField } from './milestones'
 import { codeField } from './shared'
-import { executorField, milestoneFields, taskAssignees } from './milestones'
+import { today } from '../forms'
+import { executorField, milestoneFields, taskAssignees, taskElapsedLabel, taskVarianceLabel } from './milestones'
 import type { Catalog } from '../catalog'
 import { customer } from './shared'
 import { participants } from './shared'
@@ -26,7 +28,7 @@ export const taskFields = (c: Catalog, canDesign = manager(), scope?: Row | null
 import { all, read } from '../api'
 import { catalog } from '../catalog'
 import { options } from '../catalog'
-import { manager, hasRoles, production, productionProject, taskManager, timeAmender, serviceRegistrar } from '../session'
+import { manager, hasRoles, production, productionProject, taskManager, taskConfirmer, timeAmender, serviceRegistrar } from '../session'
 import { user } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -55,8 +57,15 @@ export const columns: Record<string, Column[]> = {
     C('stage_label', '阶段'),
     C('milestone_label', '里程碑节点'),
     C('assignee_name', '执行人'),
+    C('discipline_label', '负责专业'),
+    C('supervisor_name', '负责主管'),
     C('status', '状态'),
-    C('due_date', '截止日期'),
+    C('logged_hours', '已登记工时'),
+    C('due_date', '计划完成日期'),
+    C('completed_date', '实际完成日期'),
+    C('started_date', '实际开始日期'),
+    { key: 'elapsed_days', label: '任务历时', format: taskElapsedLabel },
+    { key: 'schedule_variance_days', label: '提前／延期', format: taskVarianceLabel },
   ],
   deliveries: [
     C('code', '交付批次'),
@@ -121,9 +130,18 @@ export function actionNames(resource: string, r: Row): string[] {
     if (serviceRegistrar(r) && ['delivering', 'warranty'].includes(r.status)) a.push('登记售后')
   }
   if (resource === 'tasks') {
-    if (!r.system_managed && (taskManager(r) || taskAssignees(r).includes(user.value?.id)) && ['open', 'done'].includes(r.status)) {
+    a.push('查看工时')
+    if (!r.system_managed && taskConfirmer(r) && ['open', 'done'].includes(r.status)) {
       a.push('登记工时')
+      if (r.status === 'open' && r.kind !== 'acceptance' && !r.started_date) a.push('开始任务')
       if (r.status === 'open' && r.kind !== 'acceptance') a.push('完成任务')
+    }
+    if (taskConfirmer(r)) {
+      if (['open', 'done'].includes(r.status) && !r.system_managed && r.kind !== 'acceptance') {
+        if (r.started_date) a.push('更正开始日期')
+        else if (r.status === 'done') a.push('补录开始日期')
+      }
+      if (r.status === 'done' && !r.system_managed && r.kind !== 'acceptance') a.push(r.completed_date ? '更正完成日期' : '补录完成日期')
     }
     if (taskManager(r)) {
       if (r.status === 'open') a.push('重新分配')
@@ -194,6 +212,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     重新打开: 'reopen',
     登记工时: 'time',
     完成任务: 'complete',
+    开始任务: 'start',
+    补录开始日期: 'start-date',
+    更正开始日期: 'start-date',
+    补录完成日期: 'completion-date',
+    更正完成日期: 'completion-date',
     重新分配: 'assign',
     取消任务: 'cancel',
     重开任务: 'reopen',
@@ -271,8 +294,17 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     }
   }
   if (name === '验收') fields = [date(), reason]
+  if (['完成任务', '补录完成日期', '更正完成日期'].includes(name)) {
+    fields = [{ ...date('completed_date', '实际完成日期'), hint: '填写实际完成当天，可补录过去的日期，不能填写未来日期；系统另行保留提交时间。' }, reason]
+    if (name === '完成任务' && !r.started_date) fields.unshift({ ...date('started_date', '实际开始日期', true), hint: '忘记点击开始任务时可在此补录；留空则暂不计算历时，不会用任务创建日期代替。' })
+    initial = { completed_date: name === '完成任务' ? today() : r.completed_date || '' }
+  }
+  if (['开始任务', '补录开始日期', '更正开始日期'].includes(name)) {
+    fields = [{ ...date('started_date', '实际开始日期'), hint: '按真实开工日期填写，可补录过去日期，不能晚于今天或实际完成日期。' }, reason]
+    initial = { started_date: name === '开始任务' ? today() : r.started_date || '', ...(name === '开始任务' ? { reason: '开始执行任务' } : {}) }
+  }
   if (name === '登记工时') {
-    fields = [date(), t('hours', '工时'), reason, ...(taskManager(r) ? [person(c, 'user', '人员', scope)] : [])]
+    fields = [date(), t('hours', '工时'), reason, person(c, 'user', '人员', scope)]
     // 原执行人若已被移出项目，就不预选一个注定被服务端拒绝的人。
     initial = { user: taskAssignees(r).includes(user.value?.id) ? user.value?.id : inScope(r.assignee) ? r.assignee : '' }
   }
@@ -285,8 +317,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     initial = r
   }
   if (name === '重新分配') {
-    fields = [executorField(c, scope), date('due_date', '截止日期', true), reason]
-    initial = { assignees: taskAssignees(r).filter(inScope), due_date: r.due_date || '' }
+    fields = [executorField(c, scope), disciplineField(), date('due_date', '计划完成日期', true), reason]
+    initial = { assignees: taskAssignees(r).filter(inScope), discipline: r.discipline, due_date: r.due_date || '' }
   }
   if (name === '重开任务') {
     // 重开时必须确认执行人：原执行人可能已经被移出项目，沿用旧值只会在服务端被拒。
@@ -294,6 +326,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     initial = { assignees: taskAssignees(r).filter(inScope) }
   }
   return { title: name, path, fields, initial, method, readonly,
+    ...(['开始任务', '完成任务', '补录开始日期', '更正开始日期', '补录完成日期', '更正完成日期'].includes(name) ? { notice: { type: 'info' as const, text: '历时按自然日计算，包含开始和完成当天；同日完成为1天，未完成算至今天。仅统计任务进度，不自动生成工时或人工成本。' } } : {}),
+    ...(['补录开始日期', '更正开始日期'].includes(name) ? { prepare: (data: Row) => ({ ...data, expected_started_date: r.started_date || null }) } : {}),
+    ...(['补录完成日期', '更正完成日期'].includes(name) ? { prepare: (data: Row) => ({ ...data, expected_completed_date: r.completed_date || null }) } : {}),
     ...(name === '重新分配' ? { prepare: (data: Row) => ({ ...data, due_date: data.due_date || null }) } : {}),
     ...(name === '编辑项目' && ['draft', 'quoted'].includes(r.status) ? { notice: { type: 'warning' as const, text: '历史未签约项目修改需求后将清除原报价，请到关联销售单重新报价并签约。' } } : {}),
   }

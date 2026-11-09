@@ -28,7 +28,7 @@ async function generate() {
 <template>
   <section class="panel milestones" aria-label="项目六阶段里程碑">
     <header class="milestone-heading">
-      <div><h2>项目里程碑</h2><p class="muted">六阶段可交叉推进。点击阶段查看任务，负责人和截止日期可在任务操作中调整。</p></div>
+      <div><h2>项目里程碑</h2><p class="muted">六阶段可交叉推进。点击阶段查看任务，负责人和计划完成日期可在任务操作中调整。</p></div>
       <el-button v-if="summary.can_generate" type="primary" :loading="busy" @click="generate">一键生成里程碑</el-button>
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />

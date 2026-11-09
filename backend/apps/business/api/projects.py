@@ -20,7 +20,17 @@ from ..models import (
 from ..serializers import (
     ProjectSerializer,
 )
-from ..services import bom, bom_material_import, budgets, corrections, execution, finance, progress, projects
+from ..services import (
+    bom,
+    bom_material_import,
+    budgets,
+    corrections,
+    execution,
+    finance,
+    progress,
+    projects,
+    task_supervision,
+)
 from .common import ImportableMixin, ReadView, key
 
 
@@ -51,6 +61,10 @@ class ProjectView(ImportableMixin, ReadView):
 
     def create(self, request):
         return Response(projects.create_project(request.user, key(request), request.data), status=201)
+
+    @action(detail=True, methods=['post'], url_path='task-supervisors')
+    def task_supervisors(self, request, pk=None):
+        return Response(task_supervision.configure(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['get'])
     def demand(self, request, pk=None):

@@ -18,10 +18,8 @@ export const engineer = () => can(['mechanical_engineer', 'electrical_engineer']
 export const production = () => can(['production_manager'])
 export const productionProject = (record?: Row) => manager() ? record?.can_manage_production !== false : production() && record?.can_manage_production === true
 export const taskManager = (record: Row) => manager() ? record.can_manage !== false : production() && ['assembly', 'test', 'install', 'service'].includes(record.kind) && record.can_manage === true
-export const timeAmender = (record: Row) => {
-  const own = user.value?.id != null && record.user === user.value.id
-  return (manager() || production() || own) && (record.can_amend ?? (manager() || own))
-}
+export const timeAmender = (record: Row) => record.can_amend === true
+export const taskConfirmer = (record: Row) => record.can_confirm === true
 export const serviceRegistrar = (record: Row) => manager() ? (record.can_register_service ?? record.can_manage !== false) : production() && record.can_register_service === true
 export const purchasing = () => can(['admin', 'manager', 'purchase_manager', 'purchaser'])
 export const purchaseReader = () => purchasing() || can(['warehouse', 'finance'])

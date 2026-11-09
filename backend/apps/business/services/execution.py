@@ -1,7 +1,8 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Exists, Min, OuterRef, Subquery, Sum, prefetch_related_objects
+from django.db.models import Count, DecimalField, Exists, Min, OuterRef, Subquery, Sum, Value, prefetch_related_objects
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -13,7 +14,6 @@ from apps.core.permissions import (
     ALL_ROLES,
     MANAGERS,
     PRODUCTION_MANAGERS,
-    can_manage_task,
     project_allowed,
     require_project,
     task_management_roles,
@@ -39,6 +39,7 @@ from .common import (
     text,
 )
 from .finance import balance
+from .task_supervision import can_confirm_task, default_discipline, discipline_value, notify_task, require_confirmation
 
 STAGES = ('design', 'assembly', 'test')
 OPEN_PROJECT = {'active', 'delivering', 'warranty'}
@@ -49,7 +50,14 @@ def with_task_flags(queryset):
 
     是否已发货和首批发货时间由原交付记录投影；不注解的话序列化每行都要反查一次。
     """
+    times = TimeEntry.objects.filter(task=OuterRef('pk')).order_by().values('task')
     return queryset.annotate(
+        logged_hours=Coalesce(
+            Subquery(times.annotate(total=Sum('hours')).values('total')),
+            Value(ZERO),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ),
+        time_entry_count=Coalesce(Subquery(times.annotate(total=Count('pk')).values('total')), Value(0)),
         project_shipped=Exists(Delivery.objects.filter(project=OuterRef('project_id'))),
         project_first_shipped_at=Subquery(
             Delivery.objects.filter(project=OuterRef('project_id')).order_by('created_at').values('created_at')[:1]
@@ -76,8 +84,8 @@ def stage_cancel_block(task):
         return None
     if task.created_at <= first_shipped_at:
         return '已有交付，首批发货前的生产阶段任务是已发货批次的依据，不能取消。'
-    if task.status != 'open' or has_work:
-        return '此阶段任务已完成或已登记工时、领料，属于已开工任务，不能取消；请完成该任务后再安排后续发货。'
+    if task.status != 'open' or task.started_date or has_work:
+        return '此阶段任务已开工、已完成或已登记工时、领料，不能取消；请完成该任务后再安排后续发货。'
     return None
 
 
@@ -125,6 +133,7 @@ def save_new_task(user, values):
     task = save(Task(**values), user)
     if additional:
         task.co_assignees.set(additional)
+    notify_task(user, task, '新任务已分配')
     return task
 
 
@@ -135,7 +144,10 @@ def completed_stage(project, kind):
 
 
 def task_values(project, data):
-    fields(data, {'project', 'kind', 'milestone', 'title', 'description', 'assignee', 'assignees', 'due_date'})
+    fields(
+        data,
+        {'project', 'kind', 'milestone', 'title', 'description', 'assignee', 'assignees', 'due_date', 'discipline'},
+    )
     kind = text(data, 'kind', maximum=20)
     if kind not in dict(PHASES):
         raise ValidationError(
@@ -153,6 +165,7 @@ def task_values(project, data):
         'project': project,
         'kind': kind,
         'milestone': milestone,
+        'discipline': discipline_value(data, kind, milestone),
         'title': title,
         'description': text(
             data, 'description', default=definition['description'] if definition else '', maximum=20000
@@ -206,20 +219,77 @@ def task_action(actor, key, operation, task_id, data, roles, execute, *, authori
     )
 
 
-def complete_task(actor, key, task_id, data):
+def start_task(actor, key, task_id, data, *, amend=False):
     def authorize(user, task):
-        if not can_manage_task(user, task) and not task.is_assigned_to(user):
-            raise PermissionDenied('只能完成分配给自己的任务，或管理范围内的生产与售后任务。')
+        require_confirmation(user, task)
 
     def execute(user, project, task):
-        fields(data, {'reason'})
+        fields(data, {'reason', 'started_date', 'expected_started_date'} if amend else {'reason', 'started_date'})
+        state(task, {'open', 'done'} if amend else {'open'})
+        if task.kind == 'acceptance' or task.milestone in AUTOMATIC:
+            raise Conflict('此节点由实际业务同步，请在具体执行任务记录开始日期。')
+        if amend:
+            if day(data, 'expected_started_date', optional=True) != task.started_date:
+                raise Conflict('实际开始日期已被修改，请刷新后重新核对。')
+        elif task.started_date:
+            raise Conflict('任务已经开始；日期有误请由有权限的任务管理者更正。')
+        reason = text(data, 'reason')
+        previous = task.started_date
+        task.started_date = task_start_date(task, data)
+        task.started_at = task.started_at or timezone.now()
+        save(task, user)
+        return audit(
+            user,
+            'task.start-date' if amend else 'task.start',
+            task,
+            reason=reason,
+            before=previous.isoformat() if previous else None,
+            after=task.started_date.isoformat(),
+        )
+
+    return task_action(
+        actor,
+        key,
+        'task.start-date' if amend else 'task.start',
+        task_id,
+        data,
+        ALL_ROLES,
+        execute,
+        authorize_task=authorize,
+    )
+
+
+def task_start_date(task, data):
+    value = event_date(data, 'started_date')
+    if task.completed_date and value > task.completed_date:
+        raise ValidationError({'started_date': '实际开始日期不能晚于实际完成日期。'})
+    if task.delivery_id and value < task.delivery.shipped_date:
+        raise ValidationError({'started_date': '实际开始日期不能早于本批发货日期。'})
+    if task.service_date and value < task.service_date:
+        raise ValidationError({'started_date': '实际开始日期不能早于售后发生日期。'})
+    return value
+
+
+def complete_task(actor, key, task_id, data):
+    def authorize(user, task):
+        require_confirmation(user, task)
+
+    def execute(user, project, task):
+        fields(data, {'reason', 'completed_date', 'started_date'})
         state(task, {'open'})
         if task.kind == 'acceptance' or task.milestone in AUTOMATIC:
             raise Conflict('此节点由实际发货、安装或验收记录同步，请从对应业务办理，不能直接完成。')
         reason = text(data, 'reason')
+        if 'started_date' in data:
+            if task.started_date:
+                raise Conflict('任务已记录开始日期，请刷新；更正日期需由有权限的任务管理者处理。')
+            task.started_date = task_start_date(task, data)
+            task.started_at = timezone.now()
+            audit(user, 'task.start', task, reason=reason, before=None, after=task.started_date.isoformat())
+        task.completed_date = task_completion_date(task, data)
         task.status, task.completed_at = 'done', timezone.now()
         save(task, user)
-        result = audit(user, 'task.complete', task, reason=reason)
+        result = audit(user, 'task.complete', task, reason=reason, completed_date=task.completed_date.isoformat())
         from .milestones import sync_milestones
 
         sync_milestones(user, project)
@@ -228,11 +298,61 @@ def complete_task(actor, key, task_id, data):
     return task_action(actor, key, 'task.complete', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
 
 
+def task_completion_date(task, data):
+    # 旧客户端省略时以本次确认当天完成；历史记录不据提交时间倒推实际日期。
+    value = event_date(data, 'completed_date') if 'completed_date' in data else timezone.localdate()
+    if task.started_date and value < task.started_date:
+        raise ValidationError({'completed_date': '实际完成日期不能早于实际开始日期。'})
+    if task.delivery_id and value < task.delivery.shipped_date:
+        raise ValidationError({'completed_date': '实际完成日期不能早于本批发货日期。'})
+    if (
+        task.kind == 'install'
+        and task.delivery_id
+        and task.delivery.accepted_date
+        and value > task.delivery.accepted_date
+    ):
+        raise ValidationError({'completed_date': '实际完成日期不能晚于本批验收日期。'})
+    if task.service_date and value < task.service_date:
+        raise ValidationError({'completed_date': '实际完成日期不能早于售后发生日期。'})
+    return value
+
+
+def amend_task_completion(actor, key, task_id, data):
+    def authorize(user, task):
+        if not can_confirm_task(user, task):
+            raise PermissionDenied('请由有权限的任务管理者补录或更正实际完成日期。')
+
+    def execute(user, project, task):
+        fields(data, {'reason', 'completed_date', 'expected_completed_date'})
+        state(task, {'done'})
+        if task.kind == 'acceptance' or task.milestone in AUTOMATIC:
+            raise Conflict('此节点的实际完成日期由业务记录同步，请处理对应的发货、安装或验收记录。')
+        expected = day(data, 'expected_completed_date', optional=True)
+        if expected != task.completed_date:
+            raise Conflict('实际完成日期已被修改，请刷新后重新核对。')
+        reason = text(data, 'reason')
+        previous = task.completed_date
+        task.completed_date = task_completion_date(task, {'completed_date': data.get('completed_date')})
+        save(task, user)
+        result = audit(
+            user,
+            'task.completion-date',
+            task,
+            reason=reason,
+            before=previous.isoformat() if previous else None,
+            after=task.completed_date.isoformat(),
+        )
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        return result
+
+    return task_action(actor, key, 'task.completion-date', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
+
+
 def log_time(actor, key, task_id, data):
     def authorize(user, task):
-        person_id = identity(data.get('user', user.pk), 'user')
-        if not can_manage_task(user, task) and (person_id != user.pk or not task.is_assigned_to(user)):
-            raise PermissionDenied('只能为自己的任务登记本人工时，或登记管理范围内的生产与售后工时。')
+        require_confirmation(user, task)
 
     def execute(user, project, task):
         fields(data, {'user', 'date', 'hours', 'reason'})
@@ -266,7 +386,13 @@ def log_time(actor, key, task_id, data):
             ),
             user,
         )
-        return audit(user, 'time.create', entry)
+        return {
+            **audit(user, 'time.create', entry),
+            'task': task.pk,
+            'hours': str(entry.hours),
+            'date': entry.date.isoformat(),
+            'user_name': person.display_name or person.username,
+        }
 
     return task_action(actor, key, 'time.create', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
 
@@ -275,8 +401,7 @@ def amend_time(actor, key, entry_id, data):
     original = lookup(TimeEntry, entry_id)
 
     def authorize(user, task):
-        if not can_manage_task(user, task) and original.user_id != user.pk:
-            raise PermissionDenied('只能更正本人工时，或管理范围内的生产与售后工时。')
+        require_confirmation(user, task)
 
     def execute(user, project, task):
         fields(data, {'hours', 'date', 'reason'})
@@ -455,17 +580,19 @@ def ship(actor, key, project_id, data):
             user,
         )
         for kind, person in [('install', installer), ('acceptance', acceptor)]:
-            save(
+            task = save(
                 Task(
                     project=project,
                     delivery=delivery,
                     kind=kind,
+                    discipline=default_discipline(kind),
                     title=f'{delivery.code} {Task.Kind(kind).label}',
                     assignee=person,
                     due_date=deadlines[kind],
                 ),
                 user,
             )
+            notify_task(user, task, '交付任务已分配')
         project.status = 'delivering'
         save(project, user)
         result = audit(user, 'delivery.ship', delivery, quantity=qty)
@@ -492,12 +619,15 @@ def accept(actor, key, delivery_id, data):
         date = event_date(data)
         if date < delivery.shipped_date:
             raise ValidationError({'date': '验收日期不能早于交付日期。'})
+        if installs.filter(completed_date__gt=date).exists():
+            raise ValidationError({'date': '验收日期不能早于本批安装的实际完成日期。'})
         reason = text(data, 'reason')
         delivery.accepted_date = date
         delivery.warranty_until = date + relativedelta(months=project.warranty_months)
         save(delivery, user)
         for task in delivery.tasks.select_for_update().filter(kind='acceptance'):
             task.status, task.completed_at = 'done', timezone.now()
+            task.completed_date = date
             save(task, user)
         shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
         if shipped == project.equipment_quantity and not project.deliveries.filter(accepted_date__isnull=True).exists():
@@ -566,6 +696,7 @@ def service(actor, key, project_id, data):
                 project=project,
                 delivery=delivery,
                 kind='service',
+                discipline='production',
                 service_date=date,
                 title=text(data, 'title', maximum=150),
                 description=text(data, 'description', default='', maximum=20000),
@@ -574,6 +705,7 @@ def service(actor, key, project_id, data):
             ),
             user,
         )
+        notify_task(user, task, '售后任务已分配')
         if fee:
             save(
                 Entry(

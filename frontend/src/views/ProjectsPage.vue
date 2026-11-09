@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import ModulePage from '../components/ModulePage.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
 import ResourcePanel from '../components/ResourcePanel.vue'
@@ -10,7 +11,9 @@ const tabs = [
   { key: 'tasks', label: '任务', resources: ['tasks'] },
   { key: 'time', label: '工时记录', resources: ['time'] },
 ]
+const route = useRoute()
 const mine = ref(true)
+const supervised = computed(() => route.query.supervisor === String(user.value?.id))
 </script>
 <template>
   <ModulePage title="项目" v-slot="{ revision, refresh }">
@@ -19,14 +22,15 @@ const mine = ref(true)
         ><ResourcePanel resource="projects" title="项目列表" :revision="revision" @changed="refresh"
       /></template>
       <template #tasks>
-        <label class="inline-check task-scope"
+        <p v-if="supervised" class="task-scope">我负责确认的任务 · 按专业主管归属显示 <router-link to="/projects?section=tasks">查看其他任务</router-link></p>
+        <label v-else class="inline-check task-scope"
           ><input v-model="mine" type="checkbox" />只看分配给我的任务</label
         >
         <ResourcePanel
           resource="tasks"
           title="任务"
           :allow-create="false"
-          :params="mine ? { assignee: user?.id } : {}"
+          :params="supervised ? { supervisor: user?.id } : mine ? { assignee: user?.id } : {}"
           :revision="revision"
           @changed="refresh"
         />

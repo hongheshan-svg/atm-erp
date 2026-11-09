@@ -104,7 +104,7 @@ def visible_rows(queryset):
 
 def references(obj, *, ignore=()):
     for relation in obj._meta.related_objects:
-        if relation.many_to_many or relation.related_model in ignore:
+        if relation.many_to_many or relation.related_model in (*ignore, models.TaskNotice):
             continue
         model = relation.related_model
         if model.objects.filter(**{relation.field.name: obj}).exists():
@@ -215,9 +215,9 @@ def mode_for(obj, actor):
     elif isinstance(obj, models.Task):
         if obj.status == 'done':
             return 'archive'
-        if obj.delivery_id or references(obj):
+        if obj.started_date or obj.delivery_id or references(obj):
             if obj.status not in {'cancelled', 'done'}:
-                raise Conflict('任务已有工时、账款或交付关联，请先完成或取消任务，再移入已删除记录。')
+                raise Conflict('任务已开始或已有工时、账款或交付关联，请先完成或取消任务，再移入已删除记录。')
             return 'archive'
     used = references(obj)
     if used:

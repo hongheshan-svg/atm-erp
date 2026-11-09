@@ -43,29 +43,29 @@ describe('生产经理任务与售后权限', () => {
   })
 
   it('可为授权生产任务派工完成和补团队工时，不能操作其他项目或设计验收任务', async () => {
-    const row = { id: 2, assignee: 9, kind: 'assembly', status: 'open', can_manage: true, can_cancel: true, can_reopen: false }
-    expect(actionNames('tasks', row)).toEqual(['登记工时', '完成任务', '重新分配', '取消任务'])
+    const row = { id: 2, assignee: 9, kind: 'assembly', status: 'open', can_manage: true, can_confirm: true, can_cancel: true, can_reopen: false }
+    expect(actionNames('tasks', row)).toEqual(['查看工时', '登记工时', '开始任务', '完成任务', '重新分配', '取消任务'])
     const command = await actionCommand('tasks', row, '登记工时')
     expect(command.fields.find(field => field.key === 'user')?.options).toEqual([{ value: 9, label: '装配员' }])
     expect(command.initial).toEqual({ user: 9 })
     expect(command.fields.map(field => field.key)).not.toContain('hourly_cost')
-    expect(actionNames('tasks', { ...row, can_manage: false })).toEqual([])
-    expect(actionNames('tasks', { ...row, kind: 'design', can_manage: false })).toEqual([])
-    expect(actionNames('tasks', { ...row, kind: 'acceptance', can_manage: false })).toEqual([])
-    const own = { ...row, kind: 'design', assignee: 8, can_manage: false }
-    expect(actionNames('tasks', own)).toEqual(['登记工时', '完成任务'])
-    expect((await actionCommand('tasks', own, '登记工时')).fields.some(field => field.key === 'user')).toBe(false)
+    expect(actionNames('tasks', { ...row, can_manage: false, can_confirm: false })).toEqual(['查看工时'])
+    expect(actionNames('tasks', { ...row, kind: 'design', can_manage: false, can_confirm: false })).toEqual(['查看工时'])
+    expect(actionNames('tasks', { ...row, kind: 'acceptance', can_manage: false, can_confirm: false })).toEqual(['查看工时'])
+    const own = { ...row, kind: 'design', assignee: 8, can_manage: false, can_confirm: false }
+    expect(actionNames('tasks', own)).toEqual(['查看工时'])
+    expect((await actionCommand('tasks', own, '登记工时')).fields.some(field => field.key === 'user')).toBe(true)
     user.value = { id: 8, roles: ['manager', 'purchaser'] }
-    expect(actionNames('tasks', { ...row, can_manage: false })).toEqual([])
+    expect(actionNames('tasks', { ...row, can_manage: false, can_confirm: false })).toEqual(['查看工时'])
     await expect(createCommand('tasks', 2)).rejects.toThrow('没有当前项目的生产派工权限')
   })
 
   it('收费售后可派工完成但不能取消或重开；普通生产任务遵循独立状态标记', () => {
-    const charged = { kind: 'service', status: 'open', assignee: 9, can_manage: true, can_cancel: false, can_reopen: false }
-    expect(actionNames('tasks', charged)).toEqual(['登记工时', '完成任务', '重新分配'])
-    expect(actionNames('tasks', { ...charged, status: 'done' })).toEqual(['登记工时'])
-    expect(actionNames('tasks', { ...charged, kind: 'test', status: 'done', can_reopen: true })).toEqual(['登记工时', '重开任务'])
-    expect(actionNames('tasks', { ...charged, kind: 'test', status: 'done', can_cancel: true, can_reopen: true })).toEqual(['登记工时', '取消任务', '重开任务'])
+    const charged = { kind: 'service', status: 'open', assignee: 9, can_manage: true, can_confirm: true, can_cancel: false, can_reopen: false }
+    expect(actionNames('tasks', charged)).toEqual(['查看工时', '登记工时', '开始任务', '完成任务', '重新分配'])
+    expect(actionNames('tasks', { ...charged, status: 'done' })).toEqual(['查看工时', '登记工时', '补录开始日期', '补录完成日期'])
+    expect(actionNames('tasks', { ...charged, kind: 'test', status: 'done', can_reopen: true })).toEqual(['查看工时', '登记工时', '补录开始日期', '补录完成日期', '重开任务'])
+    expect(actionNames('tasks', { ...charged, kind: 'test', status: 'done', can_cancel: true, can_reopen: true })).toEqual(['查看工时', '登记工时', '补录开始日期', '补录完成日期', '取消任务', '重开任务'])
     expect(actionNames('tasks', { ...charged, kind: 'install' })).not.toContain('取消任务')
     expect(actionNames('time', { user: 9, hours: '2', can_amend: true })).toEqual(['更正工时'])
     expect(actionNames('time', { user: 9, hours: '2', can_amend: false })).toEqual([])
