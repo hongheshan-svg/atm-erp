@@ -111,6 +111,7 @@ class Progress:
             task.get_status_display(),
             task.status == 'open',
             due=task.due_date,
+            due_label='计划完成日期',
             record={'status': task.status},
         )
         row.update(handlers=[self.person(person) for person in task.assigned_people()], handler_label='执行人')

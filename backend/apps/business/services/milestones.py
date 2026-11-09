@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Max, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -8,6 +8,7 @@ from ..models import Project, Task
 from ..task_milestones import AUTOMATIC, DEFINITIONS, NODES, PHASES
 from .common import audit, fields, lookup, project_action, save, state
 from .execution import save_new_task, task_values
+from .task_supervision import default_discipline
 
 
 def sync_milestones(user, project):
@@ -26,14 +27,31 @@ def sync_milestones(user, project):
         and not installs.exclude(status='done').exists(),
         'site_acceptance': all_shipped and not deliveries.filter(accepted_date__isnull=True).exists(),
     }
+    dates = {
+        'shipping_dispatch': deliveries.aggregate(value=Max('shipped_date'))['value'],
+        'site_install': None
+        if installs.filter(completed_date__isnull=True).exists()
+        else installs.aggregate(value=Max('completed_date'))['value'],
+        'site_acceptance': deliveries.aggregate(value=Max('accepted_date'))['value'],
+    }
     for task in nodes:
         target = 'done' if completed[task.milestone] else 'open'
-        if task.status == target:
+        completed_date = dates[task.milestone] if target == 'done' else None
+        if task.status == target and task.completed_date == completed_date:
             continue
+        if task.status != target:
+            task.completed_at = timezone.now() if target == 'done' else None
         task.status = target
-        task.completed_at = timezone.now() if target == 'done' else None
+        task.completed_date = completed_date
         save(task, user)
-        audit(user, 'task.milestone-sync', task, reason='按实际交付、安装和验收记录同步', status=target)
+        audit(
+            user,
+            'task.milestone-sync',
+            task,
+            reason='按实际交付、安装和验收记录同步',
+            status=target,
+            completed_date=completed_date.isoformat() if completed_date else None,
+        )
 
 
 def template(actor, project_id=None):
@@ -43,7 +61,15 @@ def template(actor, project_id=None):
     existing = list(project.tasks.exclude(milestone='').values_list('milestone', flat=True)) if project else []
     return {
         'stages': [{'value': value, 'label': label} for value, label in PHASES],
-        'nodes': [{'milestone': code, **DEFINITIONS[code], 'system_managed': code in AUTOMATIC} for code, *_ in NODES],
+        'nodes': [
+            {
+                'milestone': code,
+                **DEFINITIONS[code],
+                'discipline': default_discipline(DEFINITIONS[code]['kind'], code),
+                'system_managed': code in AUTOMATIC,
+            }
+            for code, *_ in NODES
+        ],
         'existing': existing,
         'assignee': project.manager_id if project else None,
         'can_generate': bool(
@@ -63,7 +89,9 @@ def apply_template(actor, key, data):
         for index, row in enumerate(lines):
             if not isinstance(row, dict):
                 raise ValidationError({'lines': '每项任务必须包含阶段、负责人和任务内容。'})
-            fields(row, {'kind', 'milestone', 'title', 'description', 'assignee', 'assignees', 'due_date'})
+            fields(
+                row, {'kind', 'milestone', 'title', 'description', 'assignee', 'assignees', 'due_date', 'discipline'}
+            )
             try:
                 values = task_values(project, row)
             except ValidationError as error:

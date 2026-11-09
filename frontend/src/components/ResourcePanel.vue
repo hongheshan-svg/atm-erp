@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
-import { taskSyncHint } from '../modules/milestones'
+import { taskSyncHint, taskElapsedLabel, taskVarianceLabel } from '../modules/milestones'
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { read, download } from '../api'
@@ -18,6 +18,7 @@ import { money } from '../utils/money'
 import { sessionStore } from '../utils/storage'
 import { savedTarget, wideCommand } from '../form-experience'
 import ActionDialog from './ActionDialog.vue'
+import TaskTimeRecords from './TaskTimeRecords.vue'
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
@@ -61,7 +62,8 @@ const error = ref('')
 const command = ref<Command | null>(null)
 const actionDialog = ref<{ confirmLeave: () => Promise<boolean> }>()
 const wide = computed(() => wideCommand(command.value))
-const savedRecord = ref<{ title: string; resource: string; id: number; project?: number } | null>(null)
+const savedRecord = ref<{ title: string; resource: string; id: number; project?: number; timeTask?: number } | null>(null)
+const timeTask = ref<number | null>(null)
 const hasFilter = computed(() => !!(appliedSearch.value || filterValue.value || Object.keys(appliedExtra.value).length))
 const emptyHint = computed(() => ({
   purchases: '按项目缺料可从 BOM 多选下单；零星物料可新建采购。',
@@ -69,7 +71,7 @@ const emptyHint = computed(() => ({
   entries: '签约、批准采购会自动产生应收应付；费用通过登记费用添加。',
   stocks: '采购收货后自动增加库存；首次启用可登记期初库存。',
   documents: '上传图纸、合同或业务凭证，便于项目成员协作。',
-  tasks: '先新增任务，选择执行人和截止日期，任务会出现在执行人的工作台。',
+  tasks: '先新增任务，选择执行人和计划完成日期，任务会出现在执行人的工作台。',
 } as Record<string, string>)[props.resource] || (createLabel(props.resource) && props.allowCreate ? '可通过页面上方的新增或导入入口建立记录。' : '当前账号可查看的业务尚无记录。'))
 async function leaveCurrent() { return !actionBusy.value && (!actionDialog.value?.confirmLeave || await actionDialog.value.confirmLeave()) }
 async function openBom() { if (await leaveCurrent()) { command.value = null; pickingBom.value = true } }
@@ -216,7 +218,7 @@ async function load(preserveSelection: unknown = false) {
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
       else if (props.resource === 'bank-records') await action(row, '查看银行明细')
-      else if (props.resource === 'tasks') { command.value = { title: '待办详情', path: '', readonly: true, initial: row, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'due_date', label: '截止日期' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
+      else if (props.resource === 'tasks') { command.value = { title: '待办详情', path: '', readonly: true, initial: { ...row, elapsed_label: taskElapsedLabel(row), variance_label: taskVarianceLabel(row) }, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'discipline_label', label: '负责专业' }, { key: 'supervisor_name', label: '负责主管' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'logged_hours', label: '已登记工时（小时）' }, { key: 'due_date', label: '计划完成日期' }, { key: 'completed_date', label: '实际完成日期' }, { key: 'started_date', label: '实际开始日期' }, { key: 'elapsed_label', label: '任务历时（自然日，含首尾日）' }, { key: 'variance_label', label: '提前／延期' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
       else await inspect(row)
     }
   } catch (e) {
@@ -228,7 +230,7 @@ async function load(preserveSelection: unknown = false) {
 watch(
   [() => props.resource, () => JSON.stringify(props.params || {}), () => props.projectId, () => props.resource === 'sales' ? route.query.search : undefined],
   (_now, before) => {
-    if (before?.length) { commandGeneration++; command.value = null; selectedId.value = null; selectedRow.value = null; preparing.value = false; deleting.value = null; deletionHistory.value = false }
+    if (before?.length) { commandGeneration++; command.value = null; selectedId.value = null; selectedRow.value = null; preparing.value = false; deleting.value = null; deletionHistory.value = false; timeTask.value = null; savedRecord.value = null }
     page.value = 1
     search.value = initialSearch()
     appliedSearch.value = search.value
@@ -263,6 +265,11 @@ async function action(row: Row, name: string) {
   const current = ++commandGeneration
   preparing.value = true
   try {
+    if (props.resource === 'tasks' && name === '查看工时') {
+      command.value = null
+      timeTask.value = row.id
+      return
+    }
     if (props.resource === 'purchases' && name === '预览采购合同') {
       await router.push(`/purchases/${row.id}/contract`)
       return
@@ -295,6 +302,10 @@ function saved(result?: Row) {
   if (result && command.value) {
     const target = savedTarget(command.value, result, selectedId.value)
     savedRecord.value = target ? { title: `${command.value.title}成功${result.code ? ` · ${result.code}` : ''}`, ...target, project: Number(selectedRow.value?.project || command.value.initial?.project || props.projectId) || undefined } : null
+    if (savedRecord.value && command.value.title === '登记工时') {
+      savedRecord.value.timeTask = Number(result.task || selectedId.value)
+      if (result.hours != null) savedRecord.value.title = `工时已提交：${result.user_name} · ${result.date} · ${result.hours} 小时`
+    }
   }
   if (props.revision === undefined) void load()
   emit('changed')
@@ -302,6 +313,7 @@ function saved(result?: Row) {
 async function viewSaved() {
   const record = savedRecord.value
   if (!record || !(await leaveCurrent())) return
+  if (record.timeTask) { command.value = null; timeTask.value = record.timeTask; return }
   if (record.resource === 'projects') { await router.push(`/projects/${record.id}`); return }
   if (record.resource !== props.resource) {
     const module = ['entries', 'payments', 'reconciliations', 'bank-records'].includes(record.resource) ? 'finance' : ['items', 'partners'].includes(record.resource) ? 'masterdata' : record.resource
@@ -395,7 +407,7 @@ async function inspect(row: Row) {
       <el-button native-type="submit" :loading="loading">搜索</el-button>
       <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; dateFrom = ''; dateTo = ''; searchRecords()">重置</el-button>
     </form>
-    <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>下一步：查看结果并继续处理。</span><el-button @click="viewSaved">查看结果并继续</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
+    <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : '下一步：查看结果并继续处理。' }}</span><el-button @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
     <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!createLabel(resource) || !allowCreate">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
@@ -432,6 +444,7 @@ async function inspect(row: Row) {
           }}</router-link
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
           ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" :title="col.format?.(row)" :class="{ 'status-wrap': col.format }" />
+          <el-button v-else-if="resource === 'tasks' && col.key === 'logged_hours'" link type="primary" @click="action(row, '查看工时')">{{ row.time_entry_count ? `${row.logged_hours} 小时` : '未登记 · 查看' }}</el-button>
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
@@ -460,7 +473,7 @@ async function inspect(row: Row) {
                 ></template
               ></el-dropdown
             ><span v-else-if="!primaryAction(row) && !deletionAllowed" class="muted">—</span><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
-          ><small v-if="resource === 'tasks' && taskSyncHint(row)" class="task-sync-hint">{{ taskSyncHint(row) }}<router-link :to="{ path: `/projects/${row.project}`, query: { tab: 'deliveries', section: 'deliveries' } }">查看交付进度</router-link></small></template
+          ><small v-if="resource === 'tasks' && !row.can_confirm && !row.system_managed" class="task-sync-hint">由{{ row.supervisor_name || '专业主管' }}确认完成及登记工时</small><small v-if="resource === 'tasks' && taskSyncHint(row)" class="task-sync-hint">{{ taskSyncHint(row) }}<router-link :to="{ path: `/projects/${row.project}`, query: { tab: 'deliveries', section: 'deliveries' } }">查看交付进度</router-link></small></template
         ></el-table-column
       >
     </BusinessTable>
@@ -468,6 +481,7 @@ async function inspect(row: Row) {
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" :resource="resource" :title="title" :rows="deleting || undefined" :project-id="scopedImportProject(params, projectId)" @close="deleting = null; deletionHistory = false" @saved="deleted" @open="openRemoved" />
   </section>
+  <TaskTimeRecords v-if="timeTask" :task-id="timeTask" @close="timeTask = null" />
   <ActionDialog ref="actionDialog" :command="command" @replace="command = $event" :inline="sidePanel" @busy="actionBusy = $event" @close="closeCommand" @saved="saved"><template #context><RecordContext v-if="selectedRow && (['stocks', 'entries'].includes(resource) || (['sales', 'purchases'].includes(resource) && actionNames(resource, selectedRow).includes('附件')))" :resource="resource" :record="selectedRow" @attachments="action(selectedRow!, '附件')" /></template></ActionDialog>
   </div>
 </template>

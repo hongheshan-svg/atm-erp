@@ -4,10 +4,25 @@ import { date, person, select, t } from './shared'
 import type { Catalog } from '../catalog'
 import type { Command, Field, Row } from '../types'
 
+export const disciplines = [{ value: 'mechanical', label: '机械' }, { value: 'electrical', label: '电气' }, { value: 'purchasing', label: '采购' }, { value: 'production', label: '生产' }, { value: 'delivery', label: '交付与验收' }]
+export const disciplineField = (): Field => ({ key: 'discipline', label: '负责专业', type: 'select', optional: true, options: disciplines, hint: '选择后通知该专业主管；留空按阶段及里程碑自动归属，未设置主管时由项目经理负责。' })
+
 export const taskAssignees = (row: Row): number[] => row.assignees ?? (row.assignee ? [row.assignee] : [])
+export function taskElapsedLabel(row: Row): string {
+  if (row.status === 'cancelled' || row.system_managed || row.kind === 'acceptance') return '—'
+  if (row.elapsed_days != null) return `${row.elapsed_days} 天${row.status === 'open' ? '（进行中）' : ''}`
+  if (!row.started_date) return row.status === 'done' ? '待补开始日期' : '未记录开始'
+  return '待补完成日期'
+}
+export function taskVarianceLabel(row: Row): string {
+  const days = row.schedule_variance_days
+  if (days == null) return '—'
+  if (row.status === 'open') return days > 0 ? `已逾期 ${days} 天` : '未逾期'
+  return days > 0 ? `延期 ${days} 天` : days < 0 ? `提前 ${-days} 天` : '按期完成'
+}
 export function executorField(c: Catalog, scope?: Row | null): Field {
   return { ...person(c, 'assignees', '执行人', scope), type: 'multi', searchableMulti: true,
-    hint: '可选择多人共同执行。任一执行人或有权限的经理确认后，整项任务完成；工时按各人分别登记。' }
+    hint: '可选择多人共同执行。由对应专业主管确认完成并按人员、工作日期登记工时；执行人可查看进度。' }
 }
 export function taskSyncHint(row: Row): string {
   if (row.kind === 'acceptance') return '按批次验收记录完成'
@@ -28,8 +43,9 @@ export function milestoneFields(c: Catalog, metadata: Row, scope?: Row | null, c
       hint: '先选阶段，再选节点；留空可新增自定义任务。',
     },
     { ...t('title', '任务名称', true), hint: '选定节点后可留空，自动使用节点名称；自定义任务请填写名称。' },
+    disciplineField(),
     executorField(c, scope),
-    date('due_date', '截止日期', true),
+    date('due_date', '计划完成日期', true),
     { ...t('description', '完成要求', true), hint: '写明图档版本、交付物或验收标准。发货、现场安装接线、现场验收按实际业务记录同步。' },
   ]
 }
@@ -47,7 +63,7 @@ export async function milestoneTemplateCommand(projectId: number): Promise<Comma
     blocked: !metadata.can_generate ? '仅项目经理或管理员可为执行中、交付中的项目生成模板。' : undefined,
     fields: [{ key: 'lines', label: '项目里程碑', type: 'rows', compact: true, fields: milestoneFields(c, metadata, scope).map(field => ({ ...field, hint: '', ...(field.key === 'description' ? { type: 'text' as const, wide: false } : {}) })) }],
     initial: { lines: nodes.map(node => ({
-      kind: node.kind, milestone: node.milestone, title: node.title, description: node.description,
+      kind: node.kind, milestone: node.milestone, discipline: node.discipline, title: node.title, description: node.description,
       assignees: [metadata.assignee], due_date: '',
     })) },
     prepare: data => {

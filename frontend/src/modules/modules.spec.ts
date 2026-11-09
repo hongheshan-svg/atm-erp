@@ -105,7 +105,7 @@ describe('模块边界', () => {
     expect(actionNames('payments', { reversal_of: 1, reversed_by: null })).not.toContain('冲销付款')
     expect(actionNames('payments', { reversal_of: null, reversed_by: 2 })).toContain('补录凭证')
     user.value = { role: 'manager' }
-    expect(actionNames('time', { hours: '3', reversed_by: null })).toContain('更正工时')
+    expect(actionNames('time', { hours: '3', reversed_by: null, can_amend: true })).toContain('更正工时')
     expect(actionNames('time', { hours: '3', reversed_by: 4 })).toEqual([])
   })
 
@@ -128,9 +128,9 @@ describe('模块边界', () => {
 
   it('已完成任务可补录工时，取消任务不提供入口', () => {
     user.value = { role: 'member', id: 7 }
-    expect(actionNames('tasks', { status: 'done', assignee: 7, kind: 'test' })).toEqual(['登记工时'])
-    expect(actionNames('tasks', { status: 'cancelled', assignee: 7, kind: 'test' })).toEqual([])
-    expect(actionNames('tasks', { status: 'done', assignee: 8, kind: 'test' })).toEqual([])
+    expect(actionNames('tasks', { status: 'done', assignee: 7, kind: 'test' })).toEqual(['查看工时'])
+    expect(actionNames('tasks', { status: 'cancelled', assignee: 7, kind: 'test' })).toEqual(['查看工时'])
+    expect(actionNames('tasks', { status: 'done', assignee: 8, kind: 'test' })).toEqual(['查看工时'])
   })
 
   it('销售表单不依赖项目或库存接口，签约负责交接人员', async () => {

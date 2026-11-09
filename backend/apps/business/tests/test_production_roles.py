@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.business.models import Delivery, Entry, Task, TimeEntry
+from apps.business.services.task_supervision import default_discipline
 from apps.core.models import ActionReceipt, AuditLog
 
 from .test_commercial_chain import BusinessFixtures
@@ -18,6 +19,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.other_project = self.active_project()
         self.production = self.users['production_manager']
         self.project.members.add(self.production)
+        self.project.task_supervisors = {'production': self.production.pk, 'electrical': self.production.pk}
+        self.project.save(update_fields=['task_supervisors'])
         self.today = timezone.localdate()
         self.users['member'].hourly_cost = Decimal('50.00')
         self.users['member'].save()
@@ -31,6 +34,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         return Task.objects.create(
             project=project or self.project,
             kind=kind,
+            discipline=default_discipline(kind),
             title=f'{kind}生产职责验收',
             assignee=self.users['member'],
             status=status,
@@ -85,7 +89,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             self.assertFalse(detail['can_reopen'])
         self.post('production_manager', f'tasks/{tasks["test"]}/complete/', {'reason': '调试可交叉推进'})
         self.post('production_manager', f'tasks/{tasks["assembly"]}/complete/', {'reason': '装配复核完成'})
-        self.post('member', f'tasks/{design.pk}/complete/', {'reason': '设计确认'})
+        self.post('manager', f'tasks/{design.pk}/complete/', {'reason': '设计确认'})
         self.assertEqual(Task.objects.get(pk=tasks['assembly']).status, 'done')
         self.assertEqual(Task.objects.get(pk=tasks['test']).status, 'done')
         self.post('production_manager', f'tasks/{tasks["assembly"]}/reopen/', {'reason': '并行调整装配任务'})
@@ -225,7 +229,9 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.assertEqual(TimeEntry.objects.filter(task=task).count(), 3)
         design = self.task('design')
         own_design_time = self.post(
-            'member', f'tasks/{design.pk}/time/', {'date': str(self.today), 'hours': '1', 'reason': '设计工时'}
+            'manager',
+            f'tasks/{design.pk}/time/',
+            {'user': self.users['member'].pk, 'date': str(self.today), 'hours': '1', 'reason': '设计工时'},
         )['id']
         self.assertFalse(self.get(f'time/{own_design_time}/')['can_amend'])
         self.post(
@@ -455,6 +461,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.task('design', status='done')
         for operation in ('complete', 'time', 'amend'):
             with self.subTest(operation=operation):
+                self.project.task_supervisors = {'production': self.production.pk}
+                self.project.save(update_fields=['task_supervisors'])
                 self.production.role = 'production_manager'
                 self.production.save()
                 task = self.task()
@@ -479,7 +487,9 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
                 self.production.role = 'member'
                 self.production.save()
                 before = ActionReceipt.objects.count(), TimeEntry.objects.count(), AuditLog.objects.count()
-                # The actor still participates in the project, but has lost team authority.
+                # 专业授权独立于固定岗位；撤销专业主管后立即失去确认和代录权限。
+                self.project.task_supervisors = {}
+                self.project.save(update_fields=['task_supervisors'])
                 self.post('production_manager', path, payload, key=key, status=403)
                 self.assertEqual(
                     (ActionReceipt.objects.count(), TimeEntry.objects.count(), AuditLog.objects.count()), before

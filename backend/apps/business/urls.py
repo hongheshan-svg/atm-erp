@@ -11,6 +11,7 @@ from .api.masterdata import ItemView, PartnerView
 from .api.projects import ProjectView
 from .api.purchases import PurchaseView
 from .api.reconciliation import BankMatchView, BankView, ReconciliationView
+from .api.task_notices import TaskNoticeView
 from .attachments import DocumentView
 from .reports import ReportsView
 from .sales import SalesView
@@ -32,6 +33,7 @@ router.register('reconciliations', ReconciliationView)
 router.register('bank-records', BankView)
 router.register('bank-matches', BankMatchView)
 router.register('tasks', TaskView)
+router.register('task-notices', TaskNoticeView)
 router.register('deliveries', DeliveryView)
 router.register('time', TimeView)
 router.register('documents', DocumentView)

@@ -491,7 +491,11 @@ class SalesDateFactTests(BusinessFixtures, TestCase):
             {'project': project_id, 'kind': 'design', 'title': '设计', 'assignee': self.users['member'].pk},
             status=201,
         )['id']
-        self.post('member', f'tasks/{task}/time/', {'hours': '1', 'date': today, 'reason': '当天工作'})
+        self.post(
+            'manager',
+            f'tasks/{task}/time/',
+            {'user': self.users['member'].pk, 'hours': '1', 'date': today, 'reason': '当天工作'},
+        )
 
     def test_future_amendment_date_is_rejected(self):
         project = self.active_project()

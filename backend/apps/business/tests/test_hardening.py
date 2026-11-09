@@ -78,7 +78,7 @@ class HardeningTests(BusinessFixtures, TestCase):
         self.assertEqual(exposed, importable)
         self.assertEqual(
             {prefix for prefix, _, _ in router.registry} - exposed,
-            {'bom', 'bank-records', 'bank-matches', 'documents', 'record-deletions'},
+            {'bom', 'bank-records', 'bank-matches', 'documents', 'record-deletions', 'task-notices'},
         )
 
     def test_ledger_rows_cannot_be_hidden_by_flipping_the_deleted_flag(self):
@@ -842,6 +842,9 @@ class RoleResponsibilityTests(BusinessFixtures, TestCase):
                 task = Task.objects.create(
                     project=self.project, kind='design', title=f'{role}任务', assignee=self.users[role]
                 )
+                self.post(role, f'tasks/{task.pk}/complete/', {'reason': '执行人不能直接确认'}, status=403)
+                self.project.task_supervisors = {'mechanical': self.users[role].pk}
+                self.project.save(update_fields=['task_supervisors'])
                 self.post(
                     role,
                     f'tasks/{task.pk}/time/',
@@ -851,6 +854,8 @@ class RoleResponsibilityTests(BusinessFixtures, TestCase):
                 task.refresh_from_db()
                 self.assertEqual(task.status, 'done')
                 self.assertEqual(TimeEntry.objects.get(task=task).user_id, self.users[role].pk)
+                self.project.task_supervisors = {}
+                self.project.save(update_fields=['task_supervisors'])
                 self.post(role, f'tasks/{other_task.pk}/complete/', {'reason': '不能代办他人任务'}, status=403)
                 self.post(
                     role,

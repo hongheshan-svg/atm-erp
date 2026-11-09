@@ -4,6 +4,13 @@ import { primaryActions } from '../src/row-actions'
 
 const expectedHttpErrors = new WeakMap<Page, { url: string; status: number }[]>()
 
+// 业务日期独立于 CI 主机和浏览器时区；UTC 日期在中国午夜后会落后一天。
+export function businessDate(offset = 0) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(Date.now() + offset * 86400000))
+}
+
 export function expectHttpError(page: Page, path: string, status: number) {
   const expected = expectedHttpErrors.get(page) || []
   const rule = { url: new URL(path, page.url()).href, status }
@@ -45,7 +52,7 @@ export async function openRowAction(page: Page, row: Locator, name: string) {
   await expect(direct.or(menu).first()).toBeVisible()
   // The same registry the list renders from decides where to look, so a save that reloads the row
   // is waited out on the right control instead of by clicking the menu toggle in a retry loop.
-  if (primaryActions.includes(name)) {
+  if (primaryActions.includes(name) && await direct.isVisible()) {
     await direct.click()
     return
   }
@@ -111,10 +118,18 @@ export async function selectExecutors(page: Page, form: Locator, names: string[]
   await expect(input).toBeVisible()
   while (await field.locator('.el-tag__close').count()) await field.locator('.el-tag__close').first().click()
   await expect(field.locator('.el-tag__close')).toHaveCount(0)
+  // 多选后下拉保持打开；再次点击整个选择框的中心可能正好点击已选人员的删除图标。
+  await field.locator('.el-select__wrapper').click()
   for (const name of names) {
     await input.fill(name)
-    await page.getByRole('option', { name, exact: false }).click()
+    const option = page.getByRole('option', { name, exact: false })
+    await expect(option).toBeVisible()
+    await expect(page.locator('.el-select__popper.executor-options:visible')).not.toHaveClass(/-enter-active/)
+    await option.click()
+    await expect(option).toHaveAttribute('aria-selected', 'true')
+    await expect(field.locator('.el-tag').filter({ hasText: name })).toHaveCount(1)
   }
   await page.locator('.executor-options:visible').getByRole('button', { name: '完成选择', exact: true }).click()
   await expect(page.locator('.executor-options:visible')).toHaveCount(0)
+  await expect(field.locator('.el-tag__close')).toHaveCount(names.length)
 }

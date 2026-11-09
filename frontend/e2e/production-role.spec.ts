@@ -1,4 +1,4 @@
-import { selectExecutors } from './fixtures'
+import { businessDate, selectExecutors } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -10,10 +10,7 @@ const contexts: BrowserContext[] = []
 const errors: string[] = []
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, title: string) => page.locator('.el-table__body tr:visible').filter({ hasText: title })
-const date = () => {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
+const date = businessDate
 async function api(page: Page, path: string, data?: Record<string, unknown>, status = 200) {
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }
@@ -87,6 +84,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await dialog(manager).getByLabel('项目成员', { exact: true }).selectOption([producer.id, first.id, second.id].map(String))
   await dialog(manager).getByLabel('质保月数', { exact: true }).fill('12')
   const current = await save(manager, 'business/projects/', 201)
+  await api(manager, `business/projects/${current.id}/task-supervisors/`, { supervisors: { production: producer.id, electrical: producer.id }, expected_revision: 0, reason: '项目指定生产与电气专业主管' })
   expect((await api(manager, `business/projects/${current.id}/`)).members).toEqual(expect.arrayContaining([producer.id, first.id, second.id]))
   const outside = await api(admin, 'business/projects/', { name: `其他生产项目${suffix}`, customer: customer.id, manager: owner.id, members: [first.id] }, 201)
   const outsideTask = await api(admin, 'business/tasks/', { project: outside.id, kind: 'assembly', title: `外部装配${suffix}`, assignee: first.id }, 201)
@@ -133,7 +131,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
     await dialog(page).getByLabel('阶段', { exact: true }).selectOption(kind)
     await dialog(page).getByLabel('任务名称', { exact: true }).fill(title)
     await selectExecutors(page, dialog(page), [first.display_name])
-    await dialog(page).getByLabel('截止日期', { exact: true }).fill(date())
+    await dialog(page).getByLabel('计划完成日期', { exact: true }).fill(date())
     return save(page, 'business/tasks/', 201)
   }
   const assemblyTitle = `装配派工${suffix}`, testTitle = `调试派工${suffix}`

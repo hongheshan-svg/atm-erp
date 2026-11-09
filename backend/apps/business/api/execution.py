@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django_filters import rest_framework as filters
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -19,14 +19,21 @@ from ..serializers import (
     TaskSerializer,
     TimeSerializer,
 )
-from ..services import corrections, execution, milestones
+from ..services import corrections, deletions, execution, milestones
 from ..services.common import identity
+from ..services.task_supervision import supervised_tasks
 from ..task_milestones import PHASES, ordered_tasks
 from .common import ImportableMixin, ReadView, key
 
 
 class TaskFilter(filters.FilterSet):
     assignee = filters.NumberFilter(method='filter_assignee')
+    supervisor = filters.NumberFilter(method='filter_supervisor')
+
+    def filter_supervisor(self, queryset, name, value):
+        return supervised_tasks(
+            identity(value, 'supervisor'), queryset.exclude(project__status__in=['closed', 'cancelled'])
+        )
 
     def filter_assignee(self, queryset, name, value):
         person = identity(value, 'assignee')
@@ -85,8 +92,49 @@ class TaskView(ImportableMixin, ReadView):
         return Response(execution.complete_task(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        return Response(execution.start_task(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'], url_path='start-date')
+    def start_date(self, request, pk=None):
+        return Response(
+            execution.start_task(request.user, key(request), self.get_object().pk, request.data, amend=True)
+        )
+
+    @action(detail=True, methods=['post'], url_path='completion-date')
+    def completion_date(self, request, pk=None):
+        return Response(execution.amend_task_completion(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'])
     def time(self, request, pk=None):
         return Response(execution.log_time(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['get'], url_path='time-records')
+    def time_records(self, request, pk=None):
+        task = self.get_object()
+        # 已移出默认列表的流水仍是原始事实；任务核对需展示它们，才能解释净工时。
+        records = (
+            TimeEntry.objects.filter(task=task)
+            .select_related('user', 'task__project', 'reversal')
+            .prefetch_related('task__project__members')
+            .annotate(archived=deletions.removed(TimeEntry))
+        )
+        totals = records.aggregate(total=Sum('hours'), mine=Sum('hours', filter=Q(user=request.user)))
+        mine = request.query_params.get('mine', 'false')
+        if mine not in {'true', 'false'}:
+            raise ValidationError({'mine': '请选择是否只看本人工时。'})
+        if mine == 'true':
+            records = records.filter(user=request.user)
+        page = self.paginate_queryset(records.order_by('-created_at', '-pk'))
+        response = self.get_paginated_response(
+            TimeSerializer(page, many=True, context=self.get_serializer_context()).data
+        )
+        response.data['summary'] = {
+            'task_title': task.title,
+            'logged_hours': str(totals['total'] or execution.ZERO),
+            'my_hours': str(totals['mine'] or execution.ZERO),
+        }
+        return response
 
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):

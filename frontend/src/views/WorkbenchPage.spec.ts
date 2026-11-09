@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import WorkbenchPage from './WorkbenchPage.vue'
+import TaskNotices from '../components/TaskNotices.vue'
 import { read } from '../api'
 import { today } from '../forms'
 import { user } from '../session'
@@ -19,12 +20,23 @@ const data = () => ({
 })
 async function render() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
-  const wrapper = mount(WorkbenchPage, { global: { plugins: [ElementPlus, router] } })
+  const wrapper = mount(WorkbenchPage, { global: { plugins: [ElementPlus, router], stubs: { TaskNotices: true } } })
   await flushPromises()
   return wrapper
 }
 const rows = (wrapper: any) => wrapper.get('.priority-table').findAll('.el-table__body-wrapper tbody tr')
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); user.value = { id: 7, roles: ['member'], display_name: '测试用户' }; vi.mocked(read).mockResolvedValue(data()) })
+
+it.each([
+  { roles: ['sales_manager'], visible: false },
+  { roles: ['sales_manager', 'member'], visible: true },
+  { roles: ['sales_manager', 'purchaser'], visible: true },
+])('任务提醒仅向可访问项目的岗位展示，兼岗按并集判断：$roles', async ({ roles, visible }) => {
+  user.value = { id: 7, roles }
+  const wrapper = await render()
+  expect(wrapper.findComponent(TaskNotices).exists()).toBe(visible)
+  wrapper.unmount()
+})
 
 it('三个指标合并全部风险提示，分类入口直达完整列表', async () => {
   const wrapper = await render()
@@ -88,12 +100,12 @@ it('优先事项按逾期、今日到期、待审批排序并最多展示 7 条'
   wrapper.unmount()
 })
 
-it('未到期任务直接展示项目、截止日期和继续处理入口，工程师不出现仓储资金入口', async () => {
+it('未到期任务直接展示项目、计划完成日期和继续处理入口，工程师不出现仓储资金入口', async () => {
   user.value = { id: 9, roles: ['mechanical_engineer'] }
   vi.mocked(read).mockResolvedValue({ tasks: bucket([{ id: 8, project: 4, project_name: '自动检测线', title: '机械设计', due_date: '2999-10-30' }]) })
   const wrapper = await render()
   expect(wrapper.get('.work-ongoing').text()).toContain('自动检测线')
-  expect(wrapper.get('.work-ongoing').text()).toContain('截止日期：2999-10-30')
+  expect(wrapper.get('.work-ongoing').text()).toContain('计划完成日期：2999-10-30')
   expect(wrapper.get('[aria-label="继续处理机械设计"]').attributes('href')).toBe('/projects/4?tab=tasks&resource=tasks&focus=8')
   expect(wrapper.find('[aria-label="日常库存入口"]').exists()).toBe(false)
   expect(wrapper.text()).not.toContain('登记收付款')

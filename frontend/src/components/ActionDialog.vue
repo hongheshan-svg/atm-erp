@@ -135,7 +135,7 @@ watch(() => props.command, async (value, old) => {
 const error = ref('')
 const recovery = ref<{ label: string; path: string }[]>([])
 const preview = ref<Row | null>(null)
-const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
+const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '开始任务', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
 const similarItems = ref<Row[]>([])
 watch(() => [props.command?.path, data.value.name, data.value.specification], async (_, __, onCleanup) => {
   similarItems.value = []

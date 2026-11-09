@@ -12,7 +12,7 @@ watch([preferenceKey, () => route.query.guide], () => {
 }, { immediate: true })
 function dismiss() { open.value = false; localStore.set(preferenceKey.value, 'hidden') }
 const steps = computed(() => [
-  ...(operations() ? [{ key: 'tasks', title: '处理我的任务', note: '查看分配给自己的任务，登记工时或完成任务。尚未分配时，请联系项目经理。', to: '/projects?section=tasks', action: '查看我的任务' }] : []),
+  ...(operations() ? [{ key: 'tasks', title: '处理我的任务', note: '查看分配给自己的任务和工时；由负责专业主管统一确认完成并登记实际小时数。', to: '/projects?section=tasks', action: '查看我的任务' }] : []),
   ...(can(['admin', 'manager']) ? [{ key: 'projects', title: '安排项目执行', note: '选择负责的项目，维护成员、计划并分配任务。', to: '/projects?section=projects', action: '选择项目' }] : []),
   ...(can(['mechanical_engineer', 'electrical_engineer']) ? [{ key: 'engineering', title: '编制项目用料', note: '选择参与的项目，在 BOM 维护或导入物料清单；图纸与程序放在项目附件。', to: '/bom', action: '维护 BOM' }] : []),
   ...(can(['production_manager']) ? [{ key: 'production', title: '安排生产与售后', note: '选择参与的项目，安排装配、调试、安装及售后任务。', to: '/projects?section=projects', action: '选择生产项目' }] : []),

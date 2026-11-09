@@ -264,3 +264,20 @@ describe('项目上下文与确认失败回填', () => {
     wrapper.unmount()
   })
 })
+
+it('工时导入仅对有负责任务的专业主管提供，员工不显示入口', async () => {
+  vi.resetAllMocks()
+  user.value = { id: 3, roles: ['member'] }
+  vi.mocked(read).mockResolvedValue({ results: [] })
+  const mountTime = () => shallowMount(TransferTools, { props: { resource: 'time', path: '/business/time/', projectId: 4 }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElDropdown: { name: 'ElDropdown', template: '<div><slot /><slot name="dropdown" /></div>' }, ElTableColumn: true, RouterLink: RouterLinkStub } } })
+  const worker = mountTime()
+  await flushPromises()
+  expect(read).toHaveBeenCalledWith('/business/tasks/', { supervisor: 3, project: 4, page_size: 1 })
+  expect(worker.findAllComponents({ name: 'ElDropdownItem' }).some(item => item.props('command') === 'import')).toBe(false)
+  worker.unmount()
+  vi.mocked(read).mockResolvedValue({ results: [{ can_confirm: true }] })
+  const head = mountTime()
+  await flushPromises()
+  expect(head.findAllComponents({ name: 'ElDropdownItem' }).some(item => item.props('command') === 'import')).toBe(true)
+  head.unmount()
+})

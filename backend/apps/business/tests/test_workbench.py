@@ -28,7 +28,7 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         )
         Task.objects.create(project=hidden, assignee=self.users['member'], kind='design', title='不能泄露')
         result = self.get('member')
-        self.assertEqual(set(result), {'tasks'})
+        self.assertEqual(set(result), {'tasks', 'supervised_tasks'})
         self.assertEqual(result['tasks']['count'], 25)
         self.assertEqual(len(result['tasks']['results']), 20)
         self.assertTrue(all(task['project'] == self.project.pk for task in result['tasks']['results']))

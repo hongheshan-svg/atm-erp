@@ -5,7 +5,8 @@ import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-p
 import { ElSkeleton } from 'element-plus'
 import { read } from '../api'
 import { today } from '../forms'
-import { can, user } from '../session'
+import { can, operations, user } from '../session'
+import TaskNotices from '../components/TaskNotices.vue'
 import RoleTaskGuide from '../components/RoleTaskGuide.vue'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
@@ -15,14 +16,14 @@ const work = ref<Record<string, Bucket>>({})
 const loading = ref(false), initialized = ref(false), error = ref(''), updated = ref('')
 const day = ref(today())
 let generation = 0
-const icons = { sales: Document, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
+const icons = { supervised_tasks: List, sales: Document, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
 const labels: Record<string, string> = {
-  tasks: '我的待办', production_tasks: '生产与售后派工', overdue_purchases: '采购明细逾期', approvals: '待批准采购', prepayments: '待核准预付款',
+  supervised_tasks: '我负责确认的任务', tasks: '我的待办', production_tasks: '生产与售后派工', overdue_purchases: '采购明细逾期', approvals: '待批准采购', prepayments: '待核准预付款',
   settlements: '到期收付 / 待退款', reconciliations: '待确认业务对账', bank_records: '银行待认领 / 匹配',
   receipts: '待收货', drafts: '采购草稿', sales: '我的销售订单',
 }
 const notes: Record<string, string> = {
-  tasks: '按计划推进项目任务', production_tasks: '参与项目的装配、调试、安装与售后任务，安排人员并跟进完成', overdue_purchases: '跟进超出承诺交期的未到货物料', approvals: '确认采购，衔接后续执行',
+  supervised_tasks: '按负责专业确认完成，并按人员和日期登记实际工时', tasks: '按计划推进项目任务', production_tasks: '参与项目的装配、调试、安装与售后任务，安排人员并跟进完成', overdue_purchases: '跟进超出承诺交期的未到货物料', approvals: '确认采购，衔接后续执行',
   prepayments: '按合同条款核准预付款', settlements: '处理到期款项与退款', reconciliations: '核对差异，确认可结算额度',
   bank_records: '核实户名和用途后认领或匹配', receipts: '核对到货，及时更新库存', drafts: '完善采购明细后提交', sales: '跟进报价、签约、交付和回款',
 }
@@ -37,8 +38,8 @@ const idleNote = computed(() => {
 })
 const metrics = computed(() => [
   ...(work.value.tasks || work.value.overdue_purchases || work.value.production_tasks
-    ? [{ label: work.value.overdue_purchases ? '任务 / 到货逾期' : '任务逾期', value: (work.value.tasks?.overdue_count || 0) + count('overdue_purchases') + (work.value.production_tasks?.overdue_count || 0), note: work.value.production_tasks ? '本人及生产任务分类计数；兼岗任务可能重叠' : work.value.overdue_purchases ? '我的逾期任务与采购到货逾期' : '我的任务 · 已超过截止日期', tone: 'danger' }] : []),
-  ...(work.value.tasks ? [{ label: '我的任务今日截止', value: work.value.tasks.today_count || 0, note: '任务截止日期，不含款项到期', tone: 'primary' }] : []),
+    ? [{ label: work.value.overdue_purchases ? '任务 / 到货逾期' : '任务逾期', value: (work.value.tasks?.overdue_count || 0) + count('overdue_purchases') + (work.value.production_tasks?.overdue_count || 0), note: work.value.production_tasks ? '本人及生产任务分类计数；兼岗任务可能重叠' : work.value.overdue_purchases ? '我的逾期任务与采购到货逾期' : '我的任务 · 已超过计划完成日期', tone: 'danger' }] : []),
+  ...(work.value.tasks ? [{ label: '我的任务今日截止', value: work.value.tasks.today_count || 0, note: '任务计划完成日期，不含款项到期', tone: 'primary' }] : []),
   ...(work.value.approvals || work.value.prepayments ? [{ label: '等待我审批', value: count('approvals') + count('prepayments'), note: '采购批准 + 预付款核准', tone: 'warning' }] : []),
 ])
 function collection(key: string) {
@@ -48,6 +49,7 @@ function collection(key: string) {
   // 销售列表会沿用本人上次的搜索词，工作台进来必须看到完整清单，所以显式清空。
   if (key === 'sales') return { path: '/sales', query: { search: '' } }
   // 任务有自己的完整清单：以前这里只能落到项目列表，看自己的活还要逐个项目点进去。
+  if (key === 'supervised_tasks') return { path: '/projects', query: { section: 'tasks', supervisor: String(user.value?.id) } }
   if (['tasks', 'production_tasks'].includes(key)) return { path: '/projects', query: { section: 'tasks' } }
   return { path: '/purchases' }
 }
@@ -55,12 +57,12 @@ function target(key: string, row: Row) {
   if (key === 'bank_records') return { path: '/finance', query: { section: 'bank', project: 'all', resource: 'bank-records', focus: row.id } }
   if (['prepayments', 'reconciliations'].includes(key)) return { path: '/finance', query: { section: 'reconciliations', project: 'all', resource: 'reconciliations', focus: row.id } }
   if (key === 'sales') return { path: '/sales', query: { search: row.code } }
-  const resource = ['tasks', 'production_tasks'].includes(key) ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
+  const resource = ['tasks', 'production_tasks', 'supervised_tasks'].includes(key) ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
   if (!row.project) return { ...collection(key), query: { ...collection(key).query, resource, focus: row.id } }
   return { path: `/projects/${row.project}`, query: { tab: resource === 'tasks' ? 'tasks' : resource === 'entries' ? 'finance' : 'purchases', resource, focus: row.id } }
 }
 function due(key: string, row: Row): string {
-  if (!['sales', 'tasks', 'production_tasks', 'receipts', 'overdue_purchases', 'settlements'].includes(key)) return ''
+  if (!['sales', 'tasks', 'production_tasks', 'supervised_tasks', 'receipts', 'overdue_purchases', 'settlements'].includes(key)) return ''
   if (key === 'settlements' && Number(row.balance) < 0) return ''
   // 交付逾期只统计执行中/交付中项目：已验收、已结项、已取消项目的销售单不再按交期标逾期。
   if (key === 'sales' && row.project_status && !['active', 'delivering'].includes(String(row.project_status))) return ''
@@ -76,7 +78,7 @@ function urgency(key: string, row: Row) {
   return { text: '', tone: '', rank: 4 }
 }
 const priority = computed(() => Object.entries(work.value).flatMap(([key, bucket]) => bucket.results.map(row => ({ key, row, ...urgency(key, row) })))
-  .filter((item, index, all) => !['tasks', 'production_tasks'].includes(item.key) || all.findIndex(other => ['tasks', 'production_tasks'].includes(other.key) && other.row.id === item.row.id) === index)
+  .filter((item, index, all) => !['tasks', 'production_tasks', 'supervised_tasks'].includes(item.key) || all.findIndex(other => ['tasks', 'production_tasks', 'supervised_tasks'].includes(other.key) && other.row.id === item.row.id) === index)
   .filter(item => item.rank < 4 && item.key !== 'receipts')
   .sort((a, b) => a.rank - b.rank || due(a.key, a.row).localeCompare(due(b.key, b.row))).slice(0, 7))
 const ongoing = computed(() => work.value.tasks?.results || [])
@@ -137,7 +139,7 @@ onBeforeUnmount(() => { generation++ })
       </section>
       <section v-if="work.tasks" class="panel work-ongoing" aria-labelledby="ongoing-heading">
         <header><h2 id="ongoing-heading">我正在做的工作</h2><router-link :to="collection('tasks')">查看我的全部任务（{{ count('tasks') }}）</router-link></header>
-        <ul v-if="ongoing.length"><li v-for="task in ongoing" :key="task.id"><div><strong>{{ title('tasks', task) }}</strong><span>{{ task.project_name || '关联项目' }}</span><span>截止日期：{{ task.due_date || '未设置' }}</span></div><router-link :to="target('tasks', task)" :aria-label="`继续处理${title('tasks', task)}`">继续处理 →</router-link></li></ul>
+        <ul v-if="ongoing.length"><li v-for="task in ongoing" :key="task.id"><div><strong>{{ title('tasks', task) }}</strong><span>{{ task.project_name || '关联项目' }}</span><span>计划完成日期：{{ task.due_date || '未设置' }}</span></div><router-link :to="target('tasks', task)" :aria-label="`继续处理${title('tasks', task)}`">继续处理 →</router-link></li></ul>
         <p v-else class="muted">{{ emptyTaskNote }}</p>
       </section>
       </div>
@@ -148,6 +150,7 @@ onBeforeUnmount(() => { generation++ })
         <p v-if="idleNote" class="muted work-idle">{{ idleNote }}</p>
       </section>
     </template>
+    <TaskNotices v-if="operations()" />
     <RoleTaskGuide />
   </div>
 </template>

@@ -28,7 +28,6 @@ from apps.core.permissions import (
     PURCHASERS,
     SALES,
     WAREHOUSE,
-    can_manage_task,
     has_role,
     require_project,
     require_role,
@@ -717,8 +716,9 @@ def confirm(actor, resource, token, *, allow_duplicate=False, key=None):
                 task = Task.objects.filter(pk=int(Decimal(data['task']))).first()
                 if task is None:
                     raise ValidationError({'task': UNREACHABLE})
-                if not can_manage_task(user, task) and (data['user'] != user.pk or not task.is_assigned_to(user)):
-                    raise PermissionDenied('只能为自己的任务登记本人工时，或登记管理范围内的生产与售后工时。')
+                from .task_supervision import require_confirmation
+
+                require_confirmation(user, task)
 
     def execute(user):
         lock_content(digest)

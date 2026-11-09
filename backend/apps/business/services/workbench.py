@@ -26,6 +26,7 @@ from .common import ZERO
 from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
 from .supply import applicants_by_purchase
+from .task_supervision import supervised_tasks
 
 
 def summary(request):
@@ -35,6 +36,7 @@ def summary(request):
         'sales',
         'tasks',
         'production_tasks',
+        'supervised_tasks',
         'approvals',
         'receipts',
         'drafts',
@@ -69,7 +71,7 @@ def summary(request):
             'count': selected.paginator.count,
             'results': serializer(selected.object_list, many=True, context={'request': request}).data,
         }
-        if name in {'tasks', 'production_tasks'}:
+        if name in {'tasks', 'production_tasks', 'supervised_tasks'}:
             data.update(
                 queryset.aggregate(
                     overdue_count=Count('pk', filter=Q(due_date__lt=timezone.localdate())),
@@ -103,6 +105,16 @@ def summary(request):
         .order_by(F('due_date').asc(nulls_last=True), 'pk')
     )
     result['tasks'] = bucket(tasks, TaskSerializer, 'tasks')
+    supervised = supervised_tasks(
+        user.pk,
+        with_task_flags(
+            Task.objects.filter(project__in=projects, status='open')
+            .exclude(project__status__in=['closed', 'cancelled'])
+            .select_related('project', 'assignee', 'delivery', 'entry')
+            .prefetch_related('project__members', 'co_assignees')
+        ),
+    ).order_by(F('due_date').asc(nulls_last=True), 'pk')
+    result['supervised_tasks'] = bucket(supervised, TaskSerializer, 'supervised_tasks')
     if has_role(user, {'production_manager'}):
         production_tasks = with_task_flags(
             Task.objects.filter(

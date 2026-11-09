@@ -2,7 +2,7 @@
 import BusinessTable from './BusinessTable.vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { download, read, write } from '../api'
-import { canImportResource } from '../session'
+import { canImportResource, manager, user } from '../session'
 import { message, requestKey } from '../utils/request'
 import type { Column, Row } from '../types'
 import ImportFeedback from './ImportFeedback.vue'
@@ -35,7 +35,18 @@ const mappings = computed(() => (layout.value?.columns || []).map((column: Row) 
   table: (props.tableColumns || []).filter(c => column.table_keys.includes(c.key)).map(c => c.label).join('、') || '单据明细 / 新增时填写',
 })))
 const generatedColumns = computed(() => (props.tableColumns || []).filter(c => !(layout.value?.columns || []).some((field: Row) => field.table_keys.includes(c.key))).map(c => c.label).join('、'))
-const importable = computed(() => props.allowImport && canImportResource(props.resource))
+const canImportTime = ref(false)
+watch([() => props.resource, scopedProject, () => user.value?.id], async (_, __, onCleanup) => {
+  let current = true
+  onCleanup(() => { current = false })
+  canImportTime.value = false
+  if (props.resource !== 'time' || manager() || !user.value?.id) return
+  try {
+    const result = await read('/business/tasks/', { supervisor: user.value.id, ...(scopedProject.value ? { project: scopedProject.value } : {}), page_size: 1 })
+    if (current) canImportTime.value = result.results?.some((task: Row) => task.can_confirm) === true
+  } catch { /* 查询失败不显示代录入口；服务端确认时仍逐项重新鉴权。 */ }
+}, { immediate: true })
+const importable = computed(() => props.allowImport && canImportResource(props.resource) && (props.resource !== 'time' || manager() || canImportTime.value))
 const bankImport = computed(() => props.resource === 'bank-records')
 watch([() => props.resource, scopedProject], () => { generation++; layout.value = null; preview.value = null; project.value = null; opened.value = false; busy.value = false; error.value = ''; result.value = ''; resultData.value = null; allowDuplicate.value = false; mismatch.value = null })
 watch(opened, value => { if (!value) { generation++; preview.value = null; mismatch.value = null; busy.value = false } })

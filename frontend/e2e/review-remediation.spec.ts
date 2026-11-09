@@ -1,4 +1,4 @@
-import { cancelEditing } from './fixtures'
+import { businessDate, cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, observePage, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
@@ -189,16 +189,18 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await dialog(purchaser).getByRole('button', { name: '关闭', exact: true }).click()
   await warehouse.goto(`/erp/projects/${id}?tab=purchases`)
   expect(await warehouse.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe('UTC')
+  const beforeReceipt = businessDate()
   await action(warehouse, row(warehouse, order.code), '收货')
-  await expect(dialog(warehouse).getByLabel('实际到货 / 合格收货日期', { exact: true })).toHaveValue(order.created_at.slice(0, 10))
+  expect([beforeReceipt, businessDate()]).toContain(await dialog(warehouse).getByLabel('实际到货 / 合格收货日期', { exact: true }).inputValue())
   await expect(dialog(warehouse).getByLabel('补录原因', { exact: true })).toHaveCount(0)
   await fill(warehouse, '数量', '1')
   await fill(warehouse, '不合格隔离数量', '2')
   await fill(warehouse, '原因 / 说明', '两件尺寸待复检')
   await warehouse.screenshot({ path: info.outputPath('receipt-default-date.png'), animations: 'disabled' })
   await save(warehouse)
+  const beforeRelease = businessDate()
   await action(warehouse, row(warehouse, order.code), '隔离品合格入库')
-  await expect(dialog(warehouse).getByLabel('实际合格收货日期', { exact: true })).toHaveValue(order.created_at.slice(0, 10))
+  expect([beforeRelease, businessDate()]).toContain(await dialog(warehouse).getByLabel('实际合格收货日期', { exact: true }).inputValue())
   await expect(dialog(warehouse).getByLabel('补录原因', { exact: true })).toHaveCount(0)
   await fill(warehouse, '数量', '1')
   await fill(warehouse, '原因 / 说明', '复检一件合格')

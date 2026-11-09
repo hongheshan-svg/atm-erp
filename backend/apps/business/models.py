@@ -131,6 +131,8 @@ class Project(BaseModel):
     customer = models.ForeignKey(Partner, models.PROTECT, related_name='projects')
     manager = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, related_name='managed_projects')
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='projects', db_table='lean_project_member')
+    task_supervisors = models.JSONField(default=dict, blank=True)
+    supervisor_revision = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     requirements = models.TextField(blank=True)
     due_date = models.DateField(null=True, blank=True)
@@ -347,6 +349,13 @@ class Delivery(BaseModel):
 
 
 class Task(BaseModel):
+    class Discipline(models.TextChoices):
+        MECHANICAL = 'mechanical', '机械'
+        ELECTRICAL = 'electrical', '电气'
+        PURCHASING = 'purchasing', '采购'
+        PRODUCTION = 'production', '生产'
+        DELIVERY = 'delivery', '交付与验收'
+
     class Kind(models.TextChoices):
         DESIGN = 'design', '设计'
         PURCHASE = 'purchase', '采购'
@@ -367,6 +376,7 @@ class Task(BaseModel):
     delivery = models.ForeignKey(Delivery, models.PROTECT, null=True, blank=True, related_name='tasks')
     kind = models.CharField(max_length=20, choices=Kind.choices)
     milestone = models.CharField(max_length=40, blank=True, default='')
+    discipline = models.CharField(max_length=20, choices=Discipline.choices, default='mechanical')
     title = models.CharField(max_length=150)
     description = models.TextField(blank=True)
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT)
@@ -375,6 +385,9 @@ class Task(BaseModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     due_date = models.DateField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    completed_date = models.DateField(null=True, blank=True)
+    started_date = models.DateField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
     service_date = models.DateField(null=True, blank=True)
 
     def assigned_people(self):
@@ -399,6 +412,17 @@ class Task(BaseModel):
             ),
             models.Index(fields=['project', 'kind', 'status'], condition=Q(is_deleted=False), name='lean_task_stage'),
         ]
+
+
+class TaskNotice(BaseModel):
+    task = models.ForeignKey(Task, models.PROTECT, related_name='notices')
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, related_name='+')
+    message = models.CharField(max_length=1000)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        db_table = 'lean_task_notice'
+        indexes = [models.Index(fields=['recipient', 'read_at'], name='lean_task_notice_unread')]
 
 
 class StockMove(ImmutableLedger):

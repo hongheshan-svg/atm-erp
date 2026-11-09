@@ -32,11 +32,14 @@ class ExecutionFixtures(BusinessFixtures):
         return Task.objects.get(pk=task_id)
 
     def complete(self, task, status=200):
-        return self.post('member', f'tasks/{task.pk}/complete/', {'reason': '检查完成'}, status=status)
+        return self.post('manager', f'tasks/{task.pk}/complete/', {'reason': '检查完成'}, status=status)
 
     def time(self, task, hours='1', when=TODAY, status=200):
         return self.post(
-            'member', f'tasks/{task.pk}/time/', {'hours': hours, 'date': when, 'reason': '实际工作'}, status=status
+            'manager',
+            f'tasks/{task.pk}/time/',
+            {'user': self.users['member'].pk, 'hours': hours, 'date': when, 'reason': '实际工作'},
+            status=status,
         )
 
     def ready_project(self, *, equipment=1, warranty=12):
@@ -82,6 +85,68 @@ class ExecutionFixtures(BusinessFixtures):
 
 
 class ExecutionTests(ExecutionFixtures, TestCase):
+    def test_task_time_receipt_and_net_history_survive_correction_and_archiving(self):
+        project = self.active_project()
+        task = self.task(project)
+        self.complete(task)
+        receipt = self.time(task, '9')
+        self.assertEqual(receipt['task'], task.pk)
+        self.assertEqual(Decimal(receipt['hours']), Decimal('9'))
+        self.assertEqual(receipt['date'], TODAY)
+        self.post('manager', f'time/{receipt["id"]}/amend/', {'hours': '2.5', 'date': TODAY, 'reason': '核对更正'})
+        self.post('admin', 'record-deletions/', {'resource': 'time', 'ids': [receipt['id']], 'reason': '归档原记录'})
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/time/',
+            {'user': self.users['manager'].pk, 'date': TODAY, 'hours': '1', 'reason': '经理协同'},
+        )
+        other = self.task(project, title='另一任务')
+        self.time(other, '3')
+        response = self.clients['member'].get(f'/api/business/tasks/{task.pk}/time-records/', {'page_size': 2})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['count'], 4)
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertEqual(Decimal(response.data['summary']['logged_hours']), Decimal('3.5'))
+        self.assertEqual(Decimal(response.data['summary']['my_hours']), Decimal('2.5'))
+        own = self.clients['member'].get(f'/api/business/tasks/{task.pk}/time-records/', {'mine': 'true'})
+        self.assertEqual(own.data['count'], 3)
+        self.assertTrue(all(row['user'] == self.users['member'].pk for row in own.data['results']))
+        archived = next(row for row in own.data['results'] if row['id'] == receipt['id'])
+        self.assertTrue(archived['archived'])
+        self.assertIsNotNone(archived['reversed_by'])
+        self.assertNotIn('hourly_cost', archived)
+        self.assertNotIn('cost', archived)
+        detail = self.clients['member'].get(f'/api/business/tasks/{task.pk}/').data
+        self.assertEqual(detail['logged_hours'], '3.50')
+        self.assertEqual(detail['time_entry_count'], 4)
+        listed = self.clients['member'].get('/api/business/tasks/', {'project': project.pk}).data['results']
+        self.assertEqual(next(row['logged_hours'] for row in listed if row['id'] == task.pk), '3.50')
+        exported = self.clients['member'].get('/api/business/tasks/export/', {'project': project.pk})
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn('已登记净工时（小时）', exported.content.decode('utf-8-sig'))
+        self.assertIn('3.50', exported.content.decode('utf-8-sig'))
+
+    def test_task_time_history_empty_and_project_scope(self):
+        task = self.task(self.active_project())
+        response = self.clients['member'].get(f'/api/business/tasks/{task.pk}/time-records/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['results'], [])
+        self.assertEqual(Decimal(response.data['summary']['logged_hours']), 0)
+        receipt_key = str(uuid.uuid4())
+        body = {'hours': '1.5', 'date': TODAY, 'reason': '回执核对'}
+        receipt = self.post('manager', f'tasks/{task.pk}/time/', body, key=receipt_key)
+        self.assertEqual(self.post('manager', f'tasks/{task.pk}/time/', body, key=receipt_key), receipt)
+        self.assertEqual(TimeEntry.objects.filter(task=task).count(), 1)
+        outside = Project.objects.create(
+            code='PRIVATE', name='未参与项目', customer=self.customer, manager=self.users['admin'], status='active'
+        )
+        hidden = Task.objects.create(project=outside, kind='design', title='不可见任务', assignee=self.users['admin'])
+        self.assertEqual(self.clients['member'].get(f'/api/business/tasks/{hidden.pk}/time-records/').status_code, 404)
+        self.assertEqual(
+            self.clients['member'].get(f'/api/business/tasks/{task.pk}/time-records/', {'mine': 'other'}).status_code,
+            400,
+        )
+
     def test_manager_only_change_rejects_when_old_manager_has_open_task(self):
         project = self.active_project()
         old = self.users['manager']
@@ -162,7 +227,7 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         project = self.ready_project(equipment=2, warranty=0)
         design = project.tasks.get(kind='design')
         original = self.time(design, '3')['id']
-        self.post('member', f'time/{original}/amend/', {'hours': '2', 'date': TODAY, 'reason': '更正误记'})
+        self.post('manager', f'time/{original}/amend/', {'hours': '2', 'date': TODAY, 'reason': '更正误记'})
         for kind in ('assembly', 'test'):
             self.time(project.tasks.get(kind=kind))
         purchase = self.purchase(project)
@@ -346,14 +411,14 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         task = self.task(project)
         time_id = self.time(task, '3')['id']
         User.objects.filter(pk=self.users['member'].pk).update(hourly_cost=100)
-        changed_id = self.post('member', f'time/{time_id}/amend/', {'hours': '2', 'date': TODAY, 'reason': '更正'})[
+        changed_id = self.post('manager', f'time/{time_id}/amend/', {'hours': '2', 'date': TODAY, 'reason': '更正'})[
             'id'
         ]
         self.assertEqual(TimeEntry.objects.get(pk=changed_id).cost, Decimal('100'))
         self.assertEqual(sum(TimeEntry.objects.values_list('hours', flat=True)), Decimal('2'))
         self.assertEqual(sum(TimeEntry.objects.values_list('cost', flat=True)), Decimal('100'))
         self.post(
-            'member', f'time/{time_id}/amend/', {'hours': '1', 'date': TODAY, 'reason': '原记录已更正'}, status=409
+            'manager', f'time/{time_id}/amend/', {'hours': '1', 'date': TODAY, 'reason': '原记录已更正'}, status=409
         )
         response = self.clients['member'].get('/api/business/time/', {'task__project': project.pk})
         self.assertEqual(response.data['count'], 3)
@@ -587,7 +652,7 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.time(timed)
         reversed_time = self.task(project, 'assembly', '二批装配更正')
         entry = self.time(reversed_time)['id']
-        self.post('member', f'time/{entry}/amend/', {'hours': '0', 'date': TODAY, 'reason': '误记撤销'})
+        self.post('manager', f'time/{entry}/amend/', {'hours': '0', 'date': TODAY, 'reason': '误记撤销'})
         picked = self.task(project, 'assembly', '二批领料')
         self.post(
             'warehouse',
