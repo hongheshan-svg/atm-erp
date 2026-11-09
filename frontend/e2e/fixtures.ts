@@ -50,7 +50,12 @@ export async function openRowAction(page: Page, row: Locator, name: string) {
     return
   }
   await menu.click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  const option = page.getByRole('menuitem', { name, exact: true })
+  await expect(option).toBeVisible()
+  // 展开动画缩放期间，连续两帧坐标偶尔不变但菜单尚未展开到最终位置。
+  // 等动画结束再点击，避免慢速 CI 中点击落在相邻条目或分组标题上。
+  await expect(page.locator('.el-dropdown__popper').filter({ has: option })).not.toHaveClass(/-enter-active/)
+  await option.click()
 }
 
 // Import lives behind the toolbar's 导入导出 menu; one place so a toolbar change is one edit.
