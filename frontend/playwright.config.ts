@@ -6,6 +6,8 @@ export default defineConfig({
   timeout: 120000,
   retries: 0,
   workers: 1,
+  // CI 默认只打点；逐条列出才能看到每个用例的耗时（分片权重依据），失败同时标注到 PR。
+  reporter: process.env.CI ? [['list'], ['github']] : 'list',
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 1000 } } },
     { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },

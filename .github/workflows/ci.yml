@@ -75,6 +75,7 @@ jobs:
       backend_targets: ${{ steps.select.outputs.backend_targets }}
       frontend_tests: ${{ steps.select.outputs.frontend_tests }}
       browser_specs: ${{ steps.select.outputs.browser_specs }}
+      browser_matrix: ${{ steps.select.outputs.browser_matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,7 +122,7 @@ jobs:
     with:
       ref: ${{ inputs.ref || github.ref }}
       projects: ${{ inputs.browser_projects || 'both' }}
-      specs: ${{ needs.plan.outputs.browser_specs }}
+      matrix: ${{ needs.plan.outputs.browser_matrix }}
   ota:
     needs: plan
     if: needs.plan.outputs.ota == 'true'

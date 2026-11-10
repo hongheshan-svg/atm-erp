@@ -9,6 +9,25 @@ from pathlib import Path
 from scripts.ci.impact import plan, version_only_paths
 
 SUITES = ('fast', 'browser', 'ota', 'installers')
+# 浏览器用例分片只决定“怎么分到几台机器上跑”，不决定“跑哪些”。数值为单视口下每个文件的实测合计秒数，
+# 只登记耗时明显的文件，其余按默认值估算；偏差只影响各片是否均衡，不影响覆盖。
+BROWSER_SECONDS = {
+    'eight-role-audit': 190,
+    'full-chain': 100,
+    'import-surface-audit': 60,
+    'review-remediation': 45,
+    'ui-concepts': 40,
+    'admin-deletion': 35,
+    'production-role': 32,
+    'project-milestones': 30,
+    'specialist-roles': 30,
+    'state-actions-audit': 28,
+    'system-upgrade': 17,
+    'reconciliation': 15,
+}
+BROWSER_DEFAULT_SECONDS = 8
+BROWSER_SHARD_SECONDS = 200
+BROWSER_MAX_SHARDS = 4
 
 
 def select(paths, suite='auto', custom=()):
@@ -33,6 +52,39 @@ def required_suites(scope):
     if scope['browser_specs']:
         selected.add('browser')
     return selected
+
+
+def browser_shards(specs):
+    """按估算耗时把用例文件分成若干片：每个文件恰好属于一片，没有空片，结果只取决于输入集合。"""
+    specs = sorted(set(specs))
+    if not specs:
+        return []
+
+    def seconds(spec):
+        return BROWSER_SECONDS.get(Path(spec).name.removesuffix('.spec.ts'), BROWSER_DEFAULT_SECONDS)
+
+    wanted = -(-sum(map(seconds, specs)) // BROWSER_SHARD_SECONDS)
+    shards = [[] for _ in range(max(1, min(wanted, BROWSER_MAX_SHARDS, len(specs))))]
+    loads = [0] * len(shards)
+    for spec in sorted(specs, key=lambda item: (-seconds(item), item)):
+        index = loads.index(min(loads))
+        shards[index].append(spec)
+        loads[index] += seconds(spec)
+    return [sorted(group) for group in shards]
+
+
+def browser_matrix(specs, projects='both'):
+    shards = browser_shards(specs)
+    return [
+        {
+            'project': project,
+            'shard': index,
+            'shards': len(shards),
+            'specs': json.dumps(group, separators=(',', ':')),
+        }
+        for project in (('desktop', 'mobile') if projects == 'both' else (projects,))
+        for index, group in enumerate(shards, 1)
+    ]
 
 
 def main():
@@ -98,6 +150,7 @@ def main():
             )
         }
     )
+    values['browser_matrix'] = json.dumps(browser_matrix(scope['browser_specs'], args.projects), separators=(',', ':'))
     values['tree'] = subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip()
     if os.environ.get('GITHUB_OUTPUT'):
         with Path(os.environ['GITHUB_OUTPUT']).open('a') as stream:

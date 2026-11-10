@@ -8,7 +8,8 @@ on:
       projects:
         type: string
         default: both
-      specs:
+      matrix:
+        description: 'select_suites 生成的分片列表：[{project, shard, shards, specs}]'
         type: string
         required: true
 permissions:
@@ -18,13 +19,15 @@ concurrency:
   cancel-in-progress: true
 jobs:
   browser:
+    name: browser (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.shards }})
     runs-on: ubuntu-latest
-    # 全量（发版本必跑）单视口约 15 分钟，留出余量，避免用例增长后被超时误判失败。
-    timeout-minutes: 30
+    # 每片是一套独立安装：自己的数据库、首次安装向导和账号。单片用例约 4 分钟，加环境准备约 7 分钟；
+    # 超时留出余量，避免用例增长后被误判失败。
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        project: ${{ fromJSON(inputs.projects == 'desktop' && '["desktop"]' || inputs.projects == 'mobile' && '["mobile"]' || '["desktop","mobile"]') }}
+        include: ${{ fromJSON(inputs.matrix) }}
     env:
       LEAN_PROJECT_NAME: lean-ci-${{ matrix.project }}
       LEAN_IMAGE: lean-ci-browser:local
@@ -51,8 +54,8 @@ jobs:
           file: docker/app/Dockerfile
           load: true
           tags: lean-ci-browser:local
-          cache-from: type=gha,scope=browser-app-${{ matrix.project }}
-          cache-to: type=gha,scope=browser-app-${{ matrix.project }},mode=max
+          # 只读：依赖层由 main 上的 ci-cache.yml 写入。分片各自导出缓存既互相争写，每次还要多花近一分钟。
+          cache-from: type=gha,scope=app-image
       - run: bash install.sh --skip-build --no-ota
       - name: First-install wizard
         run: npm run test:e2e -- e2e/setup.spec.ts --project="$PROJECT" --grep '全新安装' --output=test-results-first-install
@@ -64,12 +67,12 @@ jobs:
       - run: python3 -m scripts.ci.run_selected browser --project="$PROJECT"
         env:
           PROJECT: ${{ matrix.project }}
-          TEST_TARGETS: ${{ inputs.specs }}
+          TEST_TARGETS: ${{ matrix.specs }}
           E2E_ADMIN_PASSWORD: Lean-CI-ready-password-2026
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: browser-${{ matrix.project }}-${{ github.run_attempt }}
+          name: browser-${{ matrix.project }}-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
             frontend/test-results
             frontend/test-results-first-install

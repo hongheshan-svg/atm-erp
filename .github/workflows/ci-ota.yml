@@ -32,8 +32,7 @@ jobs:
           build-args: FRONTEND_MODE=prebuilt
           load: true
           tags: erp-inplace-ci
-          cache-from: type=gha,scope=ota-inplace
-          cache-to: type=gha,scope=ota-inplace,mode=max
+          cache-from: type=gha,scope=app-image
       - name: Prepare database and cache images for offline smoke
         run: |
           docker pull postgres:15-alpine
