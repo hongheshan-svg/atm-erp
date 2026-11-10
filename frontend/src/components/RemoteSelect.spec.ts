@@ -147,6 +147,14 @@ describe('单一远程搜索组合框', () => {
     expect(control(wrapper).element.validity.customError).toBe(false)
   })
 
+  it('筛选模式只缩小范围，不提供新建资料入口；表单字段保留', async () => {
+    vi.mocked(read).mockResolvedValue({ results: [item(1)], next: null })
+    const filter = open({ commitOnSelect: true })
+    const field = open()
+    await flushPromises()
+    expect(filter.findComponent(QuickReferenceCreate).exists()).toBe(false)
+    expect(field.findComponent(QuickReferenceCreate).exists()).toBe(true)
+  })
   it('筛选模式搜索不修改父值或抢走焦点，取消搜索恢复旧项目，键盘确认仅发出候选ID', async () => {
     const choose = vi.fn()
     vi.mocked(read).mockImplementation((url, params) => Promise.resolve(url === `${path}1/` ? item(1)

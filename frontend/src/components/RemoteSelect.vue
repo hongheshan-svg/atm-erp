@@ -258,7 +258,8 @@ onBeforeUnmount(() => { cancelSearch(); selectedGeneration++ })
       </ul>
       <button v-if="error" type="button" :disabled="busy" @mousedown.prevent @click="requestPage(attemptedPage)">重新加载</button>
       <button v-else-if="more" type="button" :disabled="busy" @mousedown.prevent @click="requestPage(page + 1)">继续加载更多</button>
-      <QuickReferenceCreate :path="path" :label="label" :query="search" :params="params" :accept="accept" :disabled="disabled || busy || selecting" @selected="created" @closed="returnFromCreate" />
+      <!-- 页面筛选只缩小范围，不在筛选条里新建资料。 -->
+      <QuickReferenceCreate v-if="!commitOnSelect" :path="path" :label="label" :query="search" :params="params" :accept="accept" :disabled="disabled || busy || selecting" @selected="created" @closed="returnFromCreate" />
     </span>
   </span>
 </template>

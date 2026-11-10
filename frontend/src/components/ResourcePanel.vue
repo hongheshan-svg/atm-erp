@@ -29,6 +29,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { user, operations } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
+import RemoteSelect from './RemoteSelect.vue'
 import { scopedImportProject } from '../utils/import-context'
 import { isOverdueCell, resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
 import { today } from '../forms'
@@ -87,6 +88,9 @@ const actionBusy = ref(false)
 const filterValue = ref('')
 const enabledFilter = ref(''), locationFilter = ref(''), brandFilter = ref('')
 const dateFrom = ref(''), dateTo = ref('')
+const supplierFilter = ref<string | number>()
+const notCustomer = (partner: Row) => partner.kind !== 'customer'
+watch(supplierFilter, (value, before) => { if (value !== before) searchRecords() })
 const appliedExtra = ref<Row>({})
 const unsettled = ref(false)
 const filterConfig = computed(() => resourceFilters[props.resource])
@@ -197,6 +201,8 @@ function menuGroups(row: Row) {
 const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'due_amount', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
 const day = today()
 function cell(row: Row, key: string) {
+  // 签约默认的应收标题都是「合同款」；跨项目列表里把项目名放在前面，一眼能分清是哪一笔。
+  if (props.resource === 'entries' && key === 'title' && row.kind === 'receivable' && !props.projectId && row.project_name) return `${row.project_name} · ${row.title}`
   if (!moneyKeys.has(key) || row[key] == null) return display(row[key], key)
   return money(row[key], { refund: key === 'balance' })
 }
@@ -341,7 +347,9 @@ async function viewSaved() {
   try { await inspect(await read(`${endpoint(record.resource)}${record.id}/`)) } catch (e) { error.value = message(e) }
 }
 function resetFilters() {
-  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = false; dateFrom.value = ''; dateTo.value = ''; searchRecords()
+  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = false; dateFrom.value = ''; dateTo.value = ''
+  // 清空供应商由上面的 watch 触发查询；没有选供应商时才需要自己查。
+  if (supplierFilter.value == null) searchRecords(); else supplierFilter.value = undefined
 }
 function searchRecords() {
   appliedExtra.value = {
@@ -350,6 +358,7 @@ function searchRecords() {
     // 精确匹配要求输对完整品牌名，输「施耐德」而库里存的是「Schneider」就只会得到空列表。
     ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand__icontains' : 'brand__icontains']: brandFilter.value } : {}),
     ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
+    ...(supplierFilter.value != null && props.resource === 'purchases' ? { supplier: supplierFilter.value } : {}),
     ...(props.resource === 'audit' && dateFrom.value ? { date_from: dateFrom.value } : {}),
     ...(props.resource === 'audit' && dateTo.value ? { date_to: dateTo.value } : {}),
   }
@@ -420,10 +429,11 @@ async function inspect(row: Row) {
       <select v-if="['users', 'items', 'partners'].includes(resource)" v-model="enabledFilter" aria-label="筛选启用状态" @change="searchRecords"><option value="">全部状态</option><option value="true">启用</option><option value="false">停用</option></select>
       <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位关键词" />
       <input v-if="['stocks', 'items'].includes(resource)" v-model="brandFilter" aria-label="筛选品牌" placeholder="品牌关键词" />
+      <RemoteSelect v-if="resource === 'purchases'" v-model="supplierFilter" path="/business/partners/" label="供应商筛选" :accept="notCustomer" commit-on-select />
       <label v-if="resource === 'entries'" class="inline-check"><input v-model="unsettled" type="checkbox" @change="searchRecords" />仅看未结</label>
       <template v-if="resource === 'audit'"><input v-model="dateFrom" type="date" aria-label="开始日期" title="开始日期" /><input v-model="dateTo" type="date" aria-label="结束日期" title="结束日期" /></template>
       <el-button native-type="submit" :loading="loading">搜索</el-button>
-      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo" text @click="search = ''; filterValue = ''; enabledFilter = ''; locationFilter = ''; brandFilter = ''; unsettled = false; dateFrom = ''; dateTo = ''; searchRecords()">重置</el-button>
+      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierFilter != null" text @click="resetFilters">重置</el-button>
     </form>
     <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : '下一步：查看结果并继续处理。' }}</span><el-button @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
