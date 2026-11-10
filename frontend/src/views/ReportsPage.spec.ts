@@ -103,7 +103,7 @@ describe('经营报表', () => {
     await wrapper.get('[aria-label="关注事项"]').setValue('over_budget')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(read).toHaveBeenLastCalledWith('/business/reports/', { search: '装配线', status: '', risk: 'over_budget', page: 1, page_size: 10 })
+    expect(read).toHaveBeenLastCalledWith('/business/reports/', { search: '装配线', status: '', risk: 'over_budget', page: 1, page_size: 20 })
     vi.mocked(read).mockRejectedValue(new Error('报表权限已撤销'))
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -144,7 +144,7 @@ describe('经营报表', () => {
       expect(button).toBeTruthy()
       await button!.trigger('click')
       await flushPromises()
-      expect(read).toHaveBeenLastCalledWith('/business/reports/', { search: '', status: '', risk: value, page: 1, page_size: 10 })
+      expect(read).toHaveBeenLastCalledWith('/business/reports/', { search: '', status: '', risk: value, page: 1, page_size: 20 })
     }
     wrapper.unmount()
   })

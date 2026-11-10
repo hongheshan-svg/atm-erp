@@ -235,6 +235,7 @@ SHARED_PATHS = (
         ('finance', 'purchases', 'projects', 'accounts'),
     ),
     (('frontend/src/utils/batch-selection.ts', 'frontend/src/utils/batch-selection.spec.ts'), BUSINESS),
+    (('frontend/src/batch-mode.ts', 'frontend/src/batch-mode.spec.ts'), BUSINESS),
     (('frontend/src/components/SupplierMonthly.vue',), ('finance',)),
     (('frontend/src/components/ProjectAttention.vue',), ('projects', 'bom', 'purchases')),
     (('frontend/src/industry-forms.ts',), ('sales', 'projects')),

@@ -38,7 +38,13 @@ const draftPane = ref<HTMLElement>()
 const materialsPane = ref<HTMLElement>()
 const draftHeight = ref('calc(100dvh - 40px)')
 function fitDraft() {
-  if (draftPane.value) draftHeight.value = `${Math.max(440, window.innerHeight - Math.max(18, draftPane.value.getBoundingClientRect().top) - 20)}px`
+  const pane = draftPane.value
+  if (!pane) return
+  // 高度下限取表头、字段、至少一条明细和合计区的实际高度：可用空间不够时整块随页面滚动。
+  // 否则保存按钮始终贴在视口下沿之外，越滚动越追不上。
+  const block = (selector: string) => pane.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0
+  const needed = block('.purchase-pane-heading') + block('.draft-fields') + block('.draft-footer') + 150
+  draftHeight.value = `${Math.max(440, needed, window.innerHeight - Math.max(18, pane.getBoundingClientRect().top) - 20)}px`
 }
 const disabled = computed(() => loading.value || saving.value)
 const typeName = (value: string) => ({ standard: '标准件', custom: '非标件' }[value] || '未分类')
@@ -97,6 +103,7 @@ function jumpToDraft() { draftPane.value?.scrollIntoView({ block: 'start', behav
 function jumpToMaterials() { materialsPane.value?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }
 watch([search, brands, units, types, categories, shortageOnly, pageSize], () => { page.value = 1 }, { deep: true })
 watch(effectiveTerm, term => { if (term !== 'manual') form.value.payment_due_date = ''; if (term !== 'custom') form.value.payment_days = '' })
+watch(effectiveTerm, async () => { await nextTick(); fitDraft() })
 let generation = 0, supplierGeneration = 0
 let key = requestKey(), signature = ''
 async function load() {

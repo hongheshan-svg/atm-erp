@@ -49,6 +49,17 @@ export function receiptStatus(row: Row): string {
   const arrivedOnly = !(row.lines || []).some((line: Row) => Number(line.received_quantity || 0) > 0)
   return `${arrivedOnly ? '已到货待检' : display(row.status)} · 隔离 ${pending / 1000n}.${String(pending % 1000n).padStart(3, '0')}`
 }
+// 明细合计只作展示：数量三位小数、单价两位小数，用整数相乘避免浮点误差；任一行没有单价（无权查看）时不给合计。
+export function purchaseTotal(lines: Row[]): string {
+  const scaled = (value: unknown, scale: number) => {
+    const [whole = '0', fraction = ''] = String(value ?? '0').split('.')
+    return BigInt(whole || '0') * 10n ** BigInt(scale) + BigInt((fraction + '0'.repeat(scale)).slice(0, scale) || '0')
+  }
+  if (!lines.length || lines.some(line => line.unit_price == null || line.unit_price === '')) return '—'
+  const total = lines.reduce((sum, line) => sum + scaled(line.quantity, 3) * scaled(line.unit_price, 2), 0n)
+  const cents = (total + 500n) / 1000n
+  return `${String(cents / 100n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${String(cents % 100n).padStart(2, '0')}`
+}
 export const columns: Record<string, Column[]> = {
   purchases: [
     C('code', '采购编号'),
@@ -221,9 +232,15 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     readonly = name === '查看明细'
     if (readonly) {
       fields = [
+        { key: 'supplier_name', label: '供应商' },
+        { key: 'project_label', label: '项目' },
         { key: 'receipt_status', label: '到货与检验状态' },
+        { key: 'due_date', label: '交期' },
+        ...(money() || buyer() ? [{ key: 'total_label', label: '含税合计（元）' }] : []),
         { key: 'payment_term_label', label: '采购账期' },
+        { key: 'payment_due_date', label: '付款到期日', optional: true },
         { key: 'warranty_months', label: '供应商质保月数' },
+        { key: 'note', label: '说明', optional: true, wide: true },
         rows('lines', '采购明细', [
           t('item_name', '物料'),
           t('assembly_unit', '单元'),
@@ -236,7 +253,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           t('pending_quantity', '隔离待处理'),
         ]),
       ]
-      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail) }
+      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []) }
     } else {
       const locations: string[] = name === '隔离品退回供应商' ? [] : await read('/business/stocks/locations/')
       // The API renders timestamps in the business timezone; preserve that date across browser timezones.

@@ -48,7 +48,8 @@ export async function login(page: Page, username: string, password: string) {
 // name the action and let this decide where it currently is.
 export async function openRowAction(page: Page, row: Locator, name: string) {
   const menu = row.getByRole('button', { name: '操作 ▾', exact: true })
-  const direct = row.getByRole('button', { name, exact: true })
+  // 款项行的主按钮按方向显示「登记收款 / 登记付款」，动作仍是同一个「登记收付款」。
+  const direct = name === '登记收付款' ? row.getByRole('button', { name: /^登记(收付款|收款|付款)$/ }) : row.getByRole('button', { name, exact: true })
   await expect(direct.or(menu).first()).toBeVisible()
   // The same registry the list renders from decides where to look, so a save that reloads the row
   // is waited out on the right control instead of by clicking the menu toggle in a retry loop.
@@ -94,6 +95,11 @@ export const test = base.extend<{ consoleCheck: void }>({
     const observe = (page: Page) => observePage(page, errors)
     context.pages().forEach(observe)
     context.on('page', observe)
+    // 默认每页 20 条；这些流程按 10 条准备翻页数据，未显式选择时固定为 10 条，继续覆盖跨页行为。
+    await context.addInitScript(() => {
+      // 空白页和沙箱预览框读不到本地存储，那里也用不上分页设置。
+      try { if (!localStorage.getItem('erp.page-size')) localStorage.setItem('erp.page-size', '10') } catch { /* 无存储的文档 */ }
+    })
     await use()
     expect(errors, '浏览器不应出现运行异常或控制台警告').toEqual([])
   }, { auto: true }],
@@ -109,6 +115,17 @@ export async function cancelEditing(dialog: Locator) {
   await Promise.race([discard.waitFor({ state: 'visible' }), form.waitFor({ state: 'hidden' })])
   if (await discard.isVisible()) await discard.click()
   await expect(form).not.toBeVisible()
+}
+
+// 详情面板底部只平铺下一步，其余动作收在「更多操作」里；按名称点击，不关心它当前在哪。
+export async function detailAction(page: Page, name: string) {
+  const pane = page.getByRole('dialog')
+  const direct = pane.getByRole('button', { name, exact: true })
+  const more = pane.getByRole('button', { name: '更多操作 ▾', exact: true })
+  await expect(direct.or(more).first()).toBeVisible()
+  if (await direct.isVisible()) return direct.click()
+  await more.click()
+  await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
 // Select every executor by its visible label; replace the existing selection using tag close buttons.

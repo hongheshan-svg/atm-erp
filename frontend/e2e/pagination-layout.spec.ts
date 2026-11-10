@@ -9,6 +9,8 @@ test('业务列表序号跨页连续，宽表左右可查看且勾选仍对应�
     const response = await page.request.post('/api/business/partners/', { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { name: prefix + '-' + i, kind: 'supplier' } })
     expect(response.ok(), await response.text()).toBeTruthy()
   }
+  // 选择列只在「批量管理」开启后出现。
+  await page.addInitScript(() => { try { localStorage.setItem('erp.batch-mode', '1') } catch { /* 无存储的文档 */ } })
   await page.goto('/erp/masterdata?resource=partners')
   await page.getByRole('tab', { name: '客户与供应商', exact: true }).click()
   const panel = page.getByRole('region', { name: '客户与供应商', exact: true })
@@ -35,6 +37,8 @@ test('业务列表序号跨页连续，宽表左右可查看且勾选仍对应�
   const wrap = panel.locator('.el-table__body-wrapper .el-scrollbar__wrap')
   const tools = panel.getByRole('group', { name: '客户与供应商左右查看', exact: true })
   await expect(tools).toBeVisible()
+  // 翻页遮罩淡出期间点击会让 Playwright 换对齐方式重试并横移表格；左右查看从起点开始验证。
+  await wrap.evaluate(el => { el.scrollLeft = 0 })
   const right = tools.getByRole('button', { name: '向右查看 →', exact: true })
   await right.click()
   await expect.poll(() => wrap.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)

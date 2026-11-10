@@ -6,10 +6,14 @@ import { user } from '../session'
 import ListPagination from './ListPagination.vue'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { pageSize } from '../pagination'
+import { batchMode } from '../batch-mode'
 import { download, read, write } from '../api'
 import { downloadBOM } from '../api/bom'
 vi.mock('../api/bom', () => ({ downloadBOM: vi.fn() }))
 vi.mock('../api', () => ({ read: vi.fn().mockResolvedValue({ lines: [] }), all: vi.fn().mockResolvedValue([]), write: vi.fn(), download: vi.fn() }))
+// 删除入口默认收起；这里的用例验证的是开启「批量管理」后的选择与删除，并按每页 10 条构造跨页场景。
+batchMode.value = true
+pageSize.value = 10
 afterEach(() => { user.value = null; vi.clearAllMocks(); vi.restoreAllMocks() })
 
 it('导出筛选跨页81项及所选子集，不夹带非标件；切换类别明确提示筛选外选择', async () => {

@@ -232,7 +232,7 @@ onMounted(load)
           <template #actual><section class="panel cost-panel" aria-label="项目成本">
             <h2>实际成本 <span class="muted">CNY 含税经营口径</span></h2>
             <div class="cost-grid"><div v-for="(label, key) in { materials: '材料', labor: '人工', expenses: '费用', purchase_return_variance: '退货价差', total: '合计' }" :key="key">
-              <small>{{ label }}</small><strong>¥ {{ cost[key] ?? '—' }}</strong>
+              <small>{{ label }}</small><strong>{{ formatMoney(cost[key], { currency: true }) }}</strong>
             </div></div>
           </section></template>
         </ModuleTabs>

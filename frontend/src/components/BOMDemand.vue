@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { batchMode, setBatchMode } from '../batch-mode'
 import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { read, write, download } from '../api'
@@ -55,11 +56,12 @@ const command = ref<Command | null>(null)
 const search = ref(''), brand = ref(''), unit = ref(''), partType = ref(''), shortageOnly = ref(view.value === 'purchase')
 const selected = ref<number[]>([])
 const deletionAllowed = computed(() => canDeleteRecords('bom'))
+const batchVisible = computed(() => deletionAllowed.value && batchMode.value)
 const deletionSelection = ref<Row[]>([]), deleting = ref<Row[] | null>(null), deletionHistory = ref(false)
 const deletionLoading = ref(false)
 const deletionMax = deletionLimit('bom')
 const batch = useBatchSelection(deletionSelection, 'bom_line', () => deletionMax)
-watch(deletionAllowed, allowed => { if (!allowed) { deletionSelection.value = []; deleting.value = null } })
+watch(batchVisible, allowed => { if (!allowed) { deletionSelection.value = []; deleting.value = null } })
 function openDeletion(rows: Row[]) { deleting.value = rows.map(row => ({ ...row, id: row.bom_line })) }
 watch([() => props.projectId, search, brand, unit, partType, shortageOnly, view], () => { deletionSelection.value = []; deleting.value = null; deletionHistory.value = false })
 const pickingBom = ref(false)
@@ -263,20 +265,20 @@ function saved() {
           </el-dropdown-menu></template>
         </el-dropdown>
         <el-button @click="load">刷新需求</el-button>
-        <el-button v-if="deletionAllowed && view === 'prepare'" type="danger" plain :disabled="busy || deletionLoading || !deletionSelection.length" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
-        <el-button v-if="deletionAllowed" :disabled="busy" @click="deletionHistory = true">已删除记录</el-button>
+        <el-button v-if="deletionAllowed" :type="batchMode ? 'primary' : undefined" :plain="batchMode" :aria-pressed="batchMode" :disabled="busy" @click="setBatchMode(!batchMode)">{{ batchMode ? '退出批量管理' : '批量管理' }}</el-button>
+        <el-button v-if="batchVisible && view === 'prepare'" type="danger" plain :disabled="busy || deletionLoading || !deletionSelection.length" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
+        <el-button v-if="batchVisible" :disabled="busy" @click="deletionHistory = true">已删除记录</el-button>
       </div>
     </header>
     <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
       <label><input v-model="view" type="radio" value="prepare" />编制用料</label>
       <label><input v-model="view" type="radio" value="purchase" />采购缺料</label>
-      <label><input v-model="fullColumns" type="checkbox" />展开完整列</label>
     </div>
     <p v-if="view === 'prepare'" class="muted">按单元核对物料规格、需求数量和需求日期；切换采购缺料可查看库存、在途及缺口。</p>
     <p v-else class="muted">库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。</p>
     <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <p class="muted" role="status" aria-label="BOM导出范围">当前筛选 {{ filtered.length }} 项，导出包含所有分页。<template v-if="exportSelection.length">已选 {{ exportSelection.length }} 项，可单独导出已选项。</template><strong v-if="hiddenSelectionCount">其中 {{ hiddenSelectionCount }} 项在当前筛选外；只需当前类别时请选择“筛选结果”导出。</strong></p>
-    <div v-if="deletionAllowed && view === 'prepare'" class="bom-batch-selection" aria-label="BOM批量选择">
+    <div v-if="batchVisible && view === 'prepare'" class="bom-batch-selection" aria-label="BOM批量选择">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionMax }} 项</span>
       <el-button :disabled="busy || deletionLoading || !filtered.length" @click="batch.replace(filtered)">{{ filtered.length > deletionMax ? '选择筛选结果前' + deletionMax + '项（跨页）' : '全选筛选结果（' + filtered.length + '项，跨页）' }}</el-button>
       <el-button text :disabled="busy || deletionLoading || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
@@ -286,8 +288,8 @@ function saved() {
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
     </el-dialog>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <BusinessTable label="BOM" :row-offset="(page - 1) * pageSize" class="bom-details-table" :data="visibleLines" :max-height="560" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'">
-      <el-table-column v-if="deletionAllowed && view === 'prepare'" label="选择" width="44" fixed="left">
+    <BusinessTable label="BOM" :row-offset="(page - 1) * pageSize" :max-height="pageSize > 20 ? 560 : undefined" class="bom-details-table" :data="visibleLines" row-key="bom_line" :empty-text="shortageOnly ? '当前筛选下没有缺料，可取消仅看缺料查看全部用料' : '尚未维护 BOM'">
+      <el-table-column v-if="batchVisible && view === 'prepare'" label="选择" width="44" fixed="left">
         <template #header><input type="checkbox" aria-label="选择本页BOM明细" :checked="batch.all(visibleLines)" :indeterminate="batch.some(visibleLines)" :disabled="busy || deletionLoading || !visibleLines.length || (deletionSelection.length >= deletionMax && !batch.all(visibleLines))" @change="batch.togglePage(visibleLines)" /></template>
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM明细 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="batch.has(row)" :disabled="busy || deletionLoading || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
       </el-table-column>
@@ -314,8 +316,8 @@ function saved() {
         <el-table-column prop="change_note" label="变更说明" min-width="150" />
         <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column prop="available" label="可用库存" /><el-table-column prop="shortage" label="缺料" /></template>
       </template>
-      <el-table-column v-if="deletionAllowed" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button></template></el-table-column>
-      <template #tools><el-button v-if="!fullColumns" @click="fullColumns = true">展开完整列（图号、品牌等）</el-button></template>
+      <el-table-column v-if="batchVisible" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button></template></el-table-column>
+      <template #tools><el-button :aria-pressed="fullColumns" @click="fullColumns = !fullColumns">{{ fullColumns ? '收起完整列' : '展开完整列（图号、品牌等）' }}</el-button></template>
     </BusinessTable>
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" resource="bom" title="BOM明细" :rows="deleting || undefined" :project-id="projectId" :show-original="false" @close="deleting = null; deletionHistory = false" @saved="saved" />
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />

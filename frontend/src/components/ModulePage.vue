@@ -64,7 +64,7 @@ watch(projectId, loadProjects, { immediate: true })
     <div ref="toolbarTarget" class="module-toolbar-target" />
   </header>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-  <label v-if="projectFilter" class="project-filter"
+  <label v-if="projectFilter" v-show="!focusedFlow" class="project-filter"
     >项目筛选<RemoteSelect :model-value="projectId" @update:model-value="chooseProject" path="/business/projects/" label="项目筛选" commit-on-select /><small>{{ projectId ? '仅显示所选项目' : requireProject ? '请选择项目' : '未选择时显示全部项目' }}</small></label
   >
   <slot :project-id="projectId" :projects="projects" :revision="revision" :refresh="refresh" />

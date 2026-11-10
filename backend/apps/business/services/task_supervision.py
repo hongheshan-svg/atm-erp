@@ -73,6 +73,9 @@ def supervised_tasks(user_id, queryset):
 
 def notify_task(actor, task, event):
     recipient = supervisor_id(task)
+    # 主管自己派工或调整时已经知情，再给本人发提醒只会淹没别人派来的任务。
+    if recipient == getattr(actor, 'pk', None):
+        return
     if not User.objects.filter(pk=recipient, is_active=True).exists():
         return
     people = '、'.join(person.display_name or person.username for person in task.assigned_people())

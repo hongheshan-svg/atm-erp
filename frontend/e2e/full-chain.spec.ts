@@ -1,6 +1,6 @@
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction } from './fixtures'
+import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction, selectExecutors } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
 import { selectRoles } from './role-helpers'
 const password = 'Lean-QA-2026-password'
@@ -89,7 +89,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   const errors: string[] = []
   page.setDefaultTimeout(15000)
   await login(page, 'admin', adminPassword)
-  await expect(page.getByRole('navigation', { includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(10)
+  await expect(page.getByRole('navigation', { name: '主导航', includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(10)
   await page.goto('/erp/settings')
   for (const role of roles) {
     const samePerson = combinedRoles && role === 'purchaser'
@@ -209,6 +209,9 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await purchaser.getByRole('tab', { name: 'BOM', exact: true }).click()
   // Selecting before the demand rows land silently selects nothing, leaving 按缺料采购 disabled.
   await expect(purchaser.locator('.el-table__body tr:visible').filter({ hasText: item.code })).toBeVisible()
+  // 兼任项目经理的采购员默认落在「编制用料」，缺料下单在「采购缺料」视图。
+  const shortageView = purchaser.getByRole('radio', { name: '采购缺料', exact: true })
+  if (await shortageView.isVisible()) await shortageView.check()
   await purchaser.getByRole('button', { name: '全选筛选结果', exact: true }).click()
   await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
   const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
@@ -317,7 +320,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await manager.getByRole('button', { name: '新建任务', exact: true }).click()
     await dialog(manager).getByLabel('阶段', { exact: true }).selectOption(kind)
     await fill(manager, '任务名称', title + suffix)
-    await choose(manager, '执行人', 'member' + suffix)
+    await selectExecutors(manager, dialog(manager), ['member' + suffix])
     await save(manager)
   }
   await member.goto(`/erp/projects/${id}`)
@@ -397,7 +400,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await choose(manager, '交付批次', delivery.code)
     await fill(manager, '日期', date)
     await fill(manager, '售后事项', title + suffix)
-    await choose(manager, '执行人', 'member' + suffix)
+    await selectExecutors(manager, dialog(manager), ['member' + suffix])
     await fill(manager, '收费金额（元）', fee)
     if (Number(fee) > 0) await fill(manager, '客户付款到期日', day())
     await save(manager)

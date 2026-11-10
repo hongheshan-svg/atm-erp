@@ -127,7 +127,9 @@ watch(() => props.command, async (value, old) => {
     await nextTick()
     const panel = panelHeading.value?.parentElement?.parentElement
     // 手机端详情面板从视口顶部展开，内部滚动区才有足够高度，首条记录不会被底部操作栏压住。
-    if (panel && (window.innerWidth <= 760 || panel.getBoundingClientRect().top > window.innerHeight - 360)) panel.scrollIntoView({ block: 'start' })
+    const top = panel?.getBoundingClientRect().top ?? 0
+    // 面板上方还压着其他区块时，可用高度不足以填写表单，直接把面板顶到视口上沿。
+    if (panel && (window.innerWidth <= 760 || (top > 96 && window.innerHeight - top < 620))) panel.scrollIntoView({ block: 'start' })
     fitPanel()
     panelHeading.value?.focus({ preventScroll: true })
   } else if (returnFocus?.isConnected) returnFocus.focus()
@@ -136,6 +138,18 @@ const error = ref('')
 const recovery = ref<{ label: string; path: string }[]>([])
 const preview = ref<Row | null>(null)
 const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '开始任务', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
+// 详情底部只留下一步，其余动作收进菜单：十个按钮平铺会把明细挤出面板。
+const shownActions = computed(() => {
+  const actions = command.value?.actions || []
+  if (!command.value?.readonly || actions.length <= 3) return actions
+  // 没有约定的下一步时保留第一个动作，面板底部不能只剩一个菜单。
+  return actions.filter((action, index) => primary.value ? action.label === primary.value : index === 0)
+})
+const moreActions = computed(() => (command.value?.actions || []).filter(action => !shownActions.value.includes(action)))
+async function runAction(label: string) {
+  const action = command.value?.actions?.find(item => item.label === label)
+  if (action && await confirmLeave()) await action.run()
+}
 const similarItems = ref<Row[]>([])
 watch(() => [props.command?.path, data.value.name, data.value.specification], async (_, __, onCleanup) => {
   similarItems.value = []
@@ -191,9 +205,19 @@ watch(
   },
   { immediate: true },
 )
+// 远程下拉核对预选值期间点保存，不该让人看到一条「请稍候」再手动重试：等核对结束后继续提交。
+let settling = false
+async function settleSelections() {
+  const pending = () => Array.from(fieldsContainer.value?.querySelectorAll<HTMLInputElement>('input') || []).some(input => input.validationMessage.startsWith('正在核对'))
+  for (let i = 0; i < 80 && pending(); i++) await new Promise(resolve => setTimeout(resolve, 100))
+}
 async function submit() {
   const c = command.value
-  if (!c || c.readonly || locked.value || c.blocked) return
+  if (!c || c.readonly || locked.value || c.blocked || settling) return
+  // 等待核对时不锁表单：字段保持可编辑，必填校验状态也不会因禁用而消失。
+  settling = true
+  try { await settleSelections() } finally { settling = false }
+  if (command.value !== c || locked.value) return
   busy.value = true
   error.value = ''
   recovery.value = []
@@ -280,7 +304,8 @@ async function submit() {
       <div class="dialog-footer">
         <el-button v-for="alternative in command.alternatives" :key="alternative.label" :disabled="locked" @click="openAlternative(alternative.open)">{{ alternative.label }}</el-button>
         <el-button v-if="command.previewPath" :disabled="locked" @click="previewChange">预览变更影响</el-button>
-        <el-button v-for="action in command.actions" :key="action.label" :type="action.label === primary ? 'primary' : undefined" :disabled="locked" @click="async () => { if (await confirmLeave()) await action.run() }">{{ action.label }}</el-button>
+        <el-button v-for="action in shownActions" :key="action.label" :type="action.label === primary ? 'primary' : undefined" :disabled="locked" @click="runAction(action.label)">{{ action.label }}</el-button>
+        <el-dropdown v-if="moreActions.length" trigger="click" :disabled="locked" @command="(label: string) => runAction(String(label))"><el-button :disabled="locked">更多操作 ▾</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="action in moreActions" :key="action.label" :command="action.label">{{ action.label }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         <el-button v-if="dirty && currentDraftKey" :disabled="locked" @click="keepAndClose">暂存并关闭</el-button>
         <el-button :disabled="locked" @click="requestClose">{{ command.readonly ? '关闭' : '取消' }}</el-button
         ><el-button v-if="!command.readonly && !command.blocked" type="primary" native-type="submit" :loading="locked"

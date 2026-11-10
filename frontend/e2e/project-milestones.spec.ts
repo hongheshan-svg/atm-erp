@@ -1,5 +1,5 @@
 import { businessDate, selectExecutors } from './fixtures'
-import { test, expect, login, openRowAction } from './fixtures'
+import { test, expect, login, detailAction, openRowAction } from './fixtures'
 
 test('项目六阶段模板支持一键生成、并行任务、日期调整和增删节点', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
@@ -265,7 +265,7 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   await expect(page).toHaveURL(new RegExp(`projects/${signed.project}.*focus=${task.id}`))
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: '主管核对3D画图' })
   await expect(dialog).toContainText('待办详情')
-  await dialog.getByRole('button', { name: '完成任务', exact: true }).click()
+  await detailAction(page, '完成任务')
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(today)
   await dialog.getByLabel('实际完成日期', { exact: true }).fill(today)
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('主管核对完成')
