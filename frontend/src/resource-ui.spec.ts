@@ -16,4 +16,10 @@ describe('列表逾期标识', () => {
     expect(isOverdueCell('tasks', 'due_date', { status: 'done', due_date: '2026-10-22' }, day)).toBe(false)
     expect(isOverdueCell('tasks', 'due_date', { status: 'open', due_date: day }, day)).toBe(false)
   })
+  it('执行中、交付中的项目交期已过显示逾期，草稿/已验收/结项/取消或当日不显示', () => {
+    for (const status of ['active', 'delivering']) expect(isOverdueCell('projects', 'due_date', { status, due_date: '2026-10-22' }, day)).toBe(true)
+    for (const status of ['draft', 'quoted', 'warranty', 'closed', 'cancelled']) expect(isOverdueCell('projects', 'due_date', { status, due_date: '2026-10-22' }, day)).toBe(false)
+    expect(isOverdueCell('projects', 'due_date', { status: 'active', due_date: day }, day)).toBe(false)
+    expect(isOverdueCell('projects', 'due_date', { status: 'active', due_date: null }, day)).toBe(false)
+  })
 })

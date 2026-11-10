@@ -65,7 +65,7 @@ function readonlyValue(field: Field) {
   <div ref="root" class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
     <template v-for="field in visibleFields" :key="field.key">
       <WarehouseLines v-if="field.warehouse && !readonly" v-model="model[field.key]" :field="field" :context="model" :disabled="disabled" :prefix="fieldPath(field.key)" :issues="issues" :ref="(el: any) => { if (el) children.set(field.key, el); else children.delete(field.key) }" @touched="emit('touched', $event)" />
-      <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact }">
+      <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact || field.dense, 'row-list-dense': field.dense }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
         <BusinessTable v-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
@@ -75,9 +75,9 @@ function readonlyValue(field: Field) {
             ></el-table-column
           >
         </BusinessTable>
-        <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields" :class="{ 'line-fields-compact': field.compact }">
+        <div v-for="i in readonly ? [] : indices(field.key)" :key="i" class="line-fields" :class="{ 'line-fields-compact': field.compact || field.dense, 'line-fields-dense': field.dense }">
           <p class="line-number">第 {{ i + 1 }} 行</p>
-          <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" :compact="field.compact" :prefix="`${fieldPath(field.key)}.${i}`" :issues="issues" :ref="(el: any) => { if (el) children.set(`${field.key}.${i}`, el); else children.delete(`${field.key}.${i}`) }" @touched="emit('touched', $event)" @uploading="emit('uploading', $event)" />
+          <FormFields v-model="model[field.key][i]" :fields="field.fields!" :disabled="disabled" :compact="field.compact || field.dense" :prefix="`${fieldPath(field.key)}.${i}`" :issues="issues" :ref="(el: any) => { if (el) children.set(`${field.key}.${i}`, el); else children.delete(`${field.key}.${i}`) }" @touched="emit('touched', $event)" @uploading="emit('uploading', $event)" />
           <el-button v-if="!disabled && !field.readonly" @click="model[field.key].splice(i, 1)">移除此行</el-button>
         </div>
         <div v-if="!readonly && model[field.key]?.length > 20"><button type="button" :disabled="start(field.key) === 0" @click="pages[field.key] = start(field.key) / 20 - 1">上一页明细</button> {{ start(field.key) + 1 }}–{{ Math.min(start(field.key) + 20, model[field.key].length) }} / {{ model[field.key].length }} <button type="button" :disabled="start(field.key) + 20 >= model[field.key].length" @click="pages[field.key] = start(field.key) / 20 + 1">下一页明细</button></div>

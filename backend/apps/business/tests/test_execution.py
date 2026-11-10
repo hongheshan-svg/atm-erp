@@ -669,3 +669,25 @@ class ExecutionTests(ExecutionFixtures, TestCase):
                 denied = self.post('manager', f'tasks/{task.pk}/cancel/', {'reason': '试图取消已开工任务'}, status=409)
                 self.assertIn('工时', str(denied))
                 self.assertEqual(Task.objects.get(pk=task.pk).status, status)
+
+
+class ProjectTaskProgressTests(ExecutionFixtures, TestCase):
+    def setUp(self):
+        self.setup_execution()
+
+    def test_project_list_and_detail_report_task_progress_without_cancelled_or_deleted(self):
+        project = self.active_project()
+        base = Task.objects.filter(project=project).exclude(status='cancelled')
+        total, done = base.count(), base.filter(status='done').count()
+        finished, dropped, removed = (self.task(project, title=name) for name in ('完成项', '取消项', '删除项'))
+        self.task(project, title='进行项')
+        self.complete(finished)
+        self.post('manager', f'tasks/{dropped.pk}/cancel/', {'reason': '不再需要'})
+        Task.objects.filter(pk=removed.pk).update(is_deleted=True)
+
+        listed = self.clients['manager'].get('/api/business/projects/').data
+        rows = listed['results'] if isinstance(listed, dict) else listed
+        row = next(row for row in rows if row['id'] == project.pk)
+        self.assertEqual((row['task_total'], row['task_done']), (total + 2, done + 1))
+        detail = self.clients['manager'].get(f'/api/business/projects/{project.pk}/').data
+        self.assertEqual((detail['task_total'], detail['task_done']), (total + 2, done + 1))

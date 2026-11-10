@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
@@ -53,7 +54,17 @@ class ProjectView(ImportableMixin, ReadView):
     def get_queryset(self):
         if self.action == 'progress':
             return progress.readable_projects(self.request.user, super().get_queryset())
-        return projects_for(self.request.user, super().get_queryset())
+        # 列表直接给出任务完成进度，不必逐个打开项目；已取消和已删除的任务不计入。
+        counted = Q(tasks__is_deleted=False) & ~Q(tasks__status='cancelled')
+        # 聚合会丢掉模型默认排序，分页前显式恢复。
+        return (
+            projects_for(self.request.user, super().get_queryset())
+            .annotate(
+                task_total=Count('tasks', filter=counted, distinct=True),
+                task_done=Count('tasks', filter=counted & Q(tasks__status='done'), distinct=True),
+            )
+            .order_by('-id')
+        )
 
     @action(detail=True, methods=['get'])
     def progress(self, request, pk=None):

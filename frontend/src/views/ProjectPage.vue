@@ -24,7 +24,6 @@ import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
 import { confirmFormNavigation } from '../form-experience'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
-const bomTabs = [{ key: 'demand', label: 'BOM 与缺料' }, { key: 'lines', label: 'BOM 明细', resources: ['bom'] }]
 const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
 const financeTabs = [{ key: 'entries', label: '项目款项', resources: ['entries'] }, { key: 'reconciliations', label: '项目对账', resources: ['reconciliations'] }, { key: 'payments', label: '项目收付流水', resources: ['payments'] }]
 const costTabs = [{ key: 'budget', label: '预算与预测' }, { key: 'actual', label: '实际成本' }]
@@ -61,6 +60,13 @@ const brief = computed(() => {
     `交期 ${record.due_date || '未设置'}`,
     ...(money() ? [`合同 ${amount(record.contract_amount)}`] : []),
   ].join(' · ')
+})
+// 合同金额减已发生成本：让经理在成本页直接看到还剩多少利润空间。金额均为含税经营口径。
+const margin = computed(() => {
+  const contract = Number(project.value?.contract_amount), total = Number(cost.value.total)
+  if (!money() || !Number.isFinite(contract) || contract <= 0 || !Number.isFinite(total)) return null
+  const value = contract - total
+  return { value: value.toFixed(2), rate: `${((value / contract) * 100).toFixed(1)}%`, loss: value < 0 }
 })
 const command = ref<Command | null>(null)
 const attention = computed(() => String(route.query.attention || ''))
@@ -161,7 +167,7 @@ onMounted(load)
     <p v-if="taskAttention || purchaseAttention" class="attention-filter" role="status">当前项目 · {{ attentionLabel }}<el-button text @click="clearAttention">查看全部</el-button><router-link v-if="taskAttention && attention === 'acceptance' && manager() && project.can_manage !== false" :to="{ path: `/projects/${id}`, query: { tab: 'deliveries', section: 'deliveries' } }">前往交付批次登记验收</router-link></p>
     <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab" :before-leave="confirmFormNavigation"
       ><el-tab-pane label="流程进度" name="progress" lazy><ProjectProgress v-if="tab === 'progress'" :project-id="id" :revision="revision" /></el-tab-pane><el-tab-pane label="任务与工时" name="tasks"
-        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ProjectTaskSupervisors :project="project" @changed="load" /><ProjectMilestones :project-id="id" :revision="revision" :phase="phase" @phase="value => { phase = value; clearAttention() }" @changed="load" /><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ProjectMilestones :project-id="id" :revision="revision" :phase="phase" @phase="value => { phase = value; clearAttention() }" @changed="load" /><ResourcePanel
           resource="tasks"
           :key="`tasks-${attention}`"
           :class="{ 'attention-list': taskAttention }"
@@ -170,24 +176,20 @@ onMounted(load)
           :project-id="id"
           :params="taskParams"
           :revision="revision"
-          @changed="load" /></template><template #time><ResourcePanel
+          @changed="load" /><ProjectTaskSupervisors :project="project" @changed="load" /></template><template #time><ResourcePanel
           resource="time"
           title="工时记录"
           :params="{ task__project: id }"
           :revision="revision"
           @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane label="BOM" name="bom" lazy
-        ><ModuleTabs :parent-tab="tab" v-if="tab === 'bom'" :tabs="bomTabs" :storage-key="`project-${id}-bom`"><template #demand><BOMDemand
+        ><BOMDemand
+          v-if="tab === 'bom'"
           :project-id="id"
           :status="project.status"
           :can-edit-bom="project.can_edit_bom"
           :revision="revision"
-          @changed="load" /></template><template #lines><ResourcePanel
-          resource="bom"
-          title="BOM 明细"
-          :params="{ project: id }"
-          :revision="revision"
-          @changed="load" /></template></ModuleTabs></el-tab-pane
+          @changed="load" /></el-tab-pane
       ><el-tab-pane
         v-if="purchaseReader()"
         label="采购"
@@ -234,6 +236,12 @@ onMounted(load)
             <div class="cost-grid"><div v-for="(label, key) in { materials: '材料', labor: '人工', expenses: '费用', purchase_return_variance: '退货价差', total: '合计' }" :key="key">
               <small>{{ label }}</small><strong>{{ formatMoney(cost[key], { currency: true }) }}</strong>
             </div></div>
+            <div v-if="margin" class="cost-margin" aria-label="合同毛利估算">
+              <div><small>合同金额</small><strong>{{ amount(project.contract_amount) }}</strong></div>
+              <div><small>毛利（合同 − 实际成本）</small><strong :class="{ 'margin-loss': margin.loss }">{{ formatMoney(margin.value, { currency: true }) }}</strong></div>
+              <div><small>毛利率</small><strong :class="{ 'margin-loss': margin.loss }">{{ margin.rate }}</strong></div>
+            </div>
+            <p class="muted cost-note">{{ margin ? '毛利按已发生的实际成本估算，项目未结束时成本仍会增加。' : '尚未签约或未设置合同金额，暂不估算毛利。' }}</p>
           </section></template>
         </ModuleTabs>
       </el-tab-pane><el-tab-pane label="附件" name="documents" lazy
@@ -252,6 +260,12 @@ onMounted(load)
 .project-summary > div { border: 0; border-right: 1px solid var(--surface-border); border-radius: 0; box-shadow: none; padding: 0 22px; }
 .project-summary > div:last-child { border-right: 0; }
 .project-summary strong { font-size: 20px; margin-top: 8px; }
+.cost-margin { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--surface-border); }
+.cost-margin small, .cost-margin strong { display: block; }
+.cost-margin small { color: var(--mute); font-size: 12px; }
+.cost-margin strong { margin-top: 6px; font-size: 18px; font-variant-numeric: tabular-nums; }
+.margin-loss { color: var(--risk); }
+.cost-note { margin: 10px 0 0; font-size: 12px; }
 .project-brief { margin: -14px 0 16px; font-variant-numeric: tabular-nums; }
 .attention-filter { display: flex; align-items: center; gap: 12px; }
 .attention-list :deep(.resource-status-tabs) { display: none; }

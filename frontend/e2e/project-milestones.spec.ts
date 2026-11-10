@@ -45,6 +45,8 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await selectExecutors(page, dialog.locator('.line-fields').first(), [me.display_name || me.username, colleague.display_name])
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(info.project.use.viewport!.width)
   await dialog.getByLabel('计划完成日期', { exact: true }).first().fill('2026-12-20')
+  // 按阶段批量填日期：同阶段未单独填写的节点沿用阶段日期，行内已填的不被覆盖。
+  await dialog.getByLabel(/计划完成$/).first().fill('2026-12-25')
   await page.screenshot({ path: info.outputPath('milestone-template.png'), animations: 'disabled' })
   const generated = page.waitForResponse(response => response.url().includes('/tasks/apply-milestones/') && response.request().method() === 'POST')
   await dialog.getByRole('button', { name: '确认生成里程碑', exact: true }).click()
@@ -53,6 +55,10 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   let tasks = (await get('business/tasks/?project=' + project + '&page_size=100')).results
   expect(tasks).toHaveLength(21)
   expect(tasks.find((row: any) => row.milestone === 'design_3d').due_date).toBe('2026-12-20')
+  const firstNode = tasks.find((row: any) => row.milestone === 'design_3d')
+  const stagePeers = tasks.filter((row: any) => row.kind === firstNode.kind && row.id !== firstNode.id && row.milestone && !row.system_managed)
+  expect(stagePeers.length).toBeGreaterThan(0)
+  expect(stagePeers.map((row: any) => row.due_date)).toEqual(stagePeers.map(() => '2026-12-25'))
   expect(tasks.filter((row: any) => row.system_managed)).toHaveLength(3)
   expect(tasks[0].milestone).toBe('design_3d')
   expect(tasks.find((row: any) => row.milestone === 'design_3d').assignees).toEqual([me.id, colleague.id])
@@ -114,7 +120,9 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   expect((await get('business/time/?task=' + completed.id)).count).toBe(0)
   await row.getByText('3 天', { exact: true }).scrollIntoViewIfNeeded()
   await page.screenshot({ path: info.outputPath('elapsed-days.png'), animations: 'disabled' })
-  await overview.getByRole('button', { name: '一键生成里程碑' }).click()
+  // 已有节点后入口降为次要按钮，文案改为「补充」。
+  await expect(overview.getByRole('button', { name: '一键生成里程碑' })).toHaveCount(0)
+  await overview.getByRole('button', { name: '补充里程碑节点', exact: true }).click()
   await expect(dialog).toContainText('项目里程碑 · 0 行')
   await dialog.getByRole('button', { name: '添加行', exact: true }).click()
   await dialog.getByLabel('阶段', { exact: true }).selectOption('site')

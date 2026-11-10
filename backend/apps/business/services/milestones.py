@@ -143,5 +143,7 @@ def summary(actor, project_id):
         )
     return {
         'stages': stages,
+        # 已落地的模板节点数：前端据此区分「首次生成」和「补充节点」，手工建的普通任务不算。
+        'milestones': sum(bool(task.milestone) for task in tasks),
         'can_generate': project.status in {'active', 'delivering'} and project_allowed(actor, project, MANAGERS),
     }

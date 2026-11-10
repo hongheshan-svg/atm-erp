@@ -142,7 +142,8 @@ for (const identity of identities) {
       for (const tab of tabs) {
         await page.goto(`/erp/projects/${projectId}?tab=${tab}`)
         await expect(page.locator('h1')).toContainText('岗位页面巡检')
-        const childTabs: Record<string, number> = { tasks: 2, bom: 2, deliveries: 2, finance: 3, cost: 2 }
+        // BOM 页签只有一张表（行内可改单行），不再分子页签。
+        const childTabs: Record<string, number> = { tasks: 2, deliveries: 2, finance: 3, cost: 2 }
         await expect(page.locator('.module-tabs').getByRole('tab')).toHaveCount(childTabs[tab] ?? 0)
         await inspect(page, visited)
         const labels = await page.locator('.module-tabs').getByRole('tab').allTextContents()

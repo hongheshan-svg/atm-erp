@@ -4,7 +4,8 @@ import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { read, write, download } from '../api'
 import { downloadBOM } from '../api/bom'
-import { bomCommand, permission } from '../business'
+import { actionCommand, bomCommand, permission } from '../business'
+import { today } from '../forms'
 import { bomEditor, engineer, purchaseReader } from '../session'
 import type { Row, Command } from '../types'
 import { message, requestKey } from '../utils/request'
@@ -86,7 +87,7 @@ const options = (key: string) => [...new Set<string>(demand.value.lines.map((lin
 const filtered = computed(() => demand.value.lines.filter((line: Row) =>
   (!brand.value || line.brand === brand.value) && (!unit.value || line.assembly_unit === unit.value) &&
   (!partType.value || line.part_type === partType.value) && (!shortageOnly.value || Number(line.shortage) > 0) &&
-  [line.item_code, line.item_name, line.specification].join(' ').toLowerCase().includes(search.value.trim().toLowerCase()),
+  [line.item_code, line.item_name, line.specification, line.drawing_number, line.brand].join(' ').toLowerCase().includes(search.value.trim().toLowerCase()),
 ))
 const eligible = (line: Row) => Number(line.shortage) > 0 && line.is_active !== false
 const exporting = ref(false)
@@ -150,6 +151,20 @@ async function start() {
   } catch (e) {
     error.value = message(e)
   }
+}
+// 行内直接改一条或移除一条，不必再切到另一张「BOM 明细」表；提交仍走原有的修订与移除接口。
+async function rowAction(line: Row, name: string) {
+  error.value = ''
+  try { command.value = await actionCommand('bom', { ...line, id: line.bom_line, project: props.projectId }, name) }
+  catch (e) { error.value = message(e) }
+}
+const day = today()
+// 仍有缺口且需求日期已过：提醒优先处理；已配齐的行不提示。
+const requiredOverdue = (line: Row) => Boolean(line.required_date) && line.required_date < day && Number(line.shortage) > 0
+function more(name: string) {
+  if (name === 'impact') void inspectImpact()
+  else if (name === 'refresh') void load()
+  else if (name === 'deleted') deletionHistory.value = true
 }
 async function openImport() {
   closeImport()
@@ -252,9 +267,8 @@ function saved() {
         <el-button v-if="canMaintain && view === 'prepare'" type="primary" :disabled="busy" @click="start">维护 BOM</el-button>
         <el-button v-if="canPurchase && view === 'purchase'" ref="purchaseTrigger" type="primary" :disabled="busy" @click="purchase">从 BOM 多选下单</el-button>
         <el-button v-if="canMaintain" :disabled="busy" @click="openImport">导入 BOM</el-button>
-        <el-button v-if="canMaintain" @click="inspectImpact">变更影响与处理</el-button>
         <el-dropdown :disabled="busy || deletionLoading || exporting || (!filtered.length && !exportSelection.length)" @command="exportRows">
-          <el-button aria-label="导出BOM" :loading="exporting" :disabled="busy || deletionLoading || (!filtered.length && !exportSelection.length)">导出{{ exportSelection.length ? `已选 ${exportSelection.length} 项` : `筛选结果 ${filtered.length} 项` }} ▾</el-button>
+          <el-button aria-label="导出BOM" :loading="exporting" :disabled="busy || deletionLoading || (!filtered.length && !exportSelection.length)">导出<span class="export-scope-label">{{ exportSelection.length ? `已选 ${exportSelection.length} 项` : `筛选结果 ${filtered.length} 项` }}</span> ▾</el-button>
           <template #dropdown><el-dropdown-menu>
             <template v-if="exportSelection.length">
               <el-dropdown-item command="selected:xlsx">已选 {{ exportSelection.length }} 项 · Excel</el-dropdown-item>
@@ -264,20 +278,25 @@ function saved() {
             <el-dropdown-item command="filtered:csv" :disabled="!filtered.length">筛选结果 {{ filtered.length }} 项 · CSV</el-dropdown-item>
           </el-dropdown-menu></template>
         </el-dropdown>
-        <el-button @click="load">刷新需求</el-button>
         <el-button v-if="deletionAllowed" :type="batchMode ? 'primary' : undefined" :plain="batchMode" :aria-pressed="batchMode" :disabled="busy" @click="setBatchMode(!batchMode)">{{ batchMode ? '退出批量管理' : '批量管理' }}</el-button>
         <el-button v-if="batchVisible && view === 'prepare'" type="danger" plain :disabled="busy || deletionLoading || !deletionSelection.length" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
-        <el-button v-if="batchVisible" :disabled="busy" @click="deletionHistory = true">已删除记录</el-button>
+        <el-dropdown trigger="click" :persistent="false" @command="more">
+          <el-button aria-label="更多BOM操作">更多 ▾</el-button>
+          <template #dropdown><el-dropdown-menu>
+            <el-dropdown-item v-if="canMaintain" command="impact">变更影响与处理</el-dropdown-item>
+            <el-dropdown-item command="refresh">刷新需求</el-dropdown-item>
+            <el-dropdown-item v-if="batchVisible" command="deleted" :disabled="busy">已删除记录</el-dropdown-item>
+          </el-dropdown-menu></template>
+        </el-dropdown>
       </div>
     </header>
     <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
       <label><input v-model="view" type="radio" value="prepare" />编制用料</label>
       <label><input v-model="view" type="radio" value="purchase" />采购缺料</label>
+      <small v-if="view === 'prepare'" class="muted">按单元核对规格、数量和需求日期；行尾「操作」可改单行或移除。</small>
+      <small v-else class="muted">库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。</small>
     </div>
-    <p v-if="view === 'prepare'" class="muted">按单元核对物料规格、需求数量和需求日期；切换采购缺料可查看库存、在途及缺口。</p>
-    <p v-else class="muted">库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。</p>
-    <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
-    <p class="muted" role="status" aria-label="BOM导出范围">当前筛选 {{ filtered.length }} 项，导出包含所有分页。<template v-if="exportSelection.length">已选 {{ exportSelection.length }} 项，可单独导出已选项。</template><strong v-if="hiddenSelectionCount">其中 {{ hiddenSelectionCount }} 项在当前筛选外；只需当前类别时请选择“筛选结果”导出。</strong></p>
+    <div class="bom-demand-filters"><label>搜索物料<input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号、品牌" /></label><label>品牌<select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label>单元<select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option></select></label><label>类别<select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label><label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label></div>
     <div v-if="batchVisible && view === 'prepare'" class="bom-batch-selection" aria-label="BOM批量选择">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionMax }} 项</span>
       <el-button :disabled="busy || deletionLoading || !filtered.length" @click="batch.replace(filtered)">{{ filtered.length > deletionMax ? '选择筛选结果前' + deletionMax + '项（跨页）' : '全选筛选结果（' + filtered.length + '项，跨页）' }}</el-button>
@@ -294,19 +313,19 @@ function saved() {
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM明细 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="batch.has(row)" :disabled="busy || deletionLoading || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
       </el-table-column>
       <el-table-column v-if="canPurchase && view === 'purchase'" label="选择" width="60" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
-      <el-table-column label="物料名称 / 编码" min-width="180" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small></template></el-table-column>
+      <el-table-column label="物料名称 / 编码" min-width="160" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small></template></el-table-column>
       <el-table-column v-if="view === 'prepare'" prop="specification" label="规格" min-width="140" />
-      <el-table-column prop="assembly_unit" label="单元" min-width="100" />
-      <el-table-column prop="quantity" label="需求数量" width="95" align="right" />
-      <el-table-column prop="unit" label="单位" width="65" />
+      <el-table-column prop="assembly_unit" label="单元" min-width="90" />
+      <el-table-column prop="quantity" label="需求数量" width="86" align="right" />
+      <el-table-column prop="unit" label="单位" width="56" />
       <template v-if="view === 'purchase'">
-        <el-table-column prop="issued" label="已领" width="80" align="right" />
-        <el-table-column prop="incoming" label="在途" width="80" align="right" />
-        <el-table-column prop="available" label="可用库存" width="100" align="right" />
-        <el-table-column label="缺料" width="85" align="right"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column>
+        <el-table-column prop="issued" label="已领" width="70" align="right" />
+        <el-table-column prop="incoming" label="在途" width="70" align="right" />
+        <el-table-column prop="available" label="可用库存" width="88" align="right" />
+        <el-table-column label="缺料" width="76" align="right"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column>
       </template>
-      <el-table-column prop="required_date" label="需求日期" min-width="110" />
-      <el-table-column v-if="view === 'purchase' || fullColumns" label="其他项目待领" min-width="115" align="right"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ row.other_demand }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column>
+      <el-table-column v-if="view === 'purchase' || fullColumns" label="其他项目待领" min-width="110" align="right"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ row.other_demand }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column>
+      <el-table-column label="需求日期" min-width="108"><template #default="{ row }"><span v-if="requiredOverdue(row)" class="overdue-cell">{{ row.required_date }}<strong class="overdue-flag">已逾期</strong></span><span v-else>{{ row.required_date }}</span></template></el-table-column>
       <template v-if="fullColumns">
         <el-table-column v-if="view === 'purchase'" prop="specification" label="规格" min-width="140" />
         <el-table-column prop="drawing_number" label="图号" min-width="150" /><el-table-column prop="drawing_revision" label="图档版本" min-width="90" />
@@ -316,10 +335,17 @@ function saved() {
         <el-table-column prop="change_note" label="变更说明" min-width="150" />
         <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途" /><el-table-column prop="available" label="可用库存" /><el-table-column prop="shortage" label="缺料" /></template>
       </template>
-      <el-table-column v-if="batchVisible" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button></template></el-table-column>
+      <el-table-column v-if="batchVisible || (canMaintain && view === 'prepare')" label="操作" :width="batchVisible && canMaintain && view === 'prepare' ? 150 : 96" fixed="right"><template #default="{ row }"><div class="row-actions">
+        <el-dropdown v-if="canMaintain && view === 'prepare'" trigger="click" :persistent="false" @command="(name: string) => rowAction(row, String(name))">
+          <el-button size="small" :disabled="busy">操作 ▾</el-button>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item command="修改此行">修改此行</el-dropdown-item><el-dropdown-item command="移除">移除</el-dropdown-item></el-dropdown-menu></template>
+        </el-dropdown>
+        <el-button v-if="batchVisible" type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button>
+      </div></template></el-table-column>
       <template #tools><el-button :aria-pressed="fullColumns" @click="fullColumns = !fullColumns">{{ fullColumns ? '收起完整列' : '展开完整列（图号、品牌等）' }}</el-button></template>
     </BusinessTable>
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" resource="bom" title="BOM明细" :rows="deleting || undefined" :project-id="projectId" :show-original="false" @close="deleting = null; deletionHistory = false" @saved="saved" />
+    <p class="muted bom-export-scope" role="status" aria-label="BOM导出范围">当前筛选 {{ filtered.length }} 项，导出包含所有分页。<template v-if="exportSelection.length">已选 {{ exportSelection.length }} 项，可单独导出已选项。</template><strong v-if="hiddenSelectionCount">其中 {{ hiddenSelectionCount }} 项在当前筛选外；只需当前类别时请选择“筛选结果”导出。</strong></p>
     <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
     <footer v-if="canPurchase && view === 'purchase'" class="bom-selection-bar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><el-button :disabled="busy" @click="selected = [...new Set([...selected, ...filtered.filter(eligible).map((line: Row) => line.bom_line)])]">全选筛选结果</el-button><el-button :disabled="busy || !selected.length" text @click="selected = []">清空选择</el-button><el-button ref="selectionTrigger" type="primary" :loading="busy" :disabled="!selected.length" @click="purchase">按缺料采购</el-button></footer>
     <el-dialog v-if="importOpen && !command" :model-value="true" title="导入BOM" class="bom-import-dialog" width="min(1200px, 94vw)" top="4vh" :close-on-click-modal="false" @update:model-value="closeImport" @opened="revealImportResult">
@@ -352,14 +378,18 @@ function saved() {
   </section>
 </template>
 <style scoped>
-.bom-view-switch { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.bom-view-switch { display: flex; gap: 6px 20px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.bom-view-switch small { font-size: 12px; line-height: 1.5; flex: 1 1 320px; }
+.bom-export-scope { margin: 8px 0 0; font-size: 12px; }
+/* 手机上工具栏按钮缩成两行：导出范围在下拉项和表格下方的范围说明里都有。 */
+@media (max-width: 640px) { .export-scope-label { display: none; } .panel-heading .toolbar { gap: 6px; } .panel-heading .toolbar :deep(.el-button) { padding-left: 10px; padding-right: 10px; } }
 .bom-view-switch label { display: flex; gap: 6px; align-items: center; white-space:nowrap; }
 .bom-view-switch input[type='radio'] { width:16px; height:16px; min-height:0; padding:0; flex:0 0 16px; }
 .bom-item-code { display: block; color: var(--mute); font-weight: normal; }
 .bom-import-steps { padding-left: 22px; }
 .bom-import-steps li { margin-bottom: 14px; }
 .bom-import-steps li > strong { display: block; margin-bottom: 8px; }
-.bom-demand-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 16px 0; }
+.bom-demand-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; padding: 8px 0 10px; }
 .bom-demand-filters > label { display: grid; gap: 6px; font-size: 13px; min-width: 130px; }
 .bom-demand-filters .shortage-toggle { display: flex; align-items: center; min-height: 38px; }
 .import-help { color: var(--mute); font-size: 13px; line-height: 1.7; }

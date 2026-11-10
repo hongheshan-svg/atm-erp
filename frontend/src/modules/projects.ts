@@ -42,6 +42,12 @@ import { qty } from './shared'
 import { C } from './shared'
 import { person } from './shared'
 import { endpoint, ledgerStatus } from './shared'
+// 列表上的任务完成进度；尚未安排任务时明确说明，而不是显示 0/0。
+export function taskProgressLabel(row: Row): string {
+  if (row.task_total == null) return '—'
+  if (!row.task_total) return '未安排任务'
+  return `${row.task_done} / ${row.task_total}（${Math.round((row.task_done / row.task_total) * 100)}%）`
+}
 export const columns: Record<string, Column[]> = {
   projects: [
     C('code', '项目编号'),
@@ -49,6 +55,7 @@ export const columns: Record<string, Column[]> = {
     C('customer_name', '客户'),
     C('manager_name', '负责人'),
     C('status', '状态'),
+    { key: 'task_done', label: '任务进度', format: taskProgressLabel },
     C('due_date', '计划交期'),
   ],
   tasks: [

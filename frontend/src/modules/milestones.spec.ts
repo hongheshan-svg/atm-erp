@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { all, read } from '../api'
-import { actionCommand, actionNames, columns, createCommand } from './projects'
+import { actionCommand, actionNames, columns, createCommand, taskProgressLabel } from './projects'
 import { milestoneTemplateCommand, taskSyncHint, taskElapsedLabel, taskVarianceLabel } from './milestones'
 import { user } from '../session'
 import { payload } from '../forms'
@@ -23,12 +23,29 @@ afterEach(() => { user.value = null })
 it('生成模板只补缺失节点，允许移除和新增自定义任务并锁定项目', async () => {
   const command = await milestoneTemplateCommand(7)
   expect(command.initial?.lines.map((row: any) => row.milestone)).toEqual(['purchase_long_lead', 'shipping_dispatch'])
-  const fields = command.fields[0]!.fields!
+  const lines = command.fields.find(field => field.key === 'lines')!
+  expect(lines.dense).toBe(true)
+  const fields = lines.fields!
+  // 批量工具只列还有待生成节点的阶段；已存在的 design 阶段不再给日期框。
+  expect(command.fields.filter(field => field.key.startsWith('stage_due_')).map(field => field.key)).toEqual(['stage_due_purchase', 'stage_due_shipping'])
   const select = fields.find(field => field.key === 'milestone')!
   expect(select.optionsFor?.({ kind: 'purchase' })).toEqual([{ value: 'purchase_long_lead', label: '长交期' }])
   expect(select.optionsFor?.({ kind: 'shipping' })?.[0]?.label).toContain('业务自动同步')
   const data = payload(command.fields, { lines: [{ kind: 'site', title: '培训', assignees: [1], due_date: '2026-12-20' }] })
   expect(command.prepare?.({ ...data, project: 99 })).toEqual({ project: 7, lines: [{ kind: 'site', title: '培训', assignees: [1], due_date: '2026-12-20' }] })
+  // 阶段日期只补空行；统一执行人只替换仍是默认（项目经理）的行，批量字段本身不提交。
+  expect(command.prepare?.({
+    stage_due_purchase: '2026-11-30', batch_assignees: [5, 6],
+    lines: [
+      { kind: 'purchase', milestone: 'purchase_long_lead', assignees: [1], due_date: '' },
+      { kind: 'purchase', title: '自定义', assignees: [9], due_date: '2026-12-01' },
+      { kind: 'shipping', milestone: 'shipping_dispatch', assignees: [1], due_date: '' },
+    ],
+  })).toEqual({ project: 7, lines: [
+    { kind: 'purchase', milestone: 'purchase_long_lead', assignees: [5, 6], due_date: '2026-11-30' },
+    { kind: 'purchase', title: '自定义', assignees: [9], due_date: '2026-12-01' },
+    { kind: 'shipping', milestone: 'shipping_dispatch', assignees: [5, 6], due_date: '' },
+  ] })
   expect(() => command.prepare?.({ lines: [] })).toThrow('至少保留')
 })
 it('单项任务支持六阶段和联动节点，自动节点不显示手动完成及工时', async () => {
@@ -106,4 +123,11 @@ it('开始后显示进行历时，补录与更正有明确入口且不生成工�
   expect(amend.prepare?.({ started_date: '2026-10-31', reason: '核对' })).toMatchObject({ expected_started_date: '2026-11-01' })
   expect((await actionCommand('tasks', started, '完成任务')).fields.map(field => field.key)).toEqual(['completed_date', 'reason'])
   expect(actionNames('tasks', { ...row, system_managed: true })).not.toContain('开始任务')
+})
+it('项目列表任务进度：给出完成数与百分比，未安排或无统计时不显示 0/0', () => {
+  expect(columns.projects!.map(column => column.label)).toContain('任务进度')
+  expect(taskProgressLabel({ task_total: 20, task_done: 5 })).toBe('5 / 20（25%）')
+  expect(taskProgressLabel({ task_total: 3, task_done: 3 })).toBe('3 / 3（100%）')
+  expect(taskProgressLabel({ task_total: 0, task_done: 0 })).toBe('未安排任务')
+  expect(taskProgressLabel({})).toBe('—')
 })

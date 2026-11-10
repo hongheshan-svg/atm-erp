@@ -95,15 +95,14 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await expect(dialog(manager)).toContainText('本项目现有 2 行')
   await expect(dialog(manager).getByLabel('变更说明', { exact: true })).toHaveCount(1)
   await cancelEditing(dialog(manager))
-  // 改单条用量走 BOM 明细的「修改此行」，只提交这一行，仍可先预览变更影响。
-  await manager.getByRole('tab', { name: 'BOM 明细', exact: true }).click()
+  // 改单条用量走列表行尾的「修改此行」，只提交这一行，仍可先预览变更影响。
   await action(manager, row(manager, '下料'), '修改此行')
   await fill(manager, '变更说明', '预览不保存')
   await detailAction(manager, '预览变更影响')
   await expect(dialog(manager).getByRole('region', { name: '变更影响预览', exact: true })).toContainText('本次预览可通过')
   await cancelEditing(dialog(manager))
-  await manager.getByRole('tab', { name: 'BOM 与缺料', exact: true }).click()
-  await manager.getByRole('button', { name: '变更影响与处理', exact: true }).click()
+  await manager.getByRole('button', { name: '更多BOM操作', exact: true }).click()
+  await manager.getByRole('menuitem', { name: '变更影响与处理', exact: true }).click()
   await expect(dialog(manager)).toContainText('当前最低可改量')
   await detailAction(manager, '关闭')
   await purchaser.goto(`/erp/projects/${id}?tab=bom`)

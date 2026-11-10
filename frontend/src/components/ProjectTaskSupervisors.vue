@@ -42,18 +42,21 @@ async function edit() {
 </script>
 <template>
   <section class="panel task-supervisors" aria-label="项目专业主管">
-    <header><div><h2>专业主管</h2><p class="muted">主管统一确认任务完成，按人员和日期登记实际小时数；员工查看进度。任务历时不自动计入人工成本。</p></div><el-button v-if="editable" @click="edit">设置专业主管</el-button></header>
+    <header><h2>专业主管</h2><dl><div v-for="item in disciplines" :key="item.value"><dt>{{ item.label }}</dt><dd>{{ label(item.value) }}</dd></div></dl><el-button v-if="editable" size="small" @click="edit">设置专业主管</el-button></header>
+    <p class="muted">主管统一确认任务完成，按人员和日期登记实际小时数；员工查看进度。任务历时不自动计入人工成本。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <dl><div v-for="item in disciplines" :key="item.value"><dt>{{ item.label }}</dt><dd>{{ label(item.value) }}</dd></div></dl>
     <ActionDialog :command="command" @close="command = null" @saved="emit('changed')" />
   </section>
 </template>
 <style scoped>
-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-h2 { font-size: 18px; margin: 0 0 8px; }
-p { margin: 0; line-height: 1.6; }
-dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 0; }
-dt { color: var(--ink-4); font-size: 13px; }
-dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+/* 主管是偶尔调整的配置，放在任务列表之后。 */
+.task-supervisors { padding-top: 10px; padding-bottom: 10px; margin-top: 12px; }
+header { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+h2 { font-size: 16px; margin: 0; flex: none; }
+p { margin: 4px 0 0; line-height: 1.5; font-size: 12px; }
+dl { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; flex: 1 1 400px; font-size: 13px; }
+dl div { display: flex; gap: 6px; align-items: baseline; }
+dt { color: var(--ink-4); }
+dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 640px) { header { align-items: stretch; flex-direction: column; } }
 </style>

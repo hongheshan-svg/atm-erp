@@ -21,5 +21,7 @@ export function isOverdueCell(resource: string, key: string, row: Record<string,
   if (!date || date >= day) return false
   if (resource === 'purchases' && key === 'next_delivery_date') return !['received', 'cancelled', 'void'].includes(String(row.status))
   if (resource === 'tasks' && key === 'due_date') return row.status === 'open'
+  // 项目交期：验收前（执行中、交付中）才算逾期；草稿、已验收、结项、取消不提示。
+  if (resource === 'projects' && key === 'due_date') return ['active', 'delivering'].includes(String(row.status))
   return false
 }

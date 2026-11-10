@@ -23,8 +23,7 @@ onMounted(async () => {
     project-filter
     require-project
     v-slot="{ revision, projectId, refresh, projects }"
-    ><p class="muted">物料清单（BOM） · 编制项目用料，跟进缺料。</p>
-    <p v-if="currentProject && projectId !== currentProject.id"><router-link :to="{ path: '/bom', query: { project: currentProject.id } }">继续查看当前项目：{{ currentProject.name }}</router-link></p>
+    ><p v-if="currentProject && projectId !== currentProject.id"><router-link :to="{ path: '/bom', query: { project: currentProject.id } }">继续查看当前项目：{{ currentProject.name }}</router-link></p>
     <BOMDemand
       v-if="projectId"
       :project-id="projectId"
