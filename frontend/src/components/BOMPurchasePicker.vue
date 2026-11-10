@@ -7,7 +7,7 @@ import { read, write } from '../api'
 import { buyer } from '../modules/shared'
 import { purchaseFields } from '../modules/purchases'
 import { termLabel, termLabels } from '../modules/payment-terms'
-import { defaults, payload, validateFields } from '../forms'
+import { defaults, payload, today, validateFields } from '../forms'
 import { formatPurchaseAmount, purchaseLineCents, quantityValue } from '../bom-purchase'
 import { message, recoveryActions, requestKey } from '../utils/request'
 import { pageSize } from '../pagination'
@@ -60,7 +60,7 @@ const filtered = computed(() => lines.value.filter(row =>
   (!shortageOnly.value || Number(row.shortage) > 0) &&
   [row.item_code, row.item_name, row.specification, row.drawing_number].join(' ').toLowerCase().includes(search.value.trim().toLowerCase()),
 ))
-const todayText = new Date().toISOString().slice(0, 10)
+const todayText = today()
 const overdue = (row: Row) => Number(row.shortage) > 0 && !!row.required_date && String(row.required_date) < todayText
 // 采购员按需求日期定优先级：默认最早需求在前（无日期排后）、缺料多者优先；也可按单元核对。
 function byText(a: unknown, b: unknown) { return String(a || '').localeCompare(String(b || ''), 'zh-CN') }
