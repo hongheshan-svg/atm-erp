@@ -12,7 +12,7 @@ from scripts.ci.impact import BROWSERS, BUSINESS, FULL_ONLY_BROWSERS, ROOT, SHAR
 from scripts.ci.publish_release import verify
 from scripts.ci.release_gate import preflight, release_scope, reusable_run
 from scripts.ci.run_selected import command
-from scripts.ci.select_suites import SUITES, select
+from scripts.ci.select_suites import BROWSER_MAX_SHARDS, BROWSER_SECONDS, SUITES, browser_matrix, browser_shards, select
 
 
 class RoutingTests(unittest.TestCase):
@@ -299,6 +299,66 @@ class RoutingTests(unittest.TestCase):
     def test_explicit_full_validation_keeps_every_release_suite(self):
         self.assertEqual(select([], 'full'), set(SUITES))
         self.assertEqual(select(['README.md'], 'full'), set(SUITES))
+
+    def test_browser_shards_cover_every_selected_spec_exactly_once(self):
+        business = plan([], modules=BUSINESS)['browser_specs']
+        full = plan([], full=True)['browser_specs']
+        narrow = plan(['backend/apps/core/ota.py'])['browser_specs']
+        for specs in (business, full, narrow, business[:1]):
+            shards = browser_shards(specs)
+            self.assertEqual(sorted(spec for group in shards for spec in group), sorted(specs))
+            self.assertTrue(all(shards))
+            self.assertLessEqual(len(shards), BROWSER_MAX_SHARDS)
+            self.assertEqual(shards, browser_shards(reversed(specs)))
+        # 小范围不拆分，避免为几条用例多起几套安装；大范围拆开且不把最慢的文件叠在同一片。
+        self.assertEqual(len(browser_shards(narrow)), 1)
+        self.assertGreater(len(browser_shards(business)), 1)
+        slowest = [f'e2e/{name}.spec.ts' for name in sorted(BROWSER_SECONDS, key=BROWSER_SECONDS.get)[-2:]]
+        self.assertEqual(len([group for group in browser_shards(full) if set(group) & set(slowest)]), 2)
+        self.assertEqual(browser_shards([]), [])
+        for name in BROWSER_SECONDS:
+            self.assertTrue((ROOT / f'frontend/e2e/{name}.spec.ts').is_file(), name)
+
+    def test_browser_matrix_runs_each_shard_in_the_requested_viewports(self):
+        specs = plan([], modules=BUSINESS)['browser_specs']
+        both = browser_matrix(specs, 'both')
+        count = len(browser_shards(specs))
+        self.assertEqual(len(both), 2 * count)
+        for project in ('desktop', 'mobile'):
+            rows = [row for row in both if row['project'] == project]
+            self.assertEqual([row['shard'] for row in rows], list(range(1, count + 1)))
+            self.assertEqual(sorted(spec for row in rows for spec in json.loads(row['specs'])), specs)
+            self.assertEqual({row['shards'] for row in rows}, {count})
+            # 每片的目标仍须通过运行器的路径校验，不能借分片绕开。
+            for row in rows:
+                self.assertEqual(command('browser', json.loads(row['specs']), project)[1][-1], '--project=' + project)
+        self.assertEqual({row['project'] for row in browser_matrix(specs, 'mobile')}, {'mobile'})
+        self.assertEqual(browser_matrix([], 'both'), [])
+
+    def test_browser_workflow_runs_planned_shards_and_only_reads_the_image_cache(self):
+        ci = (ROOT / '.github/workflows/ci.yml').read_text()
+        browser = (ROOT / '.github/workflows/ci-browser.yml').read_text()
+        self.assertIn('browser_matrix: ${{ steps.select.outputs.browser_matrix }}', ci)
+        self.assertIn('matrix: ${{ needs.plan.outputs.browser_matrix }}', ci)
+        self.assertIn('include: ${{ fromJSON(inputs.matrix) }}', browser)
+        self.assertIn('TEST_TARGETS: ${{ matrix.specs }}', browser)
+        self.assertIn('fail-fast: false', browser)
+        # 各片的失败截图分开保存，重跑也不覆盖。
+        self.assertIn('browser-${{ matrix.project }}-${{ matrix.shard }}-${{ github.run_attempt }}', browser)
+        # 验证任务只读镜像缓存；唯一写入方是 main 上不产生验证凭据的预热流程。
+        writers = [
+            path.name
+            for path in (ROOT / '.github/workflows').glob('*.yml')
+            if 'scope=app-image,mode=max' in path.read_text()
+        ]
+        self.assertEqual(writers, ['ci-cache.yml'])
+        for name in ('ci-browser.yml', 'ci-ota.yml'):
+            text = (ROOT / '.github/workflows' / name).read_text()
+            self.assertIn('cache-from: type=gha,scope=app-image', text)
+            self.assertNotIn('cache-to:', text)
+        warm = (ROOT / '.github/workflows/ci-cache.yml').read_text()
+        self.assertIn('branches: [main]', warm)
+        self.assertNotIn('pull_request', warm)
 
     def test_custom_combination_and_standalone(self):
         self.assertEqual(select([], 'custom', ['browser', 'ota']), {'browser', 'ota'})

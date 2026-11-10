@@ -2,7 +2,7 @@
 
 ## 默认按影响验证
 
-PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链；发版本由 Release 工作流强制运行 suite=release（见下文），不含完整业务链。
+PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同一套验证；同一 PR 的新提交取消旧任务。PR 已自动按影响范围验证，不要再对同一分支手动触发 suite=auto——两次运行互不取消，只是把同样的检查跑两遍。手动入口默认 suite=auto，只有明确选择 full 才运行完整业务链；发版本由 Release 工作流强制运行 suite=release（见下文），不含完整业务链。
 
 计划由 scripts/ci/impact.py 生成：业务模块、后端测试目标、前端组件用例、浏览器 spec、OTA/安装器，以及计划指纹均进入 Summary。后端用例仍只登记在 scripts/ci/backend_test_matrix.py，模块映射在同文件引用登记项。纯 Markdown 修改只运行计划自检和工作流语法检查。
 
@@ -18,9 +18,9 @@ PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同
 
 计划通过后，fast、browser、OTA、installers 独立并行，不再让慢任务等待整套 fast。fast 内后端、前端、运维测试也分开，未涉及的类别不启动依赖和数据库。所选检查失败、取消或意外跳过均使 CI gate 失败；并行不是放宽门禁。
 
-依赖按锁文件缓存，浏览器按锁文件缓存 Chromium，Docker 使用构建层缓存。桌面/手机使用独立缓存 scope，避免两个 runner 争写同一缓存；容器内 OTA 新增 BuildKit 缓存。缓存只用于加速，不能代替测试通过凭据。发布的原生依赖增加 pip 缓存；多架构镜像和多平台 wheelhouse 保持并行。
+依赖按锁文件缓存，浏览器按锁文件缓存 Chromium，Docker 使用构建层缓存。应用镜像的依赖层（apt、pip、npm ci）只由 main 上的 `ci-cache.yml` 写入共享 scope `app-image`（Dockerfile、运行时依赖或前端锁文件变化时触发，另每周重建一次防止过期清理）；浏览器分片和容器内 OTA 任务只读复用，不再各自导出缓存——PR 的缓存其他 PR 读不到，导出一次还要多花近一分钟。预热流程不运行测试、不产生验证凭据。缓存只用于加速，不能代替测试通过凭据。发布的原生依赖增加 pip 缓存；多架构镜像和多平台 wheelhouse 保持并行。
 
-backend 不再默认执行整个 backend 阶段：先静态检查，再运行 JSON 目标列表。前端保留 lint/typecheck/build，仅执行选定单测。浏览器双视口并行、独立数据库；每端先完成首次安装向导以建立隔离账号，再执行指定 spec。空目标不会回退到全量，目标必须属于测试矩阵或实际 spec 路径，不经过 shell 拼接。
+backend 不再默认执行整个 backend 阶段：先静态检查，再运行 JSON 目标列表。前端保留 lint/typecheck/build，仅执行选定单测。浏览器双视口并行、独立数据库；每端先完成首次安装向导以建立隔离账号，再执行指定 spec。用例较多时，计划把所选 spec 按估算耗时分成最多 4 片，每片在各自的 runner 上用一套独立安装运行，全业务范围的单视口耗时由约 15 分钟降到约 7 分钟；用例少时仍是一片。分片只决定怎么分机器，不改变选中哪些用例：每个 spec 恰好属于一片，任何一片失败、取消或被跳过都使 CI gate 失败。耗时权重登记在 `scripts/ci/select_suites.py` 的 `BROWSER_SECONDS`，只需登记明显偏慢的文件；CI 日志逐条列出用例耗时，某一片明显变慢时据此调整。空目标不会回退到全量，目标必须属于测试矩阵或实际 spec 路径，不经过 shell 拼接。
 
 ## 手动入口
 

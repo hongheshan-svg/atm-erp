@@ -1,0 +1,33 @@
+name: Warm build cache
+# PR 只能读取本 PR 和 main 的缓存。镜像的依赖层（apt、pip、npm ci）在这里写入 main，
+# 各 PR 的浏览器分片和 OTA 任务只读复用；这里不运行任何测试，也不产生验证凭据。
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker/app/Dockerfile
+      - backend/requirements.txt
+      - frontend/package-lock.json
+      - .github/workflows/ci-cache.yml
+  schedule:
+    # 缓存 7 天无人读取会被清理；每周重建一次。
+    - cron: '23 18 * * 0'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-cache
+  cancel-in-progress: true
+jobs:
+  app-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app/Dockerfile
+          cache-from: type=gha,scope=app-image
+          cache-to: type=gha,scope=app-image,mode=max
