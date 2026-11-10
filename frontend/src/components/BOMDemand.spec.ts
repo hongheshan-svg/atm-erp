@@ -262,3 +262,20 @@ it('管理员跨页选择427项BOM，切换筛选或项目清空旧选择', asyn
   wrapper.unmount()
   vi.mocked(read).mockResolvedValue({ lines: [] })
 })
+
+it('搜索覆盖图号和品牌，编制视图说明行内可改单行', async () => {
+  user.value = { roles: ['mechanical_engineer'] }
+  vi.mocked(read).mockResolvedValueOnce({ lines: [
+    { bom_line: 1, item_code: 'A1', item_name: '支架', specification: 'Q235', drawing_number: 'DWG-7788', brand: '自制', shortage: '0' },
+    { bom_line: 2, item_code: 'B2', item_name: '气缸', specification: 'SC50', drawing_number: '', brand: '亚德客', shortage: '0' },
+  ] })
+  const wrapper = shallowMount(BOMDemand, { props: { projectId: 1, status: 'active', canEditBom: true }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { template: '<div />' } } } })
+  await flushPromises()
+  const scope = () => wrapper.get('[aria-label="BOM导出范围"]').text()
+  expect(scope()).toContain('当前筛选 2 项')
+  await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('dwg-7788')
+  expect(scope()).toContain('当前筛选 1 项')
+  await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('亚德客')
+  expect(scope()).toContain('当前筛选 1 项')
+  expect(wrapper.text()).toContain('行尾「操作」可改单行或移除')
+})

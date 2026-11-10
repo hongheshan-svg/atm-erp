@@ -85,13 +85,15 @@ onBeforeUnmount(() => { generation++ })
 .progress-groups small { font-size: 11px; font-weight: normal; color: var(--mute); }
 .progress-tools { margin-bottom: 16px; }
 /* 一条记录一行：十几二十个节点时能一屏扫完，而不是翻三屏卡片。 */
-.progress-records { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.progress-record { display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(0, 2fr) auto; gap: 2px 20px; align-items: center; border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 14px; min-width: 0; background: #fff; overflow-wrap: anywhere; }
+.progress-records { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.progress-record { display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(0, 2fr) auto; gap: 0 20px; align-items: center; border: 1px solid var(--surface-border); border-radius: 8px; padding: 6px 14px; min-width: 0; background: #fff; overflow-wrap: anywhere; }
 .progress-record > header { grid-column: 1; grid-row: 1; }
 .progress-record > .progress-hint { grid-column: 1; grid-row: 2; margin: 0; }
 .progress-record > dl { grid-column: 2; grid-row: 1 / 3; display: flex; flex-wrap: wrap; gap: 4px 28px; }
-.progress-record > footer { grid-column: 3; grid-row: 1 / 3; }
-.progress-record > details { grid-column: 1 / -1; }
+/* 「查看流程节点」收在右侧操作下方，不再给每条记录多占一行；展开后才横跨整行。 */
+.progress-record > footer { grid-column: 3; grid-row: 1; justify-content: flex-end; }
+.progress-record > details { grid-column: 3; grid-row: 2; justify-self: end; }
+.progress-record > details[open] { grid-column: 1 / -1; grid-row: 3; justify-self: stretch; }
 .progress-record.overdue { border-left: 3px solid var(--risk); }
 .progress-record header { align-items: flex-start; }
 .progress-record h3 { margin: 0; font-size: 15px; flex: 1 1 180px; }
@@ -99,9 +101,9 @@ onBeforeUnmount(() => { generation++ })
 .progress-record dl { font-size: 13px; margin: 0; }
 .progress-record dl div { display: flex; gap: 8px; margin: 0; }
 .progress-record dt { color: var(--mute); }
-.progress-record dd { margin: 0; line-height: 1.6; }
+.progress-record dd { margin: 0; line-height: 1.5; }
 .overdue-label { color: var(--risk); font-size: 12px; }
-.progress-hint, .progress-record details { font-size: 12px; line-height: 1.7; color: var(--mute); }
+.progress-hint, .progress-record details { font-size: 12px; line-height: 1.5; color: var(--mute); }
 .progress-record details summary { cursor: pointer; color: var(--brand); padding: 2px 0; }
 .progress-record details[open] summary { padding-bottom: 10px; }
 .progress-record footer { margin: 0; font-size: 13px; flex-wrap: nowrap; }

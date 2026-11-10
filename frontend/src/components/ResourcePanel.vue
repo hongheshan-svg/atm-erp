@@ -159,7 +159,7 @@ const merged: Record<string, Record<string, string>> = {
   projects: { name: 'code' },
   users: { display_name: 'username' },
   entries: { title: 'kind', partner_name: 'project_name', due_date: 'due_amount', balance: 'paid_amount' },
-  tasks: { title: 'project_name', stage_label: 'milestone_label', assignee_name: 'supervisor_name', due_date: 'completed_date' },
+  tasks: { title: 'project_name', stage_label: 'milestone_label', assignee_name: 'supervisor_name', due_date: 'completed_date', elapsed_days: 'started_date' },
   time: { task_title: 'project_name' },
   stocks: { item_name: 'item_code', specification: 'brand' },
 }
@@ -464,7 +464,7 @@ async function inspect(row: Row) {
         :key="col.key"
         :label="pairs[col.key] ? `${col.label} / ${labelOf(pairs[col.key])}` : col.label"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : col.key === 'status' && col.format ? 150 : col.key === 'payment_term' ? 150 : ['status', 'is_active'].includes(col.key) ? 100 : 125"
+        :min-width="col.key === 'stage_label' ? 150 : col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : col.key === 'status' && col.format ? 150 : col.key === 'payment_term' ? 150 : ['status', 'is_active'].includes(col.key) ? 100 : ['discipline_label', 'logged_hours'].includes(col.key) ? 104 : 125"
         show-overflow-tooltip
       >
         <template #default="{ row }"

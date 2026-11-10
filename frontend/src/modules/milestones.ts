@@ -56,19 +56,34 @@ export async function milestoneTemplateCommand(projectId: number): Promise<Comma
     catalog(['users']),
   ])
   const nodes: Row[] = metadata.nodes.filter((node: Row) => !metadata.existing.includes(node.milestone))
+  const stages: Row[] = metadata.stages.filter((stage: Row) => nodes.some(node => node.kind === stage.value))
+  const rowFields = milestoneFields(c, metadata, scope).map(field => ({ ...field, hint: '', ...(field.key === 'description' ? { type: 'text' as const, wide: false } : {}) }))
+  const defaultAssignees = (row: Row) => (row.assignees || []).length === 1 && row.assignees[0] === metadata.assignee
   return {
     title: '生成六阶段里程碑', submitLabel: '确认生成里程碑',
     path: '/business/tasks/apply-milestones/', draftScope: String(projectId),
-    notice: { type: 'info', text: '六阶段可交叉推进。默认20个节点，可移除不需要的行、添加自定义任务，再安排执行人和日期。已存在的节点会跳过；发货、现场安装接线、现场验收由实际业务同步。' },
+    notice: { type: 'info', text: '六阶段可交叉推进。默认20个节点，可移除不需要的行、添加自定义任务。先按阶段填计划完成日期、选统一执行人，再逐行调整个别节点。已存在的节点会跳过；发货、现场安装接线、现场验收由实际业务同步。' },
     blocked: !metadata.can_generate ? '仅项目经理或管理员可为执行中、交付中的项目生成模板。' : undefined,
-    fields: [{ key: 'lines', label: '项目里程碑', type: 'rows', compact: true, fields: milestoneFields(c, metadata, scope).map(field => ({ ...field, hint: '', ...(field.key === 'description' ? { type: 'text' as const, wide: false } : {}) })) }],
+    fields: [
+      // 批量工具：二十个节点不必逐行填日期和执行人；行内已单独填写的值优先。
+      ...stages.map((stage: Row): Field => ({ key: `stage_due_${stage.value}`, label: `${stage.label}计划完成`, type: 'date', optional: true })),
+      { ...executorField(c, scope), key: 'batch_assignees', label: '统一执行人', optional: true, hint: '选择后替换仍为默认执行人（项目经理）的节点；已单独调整的行不变。' },
+      { key: 'lines', label: '项目里程碑', type: 'rows', dense: true, hint: '行内日期留空时使用所属阶段的计划完成日期。', fields: rowFields },
+    ],
     initial: { lines: nodes.map(node => ({
       kind: node.kind, milestone: node.milestone, discipline: node.discipline, title: node.title, description: node.description,
       assignees: [metadata.assignee], due_date: '',
     })) },
     prepare: data => {
       if (!data.lines?.length) throw new Error('请至少保留一个节点，或添加自定义任务。')
-      return { project: projectId, lines: data.lines }
+      return {
+        project: projectId,
+        lines: data.lines.map((row: Row) => ({
+          ...row,
+          due_date: row.due_date || data[`stage_due_${row.kind}`] || '',
+          assignees: data.batch_assignees?.length && defaultAssignees(row) ? data.batch_assignees : row.assignees,
+        })),
+      }
     },
   }
 }

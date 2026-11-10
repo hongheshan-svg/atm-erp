@@ -15,6 +15,8 @@ export type Field = {
   initial?: any
   readonly?: boolean
   compact?: boolean
+  // 明细行按表格排布：宽屏一行一条，仅首行显示列名；窄屏退回 compact 栅格。
+  dense?: boolean
   warehouse?: 'receipt' | 'issue'
   hidden?: boolean
   // 条件不满足时不展示、不校验、不提交；保留表单内输入以便切换回来。

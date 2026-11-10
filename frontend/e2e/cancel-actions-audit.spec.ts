@@ -84,11 +84,11 @@ test('项目编辑取消重开、BOM移除及已付款费用取消均保留业�
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(`编辑后项目${suffix}`)
   expect(await admin.get(`business/projects/${project.id}/`)).toMatchObject({ id: project.id, code: project.code, requirements: '设备名称按合同校对，单元方案变更' })
 
-  await page.goto(`/erp/projects/${project.id}?tab=bom&section=lines`)
+  await page.goto(`/erp/projects/${project.id}?tab=bom`)
   await action(page, row(page, `移除BOM物料${suffix}`), '移除')
   const removeReason = `ECN移除未采购物料${suffix}`
   await save(page, `/bom/${bom.id}/remove/`, removeReason)
-  await expect(page.getByRole('region', { name: 'BOM 明细', exact: true })).toContainText('暂无记录')
+  await expect(page.getByRole('region', { name: 'BOM 缺料需求', exact: true })).toContainText('尚未维护 BOM')
   expect((await admin.get(`business/bom/?project=${project.id}`)).count).toBe(0)
   expect((await admin.get(`business/projects/${project.id}/demand/`)).lines).toHaveLength(0)
   expect(await admin.get(`business/items/${material.id}/`)).toMatchObject({ id: material.id, name: `移除BOM物料${suffix}` })

@@ -23,6 +23,8 @@ const busy = ref(false), uploading = ref(false)
 const locked = computed(() => busy.value || uploading.value)
 watch(locked, value => emit('busy', value))
 const wide = computed(() => wideCommand(command.value))
+// 表格式明细行一行要排下七八列，对话框放到接近整屏宽。
+const dense = computed(() => Boolean(command.value?.fields.some(field => field.dense)))
 const fields = ref<{ focusPath: (path: string) => Promise<void> }>()
 const attempted = ref(false), touched = ref<Set<string>>(new Set())
 const serverIssues = ref<FieldIssue[]>([])
@@ -261,14 +263,14 @@ async function submit() {
   <component
     :is="inline ? 'section' : ElDialog"
     v-if="!inline || command"
-    :class="[inline ? 'detail-pane' : 'action-dialog', { 'wide-action': wide }]"
+    :class="[inline ? 'detail-pane' : 'action-dialog', { 'wide-action': wide, 'dense-action': dense }]"
     :style="inline ? { maxHeight: panelHeight } : undefined"
     :role="inline ? 'dialog' : undefined"
     :aria-modal="inline ? 'false' : undefined"
     :aria-label="command?.title"
     :model-value="Boolean(command)"
     :title="command?.title"
-    :width="wide ? 'min(1080px, 96vw)' : 'min(760px, 94vw)'"
+    :width="dense ? 'min(1400px, 96vw)' : wide ? 'min(1080px, 96vw)' : 'min(760px, 94vw)'"
     append-to-body
     :close-on-click-modal="false"
     :before-close="requestClose"

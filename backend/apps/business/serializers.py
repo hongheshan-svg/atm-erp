@@ -150,6 +150,15 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('quote_amount', 'contract_amount')
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     manager_name = PersonNameField(source='manager')
+    # 仅项目列表、详情的查询带这两个统计；其他入口（如删除快照）没有统计时返回空。
+    task_total = serializers.SerializerMethodField()
+    task_done = serializers.SerializerMethodField()
+
+    def get_task_total(self, obj):
+        return getattr(obj, 'task_total', None)
+
+    def get_task_done(self, obj):
+        return getattr(obj, 'task_done', None)
 
     class Meta:
         model = Project
@@ -176,6 +185,8 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
             'contract_date',
             'equipment_quantity',
             'warranty_months',
+            'task_total',
+            'task_done',
             'close_reason',
             'created_at',
             'updated_at',

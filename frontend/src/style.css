@@ -515,6 +515,24 @@ button:focus-visible {
 .line-fields-compact > .line-number { grid-column: 1 / -1; margin: 0; }
 .line-fields-compact > .fields-inline > .field:first-child { grid-column: 1 / -1; }
 .line-fields-compact > .el-button { grid-column: 1 / -1; justify-self: start; margin-top: 0; }
+/* 表格式明细行：宽屏对话框里一行一条，只在首行显示列名；窄屏和侧栏沿用上面的 compact 栅格。 */
+@media (min-width: 1200px) {
+  .action-dialog .line-fields-dense { display: flex; align-items: flex-end; gap: 8px; padding: 3px 0; border-bottom: 0; }
+  .action-dialog .line-fields-dense > .line-number { flex: 0 0 50px; margin: 0 0 10px; white-space: nowrap; }
+  .action-dialog .line-fields-dense > .fields-inline > .field { flex: 1 1 0; min-width: 0; gap: 4px; position: relative; }
+  .action-dialog .line-fields-dense > .fields-inline > .field:first-child { flex-grow: 1.8; }
+  .action-dialog .line-fields-dense > .el-button { flex: none; margin: 0; }
+  .action-dialog .line-fields-dense .field > label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .action-dialog .line-fields-dense .field > label small { display: none; }
+  .action-dialog .line-fields-dense ~ .line-fields-dense .field > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  /* 逐行重复的填写提示收起（要点写在明细上方的说明里），只保留校验错误；多行文本压成单行高度。 */
+  .action-dialog .line-fields-dense .field-help small:not(.field-error) { display: none; }
+  .action-dialog .line-fields-dense .field-help:not(:has(.field-error)) { display: none; }
+  .action-dialog .line-fields-dense .remote-hint { display: none; }
+  .action-dialog .line-fields-dense textarea { min-height: 38px; height: 38px; resize: none; line-height: 1.4; white-space: nowrap; overflow: hidden; }
+  /* 明细行上方的批量字段（如按阶段的日期）排成一行，不把明细挤到第二屏。 */
+  .action-dialog.dense-action .fields:not(.fields-inline) { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+}
 .dialog-footer {
   display: flex;
   gap: 8px;
