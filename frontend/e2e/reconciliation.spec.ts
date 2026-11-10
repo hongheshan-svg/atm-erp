@@ -1,6 +1,6 @@
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, expectHttpError, login, type Page, type Locator, openRowAction } from './fixtures'
+import { test, expect, expectHttpError, login, detailAction, type Page, type Locator, openRowAction } from './fixtures'
 
 const dialog = (p: Page) => p.getByRole('dialog')
 async function save(p: Page, path: string) {
@@ -63,7 +63,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await expect(dialog(page)).toContainText('-1.00')
   await expect(dialog(page).getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
   await page.screenshot({ path: info.outputPath('reconciliation-difference.png'), animations: 'disabled' })
-  await dialog(page).getByRole('button', { name: '确认对账', exact: true }).click()
+  await detailAction(page, '确认对账')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('尝试确认未解决差异')
   expectHttpError(page, `/api/business/reconciliations/${statement.id}/confirm/`, 409)
   const rejected = page.waitForResponse(r => r.url().endsWith(`/reconciliations/${statement.id}/confirm/`))
@@ -72,7 +72,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await expect(dialog(page).getByRole('alert').filter({ hasText: '对账差异未解决' })).toBeVisible()
   await cancelEditing(dialog(page))
   await page.goto(`/erp/finance?section=reconciliations&resource=reconciliations&focus=${statement.id}`)
-  await dialog(page).getByRole('button', { name: '作废对账', exact: true }).click()
+  await detailAction(page, '作废对账')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('原错误账单作废')
   await save(page, `/reconciliations/${statement.id}/void/`)
 
@@ -90,7 +90,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   const incoming = await bank('1100', bankRef)
   expect((await read(page, `entries/${entry.id}/`)).balance).toBe('1000.00')
   await focusBank(incoming)
-  await dialog(page).getByRole('button', { name: '认领到账', exact: true }).click()
+  await detailAction(page, '认领到账')
   await choose(page, '认领款项', name)
   await dialog(page).getByLabel('认领金额（元）', { exact: true }).fill('400')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('认领首笔合同款')
@@ -105,13 +105,13 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('先登记剩余合同款')
   await save(page, `/entries/${entry.id}/pay/`)
   await focusBank(incoming)
-  await dialog(page).getByRole('button', { name: '匹配已有收付款', exact: true }).click()
+  await detailAction(page, '匹配已有收付款')
   await choose(page, '已有收付款流水', '600.00')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('核对已登记流水')
   await save(page, `/bank-records/${incoming}/match/`)
   const outgoing = await bank('-100', bankRef + '-RETURN')
   await focusBank(incoming)
-  await dialog(page).getByRole('button', { name: '关联未认领款退回', exact: true }).click()
+  await detailAction(page, '关联未认领款退回')
   await choose(page, '实际退回的银行支出', bankRef + '-RETURN')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('退回客户多汇的一百元')
   await save(page, `/bank-records/${incoming}/return-unclaimed/`)
@@ -123,7 +123,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   await expect(dialog(page).getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
   await page.screenshot({ path: info.outputPath('bank-reconciled.png'), animations: 'disabled' })
 
-  await dialog(page).getByRole('button', { name: '撤销银行匹配', exact: true }).click()
+  await detailAction(page, '撤销银行匹配')
   await choose(page, '原匹配', ' · 600')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('核对后撤销匹配，不撤销真实收款')
   await save(page, `/bank-records/${incoming}/unmatch/`)
@@ -134,7 +134,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   expect((await read(page, `payments/?entry=${entry.id}`)).count).toBe(2)
 
   await focusBank(incoming)
-  await dialog(page).getByRole('button', { name: '撤销退回关联', exact: true }).click()
+  await detailAction(page, '撤销退回关联')
   await choose(page, '原退回关联', ' · 100')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('核对关联错误，保留原银行记录')
   await save(page, `/bank-records/${incoming}/reverse-return/`)
@@ -144,7 +144,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   expect((await read(page, `bank-records/${outgoing}/`)).remaining_amount).toBe('100.00')
 
   await focusBank(outgoing)
-  await dialog(page).getByRole('button', { name: '作废误录银行记录', exact: true }).click()
+  await detailAction(page, '作废误录银行记录')
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('误录退回流水作废')
   await save(page, `/bank-records/${outgoing}/void/`)
   expect((await read(page, `bank-records/${outgoing}/`)).void_reason).toBe('误录退回流水作废')

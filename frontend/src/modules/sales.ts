@@ -119,6 +119,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     return { title: action, path: `${path}${row.id}/cancel/`, fields: [reason] }
   if (action !== '签约') throw new Error('不支持的销售操作。')
   const users = row.project ? [] : await all('/auth/directory/')
+  const projectManagers = users.filter(u => hasRoles(u, ['admin', 'manager']))
   return {
     title: '签约',
     path: `${path}${row.id}/sign/`,
@@ -132,8 +133,9 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
               key: 'manager',
               label: '项目负责人',
               type: 'select' as const,
-              options: options(users.filter(u => hasRoles(u, ['admin', 'manager']))),
-              initial: salesOnly() ? undefined : row.manager,
+              options: options(projectManagers),
+              // 销售负责人不一定具备项目经理岗位；预选一个不在候选里的人，下拉会显示成空白且提交必被拒绝。
+              initial: salesOnly() ? undefined : projectManagers.some(u => u.id === row.manager) ? row.manager : '',
             },
             {
               key: 'members',

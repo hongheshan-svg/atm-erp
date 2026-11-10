@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { test, expect, login, type Page } from './fixtures'
+import { test, expect, login, detailAction, type Page } from './fixtures'
 
 // Real API fixtures: prepare one approved, unreceived purchase; no sales/receiving UI chain.
 const fixturePassword = 'Finance-usability-isolated-2026-only'
@@ -68,7 +68,7 @@ async function fixture(page: Page) {
 
 async function openPayment(page: Page, entryId: number) {
   await page.goto(`/erp/finance?section=entries&resource=entries&focus=${entryId}`)
-  await page.getByRole('dialog').getByRole('button', { name: '登记收付款', exact: true }).click()
+  await detailAction(page, '登记收付款')
   const form = page.getByRole('dialog', { name: '登记收付款', exact: true })
   await expect(form).toBeVisible()
   return form
@@ -213,10 +213,10 @@ test('U14 有效核准后在付款表单上传并选中凭证，实际付款及�
   await expect(form).toBeHidden()
   await expect(page.locator('.saved-result')).toContainText('登记收付款成功')
   await page.goto(`/erp/finance?section=payments&resource=payments&focus=${payment.id}`)
-  await page.getByRole('dialog').getByRole('button', { name: '预览凭证', exact: true }).click()
+  await detailAction(page, '预览凭证')
   await expect(preview).toContainText(receipt.buffer.toString())
   await preview.getByRole('button', { name: '关闭预览', exact: true }).click()
-  await page.getByRole('dialog').getByRole('button', { name: '查看凭证', exact: true }).click()
+  await detailAction(page, '查看凭证')
   const history = page.getByRole('dialog', { name: '查看凭证', exact: true })
   await history.getByRole('button', { name: `预览 ${receipt.name}`, exact: true }).click()
   await expect(preview).toContainText(receipt.buffer.toString())

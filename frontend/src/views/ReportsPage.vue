@@ -82,7 +82,7 @@ watch(pageSize, () => load())
     </section>
     <section class="panel" aria-label="项目经营明细">
       <header class="panel-heading"><h2>项目经营明细 <span class="record-count">{{ data.count }}</span></h2><small class="muted">更新于 {{ new Date(data.generated_at).toLocaleString('zh-CN') }}</small></header>
-      <BusinessTable label="项目经营明细" :row-offset="(data.page - 1) * pageSize" :data="data.results" :max-height="560" stripe empty-text="没有符合筛选条件的项目">
+      <BusinessTable label="项目经营明细" :row-offset="(data.page - 1) * pageSize" :max-height="pageSize > 20 ? 560 : undefined" :data="data.results" stripe empty-text="没有符合筛选条件的项目">
         <el-table-column label="项目" min-width="190" fixed><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="`/projects/${row.id}`">{{ row.name }}</component><small class="report-code">{{ row.code }} · {{ row.manager }}</small></template></el-table-column>
         <el-table-column label="状态" min-width="100"><template #default="{ row }"><StatusBadge :value="row.status" /></template></el-table-column>
         <el-table-column label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>

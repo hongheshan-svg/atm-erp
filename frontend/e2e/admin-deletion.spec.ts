@@ -1,5 +1,27 @@
 import { test, expect, login, openRowAction, expectHttpError } from './fixtures'
 
+// 删除入口默认收起，本文件的用例都在「批量管理」开启的状态下进行；开关本身由下面第一条用例验证。
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e-batch-default')) localStorage.setItem('erp.batch-mode', '1') } catch { /* 无存储的文档 */ } })
+})
+
+test('删除入口默认收起，开启批量管理后才显示选择列和删除按钮', async ({ page }) => {
+  await page.addInitScript(() => { try { sessionStorage.setItem('e2e-batch-default', '1'); if (!sessionStorage.getItem('e2e-batch-cleared')) { localStorage.removeItem('erp.batch-mode'); sessionStorage.setItem('e2e-batch-cleared', '1') } } catch { /* 无存储的文档 */ } })
+  await login(page, process.env.E2E_ADMIN_USERNAME || 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  await page.goto('/erp/masterdata?section=items')
+  const panel = page.getByRole('region', { name: '物料', exact: true })
+  await expect(panel.getByRole('table').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '已删除记录', exact: true })).toHaveCount(0)
+  await expect(panel.getByRole('checkbox')).toHaveCount(0)
+  await page.getByRole('button', { name: '批量管理', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已删除记录', exact: true })).toBeVisible()
+  await expect(panel.getByRole('button', { name: /^全选筛选结果|^选择筛选结果前/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('button', { name: '退出批量管理', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '退出批量管理', exact: true }).click()
+  await expect(page.getByRole('button', { name: '已删除记录', exact: true })).toHaveCount(0)
+})
+
 test('BOM删除失败自动定位具体单元，完整列始终可横向查看', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))

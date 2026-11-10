@@ -8,6 +8,10 @@ import { endpoint } from '../business'
 import { removableResources } from '../modules/deletions'
 import { read } from '../api'
 import { pageSize, setPageSize } from '../pagination'
+import { batchMode } from '../batch-mode'
+// 删除入口默认收起；本文件验证开启「批量管理」后的选择与删除，并按每页 10 条构造跨页场景。
+batchMode.value = true
+pageSize.value = 10
 import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import ActionDialog from './ActionDialog.vue'

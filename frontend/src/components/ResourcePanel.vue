@@ -39,6 +39,7 @@ import { canDeleteRecords, deletionLimit, deletionLabel } from '../modules/delet
 import { useBatchSelection } from '../utils/batch-selection'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { openDocumentPreview } from '../document-preview'
+import { batchMode, setBatchMode } from '../batch-mode'
 const route = useRoute()
 const router = useRouter()
 const props = withDefaults(defineProps<{
@@ -98,6 +99,8 @@ const selectedId = ref<number | null>(null)
 const selectedRow = ref<Row | null>(null)
 const deletionAllowed = computed(() => canDeleteRecords(props.resource))
 const deletionSelection = ref<Row[]>([])
+const batchVisible = computed(() => deletionAllowed.value && batchMode.value)
+watch(batchVisible, visible => { if (!visible) { selectionGeneration++; selectingAll.value = false; deletionSelection.value = [] } })
 const batch = useBatchSelection(deletionSelection, 'id', () => deletionLimit(props.resource))
 const selectingAll = ref(false)
 let selectionGeneration = 0
@@ -152,7 +155,7 @@ const merged: Record<string, Record<string, string>> = {
   projects: { name: 'code' },
   users: { display_name: 'username' },
   entries: { title: 'kind', partner_name: 'project_name', due_date: 'due_amount', balance: 'paid_amount' },
-  tasks: { title: 'project_name' },
+  tasks: { title: 'project_name', stage_label: 'milestone_label', assignee_name: 'supervisor_name', due_date: 'completed_date' },
   time: { task_title: 'project_name' },
   stocks: { item_name: 'item_code', specification: 'brand' },
 }
@@ -163,7 +166,23 @@ const pairs = computed(() => Object.fromEntries(
 const combinedKey = computed(() => Object.keys(pairs.value)[0])
 const secondaryKeys = computed(() => new Set(Object.values(pairs.value)))
 const labelOf = (key: string) => columns[props.resource]?.find(c => c.key === key)?.label
-const shownColumns = computed(() => columns[props.resource]?.filter(col => (!props.projectId || col.key !== 'project_name') && !secondaryKeys.value.has(col.key)))
+// 只调整列表里的先后：状态和日期紧跟名称，窄屏下不会被右侧固定的操作列挡住。导出与字段定义的顺序不变。
+const leading: Record<string, string[]> = {
+  tasks: ['title', 'status', 'assignee_name', 'due_date'],
+  purchases: ['code', 'status', 'next_delivery_date', 'supplier_name', 'project_name'],
+  entries: ['title', 'status', 'balance', 'partner_name'],
+}
+const shownColumns = computed(() => {
+  const visible = (columns[props.resource] || []).filter(col => (!props.projectId || col.key !== 'project_name') && !secondaryKeys.value.has(col.key))
+  const first = leading[props.resource] || []
+  const rank = (key: string) => first.includes(key) ? first.indexOf(key) : first.length
+  return columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
+})
+// 按钮写明方向：应收是收款，应付和费用是付款；动作本身仍是同一个「登记收付款」。
+function actionLabel(row: Row, name: string) {
+  if (props.resource !== 'entries' || name !== '登记收付款' || String(row.balance).startsWith('-')) return name
+  return row.kind === 'receivable' ? '登记收款' : '登记付款'
+}
 function primaryAction(row: Row) {
   const actions = actionNames(props.resource, row)
   return primaryActions.find(name => actions.includes(name))
@@ -380,6 +399,10 @@ async function inspect(row: Row) {
       <h2>
         {{ title }} <span class="record-count">{{ count }}</span>
       </h2>
+      <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" :aria-label="filterConfig.label">
+        <button :aria-pressed="!filterValue" :disabled="actionBusy" @click="changeFilter('')">全部</button>
+        <button v-for="(label, value) in filterConfig.options" :key="value" :aria-pressed="filterValue === value" :disabled="actionBusy" @click="changeFilter(value)">{{ label }}</button>
+      </div>
       <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
         <!-- Leading with the entries that create work; BOM selection is the intended purchase path. -->
         <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="openBom">从 BOM 多选下单</el-button>
@@ -388,14 +411,9 @@ async function inspect(row: Row) {
         }}</el-button>
         <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :project-id="scopedImportProject(params, projectId)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
-        <el-button v-if="deletionAllowed" type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy || selectingAll" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
-        <el-button v-if="deletionAllowed" :disabled="actionBusy" @click="openDeletionHistory">已删除记录</el-button>
+        <el-button v-if="deletionAllowed" :type="batchMode ? 'primary' : undefined" :plain="batchMode" :aria-pressed="batchMode" :disabled="actionBusy" @click="setBatchMode(!batchMode)">{{ batchMode ? '退出批量管理' : '批量管理' }}</el-button>
       </div></Teleport>
     </header>
-    <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" :aria-label="filterConfig.label">
-      <button :aria-pressed="!filterValue" :disabled="actionBusy" @click="changeFilter('')">全部 <span v-if="!filterValue" class="record-count">{{ count }}</span></button>
-      <button v-for="(label, value) in filterConfig.options" :key="value" :aria-pressed="filterValue === value" :disabled="actionBusy" @click="changeFilter(value)">{{ label }}</button>
-    </div>
     <form v-if="searchableResources.includes(resource)" class="resource-search" @submit.prevent="searchRecords">
       <input v-model="search" type="search" :aria-label="`搜索${title}`" placeholder="输入名称、编号或关键词" />
       <select v-if="resource === 'users' && filterConfig" v-model="filterValue" aria-label="筛选用户角色" @change="searchRecords"><option value="">全部角色</option><option v-for="(label, value) in filterConfig.options" :key="value" :value="value">{{ label }}</option></select>
@@ -411,22 +429,23 @@ async function inspect(row: Row) {
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
     <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!createLabel(resource) || !allowCreate">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
-    <div v-if="deletionAllowed" class="record-batch-selection" :aria-label="title + '批量选择'">
+    <div v-if="batchVisible" class="record-batch-selection" :aria-label="title + '批量选择'">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit(resource) }} 项</span>
       <el-button :loading="selectingAll" :disabled="loading || actionBusy || !count" @click="selectFilteredRows">{{ count > deletionLimit(resource) ? '选择筛选结果前' + deletionLimit(resource) + '项（跨页）' : '全选筛选结果（' + count + '项，跨页）' }}</el-button>
       <el-button text :disabled="selectingAll || loading || actionBusy || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
+      <el-button type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy || selectingAll" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
+      <el-button :disabled="actionBusy" @click="openDeletionHistory">已删除记录</el-button>
     </div>
-    <BusinessTable :label="title" :row-offset="(page - 1) * pageSize" v-show="records.length || loading"
+    <BusinessTable :label="title" :row-offset="(page - 1) * pageSize" :max-height="pageSize > 20 ? 560 : undefined" v-show="records.length || loading"
       v-loading="loading"
       :data="records"
-      :max-height="560"
       stripe
       row-key="id"
       :row-class-name="({ row }: { row: Row }) => row.id === selectedId ? 'selected-record' : ''"
       empty-text="暂无记录"
       style="width: 100%"
     >
-      <el-table-column v-if="deletionAllowed" label="选择" width="44">
+      <el-table-column v-if="batchVisible" label="选择" width="44">
         <template #header><input type="checkbox" :aria-label="'选择本页' + title" :checked="batch.all(records)" :indeterminate="batch.some(records)" :disabled="actionBusy || loading || selectingAll || !records.length || (deletionSelection.length >= deletionLimit(resource) && !batch.all(records))" @change="batch.togglePage(records)" /></template>
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择' + title + ' ' + deletionLabel(row)" :checked="batch.has(row)" :disabled="actionBusy || loading || selectingAll || !batch.selectable(row)" @change="batch.toggle(row)" /></template>
       </el-table-column>
@@ -452,10 +471,10 @@ async function inspect(row: Row) {
           <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
         >
       </el-table-column>
-      <el-table-column label="操作" fixed="right" :width="deletionAllowed ? 220 : 170"
+      <el-table-column label="操作" fixed="right" :width="batchVisible ? 230 : 180"
         ><template #default="{ row }"
           ><div class="row-actions"
-            ><el-button v-if="primaryAction(row)" type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ primaryAction(row) }}</el-button
+            ><el-button v-if="primaryAction(row)" type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button
             ><el-dropdown
               v-if="menuGroups(row).length"
               trigger="click"
@@ -472,7 +491,7 @@ async function inspect(row: Row) {
                   ></el-dropdown-menu
                 ></template
               ></el-dropdown
-            ><span v-else-if="!primaryAction(row) && !deletionAllowed" class="muted">—</span><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
+            ><span v-else-if="!primaryAction(row) && !batchVisible" class="muted">—</span><el-button v-if="batchVisible" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
           ><small v-if="resource === 'tasks' && !row.can_confirm && !row.system_managed" class="task-sync-hint">由{{ row.supervisor_name || '专业主管' }}确认完成及登记工时</small><small v-if="resource === 'tasks' && taskSyncHint(row)" class="task-sync-hint">{{ taskSyncHint(row) }}<router-link :to="{ path: `/projects/${row.project}`, query: { tab: 'deliveries', section: 'deliveries' } }">查看交付进度</router-link></small></template
         ></el-table-column
       >

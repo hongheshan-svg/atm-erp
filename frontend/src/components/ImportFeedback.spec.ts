@@ -4,6 +4,8 @@ import ElementPlus from 'element-plus'
 import ImportFeedback from './ImportFeedback.vue'
 import { pageSize } from '../pagination'
 
+// 用例按每页 10 条构造跨页场景，与全站默认值（20）无关。
+pageSize.value = 10
 afterEach(() => { vi.restoreAllMocks(); pageSize.value = 10 })
 
 it('汇总错误行、跨页定位具体单元格，筛选错误后仍保留原文件行号', async () => {

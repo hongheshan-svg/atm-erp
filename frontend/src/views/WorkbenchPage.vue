@@ -40,6 +40,7 @@ const metrics = computed(() => [
   ...(work.value.tasks || work.value.overdue_purchases || work.value.production_tasks
     ? [{ label: work.value.overdue_purchases ? '任务 / 到货逾期' : '任务逾期', value: (work.value.tasks?.overdue_count || 0) + count('overdue_purchases') + (work.value.production_tasks?.overdue_count || 0), note: work.value.production_tasks ? '本人及生产任务分类计数；兼岗任务可能重叠' : work.value.overdue_purchases ? '我的逾期任务与采购到货逾期' : '我的任务 · 已超过计划完成日期', tone: 'danger' }] : []),
   ...(work.value.tasks ? [{ label: '我的任务今日截止', value: work.value.tasks.today_count || 0, note: '任务计划完成日期，不含款项到期', tone: 'primary' }] : []),
+  ...(work.value.receipts && can(['admin', 'warehouse']) ? [{ label: '待收货采购', value: count('receipts'), note: '已批准，等待到货入库', tone: 'primary' }] : []),
   ...(work.value.approvals || work.value.prepayments ? [{ label: '等待我审批', value: count('approvals') + count('prepayments'), note: '采购批准 + 预付款核准', tone: 'warning' }] : []),
 ])
 function collection(key: string) {
@@ -163,11 +164,11 @@ onBeforeUnmount(() => { generation++ })
 .work-ongoing header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .work-ongoing h2 { font-size: 18px; margin: 0; }
 .work-ongoing ul { list-style: none; padding: 0; margin-bottom: 0; }
-.work-ongoing li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--surface-border); }
+.work-ongoing li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--surface-border); }
 .work-ongoing li:last-child { border-bottom: 0; }
-.work-ongoing li div { display: grid; gap: 6px; }
-.work-ongoing li span { color: var(--ink-4); font-size: 14px; }
-.work-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.work-ongoing li div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+.work-ongoing li span { color: var(--ink-4); font-size: 13px; }
+.work-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .work-metric { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 20px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; color: var(--ink-2); }
 .work-metric strong { font-size: 32px; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .work-metric small { color: var(--ink-4); font-size: 11px; }
