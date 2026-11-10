@@ -151,6 +151,50 @@ describe('列表创建入口', () => {
     expect(read).toHaveBeenLastCalledWith('/business/sales/', { status: 'quoted', page: 2, page_size: pageSize.value, search: '' })
     wrapper.unmount()
   })
+  it('采购列表按供应商筛选并可重置；其他列表没有该筛选', async () => {
+    user.value = { role: 'admin' }
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+    const global = { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } }
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'purchases', title: '采购订单' }, global })
+    await flushPromises()
+    const filter = wrapper.findComponent({ name: 'RemoteSelect' })
+    expect(filter.props()).toMatchObject({ path: '/business/partners/', label: '供应商筛选', commitOnSelect: true })
+    expect(filter.props('accept')({ kind: 'customer' })).toBe(false)
+    expect(filter.props('accept')({ kind: 'supplier' })).toBe(true)
+    wrapper.findComponent(ListPagination).vm.$emit('change', 2)
+    await flushPromises()
+    filter.vm.$emit('update:modelValue', 8)
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/purchases/', { supplier: 8, page: 1, page_size: pageSize.value, search: '' })
+    expect(wrapper.findComponent(TransferTools).props('params')).toEqual({ supplier: 8, search: '' })
+    const calls = vi.mocked(read).mock.calls.length
+    wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '重置')!.vm.$emit('click')
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/purchases/', { page: 1, page_size: pageSize.value, search: '' })
+    expect(vi.mocked(read).mock.calls.length).toBe(calls + 1)
+    wrapper.unmount()
+    const sales = shallowMount(ResourcePanel, { props: { resource: 'sales', title: '销售订单' }, global })
+    await flushPromises()
+    expect(sales.findComponent({ name: 'RemoteSelect' }).exists()).toBe(false)
+    sales.unmount()
+  })
+  it('跨项目的应收列表在款项前标出项目名，项目页内和应付不重复', async () => {
+    user.value = { role: 'admin' }
+    const rows = [
+      { id: 1, title: '合同款', kind: 'receivable', project_name: '甲线', balance: '10.00', status: 'open' },
+      { id: 2, title: '采购 PO1', kind: 'payable', project_name: '甲线', balance: '5.00', status: 'open' },
+    ]
+    vi.mocked(read).mockResolvedValue({ count: 2, results: rows })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '应收应付' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { template: '<div />' } } } })
+    await flushPromises()
+    const cell = (wrapper.vm as any).cell
+    expect(cell(rows[0], 'title')).toBe('甲线 · 合同款')
+    expect(cell(rows[1], 'title')).toBe('采购 PO1')
+    await wrapper.setProps({ projectId: 3 })
+    await flushPromises()
+    expect(cell(rows[0], 'title')).toBe('合同款')
+    wrapper.unmount()
+  })
   it('把项目页上下文透传给导入导出工具，不依赖参数名', async () => {
     user.value = { role: 'admin' }
     const wrapper = shallowMount(ResourcePanel, { props: { resource: 'time', title: '工时记录', params: { task__project: 7 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })

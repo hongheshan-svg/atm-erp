@@ -792,6 +792,11 @@ button:focus-visible {
 .resource-search input { max-width: 360px; }
 .resource-search select, .resource-search input:not([type='search']) { width: 150px; max-width: 100%; }
 .resource-search input[type='search'] { flex: 1 1 220px; }
+/* 筛选条里的远程选择：与搜索框同一行，候选浮层不撑高筛选条，键盘提示只留给读屏。 */
+.resource-search .remote-select { flex: 0 1 300px; }
+.resource-search .remote-select input { max-width: none; width: 100%; flex: none; }
+.resource-search .remote-hint { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.resource-search .remote-popup { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; }
 .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
 .resource-search .inline-check input { width: 16px; height: 16px; accent-color: var(--brand); }
 .record-link { border: 0; padding: 0; background: transparent; color: var(--brand); font-weight: 500; text-align: left; cursor: pointer; }
@@ -805,6 +810,9 @@ button:focus-visible {
 .detail-pane-heading h2 { margin: 0; font-size: 18px; }
 .detail-pane .fields { gap: 18px; grid-template-columns: 1fr; }
 .detail-pane .fields.readonly-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* 只读详情不需要表单的留白：字段排紧，把高度让给下面的明细表和收付记录。 */
+.detail-pane .fields.readonly-fields { gap: 8px 16px; }
+.detail-pane:has(.readonly-fields) .detail-pane-heading { min-height: 48px; margin-bottom: 10px; }
 .detail-pane .role-checks { grid-column: 1/-1; }
 .detail-pane .dialog-footer { flex-shrink: 0; padding-top: 16px; margin-top: 16px; }
 .detail-pane .dialog-footer .el-button { margin-left: 0; }
