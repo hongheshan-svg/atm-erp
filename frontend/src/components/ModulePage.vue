@@ -6,7 +6,6 @@ import { read } from '../api'
 import RemoteSelect from './RemoteSelect.vue'
 import { message } from '../utils/request'
 import { sessionStore } from '../utils/storage'
-import { today } from '../forms'
 import type { Row } from '../types'
 const props = defineProps<{ title: string; projectFilter?: boolean; requireProject?: boolean }>()
 const descriptions: Record<string, string> = {
@@ -57,7 +56,7 @@ watch(projectId, loadProjects, { immediate: true })
 <template>
   <header v-show="!focusedFlow" class="page-heading">
     <div>
-      <p class="eyebrow">业务管理 / {{ today() }}</p>
+      <p class="eyebrow">业务管理</p>
       <h1>{{ title }}</h1>
       <p class="muted">{{ descriptions[title] }}</p>
     </div>

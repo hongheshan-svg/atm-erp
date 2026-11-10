@@ -895,6 +895,10 @@ button:focus-visible {
   .project-filter { flex-wrap: wrap; }
   .project-filter .remote-select { flex: 1 1 100%; }
 }
+/* 手机端首屏留给列表：模块说明文字不占行，需要时在桌面端查看。 */
+@media (max-width: 760px) {
+  .page-heading .muted { display: none; }
+}
 .project-flow.panel { padding: 12px 16px; margin-bottom: 12px; }
 
 /* ── 原生控件与 Element Plus 对齐：同样的高度、描边、箭头和选中色 ── */

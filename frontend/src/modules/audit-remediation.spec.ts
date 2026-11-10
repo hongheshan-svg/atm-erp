@@ -8,6 +8,7 @@ import { defaults, payload } from '../forms'
 import FormFields from '../components/FormFields.vue'
 import { display } from './shared'
 import { salesColumns } from './sales'
+import { auditDetail, auditObject, auditOperation } from './settings'
 import { fileSize } from './documents'
 import { shipMaterialOptions } from './projects'
 import { purchaseFields } from './purchases'
@@ -42,6 +43,15 @@ it('操作审计显示操作人姓名', () => {
   const actor = columns.audit!.find(c => c.key === 'actor')!
   expect(actor.format!({ actor: 3, actor_name: '张工' })).toBe('张工')
   expect(actor.format!({ actor: 3 })).toBe('用户 #3')
+})
+
+it('操作审计把操作名、对象编号和详情转成可读中文', () => {
+  expect(auditOperation('delivery.accept')).toBe('交付单 · 验收')
+  expect(auditOperation('entry.pay')).toBe('款项 · 登记收付款')
+  expect(auditOperation('stock.issue')).toBe('库存 · 领料')
+  expect(auditObject({ resource: 'purchaseorder:50', resource_label: 'PO000049' })).toBe('采购单 PO000049')
+  expect(auditObject({ resource: 'task:97' })).toBe('任务 #97')
+  expect(auditDetail({ date: '2026-11-05', reason: '更正', expected_revision: 3, paid: true, note: '' })).toBe('日期：2026-11-05；原因：更正；paid：是；备注：空')
 })
 
 it('领料的售后任务只列所选项目，换项目后清空原选择', async () => {
