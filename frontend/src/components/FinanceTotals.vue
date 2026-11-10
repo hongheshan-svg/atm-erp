@@ -66,12 +66,13 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
   </div>
 </template>
 <style scoped>
-.finance-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 12px; padding: 12px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; }
-.finance-total { display: grid; gap: 6px; margin: 0; padding: 14px 16px; }
-.finance-total span { color: var(--ink-4); font-size: 13px; }
-.finance-total strong { color: var(--brand); font-size: 27px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.finance-total small { color: var(--ink-6); font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.finance-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 12px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; overflow: hidden; }
+.finance-total { display: grid; gap: 2px; margin: 0; padding: 10px 16px; border: 0; border-right: 1px solid var(--line-2); border-radius: 0; box-shadow: none; }
+.finance-total:last-child { border-right: 0; }
+.finance-total span { color: var(--ink-4); font-size: 12px; }
+.finance-total strong { color: var(--brand-ink); font-size: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.finance-total small { color: var(--ink-6); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .finance-risk { color: var(--risk); }
 .finance-muted { opacity: 0.55; }
-@media (max-width: 560px) { .finance-total { padding: 16px; } .finance-total strong { font-size: 21px; } }
+@media (max-width: 560px) { .finance-total { border-right: 0; border-bottom: 1px solid var(--line-2); } }
 </style>

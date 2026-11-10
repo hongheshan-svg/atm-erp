@@ -59,7 +59,9 @@ class TaskSupervisionTests(BusinessFixtures, TestCase):
             status=409,
         )
         self.configure({})
-        self.assertEqual(TaskNotice.objects.order_by('pk').last().recipient_id, self.users['manager'].pk)
+        # 项目经理本人撤回主管设置后由自己代管，不再给自己发提醒。
+        self.assertFalse(TaskNotice.objects.filter(recipient=self.users['manager']).exists())
+        self.assertEqual(TaskNotice.objects.count(), 1)
 
     def test_only_current_supervisor_can_confirm_and_record_cost_for_actual_worker(self):
         self.configure({'mechanical': self.users['mechanical_engineer'].pk})

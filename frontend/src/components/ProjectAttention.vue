@@ -72,19 +72,24 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 </template>
 
 <style scoped>
-.project-attention header { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-.project-attention h2 { margin: 0; font-size: 18px; }
-.attention-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.attention-grid a { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--surface-border); border-radius: 8px; }
-.attention-grid strong { font-size: 24px; }
-.attention-grid small { font-size: 13px; font-weight: normal; }
-.project-attention p { margin-bottom: 0; font-size: 13px; line-height: 1.6; }
+/* 一行摘要条：项目页的首屏要留给标签页里的业务内容。 */
+.project-attention { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; margin-bottom: 12px; }
+.project-attention header { display: flex; gap: 12px; align-items: center; margin: 0; }
+.project-attention header > .muted { display: none; }
+.project-attention h2 { margin: 0; font-size: 14px; white-space: nowrap; }
+.attention-details { flex: 1 1 0; min-width: 0; }
+.attention-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.attention-grid a { display: inline-flex; align-items: baseline; gap: 8px; padding: 5px 12px; border: 1px solid var(--surface-border); border-radius: 999px; font-size: 13px; white-space: nowrap; }
+.attention-grid a:hover { background: var(--brand-wash-2); border-color: var(--brand-line); }
+.attention-grid strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.attention-grid small { font-size: 12px; font-weight: normal; }
+.project-attention p { margin: 6px 0 0; font-size: 12px; line-height: 1.5; }
 .attention-toggle { border: 0; background: transparent; color: var(--brand); cursor: pointer; font: inherit; font-size: 13px; padding: 5px 0; flex-shrink: 0; }
 .attention-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px; }
 .compact-hint { display: block; margin-top: 2px; font-size: 11px; line-height: 1.5; }
 .compact-error { color: var(--risk); }
 @media (max-width: 600px) {
-  .project-attention { padding: 12px 14px; }
+  .project-attention { display: block; padding: 12px 14px; }
   .project-attention header { justify-content: space-between; flex-wrap: nowrap; margin-bottom: 0; }
   .project-attention h2 { font-size: 16px; }
   .project-attention .compact-summary { margin: 4px 0 0; font-size: 12px; }

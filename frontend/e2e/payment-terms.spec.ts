@@ -1,5 +1,5 @@
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, login, type Page } from './fixtures'
+import { test, expect, login, detailAction, type Page } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 async function select(page: Page, label: string, text: string) {
@@ -63,7 +63,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await post(`purchases/${purchase.id}/submit/`, {})
   await post(`purchases/${purchase.id}/approve/`, { reason: '隔离验收：管理员明确记录本人申请的例外审批依据' })
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
-  await dialog(page).getByRole('button', { name: '预览采购合同', exact: true }).click()
+  await detailAction(page, '预览采购合同')
   const contract = page.getByRole('article', { name: '采购合同预览' })
   await expect(contract).toContainText(materialCode)
   await expect(contract).toContainText('月结30天')
@@ -86,7 +86,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await page.screenshot({ path: info.outputPath('purchase-contract.png'), animations: 'disabled', fullPage: true })
   for (const [date, quantity] of [['2026-07-10', '2'], ['2026-08-10', '3']]) {
     await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
-    await dialog(page).getByRole('button', { name: '收货', exact: true }).click()
+    await detailAction(page, '收货')
     await dialog(page).getByLabel('实际到货 / 合格收货日期', { exact: true }).fill(date!)
     await dialog(page).getByLabel('补录原因', { exact: true }).fill('依据原始送货单补录历史收货，日期与数量已核对')
     await dialog(page).getByLabel('数量', { exact: true }).fill(quantity!)
@@ -116,7 +116,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await page.screenshot({ path: info.outputPath('supplier-monthly.png'), animations: 'disabled' })
 
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
-  await dialog(page).getByRole('button', { name: '登记采购质保', exact: true }).click()
+  await detailAction(page, '登记采购质保')
   await select(page, '原收货批次', '数量2')
   await dialog(page).getByLabel('数量', { exact: true }).fill('1')
   await dialog(page).getByLabel('故障描述', { exact: true }).fill('隔离验收：供应商维修跟进')

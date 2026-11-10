@@ -46,7 +46,8 @@ onBeforeUnmount(() => { generation++; clearInterval(timer); window.removeEventLi
 header, li { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 h2 { margin: 0; font-size: 18px; }
 ul { list-style: none; padding: 0; margin-bottom: 0; }
-li { border-top: 1px solid var(--surface-border); padding: 16px 0; }
+li { border-top: 1px solid var(--surface-border); padding: 10px 0; }
+li p { margin: 4px 0; font-size: 13px; }
 li div { min-width: 0; overflow-wrap: anywhere; }
 p { line-height: 1.6; }
 @media (max-width: 640px) { header, li { align-items: stretch; flex-direction: column; } }

@@ -51,7 +51,7 @@ export const columns: Record<string, Column[]> = {
       label: '状态',
       format: row => {
         const label = (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期' } as Record<string, string>)[String(row.status)] || '未结')
-        return row.prepaid_excess ? `${label} · 已超付 ${row.prepaid_excess}（预付）` : label
+        return row.prepaid_excess ? `${label} · 含预付 ${row.prepaid_excess}` : label
       },
       tip: row => row.prepaid_excess
         ? `已付超过合格收货净额 ${row.prepaid_excess} 元，视为预付；待后续到货或取消余量后再结算。`

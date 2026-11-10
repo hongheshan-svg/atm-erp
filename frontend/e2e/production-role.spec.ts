@@ -2,7 +2,7 @@ import { businessDate, selectExecutors } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
+import { test, expect, login, detailAction, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 const password = 'Production-role-QA-2026-only'
@@ -163,7 +163,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await queue.getByRole('link').filter({ hasText: assemblyTitle }).click()
   await expect(page).toHaveURL(new RegExp(`/erp/projects/${current.id}\\?.*focus=${assembly.id}`))
   await expect(dialog(page).getByLabel('任务', { exact: true })).toHaveValue(assemblyTitle)
-  await dialog(page).getByRole('button', { name: '重新分配', exact: true }).click()
+  await detailAction(page, '重新分配')
   await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '生产经理将装配交接给第二名成员')
   await save(page, `business/tasks/${assembly.id}/assign/`)

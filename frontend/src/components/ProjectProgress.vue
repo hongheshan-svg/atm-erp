@@ -84,21 +84,34 @@ onBeforeUnmount(() => { generation++ })
 .progress-groups strong { margin-top: 6px; font-size: 20px; }
 .progress-groups small { font-size: 11px; font-weight: normal; color: var(--mute); }
 .progress-tools { margin-bottom: 16px; }
-.progress-records { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; }
-.progress-record { border: 1px solid var(--surface-border); border-radius: 8px; padding: 16px; min-width: 0; background: #fff; overflow-wrap: anywhere; }
+/* 一条记录一行：十几二十个节点时能一屏扫完，而不是翻三屏卡片。 */
+.progress-records { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.progress-record { display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(0, 2fr) auto; gap: 2px 20px; align-items: center; border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 14px; min-width: 0; background: #fff; overflow-wrap: anywhere; }
+.progress-record > header { grid-column: 1; grid-row: 1; }
+.progress-record > .progress-hint { grid-column: 1; grid-row: 2; margin: 0; }
+.progress-record > dl { grid-column: 2; grid-row: 1 / 3; display: flex; flex-wrap: wrap; gap: 4px 28px; }
+.progress-record > footer { grid-column: 3; grid-row: 1 / 3; }
+.progress-record > details { grid-column: 1 / -1; }
 .progress-record.overdue { border-left: 3px solid var(--risk); }
 .progress-record header { align-items: flex-start; }
 .progress-record h3 { margin: 0; font-size: 15px; flex: 1 1 180px; }
 .progress-status { font-size: 12px; color: var(--brand); }
-.progress-record dl { font-size: 13px; margin: 16px 0; }
-.progress-record dl div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+.progress-record dl { font-size: 13px; margin: 0; }
+.progress-record dl div { display: flex; gap: 8px; margin: 0; }
 .progress-record dt { color: var(--mute); }
 .progress-record dd { margin: 0; line-height: 1.6; }
 .overdue-label { color: var(--risk); font-size: 12px; }
 .progress-hint, .progress-record details { font-size: 12px; line-height: 1.7; color: var(--mute); }
-.progress-record details summary { cursor: pointer; color: var(--brand); padding: 4px 0 10px; }
-.progress-record footer { margin-top: 14px; font-size: 13px; }
+.progress-record details summary { cursor: pointer; color: var(--brand); padding: 2px 0; }
+.progress-record details[open] summary { padding-bottom: 10px; }
+.progress-record footer { margin: 0; font-size: 13px; flex-wrap: nowrap; }
 .progress-empty { padding: 24px 0; color: var(--mute); font-size: 13px; }
 .progress-pagination { justify-content: flex-end; margin-top: 16px; }
-@media (max-width: 760px) { .progress-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } .progress-records { grid-template-columns: 1fr; } .progress-record { padding: 12px; } }
+@media (max-width: 900px) {
+  .progress-record { display: block; padding: 12px; }
+  .progress-record > dl { display: block; margin: 10px 0; }
+  .progress-record dl div { margin-top: 6px; }
+  .progress-record > footer { margin-top: 10px; }
+}
+@media (max-width: 760px) { .progress-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
