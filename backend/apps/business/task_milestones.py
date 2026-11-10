@@ -3,7 +3,7 @@
 PHASES = (
     ('design', '设计阶段'),
     ('purchase', '采购阶段'),
-    ('assembly', '组装阶段'),
+    ('assembly', '装配阶段'),
     ('test', '调试阶段'),
     ('shipping', '发货阶段'),
     ('site', '客户终验收阶段'),

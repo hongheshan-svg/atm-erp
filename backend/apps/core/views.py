@@ -1,4 +1,5 @@
 import django_filters
+from django.apps import apps
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -75,13 +76,30 @@ class CodeView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
 
 class AuditSerializer(serializers.ModelSerializer):
     actor_name = serializers.SerializerMethodField()
+    resource_label = serializers.SerializerMethodField()
 
     def get_actor_name(self, obj):
         return obj.actor.display_name or obj.actor.username
 
+    def get_resource_label(self, obj):
+        # 有业务编号的对象显示编号（如 PO000049），找不到或已彻底删除时回退为 resource 原文。
+        name, _, pk = obj.resource.partition(':')
+        model = next(
+            (
+                m
+                for m in apps.get_app_config('business').get_models()
+                if m._meta.model_name == name and any(f.name == 'code' for f in m._meta.fields)
+            ),
+            None,
+        )
+        if model is None or not pk.isdigit():
+            return ''
+        code = model.all_objects.filter(pk=int(pk)).values_list('code', flat=True).first()
+        return code or ''
+
     class Meta:
         model = AuditLog
-        fields = ['id', 'actor', 'actor_name', 'operation', 'resource', 'detail', 'created_at']
+        fields = ['id', 'actor', 'actor_name', 'operation', 'resource', 'resource_label', 'detail', 'created_at']
 
 
 class AuditFilter(django_filters.FilterSet):

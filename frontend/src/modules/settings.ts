@@ -19,11 +19,49 @@ import type { Column } from '../types'
 import { t } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
-const auditObjects: Record<string, string> = { record: '业务记录', sale: '销售', project: '项目', purchase: '采购', purchaseorder: '采购单', task: '任务', bom: 'BOM', document: '附件', stock: '库存', payment: '收付款', entry: '款项', reconciliation: '对账', user: '用户', company: '公司', code: '编号' }
-const auditActions: Record<string, string> = { create: '新增', update: '修改', delete: '删除', quote: '报价', invalidate_quote: '需求变更后重新报价', sign: '签约', submit: '提交', approve: '批准', reject: '退回', receive: '收货', cancel: '取消', cancel_remainder: '取消未收余量', complete: '完成', 'completion-date': '补录或更正完成日期', start: '开始', 'start-date': '补录或更正开始日期', revise: '变更', upload: '上传', download: '下载', confirm: '确认', void: '冲销' }
-function auditOperation(operation: string) {
-  const [object, action] = operation.split('.')
-  return auditObjects[object!] && auditActions[action!] ? `${auditObjects[object!]} · ${auditActions[action!]}` : operation
+// 审计操作名为「对象.动作」，对象是后端模型名（小写），动作可能含连字符或多段（如 bank.return-unclaimed.reverse）。
+const auditObjects: Record<string, string> = {
+  record: '业务记录', sale: '销售', salesorder: '销售单', project: '项目', purchase: '采购', purchaseorder: '采购单', purchaseline: '采购行', purchasewarranty: '质保',
+  task: '任务', tasknotice: '任务提醒', bom: 'BOM', bomline: 'BOM 行', document: '附件', stock: '库存', stockmove: '出入库流水', payment: '收付款', paymentevidence: '收付凭证',
+  entry: '款项', delivery: '交付单', reconciliation: '对账', bankrecord: '银行流水', bankmatch: '银行匹配', bankoffset: '银行冲抵', timeentry: '工时', contractamendment: '合同变更',
+  item: '物料', partner: '往来单位', supplier: '供应商', user: '用户', company: '公司', code: '编号', period: '锁账', import: '导入',
+}
+const auditActions: Record<string, string> = {
+  create: '新增', update: '修改', edit: '编辑', delete: '删除', restore: '恢复', quote: '报价', invalidate_quote: '需求变更后重新报价', sign: '签约', amend: '变更合同', transfer: '转交',
+  submit: '提交', approve: '批准', reject: '退回', receive: '收货', quality_accept: '质量验收', quality_return: '质量退货', warranty: '质保登记', cancel: '取消', cancel_remainder: '取消未收余量',
+  complete: '完成', start: '开始', 'start-date': '补录或更正开始日期', 'completion-date': '补录或更正完成日期', revise: '变更', milestones: '调整里程碑', supervisors: '调整负责人',
+  close: '结项', reopen: '重开', budget: '调整预算', delivery_plan: '交付计划', notice_read: '已读提醒', 'notice-read': '已读提醒', ship: '发货', accept: '验收', pay: '登记收付款', reverse: '冲销',
+  evidence: '上传付款凭证', match: '匹配', unmatch: '取消匹配', void: '作废', review: '复核', issue: '领料', return_material: '项目退料', return_purchase: '采购退货', opening: '期初入库', count: '盘点',
+  upload: '上传', download: '下载', remove: '移除', confirm: '确认', monthly_confirm: '月度对账确认', configure: '修改规则', lock: '锁账', partners: '往来单位导入', entries: '款项导入',
+  'import-evidence': '导入凭证', 'return-unclaimed.reverse': '退回未认领款项冲销', 'return-unclaimed': '退回未认领款项',
+}
+const auditFields: Record<string, string> = {
+  reason: '原因', note: '备注', name: '名称', code: '编号', date: '日期', status: '状态', amount: '金额', quantity: '数量', unit_price: '单价', locked_through: '锁账截止',
+  before: '修改前', after: '修改后', from: '原', to: '新', kind: '类型', title: '标题', operation: '操作',
+}
+const auditHidden = new Set(['expected_revision', 'revision', 'period_revision', 'fingerprint'])
+export function auditOperation(operation: string) {
+  const dot = operation.indexOf('.')
+  if (dot < 0) return operation
+  const object = operation.slice(0, dot), action = operation.slice(dot + 1)
+  return auditObjects[object] && auditActions[action] ? `${auditObjects[object]} · ${auditActions[action]}` : operation
+}
+// 对象显示为「类型 + 业务编号」（后端附带 resource_label），没有编号时显示类型与序号。
+export function auditObject(row: Row) {
+  const [model = '', id = ''] = String(row.resource ?? '').split(':')
+  const name = auditObjects[model]
+  if (!name) return String(row.resource ?? '')
+  return `${name} ${row.resource_label || `#${id}`}`
+}
+// 详情原样是 JSON 对象；这里按「字段：值」逐项展示，未知字段保留原名，避免整段截断的花括号。
+export function auditDetail(detail: unknown) {
+  if (!detail || typeof detail !== 'object') return detail == null || detail === '' ? '—' : String(detail)
+  const entries = Object.entries(detail as Row).filter(([key]) => !auditHidden.has(key))
+  if (!entries.length) return '—'
+  return entries.map(([key, value]) => {
+    const text = value == null || value === '' ? '空' : typeof value === 'boolean' ? (value ? '是' : '否') : typeof value === 'object' ? JSON.stringify(value) : String(value)
+    return `${auditFields[key] || key}：${text}`
+  }).join('；')
 }
 export const columns: Record<string, Column[]> = {
   users: [
@@ -43,8 +81,8 @@ export const columns: Record<string, Column[]> = {
   audit: [
     { key: 'actor', label: '操作人', format: r => r.actor_name || (r.actor ? `用户 #${r.actor}` : '系统') },
     { key: 'operation', label: '操作', format: r => auditOperation(r.operation) },
-    C('resource', '对象'),
-    C('detail', '详情'),
+    { key: 'resource', label: '对象', format: r => auditObject(r) },
+    { key: 'detail', label: '详情', format: r => auditDetail(r.detail) },
     { key: 'created_at', label: '时间', format: r => new Date(r.created_at).toLocaleString('zh-CN', { hour12: false }) },
   ],
 }

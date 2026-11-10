@@ -2,7 +2,9 @@ import { can, reports, operations, purchaseReader } from './session'
 import {
   House,
   Folder,
-  Files,
+  DataAnalysis,
+  List,
+  Promotion,
   ShoppingCart,
   Box,
   Wallet,
@@ -12,9 +14,9 @@ import {
 export function navigation() {
   return [
     { key: 'workbench', label: '工作台', icon: House },
-    ...(reports() ? [{ key: 'reports', label: '经营报表', icon: Files }] : []),
-    ...(can(['admin', 'manager', 'finance', 'sales_manager']) ? [{ key: 'sales', label: '销售', icon: Files }] : []),
-    ...(operations() ? [{ key: 'projects', label: '项目', icon: Folder }, { key: 'bom', label: 'BOM', icon: Files }] : []),
+    ...(reports() ? [{ key: 'reports', label: '经营报表', icon: DataAnalysis }] : []),
+    ...(can(['admin', 'manager', 'finance', 'sales_manager']) ? [{ key: 'sales', label: '销售', icon: Promotion }] : []),
+    ...(operations() ? [{ key: 'projects', label: '项目', icon: Folder }, { key: 'bom', label: 'BOM', icon: List }] : []),
     ...(purchaseReader()
       ? [
           { key: 'purchases', label: '采购', icon: ShoppingCart },
