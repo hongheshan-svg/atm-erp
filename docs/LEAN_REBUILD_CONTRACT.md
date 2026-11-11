@@ -223,6 +223,8 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - `payments/` 与 `time/` 的 `reversed_by` 为关联冲销记录 id，未冲销为 null；与 `reversal_of` 一起供页面展示原记录、冲销记录及有效记录，后端仍独立校验重复操作。
 - `documents/` multipart POST project/category/file（20MB 上限）。分类 drawing/contract/receipt/delivery/other；合同经理上传，凭据财务上传；敏感分类仅金额可见角色读取。
 - `documents/{id}/download/`：鉴权下载，无公开 media 路由；返回附件流、private/no-store、nosniff。
+- `documents/{id}/remove/` POST reason：软删除误传附件，保留记录、文件本体与 `document.remove` 审计；上传人或项目经理（项目已结项除外）可删，已作为收付款流水、补录凭证、对账单、补充协议、归档采购合同依据的附件及已结项项目拒绝。锁序固定为项目 → 采购/销售单 → 附件。
+- `documents/remove-batch/` POST documents[]/reason：与 `remove/` 同一授权与拦截（共用 `_lock_for_removal`/`_remove_locked`），一次事务、一个幂等回执，1～50 份附件，重复编号、空列表或超过 50 份返回 400，看不到的附件返回 404；任一份被拦截则整批不动，提示写明文件名（例如「别人的.pdf」：只能删除本人上传的附件）。加锁按项目、采购单、销售单、附件的主键升序。返回 `{removed, documents}`，每份写一条 `document.remove` 审计。与管理员 `record-deletions/` 不同，不进入“已删除记录”。
 - `documents/{id}/preview/?sheet=N&page=N`：鉴权只读预览，与下载共用原单据、项目及敏感分类范围；每次重新授权，错误响应同样 private/no-store、nosniff。不新建预览表或持久缓存，不执行公式、宏或外部链接。公共返回 `name/kind/warnings`；XLSX/XLS/CSV 返回可见 `sheets[{index,name}]`、`sheet`、`columns`、`rows[{number,cells}]`、`page/page_size/total_rows/total_pages`；工作表从0编号，默认首个可见页，页码从1开始，每页100行，最多10000行、100列。DOCX 返回按100个段落/表格分页的 `blocks[{kind,text|rows}]`；TXT返回 `text`。单元格值均为纯文本，保留常见数字、日期及前导零格式；仅显示已保存公式结果，不还原Office完整排版、图表或嵌入图片，超限与未计算值明确提醒。
 - PDF及PNG/JPEG/GIF/WebP/BMP预览返回 `file_url`，指向 `documents/{id}/preview-file/`；文件流再次鉴权，按扩展名及文件签名白名单返回正确类型，inline、private/no-store、nosniff及限制性CSP，不内联HTML/SVG。PDF由前端随包提供的PDF.js、字体及解码资源显示，文件不送第三方网站。源文件仍不超过20MB；Office展开不超过64MB、1000部件，文字响应最多20万字符。损坏、加密、缺失或无权限返回中文错误；不支持格式返回 `kind=unsupported/message`，提供下载或转PDF说明。
 - PDF worker通过构建产出 `.js`，兼容现有原生及Docker Nginx的MIME配置；使用JavaScript解码回退，不启用WebAssembly执行，也不放宽现行CSP。字体、CMap及解码资源随前端目录完整分发。
