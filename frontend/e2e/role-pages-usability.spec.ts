@@ -52,7 +52,7 @@ test('工程师直接看见未到期任务，项目摘要保持范围，岗位�
     const expand = summary.getByRole('button', { name: '展开项目待办', exact: true })
     await expect(expand).toHaveAttribute('aria-expanded', 'false')
     await expect(summary.getByRole('link', { name: /未完成任务/ })).toHaveCount(0)
-    await expect(summary).toContainText('点击“展开项目待办”')
+    await expect(summary.locator('.compact-summary')).toContainText('任务')
     await expand.click()
     await expect(summary.getByRole('button', { name: '收起项目待办', exact: true })).toHaveAttribute('aria-expanded', 'true')
   }

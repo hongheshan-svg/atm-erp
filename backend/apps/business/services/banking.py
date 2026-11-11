@@ -59,7 +59,7 @@ def review(actor, key, bank_id, data):
         name = text(data, 'counterparty', maximum=150)
         if name == '原流水未提供户名（待核实）':
             raise Conflict('请填写核实后的实际户名。')
-        reason = text(data, 'reason')
+        reason = text(data, 'reason', default='') or '核实户名'
         bank.counterparty = name
         bank.needs_review = False
         save(bank, user)
@@ -104,7 +104,7 @@ def create(actor, key, data, *, import_evidence=None):
                 account=account,
                 reference=reference,
                 counterparty=text(data, 'counterparty', maximum=150),
-                reason=text(data, 'reason'),
+                reason=text(data, 'reason', default='') or '登记银行流水',
                 # Internal signed-import evidence is part of the first insert, never a public request field.
                 **(import_evidence or {}),
             ),
@@ -238,7 +238,7 @@ def match(actor, key, bank_id, data, *, allocate=False):
         bank_identity.lock_accounts([lookup(BankRecord, bank_id).account])
         bank = BankRecord.objects.select_for_update().get(pk=bank_id)
         check_review(bank)
-        reason = text(data, 'reason')
+        reason = text(data, 'reason', default='') or ('认领银行流水' if allocate else '匹配银行流水')
         if allocate:
             if bank.amount <= 0 or bank.void_reason:
                 raise Conflict('只能认领有效的银行收入；支出请匹配已经核准登记的付款流水。')

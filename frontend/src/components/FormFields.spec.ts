@@ -1,6 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import FormFields from './FormFields.vue'
+import BusinessTable from './BusinessTable.vue'
+import { ElSelect } from 'element-plus'
+import { reactive } from 'vue'
+import { wideCommand } from '../form-experience'
 
 describe('明细表单编辑', () => {
   it('多人选项联动保留仍在范围内的执行人，只清除失效人员', async () => {
@@ -55,5 +59,55 @@ describe('明细表单编辑', () => {
     ] } })
     expect(wrapper.get('textarea').attributes()).toHaveProperty('disabled')
     expect(wrapper.get('input').attributes('inputmode')).toBe('text')
+  })
+  it('可搜索的单选渲染为可过滤的 ElSelect，选中值写回模型；未设置时仍是原生下拉', async () => {
+    const data = reactive<Record<string, unknown>>({ manager: 2, other: '' })
+    const options = [{ value: 1, label: '张工' }, { value: 2, label: '李工' }]
+    const wrapper = mount(FormFields, { props: { modelValue: data, fields: [
+      { key: 'manager', label: '负责人', type: 'select', searchable: true, options },
+      { key: 'other', label: '其他', type: 'select', options },
+    ] } })
+    const select = wrapper.findComponent(ElSelect)
+    expect(select.exists()).toBe(true)
+    expect(select.props('filterable')).toBe(true)
+    expect(select.props('clearable')).toBe(false)
+    expect(wrapper.findAll('select')).toHaveLength(1)
+    select.vm.$emit('update:modelValue', 1)
+    expect(data.manager).toBe(1)
+    wrapper.unmount()
+  })
+  it('选填的可搜索单选可清空；dense 行字段宽度写入 CSS 变量', () => {
+    const data = reactive<Record<string, unknown>>({ rows: [{ a: '', b: '' }] })
+    const wrapper = mount(FormFields, { props: { modelValue: data, fields: [{ key: 'rows', label: '明细', type: 'rows', dense: true, fields: [
+      { key: 'a', label: '甲', type: 'select', searchable: true, optional: true, options: [], width: 220 },
+      { key: 'b', label: '乙', width: '30%' },
+    ] }] }, global: { stubs: { ElButton: { template: '<button type="button"><slot /></button>' } } } })
+    expect(wrapper.findComponent(ElSelect).props('clearable')).toBe(true)
+    const fields = wrapper.findAll('.field-sized')
+    expect(fields.map(f => f.attributes('style'))).toEqual(['--field-width: 220px;', '--field-width: 30%;'])
+    wrapper.unmount()
+  })
+  it('只读详情含明细表时占满工作区，普通只读详情仍用侧栏', () => {
+    const base = { title: '查看明细', path: '', readonly: true, initial: {} }
+    expect(wideCommand({ ...base, fields: [{ key: 'a', label: 'A' }, { key: 'lines', label: '明细', type: 'rows' }] })).toBe(true)
+    expect(wideCommand({ ...base, fields: [{ key: 'a', label: 'A' }] })).toBe(false)
+  })
+  it('手机宽度下只读明细表改为逐行「标签：值」卡片，桌面仍是表格', () => {
+    const rows = { key: 'rows', label: '应收', type: 'rows' as const, fields: [{ key: 'title', label: '款项' }, { key: 'balance', label: '待收' }] }
+    const data = { rows: [{ title: '验收款', balance: '150,000.00' }, { title: '尾款', balance: '' }] }
+    const mobile = vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    vi.stubGlobal('matchMedia', mobile)
+    const narrow = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true } })
+    expect(narrow.findAll('.row-card')).toHaveLength(2)
+    expect(narrow.findComponent(BusinessTable).exists()).toBe(false)
+    expect(narrow.findAll('.row-card')[0]!.text()).toContain('待收：150,000.00')
+    expect(narrow.findAll('.row-card')[1]!.text()).toContain('待收：—')
+    narrow.unmount()
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const wide = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true } })
+    expect(wide.find('.row-card').exists()).toBe(false)
+    expect(wide.findComponent(BusinessTable).exists()).toBe(true)
+    wide.unmount()
+    vi.unstubAllGlobals()
   })
 })

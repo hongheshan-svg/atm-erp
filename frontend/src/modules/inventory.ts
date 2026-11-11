@@ -9,10 +9,15 @@ import { t } from './shared'
 import { display } from './shared'
 import { select } from './shared'
 import { reason } from './shared'
+import { optionalReason } from './shared'
+import { projectLink } from './shared'
+import { purchaseLink } from './shared'
 import { qty } from './shared'
 import { warehouse } from './shared'
 import { C } from './shared'
 import { project } from './shared'
+import { quantityText } from '../utils/quantity'
+import { dateTimeText } from '../utils/datetime'
 import { item } from './shared'
 import { endpoint } from './shared'
 const positiveQuantity: Field = { ...qty, numeric: { scale: 3, min: 0.001 } }
@@ -23,15 +28,19 @@ export const columns: Record<string, Column[]> = {
     C('specification', '规格'), C('brand', '品牌'),
     { key: 'part_type', label: '类别', format: row => (({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类') },
     C('location', '库位'),
-    { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${row.quantity}${row.unit ? ` ${row.unit}` : ''}`) },
+    { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
   ],
+  // 领料领给了哪个项目、收货来自哪张采购单、谁在什么时候操作，都直接在流水里看到并可跳转。
   moves: [
-    C('item_name', '物料'),
-    C('location', '库位'),
+    { key: 'item_name', label: '物料', format: row => [row.item_code, row.item_name].filter(Boolean).join(' · ') || '—' },
     C('kind', '类型'),
-    C('quantity', '数量'),
+    { key: 'quantity', label: '数量', format: row => (row.quantity == null ? '—' : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
+    { key: 'project_name', label: '项目', format: row => [row.project_code, row.project_name].filter(Boolean).join(' · ') || '—', link: projectLink },
+    { key: 'purchase_code', label: '来源采购单', format: row => row.purchase_code || '—', link: purchaseLink },
+    C('location', '库位'),
     C('reason', '说明'),
-    C('created_at', '时间'),
+    { key: 'created_at', label: '时间', format: row => dateTimeText(row.created_at) },
+    C('created_by_name', '操作人'),
     C('remark', '备注'),
   ],
 }
@@ -51,7 +60,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
       { key: 'location', label: '库位', initial: '主仓', suggestions: locations, hint: '期初可建立新库位；全角字符和多余空格会自动统一。' },
       positiveQuantity,
       t('unit_cost', '单位成本（元）'),
-      reason,
+      optionalReason(undefined, '选填；不填按「期初库存」记录'),
     ]
   }
   return {
@@ -59,6 +68,40 @@ export async function createCommand(resource: string, projectId?: number): Promi
     path,
     fields,
     initial: projectId ? { project: projectId } : {},
+  }
+}
+const sharedArrival: Field = { key: 'confirm_shared', label: '确认占用其他项目到货', type: 'boolean', initial: false, optional: true }
+// 按项目 BOM 一次领多行（库存页 /inventory?project=<id>&issue=bom 直接打开）：服务端按 BOM 未领数量和库位预填，
+// 一次事务出库，任一行不通过整单不出库。
+export async function bomIssueCommand(projectId?: number): Promise<Command> {
+  const path = '/business/stocks/bom-issue/'
+  const base = { title: '按 BOM 领料', path, submitLabel: '确认按 BOM 领料出库' }
+  if (!projectId) return { ...base, fields: [], blocked: '请先在上方「项目筛选」选择项目，系统会列出该项目 BOM 未领完且有库存的物料。' }
+  const data = await read(path, { project: projectId })
+  const lines = (data.lines || []).map((line: Row) => ({
+    ...materialDetails(line), project_code: data.project_code, project_name: data.project_name,
+    assembly_unit: line.assembly_units, remaining: line.available, remark: '',
+  }))
+  const missing = data.missing_items ? `其中 ${data.missing_items} 种当前无库存，需采购或等待到货。` : ''
+  if (!lines.length) return {
+    ...base, fields: [], subject: data.project_code,
+    blocked: data.pending_items ? `本项目还有 ${data.pending_items} 种 BOM 物料未领完，但都没有可用库存。${missing}` : '本项目 BOM 物料已全部领完，无需再领。',
+  }
+  return {
+    ...base, subject: [data.project_code, data.project_name].filter(Boolean).join(' · '),
+    fields: [
+      { key: 'project', label: '项目', hidden: true },
+      warehouseLines('issue', lines, { batch: true }),
+      optionalReason(undefined, '选填；不填按「项目领料」记录'),
+      { ...sharedArrival, hint: '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。' },
+    ],
+    initial: { project: projectId, lines },
+    notice: { type: 'info', text: `本项目 BOM 还有 ${data.pending_items} 种物料未领完。${missing}已按 BOM 未领数量和库位预填本次领料，可改小或清零；整单一次出库，任一行不通过则全部不出库。` },
+    prepare: ({ lines: rows, ...rest }) => {
+      const selected = (rows || []).filter((row: Row) => Number(row.quantity || 0) > 0)
+      if (!selected.length) throw new Error('请至少填写一行本次领料数量。')
+      return { ...rest, project: projectId, lines: selected.map((row: Row) => ({ stock: row.stock, quantity: row.quantity, ...(row.remark ? { remark: row.remark } : {}) })) }
+    },
   }
 }
 export function actionNames(resource: string, r: Row): string[] {
@@ -70,7 +113,6 @@ export function actionNames(resource: string, r: Row): string[] {
   }
   return a
 }
-const sharedArrival: Field = { key: 'confirm_shared', label: '确认占用其他项目到货', type: 'boolean', initial: false, optional: true }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
@@ -98,7 +140,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         optionsFor: (data) => tasks.filter((task) => String(task.project) === String(data.project)).map((task) => ({ value: task.id, label: task.title })),
       },
       warehouseLines('issue', lines),
-      reason,
+      optionalReason(undefined, '选填，如使用工位；不填按「项目领料」记录'),
       { ...sharedArrival, hint: '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。' },
     ]
     prepare = ({ lines, ...data }) => ({ ...data, stock: r.id, quantity: lines[0].quantity, ...(lines[0].remark ? { remark: lines[0].remark } : {}) })

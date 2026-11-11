@@ -52,6 +52,13 @@ describe('选择器就近建档', () => {
     expect(write).not.toHaveBeenCalled()
   })
 
+  it('按下新增按钮时阻止默认失焦，避免输入框校验提示挤走点击', () => {
+    const wrapper = quick({ query: '不存在的客户' })
+    const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+    byText(wrapper, '新增客户').element.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
   it('先查授权相似资料，可直接复用；核对失败不能直接新建', async () => {
     const existing = { id: 7, name: '客户甲', code: 'C007', kind: 'customer' }
     vi.mocked(read).mockResolvedValue({ results: [existing] })

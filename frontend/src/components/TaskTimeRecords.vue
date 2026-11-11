@@ -58,4 +58,9 @@ onBeforeUnmount(() => { generation++ })
 .time-tools label { display: flex; align-items: center; gap: 6px; }
 small { display: block; color: var(--muted); }
 h3 { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .time-tools label { min-height: 40px; }
+  .time-tools .el-button, :global(.task-time-records .el-dialog__footer .el-button) { min-height: 40px; }
+  :global(.task-time-records .el-pagination) { flex-wrap: wrap; row-gap: 8px; justify-content: flex-end; }
+}
 </style>

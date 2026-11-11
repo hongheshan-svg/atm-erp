@@ -66,3 +66,20 @@ it('大批量错误紧随汇总显示，文件修改说明放在错误之后', a
   expect(errors.element.nextElementSibling?.textContent).toContain('红色单元格的批注')
   wrapper.unmount()
 })
+
+it('手机宽度下预览改为逐行卡片，保留行号、问题和单元格定位属性，不再用横向滚动表格', async () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  const wrapper = mount(ImportFeedback, { props: {
+    rows: [{ row: 2, data: { title: '电机', quantity: '3' } }, { row: 3, data: { title: '导轨', quantity: '' } }],
+    columns: [{ key: 'title', label: '物料名称' }, { key: 'quantity', label: '需求数量' }],
+    errors: [{ row: 3, message: '数量必填', fields: ['quantity'] }],
+  }, global: { plugins: [ElementPlus] } })
+  await flushPromises()
+  expect(wrapper.findAll('.import-card')).toHaveLength(2)
+  expect(wrapper.find('.el-table').exists()).toBe(false)
+  expect(wrapper.findAll('.import-card')[0]!.text()).toContain('需求数量：3')
+  expect(wrapper.findAll('.import-card')[1]!.text()).toContain('数量必填')
+  expect(wrapper.find('[data-import-row="3"][data-import-field="quantity"]').exists()).toBe(true)
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})

@@ -112,7 +112,7 @@ def archive(actor, key, purchase_id, data):
                 version=latest.version + 1 if latest else 1,
                 snapshot=json.loads(json.dumps(current, cls=DjangoJSONEncoder)),
                 document=doc,
-                reason=text(data, 'reason'),
+                reason=text(data, 'reason', default='') or '归档采购合同',
             ),
             user,
         )

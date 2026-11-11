@@ -69,7 +69,8 @@ async function fixture(page: Page) {
 async function openPayment(page: Page, entryId: number) {
   await page.goto(`/erp/finance?section=entries&resource=entries&focus=${entryId}`)
   await detailAction(page, '登记收付款')
-  const form = page.getByRole('dialog', { name: '登记收付款', exact: true })
+  // 采购应付的对话框标题与行按钮一致，显示「登记付款」。
+  const form = page.getByRole('dialog', { name: '登记付款', exact: true })
   await expect(form).toBeVisible()
   return form
 }
@@ -123,6 +124,7 @@ test('U04 未收货付款先说明前置条件，可就近申请核准并查看�
   const detail = page.getByRole('dialog', { name: '查看对账明细', exact: true })
   await expect(detail).toContainText(basis)
   await expect(detail.getByRole('button', { name: '确认对账', exact: true })).toHaveCount(0)
+  await expect(detail.getByLabel('确认要求', { exact: true })).toHaveValue('预付款对账须由项目经理或管理员确认')
   await page.screenshot({ path: info.outputPath('prepayment-created-result.png'), animations: 'disabled' })
 })
 
@@ -169,7 +171,7 @@ test('U14 有效核准后在付款表单上传并选中凭证，实际付款及�
   await expect(form.getByLabel('结算凭证', { exact: true })).toHaveValue(String(document.id))
   await noPayments(f) // Upload alone must never create a Payment or consume the approval.
   expect(Number((await f.finance.get(business + `reconciliations/${statement.id}/`)).remaining_amount)).toBe(125)
-  const submit = form.getByRole('button', { name: '登记收付款记录', exact: true })
+  const submit = form.getByRole('button', { name: '登记付款记录', exact: true })
   await form.getByLabel('结算凭证', { exact: true }).scrollIntoViewIfNeeded()
   await expect(form.getByLabel('结算凭证', { exact: true })).toBeInViewport()
   await expect(submit).toBeEnabled()
@@ -211,7 +213,8 @@ test('U14 有效核准后在付款表单上传并选中凭证，实际付款及�
   expect((await f.purchaser.get('/api/auth/me/')).roles).toEqual(['purchaser'])
   await info.attach('payment-facts', { body: JSON.stringify({ entry: f.entry.id, reconciliation: statement.id, payment: stored, paid: balance.paid_amount, balance: balance.balance }), contentType: 'application/json' })
   await expect(form).toBeHidden()
-  await expect(page.locator('.saved-result')).toContainText('登记收付款成功')
+  // 保存提示随款项方向，采购应付显示「登记付款成功」。
+  await expect(page.locator('.saved-result')).toContainText('登记付款成功')
   await page.goto(`/erp/finance?section=payments&resource=payments&focus=${payment.id}`)
   await detailAction(page, '预览凭证')
   await expect(preview).toContainText(receipt.buffer.toString())

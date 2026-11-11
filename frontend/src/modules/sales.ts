@@ -12,13 +12,19 @@ const HIDDEN = '无权查看'
 const amountsHidden = (row?: Row) => row?.amounts_visible === false
 // 列表按 1440px 可视宽度精简：执行项目作为销售单号的副行、客户作为销售名称的副行，实际表头为 4 列。
 // 合同编号可直接搜索、报价金额与合同编号都在「查看明细」中，故不再单独占列。
+function contractAmountText(row: Row) {
+  if (amountsHidden(row)) return HIDDEN
+  if (row.status === 'signed' || Number(row.contract_amount) > 0) return money(row.contract_amount)
+  return Number(row.quote_amount) > 0 ? `${money(row.quote_amount)} 报价` : '—'
+}
 export const salesColumns: Column[] = [
   { key: 'code', label: '销售单号' },
   { key: 'name', label: '销售名称' },
   { key: 'customer_name', label: '客户' },
   // 取消项目不改写销售单的签约事实（重新打开要恢复原合同），列表按执行项目状态标注。
   { key: 'status', label: '状态', format: row => row.status === 'signed' && row.project_status === 'cancelled' ? '已签约 · 项目已取消' : display(row.status) },
-  { key: 'contract_amount', label: '合同金额', format: row => amountsHidden(row) ? HIDDEN : money(row.contract_amount) },
+  // 报价后、签约前合同金额为 0，直接显示 0.00 像没报价：未签约时改显示报价金额并带「报价」标记。
+  { key: 'contract_amount', label: '报价 / 合同金额', format: contractAmountText },
   { key: 'project_code', label: '执行项目' },
 ]
 export function salesActions(row: Row): string[] {
@@ -32,6 +38,18 @@ function salesBusinessActions(row: Row): string[] {
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
+// 金额以「分」整数核对，避免浮点；无法解析的输入按 0 计，由逐字段校验另行提示。
+function cents(value: unknown): bigint {
+  const text = String(value ?? '').trim()
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return 0n
+  const [whole = '0', fraction = ''] = text.split('.')
+  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
+}
+const milestoneCents = (rows: Row[] = []) => rows.reduce((sum, item) => sum + cents(item.amount), 0n)
+function centsText(value: bigint) {
+  const abs = value < 0n ? -value : value
+  return money(`${value < 0n ? '-' : ''}${abs / 100n}.${String(abs % 100n).padStart(2, '0')}`)
+}
 const earlyMilestoneReminder = (contractDate?: string): Field => ({
   key: 'early_due_notice', label: '付款期限提醒', type: 'textarea', displayOnly: true, readonly: true,
   initial: '存在早于签约日的收款节点。允许按合同约定保存；已过付款期限的未收金额将计入逾期，请核对客户约定。',
@@ -43,7 +61,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   if (row && action === '交付与回款') {
     const data = await read(`${path}${row.id}/progress/`)
     const hidden = amountsHidden(data)
-    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
+    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), receivables: (data.receivables || []).map((item: Row) => ({ ...item, balance: money(item.balance, { refund: true }), paid: money(item.paid), amount: money(item.amount), credit_amount: money(item.credit_amount) })), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
       { key: 'project_status', label: '项目状态' },
       { key: 'deliveries', label: '交付批次', type: 'rows', fields: [{ key: 'code', label: '批次' }, { key: 'quantity', label: '数量' }, { key: 'shipped_date', label: '发货日期' }, { key: 'accepted_date', label: '验收日期' }] },
       hidden
@@ -53,7 +71,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   }
   if (row && action === '补充协议记录') {
     const records = await read(`${path}${row.id}/amendments/`)
-    const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${value}`).join('；')
+    const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${key === 'amount' ? money(value) : value}`).join('；')
     const hidden = amountsHidden(row)
     return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after), document__original_name: r.document ? r.document__original_name : HIDDEN })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], ...(hidden ? { notice: { type: 'info' as const, text: '未参与该项目：补充协议金额与协议附件不显示，设备数量与质保变更仍可查看。' } } : {}), actions: records.filter((r: Row) => r.document).flatMap((r: Row) => [previewAction(r.document, r.document__original_name), { label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } }]) }
   }
@@ -70,12 +88,12 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   if (row && action === '转交负责人') {
     const users = await all('/auth/directory/')
     return { title: action, path: `${path}${row.id}/transfer/`, fields: [
-      { key: 'manager', label: '新销售负责人', type: 'select', options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager && u.id !== user.value?.id)) },
+      { key: 'manager', label: '新销售负责人', type: 'select', searchable: true, options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager && u.id !== user.value?.id)) },
       { key: 'reason', label: '转交原因', hint: '必填，最多 500 字，记入操作审计。' },
     ], notice: { type: 'info', text: '只更换销售负责人，不改变合同与回款。原负责人立即失去本人范围内的查看权限，新负责人立即获得。' } }
   }
   if (row && action === '查看明细') return {
-    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN } : row,
+    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN } : { ...row, quote_amount: money(row.quote_amount), contract_amount: money(row.contract_amount), original_contract_amount: row.original_contract_amount == null ? row.original_contract_amount : money(row.original_contract_amount) },
     fields: [
       { key: 'code', label: '销售单号' }, { key: 'name', label: '销售名称' },
       { key: 'customer_name', label: '客户' }, { key: 'manager_name', label: '负责人' },
@@ -99,7 +117,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         ...(!row ? [codeField('销售单号')] : []),
         { key: 'name', label: '销售名称' },
         customer(),
-        { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
+        { key: 'manager', label: '负责人', type: 'select', searchable: true, initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
         { key: 'requirements', label: '需求说明', type: 'textarea', optional: true },
         { key: 'due_date', label: '计划交期', type: 'date', optional: true },
         { key: 'equipment_quantity', label: '设备数量', initial: 1 },
@@ -112,7 +130,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     return {
       title: action,
       path: `${path}${row.id}/quote/`,
-      fields: [{ key: 'amount', label: '报价金额（元）' }, reason],
+      fields: [{ key: 'amount', label: '报价金额（元）' }, { key: 'reason', label: '报价说明', optional: true }],
       initial: { amount: row.quote_amount },
     }
   if (action === '取消销售')
@@ -132,6 +150,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
             {
               key: 'manager',
               label: '项目负责人',
+              searchable: true,
               type: 'select' as const,
               options: options(projectManagers),
               // 销售负责人不一定具备项目经理岗位；预选一个不在候选里的人，下拉会显示成空白且提交必被拒绝。
@@ -141,6 +160,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
               key: 'members',
               label: '项目成员',
               type: 'multi' as const,
+              searchableMulti: true,
               options: options(users),
               optional: true,
             },
@@ -150,15 +170,27 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         key: 'milestones',
         label: '收款节点',
         type: 'rows',
+        dense: true,
         fields: [
           { key: 'title', label: '节点名称' },
           { key: 'amount', label: '金额（元）' },
           { key: 'due_date', label: '收款到期日', type: 'date', hint: '允许早于签约日，按合同约定填写；已到期未收款会计入逾期。' },
         ],
       },
+      {
+        key: 'milestone_mismatch', label: '节点合计提醒', type: 'textarea', displayOnly: true, readonly: true,
+        initial: `收款节点合计与报价金额 ${money(row.quote_amount)} 元不一致，提交前请调整节点金额。`,
+        visibleWhen: data => row.quote_amount != null && milestoneCents(data.milestones) !== cents(row.quote_amount),
+      },
       earlyMilestoneReminder(),
     ],
     initial: { milestones: [{ title: '合同款', amount: row.quote_amount, due_date: '' }] },
-    notice: { type: 'info', text: '按签署合同拆分预付款、发货款、验收款及质保尾款，节点合计须等于报价金额；填写合同约定的收款日期，签约后自动建立执行项目。' },
+    // 节点合计必须等于报价金额：提交前在前端按分核对并给出差额，服务端仍是最终校验。
+    prepare: data => {
+      const quote = cents(row.quote_amount), sum = milestoneCents(data.milestones)
+      if (row.quote_amount != null && sum !== quote) throw new Error(`收款节点合计 ${centsText(sum)} 元，报价金额 ${centsText(quote)} 元，差额 ${centsText(sum - quote)} 元，请调整后再签约。`)
+      return data
+    },
+    notice: { type: 'info', text: `${[row.customer_name, row.name].filter(Boolean).join(' · ')}${row.quote_amount ? ` · 报价 ${money(row.quote_amount)} 元` : ''}${row.equipment_quantity ? ` · 设备 ${row.equipment_quantity} 台` : ''}。按签署合同拆分预付款、发货款、验收款及质保尾款，节点合计须等于报价金额；填写合同约定的收款日期，签约后自动建立执行项目。` },
   }
 }

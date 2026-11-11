@@ -181,6 +181,24 @@ class ProgressTests(BusinessFixtures, TestCase):
         self.users['member'].save()
         self.assertFalse(self.get('manager', state='all')['results'][0]['handlers'][0]['active'])
 
+    def test_groups_count_overdue_items_and_plain_tasks_have_no_hint(self):
+        Task.objects.create(
+            project=self.project,
+            title='按期任务',
+            assignee=self.users['member'],
+            due_date=self.today + timedelta(days=3),
+        )
+        result = self.get()
+        groups = {group['key']: group for group in result['groups']}
+        # 任务、采购各有 1 条已过期限的待跟进项；分类按钮直接显示「其中 N 项逾期」。
+        self.assertEqual((groups['tasks']['open'], groups['tasks']['overdue']), (2, 1))
+        self.assertEqual(groups['purchases']['overdue'], 1)
+        self.assertEqual(groups['deliveries']['overdue'], 0)
+        self.assertEqual({row['hint'] for row in result['results']}, {''})
+        self.project.status = 'closed'
+        self.project.save()
+        self.assertEqual({group['overdue'] for group in self.get(state='all')['groups']}, {0})
+
     def test_duplicate_approver_names_are_disambiguated(self):
         for username in ['li-a', 'li-b']:
             User.objects.create_user(username=username, display_name='李经理', role='purchase_manager')

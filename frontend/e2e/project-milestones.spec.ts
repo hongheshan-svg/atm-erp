@@ -1,5 +1,27 @@
-import { businessDate, selectExecutors } from './fixtures'
-import { test, expect, login, detailAction, openRowAction } from './fixtures'
+import { businessDate, choosePeople, selectExecutors } from './fixtures'
+import { test, expect, login, detailAction, openRowAction, type Locator, type Page } from './fixtures'
+
+// 手机窄屏的任务列表只留名称、状态和操作列，日期、历时和工时不在行内：点任务名称打开「项目任务详情」逐项核对后关闭。
+// 桌面仍直接核对整行，断言不变。
+async function taskDetail(page: Page, row: Locator, expected: [label: string, value: string | RegExp][], shot?: string) {
+  const detail = page.getByRole('dialog', { name: '项目任务详情', exact: true })
+  const close = async () => {
+    await detail.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(detail).toHaveCount(0)
+  }
+  // 保存后列表异步刷新，详情按点开时的行数据生成：读到旧值就关闭后重新点开。
+  await expect(async () => {
+    await row.locator('.record-link').click()
+    try {
+      for (const [label, value] of expected) await expect(detail.getByLabel(label, { exact: true })).toHaveValue(value, { timeout: 1000 })
+    } catch (error) {
+      await close()
+      throw error
+    }
+  }).toPass({ timeout: 15000 })
+  if (shot) await page.screenshot({ path: test.info().outputPath(shot), animations: 'disabled' })
+  await close()
+}
 
 test('项目六阶段模板支持一键生成、并行任务、日期调整和增删节点', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
@@ -18,6 +40,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
     return response.json()
   }
   const today = businessDate()
+  const mobile = info.project.name === 'mobile'
   const name = '六阶段里程碑验收-' + Date.now() + '-' + info.project.name
   const me = await get('auth/me/')
   const customer = await post('partners/', { name, kind: 'customer' })
@@ -64,8 +87,8 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   expect(tasks.find((row: any) => row.milestone === 'design_3d').assignees).toEqual([me.id, colleague.id])
   await expect(page.locator('.el-table__body tr:visible').first()).toContainText('3D画图')
   await expect(page.locator('.el-table__body tr:visible').first()).toContainText(colleague.display_name)
-  await expect(overview.getByRole('button', { name: /设计阶段/ })).toContainText('0 / 7')
-  await overview.getByRole('button', { name: /采购阶段/ }).click()
+  await expect(overview.getByRole('button', { name: /^设计阶段/ })).toContainText('0 / 7')
+  await overview.getByRole('button', { name: /^采购阶段/ }).click()
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: '长交期' })
   await expect(row).toHaveCount(1)
   await openRowAction(page, row, '重新分配')
@@ -77,17 +100,18 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await openRowAction(page, row, '开始任务')
   const actualStart = businessDate(-2)
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(actualStart)
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('补录实际开始跟进日期')
+  await dialog.getByLabel('开始说明', { exact: true }).fill('补录实际开始跟进日期')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(row).toContainText('3 天（进行中）')
+  if (mobile) await taskDetail(page, row, [['任务历时', '3 天（进行中）']])
+  else await expect(row).toContainText('3 天（进行中）')
   await expect(row.getByRole('button', { name: '开始任务', exact: true })).toHaveCount(0)
   await openRowAction(page, row, '完成任务')
   await dialog.getByLabel('实际完成日期', { exact: true }).fill(today)
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('长交期先行，设计仍在进行')
+  await dialog.getByLabel('完成说明', { exact: true }).fill('长交期先行，设计仍在进行')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(overview.getByRole('button', { name: /采购阶段/ })).toContainText('1 / 3')
+  await expect(overview.getByRole('button', { name: /^采购阶段/ })).toContainText('1 / 3')
   tasks = (await get('business/tasks/?project=' + project + '&page_size=100')).results
   expect(tasks.find((row: any) => row.milestone === 'design_3d').status).toBe('open')
   expect(tasks.find((row: any) => row.milestone === 'purchase_long_lead').completed_date).toBe(today)
@@ -97,17 +121,23 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('按采购确认邮件核对实际完成日')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(row).toContainText(yesterday)
+  if (!mobile) await expect(row).toContainText(yesterday)
   const completed = (await get('business/tasks/?project=' + project + '&page_size=100')).results.find((task: any) => task.milestone === 'purchase_long_lead')
   expect(completed.completed_date).toBe(yesterday)
   expect(completed.started_date).toBe(actualStart)
   expect(completed.elapsed_days).toBe(2)
   expect(completed.schedule_variance_days).toBeLessThan(0)
-  await expect(row).toContainText('2 天')
-  await expect(row).toContainText('提前')
+  if (mobile) {
+    await taskDetail(page, row, [['实际完成日期', yesterday], ['任务历时', '2 天'], ['提前／延期', /提前/]], 'actual-completion-date.png')
+  } else {
+    await expect(row).toContainText('2 天')
+    await expect(row).toContainText('提前')
+  }
   expect((await get('business/time/?task=' + completed.id)).count).toBe(0)
-  await row.getByText(yesterday, { exact: true }).scrollIntoViewIfNeeded()
-  await page.screenshot({ path: info.outputPath('actual-completion-date.png'), animations: 'disabled' })
+  if (!mobile) {
+    await row.getByText(yesterday, { exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: info.outputPath('actual-completion-date.png'), animations: 'disabled' })
+  }
   await openRowAction(page, row, '更正开始日期')
   const earlierStart = businessDate(-3)
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(earlierStart)
@@ -118,20 +148,24 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   expect(revised.started_date).toBe(earlierStart)
   expect(revised.elapsed_days).toBe(3)
   expect((await get('business/time/?task=' + completed.id)).count).toBe(0)
-  await row.getByText('3 天', { exact: true }).scrollIntoViewIfNeeded()
-  await page.screenshot({ path: info.outputPath('elapsed-days.png'), animations: 'disabled' })
-  // 已有节点后入口降为次要按钮，文案改为「补充」。
+  if (mobile) await taskDetail(page, row, [['实际开始日期', earlierStart], ['任务历时', '3 天']], 'elapsed-days.png')
+  else {
+    await row.getByText('3 天', { exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: info.outputPath('elapsed-days.png'), animations: 'disabled' })
+  }
+  // 二十个节点都已生成：不再提供打开 0 行对话框的「补充」，自定义任务走「新建任务」。
   await expect(overview.getByRole('button', { name: '一键生成里程碑' })).toHaveCount(0)
-  await overview.getByRole('button', { name: '补充里程碑节点', exact: true }).click()
-  await expect(dialog).toContainText('项目里程碑 · 0 行')
-  await dialog.getByRole('button', { name: '添加行', exact: true }).click()
+  await expect(overview.getByRole('button', { name: /补充里程碑节点/ })).toHaveCount(0)
+  await expect(overview).toContainText('节点已全部生成')
+  await page.getByRole('button', { name: '新建任务', exact: true }).click()
   await dialog.getByLabel('阶段', { exact: true }).selectOption('site')
   await dialog.getByLabel('任务名称', { exact: true }).fill('客户操作培训')
   await selectExecutors(page, dialog, [me.display_name || me.username])
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(info.project.use.viewport!.width)
-  await dialog.getByRole('button', { name: '确认生成里程碑', exact: true }).click()
+  await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await overview.getByRole('button', { name: /客户终验收阶段/ }).click()
+  // 标题旁「?」说明按钮的读屏名称也提到「客户终验收阶段」，按名称开头只取阶段卡片。
+  await overview.getByRole('button', { name: /^客户终验收阶段/ }).click()
   const installation = page.locator('.el-table__body tr:visible').filter({ hasText: '现场安装接线' })
   await expect(installation.getByRole('button', { name: '完成任务', exact: true })).toHaveCount(0)
   await expect(installation).toContainText('按批次安装任务同步')
@@ -143,7 +177,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('本项目无需单独培训节点')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(overview.getByRole('button', { name: /客户终验收阶段/ })).toContainText('0 / 3')
+  await expect(overview.getByRole('button', { name: /^客户终验收阶段/ })).toContainText('0 / 3')
   await overview.getByRole('button', { name: '查看全部阶段' }).click()
   await expect(page.locator('.el-loading-mask:visible')).toHaveCount(0)
   await expect(page.locator('.el-message:visible')).toHaveCount(0)
@@ -159,11 +193,11 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await openRowAction(page, own, '登记工时')
   await dialog.getByLabel('日期', { exact: true }).fill(today)
   await dialog.getByLabel('工时', { exact: true }).fill('1.5')
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('共同执行人员本人工时')
+  await dialog.getByLabel('工作内容', { exact: true }).fill('共同执行人员本人工时')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
   await openRowAction(page, own, '完成任务')
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('共同检查，确认整项完成')
+  await dialog.getByLabel('完成说明', { exact: true }).fill('共同检查，确认整项完成')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
   await expect(own).toContainText('已完成')
@@ -198,7 +232,7 @@ test('任务登记工时后可查看保存回执、累计和更正明细', async
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('日期', { exact: true }).fill(today)
   await dialog.getByLabel('工时', { exact: true }).fill('1.25')
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('核对设计图纸')
+  await dialog.getByLabel('工作内容', { exact: true }).fill('核对设计图纸')
   const submitted = page.waitForResponse(response => response.url().includes('/tasks/' + task.id + '/time/') && response.request().method() === 'POST')
   await dialog.locator('button[type="submit"]').click()
   const receipt = await (await submitted).json()
@@ -219,7 +253,9 @@ test('任务登记工时后可查看保存回执、累计和更正明细', async
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await post('time/' + receipt.id + '/amend/', { hours: '0.75', date: today, reason: '核对后更正' })
   await page.reload()
-  await expect(row).toContainText('0.75 小时')
+  // 手机任务行不显示工时列，详情里的「已登记工时」是同一合计。
+  if (info.project.name === 'mobile') await taskDetail(page, row, [['已登记工时', '0.75']])
+  else await expect(row).toContainText('0.75 小时')
   await openRowAction(page, row, '查看工时')
   await expect(dialog.getByLabel('工时合计')).toContainText('任务累计：0.75 小时')
   await expect(dialog).toContainText('冲销记录')
@@ -276,15 +312,15 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   await detailAction(page, '完成任务')
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(today)
   await dialog.getByLabel('实际完成日期', { exact: true }).fill(today)
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('主管核对完成')
+  await dialog.getByLabel('完成说明', { exact: true }).fill('主管核对完成')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
   await expect(row).toContainText('已完成')
   await openRowAction(page, row, '登记工时')
-  await dialog.getByLabel('人员', { exact: true }).selectOption(String(worker.id))
+  await choosePeople(page, dialog.getByLabel('人员', { exact: true }), [worker.display_name])
   await dialog.getByLabel('日期', { exact: true }).fill(today)
   await dialog.getByLabel('工时', { exact: true }).fill('2.5')
-  await dialog.getByLabel('原因 / 说明', { exact: true }).fill('主管按当日设计记录核对')
+  await dialog.getByLabel('工作内容', { exact: true }).fill('主管按当日设计记录核对')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
   await expect(page.locator('.saved-result')).toContainText('2.50 小时')
@@ -298,7 +334,7 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   await page.screenshot({ path: info.outputPath('supervisor-time-records.png'), animations: 'disabled' })
   await login(page, worker.username, password)
   await page.goto(`/erp/projects/${signed.project}?tab=tasks&section=tasks`)
-  await expect(row).toContainText('由' + head.display_name + '确认完成及登记工时')
+  await expect(page.getByText('本项目任务由对应专业主管确认完成并登记工时')).toBeVisible()
   await expect(row.getByRole('button', { name: '完成任务', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '设置专业主管', exact: true })).toHaveCount(0)
   await openRowAction(page, row, '查看工时')

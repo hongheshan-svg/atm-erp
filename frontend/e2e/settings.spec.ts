@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures'
+import { test, expect, login, openRowAction } from './fixtures'
 
 test('设置页签按需加载，键盘切换并保留内容', async ({ page }, info) => {
   const requests: string[] = []
@@ -41,8 +41,7 @@ test('设置页签按需加载，键盘切换并保留内容', async ({ page }, 
   const prefix = 'T' + suffix
   const edit = async (values: { prefix: string; date_format: string; padding: number; reset_cycle: string }) => {
     const row = page.getByRole('region', { name: '编号规则', exact: true }).locator('.el-table__body tr').filter({ hasText: '物料' })
-    await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-    await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
+    await openRowAction(page, row, '编辑')
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('前缀', { exact: true }).fill(values.prefix)
     await dialog.getByLabel('日期格式', { exact: true }).selectOption(values.date_format || 'none')

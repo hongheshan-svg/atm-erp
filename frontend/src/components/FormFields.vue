@@ -3,7 +3,7 @@ import BusinessTable from './BusinessTable.vue'
 import { ElSelect, ElOption } from 'element-plus'
 import type { Field, Row } from '../types'
 import { applicableFields, defaults } from '../forms'
-import { computed, nextTick, reactive, ref, useId, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watchEffect } from 'vue'
 import InlineDocumentField from './InlineDocumentField.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
@@ -34,6 +34,12 @@ async function focusPath(path: string) {
     target?.querySelector<HTMLElement>('input, select, textarea, button')?.focus()
   }
 }
+// 手机宽度下只读明细表改成逐行卡片：横滚会把待收、金额等关键列挤出屏外。
+const cardQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 600px)') : null
+const cardMode = ref(Boolean(cardQuery?.matches))
+const syncCards = () => { cardMode.value = Boolean(cardQuery?.matches) }
+onMounted(() => cardQuery?.addEventListener?.('change', syncCards))
+onBeforeUnmount(() => cardQuery?.removeEventListener?.('change', syncCards))
 defineExpose({ focusPath })
 const model = defineModel<Row>({ required: true })
 const visibleFields = computed(() => applicableFields(props.fields, model.value))
@@ -68,8 +74,17 @@ function readonlyValue(field: Field) {
       <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact || field.dense, 'row-list-dense': field.dense }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
-        <BusinessTable v-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
-          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : 140" :show-overflow-tooltip="!column.flow"
+        <ol v-if="readonly && cardMode" class="row-cards" :aria-label="field.label">
+          <li v-for="(row, index) in model[field.key]" :key="index" class="row-card">
+            <template v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key">
+              <div v-if="column.flow && flowFor(column.flow, row)" class="row-card-flow"><span>{{ column.label }}：</span><ProcessSteps :flow="flowFor(column.flow, row)!" compact /></div>
+              <div v-else class="row-card-line"><span>{{ column.label }}：</span><b>{{ row[column.key] == null || row[column.key] === '' ? '—' : row[column.key] }}</b></div>
+            </template>
+          </li>
+          <li v-if="!model[field.key]?.length" class="row-card-empty">暂无明细</li>
+        </ol>
+        <BusinessTable v-else-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
+          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : column.width ?? 140" :show-overflow-tooltip="!column.flow"
             ><template v-if="column.flow" #default="{ row }"
               ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
             ></el-table-column
@@ -90,7 +105,7 @@ function readonlyValue(field: Field) {
         </label>
         <span :id="`${fieldId(field.key)}-help`"><small v-if="field.hint">{{ field.hint }}</small><small v-if="issue(field.key)" class="field-error">{{ issue(field.key) }}</small></span>
       </fieldset>
-      <div v-else-if="!field.hidden" class="field" :data-field-path="fieldPath(field.key)" @focusout="emit('touched', fieldPath(field.key))" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
+      <div v-else-if="!field.hidden" class="field" :data-field-path="fieldPath(field.key)" @focusout="emit('touched', fieldPath(field.key))" :class="{ 'field-wide': field.wide || field.type === 'textarea', 'field-sized': field.width != null }" :style="field.width != null ? { '--field-width': typeof field.width === 'number' ? `${field.width}px` : field.width } : undefined">
         <label :for="fieldId(field.key)">{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></label>
         <textarea v-if="readonly" :value="readonlyValue(field)" :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label" readonly rows="1" class="readonly-text" />
         <InlineDocumentField v-else-if="field.upload" v-model="model[field.key]" :field="field" :disabled="disabled || field.readonly" :id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" @busy="emit('uploading', $event)" />
@@ -99,6 +114,9 @@ function readonlyValue(field: Field) {
         <ElSelect v-else-if="field.type === 'multi' && field.searchableMulti" v-model="model[field.key]" :ref="(el: any) => { if (el) multiSelects.set(field.key, el); else multiSelects.delete(field.key) }" multiple filterable fit-input-width popper-class="executor-options" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" :id="fieldId(field.key)" :aria-label="field.label" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly" placeholder="可搜索姓名并选择多人" no-match-text="没有匹配的人员" no-data-text="暂无可选人员">
           <ElOption v-for="option in optionsOf(field)" :key="option.value" :label="option.label" :value="option.value" />
           <template #footer><div class="executor-options-footer"><span>已选 {{ model[field.key]?.length || 0 }} 人</span><el-button size="small" type="primary" @click="multiSelects.get(field.key)?.blur()">完成选择</el-button></div></template>
+        </ElSelect>
+        <ElSelect v-else-if="field.type === 'select' && field.searchable" v-model="model[field.key]" filterable fit-input-width :clearable="Boolean(field.optional)" popper-class="executor-options" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" :id="fieldId(field.key)" :aria-label="field.label" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly" placeholder="可搜索姓名并选择" no-match-text="没有匹配的人员" no-data-text="暂无可选人员">
+          <ElOption v-for="option in optionsOf(field)" :key="option.value" :label="option.label" :value="option.value" />
         </ElSelect>
         <select
           :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"
@@ -156,6 +174,14 @@ function readonlyValue(field: Field) {
   </div>
 </template>
 <style scoped>
+.row-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.row-card { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--surface-border); border-radius: 8px; background: var(--surface, #fff); font-size: 13px; }
+.row-card-line { display: flex; gap: 6px; line-height: 1.6; }
+.row-card-line > span { color: var(--mute); flex: none; }
+.row-card-line > b { font-weight: 500; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.row-card-flow { display: grid; gap: 4px; }
+.row-card-flow > span { color: var(--mute); }
+.row-card-empty { color: var(--mute); font-size: 13px; padding: 8px 0; }
 .readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: var(--ink); padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: var(--ink); }
 .readonly-fields .field > label { color: var(--mute); font-size: 12px; }
 .readonly-fields .field { gap: 4px; }
@@ -163,4 +189,10 @@ function readonlyValue(field: Field) {
 .field-help { display: grid; gap: 4px; }
 .field-error { color: var(--risk); font-size: 13px; }
 .field :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--risk); }
+@media (max-width: 600px) {
+  /* 复选框（启用等）默认只有 16px 高：整行作为 40px 触控区。 */
+  .field:has(> input[type='checkbox']) { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 40px; }
+  .field:has(> input[type='checkbox']) > label { display: flex; align-items: center; min-height: 40px; }
+  .role-checks label { display: flex; align-items: center; min-height: 40px; }
+}
 </style>

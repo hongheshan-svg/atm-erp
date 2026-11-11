@@ -38,10 +38,10 @@ it('维护 BOM 只提交本次变更，不再把整张 BOM 灌进表单', async 
 it('BOM 单行修改只提交这一行并带上当前版本', async () => {
   vi.mocked(read).mockResolvedValue({ revision: 'rev-9', lines: [] })
   const row = { id: 5, project: 7, item: 3, item_code: 'M1', item_name: '导轨', quantity: '4.000', assembly_unit: '主机' }
-  expect(actionNames('bom', { ...row, can_edit_bom: true })).toEqual(['修改此行', '移除'])
+  expect(actionNames('bom', { ...row, can_edit_bom: true })).toEqual(['修改此行', '替换物料', '移除'])
   const command = await actionCommand('bom', row, '修改此行')
   expect(command.path).toBe('/business/projects/7/revise-bom/')
-  expect(command.initial?.quantity).toBe('4.000')
+  expect(command.initial?.quantity).toBe('4')
   expect(command.prepare?.({ quantity: '6', assembly_unit: '主机', change_note: 'ECN-3', applicant: '' })).toEqual({
     expected_revision: 'rev-9',
     lines: [{ id: 5, item: 3, quantity: '6', assembly_unit: '主机', change_note: 'ECN-3', required_date: null, application_date: null, applicant: '' }],
@@ -91,10 +91,11 @@ it('收货与隔离品命令提交前过滤两项都为 0 的行，全部为 0 �
   expect(() => accept.prepare?.({ lines: [{ line: 1, quantity: '0' }] })).toThrow('请至少填写一条到货数量')
 })
 
-it('未批准采购显示作废采购，已批准显示取消未收余量，走同一接口', async () => {
+it('草稿与待审批采购显示作废采购，已批准显示取消未收余量，走同一接口', async () => {
   user.value = { id: 1, roles: ['purchaser'] }
   expect(actionNames('purchases', { status: 'draft' })).toContain('作废采购')
   expect(actionNames('purchases', { status: 'submitted' })).not.toContain('取消未收余量')
+  expect(actionNames('purchases', { status: 'submitted' })).toContain('作废采购')
   expect(actionNames('purchases', { status: 'approved' })).toContain('取消未收余量')
   expect(actionNames('purchases', { status: 'approved' })).not.toContain('作废采购')
   const voided = await actionCommand('purchases', { id: 9, status: 'draft' }, '作废采购')

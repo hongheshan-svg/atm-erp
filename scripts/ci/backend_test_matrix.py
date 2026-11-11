@@ -50,6 +50,7 @@ TARGETS = {
         'apps.business.tests.test_audit_fixes',
         'apps.business.tests.test_audit_remediation',
         'apps.business.tests.test_audit_business',
+        'apps.business.tests.test_supply_handover',
     ),
     'concurrency': (
         'apps.core.tests.test_concurrency',
@@ -146,6 +147,7 @@ MODULE_TESTS = {
         'manual_codes',
         'transfers',
         'import_feedback',
+        'supply_handover',
     ),
     'inventory': (
         'deletions',
@@ -161,6 +163,7 @@ MODULE_TESTS = {
         'manual_codes',
         'transfers',
         'import_feedback',
+        'supply_handover',
     ),
     'finance': (
         'document_preview',
@@ -184,6 +187,7 @@ MODULE_TESTS = {
         'manual_codes',
         'transfers',
         'import_feedback',
+        'supply_handover',
     ),
     'masterdata': (
         'deletions',
@@ -214,6 +218,7 @@ MODULE_TESTS = {
         'manual_codes',
         'transfers',
         'import_feedback',
+        'supply_handover',
     ),
     'ota': ('ota',),
 }

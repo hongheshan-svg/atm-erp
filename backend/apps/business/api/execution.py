@@ -29,6 +29,11 @@ from .common import ImportableMixin, ReadView, key
 class TaskFilter(filters.FilterSet):
     assignee = filters.NumberFilter(method='filter_assignee')
     supervisor = filters.NumberFilter(method='filter_supervisor')
+    # 「进行中」只是未完成任务里已记录实际开始日期的那部分，不新增状态值。
+    started = filters.BooleanFilter(method='filter_started')
+
+    def filter_started(self, queryset, name, value):
+        return queryset.filter(status='open', started_date__isnull=not value)
 
     def filter_supervisor(self, queryset, name, value):
         return supervised_tasks(
@@ -137,6 +142,14 @@ class TaskView(ImportableMixin, ReadView):
         return response
 
     @action(detail=True, methods=['post'])
+    def edit(self, request, pk=None):
+        return Response(execution.edit_task(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'])
+    def reschedule(self, request, pk=None):
+        return Response(execution.reschedule_task(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
         return Response(
             corrections.change_task(request.user, key(request), self.get_object().pk, request.data, 'assign')
@@ -156,7 +169,8 @@ class TaskView(ImportableMixin, ReadView):
 
 
 class DeliveryView(ImportableMixin, ReadView):
-    queryset = Delivery.objects.select_related('project')
+    # 批次状态、安装人和验收负责人取自本批的安装、验收任务，一次预取。
+    queryset = Delivery.objects.select_related('project').prefetch_related('tasks__assignee', 'tasks__co_assignees')
     serializer_class = DeliverySerializer
     filterset_fields = ['project']
 

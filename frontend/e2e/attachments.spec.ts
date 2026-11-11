@@ -27,7 +27,6 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
   await page.getByRole('dialog').getByLabel('项目名称', { exact: true }).fill(project)
   await selectRemoteOption(page.getByRole('dialog').getByLabel('客户', { exact: true }), { text: customer })
   await page.getByRole('dialog').getByLabel('负责人', { exact: true }).selectOption('1')
-  await page.getByRole('dialog').getByLabel('项目成员', { exact: true }).selectOption('1')
   await save()
   await page.getByRole('link', { name: project, exact: true }).click()
   await expect(page).toHaveURL(/\/projects\/\d+(?:\?|$)/)

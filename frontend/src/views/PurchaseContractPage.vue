@@ -9,10 +9,14 @@ import { termLabel } from '../modules/payment-terms'
 import type { Command, Row } from '../types'
 import ActionDialog from '../components/ActionDialog.vue'
 import { buyer } from '../modules/shared'
+import { money } from '../utils/money'
+import { quantityText } from '../utils/quantity'
 const route = useRoute()
 const data = ref<Row | null>(null), error = ref(''), loading = ref(false)
 const selectedVersion = ref(''), command = ref<Command | null>(null)
 let generation = 0
+// 签署与打印说明：桌面默认展开（不依赖 ::details-content 支持），手机宽度默认收起，省出首屏给合同本身。
+const helpOpen = typeof window === 'undefined' || !window.matchMedia?.('(max-width: 600px)').matches
 onBeforeUnmount(() => { generation++ })
 const payment = computed(() => {
   if (!data.value) return ''
@@ -67,7 +71,7 @@ async function archive() {
     fields: [
       { key: 'document', label: '已签署合同附件', type: 'select', upload: { context: { purchase: Number(purchaseId) }, category: 'contract' }, options: docs.map(d => ({ value: d.id, label: d.original_name })) },
       { key: 'delivery_address', label: '双方确认的收货地址' },
-      { key: 'reason', label: '归档或修订原因', type: 'textarea' },
+      { key: 'reason', label: '归档或修订原因', type: 'textarea', optional: true, placeholder: '选填；修订版本请写明修订内容。不填按「归档采购合同」记录' },
       { key: 'confirmed', label: '已核对签署文件与本版完整合同、明细、条款及收货地址一致', type: 'boolean', initial: false },
     ],
     prepare: values => ({ ...values, expected_snapshot: snapshot }),
@@ -89,8 +93,11 @@ async function archive() {
       <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
       <el-button v-if="buyer() && !data.draft && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">{{ data.archived_version ? '归档新版本' : '归档签署版本' }}</el-button>
       <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : '当前采购资料预览，尚未归档签署版本' }}</span>
-      <p class="contract-help">本页完整显示双方信息、全部明细、合同条款和签章区。打印 / 另存为 PDF 将输出整份合同，内容较长时自动分为多页 A4。</p>
-      <p class="contract-help">签署前请核对图纸版次、技术指标、验收条件及服务时限，并在技术协议或补充约定中明确。归档前需补齐双方资料并核对收货地址；历史归档保留当时条款。</p>
+      <details class="contract-help-details" :open="helpOpen">
+        <summary>签署与打印说明</summary>
+        <p class="contract-help">本页完整显示双方信息、全部明细、合同条款和签章区。打印 / 另存为 PDF 将输出整份合同，内容较长时自动分为多页 A4。</p>
+        <p class="contract-help">签署前请核对图纸版次、技术指标、验收条件及服务时限，并在技术协议或补充约定中明确。归档前需补齐双方资料并核对收货地址；历史归档保留当时条款。</p>
+      </details>
     </aside>
     <div class="contract-pages">
     <article v-if="data" class="contract-paper" aria-label="采购合同预览">
@@ -105,8 +112,8 @@ async function archive() {
       <p v-if="data.delivery_address">收货地址：{{ data.delivery_address }}</p>
       <h2>一、采购明细（CNY 人民币，含税）</h2>
       <p>共 {{ data.lines.length }} 项物料，全部明细如下。</p>
-      <TableScroll label="采购合同"><div data-table-scroll class="contract-table-wrap" role="region" aria-label="完整采购明细" tabindex="0"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td>{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td>{{ line.specification || '—' }}<template v-if="line.drawing_number || line.drawing_revision"><br>图号：{{ line.drawing_number || '—' }}；版次：{{ line.drawing_revision || '—' }}</template><br>{{ line.brand }}</td><td>{{ line.unit }}</td><td>{{ line.quantity }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ line.cancelled_quantity }}</small></td><td>{{ line.unit_price }}</td><td>{{ line.amount }}</td><td>{{ line.due_date }}</td></tr></tbody></table></div></TableScroll>
-      <p class="contract-total">订单原含税合计：人民币 ¥ {{ data.total }}</p>
+      <TableScroll label="采购合同"><div data-table-scroll class="contract-table-wrap" role="region" aria-label="完整采购明细" tabindex="0"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td data-label="序号">{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td data-label="规格 / 品牌">{{ line.specification || '—' }}<template v-if="line.drawing_number || line.drawing_revision"><br>图号：{{ line.drawing_number || '—' }}；版次：{{ line.drawing_revision || '—' }}</template><br>{{ line.brand }}</td><td data-label="单位">{{ line.unit }}</td><td data-label="数量（含已取消）">{{ quantityText(line.quantity) }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ quantityText(line.cancelled_quantity) }}</small></td><td data-label="含税单价">{{ money(line.unit_price) }}</td><td data-label="含税金额">{{ money(line.amount) }}</td><td data-label="交期">{{ line.due_date }}</td></tr></tbody></table></div></TableScroll>
+      <p class="contract-total">订单原含税合计：人民币 ¥ {{ money(data.total) }}</p>
       <section v-for="(section, index) in sections" :key="section.key" class="contract-clauses" :aria-label="section.title">
         <h2>{{ sectionNumber(index + 1) }}、{{ section.title }}</h2>
         <p v-for="(clause, clauseIndex) in section.paragraphs" :key="clauseIndex">{{ clause }}</p>
@@ -146,6 +153,28 @@ async function archive() {
   .contract-paper th:nth-child(1) { width:5%; }.contract-paper th:nth-child(2) { width:20%; }.contract-paper th:nth-child(3) { width:29%; }.contract-paper th:nth-child(4) { width:5%; }.contract-paper th:nth-child(5) { width:8%; }.contract-paper th:nth-child(6) { width:10%; }.contract-paper th:nth-child(7) { width:11%; }.contract-paper th:nth-child(8) { width:12%; }
 }
 @media screen and (max-width:700px) { .contract-paper { padding:20px 12px; }.contract-meta,.contract-parties,.contract-signatures { grid-template-columns:1fr; gap:8px; }.contract-paper table { min-width:650px; } }
+/* 窄屏（≤600px）：明细逐行成卡片，说明默认收起；≥601px 的桌面布局保持不变，说明始终展开。 */
+/* 桌面：details 退化为普通容器（display:contents），说明段落的排版与改动前完全一致。 */
+@media screen and (min-width:601px) {
+  .contract-help-details { display:contents; }
+  .contract-help-details > summary { display:none; }
+}
+@media screen and (max-width:600px) {
+  .purchase-contract-page .contract-toolbar > div:first-child > a { display:inline-flex; align-items:center; min-height:40px; }
+  .contract-actions .contract-help-details { display:block; margin-top:4px; }
+  .contract-actions .contract-help-details > summary { display:flex; align-items:center; min-height:40px; cursor:pointer; }
+  .contract-actions .contract-help-details > summary { font-size:13px; color:var(--brand-ink); }
+  .contract-paper table { display:block; min-width:0; table-layout:auto; font-size:13px; }
+  .contract-paper thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .contract-paper tbody { display:block; }
+  .contract-paper tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px 12px; padding:10px; margin-bottom:10px; border:1px solid var(--ink-6); border-radius:6px; }
+  .contract-paper td { display:block; min-width:0; border:0; padding:0; }
+  .contract-paper td[data-label]::before { content:attr(data-label); display:block; font-size:11px; color:var(--ink-6); }
+  .contract-paper td:nth-child(1) { font-weight:600; }
+  .contract-paper td:nth-child(2),.contract-paper td:nth-child(3) { grid-column:1 / -1; }
+  .contract-paper td:nth-child(2) { font-weight:600; }
+  .contract-paper td small { display:inline; }
+}
 @media print {
   .contract-workspace { display:block; }.contract-actions { display:none !important; }
   @page { size:A4; margin:12mm; }

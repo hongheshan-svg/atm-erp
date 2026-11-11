@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { all } from '../api'
+import { all, read } from '../api'
 import { user } from '../session'
 import { actionCommand as paymentCommand } from './finance'
-import { actionNames, createLabel, reconciliationCommand } from './settlement'
+import { actionCommand as settlementCommand, actionNames, createLabel, reconciliationCommand } from './settlement'
 import { draftKey, loadDraft, saveDraft } from '../form-experience'
 import { purchaseFields } from './purchases'
-import { defaults, payload } from '../forms'
+import { defaults, fieldIssues, payload } from '../forms'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), download: vi.fn() }))
 beforeEach(() => { vi.resetAllMocks(); user.value = { id: 1, role: 'finance' }; vi.mocked(all).mockResolvedValue([]) })
@@ -29,6 +29,39 @@ it('预付款由经理核准，普通对账由财务确认，银行入口仅财�
   expect(actionNames('reconciliations', row)).toContain('确认对账')
   expect(actionNames('reconciliations', { ...row, kind: 'settlement' })).not.toContain('确认对账')
   expect(createLabel('bank-records')).toBe('')
+})
+
+it('确认对账原因选填；仅生成人本人确认预付款时提前提示并要求例外原因', async () => {
+  const statement = { id: 4, status: 'draft', valid: true, kind: 'settlement', created_by: 1 }
+  const plain = await settlementCommand('reconciliations', statement, '确认对账')
+  expect(plain.fields[0]).toMatchObject({ key: 'reason', label: '原因 / 说明', optional: true })
+  expect(plain.notice?.type).toBe('info')
+  expect(plain.notice?.text).not.toContain('本对账单由你生成')
+  user.value = { id: 7, roles: ['admin'] }
+  const own = await settlementCommand('reconciliations', { ...statement, kind: 'prepayment', created_by: 7 }, '确认对账')
+  expect(own.notice).toMatchObject({ type: 'warning' })
+  expect(own.notice?.text).toContain('本对账单由你生成，本人确认须填写例外原因')
+  expect(own.fields[0]?.optional).toBeFalsy()
+  expect(fieldIssues(own.fields, defaults(own.fields)).map(issue => issue.path)).toEqual(['reason'])
+  const other = await settlementCommand('reconciliations', { ...statement, kind: 'prepayment', created_by: 3 }, '确认对账')
+  expect(other.fields[0]?.optional).toBe(true)
+  expect(other.notice?.text).not.toContain('本对账单由你生成')
+  user.value = { id: 3, roles: ['manager'] }
+  expect((await settlementCommand('reconciliations', { ...statement, kind: 'prepayment', created_by: 3 }, '确认对账')).blocked).toContain('须由其他项目经理或管理员确认')
+})
+
+it('财务看不到预付款确认按钮时，在对账明细中说明须由项目经理或管理员确认', async () => {
+  const detail = { id: 4, status: 'draft', valid: true, kind: 'prepayment', snapshot: { project: { name: '上料线' }, entry: { title: '预付款', amount: '100', credit_amount: '0' }, payments: [] } }
+  vi.mocked(read).mockResolvedValue(detail)
+  user.value = { id: 1, roles: ['finance'] }
+  const shown = await settlementCommand('reconciliations', detail, '查看对账明细')
+  expect(shown.initial?.confirm_note).toBe('预付款对账须由项目经理或管理员确认')
+  expect(shown.fields[0]).toMatchObject({ key: 'confirm_note', label: '确认要求', readonly: true })
+  user.value = { id: 2, roles: ['manager'] }
+  expect((await settlementCommand('reconciliations', detail, '查看对账明细')).fields.some(f => f.key === 'confirm_note')).toBe(false)
+  user.value = { id: 1, roles: ['finance'] }
+  vi.mocked(read).mockResolvedValue({ ...detail, kind: 'settlement' })
+  expect((await settlementCommand('reconciliations', detail, '查看对账明细')).fields.some(f => f.key === 'confirm_note')).toBe(false)
 })
 
 it('采购付款和退款必选有效对账，客户收款可不选', async () => {

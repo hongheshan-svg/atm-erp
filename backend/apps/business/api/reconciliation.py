@@ -53,6 +53,7 @@ class ReconciliationSerializer(serializers.ModelSerializer):
             'reason',
             'confirmed_name',
             'confirmed_at',
+            'created_by',
             'void_reason',
             'created_at',
         ]

@@ -26,10 +26,17 @@ test('真实表格预览后导入物料，按筛选导出全部结果和报表',
   const csv = header + '\n' + Array.from({ length: 12 }, (_, i) => `${prefix}-${i},导入验收${prefix.slice(6)}-${i},规格A-${prefix.slice(6)}-${i},,,21,品牌B,标准件,台,`).join('\n')
   await dialog.locator('input[type=file]').setInputFiles({ name: 'items.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
   await expect(dialog.getByText('共 12 条，确认时再次校验', { exact: false })).toBeVisible()
-  const previewTable = dialog.locator('.el-table').last()
-  await expect(previewTable.locator('thead')).toContainText('物料名称')
-  await expect(previewTable.locator('thead')).toContainText('品牌')
-  await expect(previewTable.locator('tbody tr').first()).toContainText('品牌B')
+  if (info.project.name === 'mobile') {
+    // 手机宽度下导入预览是逐行卡片，每列一行「标签：值」，同时核对列名和取值。
+    const card = dialog.locator('.import-cards > li.import-card').first()
+    await expect(card).toContainText(`物料名称：导入验收${prefix.slice(6)}-0`)
+    await expect(card).toContainText('品牌：品牌B')
+  } else {
+    const previewTable = dialog.locator('.el-table').last()
+    await expect(previewTable.locator('thead')).toContainText('物料名称')
+    await expect(previewTable.locator('thead')).toContainText('品牌')
+    await expect(previewTable.locator('tbody tr').first()).toContainText('品牌B')
+  }
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeEnabled()
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeInViewport({ ratio: 1 })
   await page.screenshot({ path: info.outputPath('import-preview.png'), animations: 'disabled' })

@@ -521,6 +521,7 @@ button:focus-visible {
   .action-dialog .line-fields-dense > .line-number { flex: 0 0 50px; margin: 0 0 10px; white-space: nowrap; }
   .action-dialog .line-fields-dense > .fields-inline > .field { flex: 1 1 0; min-width: 0; gap: 4px; position: relative; }
   .action-dialog .line-fields-dense > .fields-inline > .field:first-child { flex-grow: 1.8; }
+  .action-dialog .line-fields-dense > .fields-inline > .field.field-sized { flex: 0 0 var(--field-width); }
   .action-dialog .line-fields-dense > .el-button { flex: none; margin: 0; }
   .action-dialog .line-fields-dense .field > label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .action-dialog .line-fields-dense .field > label small { display: none; }
@@ -806,6 +807,11 @@ button:focus-visible {
 .resource-status-tabs { display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto; gap: 4px; padding: 3px; margin: 0; background: var(--line-2); border-radius: var(--r-field); max-width: max-content; }
 .resource-status-tabs button { background: transparent; border: 0; border-radius: var(--r-ctl); padding: 5px 12px; color: var(--ink-3); cursor: pointer; white-space: nowrap; font-size: 13px; }
 .resource-status-tabs button[aria-pressed='true'] { color: var(--brand-ink); background: #fff; font-weight: 600; box-shadow: var(--shadow-card); }
+/* 手机端：状态页签独占一行、放不下就换行，不再被截成半个字；按文字自然宽度左对齐排列，触控高度 36px。 */
+@media (max-width: 600px) {
+  .resource-status-tabs { flex: 1 1 100%; flex-wrap: wrap; max-width: 100%; overflow-x: visible; }
+  .resource-status-tabs button { flex: 0 0 auto; min-height: 36px; padding: 5px 10px; }
+}
 .resource-search { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .resource-search input { max-width: 360px; }
 .resource-search select, .resource-search input:not([type='search']) { width: 150px; max-width: 100%; }
@@ -895,6 +901,10 @@ button:focus-visible {
   .project-filter { flex-wrap: wrap; }
   .project-filter .remote-select { flex: 1 1 100%; }
 }
+/* 手机端首屏留给列表：模块说明文字不占行，需要时在桌面端查看。 */
+@media (max-width: 760px) {
+  .page-heading .muted { display: none; }
+}
 .project-flow.panel { padding: 12px 16px; margin-bottom: 12px; }
 
 /* ── 原生控件与 Element Plus 对齐：同样的高度、描边、箭头和选中色 ── */
@@ -926,4 +936,16 @@ textarea:focus { border-color: var(--brand); }
 @media (min-width: 761px) {
   .page-heading > div:first-child { flex: 1 1 0; min-width: 0; }
   .module-toolbar-target { flex: none; max-width: 100%; }
+}
+
+/* 手机端导航外壳：抽屉可滚动、菜单与账号按钮达到 40px 触控区；只约束顶栏和侧栏，不涉及列表与对话框。 */
+@media (max-width: 760px) {
+  .shell .sidebar.mobile-open { overflow-y: auto; overscroll-behavior: contain; }
+  .mobile-menu-toggle { height: 40px; min-height: 40px; min-width: 56px; }
+  .topbar > .el-button { height: 40px; min-height: 40px; }
+}
+
+/* 窄屏：所有对话框里的按钮触控区不小于 40px（导入、批量删除、附件、工时明细等）。 */
+@media (max-width: 600px) {
+  .el-dialog .el-button:not(.el-button--small):not(.is-text) { min-height: 40px; }
 }

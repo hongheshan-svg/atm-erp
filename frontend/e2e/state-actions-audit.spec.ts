@@ -110,7 +110,8 @@ test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本�
   await dialog(warehouse).getByLabel('实盘数量', { exact: true }).fill('4')
   await reason(warehouse, '重新核对实盘四件')
   await submit(warehouse, `business/stocks/${stock.id}/count/`)
-  await expect(row(warehouse, itemName)).toContainText('4.000')
+  // 库存数量格显示「4 件」；按可见文字（单元格之间有分隔）判断，避免与相邻格「主仓」粘连或匹配隐藏的窄屏摘要。
+  await expect(row(warehouse, itemName)).toContainText(/(^|\s)4(\s|$)/, { useInnerText: true })
   expect(await api(page, `business/stocks/${stock.id}/`)).toMatchObject({ quantity: '4.000', value: '80.00' })
   const moves = await api(page, `business/moves/?stock=${stock.id}&kind=count`)
   expect(moves.count).toBe(2)
@@ -148,7 +149,9 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
   await dialog(warehouse).getByLabel('数量', { exact: true }).fill('1')
   await reason(warehouse, '尺寸不符供应商确认退一件')
   await submit(warehouse, `business/moves/${receipt.id}/return-purchase/`)
-  await expect(row(warehouse, itemName).filter({ hasText: '采购退货' })).toContainText('-1.000')
+  // 手机上收货流水行也显示「采购退货」按钮，排除带该按钮的行才是退货流水本身。
+  const returnRow = row(warehouse, itemName).filter({ hasText: '采购退货' }).filter({ hasNot: warehouse.getByRole('button', { name: '采购退货', exact: true }) })
+  await expect(returnRow).toContainText(/-1(\s|$)/)
   expect(await api(page, `business/stocks/${receipt.stock}/`)).toMatchObject({ quantity: '2.000', value: '200.00' })
   const entry = (await api(page, `business/entries/?project=${current.id}&kind=payable`)).results[0]
   expect(entry).toMatchObject({ amount: '300.00', credit_amount: '100.00', balance: '200.00' })
@@ -197,7 +200,10 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
   expect(closed.returned).toBe(returned.results[0].id)
   expect(closed.history).toHaveLength(3)
   await action(warehouse, row(warehouse, order.code), '质保记录')
-  const warrantyRow = dialog(warehouse).locator('.el-table__body tr').filter({ hasText: '气缸密封失效' })
+  // 手机宽度下只读明细表改成逐行「标签：值」卡片列表，桌面仍是表格。
+  const warrantyRow = (info.project.use.isMobile
+    ? dialog(warehouse).getByRole('list', { name: '质保记录', exact: true }).getByRole('listitem')
+    : dialog(warehouse).locator('.el-table__body tr')).filter({ hasText: '气缸密封失效' })
   await expect(warrantyRow).toContainText('已关闭')
   await expect(warrantyRow).toContainText('双方确认原批次退货退款完成，关闭质保事项')
   // Warranty handling must reference the existing return, without moving stock or crediting twice.
@@ -241,7 +247,7 @@ test('项目经理重新分配、取消、重开并确认任务，员工只查�
   await member.reload()
   await api(member, `business/tasks/${task.id}/complete/`, { reason: '执行人不能直接确认完成' }, 403)
   await action(manager, row(manager, title), '完成任务')
-  await reason(manager, '项目经理核对新执行人的设计成果')
+  await dialog(manager).getByLabel('完成说明', { exact: true }).fill('项目经理核对新执行人的设计成果')
   await submit(manager, `business/tasks/${task.id}/complete/`)
   const done = await api(page, `business/tasks/${task.id}/`)
   expect(done.status).toBe('done')
@@ -277,7 +283,7 @@ test('管理员页面锁账阻止专业主管跨期工时，重开后补录并�
     await action(member, row(member, title), '登记工时')
     await dialog(member).getByLabel('日期', { exact: true }).fill(cutoff)
     await dialog(member).getByLabel('工时', { exact: true }).fill('1')
-    await reason(member, '跨期漏记设计一小时')
+    await dialog(member).getByLabel('工作内容', { exact: true }).fill('跨期漏记设计一小时')
     await submit(member, `business/tasks/${task.id}/time/`, 409)
     await expect(dialog(member).getByRole('alert')).toContainText(`业务已锁账至 ${cutoff}`)
     expect((await api(page, `business/time/?task=${task.id}`)).count).toBe(0)

@@ -654,6 +654,10 @@ class RoleResponsibilityTests(BusinessFixtures, TestCase):
                 'snapshot',
                 'purchase',
                 'warnings',
+                # BOM 复核只含物料名称与数量，不含成本。
+                'bom_warnings',
+                'bom_lines',
+                'over_bom_reason',
             },
         )
         rejected = self.post('purchase_manager', f'purchases/{purchase.pk}/approve/', status=409)

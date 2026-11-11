@@ -3,6 +3,9 @@ from rest_framework.response import Response
 
 from apps.core.permissions import (
     PURCHASE_READERS,
+    WAREHOUSE,
+    require_project,
+    require_role,
 )
 
 from ..models import (
@@ -43,6 +46,21 @@ class StockView(ImportableMixin, ReadView):
     def issue(self, request):
         return Response(inventory.issue(request.user, key(request), request.data))
 
+    @action(detail=False, methods=['get', 'post'], url_path='bom-issue')
+    def bom_issue(self, request):
+        """按项目 BOM 批量领料：GET 列出本项目未领完且有库存的物料与预填数量，POST 一次出库多行。"""
+        if request.method == 'POST':
+            return Response(inventory.issue_batch(request.user, key(request), request.data))
+        from django.shortcuts import get_object_or_404
+
+        from ..models import Project
+        from ..services.common import identity
+
+        require_role(request.user, WAREHOUSE)
+        project = get_object_or_404(Project.objects, pk=identity(request.query_params.get('project'), 'project'))
+        require_project(request.user, project, WAREHOUSE)
+        return Response(inventory.bom_issue_lines(project))
+
     @action(detail=True, methods=['post'])
     def count(self, request, pk=None):
         return Response(inventory.count(request.user, key(request), self.get_object().pk, request.data))
@@ -50,7 +68,7 @@ class StockView(ImportableMixin, ReadView):
 
 class MoveView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
-    queryset = StockMove.objects.select_related('stock__item')
+    queryset = StockMove.objects.select_related('stock__item', 'project', 'purchase_line__purchase', 'created_by')
     serializer_class = MoveSerializer
     filterset_fields = ['project', 'stock', 'kind']
 

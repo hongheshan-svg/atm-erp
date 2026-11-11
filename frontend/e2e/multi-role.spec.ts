@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures'
+import { test, expect, login, goToListPage, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 test('管理员分配采购兼仓库，保存回显并即时撤销采购权限', async ({ page }, info) => {
@@ -26,12 +26,13 @@ test('管理员分配采购兼仓库，保存回显并即时撤销采购权限',
   const listing = await page.request.get('/api/auth/users/', { headers })
   const panel = page.getByRole('region', { name: '用户管理', exact: true })
   const lastPage = Math.ceil((await listing.json()).count / Number(await panel.getByLabel('每页显示条目', { exact: true }).inputValue()))
-  if (lastPage > 1) await panel.locator('.el-pagination').getByText(String(lastPage), { exact: true }).click()
+  if (lastPage > 1) await goToListPage(panel, lastPage)
   const row = panel.locator('.el-table__body tr').filter({ hasText: username })
-  await expect(row.locator('.role-tags')).toContainText('采购员')
-  await expect(row.locator('.role-tags')).toContainText('仓管')
-  await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
+  // 手机窄屏不显示角色列，角色并在姓名格的摘要行里。
+  const roles = info.project.name === 'mobile' ? row.locator('.mobile-row-summary:not(.mobile-row-links)') : row.locator('.role-tags')
+  await expect(roles).toContainText('采购员')
+  await expect(roles).toContainText('仓管')
+  await openRowAction(page, row, '编辑')
   expect(await dialog.getByRole('group', { name: '角色', exact: true }).locator('input:checked').evaluateAll(els => els.map(el => (el as HTMLInputElement).value).sort())).toEqual(['purchaser', 'warehouse'])
   await page.screenshot({ path: info.outputPath('multiple-roles.png'), fullPage: true, animations: 'disabled' })
   await login(page, username, password)

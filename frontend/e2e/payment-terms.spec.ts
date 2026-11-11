@@ -1,5 +1,5 @@
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, login, detailAction, type Page } from './fixtures'
+import { test, expect, login, detailAction, openRowAction, type Page } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 async function select(page: Page, label: string, text: string) {
@@ -90,13 +90,12 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
     await dialog(page).getByLabel('实际到货 / 合格收货日期', { exact: true }).fill(date!)
     await dialog(page).getByLabel('补录原因', { exact: true }).fill('依据原始送货单补录历史收货，日期与数量已核对')
     await dialog(page).getByLabel('数量', { exact: true }).fill(quantity!)
-    await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('按原收货记录核对')
+    await dialog(page).getByLabel('送货单号 / 备注', { exact: true }).fill('按原收货记录核对')
     await save(page, `/purchases/${purchase.id}/receive/`)
   }
   await page.goto(`/erp/projects/${signed.project}?tab=finance&section=entries`)
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: detail.code }).first()
-  await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name: '查看到期明细', exact: true }).click()
+  await openRowAction(page, row, '查看到期明细')
   await expect(dialog(page)).toContainText('2026-08-30')
   await expect(dialog(page)).toContainText('2026-09-30')
   await expect(dialog(page)).toContainText('200.00')
@@ -106,7 +105,20 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
 
   await page.goto('/erp/finance?section=monthly')
   await page.getByLabel('对账供应商', { exact: true }).selectOption(String(supplier.id))
-  await page.getByLabel('对账月份', { exact: true }).fill('2026-08')
+  const month = page.getByLabel('对账月份', { exact: true })
+  if (info.project.name === 'mobile') {
+    // 手机端是中文月份选择器（显示「2026年08月」），不接受键入；点开后翻到 2026 年再点「八月」。
+    await month.click()
+    const picker = page.getByRole('dialog').filter({ has: page.getByRole('grid', { name: '使用方向键与 Enter 键可选择月份' }) })
+    const year = picker.getByRole('button', { name: /^\d{4} 年$/ })
+    for (let shown = parseInt((await year.textContent())!); shown !== 2026; shown = parseInt((await year.textContent())!)) {
+      await picker.getByRole('button', { name: shown > 2026 ? '前一年' : '后一年', exact: true }).click()
+      await expect(year).toHaveText(`${shown > 2026 ? shown - 1 : shown + 1} 年`)
+    }
+    await picker.getByRole('gridcell', { name: '8 月', exact: true }).click()
+    await expect(picker).toBeHidden()
+    await expect(month).toHaveValue('2026年08月')
+  } else await month.fill('2026-08')
   await page.getByRole('button', { name: '查询月度对账', exact: true }).click()
   await expect(page.getByRole('region', { name: '供应商月度对账', exact: true })).toContainText('期初 200.00')
   await page.getByRole('button', { name: '确认月度对账', exact: true }).click()

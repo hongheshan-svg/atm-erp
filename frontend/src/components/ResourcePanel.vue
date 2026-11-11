@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
 import { taskSyncHint, taskElapsedLabel, taskVarianceLabel } from '../modules/milestones'
-import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, useId, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
-import { read, download } from '../api'
+import { all, read, download } from '../api'
 import {
   columns,
   endpoint,
@@ -23,15 +23,15 @@ import ListPagination from './ListPagination.vue'
 import TransferTools from './TransferTools.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
 import AttachmentDialog from './AttachmentDialog.vue'
-import { pageSize } from '../pagination'
+import { pageSize as globalPageSize } from '../pagination'
 import { Refresh } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { user, operations } from '../session'
+import { user, operations, hasRoles } from '../session'
 import StatusBadge from './StatusBadge.vue'
 import RecordContext from './RecordContext.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import { scopedImportProject } from '../utils/import-context'
-import { isOverdueCell, resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
+import { extraFilters, filterQuery, isOverdueCell, resourceFilters, searchableResources, sidePanelResources } from '../resource-ui'
 import { today } from '../forms'
 import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
@@ -50,7 +50,25 @@ const props = withDefaults(defineProps<{
   projectId?: number
   revision?: number
   allowCreate?: boolean
+  // 覆盖内置的空状态说明；页面在别处提供了入口（如页签内的按钮）时用它给出准确指引。
+  emptyHint?: string
+  // 不显示「可联系负责此业务的同事处理」（页面已提供其他入口，或联系同事没有意义）。
+  hideContactHint?: boolean
+  // 每页条数下限（全局设置更小时按它显示）；项目内任务表默认 50，免得六阶段任务翻页。
+  defaultPageSize?: number
 }>(), { allowCreate: true })
+const pageFloor = computed(() => props.defaultPageSize ?? (props.resource === 'tasks' && props.projectId ? 50 : 0))
+const pageSize = computed(() => Math.max(globalPageSize.value, pageFloor.value))
+// 手机宽度下任务表改成「名称格内带主操作」，不依赖横向滑动。
+const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const query = window.matchMedia('(max-width: 600px)')
+  const sync = () => { mobile.value = query.matches }
+  query.addEventListener?.('change', sync)
+  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
+}
+// 手机宽度的窄屏列表：只留名称、状态和操作，其余信息并入名称格的副行（完整信息在详情里）。
+const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || ['projects', 'moves'].includes(props.resource)))
 const emit = defineEmits<{ changed: [] }>()
 const records = ref<Row[]>([])
 const count = ref(0)
@@ -67,7 +85,7 @@ const wide = computed(() => wideCommand(command.value))
 const savedRecord = ref<{ title: string; resource: string; id: number; project?: number; timeTask?: number } | null>(null)
 const timeTask = ref<number | null>(null)
 const hasFilter = computed(() => !!(appliedSearch.value || filterValue.value || Object.keys(appliedExtra.value).length))
-const emptyHint = computed(() => ({
+const fallbackHint = computed(() => ({
   purchases: '按项目缺料可从 BOM 多选下单；零星物料可新建采购。',
   projects: '已签约销售请从销售单生成项目，避免重复创建。',
   entries: '签约、批准采购会自动产生应收应付；费用通过登记费用添加。',
@@ -93,9 +111,27 @@ const notCustomer = (partner: Row) => partner.kind !== 'customer'
 watch(supplierFilter, (value, before) => { if (value !== before) searchRecords() })
 const appliedExtra = ref<Row>({})
 const unsettled = ref(false)
+const extraConfig = computed(() => extraFilters[props.resource] || [])
+const filterId = useId()
+const filtersOpen = ref(false)
+// 窄屏下筛选控件多于 2 个时收起，只留搜索框和「筛选 · N」；N 为已填写的筛选数。
+const filterControls = computed(() => (props.resource === 'users' && filterConfig.value ? 1 : 0) + (['users', 'items', 'partners'].includes(props.resource) ? 1 : 0) + (props.resource === 'stocks' ? 1 : 0) + (['stocks', 'items'].includes(props.resource) ? 1 : 0) + (['purchases', 'entries'].includes(props.resource) ? 1 : 0) + (props.resource === 'audit' ? 2 : 0) + extraConfig.value.length)
+const collapsible = computed(() => mobile.value && filterControls.value > 2)
+const activeFilters = computed(() => [
+  props.resource === 'users' && filterValue.value, enabledFilter.value, locationFilter.value, brandFilter.value, unsettled.value, dateFrom.value, dateTo.value, supplierFilter.value != null && props.resource === 'purchases',
+  ...Object.values(extraValues.value),
+].filter(Boolean).length)
+const blankExtra = () => Object.fromEntries(extraConfig.value.map(item => [item.key, '']))
+const extraValues = ref<Record<string, string>>(blankExtra())
+const directory = ref<Row[]>([])
+watch(() => props.resource, async () => {
+  if (!extraConfig.value.some(item => item.kind === 'person')) return
+  try { directory.value = await all('/auth/directory/') } catch { directory.value = [] }
+}, { immediate: true })
+const personOptions = (roles: string[] = []) => directory.value.filter(u => !roles.length || hasRoles(u, roles)).map(u => ({ value: u.id, label: String(u.display_name || u.username) }))
 const filterConfig = computed(() => resourceFilters[props.resource])
 const filterParams = computed(() => ({
-  ...(filterConfig.value && filterValue.value ? { [filterConfig.value.key]: filterValue.value } : {}),
+  ...filterQuery(filterConfig.value, filterValue.value),
   ...appliedExtra.value,
 }))
 const sidePanel = computed(() => sidePanelResources.includes(props.resource))
@@ -154,21 +190,53 @@ let focused = ''
 // Columns merged as "main value + secondary line": the secondary column is dropped from the
 // header so the table fits its container. A right-fixed action column overlaps whatever sits
 // under it and the body never scrolls horizontally, so an extra column would be unreachable.
-const merged: Record<string, Record<string, string>> = {
+const merged: Record<string, Record<string, string | string[]>> = {
   sales: { code: 'project_code', name: 'customer_name' },
   projects: { name: 'code' },
   users: { display_name: 'username' },
-  entries: { title: 'kind', partner_name: 'project_name', due_date: 'due_amount', balance: 'paid_amount' },
-  tasks: { title: 'project_name', stage_label: 'milestone_label', assignee_name: 'supervisor_name', due_date: 'completed_date', elapsed_days: 'started_date' },
+  entries: { title: 'kind', partner_name: 'project_name', due_date: ['due_amount', 'agreed_payment_date'], balance: 'paid_amount' },
+  tasks: { title: 'project_name', stage_label: 'milestone_label', assignee_name: ['supervisor_name', 'discipline_label'], due_date: ['completed_date', 'schedule_variance_days'], logged_hours: ['elapsed_days', 'started_date'] },
   time: { task_title: 'project_name' },
   stocks: { item_name: 'item_code', specification: 'brand' },
+  purchases: { supplier_name: 'project_name', payment_term: 'payment_due_date' },
+  items: { drawing_number: 'drawing_revision', specification: ['unit', 'brand'], product_category: 'part_type' },
 }
 // 项目页里的列表已经限定了项目，副行不再重复项目名。
-const pairs = computed(() => Object.fromEntries(
-  Object.entries(merged[props.resource] || {}).filter(([, secondary]) => !props.projectId || secondary !== 'project_name'),
+const pairs = computed<Record<string, string[]>>(() => Object.fromEntries(
+  Object.entries(merged[props.resource] || {})
+    .map(([key, secondary]) => [key, [secondary].flat().filter(name => !props.projectId || name !== 'project_name')] as [string, string[]])
+    .filter(([, secondary]) => secondary.length),
 ))
 const combinedKey = computed(() => Object.keys(pairs.value)[0])
-const secondaryKeys = computed(() => new Set(Object.values(pairs.value)))
+const secondaryKeys = computed(() => new Set(Object.values(pairs.value).flat()))
+// 副行没有内容（空值、「—」）时不画一行空白。
+function secondaryText(row: Row, key: string) {
+  const format = columns[props.resource]?.find(c => c.key === key)?.format
+  const text = format ? format(row) : cell(row, key)
+  return text === '—' ? '' : text
+}
+// 合并列的表头里，副列名用简称，免得表头折成三四行。
+const shortLabels: Record<string, string> = { supervisor_name: '主管', discipline_label: '专业', completed_date: '实际完成', schedule_variance_days: '提前/延期', started_date: '开始日', elapsed_days: '历时', milestone_label: '节点', due_amount: '到期金额', agreed_payment_date: '约定付款日' }
+function columnLabel(col: { key: string; label: string }) {
+  const secondary = pairs.value[col.key]
+  return secondary ? [col.label, ...secondary.map(key => shortLabels[key] || labelOf(key))].join(' / ') : col.label
+}
+// 列宽按内容类型定：名称类给足宽度承担弹性，日期、金额、短状态收窄，1366 宽下不出现底部横向滚动。
+const nameColumns = new Set(['supplier_name', 'project_name', 'customer_name', 'partner_name', 'item_name', 'task_title'])
+function columnWidth(col: { key: string; format?: unknown }) {
+  const key = col.key
+  if (key === 'stage_label') return 150
+  if (key === combinedKey.value || key === 'title' || key === 'name') return props.resource === 'tasks' ? 180 : props.resource === 'projects' ? 260 : 190
+  if (key === 'status' && col.format) return 150
+  if (key === 'payment_term') return 130
+  if (['status', 'is_active'].includes(key)) return 100
+  if (['discipline_label', 'logged_hours'].includes(key)) return 104
+  if (nameColumns.has(key)) return 180
+  if (key === 'specification') return 150
+  if (key.endsWith('_date') || key === 'date') return 110
+  if (moneyKeys.has(key)) return 110
+  return 125
+}
 const labelOf = (key: string) => columns[props.resource]?.find(c => c.key === key)?.label
 // 只调整列表里的先后：状态和日期紧跟名称，窄屏下不会被右侧固定的操作列挡住。导出与字段定义的顺序不变。
 const leading: Record<string, string[]> = {
@@ -180,16 +248,42 @@ const shownColumns = computed(() => {
   const visible = (columns[props.resource] || []).filter(col => (!props.projectId || col.key !== 'project_name') && !secondaryKeys.value.has(col.key))
   const first = leading[props.resource] || []
   const rank = (key: string) => first.includes(key) ? first.indexOf(key) : first.length
-  return columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
+  const sorted = columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
+  return mobileTasks.value && sorted ? sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key) || (props.resource === 'moves' && col.key === 'kind')) : sorted
 })
+// 窄屏下被收进名称格副行的列（不含首列自己的合并副行，那些本来就显示在名称下面）。
+const hiddenColumns = computed(() => (columns[props.resource] || []).filter(col => {
+  const first = shownColumns.value?.[0]?.key
+  return !shownColumns.value?.some(c => c.key === col.key) && !pairs.value[first || '']?.includes(col.key) && (!props.projectId || col.key !== 'project_name')
+}))
 // 按钮写明方向：应收是收款，应付和费用是付款；动作本身仍是同一个「登记收付款」。
 function actionLabel(row: Row, name: string) {
   if (props.resource !== 'entries' || name !== '登记收付款' || String(row.balance).startsWith('-')) return name
   return row.kind === 'receivable' ? '登记收款' : '登记付款'
 }
+// 操作列宽度随内容走：只有「操作 ▾」或只有一个主按钮的资源收窄到 96，腾出空间给数据列。
+const actionWidth = computed(() => {
+  if (batchVisible.value) return 230
+  // 窄屏：操作列按最长的单个文字按钮收窄/放宽，不让「查看银行明细」这类按钮被裁掉。
+  if (mobileTasks.value) return Math.max(84, ...records.value.map(row => { const sole = soleAction(row); return sole ? sole.length * 13 + 30 : 84 }))
+  if (!records.value.length) return 180
+  return Math.max(...records.value.map(row => {
+    if (props.resource === 'tasks' && taskSyncHint(row)) return 180
+    const primary = !mobileTasks.value && primaryAction(row)
+    const menu = menuGroups(row).length > 0
+    return primary && menu ? 180 : menu || primary ? 96 : 60
+  }))
+})
+// 菜单里只有一项（且没有主按钮）时直接显示成文字按钮，不套下拉。
+function soleAction(row: Row) {
+  if (primaryAction(row) && !mobileTasks.value) return undefined
+  const groups = menuGroups(row)
+  return groups.length === 1 && groups[0]!.actions.length === 1 ? groups[0]!.actions[0] : undefined
+}
 function primaryAction(row: Row) {
   const actions = actionNames(props.resource, row)
-  return primaryActions.find(name => actions.includes(name))
+  // 「退料」是纠错动作：只在从「项目退料」进入的原领料流水（params.kind=issue）里作主按钮，普通库存流水里降为次要按钮。
+  return primaryActions.find(name => actions.includes(name) && (name !== '退料' || props.params?.kind === 'issue'))
 }
 // The menu never repeats the headline button, and only labels its groups when there is more than one.
 function menuGroups(row: Row) {
@@ -206,12 +300,54 @@ function cell(row: Row, key: string) {
   if (!moneyKeys.has(key) || row[key] == null) return display(row[key], key)
   return money(row[key], { refund: key === 'balance' })
 }
-function mobileSummary(row: Row) {
-  if (props.resource === 'purchases' && row.change_request) return '修改申请待处理'
-  if (props.resource === 'entries') return `待结算 ${cell(row, 'balance')} · ${display(row.kind)}`
-  if (props.resource === 'payments') return `${cell(row, 'amount')} 元 · ${row.date}`
-  return [row.status ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : ''].filter(Boolean).join(' · ')
+// 每行 1~2 行摘要；窄屏模式下把被隐藏的列并进来，关键信息不丢。
+const joined = (...parts: unknown[]) => parts.filter(part => part != null && part !== '' && part !== '—').join(' · ')
+function mobileSummary(row: Row): string[] {
+  const lines = (...rows: string[]) => rows.filter(Boolean)
+  if (props.resource === 'purchases' && row.change_request) return ['修改申请待处理']
+  if (props.resource === 'entries') return lines(`待结算 ${cell(row, 'balance')} · ${display(row.kind)}`, mobileTasks.value ? joined(row.partner_name, props.projectId ? '' : row.project_name, row.due_date ? `到期 ${row.due_date}` : '') : '')
+  if (props.resource === 'payments' && !mobileTasks.value) return [`${cell(row, 'amount')} 元 · ${row.date}`]
+  // 库存流水：首行「数量 · 日期」；项目与来源采购单在下一行以链接显示（mobileLinks）。
+  if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), columnText(row, 'created_at'))]
+  // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
+  if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
+  if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
+  if (mobileTasks.value) {
+    if (props.resource === 'purchases') {
+      const amount = row.total_amount ?? row.amount
+      return lines(joined(row.supplier_name, props.projectId ? '' : row.project_name), joined(amount != null && amount !== '' ? `金额 ${money(amount)}` : '', row.next_delivery_date ? `下一交期 ${row.next_delivery_date}` : ''))
+    }
+    if (props.resource === 'items') return lines(joined(row.name, row.specification, row.brand), joined(row.unit, row.drawing_number, columns.items?.find(col => col.key === 'part_type')?.format?.(row)))
+    // 对账、银行流水、收付款流水：两行摘要，金额统一走 money。
+    if (props.resource === 'reconciliations') return lines(joined(row.partner_name || row.entry_title, props.projectId ? '' : row.project_name), joined(row.approved_amount != null && row.approved_amount !== '' ? `额度 ${money(row.approved_amount)}` : '', row.difference != null && row.difference !== '' ? `差异 ${money(row.difference)}` : '', row.confirmed_name))
+    if (props.resource === 'bank-records') {
+      const amountValue = Number(row.amount)
+      const statusText = columns[props.resource]?.find(col => col.key === 'void_reason')?.format?.(row)
+      return lines(joined(Number.isNaN(amountValue) ? '' : `${amountValue < 0 ? '支出' : '收入'} ${money(String(row.amount).replace(/^-/, ''))}`, row.account), joined(row.counterparty, row.remaining_amount != null && row.remaining_amount !== '' ? `待匹配 ${money(row.remaining_amount)}` : '', statusText))
+    }
+    if (props.resource === 'payments') {
+      // 流水没有状态列：冲销状态（已冲销 / 冲销记录）跟在金额后，否则原记录和冲销记录在窄屏上无法区分；正常记录不重复写「有效」。
+      const ledger = columnText(row, 'reversed_by')
+      return lines(joined(row.date, columns[props.resource]?.find(col => col.key === 'amount')?.format?.(row), ledger === '有效' ? '' : ledger), joined(row.partner_name, row.reconciliation_code, props.projectId ? '' : row.project_name))
+    }
+    if (props.resource === 'users') return lines(joined(row.username, (row.roles || [row.role]).map((role: string) => labels[role] || role).join('、')))
+    const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
+    return lines(joined(...rest))
+  }
+  return [joined(row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : '')]
 }
+const columnText = (row: Row, key: string) => { const col = columns[props.resource]?.find(c => c.key === key); return col?.format ? col.format(row) : cell(row, key) }
+// 窄屏摘要中可点击的关联单据（目前只有库存流水的项目与来源采购单）；无权跳转时只显示文字。
+function mobileLinks(row: Row) {
+  if (props.resource !== 'moves' || !mobileTasks.value) return []
+  return (columns.moves || []).filter(col => ['project_name', 'purchase_code'].includes(col.key) && (!props.projectId || col.key !== 'project_name'))
+    .map(col => ({ text: col.format ? col.format(row) : cell(row, col.key), to: col.link?.(row) }))
+    .filter(link => link.text && link.text !== '—')
+}
+// 库存流水逐条备注（如领用工位）在窄屏摘要末行原样显示。
+const mobileNote = (row: Row) => props.resource === 'moves' && mobileTasks.value && row.remark ? String(row.remark) : ''
+// 窄屏下摘要里逾期的计划日期标红。
+const summaryOverdue = (row: Row) => (props.resource === 'tasks' && isOverdueCell('tasks', 'due_date', row, day)) || (props.resource === 'purchases' && isOverdueCell('purchases', 'next_delivery_date', row, day)) || (props.resource === 'projects' && isOverdueCell('projects', 'due_date', row, day))
 async function load(preserveSelection: unknown = false) {
   selectionGeneration++; selectingAll.value = false
   if (preserveSelection !== true) deletionSelection.value = []
@@ -243,7 +379,7 @@ async function load(preserveSelection: unknown = false) {
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
       else if (props.resource === 'bank-records') await action(row, '查看银行明细')
-      else if (props.resource === 'tasks') { command.value = { title: '待办详情', path: '', readonly: true, initial: { ...row, elapsed_label: taskElapsedLabel(row), variance_label: taskVarianceLabel(row) }, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'discipline_label', label: '负责专业' }, { key: 'supervisor_name', label: '负责主管' }, { key: 'description', label: '说明', type: 'textarea' }, { key: 'logged_hours', label: '已登记工时（小时）' }, { key: 'due_date', label: '计划完成日期' }, { key: 'completed_date', label: '实际完成日期' }, { key: 'started_date', label: '实际开始日期' }, { key: 'elapsed_label', label: '任务历时（自然日，含首尾日）' }, { key: 'variance_label', label: '提前／延期' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
+      else if (props.resource === 'tasks') { command.value = { title: '待办详情', path: '', readonly: true, initial: { ...row, description: row.description || '未填写', elapsed_label: taskElapsedLabel(row), variance_label: taskVarianceLabel(row) }, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'discipline_label', label: '负责专业' }, { key: 'supervisor_name', label: '负责主管' }, { key: 'description', label: '完成要求', type: 'textarea', wide: true }, { key: 'logged_hours', label: '已登记工时（小时）' }, { key: 'due_date', label: '计划完成日期' }, { key: 'completed_date', label: '实际完成日期' }, { key: 'started_date', label: '实际开始日期' }, { key: 'elapsed_label', label: '任务历时（自然日，含首尾日）' }, { key: 'variance_label', label: '提前／延期' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
       else await inspect(row)
     }
   } catch (e) {
@@ -323,8 +459,17 @@ async function action(row: Row, name: string) {
     if (current === commandGeneration) error.value = message(e)
   } finally { if (current === commandGeneration) preparing.value = false }
 }
+const flashId = ref<number | null>(null)
+let flashTimer: ReturnType<typeof setTimeout> | undefined
+onBeforeUnmount(() => clearTimeout(flashTimer))
 function saved(result?: Row) {
-  if (result && command.value) {
+  // 任务的开始、完成、改期等行内动作只留顶部提示，不再把表格往下推；登记工时和新建仍保留回执。
+  const quiet = props.resource === 'tasks' && selectedId.value != null && command.value?.title !== '登记工时'
+  if (quiet && command.value) {
+    savedRecord.value = null
+    flashId.value = selectedId.value
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashId.value = null }, 2000)
+  } else if (result && command.value) {
     const target = savedTarget(command.value, result, selectedId.value)
     savedRecord.value = target ? { title: `${command.value.title}成功${result.code ? ` · ${result.code}` : ''}`, ...target, project: Number(selectedRow.value?.project || command.value.initial?.project || props.projectId) || undefined } : null
     if (savedRecord.value && command.value.title === '登记工时') {
@@ -347,7 +492,7 @@ async function viewSaved() {
   try { await inspect(await read(`${endpoint(record.resource)}${record.id}/`)) } catch (e) { error.value = message(e) }
 }
 function resetFilters() {
-  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = false; dateFrom.value = ''; dateTo.value = ''
+  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = false; dateFrom.value = ''; dateTo.value = ''; extraValues.value = blankExtra()
   // 清空供应商由上面的 watch 触发查询；没有选供应商时才需要自己查。
   if (supplierFilter.value == null) searchRecords(); else supplierFilter.value = undefined
 }
@@ -361,6 +506,7 @@ function searchRecords() {
     ...(supplierFilter.value != null && props.resource === 'purchases' ? { supplier: supplierFilter.value } : {}),
     ...(props.resource === 'audit' && dateFrom.value ? { date_from: dateFrom.value } : {}),
     ...(props.resource === 'audit' && dateTo.value ? { date_to: dateTo.value } : {}),
+    ...Object.fromEntries(Object.entries(extraValues.value).filter(([, value]) => value)),
   }
   appliedSearch.value = search.value
   sessionStore.set(searchKey(), appliedSearch.value)
@@ -398,6 +544,12 @@ async function inspect(row: Row) {
     fields: (columns[props.resource] || []).map(col => ({ key: col.key, label: col.label, wide: props.resource === 'audit' && col.key === 'detail' })),
     actions: names.map(label => ({ label, run: () => action(row, label) })),
   }
+  // 执行人要在任务详情里读到交付标准：模板和新建任务都会填「完成要求」，空值明确显示「未填写」。
+  if (props.resource === 'tasks') {
+    const detail = command.value
+    detail.initial = { ...detail.initial, description: row.description || '未填写' }
+    detail.fields = [detail.fields[0]!, { key: 'description', label: '完成要求', type: 'textarea', wide: true }, ...detail.fields.slice(1)]
+  }
 }
 </script>
 <template>
@@ -414,7 +566,8 @@ async function inspect(row: Row) {
       </div>
       <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
         <!-- Leading with the entries that create work; BOM selection is the intended purchase path. -->
-        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="openBom">从 BOM 多选下单</el-button>
+        <!-- 嵌在库存页收货等不允许新建的面板里时不显示采购下单入口。 -->
+        <el-button v-if="resource === 'purchases' && buyer() && allowCreate !== false" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="openBom">从 BOM 多选下单</el-button>
         <el-button v-if="createLabel(resource) && allowCreate !== false" :type="resource === 'purchases' ? undefined : 'primary'" @click="create">{{
           createLabel(resource)
         }}</el-button>
@@ -425,6 +578,8 @@ async function inspect(row: Row) {
     </header>
     <form v-if="searchableResources.includes(resource)" class="resource-search" @submit.prevent="searchRecords">
       <input v-model="search" type="search" :aria-label="`搜索${title}`" placeholder="输入名称、编号或关键词" />
+      <el-button v-if="collapsible" class="filter-toggle" :aria-expanded="filtersOpen" :aria-controls="`${filterId}-filters`" @click="filtersOpen = !filtersOpen">筛选{{ activeFilters ? ` · ${activeFilters}` : '' }} {{ filtersOpen ? '▴' : '▾' }}</el-button>
+      <div :id="`${filterId}-filters`" class="resource-filter-group" :class="{ 'is-collapsed': collapsible && !filtersOpen }">
       <select v-if="resource === 'users' && filterConfig" v-model="filterValue" aria-label="筛选用户角色" @change="searchRecords"><option value="">全部角色</option><option v-for="(label, value) in filterConfig.options" :key="value" :value="value">{{ label }}</option></select>
       <select v-if="['users', 'items', 'partners'].includes(resource)" v-model="enabledFilter" aria-label="筛选启用状态" @change="searchRecords"><option value="">全部状态</option><option value="true">启用</option><option value="false">停用</option></select>
       <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位关键词" />
@@ -432,13 +587,20 @@ async function inspect(row: Row) {
       <RemoteSelect v-if="resource === 'purchases'" v-model="supplierFilter" path="/business/partners/" label="供应商筛选" :accept="notCustomer" commit-on-select />
       <label v-if="resource === 'entries'" class="inline-check"><input v-model="unsettled" type="checkbox" @change="searchRecords" />仅看未结</label>
       <template v-if="resource === 'audit'"><input v-model="dateFrom" type="date" aria-label="开始日期" title="开始日期" /><input v-model="dateTo" type="date" aria-label="结束日期" title="结束日期" /></template>
+      <template v-for="item in extraConfig" :key="item.key">
+        <select v-if="item.kind === 'person'" v-model="extraValues[item.key]" :aria-label="`筛选${item.label}`" @change="searchRecords"><option value="">全部{{ item.label }}</option><option v-for="option in personOptions(item.roles)" :key="option.value" :value="String(option.value)">{{ option.label }}</option></select>
+        <select v-else-if="item.kind === 'sort'" v-model="extraValues[item.key]" :aria-label="item.label" @change="searchRecords"><option v-for="(label, value) in item.options" :key="value" :value="value">{{ label }}</option></select>
+        <label v-else class="inline-check"><input type="checkbox" :checked="extraValues[item.key] === item.value" @change="extraValues[item.key] = ($event.target as HTMLInputElement).checked ? item.value! : ''; searchRecords()" />{{ item.label }}</label>
+      </template>
+      </div>
       <el-button native-type="submit" :loading="loading">搜索</el-button>
-      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierFilter != null" text @click="resetFilters">重置</el-button>
+      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierFilter != null || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
     </form>
+    <p v-if="resource === 'tasks' && records.some(row => !row.can_confirm && !row.system_managed)" class="task-confirm-note">本项目任务由对应专业主管确认完成并登记工时。</p>
     <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : '下一步：查看结果并继续处理。' }}</span><el-button @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
-    <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!createLabel(resource) || !allowCreate">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
+    <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint || fallbackHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!emptyHint && !hideContactHint && (!createLabel(resource) || !allowCreate)">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
     <div v-if="batchVisible" class="record-batch-selection" :aria-label="title + '批量选择'">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit(resource) }} 项</span>
       <el-button :loading="selectingAll" :disabled="loading || actionBusy || !count" @click="selectFilteredRows">{{ count > deletionLimit(resource) ? '选择筛选结果前' + deletionLimit(resource) + '项（跨页）' : '全选筛选结果（' + count + '项，跨页）' }}</el-button>
@@ -446,12 +608,12 @@ async function inspect(row: Row) {
       <el-button type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy || selectingAll" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
       <el-button :disabled="actionBusy" @click="openDeletionHistory">已删除记录</el-button>
     </div>
-    <BusinessTable :label="title" :row-offset="(page - 1) * pageSize" :max-height="pageSize > 20 ? 560 : undefined" v-show="records.length || loading"
+    <BusinessTable :label="title" :numbered="!mobileTasks" :row-offset="(page - 1) * pageSize" :max-height="pageSize > 20 ? 560 : undefined" v-show="records.length || loading"
       v-loading="loading"
       :data="records"
       stripe
       row-key="id"
-      :row-class-name="({ row }: { row: Row }) => row.id === selectedId ? 'selected-record' : ''"
+      :row-class-name="({ row }: { row: Row }) => [row.id === selectedId ? 'selected-record' : '', row.id === flashId ? 'flash-record' : ''].join(' ').trim()"
       empty-text="暂无记录"
       style="width: 100%"
     >
@@ -462,9 +624,9 @@ async function inspect(row: Row) {
       <el-table-column
         v-for="col in shownColumns"
         :key="col.key"
-        :label="pairs[col.key] ? `${col.label} / ${labelOf(pairs[col.key])}` : col.label"
+        :label="columnLabel(col)"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="col.key === 'stage_label' ? 150 : col.key === combinedKey || col.key === 'title' || col.key === 'name' ? 190 : col.key === 'status' && col.format ? 150 : col.key === 'payment_term' ? 150 : ['status', 'is_active'].includes(col.key) ? 100 : ['discipline_label', 'logged_hours'].includes(col.key) ? 104 : 125"
+        :min-width="mobileTasks ? (col.key === shownColumns?.[0]?.key ? 130 : 84) : columnWidth(col)"
         show-overflow-tooltip
       >
         <template #default="{ row }"
@@ -472,21 +634,23 @@ async function inspect(row: Row) {
             row.name
           }}</router-link
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
+          ><router-link v-else-if="col.link?.(row)" :to="col.link!(row)!">{{ col.format ? col.format(row) : cell(row, col.key) }}</router-link
           ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" :title="col.format?.(row)" :class="{ 'status-wrap': col.format }" />
           <el-button v-else-if="resource === 'tasks' && col.key === 'logged_hours'" link type="primary" @click="action(row, '查看工时')">{{ row.time_entry_count ? `${row.logged_hours} 小时` : '未登记 · 查看' }}</el-button>
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
-          <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">已逾期</strong></span>
-          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><small v-if="pairs[col.key]" class="record-secondary">{{ cell(row, pairs[col.key]!) }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary">{{ mobileSummary(row) }}</small></template
+          <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">{{ col.flag?.(row)?.text || '已逾期' }}</strong></span>
+          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.flag?.(row) && !isOverdueCell(resource, col.key, row, day)" :class="col.flag(row)!.risk ? 'overdue-flag' : 'record-secondary'">{{ col.flag(row)!.text }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary" :class="{ 'is-overdue': mobileTasks && summaryOverdue(row) }"><span v-for="(line, index) in mobileSummary(row)" :key="index">{{ line }}</span></small><small v-if="col.key === shownColumns?.[0]?.key && (mobileLinks(row).length || mobileNote(row))" class="mobile-row-summary mobile-row-links"><template v-for="(link, index) in mobileLinks(row)" :key="index"><template v-if="index"> · </template><router-link v-if="link.to" :to="link.to" @click.stop>{{ link.text }}</router-link><template v-else>{{ link.text }}</template></template><span v-if="mobileNote(row)">{{ mobileNote(row) }}</span></small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button></template
         >
       </el-table-column>
-      <el-table-column label="操作" fixed="right" :width="batchVisible ? 230 : 180"
+      <el-table-column label="操作" fixed="right" :width="actionWidth"
         ><template #default="{ row }"
           ><div class="row-actions"
-            ><el-button v-if="primaryAction(row)" type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button
+            ><el-button v-if="primaryAction(row) && !mobileTasks" type="primary" size="small" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button
+            ><el-button v-if="soleAction(row)" size="small" @click="action(row, soleAction(row)!)">{{ soleAction(row) }}</el-button
             ><el-dropdown
-              v-if="menuGroups(row).length"
+              v-else-if="menuGroups(row).length"
               trigger="click"
               :persistent="false"
               @command="(name: string) => action(row, String(name))"
@@ -501,12 +665,12 @@ async function inspect(row: Row) {
                   ></el-dropdown-menu
                 ></template
               ></el-dropdown
-            ><span v-else-if="!primaryAction(row) && !batchVisible" class="muted">—</span><el-button v-if="batchVisible" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
-          ><small v-if="resource === 'tasks' && !row.can_confirm && !row.system_managed" class="task-sync-hint">由{{ row.supervisor_name || '专业主管' }}确认完成及登记工时</small><small v-if="resource === 'tasks' && taskSyncHint(row)" class="task-sync-hint">{{ taskSyncHint(row) }}<router-link :to="{ path: `/projects/${row.project}`, query: { tab: 'deliveries', section: 'deliveries' } }">查看交付进度</router-link></small></template
+            ><span v-else-if="(!primaryAction(row) || mobileTasks) && !batchVisible" class="muted">—</span><el-button v-if="batchVisible" type="danger" text size="small" :disabled="actionBusy || loading" @click="openDeletion([row])">删除</el-button></div
+          ><small v-if="resource === 'tasks' && taskSyncHint(row)" class="task-sync-hint">{{ taskSyncHint(row) }}<router-link :to="{ path: `/projects/${row.project}`, query: { tab: 'deliveries', section: 'deliveries' } }">查看交付进度</router-link></small></template
         ></el-table-column
       >
     </BusinessTable>
-    <ListPagination :page="page" :total="count" @change="page = $event; load(true)" />
+    <ListPagination :page="page" :total="count" :min-size="pageFloor" @change="page = $event; load(true)" />
     <AttachmentDialog v-if="attachmentRow" :owner="resource === 'sales' ? 'sale' : 'purchase'" :record="attachmentRow" @close="attachmentRow = null" />
     <RecordDeletionDialog v-if="deletionAllowed && (deleting || deletionHistory)" :resource="resource" :title="title" :rows="deleting || undefined" :project-id="scopedImportProject(params, projectId)" @close="deleting = null; deletionHistory = false" @saved="deleted" @open="openRemoved" />
   </section>
@@ -517,5 +681,24 @@ async function inspect(row: Row) {
 
 <style scoped>
 .record-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+.task-confirm-note { margin: 0 0 10px; font-size: 13px; color: var(--el-text-color-secondary); }
+.resource-list :deep(.flash-record > td.el-table__cell) { background: var(--brand-wash) !important; transition: background .4s; }
+.mobile-row-summary.is-overdue { color: var(--risk); }
+.mobile-row-summary > span { display: block; }
+.resource-filter-group { display: contents; }
+.resource-search .filter-toggle { display: none; }
+@media (max-width: 600px) {
+  .resource-search .filter-toggle { display: inline-flex; min-height: 40px; }
+  .resource-filter-group { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; order: 5; }
+  .resource-filter-group.is-collapsed { display: none; }
+  .resource-filter-group > * { flex: 1 1 140px; min-width: 0; }
+  .resource-filter-group :is(select, input:not([type='checkbox'])) { width: 100%; max-width: none; }
+  .resource-filter-group .inline-check { flex: 1 1 100%; min-height: 40px; }
+  .resource-list :deep(.record-link) { white-space: normal; overflow-wrap: anywhere; }
+  .resource-search { gap: 8px; }
+  .resource-search > input[type='search'] { flex: 1 1 140px; min-width: 0; }
+}
+.mobile-primary-action { display: none; margin-top: 6px; }
+@media (max-width: 600px) { .mobile-primary-action { display: inline-flex; min-height: 40px; } .row-actions :deep(.el-button) { min-height: 40px; } }
 .task-sync-hint { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; line-height: 1.5; color: var(--el-text-color-secondary); }
 </style>

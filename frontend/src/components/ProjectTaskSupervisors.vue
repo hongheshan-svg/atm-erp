@@ -32,9 +32,9 @@ async function edit() {
     command.value = {
       title: '设置专业主管', path: `/business/projects/${props.project.id}/task-supervisors/`,
       notice: { type: 'info', text: '主管需先加入项目成员。未选择的专业由项目经理负责；调整后向新主管发送待办提醒。设置不会增加其他业务权限。' },
-      fields: [...disciplines.map(item => ({ key: item.value, label: `${item.label}主管`, type: 'select' as const, optional: true, options: choices })), { key: 'reason', label: '设置说明', type: 'textarea' }],
+      fields: [...disciplines.map(item => ({ key: item.value, label: `${item.label}主管`, type: 'select' as const, optional: true, options: choices })), { key: 'reason', label: '设置说明', type: 'textarea', optional: true }],
       initial: { ...props.project.task_supervisors },
-      prepare: data => ({ supervisors: Object.fromEntries(disciplines.map(item => [item.value, data[item.value] || null])), expected_revision: revision, reason: data.reason }),
+      prepare: data => ({ supervisors: Object.fromEntries(disciplines.map(item => [item.value, data[item.value] || null])), expected_revision: revision, ...(data.reason ? { reason: data.reason } : {}) }),
     }
     error.value = ''
   } catch (e) { error.value = message(e) }

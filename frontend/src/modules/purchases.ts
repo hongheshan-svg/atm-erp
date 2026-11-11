@@ -5,6 +5,12 @@ import { project } from './shared'
 import { remote } from './shared'
 import { date } from './shared'
 import { termFields, termLabel } from './payment-terms'
+// 未关联 BOM 行的物料超出本项目缺口（BOM 需求 − 已领 / 已到货 − 在途）时，服务端要求写明原因并在审批时提示。
+const overBomReason: Field = {
+  key: 'over_bom_reason', label: '超 BOM 采购原因', type: 'textarea', optional: true,
+  placeholder: '仅超出项目 BOM 缺口时填写，如备件、损耗补买、客户追加',
+  hint: '按 BOM 补缺请用「从 BOM 多选下单」。本单物料超出项目 BOM 缺口时必须填写，审批人会看到超出数量和原因。',
+}
 export const purchaseFields = (): Field[] => [
   codeField('采购单号'),
   project(),
@@ -17,12 +23,15 @@ export const purchaseFields = (): Field[] => [
   ...termFields(true),
   { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', hint: '仅指定日期账期填写；现付/月结请留空，实际到期明细在应收应付中查看。历史手工账期留空仍沿用订单交期。' },
   t('note', '说明', true),
+  overBomReason,
   { key: 'warranty_months', label: '供应商质保月数', initial: '12', numeric: { scale: 0, min: 1, max: 120 }, hint: '按每批合格收货日起算，写入采购合同质保条款；默认 12 个月。' },
   rows('lines', '采购明细', [item(), { ...qty, numeric: { scale: 3, min: 0.001 } }, price, { ...date('due_date', '明细交期'), optional: true }]),
 ]
 import { all, read } from '../api'
 import { purchaseApprover } from '../session'
 import { money } from '../session'
+import { money as formatMoney } from '../utils/money'
+import { quantityText } from '../utils/quantity'
 import { decimalDifference } from '../forms'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -32,6 +41,8 @@ import { t } from './shared'
 import { select } from './shared'
 import { rows } from './shared'
 import { reason } from './shared'
+import { optionalReason } from './shared'
+import { projectLink } from './shared'
 import { qty } from './shared'
 import { price } from './shared'
 import { buyer } from './shared'
@@ -63,8 +74,10 @@ export function purchaseTotal(lines: Row[]): string {
 export const columns: Record<string, Column[]> = {
   purchases: [
     C('code', '采购编号'),
-    C('project_name', '项目'),
+    { key: 'project_name', label: '项目', link: projectLink },
     C('supplier_name', '供应商'),
+    // 含税合计按明细汇总；无单价权限（仓管）时显示「—」。
+    { key: 'total', label: '含税合计（元）', format: row => purchaseTotal(row.lines || []) },
     { key: 'payment_term', label: '采购账期', format: termLabel },
     { key: 'status', label: '状态 / 隔离待处理', format: receiptStatus },
     C('next_delivery_date', '最近待到货日'), C('payment_due_date', '付款到期日'),
@@ -97,7 +110,8 @@ export function actionNames(resource: string, r: Row): string[] {
     if (r.status === 'submitted') {
       if (r.change_request) a.push(r.can_review_change ? '处理修改申请' : '查看修改申请')
       else {
-        if (buyer()) a.push('申请修改')
+        // 待审批单与草稿一样可整单作废（原因必填）；有待处理修改申请时须先由审批人处理。
+        if (buyer()) a.push('申请修改', '作废采购')
         if (purchaseApprover(r)) a.push('批准采购', '退回修改')
       }
     }
@@ -118,7 +132,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       submitLabel: '提交修改申请',
       fields: [{ ...reason, label: '修改原因', type: 'textarea', hint: '请写清哪项填错、准备怎样修改，例如第 3 项数量由 10 改为 5。' }],
       blocked: detail.status !== 'submitted' ? '仅待审批采购单可申请修改，请刷新采购单。' : pending ? '已有待处理的修改申请，请勿重复申请。' : undefined,
-      notice: { type: 'info', text: '提交申请后暂停本单采购审批。审批人同意后退回草稿，修改完成须重新提交审批。若物料或供应商选错，可在退回草稿后作废重建。已批准订单请按原流程取消余量或更正。' },
+      notice: { type: 'info', text: '提交申请后暂停本单采购审批。审批人同意后退回草稿，修改完成须重新提交审批。若物料或供应商选错，可直接“作废采购”后重建。已批准订单请按原流程取消余量或更正。' },
       prepare: data => ({ reason: data.reason }),
     }
     const readonly = name === '查看修改申请'
@@ -142,7 +156,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const remaining = detail.lines.filter((line: Row) => Number(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity)) > 0)
     const pending = remaining.filter((line: Row) => Number(line.pending_quantity || 0) > 0)
     const blocked = !['approved', 'partial'].includes(detail.status)
-      ? '采购状态已变化，请刷新列表；草稿可作废，待审批采购须先申请修改。'
+      ? '采购状态已变化，请刷新列表；草稿和待审批采购请用“作废采购”整单作废。'
       : pending.length
         ? `本单有 ${pending.length} 条明细仍在待检，请仓管先完成隔离品合格入库或退回供应商，再整单取消。也可按明细取消其他未收物料。`
         : !remaining.length ? '本单没有可取消的未收余量，请刷新采购单。' : undefined
@@ -179,7 +193,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (['质保记录', '登记采购质保', '处理采购质保'].includes(name)) {
     const path = `/business/purchases/${r.id}/warranty/`, info = await read(path)
-    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases }, fields: [rows('cases', '质保记录', [t('item', '物料'), { ...t('status', '质保进度'), flow: 'warranty' }, t('id', '编号'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('response', '供应商响应与处理'), t('warranty_end', '质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
+    if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases.map((x: Row) => ({ ...x, within_warranty: x.within_warranty == null ? '' : x.within_warranty ? '是' : '否' })) }, fields: [rows('cases', '质保记录', [t('item', '物料'), { ...t('status', '质保进度'), flow: 'warranty' }, t('id', '编号'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('response', '供应商响应与处理'), t('warranty_end', '质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
     if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${x.quantity} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: `逐批按合格收货日起 ${info.warranty_months ?? 12} 个月提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。` } }
     const moves = await all('/business/moves/', { project: r.project })
     const expenses = money() ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
@@ -187,27 +201,33 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '更新到货计划') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
-    return { title: name, path: `${endpoint(resource)}${r.id}/delivery-plan/`, fields: [reason, { ...rows('lines', '未完成明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, date('due_date', '承诺到货日期')]), readonly: true }], initial: { lines: detail.lines.filter((l: Row) => Number(decimalDifference(l.quantity, l.received_quantity, l.cancelled_quantity)) > 0).map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, due_date: l.due_date })) }), notice: { type: 'info', text: '更新供应商承诺到货日期并留记录，不改变原应付期限。' } }
+    return { title: name, path: `${endpoint(resource)}${r.id}/delivery-plan/`, fields: [optionalReason(undefined, '选填，如供应商确认的改期原因；不填按「更新到货计划」记录'), { ...rows('lines', '未完成明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, date('due_date', '承诺到货日期')]), readonly: true }], initial: { lines: detail.lines.filter((l: Row) => Number(decimalDifference(l.quantity, l.received_quantity, l.cancelled_quantity)) > 0).map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ ...(data.reason ? { reason: data.reason } : {}), expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, due_date: l.due_date })) }), notice: { type: 'info', text: '更新供应商承诺到货日期并留记录，不改变原应付期限。' } }
   }
   if (name === '处理记录') return { title: name, path: '', readonly: true, initial: { lines: (await all(`/business/purchases/${r.id}/handling-history/`)).map(l => ({ ...l, quantity_summary: l.lines.map((row: Row) => `明细${row.line || row.id}：数量 ${row.quantity || '0'}，隔离 ${row.pending_quantity || '0'}${row.remark ? `，备注：${row.remark}` : ''}`).join('；'), operation: ({ 'purchase.request_change': '申请修改', 'purchase.review_change': l.decision === 'approve' ? '同意修改申请' : '驳回修改申请', 'purchase.reject': '退回修改', 'purchase.edit': '修改采购', 'purchase.receive': '到货登记', 'purchase.quality_accept': '隔离品合格入库', 'purchase.quality_return': '隔离品退回供应商', 'purchase.delivery_plan': '更新到货计划' } as Record<string, string>)[l.operation] || l.operation })) }, fields: [rows('lines', '处理记录', [t('date', '时间'), t('actor', '操作人'), t('operation', '操作'), t('reason', '原因 / 处理意见'), t('quantity_summary', '明细与数量'), t('next_step', '后续处理')])] }
   if (name === '修改采购') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
-    return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), ...termFields(true).map(f => ({ ...f, ...(f.key === 'payment_days' ? { visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'custom' } : {}), label: f.key === 'payment_term' ? '采购账期' : f.label, optional: true, hint: f.key === 'payment_term' ? '草稿阶段可调整；月结＝每批合格收货当月月底＋天数。' : f.hint })), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'manual', hint: '仅指定日期账期填写；现付/月结由实际收货自动计算。' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, { ...qty, numeric: { scale: 3, min: 0.001 } }, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, ...((data.payment_term || detail.payment_term) === 'manual' ? { payment_due_date: data.payment_due_date } : {}), ...(data.payment_term ? { payment_term: data.payment_term } : {}), ...(data.payment_days !== undefined && data.payment_days !== '' && data.payment_days !== null ? { payment_days: data.payment_days } : {}), note: data.note, warranty_months: data.warranty_months, reason: data.reason, expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
+    return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), ...termFields(true).map(f => ({ ...f, ...(f.key === 'payment_days' ? { visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'custom' } : {}), label: f.key === 'payment_term' ? '采购账期' : f.label, optional: true, hint: f.key === 'payment_term' ? '草稿阶段可调整；月结＝每批合格收货当月月底＋天数。' : f.hint })), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'manual', hint: '仅指定日期账期填写；现付/月结由实际收货自动计算。' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, overBomReason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, { ...qty, numeric: { scale: 3, min: 0.001 } }, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, ...((data.payment_term || detail.payment_term) === 'manual' ? { payment_due_date: data.payment_due_date } : {}), ...(data.payment_term ? { payment_term: data.payment_term } : {}), ...(data.payment_days !== undefined && data.payment_days !== '' && data.payment_days !== null ? { payment_days: data.payment_days } : {}), note: data.note, warranty_months: data.warranty_months, reason: data.reason, ...(data.over_bom_reason ? { over_bom_reason: data.over_bom_reason } : {}), expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
   }
   if (name === '批准采购') {
     const check = await read(`/business/purchases/${r.id}/budget-check/`)
     const summary = check.scope === 'purchasing'
-      ? `本单 ¥${check.purchase_amount}；材料占用 ¥${check.materials_occupied}；累计采购净额 ¥${check.purchase_net}${check.configured ? `；材料预算 ¥${check.materials_budget}` : ''}。`
-      : `本单 ¥${check.purchase_amount}；批准后实际＋在途 ¥${check.occupied_total}；累计采购净额 ¥${check.purchase_net}。`
+      ? `本单 ¥${formatMoney(check.purchase_amount)}；材料占用 ¥${formatMoney(check.materials_occupied)}；累计采购净额 ¥${formatMoney(check.purchase_net)}${check.configured ? `；材料预算 ¥${formatMoney(check.materials_budget)}` : ''}。`
+      : `本单 ¥${formatMoney(check.purchase_amount)}；批准后实际＋在途 ¥${formatMoney(check.occupied_total)}；累计采购净额 ¥${formatMoney(check.purchase_net)}。`
+    const bomWarnings: string[] = check.bom_warnings || []
+    const bomText = bomWarnings.length ? `BOM 核对：${bomWarnings.join('；')}。` : ''
+    const content = approvalContent(r, check)
     if (check.over_budget) return {
       title: '超预算采购审批', path: `/business/purchases/${r.id}/approve-over-budget/`,
-      notice: { type: 'warning', text: `${check.warnings.join('；')}。${summary}` },
-      fields: [{ ...reason, label: '超预算批准原因', type: 'textarea' }, { key: 'confirmed', label: '确认承担本次超预算采购', type: 'boolean', initial: false }],
+      notice: { type: 'warning', text: `${check.warnings.join('；')}。${summary}${bomText}` },
+      fields: [...content.fields, { ...reason, label: '超预算批准原因', type: 'textarea' }, { key: 'confirmed', label: '确认承担本次超预算采购', type: 'boolean', initial: false }],
+      initial: content.initial,
       prepare: data => ({ reason: data.reason, confirmed: data.confirmed, expected_snapshot: check.snapshot }),
     }
     return {
-      title: name, path: `/business/purchases/${r.id}/approve/`, fields: [{ ...reason, optional: true, hint: '申请人不可自行审批；管理员例外处理本人申请时必填。' }],
-      notice: { type: check.configured ? 'info' : 'warning', text: check.configured ? `预算检查通过。${summary}` : `项目未设置预算，本次批准不进行预算拦截。${summary}` },
+      title: name, path: `/business/purchases/${r.id}/approve/`, fields: [...content.fields, { ...reason, optional: true, hint: '申请人不可自行审批；管理员例外处理本人申请时必填。' }],
+      initial: content.initial,
+      prepare: data => (data.reason ? { reason: data.reason } : {}),
+      notice: { type: check.configured && !bomWarnings.length ? 'info' : 'warning', text: `${check.configured ? `预算检查通过。${summary}` : `项目未设置预算，本次批准不进行预算拦截。${summary}`}${bomText}` },
     }
   }
   let path = endpoint(resource) + r.id + '/'
@@ -227,6 +247,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (routes[name]) path += routes[name] + '/'
   if (['提交采购', '批准采购'].includes(name)) fields = []
+  if (name === '退回修改') {
+    const content = approvalContent(r, {})
+    fields = [...content.fields, reason]
+    initial = content.initial
+  }
   if (['查看明细', '收货', '隔离品合格入库', '隔离品退回供应商'].includes(name)) {
     const detail = await read(endpoint(resource) + r.id + '/')
     readonly = name === '查看明细'
@@ -253,7 +278,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           t('pending_quantity', '隔离待处理'),
         ]),
       ]
-      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []) }
+      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []), lines: (detail.lines || []).map((line: Row) => ({ ...line, ...Object.fromEntries(['quantity', 'received_quantity', 'cancelled_quantity', 'returned_quantity', 'pending_quantity'].filter(key => key in line).map(key => [key, quantityText(line[key])])), ...(line.unit_price == null || line.unit_price === '' ? {} : { unit_price: formatMoney(line.unit_price) }) })) }
     } else {
       const locations: string[] = name === '隔离品退回供应商' ? [] : await read('/business/stocks/locations/')
       // The API renders timestamps in the business timezone; preserve that date across browser timezones.
@@ -267,7 +292,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           { ...date('received_date', name === '收货' ? '实际到货 / 合格收货日期' : '实际合格收货日期'), hint: '仅隔离的到货也按实际日期登记；早于采购创建日期须填写补录原因，锁账期间不能补录。' },
           { key: 'backfill_reason', label: '补录原因', type: 'textarea' as const, optional: !createdDate, visibleWhen: (data: Row) => !createdDate || (!!data.received_date && data.received_date < createdDate), hint: `采购创建日期${createdDate ? `为 ${createdDate}` : '以前'}，请说明实际到货依据与迟录原因；补录保留审计。` },
         ]),
-        reason,
+        name === '隔离品退回供应商' ? reason : optionalReason(name === '收货' ? '送货单号 / 备注' : undefined, `选填，如送货单号、检验记录；不填按「${name === '收货' ? '采购收货' : '隔离品合格入库'}」记录`),
         { ...rows('lines', '本次收货', [
           { key: 'line', label: '明细ID', hidden: true },
           { key: 'item_label', label: '采购物料', readonly: true, displayOnly: true },
@@ -300,8 +325,42 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   let prepare: Command['prepare']
   if (['收货', '隔离品合格入库', '隔离品退回供应商'].includes(name)) prepare = receiptLines
-  const notice: Command['notice'] = name === '作废采购' ? { type: 'warning', text: '将作废本单全部采购明细，请填写作废原因。' } : undefined
+  const notice: Command['notice'] = name === '作废采购'
+    ? { type: 'warning', text: `将作废本单全部采购明细，请填写作废原因。${r.status === 'submitted' ? '待审批单作废后审批人无需再处理。' : ''}` }
+    : name === '提交采购'
+      ? { type: 'info', text: `${[r.supplier_name, r.project_code || r.project_name].filter(Boolean).join(' · ')} · ${(r.lines || []).length} 行明细 · 含税合计 ${purchaseTotal(r.lines || [])} 元。提交后由项目经理、采购经理或管理员审批，申请人不能审批本人提交的采购。` }
+      : undefined
   return { title: name, path, fields, initial, method, readonly, ...(prepare ? { prepare } : {}), ...(notice ? { notice } : {}) }
+}
+// 审批、退回前不离开对话框就能核对的采购内容：供应商、项目、交期、账期、合计和逐行明细（含 BOM 核对结果）。
+// 只用列表行已有的数据，不额外读取明细；明细按“一行一条”的只读文本列出，侧栏和窄屏里也不会撑成逐行表单。
+export function approvalContent(r: Row, check: Row): { fields: Field[]; initial: Row } {
+  const shown = (key: string, label: string, extra: Partial<Field> = {}): Field => ({ key, label, readonly: true, displayOnly: true, ...extra })
+  const notes: Record<string, string> = check.bom_lines || {}
+  const lines = (r.lines || []).map((line: Row, i: number) => [
+    `${i + 1}. ${[line.item_code, line.item_name, line.specification].filter(Boolean).join(' · ')}`,
+    ...(line.assembly_unit ? [line.assembly_unit] : []),
+    `${line.quantity}${line.unit ? ` ${line.unit}` : ''} × ${purchaseTotal([{ quantity: '1', unit_price: line.unit_price }])} = ${purchaseTotal([line])}`,
+    line.bom_line ? '按 BOM 下单' : notes[String(line.id)] || '未关联 BOM 行',
+  ].join('｜'))
+  return {
+    fields: [
+      shown('supplier_name', '供应商'),
+      shown('project_label', '项目'),
+      shown('schedule_label', '交期 · 采购账期'),
+      shown('total_label', '含税合计（元）'),
+      ...(check.over_bom_reason ? [shown('over_bom_reason', '超 BOM 采购原因', { wide: true })] : []),
+      shown('approval_lines', `采购明细（${lines.length} 行）`, { type: 'textarea', wide: true }),
+    ],
+    initial: {
+      supplier_name: r.supplier_name || '—',
+      project_label: [r.project_code, r.project_name].filter(Boolean).join(' · ') || '—',
+      schedule_label: `${r.due_date || '—'} · ${termLabel(r)}`,
+      total_label: purchaseTotal(r.lines || []),
+      over_bom_reason: check.over_bom_reason || '',
+      approval_lines: lines.join('\n') || '—',
+    },
+  }
 }
 // 未到货的明细（合格与隔离数量均为 0）本次不提交；全部为 0 时在前端直接提示，服务端锁内仍会重新校验。
 export function receiptLines(data: Row): Row {

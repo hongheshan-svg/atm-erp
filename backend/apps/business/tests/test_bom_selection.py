@@ -286,6 +286,7 @@ class BOMRevisionScopeTests(BusinessFixtures, TestCase):
                 'supplier': self.supplier.pk,
                 'due_date': TODAY,
                 'lines': [{'item': self.other.pk, 'quantity': '6', 'unit_price': '3'}],
+                'over_bom_reason': '备件随设备发运',
             },
             status=201,
         )
@@ -360,3 +361,229 @@ class BOMRevisionScopeTests(BusinessFixtures, TestCase):
         )
         self.assertFalse(legacy['can_import'])
         self.assertIn('最低可改为 6.000', legacy['errors'][0]['message'])
+
+
+class BOMAuditRemediationTests(BusinessFixtures, TestCase):
+    """BOM 审计整改：待批采购单独呈现、留空单元不再静默新增、预览只列改动、导入不变行跳过、替换与批量移除、变更记录。"""
+
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+        self.project.members.add(self.users['mechanical_engineer'])
+        self.other = Item.objects.create(code='I2', name='直线导轨')
+        self.third = Item.objects.create(code='I3', name='轴承')
+        self.revise(
+            [
+                {'item': self.other.pk, 'quantity': '2', 'assembly_unit': '01 上料'},
+                {'item': self.other.pk, 'quantity': '3', 'assembly_unit': '03 检测'},
+                {'item': self.item.pk, 'quantity': '4', 'assembly_unit': '01 上料'},
+                {'item': self.third.pk, 'quantity': '1', 'assembly_unit': '03 检测'},
+            ]
+        )
+        self.feed = BOMLine.objects.get(project=self.project, item=self.other, assembly_unit='01 上料')
+        self.check = BOMLine.objects.get(project=self.project, item=self.other, assembly_unit='03 检测')
+
+    def revise(self, lines, status=200, role='manager', url='revise-bom'):
+        return self.post(
+            role,
+            f'projects/{self.project.pk}/{url}/',
+            {'expected_revision': self.bom_version(self.project.pk), 'lines': lines},
+            status=status,
+        )
+
+    def demand(self):
+        response = self.clients['purchaser'].get(f'/api/business/projects/{self.project.pk}/demand/')
+        self.assertEqual(response.status_code, 200, response.data)
+        return {row['bom_line']: row for row in response.data['lines']}
+
+    def numbers(self, row):
+        return tuple(Decimal(row[key]) for key in ('incoming', 'unapproved', 'shortage'))
+
+    def buy(self, bom, qty, *, submit=False, approve=False):
+        result = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                'project': self.project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'from_demand': bom is not None,
+                'lines': [
+                    {'item': self.other.pk, 'quantity': qty, 'unit_price': '5', **({'bom_line': bom.pk} if bom else {})}
+                ],
+            },
+            status=201,
+        )
+        purchase = PurchaseOrder.objects.get(pk=result['id'])
+        if submit or approve:
+            self.post('purchaser', f'purchases/{purchase.pk}/submit/')
+        if approve:
+            self.post('manager', f'purchases/{purchase.pk}/approve/')
+        return purchase
+
+    def test_draft_and_submitted_purchases_still_cover_shortage_but_are_shown_as_unapproved(self):
+        purchase = self.buy(self.feed, '2')
+        self.assertEqual(self.numbers(self.demand()[self.feed.pk]), (2, 2, 0))
+        self.post('purchaser', f'purchases/{purchase.pk}/submit/')
+        self.assertEqual(self.numbers(self.demand()[self.feed.pk]), (2, 2, 0))
+        self.post('manager', f'purchases/{purchase.pk}/approve/')
+        self.assertEqual(self.numbers(self.demand()[self.feed.pk]), (2, 0, 0))
+        # 未关联 BOM 行的草稿采购按共享在途分摊，同样标为待批。
+        self.buy(None, '1')
+        self.assertEqual(self.numbers(self.demand()[self.check.pk]), (1, 1, 2))
+
+    def test_blank_unit_for_multi_unit_item_is_rejected_instead_of_adding_a_line(self):
+        count = BOMLine.objects.count()
+        result = self.revise([{'item': self.other.pk, 'quantity': '3', 'change_note': '改数量'}], status=400)
+        self.assertIn('单元不能留空', str(result))
+        self.assertIn('01 上料', str(result))
+        preview = self.revise([{'item': self.other.pk, 'quantity': '3'}], url='bom-change-preview')
+        self.assertFalse(preview['can_apply'])
+        self.assertIn('单元不能留空', preview['blockers'][0])
+        self.assertEqual(BOMLine.objects.count(), count)
+        # 只有一行的物料留空单元仍然沿用原单元修改该行。
+        self.revise([{'item': self.item.pk, 'quantity': '5', 'change_note': '加量'}])
+        self.assertEqual(BOMLine.objects.get(project=self.project, item=self.item).quantity, 5)
+        self.assertEqual(BOMLine.objects.count(), count)
+
+    def test_unit_written_differently_only_by_spaces_is_rejected(self):
+        result = self.revise([{'item': self.third.pk, 'quantity': '1', 'assembly_unit': '01上料'}], status=400)
+        self.assertIn('与现有单元「01 上料」只差空格', str(result))
+        self.revise([{'item': self.third.pk, 'quantity': '1', 'assembly_unit': '０１　上料'}], status=400)
+        self.revise([{'item': self.third.pk, 'quantity': '1', 'assembly_unit': '01 上料'}])
+
+    def test_preview_lists_submitted_rows_new_line_warning_and_only_changed_items(self):
+        preview = self.revise(
+            [{'item': self.other.pk, 'quantity': '4', 'assembly_unit': '05 下料'}], url='bom-change-preview'
+        )
+        self.assertTrue(preview['can_apply'])
+        self.assertEqual(
+            [(row['action'], row['assembly_unit'], row['before'], row['after']) for row in preview['changes']],
+            [('create', '05 下料', None, '4.000')],
+        )
+        self.assertIn('已在 2 个单元有用料', preview['warnings'][0])
+        self.assertIn('总需求 5.000 → 9.000', preview['warnings'][0])
+        self.assertEqual([row['item'] for row in preview['items']], [self.other.pk])
+        self.assertEqual((preview['items'][0]['difference'], preview['unchanged_items']), ('4.000', 2))
+        dates = self.revise(
+            [{'id': self.feed.pk, 'item': self.other.pk, 'quantity': '2', 'required_date': '2026-12-01'}],
+            url='bom-change-preview',
+        )
+        self.assertEqual((dates['items'], dates['changes'][0]['action']), ([], 'update'))
+
+    def test_reduce_below_linked_purchase_names_order_and_minimum(self):
+        purchase = self.buy(self.feed, '2', approve=True)
+        message = str(
+            self.revise([{'id': self.feed.pk, 'item': self.other.pk, 'quantity': '1', 'change_note': '减'}], 409)
+        )
+        self.assertIn(purchase.code, message)
+        self.assertIn('最低可改为 2.000', message)
+        removal = str(self.post('mechanical_engineer', f'bom/{self.feed.pk}/remove/', {'reason': '作废'}, status=409))
+        self.assertIn(purchase.code, removal)
+        self.assertIn('待收货', removal)
+
+    def test_received_surplus_is_warned_when_reducing(self):
+        purchase = self.buy(self.feed, '2', approve=True)
+        self.post(
+            'warehouse',
+            f'purchases/{purchase.pk}/receive/',
+            {'lines': [{'line': purchase.lines.get().pk, 'quantity': '2'}], 'reason': '到货'},
+        )
+        preview = self.revise(
+            [{'id': self.check.pk, 'item': self.other.pk, 'quantity': '1', 'change_note': '减'}],
+            url='bom-change-preview',
+        )
+        self.assertTrue(preview['can_apply'])
+        self.assertEqual(preview['items'][0]['received_in_stock'], '2.000')
+        self.assertFalse(any('多出' in warning for warning in preview['warnings']))
+        preview = self.revise(
+            [
+                {'id': self.check.pk, 'item': self.other.pk, 'quantity': '0.5', 'change_note': '减'},
+                {'id': self.feed.pk, 'item': self.other.pk, 'quantity': '1', 'change_note': '减'},
+            ],
+            url='bom-change-preview',
+        )
+        self.assertTrue(any('变更后多出 0.500' in warning for warning in preview['warnings']), preview['warnings'])
+
+    def test_replace_material_adds_new_line_and_removes_old_in_one_step(self):
+        replacement = Item.objects.create(code='I2-B', name='直线导轨B版')
+        url = f'bom/{self.feed.pk}/replace/'
+        self.post(
+            'mechanical_engineer', url, {'item': self.other.pk, 'quantity': '2', 'change_note': '升版'}, status=400
+        )
+        self.post('sales_manager', url, {'item': replacement.pk, 'quantity': '2', 'change_note': '升版'}, status=403)
+        result = self.post(
+            'mechanical_engineer', url, {'item': replacement.pk, 'quantity': '3', 'change_note': '图档B版'}
+        )
+        new = BOMLine.objects.get(pk=result['id'])
+        self.assertEqual((new.item, new.assembly_unit, new.quantity), (replacement, '01 上料', 3))
+        self.assertTrue(BOMLine.all_objects.get(pk=self.feed.pk).is_deleted)
+        # 原行有在途采购时整步拒绝，新物料行也不落库。
+        purchase = self.buy(self.check, '1', approve=True)
+        conflict = self.post(
+            'mechanical_engineer',
+            f'bom/{self.check.pk}/replace/',
+            {'item': replacement.pk, 'quantity': '3', 'change_note': '换型'},
+            status=409,
+        )
+        self.assertIn(purchase.code, str(conflict))
+        self.assertFalse(BOMLine.objects.filter(item=replacement, assembly_unit='03 检测').exists())
+
+    def test_inactive_material_is_flagged_and_can_only_be_replaced(self):
+        Item.objects.filter(pk=self.other.pk).update(is_active=False)
+        rows = [row for row in self.demand().values() if row['item'] == self.other.pk]
+        self.assertEqual({row['is_active'] for row in rows}, {False})
+        # 修改停用物料行被拒，提示里写明物料和「替换物料」入口。
+        error = self.revise(
+            [
+                {
+                    'id': self.feed.pk,
+                    'item': self.other.pk,
+                    'quantity': '5',
+                    'assembly_unit': '01 上料',
+                    'change_note': '加量',
+                }
+            ],
+            status=400,
+        )
+        self.assertIn('I2', str(error))
+        self.assertIn('替换物料', str(error))
+        replacement = Item.objects.create(code='I2-C', name='直线导轨在用版')
+        self.post(
+            'mechanical_engineer',
+            f'bom/{self.feed.pk}/replace/',
+            {'item': replacement.pk, 'quantity': '2', 'change_note': '原型号停用'},
+        )
+        self.assertTrue(
+            BOMLine.objects.filter(project=self.project, item=replacement, assembly_unit='01 上料').exists()
+        )
+
+    def test_batch_remove_is_all_or_nothing(self):
+        bearing = BOMLine.objects.get(project=self.project, item=self.third)
+        self.buy(self.check, '1', approve=True)
+        payload = {'project': self.project.pk, 'ids': [bearing.pk, self.check.pk], 'reason': '作废'}
+        self.post('mechanical_engineer', 'bom/remove-batch/', payload, status=409)
+        self.assertTrue(BOMLine.objects.filter(pk=bearing.pk).exists())
+        payload['ids'] = [bearing.pk, self.feed.pk]
+        self.post('member', 'bom/remove-batch/', payload, status=403)
+        self.assertEqual(self.post('mechanical_engineer', 'bom/remove-batch/', payload)['removed'], 2)
+        self.assertFalse(BOMLine.objects.filter(pk__in=[bearing.pk, self.feed.pk]).exists())
+        self.assertEqual(AuditLog.objects.filter(operation='bom.remove').count(), 2)
+        self.post('mechanical_engineer', 'bom/remove-batch/', payload, status=409)
+
+    def test_change_log_is_readable_by_project_members_with_before_and_after(self):
+        self.revise([{'id': self.feed.pk, 'item': self.other.pk, 'quantity': '6', 'change_note': '加工位'}])
+        self.post('mechanical_engineer', f'bom/{self.check.pk}/remove/', {'reason': '取消检测'})
+        url = '/api/business/bom/changes/'
+        for role in ('manager', 'purchaser', 'mechanical_engineer'):
+            response = self.clients[role].get(url, {'project': self.project.pk})
+            self.assertEqual(response.status_code, 200, response.data)
+        rows = response.data['results']
+        self.assertEqual([row['action'] for row in rows[:2]], ['remove', 'update'])
+        self.assertEqual((rows[0]['before'], rows[0]['after'], rows[0]['reason']), ('3.000', None, '取消检测'))
+        self.assertEqual((rows[1]['before'], rows[1]['after'], rows[1]['actor']), ('2.000', '6.000', 'manager'))
+        searched = self.clients['manager'].get(url, {'project': self.project.pk, 'search': '轴承'}).data
+        self.assertEqual([row['action'] for row in searched['results']], ['create'])
+        self.assertEqual(self.clients['electrical_engineer'].get(url, {'project': self.project.pk}).status_code, 404)
+        self.assertEqual(self.clients['sales_manager'].get(url, {'project': self.project.pk}).status_code, 403)
+        self.assertEqual(self.clients['manager'].get(url, {'project': self.project.pk, 'start': 'x'}).status_code, 400)

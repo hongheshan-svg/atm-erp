@@ -53,17 +53,55 @@ export async function openRowAction(page: Page, row: Locator, name: string) {
   await expect(direct.or(menu).first()).toBeVisible()
   // The same registry the list renders from decides where to look, so a save that reloads the row
   // is waited out on the right control instead of by clicking the menu toggle in a retry loop.
-  if (primaryActions.includes(name) && await direct.isVisible()) {
+  // 菜单里只有一项时列表直接显示成文字按钮，没有「操作 ▾」。
+  if ((primaryActions.includes(name) || !(await menu.isVisible())) && await direct.isVisible()) {
     await direct.click()
     return
   }
   await menu.click()
   const option = page.getByRole('menuitem', { name, exact: true })
+  if (primaryActions.includes(name)) {
+    // 上一步保存后行还没刷新完就打开了菜单（如报价后「签约」由菜单外变成行内主按钮）：
+    // 菜单展开完仍没有这一项时收起菜单，改点刷新后出现的行内按钮。
+    const popper = page.locator('.el-dropdown__popper:visible')
+    await expect(popper).toHaveCount(1)
+    await expect(popper).not.toHaveClass(/-enter-active/)
+    if (!(await option.isVisible())) {
+      await menu.click()
+      await expect(popper).toHaveCount(0)
+      await direct.click()
+      return
+    }
+  }
   await expect(option).toBeVisible()
   // 展开动画缩放期间，连续两帧坐标偶尔不变但菜单尚未展开到最终位置。
   // 等动画结束再点击，避免慢速 CI 中点击落在相邻条目或分组标题上。
   await expect(page.locator('.el-dropdown__popper').filter({ has: option })).not.toHaveClass(/-enter-active/)
   await option.click()
+}
+
+// 列表翻到第 n 页或最后一页。桌面点 el-pagination 的页码（首尾页码始终显示）；手机（≤600px）隐藏页码，
+// 只有「上一页 / 第 n/m 页 / 下一页」，逐页点到目标页并核对页码提示。scope 取包含该列表分页的区域或弹窗。
+export async function goToListPage(scope: Page | Locator, target: number | 'last') {
+  const compact = scope.getByRole('group', { name: '翻页', exact: true })
+  const pager = scope.locator('.el-pagination .el-pager')
+  await expect(compact.or(pager).first()).toBeVisible()
+  if (await compact.isVisible()) {
+    const status = compact.getByText(/^第 \d+\/\d+ 页$/)
+    const [current, total] = (await status.textContent())!.match(/(\d+)\/(\d+)/)!.slice(1).map(Number) as [number, number]
+    const goal = target === 'last' ? total : target
+    expect(goal, `目标页超出共 ${total} 页`).toBeLessThanOrEqual(total)
+    const step = goal > current ? 1 : -1
+    for (let page = current; page !== goal;) {
+      page += step
+      await compact.getByRole('button', { name: step > 0 ? '下一页' : '上一页', exact: true }).click()
+      await expect(status).toHaveText(`第 ${page}/${total} 页`)
+    }
+    return
+  }
+  const goal = target === 'last' ? (await pager.locator('li.number').last().textContent())!.trim() : String(target)
+  await pager.getByText(goal, { exact: true }).click()
+  await expect(pager.locator('li.is-active')).toHaveText(goal)
 }
 
 // Import lives behind the toolbar's 导入导出 menu; one place so a toolbar change is one edit.
@@ -126,6 +164,28 @@ export async function detailAction(page: Page, name: string) {
   if (await direct.isVisible()) return direct.click()
   await more.click()
   await page.getByRole('menuitem', { name, exact: true }).click()
+}
+
+// 可搜索的人员下拉（Element Plus 单选或多选，如安装人、项目成员）：先清掉已选标签，按名称逐个输入过滤后点选；
+// 多选最后点「完成选择」收起。名称须在候选里唯一，账号名会出现在选项标签里。
+export async function choosePeople(page: Page, field: Locator, names: string[]) {
+  const select = field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " el-select ")][1]')
+  // 编辑表单的已选人员在人员名单加载后才回填，先等请求结束再清空，避免把原有成员反选掉。
+  await expect(field).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  while (await select.locator('.el-tag__close').count()) await select.locator('.el-tag__close').first().click()
+  await select.locator('.el-select__wrapper').click()
+  const popper = page.locator('.el-select__popper.executor-options:visible')
+  for (const name of names) {
+    await field.fill(name)
+    await expect(popper).not.toHaveClass(/-enter-active/)
+    const option = popper.getByRole('option').filter({ hasText: name })
+    await expect(option, `人员选项需唯一：${name}`).toHaveCount(1)
+    await option.click()
+  }
+  const done = popper.getByRole('button', { name: '完成选择', exact: true })
+  if (await done.count()) await done.click()
+  await expect(page.locator('.el-select__popper.executor-options:visible')).toHaveCount(0)
 }
 
 // Select every executor by its visible label; replace the existing selection using tag close buttons.

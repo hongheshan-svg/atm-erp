@@ -2,6 +2,7 @@ import copy
 from datetime import date
 from decimal import Decimal
 
+from django.db.models import F, Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -149,6 +150,103 @@ def applicants_by_purchase(purchases):
     return result
 
 
+def bom_cover(project, item_id, *, exclude_line=None):
+    """本项目 BOM 对该物料的需求、已领、本项目已到货、在途与还可采购量；物料不在本项目 BOM 内返回 None。
+
+    与关联 BOM 行的采购上限同一口径（需求 − 已领 − 在途），并扣除本项目已到货未领的部分，
+    已收货待领的物料不会被当成缺口再买一遍；共享库存不预留，不计入。exclude_line 用于修改草稿时扣除本行。
+    """
+    needed = BOMLine.objects.filter(project=project, item_id=item_id).aggregate(total=Sum('quantity'))['total']
+    if needed is None:
+        return None
+    lines = PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id=item_id)
+    if exclude_line is not None:
+        lines = lines.exclude(pk=exclude_line)
+    totals = lines.aggregate(
+        pending=Sum(
+            F('quantity') - F('received_quantity') - F('cancelled_quantity'), filter=~Q(purchase__status='cancelled')
+        ),
+        received=Sum(F('received_quantity') - F('returned_quantity')),
+    )
+    used = issued(project, item_id)
+    pending, received = totals['pending'] or ZERO, totals['received'] or ZERO
+    return {
+        'needed': needed,
+        'issued': used,
+        'received': received,
+        'incoming': pending,
+        'shortage': max(ZERO, needed - max(used, received) - pending),
+    }
+
+
+def bom_overrun(project, item, qty, *, exclude_line=None, cover=None):
+    """未关联 BOM 行的采购明细超出本项目该物料缺口时返回说明；不在 BOM 内或未超出返回 None。"""
+    cover = bom_cover(project, item.pk, exclude_line=exclude_line) if cover is None else cover
+    if cover is None or qty <= cover['shortage']:
+        return None
+    return {
+        'item': item.pk,
+        'label': f'{item.code} {item.name}',
+        'quantity': str(qty),
+        'excess': str(qty - cover['shortage']),
+        **{key: str(value) for key, value in cover.items()},
+    }
+
+
+def overrun_text(row):
+    return (
+        f'{row["label"]}：BOM 需求 {row["needed"]}、已领 {row["issued"]}、本项目已到货 {row["received"]}、'
+        f'在途 {row["incoming"]}，还可采购 {row["shortage"]}，本单 {row["quantity"]}（超出 {row["excess"]}）'
+    )
+
+
+def require_overrun_reason(overruns, reason):
+    """手工采购不得悄悄绕过 BOM 缺口：超出时不拒绝（备件、损耗补买），但必须写明原因并留审计。"""
+    if overruns and not reason:
+        raise ValidationError(
+            {
+                'over_bom_reason': '以下物料超出本项目 BOM 缺口：'
+                + '；'.join(overrun_text(row) for row in overruns)
+                + '。按 BOM 补缺请改用「从 BOM 多选下单」；确需超量采购（备件、损耗补买等）请填写超 BOM 采购原因。'
+            }
+        )
+
+
+def bom_review(purchase):
+    """审批时按最新 BOM 复核本单未关联 BOM 行的明细：超出本项目缺口或不在 BOM 内的逐条列出，附申请时填写的原因。"""
+    notes, warnings, over, outside = {}, [], [], []
+    for line in purchase.lines.select_related('item').order_by('pk'):
+        open_quantity = line.quantity - line.cancelled_quantity - line.received_quantity
+        if line.bom_line_id or open_quantity <= ZERO:
+            continue
+        cover = bom_cover(purchase.project, line.item_id, exclude_line=line.pk)
+        if cover is None:
+            outside.append(line.item.name)
+            notes[str(line.pk)] = '不在本项目 BOM'
+            continue
+        row = bom_overrun(purchase.project, line.item, open_quantity, cover=cover)
+        if row:
+            over.append(f'{line.item.name} +{row["excess"]}')
+            notes[str(line.pk)] = f'超出 BOM 缺口 +{row["excess"]}（还可采购 {row["shortage"]}）'
+    if over:
+        warnings.append(f'本单含 {len(over)} 行超出 BOM 需求：{"、".join(over)}')
+    if outside:
+        warnings.append(f'本单含 {len(outside)} 行物料不在本项目 BOM：{"、".join(outside)}')
+    reason = ''
+    if warnings:
+        log = (
+            AuditLog.objects.filter(
+                resource=f'purchaseorder:{purchase.pk}',
+                operation__in=['purchase.create', 'purchase.edit'],
+                detail__has_key='over_bom_reason',
+            )
+            .order_by('-id')
+            .first()
+        )
+        reason = log.detail['over_bom_reason'] if log else ''
+    return {'bom_warnings': warnings, 'bom_lines': notes, 'over_bom_reason': reason}
+
+
 def create_purchase(actor, key, data):
     def execute(user, project):
         fields(
@@ -165,9 +263,11 @@ def create_purchase(actor, key, data):
                 'from_demand',
                 'code',
                 'warranty_months',
+                'over_bom_reason',
             },
         )
         state(project, {'active', 'delivering', 'warranty'})
+        over_bom_reason = text(data, 'over_bom_reason', default='')
         supplier = lookup(Partner, data.get('supplier'), 'supplier', is_active=True, kind__in=['supplier', 'both'])
         agreed = terms(data, supplier)
         if agreed['payment_term'] != 'manual' and data.get('payment_due_date'):
@@ -186,6 +286,7 @@ def create_purchase(actor, key, data):
             prepared[row_key] = row
         items = lock_items({item_id for item_id, _ in prepared})
         shortage = {row['bom_line']: Decimal(row['shortage']) for row in demand(project)} if from_demand else {}
+        overruns = []
         purchase = save(
             PurchaseOrder(
                 code=CodeRule.generate_code('purchase', custom=text(data, 'code', default='', maximum=30)),
@@ -216,6 +317,11 @@ def create_purchase(actor, key, data):
                     raise Conflict('采购数量超过当前 BOM 剩余需求，请刷新后重新确认。')
             if from_demand and (not bom or qty > shortage.get(bom.pk, ZERO)):
                 raise Conflict('采购数量超过当前缺口，请刷新需求后重试。')
+            if bom is None:
+                # 先于本行落库计算，本单前面已保存的同物料明细计入在途。
+                overrun = bom_overrun(project, items[item_id], qty)
+                if overrun:
+                    overruns.append(overrun)
             number(rounded(qty * price), 'line_amount')
             save(
                 PurchaseLine(
@@ -229,6 +335,9 @@ def create_purchase(actor, key, data):
                 user,
             )
         number(total(purchase), 'total_amount')
+        require_overrun_reason(overruns, over_bom_reason)
+        if overruns:
+            return audit(user, 'purchase.create', purchase, over_bom=overruns, over_bom_reason=over_bom_reason)
         return audit(user, 'purchase.create', purchase)
 
     return project_action(actor, key, 'purchase.create', data.get('project'), data, PURCHASERS, execute)
@@ -270,6 +379,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
         require_no_request(purchase)
         report = purchase_check(purchase)
         reason = text(data, 'reason', default='')
+        # 管理员审批本人申请的例外仍须写明原因：按用户实际填写的内容判断，不用缺省动作名凑数。
         self_approval = independent_approval(user, purchase_applicants(purchase), reason)
         budget_adjuster_approval = False
         if override:
@@ -296,6 +406,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
                 '请交由其他有权限的人员审批，管理员例外须填写原因。',
                 reason_required='管理员调整预算后批准本单，必须填写例外审批原因并保留审计。',
             )
+        reason = reason or '批准采购'
         save(
             Entry(
                 project=purchase.project,
@@ -318,6 +429,7 @@ def approve(actor, key, purchase_id, data, *, override=False):
             self_approval=self_approval,
             budget_adjuster_approval=budget_adjuster_approval,
             budget_check=report,
+            bom_check=bom_review(purchase),
         )
 
     operation = 'purchase.approve_over_budget' if override else 'purchase.approve'
@@ -338,7 +450,8 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
         if received_date < timezone.localdate(purchase.created_at) and not backfill_reason:
             raise ValidationError({'backfill_reason': '收货日期早于采购创建日期，请填写补录原因。'})
         location = location_value(data)
-        reason = text(data, 'reason')
+        # 正常到货的说明选填（可写送货单号），缺省记为动作名；补录、退货、取消等纠错动作仍须写明原因。
+        reason = text(data, 'reason', default='') or ('隔离品合格入库' if from_quarantine else '采购收货')
         lines = {line.pk: line for line in purchase.lines.select_for_update().order_by('item_id', 'pk')}
         selected, seen, remarks = {}, set(), {}
         for index, row in enumerate(rows(data)):
@@ -439,9 +552,10 @@ def cancel_remainder(actor, key, purchase_id, data):
         fields(data, {'reason', 'lines'})
         reason = text(data, 'reason')
         state(purchase.project, {'active', 'delivering', 'warranty'})
-        if purchase.status == 'submitted':
-            raise Conflict('待审批采购不能直接作废，请先申请修改，经审批退回草稿后再处理。')
-        state(purchase, {'draft', 'approved', 'partial'})
+        state(purchase, {'draft', 'submitted', 'approved', 'partial'})
+        # 待审批单按草稿规则整单作废（尚无应付）；修改申请待审批人处理时不替对方关闭申请。
+        if purchase.status == 'submitted' and pending_requests([purchase]):
+            raise Conflict('已有待处理的修改申请，请先由审批人处理后再作废。')
         lines = list(purchase.lines.select_for_update().order_by('item_id', 'pk'))
         by_id = {line.pk: line for line in lines}
         selected = {}
@@ -525,7 +639,7 @@ def delivery_plan(actor, key, purchase_id, data):
             expected = None
         if expected != purchase.updated_at:
             raise Conflict('采购已变化，请刷新到货计划。')
-        reason = text(data, 'reason')
+        reason = text(data, 'reason', default='') or '更新到货计划'
         before, after, seen = [], [], set()
         for row in rows(data):
             fields(row, {'id', 'due_date'})
@@ -560,10 +674,12 @@ def edit(actor, key, purchase_id, data):
                 'note',
                 'lines',
                 'warranty_months',
+                'over_bom_reason',
             },
         )
         state(purchase.project, {'active', 'delivering', 'warranty'})
         state(purchase, {'draft'})
+        over_bom_reason = text(data, 'over_bom_reason', default='')
         version = data.get('expected_updated_at')
         try:
             expected = parse_datetime(version) if isinstance(version, str) else None
@@ -589,7 +705,7 @@ def edit(actor, key, purchase_id, data):
             selected[pk] = row
         if set(selected) != set(lines):
             raise ValidationError('请保留所有采购明细；不再需要的采购请取消后重建。')
-        before = []
+        before, overruns = [], []
         for index, (pk, row) in enumerate(selected.items()):
             line = lines[pk]
             before.append(
@@ -618,6 +734,10 @@ def edit(actor, key, purchase_id, data):
                     + line.quantity
                 ):
                     raise Conflict('修改数量超过 BOM 剩余需求。')
+            elif qty > line.quantity:
+                overrun = bom_overrun(purchase.project, line.item, qty, exclude_line=line.pk)
+                if overrun:
+                    overruns.append(overrun)
             line.quantity = qty
             line.unit_price = price
             line.due_date = day(row, 'due_date')
@@ -630,8 +750,10 @@ def edit(actor, key, purchase_id, data):
         if 'warranty_months' in data:
             purchase.warranty_months = integer(data, 'warranty_months', 12, minimum=1, maximum=120)
         number(total(purchase), 'total_amount')
+        require_overrun_reason(overruns, over_bom_reason)
         save(purchase, user)
-        return audit(user, 'purchase.edit', purchase, before=before, after=data, reason=reason)
+        extra = {'over_bom': overruns, 'over_bom_reason': over_bom_reason} if overruns else {}
+        return audit(user, 'purchase.edit', purchase, before=before, after=data, reason=reason, **extra)
 
     return purchase_action(actor, key, 'purchase.edit', purchase_id, data, PURCHASERS, execute)
 

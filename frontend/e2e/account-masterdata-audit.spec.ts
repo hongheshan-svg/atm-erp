@@ -1,6 +1,6 @@
 import { cancelEditing } from './fixtures'
 import { searchRemote } from './remote-select-helpers'
-import { test, expect, login, expectHttpError, type Page, type Locator } from './fixtures'
+import { test, expect, login, expectHttpError, openRowAction, type Page, type Locator } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
@@ -29,8 +29,7 @@ async function save(page: Page, path: string, method: 'POST' | 'PATCH', status: 
   return response.json()
 }
 async function edit(page: Page, target: Locator) {
-  await target.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
+  await openRowAction(page, target, '编辑')
   await expect(dialog(page)).toBeVisible()
 }
 async function rejectedLogin(page: Page, username: string, password: string) {
@@ -202,7 +201,11 @@ test('物料和往来单位编辑停用后退出新单选项，原采购关联�
   await cancelEditing(dialog(page))
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
   await expect(dialog(page).getByRole('heading', { name: '查看明细', exact: true })).toBeVisible()
-  await expect(dialog(page).getByRole('cell', { name: `停用后物料${suffix}`, exact: true })).toBeVisible()
+  // 手机端只读明细按行显示成卡片列表，桌面是表格。
+  const line = info.project.name === 'mobile'
+    ? dialog(page).getByRole('list', { name: '采购明细', exact: true }).getByText(`停用后物料${suffix}`, { exact: true })
+    : dialog(page).getByRole('cell', { name: `停用后物料${suffix}`, exact: true })
+  await expect(line).toBeVisible()
   const preserved = await admin.get(`business/purchases/${purchase.id}/`)
   expect(preserved).toMatchObject({ id: purchase.id, code: oldOrder.code, supplier: partner.id, status: 'draft' })
   expect(preserved.lines[0]).toMatchObject({ id: oldOrder.lines[0].id, item: material.id, quantity: '1.000', unit_price: '10.00' })

@@ -480,6 +480,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.post('manager', f'projects/{project.pk}/edit/', {'name': '改名', 'reason': '更正名称'})
         results = self.get('admin', 'core/audit/', {'search': '王经理', 'operation': 'project.edit'}).data['results']
         self.assertEqual([(row['operation'], row['actor_name']) for row in results], [('project.edit', '王经理')])
+        self.assertEqual(results[0]['resource_label'], project.code)
         today = timezone.localdate().isoformat()
         self.assertTrue(self.get('admin', 'core/audit/', {'date_from': today, 'date_to': today}).data['count'])
         self.assertEqual(self.get('admin', 'core/audit/', {'date_to': '2000-01-01'}).data['count'], 0)

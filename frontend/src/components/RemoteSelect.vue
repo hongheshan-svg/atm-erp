@@ -234,7 +234,7 @@ onBeforeUnmount(() => { cancelSearch(); selectedGeneration++ })
 <template>
   <span ref="root" class="remote-select" @focusout="leave">
     <span class="remote-input">
-      <input ref="input" :id="inputId || `${uid}-input`" role="combobox" :value="inputValue" :aria-label="label"
+      <input ref="input" :id="inputId || `${uid}-input`" role="combobox" :value="inputValue" :title="inputValue || undefined" :aria-label="label"
         aria-autocomplete="list" aria-haspopup="listbox" :aria-expanded="opened" :aria-controls="`${uid}-list`"
         :aria-activedescendant="opened ? activeId : undefined" :aria-invalid="invalid || Boolean(selectedError) || undefined"
         :aria-describedby="description" :required="required" :disabled="locked" autocomplete="off"
@@ -282,4 +282,12 @@ onBeforeUnmount(() => { cancelSearch(); selectedGeneration++ })
 .remote-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .remote-name small { font-size: 12px; color: var(--ink-2); }
 .remote-feedback { padding: 6px; font-size: 13px; }
+</style>
+<style>
+/* 表格式明细行里候选浮层不占文档流，否则展开时会把同一行其他输入框顶下去。 */
+.line-fields-dense .remote-select .remote-popup { position: absolute; top: 100%; left: 0; z-index: 30; min-width: 100%; width: max-content; max-width: min(420px, 80vw); margin-top: 2px; }
+/* 浮层向下展开时不被对话框内容区裁掉：含远程选择的明细行留出候选列表的高度。 */
+.line-fields-dense .remote-select .remote-popup ul { max-height: 210px; }
+.action-fields:has(.line-fields-dense .remote-select) { min-height: 400px; }
+@media (max-width: 600px) { .line-fields-dense .remote-select .remote-popup { width: auto; right: 0; max-width: none; } }
 </style>

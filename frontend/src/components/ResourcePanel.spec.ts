@@ -49,6 +49,109 @@ describe('列表创建入口', () => {
     expect(wrapper.text()).not.toContain('工时已提交')
     wrapper.unmount()
   })
+  it('库存页上下文：收货面板不显示 BOM 下单入口；退料只在原领料流水里作主按钮', async () => {
+    user.value = { id: 1, roles: ['admin'] }
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+    const mountIt = (props: { resource: string; title: string } & Record<string, unknown>) => shallowMount(ResourcePanel, { props, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { template: '<div />' }, TransferTools: true } } })
+    const purchases = mountIt({ resource: 'purchases', title: '采购订单' })
+    await flushPromises()
+    expect(purchases.text()).toContain('从 BOM 多选下单')
+    const receipts = mountIt({ resource: 'purchases', title: '待收货采购', allowCreate: false, params: { status: 'approved' }, emptyHint: '没有待收货的采购单。' })
+    await flushPromises()
+    expect(receipts.text()).not.toContain('从 BOM 多选下单')
+    expect(receipts.text()).toContain('没有待收货的采购单。')
+    const issue = { id: 3, kind: 'issue' }
+    const moves = mountIt({ resource: 'moves', title: '库存流水' })
+    await flushPromises()
+    expect((moves.vm as any).primaryAction(issue)).toBeUndefined()
+    expect((moves.vm as any).soleAction(issue)).toBe('退料')
+    const returns = mountIt({ resource: 'moves', title: '原领料流水', params: { kind: 'issue' } })
+    await flushPromises()
+    expect((returns.vm as any).primaryAction(issue)).toBe('退料')
+    for (const w of [purchases, receipts, moves, returns]) w.unmount()
+  })
+  it('空状态：页面给了 emptyHint 就用它，并且不再提示联系同事', async () => {
+    user.value = { id: 1, role: 'admin' }
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+    const mountIt = (extra: Record<string, unknown>) => shallowMount(ResourcePanel, { props: { resource: 'deliveries', title: '交付批次', ...extra }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+    const plain = mountIt({})
+    await flushPromises()
+    expect(plain.text()).toContain('可联系负责此业务的同事处理')
+    const hinted = mountIt({ emptyHint: '尚未发货。' })
+    await flushPromises()
+    expect(hinted.text()).toContain('尚未发货。')
+    expect(hinted.text()).not.toContain('联系负责此业务')
+    const hidden = mountIt({ hideContactHint: true })
+    await flushPromises()
+    expect(hidden.text()).not.toContain('联系负责此业务')
+    for (const w of [plain, hinted, hidden]) w.unmount()
+  })
+  it('手机宽度：列表只留名称、状态，其余并入名称格摘要；筛选超过 2 个时收起并显示生效数', async () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia
+    try {
+      user.value = { id: 1, role: 'admin' }
+      vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+      const purchases = shallowMount(ResourcePanel, { props: { resource: 'purchases', title: '采购订单' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      const vm = purchases.vm as any
+      expect(vm.shownColumns.map((c: { key: string }) => c.key)).toEqual(['code', 'status'])
+      expect(vm.mobileSummary({ supplier_name: '甲供', project_name: '乙项目', total_amount: '1200.50', next_delivery_date: '2026-12-01' })).toEqual(['甲供 · 乙项目', '金额 1,200.50 · 下一交期 2026-12-01'])
+      expect(vm.mobileSummary({ supplier_name: '甲供', project_name: '乙项目' })).toEqual(['甲供 · 乙项目'])
+      purchases.unmount()
+      const items = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      expect((items.vm as any).mobileSummary({ name: '导轨', specification: 'HSR15', brand: 'THK', unit: '根', part_type: 'standard' })[0]).toBe('导轨 · HSR15 · THK')
+      expect((items.vm as any).mobileSummary({ name: '导轨', part_type: 'custom', unit: '根' }).join(' ')).toContain('非标件')
+      expect((items.vm as any).mobileSummary({ name: '导轨', part_type: 'standard' }).join(' ')).toContain('标准件')
+      expect(items.find('.filter-toggle').exists()).toBe(false)
+      items.unmount()
+      // 摘要里不能漏出英文枚举值。
+      const raw = /\b(custom|standard|supplier|customer|both|receivable|payable|expense|admin|manager)\b/
+      for (const [resource, row] of [
+        ['partners', { name: '甲', kind: 'supplier', contact: '李', phone: '1', payment_term: 'manual', payment_days: 0 }],
+        ['entries', { title: '合同款', kind: 'receivable', balance: '10.00', partner_name: '乙', status: 'open' }],
+        ['users', { display_name: '王', username: 'wang', roles: ['admin', 'manager'] }],
+        ['tasks', { title: '任务', due_date: '2026-11-01', assignee_name: '赵', stage_label: '设计阶段', status: 'open' }],
+      ] as const) {
+        const panel = shallowMount(ResourcePanel, { props: { resource, title: resource }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+        await flushPromises()
+        expect((panel.vm as any).mobileSummary(row).join(' | ')).not.toMatch(raw)
+        panel.unmount()
+      }
+      // 库存流水：保留物料与类型列；摘要首行「数量 · 时间」，次行项目与来源采购单可点击。
+      user.value = { id: 1, roles: ['warehouse'] }
+      const moves = shallowMount(ResourcePanel, { props: { resource: 'moves', title: '库存流水' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      const mv = moves.vm as any
+      expect(mv.shownColumns.map((c: { key: string }) => c.key)).toEqual(['item_name', 'kind'])
+      const move = { id: 1, project: 4, project_code: 'ATM2680', project_name: '上料线', purchase: 8, purchase_code: 'PO-8', item_code: 'M-1', item_name: '伺服电机', quantity: '2.000', unit: '台', created_at: '2026-11-11T09:30:00+08:00' }
+      expect(mv.mobileSummary(move)).toEqual(['2 台 · 2026-11-11 09:30'])
+      expect(mv.mobileLinks(move)).toEqual([
+        { text: 'ATM2680 · 上料线', to: '/projects/4' },
+        { text: 'PO-8', to: { path: '/purchases', query: { resource: 'purchases', focus: '8', project: '4' } } },
+      ])
+      expect(mv.mobileLinks({ ...move, project: null, project_code: '', project_name: '', purchase: null, purchase_code: '' })).toEqual([])
+      expect(mv.mobileNote({ ...move, remark: '一号工位' })).toBe('一号工位')
+      expect(mv.mobileNote(move)).toBe('')
+      moves.unmount()
+      user.value = { id: 1, role: 'admin' }
+      const projects = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
+      await flushPromises()
+      const toggle = projects.find('.filter-toggle')
+      expect(toggle.attributes('aria-expanded')).toBe('false')
+      expect(projects.find('.resource-filter-group').classes()).toContain('is-collapsed')
+      expect(toggle.text()).toBe('筛选 ▾')
+      ;(projects.vm as any).extraValues.overdue = 'true'
+      await flushPromises()
+      expect(projects.find('.filter-toggle').text()).toContain('筛选 · 1')
+      await projects.find('.filter-toggle').trigger('click')
+      expect(projects.find('.filter-toggle').attributes('aria-expanded')).toBe('true')
+      expect(projects.find('.resource-filter-group').classes()).not.toContain('is-collapsed')
+      expect(projects.find('.filter-toggle').attributes('aria-controls')).toBe(projects.find('.resource-filter-group').attributes('id'))
+      projects.unmount()
+    } finally { window.matchMedia = original }
+  })
   it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
     user.value = { roles: ['finance', 'admin'] }
     vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 21, title: '费用' }], next: null })

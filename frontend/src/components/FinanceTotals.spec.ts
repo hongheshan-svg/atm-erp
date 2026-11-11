@@ -116,3 +116,25 @@ describe('收付款余额卡片', () => {
     wrapper.unmount()
   })
 })
+
+describe('项目收付款汇总', () => {
+  beforeEach(() => vi.clearAllMocks())
+  it('读取项目汇总接口，给出应收合计、已收、未收及逾期，应付合并费用', async () => {
+    vi.mocked(read).mockResolvedValue({
+      receivable: { total: '100000.00', settled: '30000.00', outstanding: '70000.00', overdue: '20000.00', refund: '0.00', count: 3 },
+      payable: { total: '40000.00', settled: '10000.00', outstanding: '30000.00', overdue: '0.00', refund: '0.00', count: 2 },
+      expense: { total: '500.50', settled: '500.50', outstanding: '0.00', overdue: '0.00', refund: '0.00', count: 1 },
+    })
+    const wrapper = await render({ projectId: 37, project: true })
+    expect(read).toHaveBeenCalledWith('/business/projects/37/finance-summary/')
+    expect(wrapper.get('.finance-totals').attributes('aria-label')).toBe('项目款项汇总')
+    const cards = wrapper.findAll('.finance-total')
+    expect(cards.map(card => card.attributes('aria-label'))).toEqual(['应收合计', '已收', '未收', '应付合计（含费用）', '已付', '未付'])
+    expect(cards[0]!.get('strong').text()).toBe('¥ 100,000.00')
+    expect(cards[2]!.get('small').text()).toBe('其中逾期 20,000.00')
+    expect(cards[2]!.get('small').classes()).toContain('finance-risk')
+    expect(cards[3]!.get('strong').text()).toBe('¥ 40,500.50')
+    expect(cards[5]!.get('small').text()).toBe('暂无逾期应付')
+    expect(cards[5]!.get('small').classes()).not.toContain('finance-risk')
+  })
+})

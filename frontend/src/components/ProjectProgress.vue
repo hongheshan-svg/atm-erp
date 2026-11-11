@@ -49,7 +49,7 @@ onBeforeUnmount(() => { generation++ })
   <section class="project-progress" aria-label="流程进度" :aria-busy="loading">
     <header class="progress-heading"><div><h2>流程进度</h2><p class="muted">查看当前节点，找到相关人员跟进。可审批人员是岗位候选人，尚未指定某个人处理。</p></div><el-button :loading="loading" @click="load">刷新进度</el-button></header>
     <p v-if="data" class="progress-context">项目负责人：{{ data.project.manager.name }}<span>更新于 {{ time(data.checked_at) }}</span></p>
-    <nav class="progress-groups" aria-label="流程分类"><button v-for="group in groups" :key="group.key" type="button" :aria-pressed="category === group.key" @click="select(group.key)"><span>{{ group.label }}</span><strong>{{ group.open }} <small>待跟进</small></strong></button></nav>
+    <nav class="progress-groups" aria-label="流程分类"><button v-for="group in groups" :key="group.key" type="button" :aria-pressed="category === group.key" @click="select(group.key)"><span>{{ group.label }}</span><strong>{{ group.open }} <small>待跟进</small></strong><em v-if="group.overdue" class="group-overdue">其中 {{ group.overdue }} 项逾期</em></button></nav>
     <div class="progress-tools"><div role="group" aria-label="进度范围"><el-button :type="state === 'open' ? 'primary' : undefined" :aria-pressed="state === 'open'" @click="scope('open')">待跟进</el-button><el-button :type="state === 'all' ? 'primary' : undefined" :aria-pressed="state === 'all'" @click="scope('all')">全部记录</el-button></div><span v-if="data" class="muted">共 {{ data.count }} 项</span></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" /><el-button v-if="error" @click="load">重新加载进度</el-button>
     <p v-if="copied" role="status">{{ copied }}</p>
@@ -59,7 +59,7 @@ onBeforeUnmount(() => { generation++ })
       <article v-for="row in data.results" :key="`${row.resource}-${row.id}`" class="progress-record" :class="{ overdue: row.overdue }">
         <header><h3>{{ row.title }}</h3><span class="progress-status">{{ row.status_label }}</span></header>
         <dl><div><dt>{{ row.handler_label }}</dt><dd>{{ names({ handlers: row.handlers.slice(0, 3) }) }}<details v-if="row.handlers.length > 3" class="more-contacts"><summary>查看其余 {{ row.handlers.length - 3 }} 位人员</summary>{{ names({ handlers: row.handlers.slice(3) }) }}</details></dd></div><div><dt>{{ row.due_label }}</dt><dd>{{ row.due_date || '未设置' }} <strong v-if="row.overdue" class="overdue-label">已逾期</strong></dd></div><div v-if="row.agreed_date"><dt>约定付款日</dt><dd>{{ row.agreed_date }}（实际付款期限尚未起算）</dd></div></dl>
-        <p class="progress-hint">{{ row.hint }}</p>
+        <p v-if="row.hint" class="progress-hint">{{ row.hint }}</p>
         <details v-if="recordFlow(row)"><summary>查看流程节点</summary><ProcessSteps :flow="recordFlow(row)!" /></details>
         <footer><el-button text @click="copy(row)">复制跟进信息</el-button><router-link v-if="row.path" :to="row.path">查看原单</router-link></footer>
       </article>
@@ -83,6 +83,7 @@ onBeforeUnmount(() => { generation++ })
 .progress-groups span { font-size: 13px; }
 .progress-groups strong { margin-top: 6px; font-size: 20px; }
 .progress-groups small { font-size: 11px; font-weight: normal; color: var(--mute); }
+.group-overdue { display: block; margin-top: 2px; font-size: 12px; font-style: normal; font-weight: 600; color: var(--risk); }
 .progress-tools { margin-bottom: 16px; }
 /* 一条记录一行：十几二十个节点时能一屏扫完，而不是翻三屏卡片。 */
 .progress-records { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }

@@ -38,10 +38,17 @@ test('BOM 同屏采购跨页筛选保留草稿编辑，按准确含税金额保�
   const bom = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
   await bom.getByRole('button', { name: '导入 BOM', exact: true }).click()
   await page.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type=file]').setInputFiles({ name: 'bom.csv', mimeType: 'text/csv', buffer: Buffer.from('物料编码,单元,需求数量,变更说明,需求日期,申请日期,申请人\n' + Array.from({ length: 13 }, (_, i) => `${tag}-${i},${i < 12 ? '上料单元' : '检测单元'},1,初版,2026-10-01,2026-09-11,设计员`).join('\n')) })
-  await expect(bom.locator('.import-preview thead')).toContainText('物料编码')
-  await expect(bom.locator('.import-preview thead')).toContainText('单元')
-  await expect(bom.locator('.import-preview tbody tr').first()).toContainText(`${tag}-0`)
-  await expect(bom.locator('.import-preview tbody tr').first()).toContainText('上料单元')
+  if (info.project.name === 'mobile') {
+    // 手机宽度下导入预览是逐行卡片，每列一行「标签：值」，同时核对列名和取值。
+    const card = bom.locator('.import-preview .import-card').first()
+    await expect(card).toContainText(`物料编码：${tag}-0`)
+    await expect(card).toContainText('单元：上料单元')
+  } else {
+    await expect(bom.locator('.import-preview thead')).toContainText('物料编码')
+    await expect(bom.locator('.import-preview thead')).toContainText('单元')
+    await expect(bom.locator('.import-preview tbody tr').first()).toContainText(`${tag}-0`)
+    await expect(bom.locator('.import-preview tbody tr').first()).toContainText('上料单元')
+  }
   await bom.getByRole('button', { name: '确认导入', exact: true }).click()
   await page.getByRole('dialog').locator('button[type="submit"]').click()
   await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
@@ -50,7 +57,7 @@ test('BOM 同屏采购跨页筛选保留草稿编辑，按准确含税金额保�
   expect(demand.lines[0].applicant).toBe('设计员')
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
-  const picker = page.getByRole('region', { name: 'BOM 勾选采购', exact: true })
+  const picker = page.getByRole('region', { name: '从 BOM 多选下单', exact: true })
   const order = picker.getByRole('region', { name: '采购草稿', exact: true })
   await expect(picker).toBeVisible()
   await expect(order).toBeVisible()

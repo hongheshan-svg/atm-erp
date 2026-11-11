@@ -1,4 +1,4 @@
-import { businessDate, selectExecutors } from './fixtures'
+import { businessDate, choosePeople, selectExecutors } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -81,7 +81,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await dialog(manager).getByLabel('项目名称', { exact: true }).fill(`生产交付验收${suffix}`)
   await selectRemoteOption(dialog(manager).getByLabel('客户', { exact: true }), { id: customer.id, text: customer.name })
   await dialog(manager).getByLabel('负责人', { exact: true }).selectOption(String(owner.id))
-  await dialog(manager).getByLabel('项目成员', { exact: true }).selectOption([producer.id, first.id, second.id].map(String))
+  await choosePeople(manager, dialog(manager).getByLabel('项目成员', { exact: true }), [producer, first, second].map(account => account.display_name))
   await dialog(manager).getByLabel('质保月数', { exact: true }).fill('12')
   const current = await save(manager, 'business/projects/', 201)
   await api(manager, `business/projects/${current.id}/task-supervisors/`, { supervisors: { production: producer.id, electrical: producer.id }, expected_revision: 0, reason: '项目指定生产与电气专业主管' })
@@ -138,7 +138,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const assembly = await createTask('assembly', assemblyTitle)
   const commissioning = await createTask('test', testTitle)
   await action(page, row(page, testTitle), '完成任务')
-  await reason(page, '允许装配和调试交叉推进')
+  await dialog(page).getByLabel('完成说明', { exact: true }).fill('允许装配和调试交叉推进')
   await save(page, 'business/tasks/' + commissioning.id + '/complete/')
   expect((await api(admin, 'business/tasks/' + commissioning.id + '/')).status).toBe('done')
   await action(page, row(page, testTitle), '重开任务')
@@ -169,10 +169,10 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await save(page, `business/tasks/${assembly.id}/assign/`)
   expect(await api(admin, `business/tasks/${assembly.id}/`)).toMatchObject({ assignee: second.id, status: 'open' })
   await action(page, row(page, assemblyTitle), '登记工时')
-  await dialog(page).getByLabel('人员', { exact: true }).selectOption(String(second.id))
+  await choosePeople(page, dialog(page).getByLabel('人员', { exact: true }), [second.display_name])
   await dialog(page).getByLabel('日期', { exact: true }).fill(date())
   await dialog(page).getByLabel('工时', { exact: true }).fill('3')
-  await reason(page, '团队装配工时原记录')
+  await dialog(page).getByLabel('工作内容', { exact: true }).fill('团队装配工时原记录')
   const original = await save(page, `business/tasks/${assembly.id}/time/`)
   await page.getByRole('tab', { name: '工时记录', exact: true }).click()
   await action(page, row(page, '团队装配工时原记录'), '更正工时')
@@ -196,7 +196,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await page.getByRole('tab', { name: '项目任务', exact: true }).click()
   async function complete(title: string, id: number) {
     await action(page, row(page, title), '完成任务')
-    await reason(page, '生产经理核对现场执行完成')
+    await dialog(page).getByLabel('完成说明', { exact: true }).fill('生产经理核对现场执行完成')
     await save(page, `business/tasks/${id}/complete/`)
     expect((await api(admin, `business/tasks/${id}/`)).status).toBe('done')
   }
@@ -236,7 +236,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await dialog(page).getByLabel('日期', { exact: true }).fill(date())
   const serviceTitle = `保内传感器复核${suffix}`
   await dialog(page).getByLabel('售后事项', { exact: true }).fill(serviceTitle)
-  await dialog(page).getByLabel('执行人', { exact: true }).selectOption(String(first.id))
+  await choosePeople(page, dialog(page).getByLabel('执行人', { exact: true }), [first.display_name])
   const service = await save(page, `business/projects/${current.id}/service/`)
   await page.getByRole('tab', { name: '交付与售后', exact: true }).click()
   await page.getByRole('tab', { name: '售后任务', exact: true }).click()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch } from 'vue'
 import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
@@ -19,19 +19,20 @@ import ProjectAttention from '../components/ProjectAttention.vue'
 import ProjectProgress from '../components/ProjectProgress.vue'
 import ProjectTaskSupervisors from '../components/ProjectTaskSupervisors.vue'
 import ProjectMilestones from '../components/ProjectMilestones.vue'
+import ProjectReadiness from '../components/ProjectReadiness.vue'
+import FinanceTotals from '../components/FinanceTotals.vue'
 import { revealActiveTab } from '../utils/tabs'
 import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
+import { projectDueFlag } from '../modules/projects'
 import { confirmFormNavigation } from '../form-experience'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
 const financeTabs = [{ key: 'entries', label: '项目款项', resources: ['entries'] }, { key: 'reconciliations', label: '项目对账', resources: ['reconciliations'] }, { key: 'payments', label: '项目收付流水', resources: ['payments'] }]
-const costTabs = [{ key: 'budget', label: '预算与预测' }, { key: 'actual', label: '实际成本' }]
 const route = useRoute()
 const router = useRouter()
 const id = Number(route.params.id)
 const project = ref<Row | null>(null)
-const cost = ref<Row>({})
 const revision = ref(0)
 const tabsRef = ref<TabsInstance>()
 async function revealTab() {
@@ -47,35 +48,63 @@ const requirementsOpen = ref(false)
 watch(tab, value => { sessionStore.set(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
 watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value))) tab.value = String(value) })
 watch(tab, revealTab, { flush: 'post' })
-watch(tab, value => { if (value === 'cost') void load() })
 const error = ref('')
 const projectFlow = computed(() => flowFor('projects', project.value))
 const amount = (value: unknown) => formatMoney(value, { currency: true, placeholder: '未设置' })
-// 收起时的一行摘要；合同金额与四宫格一样只在 money() 通过时才拼进来。
-const brief = computed(() => {
+// 合同：有金额照常显示；没有销售单写「无销售合同」，有销售单尚未签约写「未签约」，不再显示 ¥ 0.00。
+const contractText = computed(() => {
   const record = project.value
   if (!record) return ''
-  return [
-    `${record.equipment_quantity} 台`,
-    `交期 ${record.due_date || '未设置'}`,
-    ...(money() ? [`合同 ${amount(record.contract_amount)}`] : []),
-  ].join(' · ')
+  if (Number(record.contract_amount) > 0) return amount(record.contract_amount)
+  return record.has_sale === false ? '无销售合同' : '未签约'
 })
-// 合同金额减已发生成本：让经理在成本页直接看到还剩多少利润空间。金额均为含税经营口径。
-const margin = computed(() => {
-  const contract = Number(project.value?.contract_amount), total = Number(cost.value.total)
-  if (!money() || !Number.isFinite(contract) || contract <= 0 || !Number.isFinite(total)) return null
-  const value = contract - total
-  return { value: value.toFixed(2), rate: `${((value / contract) * 100).toFixed(1)}%`, loss: value < 0 }
+// 执行中、交付中的项目交期已过或今天到期时，页头和概览用风险色写明。
+const dueFlag = computed(() => {
+  const flag = project.value ? projectDueFlag(project.value) : undefined
+  return flag?.risk ? flag.text : ''
 })
+// 收起时的一行摘要，交期单独成段以便标红；合同金额与四宫格一样只在 money() 通过时才拼进来。
+const briefHead = computed(() => project.value ? `${project.value.equipment_quantity} 台 · ` : '')
+const briefDue = computed(() => project.value ? `交期 ${project.value.due_date || '未设置'}${dueFlag.value ? ` ${dueFlag.value}` : ''}` : '')
+const briefTail = computed(() => project.value && money() ? ` · ${project.value.has_sale === false ? contractText.value : `合同 ${contractText.value}`}` : '')
+const memberNames = computed((): string[] | null => Array.isArray(project.value?.member_names) ? project.value!.member_names : null)
+const canEditProject = computed(() => Boolean(project.value && actionNames('projects', project.value).includes('编辑项目')))
+// 已结项、已取消的项目不再显示待办条，改为一行结项或取消说明。
+const finished = computed(() => ['closed', 'cancelled'].includes(String(project.value?.status)))
+// 需求说明只有一行且放得下时不显示「展开全文」；收起态是单行省略，按是否溢出或含换行判断。
+const requirementRef = ref<HTMLElement>()
+const requirementLong = ref(false)
+function measureRequirement() {
+  const text = String(project.value?.requirements || '').trim()
+  const element = requirementRef.value
+  if (requirementsOpen.value) return
+  requirementLong.value = /\n/.test(text) || Boolean(element && element.scrollWidth > element.clientWidth + 1)
+}
+watch([overview, () => project.value?.requirements], () => { void nextTick(measureRequirement) }, { flush: 'post' })
+onMounted(() => window.addEventListener('resize', measureRequirement))
+onBeforeUnmount(() => window.removeEventListener('resize', measureRequirement))
+// 推进检查只给能发货、结项的项目经理看；其他角色不请求，避免无权限报错。
+const readinessVisible = computed(() => Boolean(project.value && manager() && project.value.can_manage !== false && ['active', 'delivering', 'warranty'].includes(project.value.status)))
+// 交付页签里的「登记发货」与页头「项目操作」同一条件。
+const canShip = computed(() => Boolean(project.value && actionNames('projects', project.value).includes('发货')))
+const deliveryEmpty = computed(() => canShip.value
+  ? '尚未发货。完成设计、装配、调试任务后在此登记发货；每批发货会自动生成安装和验收任务。'
+  : '尚未发货。发货由项目经理登记，每批发货会自动生成安装和验收任务。')
 const command = ref<Command | null>(null)
 const attention = computed(() => String(route.query.attention || ''))
 const taskAttention = computed(() => tab.value === 'tasks' && (!route.query.section || route.query.section === 'tasks') && ['open-tasks', 'acceptance'].includes(attention.value))
-const purchaseAttention = computed(() => tab.value === 'purchases' && ['submitted', 'approved', 'partial'].includes(attention.value))
-const phase = ref('')
+const purchaseAttention = computed(() => tab.value === 'purchases' && ['draft', 'submitted', 'approved', 'partial'].includes(attention.value))
+// 阶段筛选跟随地址，推进检查里的「装配阶段」等链接可以直接落到对应任务。
+const phase = ref(String(route.query.phase || ''))
+watch(() => route.query.phase, value => { phase.value = String(value || '') })
+function selectPhase(value: string) {
+  const { attention: _attention, phase: _phase, ...query } = route.query
+  phase.value = value
+  void router.replace({ query: { ...query, ...(value ? { phase: value } : {}) } })
+}
 const taskParams = computed(() => ({ project: id, ...(phase.value ? { phase: phase.value } : {}), ...(taskAttention.value ? { status: 'open', ...(attention.value === 'acceptance' ? { kind: 'acceptance' } : {}) } : {}) }))
 const purchaseParams = computed(() => ({ project: id, ...(purchaseAttention.value ? { status: attention.value } : {}) }))
-const attentionLabel = computed(() => ({ 'open-tasks': '未完成任务', acceptance: '待验收任务', submitted: '待批准采购', approved: '待收货采购', partial: '部分收货采购' }[attention.value]))
+const attentionLabel = computed(() => ({ 'open-tasks': '未完成任务', acceptance: '待验收任务', draft: '采购草稿', submitted: '待批准采购', approved: '待收货采购', partial: '部分收货采购' }[attention.value]))
 function clearAttention() {
   const { attention: _attention, ...query } = route.query
   void router.replace({ query })
@@ -85,7 +114,6 @@ async function load() {
   try {
     project.value = await read(`/business/projects/${id}/`)
     sessionStore.set(`current-project-${user.value?.id}`, String(id))
-    if (money() && tab.value === 'cost') cost.value = await read(`/business/projects/${id}/cost/`)
     revision.value++
     await revealTab()
   } catch (e) {
@@ -104,17 +132,17 @@ onMounted(load)
 <template>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" /><template
     v-if="project"
-    ><header class="page-heading">
+    ><header class="page-heading project-heading">
       <div>
-        <router-link to="/projects" class="muted">← 项目列表</router-link>
-        <p class="eyebrow">{{ project.code }}</p>
-        <h1>{{ project.name }}</h1>
-        <p class="muted">
-          {{ project.customer_name }} · {{ project.manager_name }} <StatusBadge :value="project.status" :text="display(project.status)" />
+        <p class="project-crumb">
+          <span class="project-back"><router-link to="/projects" class="muted">← 项目列表</router-link><span class="eyebrow">{{ project.code }}</span></span
+          ><span class="project-meta">{{ project.customer_name }} · {{ project.manager_name }}<template v-if="!overview"> · <span class="project-brief">{{ briefHead }}<span :class="{ 'project-late': dueFlag }">{{ briefDue }}</span>{{ briefTail }}</span></template></span>
         </p>
+        <div class="project-name"><h1>{{ project.name }}</h1><StatusBadge :value="project.status" :text="display(project.status)" /></div>
       </div>
       <div class="toolbar">
-        <el-button @click="overview = !overview" :aria-expanded="overview">{{ overview ? '收起项目概览' : '展开项目概览' }}</el-button>
+        <!-- 手机上按钮与返回同一行：概览按钮显示短字，读屏和按名称查找仍用完整名称。 -->
+        <el-button @click="overview = !overview" :aria-expanded="overview" :aria-label="overview ? '收起项目概览' : '展开项目概览'"><span class="label-full">{{ overview ? '收起项目概览' : '展开项目概览' }}</span><span class="label-short" aria-hidden="true">概览 {{ overview ? '▴' : '▾' }}</span></el-button>
         <el-button @click="load">刷新</el-button
         ><el-dropdown
           v-if="actionNames('projects', project).length"
@@ -134,27 +162,36 @@ onMounted(load)
         >
       </div>
     </header>
-    <p v-if="!overview" class="project-brief muted">{{ brief }}</p>
-    <ProcessSteps v-if="projectFlow" class="panel project-flow" :flow="projectFlow" />
-    <ProjectAttention v-if="tab !== 'progress'" :project="project" :revision="revision" />
+    <!-- 状态、下一步和待办合成一块：流程条压成一行步骤，推进检查紧跟其后，首屏留给任务表。 -->
+    <section class="panel project-status" aria-label="项目推进">
+      <ProcessSteps v-if="projectFlow" class="project-flow" :flow="projectFlow" inline />
+      <ProjectReadiness v-if="readinessVisible" :project="project" :revision="revision" @act="act" />
+      <p v-if="finished" class="project-finished"><strong>{{ display(project.status) }}</strong>{{ project.close_reason ? `：${project.close_reason}` : '' }}</p>
+      <ProjectAttention v-else-if="tab !== 'progress'" :project="project" :revision="revision" />
+    </section>
     <div v-show="overview">
     <section class="project-summary">
       <div>
         <small>设备数量</small><strong>{{ project.equipment_quantity }} 台</strong>
       </div>
       <div>
-        <small>计划交期</small><strong>{{ project.due_date || '未设置' }}</strong>
+        <small>计划交期</small><strong :class="{ 'project-late': dueFlag }">{{ project.due_date || '未设置' }}</strong><span v-if="dueFlag" class="project-late">{{ dueFlag }}</span>
       </div>
       <div>
         <small>质保约定</small><strong>{{ project.warranty_months }} 个月</strong>
       </div>
       <div v-if="money()">
-        <small>合同金额</small><strong>{{ amount(project.contract_amount) }}</strong>
+        <small>合同金额</small><strong>{{ contractText }}</strong>
       </div>
     </section>
+    <p v-if="memberNames" class="project-members">
+      <span class="muted">项目成员（{{ memberNames.length }}）</span><span>{{ memberNames.length ? memberNames.join(' · ') : '尚未添加成员' }}</span>
+      <el-button v-if="canEditProject" link type="primary" class="inline-link" @click="act('编辑项目')">管理成员</el-button>
+    </p>
     <div v-if="project.requirements" class="requirements">
-      <p class="requirement-text" :class="{ 'requirement-clamped': !requirementsOpen }">{{ project.requirements }}</p>
+      <p ref="requirementRef" class="requirement-text" :class="{ 'requirement-clamped': !requirementsOpen }">{{ project.requirements }}</p>
       <el-button
+        v-if="requirementLong || requirementsOpen"
         link
         type="primary"
         class="requirement-toggle"
@@ -165,9 +202,9 @@ onMounted(load)
     </div>
     </div>
     <p v-if="taskAttention || purchaseAttention" class="attention-filter" role="status">当前项目 · {{ attentionLabel }}<el-button text @click="clearAttention">查看全部</el-button><router-link v-if="taskAttention && attention === 'acceptance' && manager() && project.can_manage !== false" :to="{ path: `/projects/${id}`, query: { tab: 'deliveries', section: 'deliveries' } }">前往交付批次登记验收</router-link></p>
-    <el-tabs ref="tabsRef" class="scrollable-tabs" v-model="tab" :before-leave="confirmFormNavigation"
+    <el-tabs ref="tabsRef" class="scrollable-tabs project-tabs" v-model="tab" :before-leave="confirmFormNavigation"
       ><el-tab-pane label="流程进度" name="progress" lazy><ProjectProgress v-if="tab === 'progress'" :project-id="id" :revision="revision" /></el-tab-pane><el-tab-pane label="任务与工时" name="tasks"
-        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ProjectMilestones :project-id="id" :revision="revision" :phase="phase" @phase="value => { phase = value; clearAttention() }" @changed="load" /><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ProjectMilestones :project-id="id" :revision="revision" :phase="phase" @phase="selectPhase" @changed="load" /><ResourcePanel
           resource="tasks"
           :key="`tasks-${attention}`"
           :class="{ 'attention-list': taskAttention }"
@@ -206,10 +243,12 @@ onMounted(load)
           :revision="revision"
           @changed="load" /></el-tab-pane
       ><el-tab-pane label="交付与售后" name="deliveries" lazy
-        ><ModuleTabs :parent-tab="tab" v-if="tab === 'deliveries'" :tabs="deliveryTabs" :storage-key="`project-${id}-deliveries`"><template #deliveries><ResourcePanel
+        ><ModuleTabs :parent-tab="tab" v-if="tab === 'deliveries'" :tabs="deliveryTabs" :storage-key="`project-${id}-deliveries`"><template #deliveries><div v-if="canShip" class="tab-actions"><el-button type="primary" @click="act('发货')">登记发货</el-button><span class="muted">每批发货自动生成本批安装和验收任务；安装完成后在下方批次上登记验收。</span></div><ResourcePanel
           resource="deliveries"
           title="交付批次"
           :params="{ project: id }"
+          :empty-hint="deliveryEmpty"
+          hide-contact-hint
           :revision="revision"
           @changed="load" /></template><template #service><ResourcePanel
           resource="tasks"
@@ -220,7 +259,7 @@ onMounted(load)
           :revision="revision"
           @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane v-if="money()" label="收付款" name="finance" lazy
-        ><ModuleTabs :parent-tab="tab" v-if="tab === 'finance'" :tabs="financeTabs" :storage-key="`project-${id}-finance`"><template #entries><ResourcePanel
+        ><FinanceTotals v-if="tab === 'finance'" project :project-id="id" :revision="revision" /><ModuleTabs :parent-tab="tab" v-if="tab === 'finance'" :tabs="financeTabs" :storage-key="`project-${id}-finance`"><template #entries><ResourcePanel
           resource="entries"
           title="项目款项"
           :allow-create="['active', 'delivering', 'warranty'].includes(project.status)"
@@ -229,21 +268,7 @@ onMounted(load)
           :revision="revision"
           @changed="load" /></template><template #reconciliations><ResourcePanel resource="reconciliations" title="项目对账" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template><template #payments><ResourcePanel resource="payments" title="项目收付流水" :allow-create="false" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template></ModuleTabs></el-tab-pane
       ><el-tab-pane v-if="money()" label="成本与预算" name="cost" lazy>
-        <ModuleTabs :parent-tab="tab" v-if="tab === 'cost'" :tabs="costTabs" :storage-key="`project-${id}-cost`">
-          <template #budget><BudgetPanel :project-id="id" :revision="revision" :status="project.status" :can-manage="project.can_manage" /></template>
-          <template #actual><section class="panel cost-panel" aria-label="项目成本">
-            <h2>实际成本 <span class="muted">CNY 含税经营口径</span></h2>
-            <div class="cost-grid"><div v-for="(label, key) in { materials: '材料', labor: '人工', expenses: '费用', purchase_return_variance: '退货价差', total: '合计' }" :key="key">
-              <small>{{ label }}</small><strong>{{ formatMoney(cost[key], { currency: true }) }}</strong>
-            </div></div>
-            <div v-if="margin" class="cost-margin" aria-label="合同毛利估算">
-              <div><small>合同金额</small><strong>{{ amount(project.contract_amount) }}</strong></div>
-              <div><small>毛利（合同 − 实际成本）</small><strong :class="{ 'margin-loss': margin.loss }">{{ formatMoney(margin.value, { currency: true }) }}</strong></div>
-              <div><small>毛利率</small><strong :class="{ 'margin-loss': margin.loss }">{{ margin.rate }}</strong></div>
-            </div>
-            <p class="muted cost-note">{{ margin ? '毛利按已发生的实际成本估算，项目未结束时成本仍会增加。' : '尚未签约或未设置合同金额，暂不估算毛利。' }}</p>
-          </section></template>
-        </ModuleTabs>
+        <BudgetPanel v-if="tab === 'cost'" :project-id="id" :revision="revision" :status="project.status" :can-manage="project.can_manage" :contract="project.contract_amount" />
       </el-tab-pane><el-tab-pane label="附件" name="documents" lazy
         ><ResourcePanel
           resource="documents"
@@ -260,13 +285,25 @@ onMounted(load)
 .project-summary > div { border: 0; border-right: 1px solid var(--surface-border); border-radius: 0; box-shadow: none; padding: 0 22px; }
 .project-summary > div:last-child { border-right: 0; }
 .project-summary strong { font-size: 20px; margin-top: 8px; }
-.cost-margin { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--surface-border); }
-.cost-margin small, .cost-margin strong { display: block; }
-.cost-margin small { color: var(--mute); font-size: 12px; }
-.cost-margin strong { margin-top: 6px; font-size: 18px; font-variant-numeric: tabular-nums; }
-.margin-loss { color: var(--risk); }
-.cost-note { margin: 10px 0 0; font-size: 12px; }
-.project-brief { margin: -14px 0 16px; font-variant-numeric: tabular-nums; }
+/* 页头两行：返回、编号、客户·负责人·摘要一行，名称与状态一行。 */
+.project-heading { margin-bottom: 10px; }
+.project-crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-size: 13px; }
+/* 全局手机规则会隐藏页头 .muted 说明文字；返回项目列表是导航，不能跟着隐藏。 */
+.project-crumb .muted { margin: 0; display: inline; }
+.project-meta { color: var(--mute); min-width: 0; }
+.project-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.project-name h1 { margin: 2px 0 0; font-size: 22px; min-width: 0; overflow-wrap: anywhere; }
+.project-brief { font-variant-numeric: tabular-nums; }
+.project-status { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; padding: 8px 14px; margin-bottom: 8px; }
+.project-status .project-flow { flex: none; margin: 2px 0 0; }
+.project-status :deep(.project-readiness) { flex: 1 1 520px; }
+.project-status :deep(.project-attention) { flex: 1 1 auto; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+/* 主页签和「项目任务 / 工时记录」子页签压窄，任务表尽量进首屏。 */
+.project-tabs > :deep(.el-tabs__header) { margin-bottom: 8px; }
+.project-tabs :deep(.module-tabs > .el-tabs__header) { margin-bottom: 8px; }
+.project-tabs :deep(.module-tabs > .el-tabs__header .el-tabs__item) { height: 32px; line-height: 32px; font-size: 13px; }
+.tab-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+.tab-actions .muted { font-size: 12px; }
 .attention-filter { display: flex; align-items: center; gap: 12px; }
 .attention-list :deep(.resource-status-tabs) { display: none; }
 .requirements { display: flex; align-items: flex-start; gap: 12px; background: #fff; border-left: 3px solid var(--brand-line); line-height: 1.7; }
@@ -274,5 +311,31 @@ onMounted(load)
 /* 默认只留一行：nowrap 让换行折成空格，省略号提示还有下文。 */
 .requirement-clamped { max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .requirement-toggle { flex: none; align-self: flex-start; }
+/* 文字链接按钮：不要白底和投影，看起来像正文里的链接。 */
+.requirement-toggle, .project-members .inline-link { height: auto; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.project-members { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 10px 0; font-size: 13px; line-height: 1.6; }
+.project-members .muted { margin: 0; }
+.project-late { color: var(--risk); font-weight: 600; }
+.project-summary .project-late { display: block; margin-top: 2px; font-size: 12px; }
+.project-finished { margin: 0; font-size: 13px; color: var(--ink-4, #475569); flex-basis: 100%; }
+.project-finished strong { color: var(--ink-2, #1e293b); }
 @media (max-width: 760px) { .project-summary { row-gap: 20px; } .project-summary > div { padding: 0 16px; } }
+.project-back { display: contents; }
+.label-short { display: none; }
+/* 手机：返回与按钮一行，名称最多两行，客户·负责人·交期最多两行；推进块压紧，任务表尽量进首屏。 */
+@media (max-width: 600px) {
+  .project-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'back tools' 'name name' 'meta meta'; align-items: center; gap: 2px 8px; margin-bottom: 8px; }
+  .project-heading > div:first-child, .project-crumb { display: contents; }
+  .project-back { grid-area: back; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 13px; white-space: nowrap; }
+  .project-back .eyebrow { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .project-name { grid-area: name; margin-top: 2px; }
+  .project-name h1 { margin: 0; font-size: 18px; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .project-meta { grid-area: meta; font-size: 12px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .project-heading > .toolbar { grid-area: tools; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; margin: 0; }
+  .project-heading > .toolbar :deep(.el-button) { height: 30px; min-height: 30px; padding: 4px 8px; margin: 0; font-size: 12px; }
+  .label-full { display: none; }
+  .label-short { display: inline; }
+  .project-status { gap: 6px 10px; padding: 8px 12px; }
+  .project-status :deep(.project-readiness), .project-status :deep(.project-attention) { flex-basis: 100%; }
+}
 </style>

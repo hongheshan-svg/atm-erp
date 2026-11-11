@@ -4,7 +4,8 @@ import { read } from '../api'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
 import type { Row } from '../types'
-const props = defineProps<{ projectId?: number; revision?: number }>()
+// project：项目收付款页签的汇总口径（应收合计 / 已收 / 未收，应付含费用），而不是全公司余额卡。
+const props = defineProps<{ projectId?: number; revision?: number; project?: boolean }>()
 const data = ref<Row | null>(null)
 const error = ref('')
 let generation = 0
@@ -27,9 +28,28 @@ const overdue = computed(() => {
   if (!row) return '0.00'
   return centsToAmount(toCents(row.overdue_receivable) + toCents(row.overdue_payable))
 })
-const cards = computed(() => {
+const sum = (...values: unknown[]) => centsToAmount(values.reduce<bigint>((total, value) => total + toCents(value), 0n))
+type Card = { key: string; label: string; value: unknown; note: string; risk: boolean; muted?: boolean; alert?: boolean }
+const projectCards = computed((): Card[] => {
+  const row = data.value
+  if (!row?.receivable) return []
+  const receivable = row.receivable, payable = row.payable || {}, expense = row.expense || {}
+  const payableOverdue = sum(payable.overdue, expense.overdue)
+  return [
+    { key: 'receivable_total', label: '应收合计', value: receivable.total, note: `${receivable.count ?? 0} 笔，已扣除合同减额`, risk: false },
+    { key: 'received', label: '已收', value: receivable.settled, note: '已登记的客户收款', risk: false },
+    { key: 'unreceived', label: '未收', value: receivable.outstanding, risk: false, alert: toCents(receivable.overdue) > 0n,
+      note: toCents(receivable.overdue) > 0n ? `其中逾期 ${money(receivable.overdue)}` : '暂无逾期应收' },
+    { key: 'payable_total', label: '应付合计（含费用）', value: sum(payable.total, expense.total), note: `采购 ${money(payable.total)} · 费用 ${money(expense.total)}`, risk: false },
+    { key: 'paid', label: '已付', value: sum(payable.settled, expense.settled), note: '已登记的付款', risk: false },
+    { key: 'unpaid', label: '未付', value: sum(payable.outstanding, expense.outstanding), risk: false, alert: toCents(payableOverdue) > 0n,
+      note: toCents(payableOverdue) > 0n ? `其中逾期 ${money(payableOverdue)}` : '暂无逾期应付' },
+  ]
+})
+const cards = computed((): Card[] => {
   const row = data.value
   if (!row) return []
+  if (props.project) return projectCards.value
   return [
     { key: 'receivable', label: '待收款', value: row.receivable, note: '应收余额，不含待退客户款', risk: false },
     { key: 'payable', label: '待付款', value: row.payable, note: '采购与费用余额，不含待收退款', risk: false },
@@ -47,7 +67,9 @@ async function load() {
   const current = ++generation
   error.value = ''
   try {
-    const result = await read('/business/entries/summary/', { project: props.projectId })
+    const result = props.project
+      ? await read(`/business/projects/${props.projectId}/finance-summary/`)
+      : await read('/business/entries/summary/', { project: props.projectId })
     if (current === generation) data.value = result
   } catch (e) {
     if (current === generation) error.value = message(e)
@@ -57,11 +79,11 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
 </script>
 <template>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-  <div v-else-if="cards.length" class="finance-totals" aria-label="往来款项余额">
+  <div v-else-if="cards.length" class="finance-totals" :aria-label="project ? '项目款项汇总' : '往来款项余额'">
     <section v-for="card in cards" :key="card.key" class="panel finance-total" :class="{ 'finance-muted': card.muted }" :aria-label="card.label">
       <span>{{ card.label }}</span>
       <strong :class="{ 'finance-risk': card.risk && Number(card.value) }">{{ money(card.value, { currency: true }) }}</strong>
-      <small>{{ card.note }}</small>
+      <small :class="{ 'finance-risk': card.alert }">{{ card.note }}</small>
     </section>
   </div>
 </template>
@@ -74,5 +96,14 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
 .finance-total small { color: var(--ink-6); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .finance-risk { color: var(--risk); }
 .finance-muted { opacity: 0.55; }
-@media (max-width: 560px) { .finance-total { border-right: 0; border-bottom: 1px solid var(--line-2); } }
+/* 手机：两列小卡，金额不在「¥」后折行；普通说明收起，逾期提示仍保留。 */
+@media (max-width: 600px) {
+  .finance-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-total { gap: 0; padding: 7px 12px; border-right: 0; border-bottom: 1px solid var(--line-2); }
+  .finance-total:nth-child(odd) { border-right: 1px solid var(--line-2); }
+  .finance-total:nth-last-child(-n + 2):nth-child(odd), .finance-total:last-child { border-bottom: 0; }
+  .finance-total:last-child:nth-child(odd) { grid-column: 1 / -1; border-right: 0; }
+  .finance-total strong { font-size: 15px; white-space: nowrap; overflow-wrap: normal; }
+  .finance-total small:not(.finance-risk) { display: none; }
+}
 </style>
