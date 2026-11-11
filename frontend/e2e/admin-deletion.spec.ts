@@ -5,9 +5,16 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { try { if (!sessionStorage.getItem('e2e-batch-default')) localStorage.setItem('erp.batch-mode', '1') } catch { /* 无存储的文档 */ } })
 })
 
-test('删除入口默认收起，开启批量管理后才显示选择列和删除按钮', async ({ page }) => {
+test('删除入口默认收起，开启批量管理后才显示选择列和删除按钮', async ({ page }, info) => {
   await page.addInitScript(() => { try { sessionStorage.setItem('e2e-batch-default', '1'); if (!sessionStorage.getItem('e2e-batch-cleared')) { localStorage.removeItem('erp.batch-mode'); sessionStorage.setItem('e2e-batch-cleared', '1') } } catch { /* 无存储的文档 */ } })
   await login(page, process.env.E2E_ADMIN_USERNAME || 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  // 自备一条物料：按影响范围只跑部分用例时本条可能最先执行，空库在手机端显示空状态而不是表格。
+  const token = await page.evaluate(() => localStorage.getItem('access_token'))
+  const created = await page.request.post('/api/business/items/', {
+    headers: { Authorization: 'Bearer ' + token, 'Idempotency-Key': crypto.randomUUID() },
+    data: { code: 'TOGGLE-' + Date.now() + '-' + info.project.name, name: '批量管理开关验收', specification: '隔离验收', unit: '件' },
+  })
+  expect(created.ok(), await created.text()).toBeTruthy()
   await page.goto('/erp/masterdata?section=items')
   const panel = page.getByRole('region', { name: '物料', exact: true })
   await expect(panel.getByRole('table').first()).toBeVisible()
