@@ -21,7 +21,7 @@ class BankIdentityTests(BusinessFixtures, TestCase):
         self.project = self.active_project(amount='1000')
         self.entry = self.project.entries.get()
 
-    def bank(self, amount, reference, account='A'):
+    def bank(self, amount, reference, account='A', date=TODAY, status=201):
         data = self.post(
             'finance',
             'bank-records/',
@@ -29,13 +29,13 @@ class BankIdentityTests(BusinessFixtures, TestCase):
                 'amount': amount,
                 'reference': reference,
                 'account': account,
-                'date': TODAY,
+                'date': date,
                 'counterparty': '客户',
                 'reason': '银行实际记录',
             },
-            status=201,
+            status=status,
         )
-        return BankRecord.objects.get(pk=data['id'])
+        return BankRecord.objects.get(pk=data['id']) if status == 201 else data
 
     def pay(self, reference, amount='100', account='A', date=TODAY, entry=None, status=200):
         entry = entry or self.entry
@@ -127,6 +127,39 @@ class BankIdentityTests(BusinessFixtures, TestCase):
         self.match(first, other_account, status=409)
         self.assertEqual(BankMatch.objects.count(), 2)
         self.assertEqual(finance.balance(self.entry), 700)
+
+    def test_manual_bank_record_cannot_repeat_imported_huaxia_transfer_by_core_number(self):
+        imported = self.imported()
+        self.assertEqual(imported.reference, '2026-01-01:000123')
+        receipts = ActionReceipt.objects.count()
+        error = self.bank('100', '000123', account=imported.account, date='2026-01-01', status=409)
+        self.assertIn(f'记录 ID {imported.pk}', str(error['reference']))
+        self.assertEqual(BankRecord.objects.count(), 1)
+        self.assertEqual(ActionReceipt.objects.count(), receipts)
+        # The single record stays the only claimable copy of the transfer.
+        self.post(
+            'finance',
+            f'bank-records/{imported.pk}/allocate/',
+            {'entry': self.entry.pk, 'amount': '100', 'reason': '认领到账'},
+        )
+        self.assertEqual(finance.balance(self.entry), 900)
+        # A core number reused on another bank date, or on another account, is another transfer.
+        self.bank('100', '000123', account=imported.account, date='2026-01-02')
+        self.bank('100', '000123', account='其他账户', date='2026-01-01')
+
+    def test_manual_bank_records_treat_both_huaxia_spellings_as_one_transfer(self):
+        raw = self.bank('100', '000123', account='H', date='2026-01-01')
+        self.bank('100', '2026-01-01:000123', account='H', date='2026-01-01', status=409)
+        prefixed = self.bank('-50', '2026-01-03:000777', account='H', date='2026-01-03')
+        error = self.bank('-50', '000777', account='H', date='2026-01-03', status=409)
+        self.assertIn(f'记录 ID {prefixed.pk}', str(error['reference']))
+        # Other dates and plain references that only look similar stay separate records.
+        self.bank('100', '2026-01-02:000123', account='H', date='2026-01-02')
+        self.bank('100', '000777', account='H', date='2026-01-04')
+        self.bank('100', '2026-13-01:000123', account='H', date='2026-01-01')
+        self.assertEqual(BankRecord.objects.filter(account='H').count(), 5)
+        raw.refresh_from_db()
+        self.assertEqual(raw.void_reason, '')
 
     def test_prefixed_bank_reference_cannot_be_recorded_with_another_date(self):
         bank = self.imported()
