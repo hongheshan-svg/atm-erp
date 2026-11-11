@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElDatePicker } from 'element-plus'
 import { all, read } from '../api'
 import { message } from '../utils/request'
 import type { Command, Row } from '../types'
@@ -11,6 +12,14 @@ const suppliers = ref<Row[]>([]), supplier = ref(''), month = ref(today().slice(
 const data = ref<Row | null>(null), error = ref(''), busy = ref(false), command = ref<Command | null>(null)
 const feedback = ref('')
 let generation = 0
+// 手机宽度：月份用中文月份选择器并让标签在输入框上方，明细改为逐行卡片，免得表格横滚。
+const narrow = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const query = window.matchMedia('(max-width: 600px)')
+  const sync = () => { narrow.value = query.matches }
+  query.addEventListener?.('change', sync)
+  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
+}
 watch([supplier, month], () => { generation++; data.value = null; command.value = null; busy.value = false; feedback.value = '' }, { flush: 'sync' })
 onBeforeUnmount(() => { generation++ })
 onMounted(async () => { try { suppliers.value = (await all('/business/partners/')).filter(r => r.kind !== 'customer') } catch (e) { error.value = message(e) } })
@@ -41,16 +50,35 @@ function saved(result: Row) {
 <template>
   <section class="panel" aria-label="供应商月度对账">
     <h2>供应商月度对账</h2>
-    <form class="toolbar" @submit.prevent="load"><label>供应商 <select v-model="supplier" required aria-label="对账供应商"><option value="">请选择</option><option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.code }} · {{ s.name }}</option></select></label><label>月份 <input v-model="month" required type="month" aria-label="对账月份"></label><el-button native-type="submit" :loading="busy">查询月度对账</el-button></form>
+    <form class="toolbar" @submit.prevent="load"><label>供应商 <select v-model="supplier" required aria-label="对账供应商"><option value="">请选择</option><option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.code }} · {{ s.name }}</option></select></label><label>月份 <input v-if="!narrow" v-model="month" required type="month" aria-label="对账月份"><ElDatePicker v-else v-model="month" type="month" value-format="YYYY-MM" format="YYYY年MM月" :clearable="false" aria-label="对账月份" placeholder="选择月份" /></label><el-button native-type="submit" :loading="busy">查询月度对账</el-button></form>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-alert v-if="feedback" :title="feedback" type="info" :closable="false" />
     <template v-if="data">
       <p>当前报告：{{ suppliers.find(s => s.id === data!.supplier)?.name }} · {{ data.month }}</p>
       <p>截至 {{ data.through }}；期初 {{ data.totals.opening }} ＋ 收货 {{ data.totals.received }} － 退货 {{ data.totals.returned }} － 净付款 {{ data.totals.paid }} ＝ 期末 {{ data.totals.closing }} 元。</p>
       <p class="muted">按该供应商跨项目汇总，不受外层项目筛选影响；经理仅查看负责或参与项目。以合格收货及退货供应商贷项计账，隔离品、未收货合同额不计入；负余额表示预付净额。历史无收货日期的记录沿用创建日。</p>
-      <BusinessTable label="供应商月结" :data="data.rows" max-height="450" stripe><el-table-column prop="project_name" label="项目" /><el-table-column prop="code" label="采购单" /><el-table-column v-for="(label, key) in { opening: '期初', received: '收货', returned: '退货', paid: '净付款', closing: '期末' }" :key="key" :prop="key" :label="label" /><el-table-column label="原单"><template #default="{ row }"><router-link :to="{ path: '/finance', query: { section: 'entries', resource: 'entries', focus: row.entry } }">核对应付</router-link></template></el-table-column></BusinessTable>
+      <BusinessTable v-if="!narrow" label="供应商月结" :data="data.rows" max-height="450" stripe><el-table-column prop="project_name" label="项目" /><el-table-column prop="code" label="采购单" /><el-table-column v-for="(label, key) in { opening: '期初', received: '收货', returned: '退货', paid: '净付款', closing: '期末' }" :key="key" :prop="key" :label="label" /><el-table-column label="原单"><template #default="{ row }"><router-link :to="{ path: '/finance', query: { section: 'entries', resource: 'entries', focus: row.entry } }">核对应付</router-link></template></el-table-column></BusinessTable>
+      <ul v-else class="monthly-cards" aria-label="供应商月结明细"><li v-for="row in data.rows" :key="row.code"><strong>{{ row.code }} · {{ row.project_name }}</strong><dl><template v-for="(label, key) in { opening: '期初', received: '收货', returned: '退货', paid: '净付款', closing: '期末' }" :key="key"><dt>{{ label }}</dt><dd>{{ row[key] }}</dd></template></dl><router-link :to="{ path: '/finance', query: { section: 'entries', resource: 'entries', focus: row.entry } }">核对应付</router-link></li></ul>
       <el-button v-if="can(['admin', 'finance']) && data.rows.length" type="primary" @click="confirm">确认月度对账</el-button>
     </template>
     <ActionDialog :command="command" @close="command = null" @saved="saved" />
   </section>
 </template>
+<style scoped>
+.monthly-cards { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+.monthly-cards li { border: 1px solid var(--surface-border); border-radius: 8px; padding: 10px 12px; }
+.monthly-cards strong { display: block; overflow-wrap: anywhere; }
+.monthly-cards dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; margin: 8px 0; }
+.monthly-cards dt { font-size: 11px; color: var(--ink-4); }
+.monthly-cards dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.monthly-cards a { display: inline-flex; align-items: center; min-height: 40px; }
+@media (max-width: 600px) {
+  .toolbar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .toolbar label { display: flex; flex-direction: column; gap: 6px; }
+  .toolbar select { width: 100%; min-height: 40px; }
+  .toolbar :deep(.el-date-editor) { width: 100%; }
+  .toolbar :deep(.el-date-editor .el-input__wrapper) { min-height: 40px; }
+  .toolbar :deep(.el-date-editor input) { border: 0; box-shadow: none; padding: 0; min-height: 0; background: transparent; }
+  .toolbar .el-button { min-height: 40px; }
+}
+</style>

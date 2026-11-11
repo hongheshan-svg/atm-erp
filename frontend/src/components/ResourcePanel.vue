@@ -264,7 +264,8 @@ function actionLabel(row: Row, name: string) {
 // 操作列宽度随内容走：只有「操作 ▾」或只有一个主按钮的资源收窄到 96，腾出空间给数据列。
 const actionWidth = computed(() => {
   if (batchVisible.value) return 230
-  if (mobileTasks.value) return 84
+  // 窄屏：操作列按最长的单个文字按钮收窄/放宽，不让「查看银行明细」这类按钮被裁掉。
+  if (mobileTasks.value) return Math.max(84, ...records.value.map(row => { const sole = soleAction(row); return sole ? sole.length * 13 + 30 : 84 }))
   if (!records.value.length) return 180
   return Math.max(...records.value.map(row => {
     if (props.resource === 'tasks' && taskSyncHint(row)) return 180
@@ -304,7 +305,7 @@ function mobileSummary(row: Row): string[] {
   const lines = (...rows: string[]) => rows.filter(Boolean)
   if (props.resource === 'purchases' && row.change_request) return ['修改申请待处理']
   if (props.resource === 'entries') return lines(`待结算 ${cell(row, 'balance')} · ${display(row.kind)}`, mobileTasks.value ? joined(row.partner_name, props.projectId ? '' : row.project_name, row.due_date ? `到期 ${row.due_date}` : '') : '')
-  if (props.resource === 'payments') return [`${cell(row, 'amount')} 元 · ${row.date}`]
+  if (props.resource === 'payments' && !mobileTasks.value) return [`${cell(row, 'amount')} 元 · ${row.date}`]
   // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
   if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
   if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
@@ -313,7 +314,15 @@ function mobileSummary(row: Row): string[] {
       const amount = row.total_amount ?? row.amount
       return lines(joined(row.supplier_name, props.projectId ? '' : row.project_name), joined(amount != null && amount !== '' ? `金额 ${money(amount)}` : '', row.next_delivery_date ? `下一交期 ${row.next_delivery_date}` : ''))
     }
-    if (props.resource === 'items') return lines(joined(row.name, row.specification, row.brand), joined(row.unit, row.drawing_number, cell(row, 'part_type') === '—' ? '' : display(row.part_type)))
+    if (props.resource === 'items') return lines(joined(row.name, row.specification, row.brand), joined(row.unit, row.drawing_number, columns.items?.find(col => col.key === 'part_type')?.format?.(row)))
+    // 对账、银行流水、收付款流水：两行摘要，金额统一走 money。
+    if (props.resource === 'reconciliations') return lines(joined(row.partner_name || row.entry_title, props.projectId ? '' : row.project_name), joined(row.approved_amount != null && row.approved_amount !== '' ? `额度 ${money(row.approved_amount)}` : '', row.difference != null && row.difference !== '' ? `差异 ${money(row.difference)}` : '', row.confirmed_name))
+    if (props.resource === 'bank-records') {
+      const amountValue = Number(row.amount)
+      const statusText = columns[props.resource]?.find(col => col.key === 'void_reason')?.format?.(row)
+      return lines(joined(Number.isNaN(amountValue) ? '' : `${amountValue < 0 ? '支出' : '收入'} ${money(String(row.amount).replace(/^-/, ''))}`, row.account), joined(row.counterparty, row.remaining_amount != null && row.remaining_amount !== '' ? `待匹配 ${money(row.remaining_amount)}` : '', statusText))
+    }
+    if (props.resource === 'payments') return lines(joined(row.date, columns[props.resource]?.find(col => col.key === 'amount')?.format?.(row)), joined(row.partner_name, row.reconciliation_code, props.projectId ? '' : row.project_name))
     if (props.resource === 'users') return lines(joined(row.username, (row.roles || [row.role]).map((role: string) => labels[role] || role).join('、')))
     const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
     return lines(joined(...rest))
@@ -599,7 +608,7 @@ async function inspect(row: Row) {
         :key="col.key"
         :label="columnLabel(col)"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="mobileTasks ? (col.key === shownColumns?.[0]?.key ? 150 : 96) : columnWidth(col)"
+        :min-width="mobileTasks ? (col.key === shownColumns?.[0]?.key ? 130 : 84) : columnWidth(col)"
         show-overflow-tooltip
       >
         <template #default="{ row }"

@@ -81,8 +81,23 @@ describe('列表创建入口', () => {
       const items = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
       await flushPromises()
       expect((items.vm as any).mobileSummary({ name: '导轨', specification: 'HSR15', brand: 'THK', unit: '根', part_type: 'standard' })[0]).toBe('导轨 · HSR15 · THK')
+      expect((items.vm as any).mobileSummary({ name: '导轨', part_type: 'custom', unit: '根' }).join(' ')).toContain('非标件')
+      expect((items.vm as any).mobileSummary({ name: '导轨', part_type: 'standard' }).join(' ')).toContain('标准件')
       expect(items.find('.filter-toggle').exists()).toBe(false)
       items.unmount()
+      // 摘要里不能漏出英文枚举值。
+      const raw = /\b(custom|standard|supplier|customer|both|receivable|payable|expense|admin|manager)\b/
+      for (const [resource, row] of [
+        ['partners', { name: '甲', kind: 'supplier', contact: '李', phone: '1', payment_term: 'manual', payment_days: 0 }],
+        ['entries', { title: '合同款', kind: 'receivable', balance: '10.00', partner_name: '乙', status: 'open' }],
+        ['users', { display_name: '王', username: 'wang', roles: ['admin', 'manager'] }],
+        ['tasks', { title: '任务', due_date: '2026-11-01', assignee_name: '赵', stage_label: '设计阶段', status: 'open' }],
+      ] as const) {
+        const panel = shallowMount(ResourcePanel, { props: { resource, title: resource }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+        await flushPromises()
+        expect((panel.vm as any).mobileSummary(row).join(' | ')).not.toMatch(raw)
+        panel.unmount()
+      }
       const projects = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
       await flushPromises()
       const toggle = projects.find('.filter-toggle')

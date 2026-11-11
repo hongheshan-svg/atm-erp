@@ -5,11 +5,14 @@ import ModuleTabs from '../components/ModuleTabs.vue'
 import { can } from '../session'
 import SupplierMonthly from '../components/SupplierMonthly.vue'
 import FinanceTotals from '../components/FinanceTotals.vue'
+// 页面说明：桌面默认展开（不依赖 ::details-content），手机宽度默认收起，省出首屏给列表。
+const helpOpen = typeof window === 'undefined' || !window.matchMedia?.('(max-width: 600px)').matches
 const tabs = [{ key: 'entries', label: '应收应付与费用' }, { key: 'reconciliations', label: '业务对账' }, { key: 'monthly', label: '供应商月度对账' }, { key: 'payments', label: '收付款流水' }, ...(can(['admin', 'finance']) ? [{ key: 'bank', label: '银行到账与认领' }] : [])]
 </script>
 <template>
   <ModulePage title="收付款" project-filter v-slot="{ revision, projectId, refresh }"
-    ><p class="muted">金额为人民币含税经营口径，不替代法定会计账。采购付款及退款先对账，预付款按合同核准；客户到账可先登记。未知项目的银行收入请清除项目筛选后认领。</p>
+    >
+    <details class="finance-help" :open="helpOpen"><summary>说明</summary><p class="muted">金额为人民币含税经营口径，不替代法定会计账。采购付款及退款先对账，预付款按合同核准；客户到账可先登记。未知项目的银行收入请清除项目筛选后认领。</p></details>
     <ModuleTabs :tabs="tabs" storage-key="finance"><template #monthly><SupplierMonthly /></template><template #entries><FinanceTotals :project-id="projectId" :revision="revision" /><ResourcePanel
       resource="entries"
       title="应收应付与费用"
@@ -25,3 +28,13 @@ const tabs = [{ key: 'entries', label: '应收应付与费用' }, { key: 'reconc
       @changed="refresh"
   /></template><template #reconciliations><p class="muted">从款项操作生成对账单，也可导入对账草稿（编号可手填）。先查看明细核对差异，再确认；预付款由项目经理或管理员核准。</p><ResourcePanel resource="reconciliations" title="业务对账" :params="{ entry__project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template><template #bank><ResourcePanel resource="bank-records" title="银行到账与认领" :params="{ project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template></ModuleTabs></ModulePage>
 </template>
+<style scoped>
+/* 桌面：details 退化为普通容器，说明段落排版与原来一致。 */
+@media (min-width: 601px) {
+  .finance-help { display: contents; }
+  .finance-help > summary { display: none; }
+}
+@media (max-width: 600px) {
+  .finance-help > summary { display: flex; align-items: center; min-height: 40px; cursor: pointer; font-size: 13px; color: var(--brand-ink); }
+}
+</style>
