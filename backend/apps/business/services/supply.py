@@ -552,9 +552,10 @@ def cancel_remainder(actor, key, purchase_id, data):
         fields(data, {'reason', 'lines'})
         reason = text(data, 'reason')
         state(purchase.project, {'active', 'delivering', 'warranty'})
-        if purchase.status == 'submitted':
-            raise Conflict('待审批采购不能直接作废，请先申请修改，经审批退回草稿后再处理。')
-        state(purchase, {'draft', 'approved', 'partial'})
+        state(purchase, {'draft', 'submitted', 'approved', 'partial'})
+        # 待审批单按草稿规则整单作废（尚无应付）；修改申请待审批人处理时不替对方关闭申请。
+        if purchase.status == 'submitted' and pending_requests([purchase]):
+            raise Conflict('已有待处理的修改申请，请先由审批人处理后再作废。')
         lines = list(purchase.lines.select_for_update().order_by('item_id', 'pk'))
         by_id = {line.pk: line for line in lines}
         selected = {}

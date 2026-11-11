@@ -91,10 +91,11 @@ it('收货与隔离品命令提交前过滤两项都为 0 的行，全部为 0 �
   expect(() => accept.prepare?.({ lines: [{ line: 1, quantity: '0' }] })).toThrow('请至少填写一条到货数量')
 })
 
-it('未批准采购显示作废采购，已批准显示取消未收余量，走同一接口', async () => {
+it('草稿与待审批采购显示作废采购，已批准显示取消未收余量，走同一接口', async () => {
   user.value = { id: 1, roles: ['purchaser'] }
   expect(actionNames('purchases', { status: 'draft' })).toContain('作废采购')
   expect(actionNames('purchases', { status: 'submitted' })).not.toContain('取消未收余量')
+  expect(actionNames('purchases', { status: 'submitted' })).toContain('作废采购')
   expect(actionNames('purchases', { status: 'approved' })).toContain('取消未收余量')
   expect(actionNames('purchases', { status: 'approved' })).not.toContain('作废采购')
   const voided = await actionCommand('purchases', { id: 9, status: 'draft' }, '作废采购')
