@@ -54,6 +54,91 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         self.post('manager', f'projects/{other.pk}/bom-import-confirm/', {'token': reuse['token']})
         self.assertEqual(Item.objects.filter(name='新导入气缸').count(), 1)
 
+    def test_bom_import_backfills_blank_brand_only_and_saves_without_bom_change(self):
+        project = self.active_project()
+        blank = Item.objects.create(code='BF-001', name='侧出上壳', specification='H24B-SE', unit='件')
+        branded = Item.objects.create(code='BF-002', name='公插芯', specification='HE-024-M', unit='件', brand='哈丁')
+        for item in (blank, branded):
+            BOMLine.objects.create(project=project, item=item, quantity=2, assembly_unit='上料')
+
+        def demand():
+            response = self.clients['manager'].get(f'/api/business/projects/{project.pk}/demand/')
+            self.assertEqual(response.status_code, 200, response.data)
+            return response.data
+
+        revision = demand()['revision']
+        # 「可回导模板」原样导回，只在品牌列补上空缺：BOM 用量不变，也照样可以导入。
+        row = ['BF-001', '上料', '2', '', '', '', '', '侧出上壳', 'H24B-SE', '', '', '', '哈丁', '', '件']
+        same = ['BF-002', '上料', '2', '', '', '', '', '公插芯', 'HE-024-M', '', '', '', '哈丁', '', '件']
+        preview = self.auto_preview(project, [row, same])
+        self.assertTrue(preview['can_import'], preview)
+        self.assertEqual(
+            [line['material_action'] for line in preview['lines']], ['沿用已有物料，补填品牌', '使用已有编码']
+        )
+        self.assertEqual({line['bom_action'] for line in preview['lines']}, {'unchanged'})
+        blank.refresh_from_db()
+        self.assertEqual(blank.brand, '')
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+        blank.refresh_from_db()
+        self.assertEqual(blank.brand, '哈丁')
+        self.assertTrue(
+            AuditLog.objects.filter(
+                operation='item.save', resource=f'item:{blank.pk}', detail__fields=['brand']
+            ).exists()
+        )
+        current = demand()
+        self.assertEqual(current['revision'], revision)
+        self.assertEqual(
+            {line['item_code']: line['brand'] for line in current['lines']}, {'BF-001': '哈丁', 'BF-002': '哈丁'}
+        )
+        # 已有品牌不同、其他资料不同，仍按不一致拒绝，不覆盖主数据。
+        for changed in (
+            ['BF-002', '上料', '2', '', '', '', '', '公插芯', 'HE-024-M', '', '', '', '浩亭', '', '件'],
+            ['BF-001', '上料', '2', '', '', '', '', '侧出上壳', 'H24B-SE-X', '', '', '', '', '', '件'],
+        ):
+            rejected = self.auto_preview(project, [changed])
+            self.assertFalse(rejected['can_import'])
+            self.assertIn('只会补填原来为空的品牌', str(rejected['errors']))
+        branded.refresh_from_db()
+        self.assertEqual(branded.brand, '哈丁')
+        # 补品牌与改用量同一张表：两样都保存。
+        third = Item.objects.create(code='BF-003', name='航插上壳', specification='H3A-TE', unit='件')
+        BOMLine.objects.create(project=project, item=third, quantity=1, assembly_unit='上料')
+        mixed = self.auto_preview(
+            project, [['BF-003', '上料', '3', '补料', '', '', '', '航插上壳', 'H3A-TE', '', '', '', '浩亭', '', '件']]
+        )
+        self.assertTrue(mixed['can_import'], mixed)
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': mixed['token']})
+        third.refresh_from_db()
+        self.assertEqual(third.brand, '浩亭')
+        self.assertEqual(BOMLine.objects.get(project=project, item=third).quantity, 3)
+
+    def test_bom_import_without_code_backfills_unbranded_same_item_instead_of_duplicating(self):
+        project = self.active_project()
+        row = ['', '上料', '2', '新增', '', '', '', '长方形接头', 'KDM10P-08', '', '', '21', '', 'standard', '件']
+        first = self.auto_preview(project, [row])
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': first['token']})
+        item = Item.objects.get(name='长方形接头')
+        self.assertEqual(item.brand, '')
+        # 原始表补上品牌、编码仍留空再导入：补到原物料上，不新建物料、不新增 BOM 行。
+        again = self.auto_preview(project, [[*row[:3], '', *row[4:12], '哈丁', *row[13:]]])
+        self.assertTrue(again['can_import'], again)
+        self.assertEqual(again['lines'][0]['material_action'], '沿用已有物料，补填品牌')
+        self.assertEqual(again['lines'][0]['bom_action'], 'unchanged')
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': again['token']})
+        self.assertEqual(Item.objects.filter(name='长方形接头').count(), 1)
+        item.refresh_from_db()
+        self.assertEqual(item.brand, '哈丁')
+        self.assertEqual(BOMLine.objects.filter(project=project).count(), 1)
+        # 两个除品牌外相同的无品牌物料：不猜，要求填编码。
+        Item.objects.create(code='DUP-A', name='直通接头', specification='PC6-01', unit='件', product_category='21')
+        Item.objects.create(code='DUP-B', name='直通接头', specification='PC6-01', unit='件', product_category='21')
+        ambiguous = self.auto_preview(
+            project, [['', '上料', '1', '新增', '', '', '', '直通接头', 'PC6-01', '', '', '21', 'SMC', '', '件']]
+        )
+        self.assertFalse(ambiguous['can_import'])
+        self.assertIn('请填写要补品牌的物料编码', str(ambiguous['errors']))
+
     def test_bom_auto_creation_validation_failure_and_stale_token_are_atomic(self):
         project = self.active_project()
         row = ['', '上料', '2', '新增', '', '', '', '失败不得落库', 'ABC', '', '', '21', '', 'standard', '件']

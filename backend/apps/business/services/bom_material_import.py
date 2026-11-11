@@ -33,6 +33,7 @@ MATERIAL_FIELDS = (
 )
 HEADERS = [label for label, _ in BOM_COLUMNS]
 SALT = 'lean-bom-material-import-v1'
+BRAND_BACKFILLED = '沿用已有物料，补填品牌'
 
 
 def material(actor, row):
@@ -45,12 +46,22 @@ def material(actor, row):
     if code:
         item = Item.objects.filter(code=code, is_active=True).first()
         if item:
-            if any(
-                value
-                and masterdata.normalized(getattr(item, field)).casefold() != masterdata.normalized(value).casefold()
-                for field, value in data.items()
-            ):
-                raise ValidationError('所填物料资料与编码对应的现有物料不一致，请核对编码；导入不会覆盖物料主数据。')
+            backfill = {}
+            for field, value in data.items():
+                current = masterdata.normalized(getattr(item, field))
+                if not value or current.casefold() == masterdata.normalized(value).casefold():
+                    continue
+                # 品牌原来为空时按文件补填（导出可回导模板、补品牌列再导回）；已有品牌和其他资料仍不覆盖。
+                if field == 'brand' and not current:
+                    backfill[field] = value
+                    continue
+                raise ValidationError(
+                    '所填物料资料与编码对应的现有物料不一致，请核对编码；导入不会覆盖物料主数据，'
+                    '只会补填原来为空的品牌。'
+                )
+            if backfill:
+                masterdata.masterdata(actor, str(uuid.uuid4()), Item, backfill, item.pk)
+                return Item.objects.get(pk=item.pk), BRAND_BACKFILLED
             return item, '使用已有编码'
         if Item.all_objects.filter(code=code).exists():
             raise ValidationError('填写的物料编码已停用或已删除，请先核对主数据，不能重复占用该编码。')
@@ -74,6 +85,17 @@ def material(actor, row):
         if not matches[0].is_active:
             raise ValidationError('相同物料已停用，请先核对主数据，不能自动重复建码。')
         return matches[0], '复用相同物料'
+    if data['brand']:
+        # 原始 BOM 表补上品牌、编码仍留空再导入：除品牌外完全相同、原来没有品牌的物料就是同一物料，
+        # 补填品牌后复用，不另建一批重复物料（否则 BOM 会多出新行，需求量翻倍）。
+        unbranded = masterdata.duplicates({**data, 'brand': ''})
+        if len(unbranded) > 1:
+            raise ValidationError('存在多个除品牌外相同、且没有品牌的物料，请填写要补品牌的物料编码。')
+        if unbranded:
+            if not unbranded[0].is_active:
+                raise ValidationError('相同物料已停用，请先核对主数据，不能自动重复建码。')
+            masterdata.masterdata(actor, str(uuid.uuid4()), Item, {'brand': data['brand']}, unbranded[0].pk)
+            return Item.objects.get(pk=unbranded[0].pk), BRAND_BACKFILLED
     result = masterdata.masterdata(actor, str(uuid.uuid4()), Item, data)
     return Item.objects.get(pk=result['id']), '自动新建物料'
 
@@ -107,8 +129,9 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     result = bom_import.preview(project, SimpleUploadedFile('bom.csv', stream.getvalue().encode()))
     if errors and not actions:
         result['errors'] = []  # Material errors already explain why there are no valid lines.
-    if errors:
-        # 有物料问题时，「其余行与当前 BOM 一致」不是失败原因，不再另行提示。
+    if errors or any(action == BRAND_BACKFILLED for _, action, _ in actions):
+        # 有物料问题时，「其余行与当前 BOM 一致」不是失败原因，不再另行提示；
+        # 只补填品牌、BOM 用量不变时，这次导入照样有内容要保存。
         result['errors'] = [error for error in result['errors'] if not error.get('unchanged')]
     result['errors'] = sorted([*errors, *result['errors']], key=lambda error: error.get('row', 0))
     result['can_import'] = bool(result['lines']) and not result['errors']
@@ -228,19 +251,20 @@ def confirm(actor, project, data):
     def execute(user, locked):
         result = resolve(user, locked, payload['records'], payload['revision'])
         fields = ('item', 'quantity', 'assembly_unit', 'change_note', 'required_date', 'application_date', 'applicant')
+        # 与当前 BOM 完全一致的行不提交，不要求变更说明，也不写修订记录。
+        changed = [
+            {field: row.get(field) for field in fields}
+            for row in result['lines']
+            if row.get('bom_action') != 'unchanged'
+        ]
+        if not changed:
+            # 只补填了品牌：物料主数据已在 resolve 里保存，BOM 本身没有修订。
+            return {'id': locked.pk, 'revision': bom.revision(locked), 'lines': result['lines']}
         saved = bom.revise_bom(
             user,
             str(uuid.uuid4()),
             locked.pk,
-            {
-                'expected_revision': payload['revision'],
-                # 与当前 BOM 完全一致的行不提交，不要求变更说明，也不写修订记录。
-                'lines': [
-                    {field: row.get(field) for field in fields}
-                    for row in result['lines']
-                    if row.get('bom_action') != 'unchanged'
-                ],
-            },
+            {'expected_revision': payload['revision'], 'lines': changed},
         )
         return {**saved, 'lines': result['lines']}
 

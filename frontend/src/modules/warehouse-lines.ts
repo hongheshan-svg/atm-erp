@@ -18,21 +18,23 @@ export function materialDetails(item: Row): Row {
   }
 }
 // batch：按 BOM 批量领料，每行是一个库位，可填 0 表示本次不领；单行领料数量须大于 0。
+// location：库存页勾选多行领料，逐行显示库位，数量仍须大于 0（勾选了就是要领）。
 // 收货：每行前有「本次到货」勾选（selected，默认勾选，不提交）；cancel 为 true 时（有采购权限）
 // 未收足的行可勾选「余量不再到货」（cancel_remainder），同一次提交里取消该行剩余未收数量。
-export function warehouseLines(kind: 'receipt' | 'issue', initial: Row[], options: { batch?: boolean; cancel?: boolean } = {}): Field {
+export function warehouseLines(kind: 'receipt' | 'issue', initial: Row[], options: { batch?: boolean; location?: boolean; cancel?: boolean } = {}): Field {
   const batch = kind === 'issue' && !!options.batch
+  const located = kind === 'issue' && (batch || !!options.location)
   return {
     ...rows('lines', kind === 'receipt' ? '本次收货' : '本次出库', [
       { key: kind === 'receipt' ? 'line' : 'stock', label: '明细标识', hidden: true },
       ...(kind === 'receipt' ? [{ key: 'selected', label: '本次到货', type: 'boolean', hidden: true, initial: true } satisfies Field] : []),
       ...(kind === 'receipt' && options.cancel ? [{ key: 'cancel_remainder', label: '余量不再到货', type: 'boolean', hidden: true, initial: false } satisfies Field] : []),
       detail('material_label', '产品编号 / 零件名称'),
-      ...(kind === 'receipt' ? [detail('assembly_unit', '单元')] : batch ? [detail('location', '库位')] : []),
+      ...(kind === 'receipt' ? [detail('assembly_unit', '单元')] : located ? [detail('location', '库位')] : []),
       detail('spec_label', '图号 / 型号 / 版本 / 类型'), detail('unit', '单位'),
       detail('required_quantity', '需求数量'),
       ...(batch ? [detail('bom_remaining', 'BOM 未领')] : []),
-      detail('remaining', kind === 'receipt' ? '待收数量' : batch ? '本库位可用' : '可用库存'),
+      detail('remaining', kind === 'receipt' ? '待收数量' : located ? '本库位可用' : '可用库存'),
       { key: 'quantity', label: '数量', numeric: { scale: 3, min: kind === 'receipt' || batch ? 0 : 0.001 }, hint: kind === 'receipt' ? '本次实际到货的合格数量；可少于待收，余量继续待收。' : batch ? '本次领用数量；填 0 表示本行不领。' : '本次实际领料出库数量。' },
       ...(kind === 'receipt' ? [{ key: 'pending_quantity', label: '不合格隔离数量', initial: '0', numeric: { scale: 3, min: 0 }, hint: '待检或不合格数量，不进入可用库存。' } satisfies Field] : []),
       { key: 'remark', label: '备注', optional: true, placeholder: '选填，如外观异常、使用工位；最多500字' },

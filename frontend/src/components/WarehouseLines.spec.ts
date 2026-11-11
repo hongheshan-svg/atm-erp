@@ -187,3 +187,21 @@ it('无采购权限时不提供余量不再到货，只提示由采购取消未�
   expect(wrapper.get('.warehouse-summary').text()).toContain('请采购在「取消未收余量」中处理')
   wrapper.unmount()
 })
+
+it('库存勾选批量领料：逐行显示库位，数量默认留空，可一键按可用填入或清空，并读取所选项目需求', async () => {
+  const initial = [{ ...material, stock: 1, location: '主仓', remaining: '5.000', quantity: '', remark: '' }, { ...materialDetails({ item: 2, item_code: 'M-2', item_name: '气缸', unit: '个' }), stock: 2, location: '二号仓', remaining: '1.500', quantity: '', remark: '' }]
+  vi.mocked(read).mockImplementation(async path => String(path).endsWith('/demand/') ? { lines: [{ item: 1, quantity: '4.000' }] } : { id: 7, code: 'ATM01', name: '上料线' })
+  const field = warehouseLines('issue', initial, { location: true })
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: initial.map(row => ({ stock: row.stock, quantity: '', remark: '' })), context: { project: 7 } } })
+  await flushPromises()
+  expect(wrapper.findAll('th').map(th => th.text()).slice(1)).toEqual(['产品编号 / 零件名称', '库位', '图号 / 型号 / 版本 / 类型', '单位', '需求数量', '本库位可用', '本次出库数量', '备注'])
+  expect(wrapper.get('legend').text()).toContain('项目 ATM01 · 上料线')
+  expect(wrapper.findAll('tbody tr')[0]!.text()).toContain('4.000')
+  const button = (text: string) => wrapper.findAll('.warehouse-fill button').find(item => item.text() === text)!
+  expect(wrapper.findAll('.warehouse-fill button').map(item => item.text())).toEqual(['全部按可用填入', '全部清空'])
+  await button('全部按可用填入').trigger('click')
+  expect(wrapper.props('modelValue').map((row: Row) => row.quantity)).toEqual(['5.000', '1.500'])
+  await button('全部清空').trigger('click')
+  expect(wrapper.props('modelValue').map((row: Row) => row.quantity)).toEqual(['', ''])
+  wrapper.unmount()
+})

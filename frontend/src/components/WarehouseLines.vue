@@ -20,6 +20,8 @@ const receipt = computed(() => props.field.warehouse === 'receipt')
 const selectable = computed(() => receipt.value && props.field.fields!.some(field => field.key === 'selected'))
 const cancellable = computed(() => receipt.value && props.field.fields!.some(field => field.key === 'cancel_remainder'))
 const picked = (row: Row) => !selectable.value || row.selected !== false
+// 库存页勾选多行领料（与收货的逐行勾选无关）：没有建议数量，提供「全部按可用填入」和「全部清空」。
+const stockPicks = computed(() => props.field.warehouse === 'issue' && !batch.value)
 const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(model.value.length / 20) - 1)) * 20)
 const indices = computed(() => Array.from({ length: Math.min(20, model.value.length - start.value) }, (_, i) => start.value + i))
 const path = (i: number, key: string) => `${props.prefix}.${i}.${key}`
@@ -93,10 +95,10 @@ function pick(row: Row, on: boolean) {
   if (cancellable.value) row.cancel_remainder = false
 }
 function pickAll(on: boolean) { for (const row of model.value) if (picked(row) !== on) pick(row, on) }
-function fill(mode: 'pending' | 'suggested' | 'zero') {
+function fill(mode: 'pending' | 'suggested' | 'zero' | 'clear') {
   for (const row of model.value) {
     if (selectable.value && mode === 'pending') row.selected = true
-    if (mode === 'zero') row.quantity = '0'
+    if (mode === 'zero' || mode === 'clear') row.quantity = mode === 'zero' ? '0' : ''
     else row.quantity = mode === 'pending' ? source(row).remaining : source(row).quantity
     if (receipt.value) row.pending_quantity = '0'
     if (cancellable.value) row.cancel_remainder = false
@@ -150,9 +152,9 @@ defineExpose({ focusPath })
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="loadProject">重试</button></p>
     <div class="warehouse-summary" role="status"><strong>{{ summary }}</strong><span v-if="receipt || model.length > 1" class="warehouse-fill"
       ><label v-if="selectable" class="pick-all-mobile"><input type="checkbox" :checked="allPicked" :indeterminate="pickedRows.length > 0 && !allPicked" :disabled="disabled || !model.length" aria-label="全选本次到货明细" @change="pickAll(($event.target as HTMLInputElement).checked)" />全选</label
-      ><button v-if="receipt" type="button" :disabled="disabled" @click="fill('pending')">全部按待收填入</button
+      ><button v-if="receipt || stockPicks" type="button" :disabled="disabled" @click="fill('pending')">{{ receipt ? '全部按待收填入' : '全部按可用填入' }}</button
       ><button v-else type="button" :disabled="disabled" @click="fill('suggested')">恢复建议数量</button
-      ><button type="button" :disabled="disabled" @click="fill('zero')">全部清零</button></span
+      ><button type="button" :disabled="disabled" @click="fill(stockPicks ? 'clear' : 'zero')">{{ stockPicks ? '全部清空' : '全部清零' }}</button></span
     ><small v-if="receipt" class="muted">未到货的行取消勾选；合格与隔离合计少于待收的行已高亮，余量继续待收。{{ cancellable ? '供应商不再补货时，勾选该行的「余量不再到货」一并取消余量。' : '供应商不再补货时，请采购在「取消未收余量」中处理。' }}</small></div>
     <p class="table-guide">手机上按每款物料逐项填写。</p>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">

@@ -3,15 +3,16 @@ import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import AttachmentDialog from './AttachmentDialog.vue'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
+import AttachmentRemovalDialog from './AttachmentRemovalDialog.vue'
 import ListPagination from './ListPagination.vue'
-import { read } from '../api'
+import { read, write } from '../api'
 import { pageSize } from '../pagination'
 import { user } from '../session'
 
 vi.mock('../api', () => ({ read: vi.fn(), download: vi.fn(), write: vi.fn(), all: vi.fn().mockResolvedValue([]) }))
 const make = () => mount(AttachmentDialog, {
   props: { owner: 'sale', record: { id: 1, code: 'SO1', status: 'draft' } },
-  global: { plugins: [ElementPlus], stubs: { ElDialog: { template: '<section><slot /></section>' }, ActionDialog: true, RecordDeletionDialog: true } },
+  global: { plugins: [ElementPlus], stubs: { ElDialog: { template: '<section><slot /></section>' }, ActionDialog: true, RecordDeletionDialog: true, AttachmentRemovalDialog: true } },
 })
 afterEach(() => { user.value = null; vi.resetAllMocks() })
 
@@ -59,5 +60,58 @@ it('附件全选中切换单据时忽略旧单据的迟到结果', async () => {
   finish({ results: [{ id: 99 }], next: null })
   await flushPromises()
   expect(wrapper.get('[aria-label="附件批量选择"]').text()).toContain('已选 0')
+  wrapper.unmount()
+})
+
+const mixed = [
+  { id: 1, original_name: '比价表.png', size: 1, created_at: '2026-11-07T00:00:00Z', can_remove: true },
+  { id: 2, original_name: '别人的合同.pdf', size: 1, created_at: '2026-11-07T00:00:00Z', can_remove: false },
+  { id: 3, original_name: '报价.xlsx', size: 1, created_at: '2026-11-07T00:00:00Z', can_remove: true },
+]
+
+it('非管理员只能勾选自己可删除的附件，并批量提交整批共用原因', async () => {
+  user.value = { roles: ['purchaser'] }
+  vi.mocked(read).mockResolvedValue({ count: 3, results: mixed, next: null })
+  vi.mocked(write).mockResolvedValue({ removed: 2 })
+  const wrapper = make()
+  await flushPromises()
+  expect(wrapper.find('[aria-label="附件批量选择"]').exists()).toBe(false)
+  expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(3)
+  expect(wrapper.find('[aria-label="选择附件 #2 · 别人的合同.pdf"]').exists()).toBe(false)
+  const removeButton = () => wrapper.findAll('button').find(button => button.text().startsWith('删除所选'))!
+  expect(removeButton().attributes('disabled')).toBeDefined()
+  await wrapper.get('[aria-label="选择本页附件"]').setValue(true)
+  expect(removeButton().text()).toBe('删除所选（2）')
+  await removeButton().trigger('click')
+  expect(wrapper.getComponent(AttachmentRemovalDialog).props('rows').map(row => row.id)).toEqual([1, 3])
+  wrapper.unmount()
+})
+
+it('附件撤回弹窗列出文件名、要求原因并提交 remove-batch', async () => {
+  vi.mocked(write).mockResolvedValue({ removed: 2 })
+  const wrapper = mount(AttachmentRemovalDialog, {
+    props: { rows: [mixed[0], mixed[2]] },
+    global: { plugins: [ElementPlus], stubs: { ElDialog: { template: '<section><slot /><slot name="footer" /></section>' } } },
+  })
+  expect(wrapper.get('[aria-label="将删除的附件"]').text()).toContain('比价表.png')
+  expect(wrapper.get('[aria-label="将删除的附件"]').text()).toContain('报价.xlsx')
+  const confirm = wrapper.findAll('button').find(button => button.text().includes('确认删除'))!
+  expect(confirm.attributes('disabled')).toBeDefined()
+  await wrapper.get('textarea').setValue(' 比价表传错了 ')
+  await confirm.trigger('click')
+  await flushPromises()
+  expect(write).toHaveBeenCalledWith('/business/documents/remove-batch/', { documents: [1, 3], reason: '比价表传错了' }, expect.any(String))
+  expect(wrapper.emitted('saved')).toHaveLength(1)
+  expect(wrapper.emitted('close')).toHaveLength(1)
+})
+
+it('管理员仍使用原有批量删除，不出现撤回按钮', async () => {
+  user.value = { roles: ['admin'] }
+  vi.mocked(read).mockResolvedValue({ count: 3, results: mixed, next: null })
+  const wrapper = make()
+  await flushPromises()
+  expect(wrapper.findAll('button').some(button => button.text().startsWith('删除所选'))).toBe(false)
+  expect(wrapper.find('[aria-label="附件批量选择"]').exists()).toBe(true)
+  expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(4)
   wrapper.unmount()
 })

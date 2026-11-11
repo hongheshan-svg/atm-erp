@@ -75,7 +75,7 @@ export const columns: Record<string, Column[]> = {
   ],
   company: [C('name', '公司名称'), C('address', '地址'), C('phone', '电话'), { key: 'locked_through', label: '业务锁账至', format: r => r.locked_through || '未锁账' }],
   codes: [
-    { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单' }[String(r.key)] || r.key) },
+    { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单', issue_slip: '领料单' }[String(r.key)] || r.key) },
     C('prefix', '前缀'), { key: 'date_format', label: '日期格式', format: r => r.date_format || '无日期' }, C('padding', '流水位数'),
     { key: 'reset_cycle', label: '重置周期', format: r => ({ never: '不重置', year: '每年', month: '每月', day: '每天' }[String(r.reset_cycle)] || r.reset_cycle) }, C('counter', '当前序号'),
   ],
