@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
 import { taskSyncHint, taskElapsedLabel, taskVarianceLabel } from '../modules/milestones'
-import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, useId, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { all, read, download } from '../api'
 import {
@@ -67,7 +67,8 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   query.addEventListener?.('change', sync)
   onBeforeUnmount(() => query.removeEventListener?.('change', sync))
 }
-const mobileTasks = computed(() => mobile.value && props.resource === 'tasks')
+// 手机宽度的窄屏列表：只留名称、状态和操作，其余信息并入名称格的副行（完整信息在详情里）。
+const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || props.resource === 'projects'))
 const emit = defineEmits<{ changed: [] }>()
 const records = ref<Row[]>([])
 const count = ref(0)
@@ -111,6 +112,15 @@ watch(supplierFilter, (value, before) => { if (value !== before) searchRecords()
 const appliedExtra = ref<Row>({})
 const unsettled = ref(false)
 const extraConfig = computed(() => extraFilters[props.resource] || [])
+const filterId = useId()
+const filtersOpen = ref(false)
+// 窄屏下筛选控件多于 2 个时收起，只留搜索框和「筛选 · N」；N 为已填写的筛选数。
+const filterControls = computed(() => (props.resource === 'users' && filterConfig.value ? 1 : 0) + (['users', 'items', 'partners'].includes(props.resource) ? 1 : 0) + (props.resource === 'stocks' ? 1 : 0) + (['stocks', 'items'].includes(props.resource) ? 1 : 0) + (['purchases', 'entries'].includes(props.resource) ? 1 : 0) + (props.resource === 'audit' ? 2 : 0) + extraConfig.value.length)
+const collapsible = computed(() => mobile.value && filterControls.value > 2)
+const activeFilters = computed(() => [
+  props.resource === 'users' && filterValue.value, enabledFilter.value, locationFilter.value, brandFilter.value, unsettled.value, dateFrom.value, dateTo.value, supplierFilter.value != null && props.resource === 'purchases',
+  ...Object.values(extraValues.value),
+].filter(Boolean).length)
 const blankExtra = () => Object.fromEntries(extraConfig.value.map(item => [item.key, '']))
 const extraValues = ref<Record<string, string>>(blankExtra())
 const directory = ref<Row[]>([])
@@ -238,8 +248,14 @@ const shownColumns = computed(() => {
   const visible = (columns[props.resource] || []).filter(col => (!props.projectId || col.key !== 'project_name') && !secondaryKeys.value.has(col.key))
   const first = leading[props.resource] || []
   const rank = (key: string) => first.includes(key) ? first.indexOf(key) : first.length
-  return columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
+  const sorted = columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
+  return mobileTasks.value && sorted ? sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key)) : sorted
 })
+// 窄屏下被收进名称格副行的列（不含首列自己的合并副行，那些本来就显示在名称下面）。
+const hiddenColumns = computed(() => (columns[props.resource] || []).filter(col => {
+  const first = shownColumns.value?.[0]?.key
+  return !shownColumns.value?.some(c => c.key === col.key) && !pairs.value[first || '']?.includes(col.key) && (!props.projectId || col.key !== 'project_name')
+}))
 // 按钮写明方向：应收是收款，应付和费用是付款；动作本身仍是同一个「登记收付款」。
 function actionLabel(row: Row, name: string) {
   if (props.resource !== 'entries' || name !== '登记收付款' || String(row.balance).startsWith('-')) return name
@@ -248,6 +264,7 @@ function actionLabel(row: Row, name: string) {
 // 操作列宽度随内容走：只有「操作 ▾」或只有一个主按钮的资源收窄到 96，腾出空间给数据列。
 const actionWidth = computed(() => {
   if (batchVisible.value) return 230
+  if (mobileTasks.value) return 84
   if (!records.value.length) return 180
   return Math.max(...records.value.map(row => {
     if (props.resource === 'tasks' && taskSyncHint(row)) return 180
@@ -281,15 +298,30 @@ function cell(row: Row, key: string) {
   if (!moneyKeys.has(key) || row[key] == null) return display(row[key], key)
   return money(row[key], { refund: key === 'balance' })
 }
-function mobileSummary(row: Row) {
-  if (props.resource === 'purchases' && row.change_request) return '修改申请待处理'
-  if (props.resource === 'entries') return `待结算 ${cell(row, 'balance')} · ${display(row.kind)}`
-  if (props.resource === 'payments') return `${cell(row, 'amount')} 元 · ${row.date}`
+// 每行 1~2 行摘要；窄屏模式下把被隐藏的列并进来，关键信息不丢。
+const joined = (...parts: unknown[]) => parts.filter(part => part != null && part !== '' && part !== '—').join(' · ')
+function mobileSummary(row: Row): string[] {
+  const lines = (...rows: string[]) => rows.filter(Boolean)
+  if (props.resource === 'purchases' && row.change_request) return ['修改申请待处理']
+  if (props.resource === 'entries') return lines(`待结算 ${cell(row, 'balance')} · ${display(row.kind)}`, mobileTasks.value ? joined(row.partner_name, props.projectId ? '' : row.project_name, row.due_date ? `到期 ${row.due_date}` : '') : '')
+  if (props.resource === 'payments') return [`${cell(row, 'amount')} 元 · ${row.date}`]
   // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
-  if (props.resource === 'tasks') return [row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name].filter(Boolean).join(' · ')
-  if (props.resource === 'projects') return [row.customer_name, row.due_date ? `交期 ${row.due_date}` : ''].filter(Boolean).join(' · ')
-  return [row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : ''].filter(Boolean).join(' · ')
+  if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
+  if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
+  if (mobileTasks.value) {
+    if (props.resource === 'purchases') {
+      const amount = row.total_amount ?? row.amount
+      return lines(joined(row.supplier_name, props.projectId ? '' : row.project_name), joined(amount != null && amount !== '' ? `金额 ${money(amount)}` : '', row.next_delivery_date ? `下一交期 ${row.next_delivery_date}` : ''))
+    }
+    if (props.resource === 'items') return lines(joined(row.name, row.specification, row.brand), joined(row.unit, row.drawing_number, cell(row, 'part_type') === '—' ? '' : display(row.part_type)))
+    if (props.resource === 'users') return lines(joined(row.username, (row.roles || [row.role]).map((role: string) => labels[role] || role).join('、')))
+    const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
+    return lines(joined(...rest))
+  }
+  return [joined(row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : '')]
 }
+// 窄屏下摘要里逾期的计划日期标红。
+const summaryOverdue = (row: Row) => (props.resource === 'tasks' && isOverdueCell('tasks', 'due_date', row, day)) || (props.resource === 'purchases' && isOverdueCell('purchases', 'next_delivery_date', row, day)) || (props.resource === 'projects' && isOverdueCell('projects', 'due_date', row, day))
 async function load(preserveSelection: unknown = false) {
   selectionGeneration++; selectingAll.value = false
   if (preserveSelection !== true) deletionSelection.value = []
@@ -519,6 +551,8 @@ async function inspect(row: Row) {
     </header>
     <form v-if="searchableResources.includes(resource)" class="resource-search" @submit.prevent="searchRecords">
       <input v-model="search" type="search" :aria-label="`搜索${title}`" placeholder="输入名称、编号或关键词" />
+      <el-button v-if="collapsible" class="filter-toggle" :aria-expanded="filtersOpen" :aria-controls="`${filterId}-filters`" @click="filtersOpen = !filtersOpen">筛选{{ activeFilters ? ` · ${activeFilters}` : '' }} {{ filtersOpen ? '▴' : '▾' }}</el-button>
+      <div :id="`${filterId}-filters`" class="resource-filter-group" :class="{ 'is-collapsed': collapsible && !filtersOpen }">
       <select v-if="resource === 'users' && filterConfig" v-model="filterValue" aria-label="筛选用户角色" @change="searchRecords"><option value="">全部角色</option><option v-for="(label, value) in filterConfig.options" :key="value" :value="value">{{ label }}</option></select>
       <select v-if="['users', 'items', 'partners'].includes(resource)" v-model="enabledFilter" aria-label="筛选启用状态" @change="searchRecords"><option value="">全部状态</option><option value="true">启用</option><option value="false">停用</option></select>
       <input v-if="resource === 'stocks'" v-model="locationFilter" aria-label="筛选库位" placeholder="库位关键词" />
@@ -531,6 +565,7 @@ async function inspect(row: Row) {
         <select v-else-if="item.kind === 'sort'" v-model="extraValues[item.key]" :aria-label="item.label" @change="searchRecords"><option v-for="(label, value) in item.options" :key="value" :value="value">{{ label }}</option></select>
         <label v-else class="inline-check"><input type="checkbox" :checked="extraValues[item.key] === item.value" @change="extraValues[item.key] = ($event.target as HTMLInputElement).checked ? item.value! : ''; searchRecords()" />{{ item.label }}</label>
       </template>
+      </div>
       <el-button native-type="submit" :loading="loading">搜索</el-button>
       <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierFilter != null || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
     </form>
@@ -564,7 +599,7 @@ async function inspect(row: Row) {
         :key="col.key"
         :label="columnLabel(col)"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="columnWidth(col)"
+        :min-width="mobileTasks ? (col.key === shownColumns?.[0]?.key ? 150 : 96) : columnWidth(col)"
         show-overflow-tooltip
       >
         <template #default="{ row }"
@@ -578,7 +613,7 @@ async function inspect(row: Row) {
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
           <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">已逾期</strong></span>
-          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary" :class="{ 'is-overdue': mobileTasks && isOverdueCell(resource, 'due_date', row, day) }">{{ mobileSummary(row) }}</small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ primaryAction(row) }}</el-button></template
+          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary" :class="{ 'is-overdue': mobileTasks && summaryOverdue(row) }"><span v-for="(line, index) in mobileSummary(row)" :key="index">{{ line }}</span></small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ primaryAction(row) }}</el-button></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" :width="actionWidth"
@@ -621,6 +656,20 @@ async function inspect(row: Row) {
 .task-confirm-note { margin: 0 0 10px; font-size: 13px; color: var(--el-text-color-secondary); }
 .resource-list :deep(.flash-record > td.el-table__cell) { background: var(--brand-wash) !important; transition: background .4s; }
 .mobile-row-summary.is-overdue { color: var(--risk); }
+.mobile-row-summary > span { display: block; }
+.resource-filter-group { display: contents; }
+.resource-search .filter-toggle { display: none; }
+@media (max-width: 600px) {
+  .resource-search .filter-toggle { display: inline-flex; min-height: 40px; }
+  .resource-filter-group { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; order: 5; }
+  .resource-filter-group.is-collapsed { display: none; }
+  .resource-filter-group > * { flex: 1 1 140px; min-width: 0; }
+  .resource-filter-group :is(select, input:not([type='checkbox'])) { width: 100%; max-width: none; }
+  .resource-filter-group .inline-check { flex: 1 1 100%; min-height: 40px; }
+  .resource-list :deep(.record-link) { white-space: normal; overflow-wrap: anywhere; }
+  .resource-search { gap: 8px; }
+  .resource-search > input[type='search'] { flex: 1 1 140px; min-width: 0; }
+}
 .mobile-primary-action { display: none; margin-top: 6px; }
 @media (max-width: 600px) { .mobile-primary-action { display: inline-flex; } }
 .task-sync-hint { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; line-height: 1.5; color: var(--el-text-color-secondary); }

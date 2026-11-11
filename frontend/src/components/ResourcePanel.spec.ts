@@ -65,6 +65,40 @@ describe('列表创建入口', () => {
     expect(hidden.text()).not.toContain('联系负责此业务')
     for (const w of [plain, hinted, hidden]) w.unmount()
   })
+  it('手机宽度：列表只留名称、状态，其余并入名称格摘要；筛选超过 2 个时收起并显示生效数', async () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia
+    try {
+      user.value = { id: 1, role: 'admin' }
+      vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+      const purchases = shallowMount(ResourcePanel, { props: { resource: 'purchases', title: '采购订单' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      const vm = purchases.vm as any
+      expect(vm.shownColumns.map((c: { key: string }) => c.key)).toEqual(['code', 'status'])
+      expect(vm.mobileSummary({ supplier_name: '甲供', project_name: '乙项目', total_amount: '1200.50', next_delivery_date: '2026-12-01' })).toEqual(['甲供 · 乙项目', '金额 1,200.50 · 下一交期 2026-12-01'])
+      expect(vm.mobileSummary({ supplier_name: '甲供', project_name: '乙项目' })).toEqual(['甲供 · 乙项目'])
+      purchases.unmount()
+      const items = shallowMount(ResourcePanel, { props: { resource: 'items', title: '物料' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      expect((items.vm as any).mobileSummary({ name: '导轨', specification: 'HSR15', brand: 'THK', unit: '根', part_type: 'standard' })[0]).toBe('导轨 · HSR15 · THK')
+      expect(items.find('.filter-toggle').exists()).toBe(false)
+      items.unmount()
+      const projects = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
+      await flushPromises()
+      const toggle = projects.find('.filter-toggle')
+      expect(toggle.attributes('aria-expanded')).toBe('false')
+      expect(projects.find('.resource-filter-group').classes()).toContain('is-collapsed')
+      expect(toggle.text()).toBe('筛选 ▾')
+      ;(projects.vm as any).extraValues.overdue = 'true'
+      await flushPromises()
+      expect(projects.find('.filter-toggle').text()).toContain('筛选 · 1')
+      await projects.find('.filter-toggle').trigger('click')
+      expect(projects.find('.filter-toggle').attributes('aria-expanded')).toBe('true')
+      expect(projects.find('.resource-filter-group').classes()).not.toContain('is-collapsed')
+      expect(projects.find('.filter-toggle').attributes('aria-controls')).toBe(projects.find('.resource-filter-group').attributes('id'))
+      projects.unmount()
+    } finally { window.matchMedia = original }
+  })
   it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
     user.value = { roles: ['finance', 'admin'] }
     vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 21, title: '费用' }], next: null })
