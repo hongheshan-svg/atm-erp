@@ -13,6 +13,8 @@ const route = useRoute()
 const data = ref<Row | null>(null), error = ref(''), loading = ref(false)
 const selectedVersion = ref(''), command = ref<Command | null>(null)
 let generation = 0
+// 签署与打印说明：桌面默认展开（不依赖 ::details-content 支持），手机宽度默认收起，省出首屏给合同本身。
+const helpOpen = typeof window === 'undefined' || !window.matchMedia?.('(max-width: 600px)').matches
 onBeforeUnmount(() => { generation++ })
 const payment = computed(() => {
   if (!data.value) return ''
@@ -89,7 +91,7 @@ async function archive() {
       <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
       <el-button v-if="buyer() && !data.draft && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">{{ data.archived_version ? '归档新版本' : '归档签署版本' }}</el-button>
       <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : '当前采购资料预览，尚未归档签署版本' }}</span>
-      <details class="contract-help-details">
+      <details class="contract-help-details" :open="helpOpen">
         <summary>签署与打印说明</summary>
         <p class="contract-help">本页完整显示双方信息、全部明细、合同条款和签章区。打印 / 另存为 PDF 将输出整份合同，内容较长时自动分为多页 A4。</p>
         <p class="contract-help">签署前请核对图纸版次、技术指标、验收条件及服务时限，并在技术协议或补充约定中明确。归档前需补齐双方资料并核对收货地址；历史归档保留当时条款。</p>
@@ -154,7 +156,6 @@ async function archive() {
 @media screen and (min-width:601px) {
   .contract-help-details { display:contents; }
   .contract-help-details > summary { display:none; }
-  .contract-help-details::details-content { content-visibility:visible; display:contents; }
 }
 @media screen and (max-width:600px) {
   .purchase-contract-page .contract-toolbar > div:first-child > a { display:inline-flex; align-items:center; min-height:40px; }
