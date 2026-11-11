@@ -70,7 +70,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   if (row && action === '转交负责人') {
     const users = await all('/auth/directory/')
     return { title: action, path: `${path}${row.id}/transfer/`, fields: [
-      { key: 'manager', label: '新销售负责人', type: 'select', options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager && u.id !== user.value?.id)) },
+      { key: 'manager', label: '新销售负责人', type: 'select', searchable: true, options: options(users.filter(u => hasRoles(u, ['sales_manager']) && u.id !== row.manager && u.id !== user.value?.id)) },
       { key: 'reason', label: '转交原因', hint: '必填，最多 500 字，记入操作审计。' },
     ], notice: { type: 'info', text: '只更换销售负责人，不改变合同与回款。原负责人立即失去本人范围内的查看权限，新负责人立即获得。' } }
   }
@@ -99,7 +99,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         ...(!row ? [codeField('销售单号')] : []),
         { key: 'name', label: '销售名称' },
         customer(),
-        { key: 'manager', label: '负责人', type: 'select', initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
+        { key: 'manager', label: '负责人', type: 'select', searchable: true, initial: user.value?.id, options: options(users.filter(u => salesOnly() ? u.id === user.value?.id : hasRoles(u, ['admin', 'manager', 'sales_manager']))) },
         { key: 'requirements', label: '需求说明', type: 'textarea', optional: true },
         { key: 'due_date', label: '计划交期', type: 'date', optional: true },
         { key: 'equipment_quantity', label: '设备数量', initial: 1 },
@@ -132,6 +132,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
             {
               key: 'manager',
               label: '项目负责人',
+              searchable: true,
               type: 'select' as const,
               options: options(projectManagers),
               // 销售负责人不一定具备项目经理岗位；预选一个不在候选里的人，下拉会显示成空白且提交必被拒绝。

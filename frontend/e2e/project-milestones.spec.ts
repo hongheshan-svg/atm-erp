@@ -298,7 +298,7 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   await page.screenshot({ path: info.outputPath('supervisor-time-records.png'), animations: 'disabled' })
   await login(page, worker.username, password)
   await page.goto(`/erp/projects/${signed.project}?tab=tasks&section=tasks`)
-  await expect(row).toContainText('由' + head.display_name + '确认完成及登记工时')
+  await expect(page.getByText('本项目任务由对应专业主管确认完成并登记工时')).toBeVisible()
   await expect(row.getByRole('button', { name: '完成任务', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '设置专业主管', exact: true })).toHaveCount(0)
   await openRowAction(page, row, '查看工时')

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isOverdueCell } from './resource-ui'
+import { filterQuery, isOverdueCell, resourceFilters } from './resource-ui'
 
 describe('列表逾期标识', () => {
   const day = '2026-10-23'
@@ -21,5 +21,13 @@ describe('列表逾期标识', () => {
     for (const status of ['draft', 'quoted', 'warranty', 'closed', 'cancelled']) expect(isOverdueCell('projects', 'due_date', { status, due_date: '2026-10-22' }, day)).toBe(false)
     expect(isOverdueCell('projects', 'due_date', { status: 'active', due_date: day }, day)).toBe(false)
     expect(isOverdueCell('projects', 'due_date', { status: 'active', due_date: null }, day)).toBe(false)
+  })
+})
+
+describe('列表筛选参数', () => {
+  it('「进行中」映射为待完成且已开始，其余选项仍是单个参数', () => {
+    expect(filterQuery(resourceFilters.tasks, 'started')).toEqual({ status: 'open', started: 'true' })
+    expect(filterQuery(resourceFilters.tasks, 'done')).toEqual({ status: 'done' })
+    expect(filterQuery(resourceFilters.tasks, '')).toEqual({})
   })
 })

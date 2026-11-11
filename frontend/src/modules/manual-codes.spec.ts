@@ -44,3 +44,13 @@ it('对账草稿导入仅开放财务及管理员', () => {
   user.value = { roles: ['finance'] }
   expect(canImportResource('reconciliations')).toBe(true)
 })
+
+it('销售的人员单选可搜索：负责人、签约的项目负责人、转交的新销售负责人', async () => {
+  vi.mocked(all).mockResolvedValue([{ id: 2, display_name: '李经理', roles: ['admin', 'manager', 'sales_manager'] }])
+  const create = await salesCommand()
+  expect(create.fields.find(f => f.key === 'manager')?.searchable).toBe(true)
+  const sign = await salesCommand({ id: 2, status: 'quoted' }, '签约')
+  expect(sign.fields.find(f => f.key === 'manager')?.searchable).toBe(true)
+  const transfer = await salesCommand({ id: 2, status: 'signed', manager: 9 }, '转交负责人')
+  expect(transfer.fields.find(f => f.key === 'manager')?.searchable).toBe(true)
+})
