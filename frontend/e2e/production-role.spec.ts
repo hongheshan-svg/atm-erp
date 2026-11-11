@@ -162,7 +162,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await expect(queue).toBeVisible()
   await queue.getByRole('link').filter({ hasText: assemblyTitle }).click()
   await expect(page).toHaveURL(new RegExp(`/erp/projects/${current.id}\\?.*focus=${assembly.id}`))
-  await expect(dialog(page).getByLabel('任务', { exact: true })).toHaveValue(assemblyTitle)
+  await expect(dialog(page).getByLabel('任务名称', { exact: true })).toHaveValue(assemblyTitle)
   await detailAction(page, '重新分配')
   await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '生产经理将装配交接给第二名成员')
@@ -264,7 +264,8 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const output = info.outputPath(filename)
   await download.saveAs(output)
   expect(await readFile(output, 'utf8')).toBe(content)
-  expect((await page.request.get(`/api/business/documents/${document.id}/download/`)).status()).toBe(403)
+  // 不带登录凭据直接请求下载地址：未登录返回 401（需要登录），不暴露附件。
+  expect((await page.request.get(`/api/business/documents/${document.id}/download/`)).status()).toBe(401)
   await page.screenshot({ path: info.outputPath('production-technical-document.png'), fullPage: true, animations: 'disabled' })
   await info.attach('production-manager-chain', { body: JSON.stringify({ producer: producer.id, project: current.id, outside: outside.id, assembly: assembly.id, commissioning: commissioning.id, originalTime: original.id, replacementTime: replacement.id, delivery: delivery.id, installation: installation.id, service: service.id, document: document.id, netHours: 2, newServiceReceivables: 0 }), contentType: 'application/json' })
 })

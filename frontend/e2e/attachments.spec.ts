@@ -58,7 +58,8 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
   expect(await readFile(path, 'utf8')).toBe(content)
   const id = (await result.json()).id
   const anonymous = await page.request.get(`/api/business/documents/${id}/download/`)
-  expect(anonymous.status()).toBe(403)
+  // 未登录返回 401（需要登录），不暴露附件。
+  expect(anonymous.status()).toBe(401)
   expect(anonymous.headers()['content-type']).toContain('application/json')
   const publicFile = await page.request.get('/media/' + name)
   expect(publicFile.status()).toBe(404)

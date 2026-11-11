@@ -76,7 +76,8 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   const downloaded = page.waitForEvent('download')
   await attachments.getByRole('button', { name: '下载', exact: true }).click()
   expect((await downloaded).suggestedFilename()).toBe(filename)
-  expect((await page.request.get(`/api/business/documents/${documentId}/download/`)).status()).toBe(403)
+  // 不带登录凭据直接请求下载地址：未登录返回 401（需要登录），不暴露附件。
+  expect((await page.request.get(`/api/business/documents/${documentId}/download/`)).status()).toBe(401)
   await page.screenshot({ path: info.outputPath('sales-attachments.png'), animations: 'disabled' })
   await attachments.getByRole('button', { name: '关闭', exact: true }).click()
   await action('报价')
