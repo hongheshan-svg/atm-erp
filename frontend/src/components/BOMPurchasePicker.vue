@@ -370,11 +370,12 @@ async function save() {
 .draft-extra label { margin: 10px 0; }
 .draft-items { overflow-y: auto; flex: 1 1 auto; min-height: 90px; max-height: 480px; margin-top: 16px; border-top: 1px solid var(--surface-border); }
 .draft-empty { padding: 24px 0; line-height: 1.7; color: var(--ink-5); font-size: 13px; }
-.draft-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--surface-border); }
+/* 明细加了规格与需求日期一行后变高；收紧上下留白，桌面 1080p 下三条明细与保存按钮仍同屏可见。 */
+.draft-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--surface-border); }
 .draft-item-title { display: flex; justify-content: space-between; align-items: center; position: relative; padding-right: 16px; }
 .draft-item-title > div { min-width: 0; }
 .draft-item-title strong { font-size: 13px; }
-.draft-item-title small { display: block; font-size: 11px; line-height: 1.5; margin-top: 4px; overflow-wrap: anywhere; }
+.draft-item-title small { display: block; font-size: 11px; line-height: 1.5; margin-top: 2px; overflow-wrap: anywhere; }
 .draft-item-title .el-button { position: absolute; right: -3px; top: -4px; padding: 2px; height: 24px; }
 .draft-price-row { display: grid; grid-template-columns: minmax(52px, .75fr) minmax(72px, 1fr) minmax(65px, 1fr); gap: 8px; align-items: end; }
 .draft-price-row label { display: grid; gap: 5px; color: var(--mute); font-size: 11px; }

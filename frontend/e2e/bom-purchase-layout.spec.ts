@@ -154,7 +154,8 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   await projectBom.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
   await expect(draft.locator('.draft-item')).toHaveCount(1)
   await expect(draft.locator('.draft-item')).toContainText('安装底板')
-  await expect(draft.getByLabel('采购数量', { exact: true })).toHaveValue('2.000')
+  // 数量显示去尾零：缺料 2.000 在草稿里显示为 2。
+  await expect(draft.getByLabel('采购数量', { exact: true })).toHaveValue('2')
   await workspace.getByRole('button', { name: '返回列表', exact: true }).click()
   await expect(projectBom.getByRole('button', { name: '从 BOM 多选下单', exact: true })).toBeFocused()
   expect(purchaseRequests).toBe(1)

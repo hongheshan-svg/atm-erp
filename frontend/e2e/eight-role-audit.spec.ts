@@ -63,9 +63,13 @@ async function inspect(page: Page, visited: Record<string, unknown>[]) {
   // Main document must remain usable; wide tables scroll inside their own panel.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true)
   for (const select of await page.locator('select[aria-label="每页显示条目"]:visible').all()) {
-    await select.selectOption('20')
-    await expect(select).toHaveValue('20')
-    await select.selectOption('10')
+    // 项目内任务表每页至少 50 条，只提供 50/100 两档；其余列表从 10 切到 20 再切回。
+    const sizes = await select.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))
+    const [other, restore] = sizes.includes('10') ? ['20', '10'] : [sizes[1]!, sizes[0]!]
+    await select.selectOption(other)
+    await expect(select).toHaveValue(other)
+    await select.selectOption(restore)
+    await expect(select).toHaveValue(restore)
   }
   for (const search of await page.getByRole('searchbox').all()) {
     await search.fill('不存在的验收记录-qa-none')
@@ -142,9 +146,15 @@ for (const identity of identities) {
       for (const tab of tabs) {
         await page.goto(`/erp/projects/${projectId}?tab=${tab}`)
         await expect(page.locator('h1')).toContainText('岗位页面巡检')
-        // BOM 页签只有一张表（行内可改单行），不再分子页签。
-        const childTabs: Record<string, number> = { tasks: 2, deliveries: 2, finance: 3, cost: 2 }
+        // BOM 页签只有一张表（行内可改单行），不再分子页签；成本与预算合为一个面板，
+        // 实际成本与毛利在指标卡里，成本来源从「追溯成本明细」打开。
+        const childTabs: Record<string, number> = { tasks: 2, deliveries: 2, finance: 3 }
         await expect(page.locator('.module-tabs').getByRole('tab')).toHaveCount(childTabs[tab] ?? 0)
+        if (tab === 'cost') {
+          const costPanel = page.getByRole('region', { name: '项目预算与成本管控', exact: true })
+          for (const label of ['预算合计', '实际成本', '毛利（按实际）']) await expect(costPanel.getByRole('term').filter({ hasText: label })).toHaveCount(1)
+          await expect(costPanel.getByRole('button', { name: '追溯成本明细', exact: true })).toBeVisible()
+        }
         await inspect(page, visited)
         const labels = await page.locator('.module-tabs').getByRole('tab').allTextContents()
         for (const label of labels) {

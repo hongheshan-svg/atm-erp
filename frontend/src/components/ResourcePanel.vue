@@ -325,7 +325,11 @@ function mobileSummary(row: Row): string[] {
       const statusText = columns[props.resource]?.find(col => col.key === 'void_reason')?.format?.(row)
       return lines(joined(Number.isNaN(amountValue) ? '' : `${amountValue < 0 ? '支出' : '收入'} ${money(String(row.amount).replace(/^-/, ''))}`, row.account), joined(row.counterparty, row.remaining_amount != null && row.remaining_amount !== '' ? `待匹配 ${money(row.remaining_amount)}` : '', statusText))
     }
-    if (props.resource === 'payments') return lines(joined(row.date, columns[props.resource]?.find(col => col.key === 'amount')?.format?.(row)), joined(row.partner_name, row.reconciliation_code, props.projectId ? '' : row.project_name))
+    if (props.resource === 'payments') {
+      // 流水没有状态列：冲销状态（已冲销 / 冲销记录）跟在金额后，否则原记录和冲销记录在窄屏上无法区分；正常记录不重复写「有效」。
+      const ledger = columnText(row, 'reversed_by')
+      return lines(joined(row.date, columns[props.resource]?.find(col => col.key === 'amount')?.format?.(row), ledger === '有效' ? '' : ledger), joined(row.partner_name, row.reconciliation_code, props.projectId ? '' : row.project_name))
+    }
     if (props.resource === 'users') return lines(joined(row.username, (row.roles || [row.role]).map((role: string) => labels[role] || role).join('、')))
     const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
     return lines(joined(...rest))

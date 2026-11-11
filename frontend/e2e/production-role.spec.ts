@@ -138,7 +138,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const assembly = await createTask('assembly', assemblyTitle)
   const commissioning = await createTask('test', testTitle)
   await action(page, row(page, testTitle), '完成任务')
-  await dialog(page).getByLabel('完成说明（选填）', { exact: true }).fill('允许装配和调试交叉推进')
+  await dialog(page).getByLabel('完成说明', { exact: true }).fill('允许装配和调试交叉推进')
   await save(page, 'business/tasks/' + commissioning.id + '/complete/')
   expect((await api(admin, 'business/tasks/' + commissioning.id + '/')).status).toBe('done')
   await action(page, row(page, testTitle), '重开任务')
@@ -172,7 +172,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await choosePeople(page, dialog(page).getByLabel('人员', { exact: true }), [second.display_name])
   await dialog(page).getByLabel('日期', { exact: true }).fill(date())
   await dialog(page).getByLabel('工时', { exact: true }).fill('3')
-  await dialog(page).getByLabel('工作内容（选填）', { exact: true }).fill('团队装配工时原记录')
+  await dialog(page).getByLabel('工作内容', { exact: true }).fill('团队装配工时原记录')
   const original = await save(page, `business/tasks/${assembly.id}/time/`)
   await page.getByRole('tab', { name: '工时记录', exact: true }).click()
   await action(page, row(page, '团队装配工时原记录'), '更正工时')
@@ -196,7 +196,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await page.getByRole('tab', { name: '项目任务', exact: true }).click()
   async function complete(title: string, id: number) {
     await action(page, row(page, title), '完成任务')
-    await dialog(page).getByLabel('完成说明（选填）', { exact: true }).fill('生产经理核对现场执行完成')
+    await dialog(page).getByLabel('完成说明', { exact: true }).fill('生产经理核对现场执行完成')
     await save(page, `business/tasks/${id}/complete/`)
     expect((await api(admin, `business/tasks/${id}/`)).status).toBe('done')
   }

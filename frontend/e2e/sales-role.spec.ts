@@ -1,5 +1,5 @@
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, login } from './fixtures'
+import { test, expect, login, openRowAction, choosePeople } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 test('管理员新增销售经理，销售建单报价签约并只读交付回款', async ({ page }, info) => {
@@ -18,13 +18,16 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   }
   async function choose(label: string, text: string) {
     const field = dialog().getByLabel(label, { exact: true })
-    if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
+    if (await field.getAttribute('role') === 'combobox') {
+      // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
+      const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
+      return remote ? selectRemoteOption(field, { text: text }) : choosePeople(page, field, [text])
+    }
     const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
     await field.selectOption(value!)
   }
   async function action(name: string) {
-    await page.locator('.el-table__body tr:visible').filter({ hasText: sale }).first().getByRole('button', { name: '操作 ▾', exact: true }).click()
-    await page.getByRole('menuitem', { name, exact: true }).click()
+    await openRowAction(page, page.locator('.el-table__body tr:visible').filter({ hasText: sale }).first(), name)
   }
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   await page.goto('/erp/settings')
@@ -77,10 +80,21 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await attachments.getByRole('button', { name: '关闭', exact: true }).click()
   await action('报价')
   await dialog().getByLabel('报价金额（元）', { exact: true }).fill('1000')
-  await dialog().getByLabel('原因 / 说明', { exact: true }).fill('客户确认')
+  await dialog().getByLabel('报价说明', { exact: true }).fill('客户确认')
   await save()
   await action('签约')
-  await expect(dialog().getByLabel('项目负责人', { exact: true }).locator('option').filter({ hasText: username })).toHaveCount(0)
+  // 项目负责人是可搜索的人员下拉，只列项目经理和管理员：按销售经理本人的账号搜索没有候选。
+  const manager = dialog().getByLabel('项目负责人', { exact: true })
+  await expect(manager).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await manager.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " el-select ")][1]').locator('.el-select__wrapper').click()
+  await manager.fill(username)
+  const people = page.locator('.el-select__popper.executor-options:visible')
+  await expect(people).toContainText('没有匹配的人员')
+  await expect(people.getByRole('option').filter({ hasText: username })).toHaveCount(0)
+  await manager.fill('')
+  await manager.press('Escape')
+  await expect(people).toHaveCount(0)
   await choose('项目负责人', '管理员')
   await dialog().getByLabel('收款到期日', { exact: true }).fill('2026-12-31')
   await save()

@@ -20,19 +20,39 @@ test('业务列表序号跨页连续，宽表左右可查看且勾选仍对应�
   const rows = panel.locator('.el-table__body tr')
   await expect(rows).toHaveCount(10)
   const sequence = panel.locator('td.business-row-number')
-  await expect(sequence).toHaveText(Array.from({ length: 10 }, (_, i) => String(i + 1)))
+  // 手机窄屏只留名称、状态和操作列，不显示序号：跨页连续改由页码提示和各页记录顺序核对（每行勾选框以记录命名）。
+  const mobile = info.project.name === 'mobile'
+  const pageStatus = panel.getByRole('group', { name: '翻页', exact: true }).getByText(/^第 \d+\/\d+ 页$/)
+  const names = () => rows.getByRole('checkbox').evaluateAll(boxes => boxes.map(box => box.getAttribute('aria-label')!))
+  // 翻页后页码先变、记录随后加载；等到本页记录与上一页完全不同再读取。
+  const loadedPage = async (previous: string[], size: number) => {
+    let current: string[] = []
+    await expect.poll(async () => { current = await names(); return current.length === size && current.every(name => !previous.includes(name)) }).toBe(true)
+    return current
+  }
+  const pages = [await loadedPage([], 10)]
+  if (mobile) {
+    await expect(sequence).toHaveCount(0)
+    await expect(pageStatus).toHaveText('第 1/3 页')
+  } else await expect(sequence).toHaveText(Array.from({ length: 10 }, (_, i) => String(i + 1)))
   await panel.getByRole('button', { name: '下一页', exact: true }).click()
-  await expect(sequence).toHaveText(Array.from({ length: 10 }, (_, i) => String(i + 11)))
+  if (mobile) await expect(pageStatus).toHaveText('第 2/3 页')
+  else await expect(sequence).toHaveText(Array.from({ length: 10 }, (_, i) => String(i + 11)))
+  pages.push(await loadedPage(pages[0]!, 10))
   await expect(rows.first().getByRole('checkbox')).toBeEnabled()
   const selectedName = await rows.first().getByRole('checkbox').getAttribute('aria-label')
   await rows.first().getByRole('checkbox').check()
   await panel.getByRole('button', { name: '下一页', exact: true }).click()
-  await expect(sequence).toHaveText(['21'])
+  if (mobile) await expect(pageStatus).toHaveText('第 3/3 页')
+  else await expect(sequence).toHaveText(['21'])
+  pages.push(await loadedPage(pages[1]!, 1))
   await panel.getByRole('button', { name: '上一页', exact: true }).click()
   await expect(rows.first().getByRole('checkbox')).toHaveAttribute('aria-label', selectedName!)
   await expect(rows.first().getByRole('checkbox')).toBeChecked()
   await panel.getByLabel('每页显示条目', { exact: true }).selectOption('50')
-  await expect(sequence).toHaveText(Array.from({ length: 21 }, (_, i) => String(i + 1)))
+  if (!mobile) await expect(sequence).toHaveText(Array.from({ length: 21 }, (_, i) => String(i + 1)))
+  // 一页显示全部时的顺序与逐页翻看拼起来一致，没有跳过或重复。
+  await expect.poll(names).toEqual(pages.flat())
 
   const wrap = panel.locator('.el-table__body-wrapper .el-scrollbar__wrap')
   const tools = panel.getByRole('group', { name: '客户与供应商左右查看', exact: true })
@@ -55,7 +75,8 @@ test('业务列表序号跨页连续，宽表左右可查看且勾选仍对应�
   // 过滤后显示序号重新开始，业务编码仍由服务端保留；不执行删除。
   await search.fill(prefix + '-21')
   await panel.getByRole('button', { name: '搜索', exact: true }).click()
-  await expect(sequence).toHaveText(['1'])
+  if (mobile) await expect(rows).toHaveCount(1)
+  else await expect(sequence).toHaveText(['1'])
   await expect(rows.first()).toContainText(prefix + '-21')
   await expect(rows.first()).toContainText('供应商')
 })

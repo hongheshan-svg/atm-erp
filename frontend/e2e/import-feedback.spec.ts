@@ -48,7 +48,14 @@ test('导入纠错与BOM双视图在桌面和手机可操作', async ({ page }, 
   await dialog.getByRole('button', { name: '定位第 23 行', exact: true }).click()
   await expect(dialog.locator('[data-import-row="23"][data-import-field="quantity"]')).toBeFocused()
   await dialog.getByLabel('只看错误行', { exact: true }).check()
-  await expect(dialog.locator('.el-table__body tbody tr')).toHaveCount(1)
+  if (mobile) {
+    // 手机宽度下预览是逐行卡片：只剩出错的第 23 行，卡片里标出问题和出错字段。
+    const cards = dialog.locator('.import-cards > li.import-card')
+    await expect(cards).toHaveCount(1)
+    await expect(cards.locator('.import-card-head')).toHaveText('第 23 行')
+    await expect(cards.locator('.import-card-issue')).toHaveText('需求数量：请输入正数。')
+    await expect(cards.locator('[data-import-field="quantity"]')).toHaveClass(/error-cell/)
+  } else await expect(dialog.locator('.el-table__body tbody tr')).toHaveCount(1)
   await expect(dialog.getByRole('button', { name: '确认导入', exact: true })).toBeDisabled()
   await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1)

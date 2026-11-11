@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures'
+import { test, expect, login, openRowAction } from './fixtures'
 
 test('合同设备命名说明与项目编号规范应用保留流水', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
@@ -22,9 +22,9 @@ test('合同设备命名说明与项目编号规范应用保留流水', async ({
   await guide.getByText('查看八类物料编码与工程图号').click()
   await expect(guide).toContainText('2199000001')
   await guide.screenshot({ path: info.outputPath('coding-rules.png'), animations: 'disabled' })
-  const row = page.getByRole('row').filter({ has: page.getByRole('cell', { name: '项目', exact: true }) })
-  await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByText('应用项目规范', { exact: true }).click()
+  // 用途格是打开详情的按钮；手机窄屏把前缀、日期格式等并进同一格的副行，按按钮名称定位这一行。
+  const row = page.getByRole('region', { name: '编号规则', exact: true }).getByRole('row').filter({ has: page.getByRole('button', { name: '项目', exact: true }) })
+  await openRowAction(page, row, '应用项目规范')
   const dialog = page.getByRole('dialog', { name: '应用项目编号规范' })
   await dialog.getByLabel('应用原因').fill('按QP-001执行')
   await dialog.locator('button[type="submit"]').click()

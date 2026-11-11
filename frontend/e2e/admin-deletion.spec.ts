@@ -1,4 +1,4 @@
-import { test, expect, login, openRowAction, expectHttpError } from './fixtures'
+import { test, expect, login, openRowAction, expectHttpError, goToListPage } from './fixtures'
 
 // 删除入口默认收起，本文件的用例都在「批量管理」开启的状态下进行；开关本身由下面第一条用例验证。
 test.beforeEach(async ({ page }) => {
@@ -269,8 +269,7 @@ test('BOM独立列表及销售附件支持删除和已删除记录', async ({ pa
   await page.locator('input[type="search"]').fill(`附件删除${suffix}`)
   await page.locator('form.resource-search').evaluate((element: HTMLFormElement) => element.requestSubmit())
   const saleRow = page.locator('.el-table__body tr:visible').filter({ hasText: `附件删除${suffix}` })
-  await saleRow.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await page.getByRole('menuitem', { name: '附件', exact: true }).click()
+  await openRowAction(page, saleRow, '附件')
   const attachments = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: '上传附件', exact: true }) })
   await expect(attachments).toContainText(`误传${suffix}.txt`)
   await attachments.getByRole('button', { name: '删除', exact: true }).click()
@@ -313,7 +312,7 @@ test('BOM按筛选跨页全选427项并一次删除，保留筛选外明细', as
   await bom.getByLabel('每页显示条目').selectOption('10')
   await bom.getByRole('checkbox', { name: '选择本页BOM明细', exact: true }).check()
   await expect(bom.getByLabel('BOM批量选择')).toContainText('已选 10 项')
-  await bom.locator('.el-pager').getByText('2', { exact: true }).click()
+  await goToListPage(bom, 2)
   await bom.getByRole('checkbox', { name: '选择本页BOM明细', exact: true }).check()
   await expect(bom.getByLabel('BOM批量选择')).toContainText('已选 20 项')
   // 手机上次级筛选收在「筛选 ▾」里，先展开。
@@ -366,7 +365,7 @@ test('基础物料跨页勾选与全选筛选结果后批量删除，保留未�
   await page.getByLabel('每页显示条目').selectOption('10')
   await page.getByRole('checkbox', { name: '选择本页物料', exact: true }).check()
   await expect(page.getByLabel('物料批量选择')).toContainText('已选 10 项')
-  await page.locator('.el-pager').getByText('2', { exact: true }).click()
+  await goToListPage(page, 2)
   await expect(page.getByRole('checkbox', { name: '选择本页物料', exact: true })).not.toBeChecked()
   await page.getByRole('checkbox', { name: '选择本页物料', exact: true }).check()
   await expect(page.getByLabel('物料批量选择')).toContainText('已选 20 项')
@@ -407,7 +406,7 @@ test('采购订单可跨页全选21张草稿并整批删除', async ({ page }, i
   await page.getByLabel('每页显示条目').selectOption('10')
   await allPage.check()
   await expect(page.getByRole('button', { name: '批量删除（10）', exact: true })).toBeEnabled()
-  await page.locator('.el-pager').getByText('2', { exact: true }).click()
+  await goToListPage(page, 2)
   await expect(allPage).not.toBeChecked()
   await allPage.check()
   await expect(page.getByRole('button', { name: '批量删除（20）', exact: true })).toBeEnabled()
@@ -457,7 +456,7 @@ test('销售附件弹窗跨页全选21个文件，仅删除当前单据的附件
   await attachments.getByLabel('每页显示条目').selectOption('10')
   const allPage = attachments.getByRole('checkbox', { name: '选择本页附件', exact: true })
   await allPage.check()
-  await attachments.locator('.el-pager').getByText('2', { exact: true }).click()
+  await goToListPage(attachments, 2)
   await expect(allPage).not.toBeChecked()
   await allPage.check()
   await expect(attachments.getByLabel('附件批量选择')).toContainText('已选 20 项')

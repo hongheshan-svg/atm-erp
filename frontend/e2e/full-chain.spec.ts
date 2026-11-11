@@ -159,7 +159,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   const saleRow = row(salesperson, names.project)
   await action(salesperson, saleRow, '报价')
   await fill(salesperson, '报价金额（元）', '10000')
-  await reason(salesperson)
+  await fill(salesperson, '报价说明', '验收测试')
   await save(salesperson)
   await action(salesperson, saleRow, '编辑销售')
   await fill(salesperson, '需求说明', '确认两台设备及交付范围')
@@ -169,10 +169,14 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   expect(revisedSale.status).toBe('draft')
   expect(Number(revisedSale.quote_amount)).toBe(0)
   expect(revisedSale.project).toBeNull()
+  // 编辑后退回草稿：等列表刷新出草稿行的主按钮「报价」再操作。
+  await expect(saleRow.getByRole('button', { name: '报价', exact: true })).toBeVisible()
   await action(salesperson, saleRow, '报价')
   await fill(salesperson, '报价金额（元）', '10000')
-  await reason(salesperson, '重新确认')
+  await fill(salesperson, '报价说明', '重新确认')
   await save(salesperson)
+  // 列表在对话框关闭后才刷新：等「签约」成为该行主按钮，避免打开旧草稿行的菜单去找签约。
+  await expect(saleRow.getByRole('button', { name: '签约', exact: true })).toBeVisible()
   await action(salesperson, saleRow, '签约')
   await fill(salesperson, '合同编号（按签署合同填写）', 'HT-' + suffix)
   await choose(salesperson, '项目负责人', 'manager' + suffix)
@@ -182,7 +186,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await save(salesperson)
   await expect(salesperson.locator('.el-message')).toHaveCount(0)
   await action(salesperson, saleRow, '查看明细')
-  await expect(dialog(salesperson).getByLabel('合同金额（元）', { exact: true })).toHaveValue('10000.00')
+  await expect(dialog(salesperson).getByLabel('合同金额（元）', { exact: true })).toHaveValue('10,000.00')
   await expect(dialog(salesperson).getByLabel('合同编号', { exact: true })).toHaveValue('HT-' + suffix)
   await expect(dialog(salesperson).locator('button[type="submit"]')).toHaveCount(0)
   await dialog(salesperson).getByRole('button', { name: '关闭', exact: true }).click()
@@ -306,6 +310,8 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await choose(purchaser, '物料', names.item)
   await fill(purchaser, '数量', '2')
   await fill(purchaser, '含税单价（元）', '100')
+  // BOM 需求 4、首单已到货 3，本单 2 件超出缺口 1 件（后面保内售后领用的备件），手工采购须写明超 BOM 原因。
+  await fill(purchaser, '超 BOM 采购原因', '保内售后备件，超出 BOM 1 件')
   await save(purchaser)
   purchases = (await read(purchaser, `business/purchases/?project=${id}`)).results
   const po2 = purchases.find((p: { id: number }) => p.id !== po.id)
@@ -346,17 +352,19 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   }
   // v1.8.24 起执行人只查看进度；完成确认和工时登记由专业主管负责，未设主管时由项目经理负责。
   await member.getByRole('tab', { name: '项目任务', exact: true }).click()
-  await row(member, '设计' + suffix).getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await expect(member.getByRole('menuitem')).toHaveText(['查看工时'])
-  await member.keyboard.press('Escape')
+  // 行内只剩一项动作时直接显示为文字按钮、不套「操作 ▾」菜单；手机名称格里也没有主按钮。
+  const memberTask = row(member, '设计' + suffix)
+  await expect(memberTask.locator('.row-actions').getByRole('button')).toHaveText(['查看工时'])
+  await expect(memberTask.getByRole('button', { name: '操作 ▾', exact: true })).toHaveCount(0)
+  await expect(memberTask.locator('.mobile-primary-action')).toHaveCount(0)
   await manager.reload()
   for (const title of ['设计', '装配', '调试']) {
     await action(manager, row(manager, title + suffix), '完成任务')
-    await fill(manager, '完成说明（选填）', '验收测试')
+    await fill(manager, '完成说明', '验收测试')
     await save(manager)
     await action(manager, row(manager, title + suffix), '登记工时')
     await fill(manager, '工时', title === '设计' ? '3' : '1')
-    await fill(manager, '工作内容（选填）', '验收测试')
+    await fill(manager, '工作内容', '验收测试')
     await save(manager)
   }
   await manager.getByRole('tab', { name: '工时记录', exact: true }).click()
@@ -368,6 +376,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   const reversedTime = timeRows.locator('.el-table__body tr:visible').filter({ hasText: '已冲销' })
   await expect(reversedTime).toHaveCount(1)
   await expect(reversedTime.getByRole('button', { name: '操作 ▾', exact: true })).toHaveCount(0)
+  await expect(reversedTime.getByRole('button', { name: '更正工时', exact: true })).toHaveCount(0)
   await manager.reload()
   await projectAction(manager, '发货')
   // 推进检查在打开发货时就列出全部缺项（这里是领料不足），不再等填完表单提交后逐条报错。
@@ -392,17 +401,17 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     const installRow = row(manager, delivery.code + ' 安装')
     await action(manager, installRow, '登记工时')
     await fill(manager, '工时', '1')
-    await fill(manager, '工作内容（选填）', '验收测试')
+    await fill(manager, '工作内容', '验收测试')
     await save(manager)
     await action(manager, installRow, '完成任务')
     // 验收日期不能早于安装完成日期：安装与发货、验收同为昨天。
     await fill(manager, '实际完成日期', day(-1))
-    await fill(manager, '完成说明（选填）', '验收测试')
+    await fill(manager, '完成说明', '验收测试')
     await save(manager)
     await manager.getByRole('tab', { name: '交付与售后', exact: true }).click()
     await action(manager, row(manager, delivery.code), '验收')
     await fill(manager, '日期', day(-1))
-    await fill(manager, '验收说明（选填）', '验收测试')
+    await fill(manager, '验收说明', '验收测试')
     await save(manager)
   }
   const delivery = (await read(manager, `business/deliveries/?project=${id}`)).results[0]
@@ -431,7 +440,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await openProjectTasks(manager)
     await action(manager, row(manager, title + suffix), '登记工时')
     await fill(manager, '工时', '1')
-    await fill(manager, '工作内容（选填）', '验收测试')
+    await fill(manager, '工作内容', '验收测试')
     await save(manager)
     await action(manager, row(manager, title + suffix), '完成任务')
     // 完成说明选填：留空时服务端记为「完成任务」。

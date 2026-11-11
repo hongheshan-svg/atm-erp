@@ -1,4 +1,4 @@
-import { businessDate, cancelEditing } from './fixtures'
+import { businessDate, cancelEditing, choosePeople } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, detailAction, observePage, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
@@ -9,7 +9,11 @@ const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
 async function choose(page: Page, label: string, text: string) {
   const field = dialog(page).getByLabel(label, { exact: true })
-  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
+  if (await field.getAttribute('role') === 'combobox') {
+    // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
+    const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
+    return remote ? selectRemoteOption(field, { text: text }) : choosePeople(page, field, [text])
+  }
   const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
   await field.selectOption(value!)
 }
@@ -76,8 +80,10 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await save(manager)
   await action(manager, row(manager, name), '报价')
   await fill(manager, '报价金额（元）', '1000')
-  await fill(manager, '原因 / 说明', '确认方案')
+  await fill(manager, '报价说明', '确认方案')
   await save(manager)
+  // 报价保存后列表重新加载；等本行显示「已报价」再签约，手机上「签约」按钮随刷新出现在名称格里。
+  await expect(row(manager, name)).toContainText('已报价')
   await action(manager, row(manager, name), '签约')
   await fill(manager, '收款到期日', '2026-12-31')
   await save(manager)
@@ -103,6 +109,11 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await cancelEditing(dialog(manager))
   await manager.getByRole('button', { name: '更多BOM操作', exact: true }).click()
   await manager.getByRole('menuitem', { name: '变更影响与处理', exact: true }).click()
+  if (info.project.use.isMobile) {
+    // 手机上影响表只有「物料」一列，没有已领或在途的物料先收起；展开后逐行显示最低可改量。
+    await expect(dialog(manager)).toContainText('其余 1 种物料没有已领或在途，可直接修改。')
+    await dialog(manager).getByRole('button', { name: '展开全部', exact: true }).click()
+  }
   await expect(dialog(manager)).toContainText('当前最低可改量')
   await detailAction(manager, '关闭')
   await purchaser.goto(`/erp/projects/${id}?tab=bom`)
@@ -234,14 +245,16 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await save(finance)
   await finance.goto(`/erp/projects/${id}?tab=finance`)
   await finance.getByRole('tab', { name: '项目收付流水', exact: true }).click()
-  await action(finance, row(finance, `BANK${suffix}`), '补录凭证')
+  // 手机窄屏的收付流水行只摘要日期、金额和往来单位，不显示银行流水号；本项目只有这一笔流水，按客户名找行。
+  const paymentRow = info.project.use.isMobile ? `customer${suffix}` : `BANK${suffix}`
+  await action(finance, row(finance, paymentRow), '补录凭证')
   await choose(finance, '凭证', '到账回单.txt')
   await fill(finance, '原因 / 说明', '补到银行回单')
   await save(finance)
   const payment = (await read(finance, `payments/?entry=${entry.id}`)).results[0]
   expect(payment.evidence).toHaveLength(1)
   expect(payment.amount).toBe('1000.00')
-  await action(finance, row(finance, `BANK${suffix}`), '查看凭证')
+  await action(finance, row(finance, paymentRow), '查看凭证')
   await expect(dialog(finance)).toContainText('到账回单.txt')
   await detailAction(finance, '关闭')
   await manager.goto('/erp/sales')
@@ -260,7 +273,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(manager, '预计剩余材料成本（元）', '120')
   await fill(manager, '预计剩余人工成本（元）', '500')
   await fill(manager, '预计剩余费用（元）', '50')
-  await fill(manager, '估算依据（选填）', '剩余安装与差旅')
+  await fill(manager, '估算依据', '剩余安装与差旅')
   await save(manager)
   expect((await read(manager, `projects/${id}/cost-analysis/`)).forecast_total).toBe('670.00')
   await manager.getByRole('button', { name: '追溯成本明细', exact: true }).click()
@@ -282,7 +295,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await expect(manager.getByRole('tab', { name: '收付款', exact: true })).toHaveAttribute('aria-selected', 'true')
   await manager.screenshot({ path: info.outputPath('project-tabs-after-reload.png'), fullPage: true, animations: 'disabled' })
   await expect(manager.getByRole('tab', { name: '收付款', exact: true })).toBeInViewport()
-  await expect(manager.getByRole('region', { name: '项目收付流水', exact: true })).toContainText(`BANK${suffix}`)
+  await expect(manager.getByRole('region', { name: '项目收付流水', exact: true })).toContainText(paymentRow)
   await manager.screenshot({ path: info.outputPath('review-project-finance.png'), fullPage: true, animations: 'disabled' })
   for (const p of Object.values(people)) await p.context().close()
   expect(errors).toEqual([])

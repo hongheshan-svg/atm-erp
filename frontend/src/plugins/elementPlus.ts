@@ -14,6 +14,7 @@ import {
   ElTabPane,
   ElTabs,
   ElTag,
+  ElTooltip,
 } from 'element-plus'
 
 export function installElementPlus(app: App) {
@@ -32,6 +33,7 @@ export function installElementPlus(app: App) {
     ElTabPane,
     ElTabs,
     ElTag,
+    ElTooltip,
   ]) {
     app.use(component)
   }

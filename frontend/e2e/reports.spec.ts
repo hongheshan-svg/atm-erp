@@ -1,4 +1,4 @@
-import { test, expect, observePage, login } from './fixtures'
+import { test, expect, observePage, login, goToListPage, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 test('总经理单独授权后查看筛选报表，撤销后接口和入口均拒绝', async ({ page, browser }, info) => {
@@ -40,13 +40,9 @@ test('总经理单独授权后查看筛选报表，撤销后接口和入口均�
     const count = (await users.json()).count
     const userPanel = page.getByRole('region', { name: '用户管理', exact: true })
     const lastPage = Math.ceil(count / Number(await userPanel.getByLabel('每页显示条目', { exact: true }).inputValue()))
-    if (lastPage > 1) {
-      const pager = userPanel.locator('.el-pagination')
-      await pager.getByText(String(lastPage), { exact: true }).click()
-    }
+    if (lastPage > 1) await goToListPage(userPanel, lastPage)
     const row = userPanel.locator('.el-table__body tr').filter({ hasText: name })
-    await row.getByRole('button', { name: '操作 ▾', exact: true }).click()
-    await page.getByRole('menuitem', { name: '编辑', exact: true }).click()
+    await openRowAction(page, row, '编辑')
     await dialog.getByLabel('总经理报表权限（仅项目经理角色）', { exact: true }).uncheck()
     const revoked = page.waitForResponse(r => r.url().endsWith(`/auth/users/${account.id}/`) && r.request().method() === 'PATCH')
     await dialog.locator('button[type="submit"]').click()

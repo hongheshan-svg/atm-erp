@@ -60,11 +60,48 @@ export async function openRowAction(page: Page, row: Locator, name: string) {
   }
   await menu.click()
   const option = page.getByRole('menuitem', { name, exact: true })
+  if (primaryActions.includes(name)) {
+    // 上一步保存后行还没刷新完就打开了菜单（如报价后「签约」由菜单外变成行内主按钮）：
+    // 菜单展开完仍没有这一项时收起菜单，改点刷新后出现的行内按钮。
+    const popper = page.locator('.el-dropdown__popper:visible')
+    await expect(popper).toHaveCount(1)
+    await expect(popper).not.toHaveClass(/-enter-active/)
+    if (!(await option.isVisible())) {
+      await menu.click()
+      await expect(popper).toHaveCount(0)
+      await direct.click()
+      return
+    }
+  }
   await expect(option).toBeVisible()
   // 展开动画缩放期间，连续两帧坐标偶尔不变但菜单尚未展开到最终位置。
   // 等动画结束再点击，避免慢速 CI 中点击落在相邻条目或分组标题上。
   await expect(page.locator('.el-dropdown__popper').filter({ has: option })).not.toHaveClass(/-enter-active/)
   await option.click()
+}
+
+// 列表翻到第 n 页或最后一页。桌面点 el-pagination 的页码（首尾页码始终显示）；手机（≤600px）隐藏页码，
+// 只有「上一页 / 第 n/m 页 / 下一页」，逐页点到目标页并核对页码提示。scope 取包含该列表分页的区域或弹窗。
+export async function goToListPage(scope: Page | Locator, target: number | 'last') {
+  const compact = scope.getByRole('group', { name: '翻页', exact: true })
+  const pager = scope.locator('.el-pagination .el-pager')
+  await expect(compact.or(pager).first()).toBeVisible()
+  if (await compact.isVisible()) {
+    const status = compact.getByText(/^第 \d+\/\d+ 页$/)
+    const [current, total] = (await status.textContent())!.match(/(\d+)\/(\d+)/)!.slice(1).map(Number) as [number, number]
+    const goal = target === 'last' ? total : target
+    expect(goal, `目标页超出共 ${total} 页`).toBeLessThanOrEqual(total)
+    const step = goal > current ? 1 : -1
+    for (let page = current; page !== goal;) {
+      page += step
+      await compact.getByRole('button', { name: step > 0 ? '下一页' : '上一页', exact: true }).click()
+      await expect(status).toHaveText(`第 ${page}/${total} 页`)
+    }
+    return
+  }
+  const goal = target === 'last' ? (await pager.locator('li.number').last().textContent())!.trim() : String(target)
+  await pager.getByText(goal, { exact: true }).click()
+  await expect(pager.locator('li.is-active')).toHaveText(goal)
 }
 
 // Import lives behind the toolbar's 导入导出 menu; one place so a toolbar change is one edit.

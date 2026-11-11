@@ -213,7 +213,8 @@ test('U14 有效核准后在付款表单上传并选中凭证，实际付款及�
   expect((await f.purchaser.get('/api/auth/me/')).roles).toEqual(['purchaser'])
   await info.attach('payment-facts', { body: JSON.stringify({ entry: f.entry.id, reconciliation: statement.id, payment: stored, paid: balance.paid_amount, balance: balance.balance }), contentType: 'application/json' })
   await expect(form).toBeHidden()
-  await expect(page.locator('.saved-result')).toContainText('登记收付款成功')
+  // 保存提示随款项方向，采购应付显示「登记付款成功」。
+  await expect(page.locator('.saved-result')).toContainText('登记付款成功')
   await page.goto(`/erp/finance?section=payments&resource=payments&focus=${payment.id}`)
   await detailAction(page, '预览凭证')
   await expect(preview).toContainText(receipt.buffer.toString())

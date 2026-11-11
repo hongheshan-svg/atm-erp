@@ -1,4 +1,4 @@
-import { cancelEditing } from './fixtures'
+import { cancelEditing, choosePeople } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, expectHttpError, login, detailAction, type Page, type Locator, openRowAction } from './fixtures'
 
@@ -14,7 +14,11 @@ async function save(p: Page, path: string) {
 }
 async function choose(p: Page, label: string, text: string) {
   const field = dialog(p).getByLabel(label, { exact: true })
-  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
+  if (await field.getAttribute('role') === 'combobox') {
+    // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
+    const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
+    return remote ? selectRemoteOption(field, { text: text }) : choosePeople(p, field, [text])
+  }
   const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
   await field.selectOption(value!)
 }
@@ -47,8 +51,10 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   const saleRow = page.locator('.el-table__body tr:visible').filter({ hasText: name }).first()
   await action(page, saleRow, '报价')
   await dialog(page).getByLabel('报价金额（元）', { exact: true }).fill('1000')
-  await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('客户确认')
+  await dialog(page).getByLabel('报价说明', { exact: true }).fill('客户确认')
   await save(page, `/sales/${sale.id}/quote/`)
+  // 报价保存后列表重新加载；等本行显示「已报价」再签约，手机上「签约」按钮随刷新出现在名称格里。
+  await expect(saleRow).toContainText('已报价')
   await action(page, saleRow, '签约')
   await dialog(page).getByLabel('收款到期日', { exact: true }).fill('2026-12-31')
   const signed = await save(page, `/sales/${sale.id}/sign/`)
