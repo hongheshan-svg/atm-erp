@@ -7,7 +7,8 @@ import RemoteSelect from './RemoteSelect.vue'
 import { message } from '../utils/request'
 import { sessionStore } from '../utils/storage'
 import type { Row } from '../types'
-const props = defineProps<{ title: string; projectFilter?: boolean; requireProject?: boolean }>()
+// compact：标题、说明与项目筛选在桌面端并成一行（BOM 页用，首屏留给明细表）；不传时布局与原来一致。
+const props = defineProps<{ title: string; projectFilter?: boolean; requireProject?: boolean; compact?: boolean }>()
 const descriptions: Record<string, string> = {
   销售: '从需求确认到签约交接。', 项目: '围绕交期推进设计、装配、调试与交付。',
   BOM: '按项目维护物料需求，跟进缺料与采购。',
@@ -54,6 +55,8 @@ function refresh() { revision.value++ }
 watch(projectId, loadProjects, { immediate: true })
 </script>
 <template>
+  <!-- 非 compact 时外层为 display: contents，不改变原有排版。 -->
+  <div class="module-heading" :class="{ 'is-compact': compact && !focusedFlow }">
   <header v-show="!focusedFlow" class="page-heading">
     <div>
       <p class="eyebrow">业务管理</p>
@@ -66,10 +69,23 @@ watch(projectId, loadProjects, { immediate: true })
   <label v-if="projectFilter" v-show="!focusedFlow" class="project-filter"
     >项目筛选<RemoteSelect :model-value="projectId" @update:model-value="chooseProject" path="/business/projects/" label="项目筛选" commit-on-select /><small>{{ projectId ? '仅显示所选项目' : requireProject ? '请选择项目' : '未选择时显示全部项目' }}</small></label
   >
+  </div>
   <slot :project-id="projectId" :projects="projects" :revision="revision" :refresh="refresh" />
 </template>
 
 <style scoped>
+.module-heading { display: contents; }
+/* 桌面 compact：「BOM  说明 … [项目筛选]」一行，业务管理眉标不再单占一行。手机端仍按下方规则排版。 */
+@media (min-width: 761px) {
+  .module-heading.is-compact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 12px; }
+  .is-compact > .page-heading { flex: 0 1 auto; min-width: 0; margin: 0; }
+  .is-compact > .page-heading .eyebrow { display: none; }
+  .is-compact > .page-heading > div:first-child { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+  .is-compact > .page-heading h1 { margin: 0; font-size: 22px; white-space: nowrap; }
+  .is-compact > .page-heading .muted { margin: 0; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .is-compact > .project-filter { flex: 1 1 560px; margin: 0; padding-top: 6px; padding-bottom: 6px; }
+  .is-compact > .el-alert { flex: 1 1 100%; order: 3; }
+}
 /* 手机端（≤600px）压缩页头与项目筛选：列表表头尽量靠上，首屏能看到几行数据。 */
 @media (max-width: 600px) {
   .page-heading { margin-bottom: 10px; gap: 8px; }

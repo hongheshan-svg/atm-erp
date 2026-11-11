@@ -22,6 +22,7 @@ onMounted(async () => {
     title="BOM"
     project-filter
     require-project
+    compact
     v-slot="{ revision, projectId, refresh, projects }"
     ><p v-if="currentProject && projectId !== currentProject.id"><router-link :to="{ path: '/bom', query: { project: currentProject.id } }">继续查看当前项目：{{ currentProject.name }}</router-link></p>
     <BOMDemand
