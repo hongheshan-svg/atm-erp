@@ -11,10 +11,12 @@ queries does not grow with the number of problem records.
 from django.db.models import (
     BooleanField,
     Case,
+    CharField,
     Count,
     DecimalField,
     Exists,
     F,
+    Func,
     IntegerField,
     OuterRef,
     Q,
@@ -24,7 +26,8 @@ from django.db.models import (
     When,
     Window,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.fields.json import KT
+from django.db.models.functions import Coalesce, NullIf, Substr
 from django.utils import timezone
 from django.utils.http import content_disposition_header
 from rest_framework.exceptions import ValidationError
@@ -40,6 +43,7 @@ CATEGORIES = {
     'duplicate-payments': '同一款项重复登记的银行收付款',
     'claim-manual': '认领与手工登记重复',
     'duplicate-banks': '疑似重复的银行记录',
+    'bank-aliases': '华夏流水号不同写法的同一笔',
     'warranty-links': '采购质保关联异常',
     'deleted-open': '已删除但仍在办的记录',
 }
@@ -185,6 +189,57 @@ def duplicate_banks():
         )
         for bank in records
     ]
+
+
+def bank_aliases():
+    """Live bank records of one Huaxia transfer, written as core number and as "bank date:core number".
+
+    Same identity as bank_identity.recorded_aliases, which now rejects such a second manual record: one
+    account, one bank date and one core number. A prefixed reference carries its own bank date; an
+    imported Huaxia row also keeps its core number in source.original_reference. Other banks' vouchers
+    are not unique transaction numbers and keep their own reference. A prefix that is not a real date
+    never equals a stored bank date, so it cannot join another record.
+    """
+    prefixed = Q(reference__regex=r'^[0-9]{4}-[0-9]{2}-[0-9]{2}:.+$')
+    day = Case(
+        When(prefixed, then=Substr('reference', 1, 10)),
+        default=Func(F('date'), Value('YYYY-MM-DD'), function='to_char'),
+        output_field=CharField(),
+    )
+    core = Case(
+        When(prefixed, then=Substr('reference', 12)),
+        When(source__bank='HXB', then=Coalesce(NullIf(KT('source__original_reference'), Value('')), F('reference'))),
+        default=F('reference'),
+        output_field=CharField(),
+    )
+    records = (
+        with_remaining(BankRecord.objects.filter(void_reason=''))
+        .annotate(alias_day=day, alias_core=core)
+        .annotate(copies=Window(Count('pk'), partition_by=[F('account'), F('alias_day'), F('alias_core')]))
+        .filter(copies__gte=2)
+        .select_related('project')
+        .order_by('account', 'alias_day', 'alias_core', 'pk')
+    )
+    rows = []
+    for bank in records:
+        used = abs(bank.amount) - bank.net_remaining
+        state = f'本条已认领、匹配或退回 {used:.2f} 元' if used else '本条尚未认领、匹配或退回'
+        rows.append(
+            row(
+                'bank-aliases',
+                'bank-records',
+                bank.pk,
+                f'{bank.account} · 流水号 {bank.reference}',
+                bank.project,
+                bank.amount,
+                f'与另外 {bank.copies - 1} 条未作废银行记录是同一笔华夏交易：同账户、银行日期 {bank.alias_day}、'
+                f'核心流水号「{bank.alias_core}」，只是流水号写成了核心号或“日期:核心号”两种写法。{state}。'
+                '请对照银行原始流水只保留一条。误录且未使用的一条直接“作废误录银行记录”；已认领或匹配的先“撤销银行匹配”，'
+                '对应收付款与保留那条重复计入的到收付款流水“冲销付款”，否则改为匹配到保留的那条，再作废本条。',
+                finance_path('bank-records', bank.pk),
+            )
+        )
+    return rows
 
 
 def warranty_links():
@@ -388,6 +443,7 @@ CHECKS = {
     'duplicate-payments': duplicate_payments,
     'claim-manual': claim_manual,
     'duplicate-banks': duplicate_banks,
+    'bank-aliases': bank_aliases,
     'warranty-links': warranty_links,
     'deleted-open': deleted_open,
 }

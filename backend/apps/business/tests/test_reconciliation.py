@@ -909,7 +909,14 @@ class BankReferenceConcurrencyTests(BusinessFixtures, TransactionTestCase):
 class DataCheckTests(BusinessFixtures, TestCase):
     """Administrator read-only checklist of historical records that today's rules would reject."""
 
-    CATEGORIES = ('duplicate-payments', 'claim-manual', 'duplicate-banks', 'warranty-links', 'deleted-open')
+    CATEGORIES = (
+        'duplicate-payments',
+        'claim-manual',
+        'duplicate-banks',
+        'bank-aliases',
+        'warranty-links',
+        'deleted-open',
+    )
 
     def setUp(self):
         self.setup_business()
@@ -1016,6 +1023,16 @@ class DataCheckTests(BusinessFixtures, TestCase):
         self.bank(f'M-{index}', '500', account=f'核查户{index}')
         self.bank(f'IMPORT-HXB-{index}', '500', account=f'核查户{index}', import_fingerprint=f'fp-{index}')
 
+        # One Huaxia transfer imported as "date:core" and typed again as the core number with another amount.
+        self.bank(
+            f'{self.today.isoformat()}:HX{index}',
+            '410',
+            account=f'华夏户{index}',
+            import_fingerprint=f'fp-hx-{index}',
+            source={'bank': 'HXB', 'original_reference': f'HX{index}'},
+        )
+        self.bank(f'HX{index}', '401', account=f'华夏户{index}')
+
         _, receipt = self.receipt(f'PO-DC-{index}')
         returned = self.give_back(receipt, '2')
         expense = self.entry(f'质保费用{index}', kind='expense', amount='50')
@@ -1049,7 +1066,14 @@ class DataCheckTests(BusinessFixtures, TestCase):
         self.group(1)
         self.assertEqual(
             self.counts(),
-            {'duplicate-payments': 2, 'claim-manual': 1, 'duplicate-banks': 2, 'warranty-links': 2, 'deleted-open': 7},
+            {
+                'duplicate-payments': 2,
+                'claim-manual': 1,
+                'duplicate-banks': 2,
+                'bank-aliases': 2,
+                'warranty-links': 2,
+                'deleted-open': 7,
+            },
         )
         body = self.checks().data
         self.assertEqual(body['category'], 'duplicate-payments')
@@ -1088,6 +1112,12 @@ class DataCheckTests(BusinessFixtures, TestCase):
         self.assertIn('本条为导入记录', banks[1]['problem'])
         self.assertTrue(banks[0]['path'].startswith('/finance?section=bank&resource=bank-records&focus='))
 
+        aliases = self.rows('bank-aliases')
+        self.assertEqual([row['amount'] for row in aliases], ['410.00', '401.00'])
+        self.assertIn('核心流水号「HX1」', aliases[0]['problem'])
+        self.assertIn('本条尚未认领、匹配或退回', aliases[1]['problem'])
+        self.assertTrue(aliases[1]['path'].startswith('/finance?section=bank&resource=bank-records&focus='))
+
         warranties = self.rows('warranty-links')
         self.assertIn('同时关联了 2 张质保单', warranties[0]['problem'])
         self.assertIn('关联退货数量 2.000 超过本质保单报修数量 1.000', warranties[0]['problem'])
@@ -1115,6 +1145,20 @@ class DataCheckTests(BusinessFixtures, TestCase):
             f'/projects/{self.project.pk}?tab=deliveries&section=deliveries&resource=deliveries&focus={delivery.pk}',
         )
 
+    def test_bank_aliases_cover_manual_spellings_and_report_used_amount(self):
+        day = self.today.isoformat()
+        prefixed = self.bank(f'{day}:000777', '-300', account='华夏户')
+        raw = self.bank('000777', '-300', account='华夏户')
+        self.match(raw, self.pay(self.entry('采购付款', kind='payable'), '200', '000777', account='华夏户'), '200')
+        # An older Huaxia import whose stored reference is not "date:core" still carries its core number.
+        legacy = self.bank('LEGACY-HX9', '700', account='华夏户', source={'bank': 'HXB', 'original_reference': 'HX9'})
+        typed = self.bank(f'{day}:HX9', '700', account='华夏户')
+        rows = {row['record_id']: row for row in self.rows('bank-aliases')}
+        self.assertEqual(set(rows), {prefixed.pk, raw.pk, legacy.pk, typed.pk})
+        self.assertIn(f'银行日期 {day}、核心流水号「000777」', rows[raw.pk]['problem'])
+        self.assertIn('本条已认领、匹配或退回 200.00 元', rows[raw.pk]['problem'])
+        self.assertIn('本条尚未认领、匹配或退回', rows[prefixed.pk]['problem'])
+
     def test_records_that_current_rules_accept_are_not_listed(self):
         entry = self.entry('正常款项')
         reversed_payment = self.pay(entry, '100', 'R-1')
@@ -1136,6 +1180,17 @@ class DataCheckTests(BusinessFixtures, TestCase):
         self.bank('D', '600', account='作废户')
         self.bank('E', '600', account='日期户')
         self.bank('F', '600', account='日期户', date=self.today - timedelta(days=1))
+        # Huaxia aliases: core reused on another day, other account, voided copy, ICBC voucher, non-date prefix.
+        day = self.today.isoformat()
+        self.bank(f'{day}:HX-OK', '601', account='华夏户', source={'bank': 'HXB', 'original_reference': 'HX-OK'})
+        self.bank('HX-OK', '602', account='华夏户', date=self.today - timedelta(days=1))
+        self.bank('HX-OK', '603', account='另一华夏户')
+        self.bank(f'{day}:HX-VOID', '604', account='华夏户')
+        self.bank('HX-VOID', '605', account='华夏户', void_reason='误录')
+        self.bank('IMPORT-ICBC-OK', '606', account='工行户', source={'bank': 'ICBC', 'original_reference': 'V-1'})
+        self.bank('V-1', '607', account='工行户')
+        self.bank('2026-13-01:HX-BAD', '608', account='华夏户')
+        self.bank('HX-BAD', '609', account='华夏户')
         # Warranty linked to its own partial return and expense.
         _, receipt = self.receipt('PO-OK')
         self.warranty(receipt, '2', returned=self.give_back(receipt, '1'), expense=self.entry('质保', kind='expense'))
