@@ -277,7 +277,18 @@ it('搜索覆盖图号和品牌，编制视图说明行内可改单行', async (
   expect(scope()).toContain('当前筛选 1 项')
   await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('亚德客')
   expect(scope()).toContain('当前筛选 1 项')
-  expect(wrapper.text()).toContain('行尾「操作」可改单行或移除')
+  // 桌面端视图说明收进切换按钮旁的「?」悬停提示，不再单占一行；读屏从按钮名称读到全文，随视图切换。
+  expect(wrapper.text()).not.toContain('行尾「操作」可改单行或移除')
+  expect(wrapper.get('.bom-view-switch .bom-help-icon').attributes('aria-label')).toBe('视图说明：按单元核对规格、数量和需求日期；行尾「操作」可改单行或移除。')
+  await wrapper.get('.bom-view-switch input[value="purchase"]').setValue()
+  expect(wrapper.get('.bom-help-icon').attributes('aria-label')).toContain('库存为共享库存，不预留')
+  // 「展开完整列」在页头工具栏里（导出旁边），不用滚到表格底部。
+  const full = () => wrapper.get('.bom-panel-heading .toolbar').findAll('el-button-stub').find(button => button.attributes('aria-pressed') !== undefined && button.text().includes('完整列'))!
+  expect(full().attributes('aria-label')).toBe('展开完整列（图号、品牌等）')
+  expect(full().text()).toBe('展开完整列')
+  await full().trigger('click')
+  expect(full().text()).toBe('收起完整列')
+  expect(full().attributes('aria-pressed')).toBe('true')
 })
 
 afterEach(() => { vi.mocked(read).mockReset(); vi.mocked(read).mockResolvedValue({ lines: [] }) })

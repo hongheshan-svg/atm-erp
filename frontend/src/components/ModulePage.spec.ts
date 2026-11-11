@@ -14,11 +14,11 @@ import type { Command } from '../types'
 vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn(), all: vi.fn(), download: vi.fn(), readBlob: vi.fn() }))
 const command: Command = { title: '登记费用', path: '/business/entries/expense/', initial: { project: 7 }, fields: [{ key: 'note', label: '说明', type: 'textarea' }] }
 let unmount: (() => void) | undefined
-async function render(path: string, editing = false) {
+async function render(path: string, editing = false, compact = false) {
   const screen = defineComponent({
     components: { ModulePage, ActionDialog },
-    setup: () => ({ command: ref(editing ? command : null) }),
-    template: '<ModulePage title="收付款" project-filter v-slot="{ projectId }"><output>{{ projectId || "all" }}</output><ActionDialog inline :command="command" /></ModulePage>',
+    setup: () => ({ command: ref(editing ? command : null), compact }),
+    template: '<ModulePage title="收付款" project-filter :compact="compact" v-slot="{ projectId }"><output>{{ projectId || "all" }}</output><ActionDialog inline :command="command" /></ModulePage>',
   })
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/finance', component: screen }] })
   await router.push(path)
@@ -81,4 +81,18 @@ it('清除项目筛选写入 all，并清除旧详情定位', async () => {
   await flushPromises()
   expect(router.currentRoute.value.query).toEqual({ section: 'payments', project: 'all' })
   expect(wrapper.get('output').text()).toBe('all')
+})
+
+it('compact 只在传入时生效：标题与项目筛选同在一个外层里并成一行，默认外层不参与排版', async () => {
+  let { wrapper } = await render('/finance?project=7')
+  const plain = wrapper.get('.module-heading')
+  expect(plain.classes()).not.toContain('is-compact')
+  expect(plain.find('.page-heading h1').text()).toBe('收付款')
+  expect(plain.find('.project-filter > small').text()).toBe('仅显示所选项目')
+  unmount?.()
+  ;({ wrapper } = await render('/finance?project=7', false, true))
+  const compact = wrapper.get('.module-heading')
+  expect(compact.classes()).toContain('is-compact')
+  expect(compact.findAll(':scope > .page-heading, :scope > .project-filter')).toHaveLength(2)
+  expect(wrapper.get('output').text()).toBe('7')
 })

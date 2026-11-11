@@ -48,6 +48,10 @@ if (typeof window !== 'undefined' && window.matchMedia) {
 }
 const filterId = useId()
 const filtersOpen = ref(false), helpOpen = ref(false)
+// 视图说明：桌面放在切换按钮旁的「?」悬停提示里，手机点「说明 ▾」展开。
+const viewHelp = computed(() => view.value === 'prepare'
+  ? '按单元核对规格、数量和需求日期；行尾「操作」可改单行或移除。'
+  : '库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。橙色「待批」是仍为草稿或待批准的采购，缺料已扣除，请跟进提交和审批。')
 let importGeneration = 0
 function closeImport() {
   importGeneration++
@@ -390,9 +394,17 @@ function saved() {
 </script>
 <template>
   <BOMPurchasePicker v-if="pickingBom && canPurchase" :project-id="projectId" :initial-selection="selected" :shortage-only="shortageOnly" @close="closePurchase" @saved="savedPurchase" />
-  <section v-else class="panel" aria-label="BOM 缺料需求">
-    <header class="panel-heading">
+  <section v-else class="panel bom-demand-panel" aria-label="BOM 缺料需求">
+    <!-- 桌面一行：标题、视图切换（说明在「?」悬停提示里）、工具栏；手机工具栏在上、视图切换另起一行。 -->
+    <header class="panel-heading bom-panel-heading">
       <h2 class="bom-panel-title">BOM 与缺料</h2>
+      <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
+        <label><input v-model="view" type="radio" value="prepare" />编制用料</label>
+        <label><input v-model="view" type="radio" value="purchase" />采购缺料</label>
+        <button v-if="mobile" type="button" class="bom-help-toggle" :aria-expanded="helpOpen" @click="helpOpen = !helpOpen">说明 {{ helpOpen ? '▴' : '▾' }}</button>
+        <el-tooltip v-else :content="viewHelp" placement="bottom-start" popper-class="bom-help-popper"><button type="button" class="bom-help-icon" :aria-label="`视图说明：${viewHelp}`">?</button></el-tooltip>
+        <small v-if="mobile && helpOpen" class="muted">{{ viewHelp }}</small>
+      </div>
       <div class="toolbar">
         <el-button v-if="canMaintain && view === 'prepare'" type="primary" :disabled="busy" @click="start">维护 BOM</el-button>
         <el-button v-if="canMaintain" :disabled="busy" @click="openImport">导入 BOM</el-button>
@@ -409,6 +421,7 @@ function saved() {
             <el-dropdown-item v-if="canMaintain" :command="`${exportSelection.length ? 'selected' : 'filtered'}:xlsx:import`" divided>可回导模板 · Excel（{{ exportSelection.length || filtered.length }} 项，改完直接导入）</el-dropdown-item>
           </el-dropdown-menu></template>
         </el-dropdown>
+        <el-button v-if="!mobile" :aria-pressed="fullColumns" :aria-label="fullColumns ? '收起完整列' : '展开完整列（图号、品牌等）'" :title="fullColumns ? undefined : '加列显示图号、图档版本、品牌、申请人、变更说明等'" @click="fullColumns = !fullColumns">{{ fullColumns ? '收起完整列' : '展开完整列' }}</el-button>
         <el-button v-if="deletionAllowed" :type="batchMode ? 'primary' : undefined" :plain="batchMode" :aria-pressed="batchMode" :disabled="busy" @click="setBatchMode(!batchMode)">{{ batchMode ? '退出批量删除' : '批量删除（管理员）' }}</el-button>
         <el-button v-if="batchVisible && view === 'prepare'" type="danger" plain :disabled="busy || deletionLoading || !deletionSelection.length" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
         <el-dropdown trigger="click" :persistent="false" @command="more">
@@ -422,13 +435,6 @@ function saved() {
         </el-dropdown>
       </div>
     </header>
-    <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
-      <label><input v-model="view" type="radio" value="prepare" />编制用料</label>
-      <label><input v-model="view" type="radio" value="purchase" />采购缺料</label>
-      <button v-if="mobile" type="button" class="bom-help-toggle" :aria-expanded="helpOpen" @click="helpOpen = !helpOpen">说明 {{ helpOpen ? '▴' : '▾' }}</button>
-      <template v-if="!mobile || helpOpen"><small v-if="view === 'prepare'" class="muted">按单元核对规格、数量和需求日期；行尾「操作」可改单行或移除。</small>
-      <small v-else class="muted">库存为共享库存，不预留，当前可用不保证后续可领；其他项目待领需协调。同物料不同单元独立选择，已领、在途及库存按行分摊，非单元实际领用记录。橙色「待批」是仍为草稿或待批准的采购，缺料已扣除，请跟进提交和审批。</small></template>
-    </div>
     <div v-if="unitSummary.length > 1" class="bom-unit-summary" role="group" aria-label="单元齐套概览">
       <button v-for="group in unitSummary" :key="group.unit" type="button" class="bom-unit-chip" :class="{ active: unit === group.unit }" :aria-pressed="unit === group.unit" @click="unit = unit === group.unit ? '' : group.unit"><strong>{{ unitLabel(group.unit) }}</strong><small><span class="bom-unit-rows">{{ group.rows }} 行 · </span><span :class="{ 'shortage-number': group.short }">缺 {{ group.short }}</span><template v-if="group.overdue"> · <span class="overdue-count">逾期 {{ group.overdue }}</span></template></small></button>
     </div>
@@ -475,23 +481,23 @@ function saved() {
         <template #header><input type="checkbox" aria-label="选择本页BOM行" title="勾选后可批量改需求日期、改单元或移除" :checked="maintain.all(visibleLines)" :indeterminate="maintain.some(visibleLines)" :disabled="busy || !visibleLines.length" @change="maintain.togglePage(visibleLines)" /></template>
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM行 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="maintain.has(row)" :disabled="busy || !maintain.selectable(row)" @change="maintain.toggle(row)" /></template>
       </el-table-column>
-      <el-table-column v-if="canPurchase && view === 'purchase'" :label="mobile ? '' : '选择'" :width="mobile ? 40 : 60" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" :title="purchaseBlocked(row)" @change="toggle(row)" /></template></el-table-column>
+      <el-table-column v-if="canPurchase && view === 'purchase'" :label="mobile ? '' : '选择'" :width="mobile ? 40 : 48" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" :title="purchaseBlocked(row)" @change="toggle(row)" /></template></el-table-column>
       <el-table-column :label="mobile ? '物料' : '物料名称 / 编码'" :min-width="mobile ? 150 : 160" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><el-tag v-if="inactive(row)" size="small" type="info" class="bom-inactive-tag" :title="purchaseBlocked(row)">已停用</el-tag><small class="bom-item-code" :class="{ 'is-inline': !mobile }">{{ row.item_code }}</small>
         <small v-if="mobile && view === 'purchase'" class="bom-mobile-summary"><span><b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b> · <i>在途 {{ qty(approvedIncoming(row)) }}</i><em v-if="unapproved(row) > 0" class="unapproved-inline">（待批 {{ qty(row.unapproved) }}）</em> · <i>可用 {{ qty(row.available) }}</i></span><span>{{ row.assembly_unit || '未分单元' }}<template v-if="row.required_date"> · <i>需 {{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
         <small v-else-if="mobile" class="bom-mobile-summary"><span>{{ [row.specification, row.assembly_unit || '未分单元'].filter(Boolean).join(' · ') }}</span><span><i>需求 {{ qty(row.quantity) }}{{ row.unit ? ` ${row.unit}` : '' }}</i> · <b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b><template v-if="row.required_date"> · <i>{{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
       </template></el-table-column>
       <template v-if="!mobile">
       <el-table-column v-if="view === 'prepare'" prop="specification" label="规格" min-width="140" />
-      <el-table-column prop="assembly_unit" label="单元" min-width="130" class-name="bom-unit-cell"><template #header><button type="button" class="sort-header" title="按单元、物料编码排序" @click="sortBy('unit')">单元{{ sortMark('unit') }}</button></template></el-table-column>
-      <el-table-column prop="quantity" label="需求数量" width="86" align="right" :formatter="qtyCell" />
-      <el-table-column prop="unit" label="单位" width="56" />
+      <el-table-column prop="assembly_unit" label="单元" min-width="130" class-name="bom-unit-cell" show-overflow-tooltip><template #header><button type="button" class="sort-header" title="按单元、物料编码排序" @click="sortBy('unit')">单元{{ sortMark('unit') }}</button></template></el-table-column>
+      <el-table-column prop="quantity" label="需求数量" width="78" align="right" :formatter="qtyCell" />
+      <el-table-column prop="unit" label="单位" width="48" />
       <template v-if="view === 'purchase'">
-        <el-table-column prop="issued" label="已领" width="70" align="right" :formatter="qtyCell" />
-        <el-table-column label="在途" width="84" align="right"><template #default="{ row }">{{ qty(approvedIncoming(row)) }}<small v-if="unapproved(row) > 0" class="unapproved-number" :title="'草稿或待批准的采购 ' + qty(row.unapproved) + '，缺料已扣除，批准后转为在途'">待批 {{ qty(row.unapproved) }}</small></template></el-table-column>
-        <el-table-column prop="available" label="可用库存" width="88" align="right" :formatter="qtyCell" />
-        <el-table-column label="缺料" width="76" align="right"><template #header><button type="button" class="sort-header" title="缺料多的排前" @click="sortBy('shortage')">缺料{{ sortMark('shortage') }}</button></template><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ qty(row.shortage) }}</strong></template></el-table-column>
+        <el-table-column prop="issued" label="已领" width="64" align="right" :formatter="qtyCell" />
+        <el-table-column label="在途" width="76" align="right"><template #default="{ row }">{{ qty(approvedIncoming(row)) }}<small v-if="unapproved(row) > 0" class="unapproved-number" :title="'草稿或待批准的采购 ' + qty(row.unapproved) + '，缺料已扣除，批准后转为在途'">待批 {{ qty(row.unapproved) }}</small></template></el-table-column>
+        <el-table-column prop="available" label="可用库存" width="78" align="right" :formatter="qtyCell" />
+        <el-table-column label="缺料" width="68" align="right"><template #header><button type="button" class="sort-header" title="缺料多的排前" @click="sortBy('shortage')">缺料{{ sortMark('shortage') }}</button></template><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ qty(row.shortage) }}</strong></template></el-table-column>
       </template>
-      <el-table-column v-if="(view === 'purchase' && showOtherDemand) || fullColumns" label="其他项目待领" min-width="110" align="right"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ qty(row.other_demand) }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column>
+      <el-table-column v-if="(view === 'purchase' && showOtherDemand) || fullColumns" label="其他项目待领" min-width="104" align="right" class-name="bom-nowrap-cell"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ qty(row.other_demand) }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column>
       <el-table-column label="需求日期" min-width="108"><template #header><button type="button" class="sort-header" title="需求日期早的排前" @click="sortBy('required_date')">需求日期{{ sortMark('required_date') }}</button></template><template #default="{ row }"><span v-if="overdue(row)" class="overdue-cell">{{ row.required_date }}<strong :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></span><span v-else>{{ row.required_date }}</span></template></el-table-column>
       <template v-if="fullColumns">
         <el-table-column v-if="view === 'purchase'" prop="specification" label="规格" min-width="140" />
@@ -510,7 +516,6 @@ function saved() {
         </el-dropdown>
         <el-button v-if="batchVisible" type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button>
       </div></template></el-table-column>
-      <template v-if="!mobile" #tools><el-button :aria-pressed="fullColumns" @click="fullColumns = !fullColumns">{{ fullColumns ? '收起完整列' : '展开完整列（图号、品牌等）' }}</el-button></template>
     </BusinessTable>
     <el-dialog v-if="changesOpen" :model-value="true" title="BOM 变更记录" class="bom-change-dialog bom-mobile-dialog" width="min(1100px, 94vw)" top="6vh" @update:model-value="changesOpen = false">
       <form class="bom-demand-filters" aria-label="筛选变更记录" @submit.prevent="loadChanges(1)">
@@ -572,8 +577,10 @@ function saved() {
   </section>
 </template>
 <style scoped>
-.bom-view-switch { display: flex; gap: 6px 20px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.bom-view-switch { display: flex; gap: 6px 16px; align-items: center; flex-wrap: wrap; }
 .bom-view-switch small { font-size: 12px; line-height: 1.5; flex: 1 1 320px; }
+.bom-help-icon { width: 18px; height: 18px; padding: 0; border: 1px solid var(--field-line); border-radius: 50%; background: #fff; color: var(--mute); font-size: 12px; line-height: 16px; cursor: help; flex: none; margin-left: -6px; }
+.bom-help-icon:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .bom-export-scope { margin: 8px 0 0; font-size: 12px; }
 /* 手机上工具栏按钮缩成两行：导出范围在下拉项和表格下方的范围说明里都有。 */
 @media (max-width: 640px) { .export-scope-label { display: none; } .panel-heading .toolbar { gap: 6px; } .panel-heading .toolbar :deep(.el-button) { padding-left: 10px; padding-right: 10px; } }
@@ -591,7 +598,8 @@ function saved() {
 .bom-inactive-tag { margin-left: 6px; vertical-align: 1px; }
 .bom-inactive-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; font-size: 13px; color: var(--ink-3); }
 .bom-link-button { border: 0; padding: 0; background: transparent; color: var(--brand); font: inherit; cursor: pointer; }
-.bom-details-table :deep(.bom-unit-cell .cell) { white-space: nowrap; }
+/* 单元名、其他项目待领不换行（单元列的 show-overflow-tooltip 负责省略和悬停全名）。 */
+.bom-demand-panel :deep(.bom-details-table :is(.bom-unit-cell, .bom-nowrap-cell) .cell) { white-space: nowrap; }
 .bom-filter-group { display: contents; }
 .bom-demand-filters .shortage-toggle { display: flex; align-items: center; min-height: 38px; }
 .import-help { color: var(--mute); font-size: 13px; line-height: 1.7; }
@@ -621,6 +629,27 @@ function saved() {
 .bom-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--brand-wash-2); padding: 8px 14px; border: 1px solid var(--brand-line); border-radius: 8px; margin-top: 10px; z-index: 5; }
 .bom-selection-bar > .el-button--primary { margin-left: auto; }
 @media (max-width: 760px) { .bom-demand-filters label { flex: 1 1 140px; } }
+/* 桌面首屏密度（1366×768 编制、采购视图各 7 行以上）：标题、视图切换和工具栏一行，单元概览、筛选和表格行距收紧，底部选择条变矮。 */
+@media (min-width: 601px) {
+  .bom-demand-panel { padding: 12px 16px 16px; }
+  /* 放不下时工具栏整体换到下一行并靠右，不把页面撑出横向滚动。 */
+  .bom-panel-heading { flex-wrap: wrap; justify-content: flex-start; row-gap: 8px; margin-bottom: 6px; }
+  .bom-panel-heading .bom-panel-title { white-space: nowrap; }
+  .bom-panel-heading .bom-view-switch { flex-wrap: nowrap; }
+  .bom-panel-heading .toolbar { margin-left: auto; justify-content: flex-end; }
+  .bom-unit-summary { padding-top: 2px; }
+  .bom-unit-chip { padding: 2px 9px; }
+  .bom-demand-filters { padding: 6px 0 8px; }
+  /* el-table 根节点不带本组件的 scoped 属性，从面板往下选。 */
+  .bom-demand-panel :deep(.bom-details-table td.el-table__cell) { padding: 6px 0; }
+  .bom-demand-panel :deep(.bom-details-table th.el-table__cell) { height: 38px; padding: 4px 0; }
+  .bom-demand-panel :deep(.bom-details-table .el-table__body .cell) { line-height: 20px; }
+  /* 单元格左右留白 12→8px，固定宽度的数量列相应收窄：采购视图连同「其他项目待领」在 1366 宽也不出横向滚动。 */
+  .bom-demand-panel :deep(.bom-details-table .cell) { padding: 0 8px; }
+  .bom-demand-panel :deep(.bom-details-table .el-table__body :is(.overdue-flag, .unapproved-number)) { line-height: 16px; }
+  .panel .bom-selection-bar { padding: 4px 12px; gap: 10px; }
+  .panel .bom-selection-bar .el-button { height: 30px; min-height: 30px; }
+}
 .bom-mobile-summary { display: block; margin-top: 4px; color: var(--ink-3); font-size: 12px; font-weight: normal; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
 .bom-mobile-summary > span { display: block; }
 .bom-mobile-summary b, .bom-mobile-summary i { font-style: normal; white-space: nowrap; }
@@ -637,6 +666,9 @@ function saved() {
   .bom-inactive-note > .el-tag { margin-right: 6px; vertical-align: 1px; }
   .bom-inactive-note .bom-link-button { display: inline-flex; align-items: center; margin-left: 4px; vertical-align: middle; }
   .bom-panel-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* 视图切换在页头里，手机上排到工具栏下方单独一行。 */
+  .bom-panel-heading { row-gap: 8px; margin-bottom: 0; }
+  .bom-panel-heading .bom-view-switch { order: 2; flex: 1 1 100%; }
   .bom-view-switch { gap: 0 16px; }
   .bom-view-switch label { min-height: 40px; }
   .bom-view-switch small { flex-basis: 100%; }
@@ -665,6 +697,8 @@ function saved() {
 }
 </style>
 <style>
+/* 视图说明悬停提示挂在 body 下：限宽折行，长说明不拉成一条。 */
+.bom-help-popper { max-width: 420px; line-height: 1.6; }
 /* 窄屏对话框：标题和底部按钮固定，只让正文滚动（对话框挂在 body 下，scoped 样式够不到）。 */
 @media (max-width: 600px) {
   .el-dialog.bom-mobile-dialog, .el-dialog.bom-import-dialog { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); margin: 12px auto; }
