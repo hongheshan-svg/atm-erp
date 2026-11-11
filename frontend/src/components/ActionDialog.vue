@@ -328,3 +328,11 @@ async function submit() {
 .draft-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .draft-notice span { flex: 1 1 240px; }
 </style>
+<style>
+/* 窄屏（手机）：对话框、详情面板与确认框的按钮触控区不小于 40px；详情面板底部取消/确认并排，主次靠颜色区分，避免把破坏性确认放在最顶部整行。 */
+@media (max-width: 600px) {
+  :is(.action-dialog, .detail-pane, .el-message-box) .el-button:not(.el-button--small):not(.is-text) { min-height: 40px; }
+  .detail-pane .detail-pane-heading .el-button.is-text { min-width: 40px; min-height: 40px; }
+  .detail-pane .dialog-footer > .el-button--primary { order: initial; flex: 1 1 auto; }
+}
+</style>
