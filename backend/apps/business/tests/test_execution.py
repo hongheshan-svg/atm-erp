@@ -230,7 +230,7 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.post('manager', f'time/{original}/amend/', {'hours': '2', 'date': TODAY, 'reason': '更正误记'})
         for kind in ('assembly', 'test'):
             self.time(project.tasks.get(kind=kind))
-        purchase = self.purchase(project)
+        purchase = self.purchase(project, over_bom_reason='备件随整线一并采购')
         self.post(
             'warehouse',
             f'purchases/{purchase.pk}/receive/',

@@ -107,18 +107,17 @@ class BusinessFixtures:
         )
         return Project.objects.get(pk=result['project'])
 
-    def purchase(self, project, qty='5.000', price='100.00', *, approve=True):
-        data = self.post(
-            'purchaser',
-            'purchases/',
-            {
-                'project': project.pk,
-                'supplier': self.supplier.pk,
-                'due_date': TODAY,
-                'lines': [{'item': self.item.pk, 'quantity': qty, 'unit_price': price}],
-            },
-            status=201,
-        )
+    def purchase(self, project, qty='5.000', price='100.00', *, approve=True, over_bom_reason=None):
+        payload = {
+            'project': project.pk,
+            'supplier': self.supplier.pk,
+            'due_date': TODAY,
+            'lines': [{'item': self.item.pk, 'quantity': qty, 'unit_price': price}],
+        }
+        # 超出项目 BOM 缺口的手工采购须写明原因（SYS-01），用到超量采购的用例显式传入。
+        if over_bom_reason:
+            payload['over_bom_reason'] = over_bom_reason
+        data = self.post('purchaser', 'purchases/', payload, status=201)
         purchase = PurchaseOrder.objects.get(pk=data['id'])
         self.post('purchaser', f'purchases/{purchase.pk}/submit/')
         if approve:
