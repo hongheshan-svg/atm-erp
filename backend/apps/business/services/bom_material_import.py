@@ -107,7 +107,10 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     result = bom_import.preview(project, SimpleUploadedFile('bom.csv', stream.getvalue().encode()))
     if errors and not actions:
         result['errors'] = []  # Material errors already explain why there are no valid lines.
-    result['errors'] = sorted([*errors, *result['errors']], key=lambda error: error['row'])
+    if errors:
+        # 有物料问题时，「其余行与当前 BOM 一致」不是失败原因，不再另行提示。
+        result['errors'] = [error for error in result['errors'] if not error.get('unchanged')]
+    result['errors'] = sorted([*errors, *result['errors']], key=lambda error: error.get('row', 0))
     result['can_import'] = bool(result['lines']) and not result['errors']
     if not result['can_import'] and not collect_errors:
         raise ValidationError([f'第{error["row"]}行：{error["message"]}' for error in result['errors']])
@@ -116,7 +119,7 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
         line['material_action'], line['new_material'] = by_row[line['row']]
     if collect_errors:
         resolved = {line['row']: line for line in result['lines']}
-        issues = {error['row']: error['message'] for error in result['errors']}
+        issues = {error['row']: error['message'] for error in result['errors'] if 'row' in error}
         result['lines'] = [
             {
                 **dict(zip((key for _, key in BOM_COLUMNS), row, strict=True)),
@@ -231,7 +234,12 @@ def confirm(actor, project, data):
             locked.pk,
             {
                 'expected_revision': payload['revision'],
-                'lines': [{field: row.get(field) for field in fields} for row in result['lines']],
+                # 与当前 BOM 完全一致的行不提交，不要求变更说明，也不写修订记录。
+                'lines': [
+                    {field: row.get(field) for field in fields}
+                    for row in result['lines']
+                    if row.get('bom_action') != 'unchanged'
+                ],
             },
         )
         return {**saved, 'lines': result['lines']}
