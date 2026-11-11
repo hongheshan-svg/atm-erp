@@ -185,10 +185,11 @@ def _lock_for_removal(user, document_ids):
     批量时 ``label`` 让提示写明是哪个文件，授权规则与单个删除完全一致。
     """
     ids = sorted(set(document_ids))
+    labelled = len(ids) > 1
+    missing = ('部分附件' if labelled else '附件') + '不存在或已被删除，请刷新后重试。'
     initial = {doc.pk: doc for doc in Document.objects.filter(pk__in=ids)}
     if len(initial) != len(ids):
-        raise Conflict('部分附件不存在或已被删除，请刷新后重试。')
-    labelled = len(ids) > 1
+        raise Conflict(missing)
 
     def label(document, message):
         return f'「{document.original_name}」：{message}' if labelled else message
@@ -212,7 +213,7 @@ def _lock_for_removal(user, document_ids):
     }
     locked = {doc.pk: doc for doc in Document.objects.select_for_update().filter(pk__in=ids).order_by('pk')}
     if len(locked) != len(ids):
-        raise Conflict('部分附件不存在或已被删除，请刷新后重试。')
+        raise Conflict(missing)
     result = []
     for pk in ids:
         document, before = locked[pk], initial[pk]
