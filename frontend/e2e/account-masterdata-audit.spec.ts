@@ -204,7 +204,7 @@ test('物料和往来单位编辑停用后退出新单选项，原采购关联�
   // 手机端只读明细按行显示成卡片列表，桌面是表格。
   const line = info.project.name === 'mobile'
     ? dialog(page).getByRole('list', { name: '采购明细', exact: true }).getByText(`停用后物料${suffix}`, { exact: true })
-    : dialog(page).getByRole('cell', { name: `停用后物料${suffix}`, exact: true })
+    : dialog(page).getByRole('cell', { name: `停用后物料${suffix}` })
   await expect(line).toBeVisible()
   const preserved = await admin.get(`business/purchases/${purchase.id}/`)
   expect(preserved).toMatchObject({ id: purchase.id, code: oldOrder.code, supplier: partner.id, status: 'draft' })

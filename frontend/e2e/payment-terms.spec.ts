@@ -87,7 +87,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   for (const [date, quantity] of [['2026-07-10', '2'], ['2026-08-10', '3']]) {
     await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
     await detailAction(page, '收货')
-    await dialog(page).getByLabel('实际到货 / 合格收货日期', { exact: true }).fill(date!)
+    await dialog(page).getByLabel('入库日期（实际到货 / 合格收货日）', { exact: true }).fill(date!)
     await dialog(page).getByLabel('补录原因', { exact: true }).fill('依据原始送货单补录历史收货，日期与数量已核对')
     await dialog(page).getByLabel('数量', { exact: true }).fill(quantity!)
     await dialog(page).getByLabel('送货单号 / 备注', { exact: true }).fill('按原收货记录核对')
