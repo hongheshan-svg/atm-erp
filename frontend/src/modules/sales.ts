@@ -61,7 +61,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   if (row && action === '交付与回款') {
     const data = await read(`${path}${row.id}/progress/`)
     const hidden = amountsHidden(data)
-    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
+    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), receivables: (data.receivables || []).map((item: Row) => ({ ...item, balance: money(item.balance, { refund: true }), paid: money(item.paid), amount: money(item.amount), credit_amount: money(item.credit_amount) })), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
       { key: 'project_status', label: '项目状态' },
       { key: 'deliveries', label: '交付批次', type: 'rows', fields: [{ key: 'code', label: '批次' }, { key: 'quantity', label: '数量' }, { key: 'shipped_date', label: '发货日期' }, { key: 'accepted_date', label: '验收日期' }] },
       hidden
@@ -71,7 +71,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
   }
   if (row && action === '补充协议记录') {
     const records = await read(`${path}${row.id}/amendments/`)
-    const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${value}`).join('；')
+    const describe = (values: Row) => Object.entries(values).map(([key, value]) => `${({ amount: '合同金额', equipment_quantity: '设备数量', warranty_months: '质保月数' } as Record<string, string>)[key] || key}：${key === 'amount' ? money(value) : value}`).join('；')
     const hidden = amountsHidden(row)
     return { title: action, path: '', readonly: true, initial: { lines: records.map((r: Row) => ({ ...r, before_text: describe(r.before), after_text: describe(r.after), document__original_name: r.document ? r.document__original_name : HIDDEN })) }, fields: [{ key: 'lines', label: '补充协议', type: 'rows', fields: [{ key: 'date', label: '日期' }, { key: 'reason', label: '原因' }, { key: 'before_text', label: '变更前' }, { key: 'after_text', label: '变更后' }, { key: 'document__original_name', label: '合同附件' }] }], ...(hidden ? { notice: { type: 'info' as const, text: '未参与该项目：补充协议金额与协议附件不显示，设备数量与质保变更仍可查看。' } } : {}), actions: records.filter((r: Row) => r.document).flatMap((r: Row) => [previewAction(r.document, r.document__original_name), { label: `下载 ${r.document__original_name}`, run: async () => { const doc = await read(`/business/documents/${r.document}/`); await download(doc.download_url, doc.original_name) } }]) }
   }
@@ -93,7 +93,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     ], notice: { type: 'info', text: '只更换销售负责人，不改变合同与回款。原负责人立即失去本人范围内的查看权限，新负责人立即获得。' } }
   }
   if (row && action === '查看明细') return {
-    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN } : row,
+    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN } : { ...row, quote_amount: money(row.quote_amount), contract_amount: money(row.contract_amount), original_contract_amount: row.original_contract_amount == null ? row.original_contract_amount : money(row.original_contract_amount) },
     fields: [
       { key: 'code', label: '销售单号' }, { key: 'name', label: '销售名称' },
       { key: 'customer_name', label: '客户' }, { key: 'manager_name', label: '负责人' },

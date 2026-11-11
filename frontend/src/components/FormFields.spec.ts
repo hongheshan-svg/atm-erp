@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import FormFields from './FormFields.vue'
+import BusinessTable from './BusinessTable.vue'
 import { ElSelect } from 'element-plus'
 import { reactive } from 'vue'
 import { wideCommand } from '../form-experience'
@@ -90,5 +91,23 @@ describe('明细表单编辑', () => {
     const base = { title: '查看明细', path: '', readonly: true, initial: {} }
     expect(wideCommand({ ...base, fields: [{ key: 'a', label: 'A' }, { key: 'lines', label: '明细', type: 'rows' }] })).toBe(true)
     expect(wideCommand({ ...base, fields: [{ key: 'a', label: 'A' }] })).toBe(false)
+  })
+  it('手机宽度下只读明细表改为逐行「标签：值」卡片，桌面仍是表格', () => {
+    const rows = { key: 'rows', label: '应收', type: 'rows' as const, fields: [{ key: 'title', label: '款项' }, { key: 'balance', label: '待收' }] }
+    const data = { rows: [{ title: '验收款', balance: '150,000.00' }, { title: '尾款', balance: '' }] }
+    const mobile = vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    vi.stubGlobal('matchMedia', mobile)
+    const narrow = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true } })
+    expect(narrow.findAll('.row-card')).toHaveLength(2)
+    expect(narrow.findComponent(BusinessTable).exists()).toBe(false)
+    expect(narrow.findAll('.row-card')[0]!.text()).toContain('待收：150,000.00')
+    expect(narrow.findAll('.row-card')[1]!.text()).toContain('待收：—')
+    narrow.unmount()
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const wide = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true } })
+    expect(wide.find('.row-card').exists()).toBe(false)
+    expect(wide.findComponent(BusinessTable).exists()).toBe(true)
+    wide.unmount()
+    vi.unstubAllGlobals()
   })
 })
