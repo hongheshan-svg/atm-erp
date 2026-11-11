@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from apps.accounts.models import User
-from apps.business.models import BOMLine, Delivery, Entry, Project, Stock, StockMove, Task, TimeEntry
+from apps.business.models import BOMLine, Delivery, Entry, Item, Project, Stock, StockMove, Task, TimeEntry
 from apps.business.services import execution
 from apps.core.models import ActionReceipt, AuditLog
 from apps.core.permissions import MONEY_READERS
@@ -814,6 +814,49 @@ class ProjectReadinessTests(ExecutionFixtures, TestCase):
         # 全部发货后不再列发货条件，只剩验收进度。
         self.assertEqual(result['ship'], [])
         self.assertEqual(self.items(result, 'accept')['acceptance']['detail'], '已验收 0 / 2 批')
+
+    def test_material_checks_read_issued_quantities_once(self):
+        """推进检查与发货核对领料时按物料一次分组读取已领量，查询数不随 BOM 物料数增长。"""
+
+        def scenario(size):
+            project = self.ready_project()
+            items = Item.objects.bulk_create([Item(code=f'QX{project.pk}-{i}', name=f'配套件{i}') for i in range(size)])
+            BOMLine.objects.bulk_create([BOMLine(project=project, item=item, quantity=2) for item in items])
+            stocks = Stock.objects.bulk_create(
+                [Stock(item=item, location=f'P{project.pk}', quantity=5, value=5) for item in [self.item, *items]]
+            )
+            issued = [Decimal('4'), Decimal('1')] + [Decimal('2')] * (size - 1)
+            StockMove.objects.bulk_create(
+                [
+                    StockMove(stock=stock, project=project, kind='issue', quantity=-qty, value=-qty, reason='领料')
+                    for stock, qty in zip(stocks, issued, strict=True)
+                ]
+            )
+            counts = []
+            with CaptureQueriesContext(connection) as queries:
+                materials = self.items(self.readiness(project))['materials']
+            counts.append(len(queries))
+            self.assertEqual(
+                (materials['ok'], materials['detail']),
+                (False, '按发 1 台核算，还有 1 种物料领料不足（最后一台须覆盖剩余 BOM）'),
+            )
+            with CaptureQueriesContext(connection) as queries:
+                result = self.post(
+                    'manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409
+                )
+            counts.append(len(queries))
+            self.assertIn('累计领料不足以支持本批交付', str(result))
+            StockMove.objects.create(
+                stock=stocks[1], project=project, kind='issue', quantity=-1, value=-1, reason='补领'
+            )
+            with CaptureQueriesContext(connection) as queries:
+                delivery = self.deliver(project)
+            counts.append(len(queries))
+            self.assertEqual(len(delivery.material_requirements), size + 1)
+            return counts
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 种物料查询数: {small} / {large}')
 
     def test_close_checks_match_close_and_scope_is_project_manager(self):
         project = self.ready_project()

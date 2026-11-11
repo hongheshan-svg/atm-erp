@@ -1,9 +1,11 @@
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.business.models import Entry, Payment, Project, PurchaseOrder, Task
+from apps.business.models import BOMLine, Entry, Item, Payment, Project, PurchaseOrder, Task
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -192,3 +194,51 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         self.assertEqual([row['self_requested'] for row in self.get('admin')['prepayments']['results']], [False])
         Reconciliation.objects.filter(pk=statement).update(created_by=self.users['admin'])
         self.assertEqual([row['self_requested'] for row in self.get('admin')['prepayments']['results']], [True])
+
+    def test_shortage_projects_read_all_projects_at_once(self):
+        """缺料项目按全部可见项目一次分组读取（与逐个项目分摊同一口径），只看单个分类时不跑其他分类的查询。"""
+        spare = Item.objects.create(code='WB-SPARE', name='备件')
+        created = 0
+
+        def scenario(size):
+            nonlocal created
+            projects = Project.objects.bulk_create(
+                [
+                    Project(
+                        code=f'WB{size}-{i}',
+                        name=f'缺料项目{i}',
+                        customer=self.customer,
+                        manager=self.users['manager'],
+                        status='active',
+                    )
+                    for i in range(size)
+                ]
+            )
+            BOMLine.objects.bulk_create(
+                [BOMLine(project=project, item=item, quantity=2) for project in projects for item in (self.item, spare)]
+            )
+            created += size
+            counts = []
+            for params in ({'bucket': 'shortage_projects'}, {}):
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.clients['purchase_manager'].get('/api/business/workbench/', params)
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertEqual(response.data['shortage_projects']['count'], created)
+                counts.append(len(queries))
+            self.assertEqual(response.data['shortage_projects']['results'][0]['shortage_lines'], 2)
+            return counts
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 个项目查询数: {small} / {large}')
+        PurchaseOrder.objects.create(
+            code='WB-OVERDUE',
+            project=self.project,
+            supplier=self.supplier,
+            due_date=timezone.localdate() - timedelta(days=1),
+            status='submitted',
+        )
+        with CaptureQueriesContext(connection) as queries:
+            response = self.clients['purchase_manager'].get('/api/business/workbench/', {'bucket': 'drafts'})
+        self.assertEqual(set(response.data), {'drafts'})
+        # 审批申请人回查审计、逾期采购等其他分类的查询只在请求该分类或整页时运行。
+        self.assertFalse([q['sql'] for q in queries.captured_queries if 'lean_audit' in q['sql']])

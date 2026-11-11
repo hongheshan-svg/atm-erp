@@ -2,6 +2,7 @@ import hashlib
 import re
 import unicodedata
 from decimal import Decimal
+from functools import cached_property
 
 from django.db.models import F, Q, Sum
 from rest_framework.exceptions import ValidationError
@@ -62,6 +63,88 @@ def open_purchases(queryset):
     return '、'.join(f'{code} {PURCHASE_STATUS.get(status, status)}' for code, status in found)
 
 
+def open_purchases_by(queryset, field):
+    """open_purchases 按 field（如 item_id、bom_line_id）分组的版本：{分组值: 同样拼好的单号与状态}，一次查询。"""
+    found = {}
+    for key, code, status in (
+        queryset.filter(purchase__is_deleted=False, quantity__gt=F('received_quantity') + F('cancelled_quantity'))
+        .exclude(purchase__status='cancelled')
+        .values_list(field, 'purchase__code', 'purchase__status')
+        .distinct()
+        .order_by('purchase__code')
+    ):
+        found.setdefault(key, []).append(f'{code} {PURCHASE_STATUS.get(status, status)}')
+    return {key: '、'.join(values) for key, values in found.items()}
+
+
+# 以下按物料或 BOM 行分组的读取与对应的单项函数同一口径（含「合计为 0 记作 0」），批量校验时每类只查一次。
+def issued_by_item(project, item_ids):
+    """{物料: issued(project, 物料)}。"""
+    totals = dict.fromkeys(item_ids, ZERO)
+    if totals:
+        for row in (
+            StockMove.objects.filter(project=project, stock__item_id__in=list(totals), kind__in=['issue', 'return'])
+            .exclude(task__kind='service')
+            .values('stock__item_id')
+            .annotate(total=Sum('quantity'))
+        ):
+            totals[row['stock__item_id']] = -(row['total'] or ZERO)
+    return totals
+
+
+def incoming_by_item(project, item_ids):
+    """{物料: incoming(project, 物料)}。"""
+    totals = dict.fromkeys(item_ids, ZERO)
+    if totals:
+        for row in (
+            PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id__in=list(totals))
+            .exclude(purchase__status='cancelled')
+            .values('item_id')
+            .annotate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))
+        ):
+            totals[row['item_id']] = row['total'] or ZERO
+    return totals
+
+
+def linked_incoming_by_line(line_ids):
+    """{BOM 行: linked_incoming(该行)}。"""
+    totals = dict.fromkeys(line_ids, ZERO)
+    if totals:
+        for row in (
+            PurchaseLine.objects.filter(bom_line_id__in=list(totals), purchase__is_deleted=False)
+            .exclude(purchase__status='cancelled')
+            .values('bom_line_id')
+            .annotate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))
+        ):
+            totals[row['bom_line_id']] = row['total'] or ZERO
+    return totals
+
+
+def received_unissued_by_item(project, item_ids):
+    """{物料: received_unissued(project, 物料)}。"""
+    received = dict.fromkeys(item_ids, ZERO)
+    if not received:
+        return {}
+    for row in (
+        StockMove.objects.filter(
+            project=project, stock__item_id__in=list(received), kind__in=['receipt', 'purchase_return']
+        )
+        .values('stock__item_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        received[row['stock__item_id']] = row['total'] or ZERO
+    used = issued_by_item(project, received)
+    return {item_id: max(ZERO, total - used[item_id]) for item_id, total in received.items()}
+
+
+def by_item(lines):
+    """{物料: 该物料的 BOM 行}，保持原顺序；逐行按物料查找时不再反复扫描整张 BOM。"""
+    result = {}
+    for line in lines:
+        result.setdefault(line.item_id, []).append(line)
+    return result
+
+
 def unit_key(value):
     return re.sub(r'\s+', '', unicodedata.normalize('NFKC', value or '')).casefold()
 
@@ -108,12 +191,14 @@ def target_unit(row, matching):
     return ''
 
 
-def check_line_limit(bom_line, quantity, *, exclude_line=None):
+def check_line_limit(bom_line, quantity, *, exclude_line=None, plan=None):
     """多单元同物料时，采购必须落到实际需要它的那一行，不能借用其他单元的用量。
 
     该行已占用 = 关联未收在途 + 关联已收（扣除已退货、仍计入本项目已领或库存的部分），与缺料表同一口径。
+    plan 为调用方已按同一口径算好的该物料分摊（见 ItemSupply.plan），缺省时逐行查库。
     """
-    _, plan = allocation(bom_line.project_id, item_id=bom_line.item_id, exclude_line=exclude_line)
+    if plan is None:
+        _, plan = allocation(bom_line.project_id, item_id=bom_line.item_id, exclude_line=exclude_line)
     entry = plan.get(bom_line.pk, {'linked': ZERO, 'received': ZERO})
     pending, received = entry['linked'], entry['received']
     remaining = bom_line.quantity - pending - received
@@ -149,14 +234,26 @@ def total_shortfalls(project, existing, updates):
         if current is None or qty != current.quantity:
             changed.add(item_id)
     shortfalls = []
-    for item_id in sorted(changed):
-        used, pending = issued(project, item_id) + ZERO, incoming(project, item_id) + ZERO
+    changed = sorted(changed)
+    used_by, pending_by = issued_by_item(project, changed), incoming_by_item(project, changed)
+    for item_id in changed:
+        used, pending = used_by[item_id] + ZERO, pending_by[item_id] + ZERO
         if totals[item_id] < used + pending:
             shortfalls.append((item_id, used, pending))
     names = Item.objects.in_bulk([item_id for item_id, _, _ in shortfalls]) if shortfalls else {}
+    orders_by = (
+        open_purchases_by(
+            PurchaseLine.objects.filter(
+                purchase__project=project, item_id__in=[item_id for item_id, _, _ in shortfalls]
+            ),
+            'item_id',
+        )
+        if shortfalls
+        else {}
+    )
     result = []
     for item_id, used, pending in shortfalls:
-        orders = open_purchases(PurchaseLine.objects.filter(purchase__project=project, item_id=item_id))
+        orders = orders_by.get(item_id, '')
         result.append(
             {
                 'item': item_id,
@@ -252,6 +349,58 @@ def claimed_by_others(project, item_id):
     return result
 
 
+def purchase_groups(queryset, *keys):
+    """allocation 用的采购分组合计：按 (物料, BOM 行) 的在途、其中未批准部分、已收扣除退货。"""
+    remaining = F('quantity') - F('received_quantity') - F('cancelled_quantity')
+    return queryset.values(*keys, 'item_id', 'bom_line_id').annotate(
+        pending=Sum(remaining, filter=~Q(purchase__status='cancelled')),
+        unapproved=Sum(remaining, filter=Q(purchase__status__in=UNAPPROVED)),
+        received=Sum(F('received_quantity') - F('returned_quantity')),
+    )
+
+
+def claimed_by_others_by_item(project, item_ids):
+    """{物料: claimed_by_others(project, 物料)}：到货、已领和需求各一次分组读取。"""
+    result = {item_id: {} for item_id in item_ids}
+    received = {}
+    for row in (
+        StockMove.objects.filter(
+            stock__item_id__in=list(result),
+            kind__in=['receipt', 'purchase_return'],
+            project__status__in=['active', 'delivering'],
+        )
+        .exclude(project=project)
+        .values('stock__item_id', 'project_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        received.setdefault(row['stock__item_id'], {})[row['project_id']] = row['total']
+    if not received:
+        return result
+    projects = list({project_id for totals in received.values() for project_id in totals})
+    used = {
+        (row['stock__item_id'], row['project_id']): -row['total']
+        for row in StockMove.objects.filter(
+            stock__item_id__in=list(received), kind__in=['issue', 'return'], project_id__in=projects
+        )
+        .exclude(task__kind='service')
+        .values('stock__item_id', 'project_id')
+        .annotate(total=Sum('quantity'))
+    }
+    needed = {
+        (row['item_id'], row['project_id']): row['total']
+        for row in BOMLine.objects.filter(item_id__in=list(received), project_id__in=projects)
+        .values('item_id', 'project_id')
+        .annotate(total=Sum('quantity'))
+    }
+    for item_id, totals in received.items():
+        for project_id, quantity in totals.items():
+            taken = used.get((item_id, project_id), ZERO)
+            claim = min(quantity - taken, needed.get((item_id, project_id), ZERO) - taken)
+            if claim > ZERO:
+                result[item_id][project_id] = claim
+    return result
+
+
 def allocation(project, *, item_id=None, exclude_line=None):
     """把本项目已领、在途和共享库存分摊到 BOM 行，只用于展示缺口和单行采购上限，不是第二本账。
 
@@ -263,31 +412,83 @@ def allocation(project, *, item_id=None, exclude_line=None):
         lines = lines.filter(item_id=item_id)
     lines = list(lines)
     item_ids = {line.item_id for line in lines}
+    used = {
+        row['stock__item_id']: row['total']
+        for row in StockMove.objects.filter(project=project, stock__item_id__in=item_ids, kind__in=['issue', 'return'])
+        .exclude(task__kind='service')
+        .values('stock__item_id')
+        .annotate(total=Sum('quantity'))
+    }
+    stock = {
+        row['item_id']: row['total']
+        for row in Stock.objects.filter(item_id__in=item_ids).values('item_id').annotate(total=Sum('quantity'))
+    }
+    purchases = PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id__in=item_ids)
+    if exclude_line is not None:
+        purchases = purchases.exclude(pk=exclude_line)
+    return lines, allocate(lines, used, stock, purchase_groups(purchases))
+
+
+def allocations(project_ids):
+    """{项目: (BOM 行, 分摊)}：多个项目各类合计一次分组读取，结果与逐个调用 allocation(project) 相同。"""
+    lines_by = {}
+    for line in (
+        BOMLine.objects.filter(project_id__in=project_ids)
+        .select_related('item')
+        .order_by('project_id', 'item_id', 'pk')
+    ):
+        lines_by.setdefault(line.project_id, []).append(line)
+    item_ids = {line.item_id for lines in lines_by.values() for line in lines}
+    used = {}
+    for row in (
+        StockMove.objects.filter(
+            project_id__in=list(lines_by), stock__item_id__in=item_ids, kind__in=['issue', 'return']
+        )
+        .exclude(task__kind='service')
+        .values('project_id', 'stock__item_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        used.setdefault(row['project_id'], {})[row['stock__item_id']] = row['total']
+    stock = {
+        row['item_id']: row['total']
+        for row in Stock.objects.filter(item_id__in=item_ids).values('item_id').annotate(total=Sum('quantity'))
+    }
+    purchases = {}
+    for row in purchase_groups(
+        PurchaseLine.objects.filter(
+            purchase__project_id__in=list(lines_by), purchase__is_deleted=False, item_id__in=item_ids
+        ),
+        'purchase__project_id',
+    ):
+        purchases.setdefault(row['purchase__project_id'], []).append(row)
+    return {
+        project_id: (lines, allocate(lines, used.get(project_id, {}), stock, purchases.get(project_id, [])))
+        for project_id, lines in lines_by.items()
+    }
+
+
+def allocate(lines, issues, stock, purchases):
+    """allocation 的分摊计算，不查库。
+
+    lines 为同一项目的 BOM 行（按物料、主键排序）；issues 为 {物料: 领料与退料流水原始合计（负数为已领）}，stock 为
+    {物料: 各库位在库合计}；purchases 为 purchase_groups 的分组行。只计入 lines 涉及的物料。
+    """
+    item_ids = {line.item_id for line in lines}
     line_ids = {line.pk for line in lines}
     used_pool = {pk: ZERO for pk in item_ids}
     stock_pool = {pk: ZERO for pk in item_ids}
     shared_pool = {pk: ZERO for pk in item_ids}
     line_incoming, line_received = {}, {}
-    for row in (
-        StockMove.objects.filter(project=project, stock__item_id__in=item_ids, kind__in=['issue', 'return'])
-        .exclude(task__kind='service')
-        .values('stock__item_id')
-        .annotate(total=Sum('quantity'))
-    ):
-        used_pool[row['stock__item_id']] = -row['total']
-    for row in Stock.objects.filter(item_id__in=item_ids).values('item_id').annotate(total=Sum('quantity')):
-        stock_pool[row['item_id']] = row['total']
+    for pk in item_ids:
+        if pk in issues:
+            used_pool[pk] = -issues[pk]
+        if pk in stock:
+            stock_pool[pk] = stock[pk]
     shared_unapproved = {pk: ZERO for pk in item_ids}
     line_unapproved = {}
-    purchases = PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id__in=item_ids)
-    if exclude_line is not None:
-        purchases = purchases.exclude(pk=exclude_line)
-    remaining = F('quantity') - F('received_quantity') - F('cancelled_quantity')
-    for row in purchases.values('item_id', 'bom_line_id').annotate(
-        pending=Sum(remaining, filter=~Q(purchase__status='cancelled')),
-        unapproved=Sum(remaining, filter=Q(purchase__status__in=UNAPPROVED)),
-        received=Sum(F('received_quantity') - F('returned_quantity')),
-    ):
+    for row in purchases:
+        if row['item_id'] not in item_ids:
+            continue
         pending, unapproved = row['pending'] or ZERO, row['unapproved'] or ZERO
         if row['bom_line_id'] in line_ids:
             line_incoming[row['bom_line_id']] = pending
@@ -347,7 +548,7 @@ def allocation(project, *, item_id=None, exclude_line=None):
         entry = plan[line.pk]
         left = line.quantity - entry['assigned'] - entry['used'] - entry['available']
         take(line, ('used', 'shared', 'shared_unapproved', 'available'), left)
-    return lines, plan
+    return plan
 
 
 def shortage(line, entry):
@@ -360,6 +561,114 @@ def line_shortage(bom_line, *, exclude_line=None):
     """单个 BOM 行的当前缺料量；修改采购草稿时 exclude_line 扣除本行原数量，只核对改后的数量。"""
     _, plan = allocation(bom_line.project_id, item_id=bom_line.item_id, exclude_line=exclude_line)
     return shortage(bom_line, plan[bom_line.pk])
+
+
+class ItemSupply:
+    """一张采购单逐行校验所需的本项目 BOM 行、已领、库存与采购分组：每类在首次用到时读取一次。
+
+    结果与逐行调用 allocation、issued、incoming 和 supply.bom_cover 相同：本单已写入或正在修改的明细不回查，
+    由调用方以 extra=[(采购状态, 采购明细), …] 传入，按库里分组合计的同一规则并入。调用方持有项目锁，
+    本项目的 BOM、领料与采购在整单期间不会被其他请求改动。exclude_purchase 用于修改草稿：库里扣除本单全部明细，
+    再按内存中的当前值加回。
+    """
+
+    def __init__(self, project, item_ids, *, exclude_purchase=None):
+        self.project, self.exclude_purchase = project, exclude_purchase
+        self.item_ids = sorted(set(item_ids))
+
+    @cached_property
+    def lines(self):
+        result = {}
+        for line in (
+            BOMLine.objects.filter(project=self.project, item_id__in=self.item_ids)
+            .select_related('item')
+            .order_by('item_id', 'pk')
+        ):
+            result.setdefault(line.item_id, []).append(line)
+        return result
+
+    @cached_property
+    def issues(self):
+        return {
+            row['stock__item_id']: row['total']
+            for row in StockMove.objects.filter(
+                project=self.project, stock__item_id__in=self.item_ids, kind__in=['issue', 'return']
+            )
+            .exclude(task__kind='service')
+            .values('stock__item_id')
+            .annotate(total=Sum('quantity'))
+        }
+
+    @cached_property
+    def stock(self):
+        return {
+            row['item_id']: row['total']
+            for row in Stock.objects.filter(item_id__in=self.item_ids).values('item_id').annotate(total=Sum('quantity'))
+        }
+
+    @cached_property
+    def purchases(self):
+        queryset = PurchaseLine.objects.filter(
+            purchase__project=self.project, purchase__is_deleted=False, item_id__in=self.item_ids
+        )
+        if self.exclude_purchase is not None:
+            queryset = queryset.exclude(purchase=self.exclude_purchase)
+        result = {}
+        for row in purchase_groups(queryset):
+            result.setdefault(row['item_id'], {})[row['bom_line_id']] = row
+        return result
+
+    def line(self, pk, item_id):
+        """本项目在用、物料一致的 BOM 行；不在其中返回 None（调用方按原来的逐行查询处理）。"""
+        return next((line for line in self.lines.get(item_id, ()) if line.pk == pk), None)
+
+    def groups(self, item_id, extra=()):
+        merged = {key: dict(row) for key, row in self.purchases.get(item_id, {}).items()}
+        for status, line in extra:
+            if line.item_id != item_id:
+                continue
+            remaining = line.quantity - line.received_quantity - line.cancelled_quantity
+            row = merged.setdefault(
+                line.bom_line_id,
+                {
+                    'item_id': item_id,
+                    'bom_line_id': line.bom_line_id,
+                    'pending': None,
+                    'unapproved': None,
+                    'received': None,
+                },
+            )
+            # 与 purchase_groups 的 SUM(... FILTER ...) 相同：不满足条件的明细不计入，全无则为空。
+            for key, value in (
+                ('pending', None if status == 'cancelled' else remaining),
+                ('unapproved', remaining if status in UNAPPROVED else None),
+                ('received', line.received_quantity - line.returned_quantity),
+            ):
+                if value is not None:
+                    row[key] = value if row[key] is None else row[key] + value
+        return list(merged.values())
+
+    def plan(self, item_id, extra=()):
+        """等同 allocation(project, item_id=item_id) 的分摊；修改草稿时 extra 不含被修改的那一行。"""
+        return allocate(self.lines.get(item_id, []), self.issues, self.stock, self.groups(item_id, extra))
+
+    def needed(self, item_id):
+        """本项目 BOM 对该物料的需求合计；不在 BOM 内返回 None。"""
+        lines = self.lines.get(item_id)
+        return sum((line.quantity for line in lines), ZERO) if lines else None
+
+    def issued(self, item_id):
+        return -(self.issues.get(item_id) or ZERO)
+
+    def purchased(self, item_id, extra=()):
+        """(在途, 已收扣除退货)：在途同 incoming()，两者同 bom_cover 的采购合计。"""
+        pending = received = None
+        for row in self.groups(item_id, extra):
+            if row['pending'] is not None:
+                pending = row['pending'] if pending is None else pending + row['pending']
+            if row['received'] is not None:
+                received = row['received'] if received is None else received + row['received']
+        return pending or ZERO, received or ZERO
 
 
 def demand(project):
@@ -424,7 +733,7 @@ def preview_revision(actor, project, data):
     require_project(actor, project, BOM_WRITERS)
     fields(data, {'expected_revision', 'lines'})
     before = impact(project)
-    existing = list(project.bom_lines.select_related('item'))
+    existing = by_item(project.bom_lines.select_related('item'))
     totals = {row['item']: Decimal(row['quantity']) for row in before['items']}
     submitted = []
     for index, row in enumerate(rows(data)):
@@ -433,7 +742,7 @@ def preview_revision(actor, project, data):
             qty = number(row.get('quantity'), 'quantity', 3, positive=True)
         except ValidationError as exc:
             raise ValidationError({'lines': {index: exc.detail}}) from exc
-        matching = [line for line in existing if line.item_id == item]
+        matching = existing.get(item, [])
         try:
             unit = target_unit(row, matching)
         except ValidationError:
@@ -447,6 +756,8 @@ def preview_revision(actor, project, data):
         submitted.append((item, unit, qty, current, matching))
     blockers = []
     try:
+        # 能否保存交给 revise_bom 在回滚的保存点里实际走一遍（加项目锁和物料锁、写审计后撤销），校验与保存不会两套口径。
+        # 代价是预览期间短暂持有这些锁；revise_bom 的读取已按物料分组，耗时不随行数线性增长。
         with transaction.atomic():
             revise_bom(actor, str(uuid.uuid4()), project.pk, data)
             transaction.set_rollback(True)
@@ -462,8 +773,9 @@ def preview_revision(actor, project, data):
         blockers.append(explain(exc.detail))
     items = {row['item']: row for row in before['items']}
     added = Item.objects.in_bulk([item for item in totals if item not in items])
+    used_by, pending_by = issued_by_item(project, added), incoming_by_item(project, added)
     for item_id, item in added.items():
-        used, pending = issued(project, item_id), incoming(project, item_id)
+        used, pending = used_by[item_id], pending_by[item_id]
         items[item_id] = {
             'item': item_id,
             'item_code': item.code,
@@ -474,14 +786,17 @@ def preview_revision(actor, project, data):
             'minimum': str(used + pending),
         }
     # 只列本次真正改动数量或仍有未处理占用的物料，改动的那一行不会被几百行「差异 0」淹没。
-    shown, warnings = [], []
+    changed = []
     for row in items.values():
         target = totals.get(row['item'], ZERO)
         difference = target - Decimal(row['quantity'])
         unresolved = max(ZERO, Decimal(row['minimum']) - target)
-        if not difference and not unresolved:
-            continue
-        stocked = received_unissued(project, row['item'])
+        if difference or unresolved:
+            changed.append((row, target, difference, unresolved))
+    stocked_by = received_unissued_by_item(project, [row['item'] for row, *_ in changed])
+    shown, warnings = [], []
+    for row, target, difference, unresolved in changed:
+        stocked = stocked_by[row['item']]
         used, pending = Decimal(row['issued']), Decimal(row['incoming'])
         surplus = max(ZERO, stocked + pending - max(ZERO, target - used))
         shown.append(
@@ -597,6 +912,7 @@ def revise_bom(actor, key, project_id, data):
             raise Conflict('BOM 已改变，请重新预览。')
         planned = {}
         existing = list(BOMLine.objects.filter(project=project).select_related('item'))
+        grouped = by_item(existing)
         known = {line.assembly_unit for line in existing}
         for index, row in enumerate(rows(data)):
             fields(
@@ -613,7 +929,7 @@ def revise_bom(actor, key, project_id, data):
                 },
             )
             item_id = identity(row.get('item'), 'item')
-            matching = [line for line in existing if line.item_id == item_id]
+            matching = grouped.get(item_id, [])
             try:
                 unit = target_unit(row, matching)
                 problem = unit_conflict(unit, known)
@@ -629,6 +945,7 @@ def revise_bom(actor, key, project_id, data):
         items = lock_items({item_id for item_id, unit in planned})
         prepared = []
         seen_ids = set()
+        linked = None  # 关联在途按 BOM 行一次读取，首次用到时查询。
         for index, ((item_id, unit), row) in enumerate(planned.items()):
             if not items[item_id].is_active:
                 stopped = items[item_id]
@@ -640,26 +957,27 @@ def revise_bom(actor, key, project_id, data):
                 qty = number(row.get('quantity'), 'quantity', 3, positive=True)
             except ValidationError as exc:
                 raise ValidationError({'lines': {index: exc.detail}}) from exc
+            matching = grouped.get(item_id, [])
             if row.get('id') is not None:
                 line_id = identity(row['id'], 'id')
-                current = next((line for line in existing if line.pk == line_id and line.item_id == item_id), None)
+                current = next((line for line in matching if line.pk == line_id), None)
                 if current is None or line_id in seen_ids:
                     raise ValidationError('BOM 行不存在、重复或物料已改变。替换物料请新增行并处理原行。')
-                if any(
-                    line.pk != line_id and line.item_id == item_id and line.assembly_unit == unit for line in existing
-                ):
+                if any(line.pk != line_id and line.assembly_unit == unit for line in matching):
                     raise ValidationError('目标单元已存在此物料。')
             else:
-                current = next(
-                    (line for line in existing if line.item_id == item_id and line.assembly_unit == unit), None
-                )
+                current = next((line for line in matching if line.assembly_unit == unit), None)
             if current:
                 if current.pk in seen_ids:
                     raise ValidationError('同一 BOM 行不能在一次修订中重复修改。')
                 seen_ids.add(current.pk)
             note = text(row, 'change_note', default='' if current is None else None)
             if current:
-                pending = linked_incoming(current)
+                if linked is None:
+                    linked = linked_incoming_by_line(
+                        [line.pk for item in {item for item, _ in planned} for line in grouped.get(item, ())]
+                    )
+                pending = linked[current.pk]
                 if qty < pending:
                     orders = open_purchases(PurchaseLine.objects.filter(bom_line=current))
                     raise Conflict(

@@ -225,6 +225,9 @@ def preview(actor, project, upload):
         for row in records
     ]
     expected = bom.revision(project)
+    # 预览在回滚的保存点里实际走一遍确认时的解析（锁项目、物料编号规则和已有物料，按需建物料并写审计后整体撤销），
+    # 预览与确认因此是同一套校验，且「预览不占用编号」。代价是预览期间同样持有这些锁：全公司新建物料
+    # 和本项目的写入要等预览结束。改成只读校验需要把 material/masterdata 的建码与查重另写一套，暂不改。
     try:
         with transaction.atomic():
             result = project_action(

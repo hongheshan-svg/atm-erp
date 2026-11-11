@@ -17,6 +17,7 @@ from apps.business.models import (
     Payment,
     PaymentEvidence,
     PurchaseContractVersion,
+    PurchaseLine,
     PurchaseOrder,
     Reconciliation,
     Stock,
@@ -26,6 +27,7 @@ from apps.business.models import (
 from apps.core.models import ActionReceipt, AuditLog, Company
 
 from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_permission_queries import counted_queries
 
 
 class SupplyFixtures(BusinessFixtures):
@@ -575,3 +577,62 @@ class HandoverWorkbenchTests(SupplyFixtures, TestCase):
         self.assertNotIn(
             entry.pk, [row['id'] for row in self.workbench('sales_manager')['sale_receivables']['results']]
         )
+
+
+class PurchaseLineLockTests(SupplyFixtures, TestCase):
+    """到货计划与隔离品退回按主键顺序一次锁住本单明细，不再逐行查询；明细不属于本单仍返回 404。"""
+
+    WRITES = ('apps.business.services.supply.save', 'apps.business.services.supply.audit')
+
+    def order(self, size):
+        items = Item.objects.bulk_create([Item(code=f'QL{size}-{i}', name=f'到货件{i}') for i in range(size)])
+        purchase = PurchaseOrder.objects.create(
+            code=f'QL{size}', project=self.project, supplier=self.supplier, due_date=TODAY, status='partial'
+        )
+        PurchaseLine.objects.bulk_create(
+            [PurchaseLine(purchase=purchase, item=item, quantity=5, unit_price=1, pending_quantity=2) for item in items]
+        )
+        return purchase
+
+    def test_delivery_plan_and_quality_return_lock_lines_once(self):
+        def scenario(size):
+            purchase = self.order(size)
+            lines = list(purchase.lines.order_by('-pk'))
+            plan = {
+                'expected_updated_at': purchase.updated_at.isoformat(),
+                'lines': [{'id': line.pk, 'due_date': '2026-10-01'} for line in lines],
+            }
+            sql = []
+            planned, _ = counted_queries(
+                lambda: self.post('purchaser', f'purchases/{purchase.pk}/delivery-plan/', plan), *self.WRITES, sql=sql
+            )
+            locks = [statement for statement in sql if 'FOR UPDATE' in statement and 'lean_purchase_line' in statement]
+            self.assertEqual(len(locks), 1)
+            self.assertIn('ORDER BY "lean_purchase_line"."id" ASC', locks[0])
+            self.assertEqual(
+                {str(day) for day in PurchaseLine.objects.filter(purchase=purchase).values_list('due_date', flat=True)},
+                {'2026-10-01'},
+            )
+            back = {'reason': '不合格', 'lines': [{'line': line.pk, 'quantity': '1'} for line in lines]}
+            returned, _ = counted_queries(
+                lambda: self.post('warehouse', f'purchases/{purchase.pk}/quality-return/', back), *self.WRITES
+            )
+            self.assertEqual(
+                set(PurchaseLine.objects.filter(purchase=purchase).values_list('pending_quantity', flat=True)),
+                {Decimal('1')},
+            )
+            purchase.refresh_from_db()
+            self.assertEqual(purchase.status, 'partial')
+            return planned, returned
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 行查询数: {small} / {large}')
+        purchase = self.order(1)
+        stranger = PurchaseLine.objects.exclude(purchase=purchase).first()
+        missing = {'reason': '不合格', 'lines': [{'line': stranger.pk, 'quantity': '1'}]}
+        self.post('warehouse', f'purchases/{purchase.pk}/quality-return/', missing, status=404)
+        plan = {
+            'expected_updated_at': purchase.updated_at.isoformat(),
+            'lines': [{'id': stranger.pk, 'due_date': TODAY}],
+        }
+        self.post('purchaser', f'purchases/{purchase.pk}/delivery-plan/', plan, status=404)

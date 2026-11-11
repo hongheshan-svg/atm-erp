@@ -24,7 +24,7 @@ from apps.core.permissions import (
 
 from ..models import BOMLine, Entry, Project, PurchaseOrder, Task
 from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
-from .bom import allocation
+from .bom import allocations
 from .common import ZERO
 from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
@@ -71,15 +71,17 @@ def handover_projects(user):
 
 def shortage_projects(user):
     """采购员可见的执行中项目里仍有缺料的 BOM 行（与 BOM 选料下单同一缺料口径），按最早需求日期排序。"""
-    projects = (
+    projects = list(
         projects_for(user, Project.objects.all(), PURCHASERS)
         .filter(status__in=['active', 'delivering'])
         .filter(Exists(BOMLine.objects.filter(project=OuterRef('pk'))))
         .order_by('pk')
     )
+    # 各项目的 BOM、已领、库存与在途一次分组读取，再逐个项目分摊，与逐个调用 allocation 同一口径。
+    planned = allocations([project.pk for project in projects])
     rows = []
     for project in projects:
-        lines, plan = allocation(project)
+        lines, plan = planned.get(project.pk, ([], {}))
         short = []
         for line in lines:
             entry = plan[line.pk]
@@ -194,7 +196,8 @@ def summary(request):
         )
         result['sale_receivables'] = bucket(receivables, EntrySerializer, 'sale_receivables')
         if result['sale_receivables'] is not None:
-            codes = dict(receivables.values_list('pk', 'project__sale__code'))
+            page = [row['id'] for row in result['sale_receivables']['results']]
+            codes = dict(receivables.filter(pk__in=page).values_list('pk', 'project__sale__code'))
             for row in result['sale_receivables']['results']:
                 row['sale_code'] = codes.get(row['id'])
     if not has_role(user, OPERATION_ROLES):
@@ -247,7 +250,12 @@ def summary(request):
         .prefetch_related('lines__item', 'lines__bom_line', 'project__members')
         .order_by('due_date', 'pk')
     )
-    if has_role(user, PURCHASE_APPROVERS):
+
+    def wanted(name):
+        """只请求某一分类时，其他分类不再做额外查询（bucket 本来也会返回 None）。"""
+        return not selected_bucket or selected_bucket == name
+
+    if has_role(user, PURCHASE_APPROVERS) and wanted('approvals'):
         approvals = purchases.filter(
             status='submitted', project__in=projects_for(user, Project.objects.all(), PURCHASE_APPROVERS)
         )
@@ -269,9 +277,9 @@ def summary(request):
         # 批准后还没发合同、也没到货的本人采购：提醒采购员归档合同、向供应商下单。
         approved = purchases.filter(status='approved', created_by=user, contract_versions__isnull=True).distinct()
         result['approved_purchases'] = bucket(approved, PurchaseSerializer, 'approved_purchases')
-        if not selected_bucket or selected_bucket == 'shortage_projects':
+        if wanted('shortage_projects'):
             result['shortage_projects'] = bucket(shortage_projects(user), Plain, 'shortage_projects')
-    if has_role(user, PURCHASERS | WAREHOUSE):
+    if has_role(user, PURCHASERS | WAREHOUSE) and wanted('overdue_purchases'):
         overdue = (
             purchases.filter(status__in=['approved', 'partial'])
             .filter(
@@ -307,7 +315,7 @@ def summary(request):
         pending = with_snapshot_sources(
             Reconciliation.objects.filter(status='draft', entry__project__in=projects)
         ).order_by('id')
-        if has_role(user, MANAGERS):
+        if has_role(user, MANAGERS) and wanted('prepayments'):
             prepayments = pending.filter(
                 kind='prepayment', entry__project__in=projects_for(user, Project.objects.all(), MANAGERS)
             )
@@ -323,7 +331,7 @@ def summary(request):
                         row['self_requested'] = row['id'] in mine
         if has_role(user, FINANCE):
             statements = pending.exclude(kind='prepayment')
-            if statements.exists():
+            if wanted('reconciliations') and statements.exists():
                 result['reconciliations'] = bucket(statements, ReconciliationSerializer, 'reconciliations')
             banks = (
                 bank_list(with_remaining(BankRecord.objects.filter(void_reason='')))
@@ -331,6 +339,6 @@ def summary(request):
                 .select_related('project')
                 .order_by('date', 'id')
             )
-            if banks.exists():
+            if wanted('bank_records') and banks.exists():
                 result['bank_records'] = bucket(banks, BankSerializer, 'bank_records')
     return {key: value for key, value in result.items() if value is not None}

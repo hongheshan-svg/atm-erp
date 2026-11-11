@@ -1,13 +1,16 @@
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from apps.business.models import BOMLine, Item, PurchaseLine, PurchaseOrder, Stock, StockMove
 from apps.business.services import bom_import
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_permission_queries import counted_queries
 
 
 class BOMSelectionTests(BusinessFixtures, TestCase):
@@ -617,3 +620,198 @@ class BOMAuditRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(self.clients['electrical_engineer'].get(url, {'project': self.project.pk}).status_code, 404)
         self.assertEqual(self.clients['sales_manager'].get(url, {'project': self.project.pk}).status_code, 403)
         self.assertEqual(self.clients['manager'].get(url, {'project': self.project.pk, 'start': 'x'}).status_code, 400)
+
+
+class BOMQueryBudgetTests(BusinessFixtures, TestCase):
+    """缺料、在途与已领按物料一次分组读取：逐行写入之外的查询数不随行数增长，同一请求里前面的行照样计入。"""
+
+    BOM_WRITES = ('apps.business.services.bom.save', 'apps.business.services.bom.audit')
+    PURCHASE_WRITES = ('apps.business.services.supply.save', 'apps.business.services.supply.audit')
+
+    def setUp(self):
+        self.setup_business()
+
+    def stocked_bom(self, size, *, issued=None, linked='1'):
+        """size 种物料各一条 BOM 行（用量 5），本项目已领 issued（为 None 时不建库存），各行挂一张草稿采购在途 linked。"""
+        project = self.active_project()
+        items = Item.objects.bulk_create([Item(code=f'QB{project.pk}-{i}', name=f'预算件{i}') for i in range(size)])
+        lines = BOMLine.objects.bulk_create(
+            [BOMLine(project=project, item=item, quantity=5, assembly_unit='上料') for item in items]
+        )
+        if issued is not None:
+            stocks = Stock.objects.bulk_create([Stock(item=item, quantity=10, value=10) for item in items])
+            StockMove.objects.bulk_create(
+                [
+                    StockMove(
+                        stock=stock, project=project, kind='issue', quantity=-Decimal(issued), value=-1, reason='领料'
+                    )
+                    for stock in stocks
+                ]
+            )
+        order = PurchaseOrder.objects.create(
+            code=f'QP{project.pk}', project=project, supplier=self.supplier, due_date=TODAY
+        )
+        PurchaseLine.objects.bulk_create(
+            [
+                PurchaseLine(purchase=order, item=line.item, bom_line=line, quantity=Decimal(linked), unit_price=1)
+                for line in lines
+            ]
+        )
+        return project, items, lines
+
+    def test_bom_import_revision_and_change_preview_reads_do_not_grow_with_rows(self):
+        def scenario(size):
+            project, items, lines = self.stocked_bom(size, issued='2')
+            fresh = Item.objects.bulk_create([Item(code=f'QN{project.pk}-{i}', name=f'新件{i}') for i in range(size)])
+            csv = '物料编码,单元,需求数量,变更说明\n' + ''.join(f'{item.code},上料,2,减量\n' for item in items)
+            with CaptureQueriesContext(connection) as preview:
+                result = bom_import.preview(project, SimpleUploadedFile('bom.csv', csv.encode()))
+            reads = {'import_preview': len(preview)}
+            # 合计 2 小于已领 2 与在途 1：每种物料一条说明，带上在途采购单号。
+            self.assertEqual(len(result['errors']), size, result['errors'])
+            self.assertIn(f'QP{project.pk} 草稿', result['errors'][0]['message'])
+            revision = self.bom_version(project.pk)
+            raised = [{'id': line.pk, 'item': line.item_id, 'quantity': '8', 'change_note': '加量'} for line in lines]
+            added = [{'item': item.pk, 'quantity': '1', 'assembly_unit': '检测'} for item in fresh]
+            change = {'expected_revision': revision, 'lines': raised + added}
+            reads['change_preview'], _ = counted_queries(
+                lambda: self.assertTrue(
+                    self.post('manager', f'projects/{project.pk}/bom-change-preview/', change)['can_apply']
+                ),
+                *self.BOM_WRITES,
+            )
+            reads['revise'], _ = counted_queries(
+                lambda: self.post('manager', f'projects/{project.pk}/revise-bom/', change), *self.BOM_WRITES
+            )
+            self.assertEqual(BOMLine.objects.filter(project=project).count(), size * 2)
+            return reads
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 行查询数: {small} / {large}')
+
+    def test_batch_bom_removal_reads_do_not_grow_with_rows(self):
+        def scenario(size):
+            project, items, lines = self.stocked_bom(size)
+            payload = {'project': project.pk, 'ids': [line.pk for line in lines], 'reason': '作废'}
+            with CaptureQueriesContext(connection) as blocked:
+                denied = self.post('manager', 'bom/remove-batch/', payload, status=409)
+            blocked = len(blocked)
+            self.assertEqual(str(denied).count('关联在途采购 1.000'), size)
+            self.assertEqual(str(denied).count('小于已领用 0 与在途采购 1.000'), size)
+            PurchaseLine.objects.filter(purchase__project=project).update(cancelled_quantity=1)
+            reads, _ = counted_queries(
+                lambda: self.post('manager', 'bom/remove-batch/', payload),
+                (BOMLine, 'soft_delete'),
+                'apps.business.services.corrections.audit',
+            )
+            self.assertFalse(BOMLine.objects.filter(project=project).exists())
+            return blocked, reads
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 行查询数: {small} / {large}')
+
+    def test_purchase_create_and_edit_reads_do_not_grow_with_rows(self):
+        def scenario(size):
+            project, items, lines = self.stocked_bom(size, linked='0.5')
+            payload = {
+                'project': project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'from_demand': True,
+                'lines': [
+                    {'item': line.item_id, 'bom_line': line.pk, 'quantity': '2', 'unit_price': '1'} for line in lines
+                ],
+            }
+            reads = {}
+            created = {}
+
+            def create():
+                created.update(self.post('purchaser', 'purchases/', payload, status=201))
+
+            reads['create'], _ = counted_queries(create, *self.PURCHASE_WRITES)
+            detail = self.clients['purchaser'].get(f'/api/business/purchases/{created["id"]}/').data
+            edit = {
+                'expected_updated_at': detail['updated_at'],
+                'reason': '调整',
+                'due_date': TODAY,
+                'lines': [
+                    {'id': row['id'], 'quantity': '3', 'unit_price': '2', 'due_date': TODAY} for row in detail['lines']
+                ],
+            }
+            reads['edit'], _ = counted_queries(
+                lambda: self.post('purchaser', f'purchases/{created["id"]}/edit/', edit), *self.PURCHASE_WRITES
+            )
+            # 未关联 BOM 行的手工采购：缺口 = 5 - 在途 3.5，买 2 超出 0.5，须写明原因并留审计。
+            manual = {
+                'project': project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'over_bom_reason': '备件',
+                'lines': [{'item': item.pk, 'quantity': '2', 'unit_price': '1'} for item in items],
+            }
+            reads['manual'], _ = counted_queries(
+                lambda: created.update(self.post('purchaser', 'purchases/', manual, status=201)),
+                *self.PURCHASE_WRITES,
+            )
+            log = AuditLog.objects.get(operation='purchase.create', resource=f'purchaseorder:{created["id"]}')
+            self.assertEqual(len(log.detail['over_bom']), size)
+            self.assertEqual(
+                {key: log.detail['over_bom'][0][key] for key in ('needed', 'incoming', 'shortage', 'excess')},
+                {'needed': '5.000', 'incoming': '3.500', 'shortage': '1.500', 'excess': '0.500'},
+            )
+            draft = self.clients['purchaser'].get(f'/api/business/purchases/{created["id"]}/').data
+            manual_edit = {
+                'expected_updated_at': draft['updated_at'],
+                'reason': '调整',
+                'due_date': TODAY,
+                'over_bom_reason': '备件',
+                'lines': [
+                    {'id': row['id'], 'quantity': '2.5', 'unit_price': '1', 'due_date': TODAY} for row in draft['lines']
+                ],
+            }
+            reads['manual_edit'], _ = counted_queries(
+                lambda: self.post('purchaser', f'purchases/{created["id"]}/edit/', manual_edit),
+                *self.PURCHASE_WRITES,
+            )
+            return reads
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 行查询数: {small} / {large}')
+
+    def test_earlier_rows_of_the_same_order_count_as_incoming(self):
+        """逐行校验时，本单前面已写入的明细计入在途：与逐行查库的结果一致。"""
+        project = self.active_project()
+        first = BOMLine.objects.create(project=project, item=self.item, quantity=3, assembly_unit='上料')
+        second = BOMLine.objects.create(project=project, item=self.item, quantity=3, assembly_unit='检测')
+        base = {'project': project.pk, 'supplier': self.supplier.pk, 'due_date': TODAY}
+        # 先买 4 件不挂 BOM 行：物料缺口只剩 2，后面的行即使本行还有 3 也只能买 2。
+        denied = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                **base,
+                'over_bom_reason': '备件',
+                'lines': [
+                    {'item': self.item.pk, 'quantity': '4', 'unit_price': '1'},
+                    {'item': self.item.pk, 'bom_line': first.pk, 'quantity': '3', 'unit_price': '1'},
+                ],
+            },
+            status=409,
+        )
+        self.assertIn('超过当前 BOM 剩余需求', str(denied))
+        # 先挂满两行，再买的未关联明细超出缺口 0：说明里的在途含本单前两行。
+        denied = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                **base,
+                'lines': [
+                    {'item': self.item.pk, 'bom_line': first.pk, 'quantity': '3', 'unit_price': '1'},
+                    {'item': self.item.pk, 'bom_line': second.pk, 'quantity': '3', 'unit_price': '1'},
+                    {'item': self.item.pk, 'quantity': '1', 'unit_price': '1'},
+                ],
+            },
+            status=400,
+        )
+        self.assertIn('在途 6.000，还可采购 0', str(denied))
+        self.assertFalse(PurchaseOrder.objects.filter(project=project).exists())

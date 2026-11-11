@@ -15,7 +15,7 @@ from apps.core.permissions import (
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
 from ..task_milestones import AUTOMATIC, PRE_SHIPMENT
-from .bom import incoming, issued, linked_incoming, open_purchases
+from .bom import incoming_by_item, issued_by_item, linked_incoming_by_line, open_purchases_by
 from .common import (
     ZERO,
     audit,
@@ -380,31 +380,45 @@ def removal_problems(project, lines):
     提示带上数量和采购单号，工程师拿着它就能去找采购或仓管，不必再翻单据。
     """
     problems = []
-    for line in lines:
-        pending = linked_incoming(line)
-        if pending > ZERO:
-            orders = open_purchases(PurchaseLine.objects.filter(bom_line=line))
-            problems.append(
-                f'{line.item.code} {line.item.name}（{line.assembly_unit or "未分单元"}）关联在途采购 {pending}'
-                f'{f"（{orders}）" if orders else ""}，请联系采购员取消未收余量后再移除。'
-            )
-    removing = {line.pk for line in lines}
-    for item_id in sorted({line.item_id for line in lines}):
-        other = (
-            BOMLine.objects.filter(project=project, item_id=item_id)
-            .exclude(pk__in=removing)
-            .aggregate(total=Sum('quantity'))['total']
-            or ZERO
+    # 关联在途、其余单元合计、已领与在途按 BOM 行或物料各一次分组读取；采购单号只为被拦截的行和物料查一次。
+    linked = linked_incoming_by_line([line.pk for line in lines])
+    blocked = [line for line in lines if linked[line.pk] > ZERO]
+    line_orders = open_purchases_by(PurchaseLine.objects.filter(bom_line__in=blocked), 'bom_line_id') if blocked else {}
+    for line in blocked:
+        orders = line_orders.get(line.pk, '')
+        problems.append(
+            f'{line.item.code} {line.item.name}（{line.assembly_unit or "未分单元"}）关联在途采购 {linked[line.pk]}'
+            f'{f"（{orders}）" if orders else ""}，请联系采购员取消未收余量后再移除。'
         )
-        used, pending = issued(project, item_id), incoming(project, item_id)
-        if other < used + pending:
-            item = next(line.item for line in lines if line.item_id == item_id)
-            orders = open_purchases(PurchaseLine.objects.filter(purchase__project=project, item_id=item_id))
-            problems.append(
-                f'移除后 {item.code} {item.name} 其余单元合计 {other}，小于已领用 {used} 与在途采购 {pending}'
-                f'{f"（{orders}）" if orders else ""} 之和；请联系采购员取消未收余量或联系仓管退回未用材料，'
-                '也可用「修改此行」改为减少数量。'
-            )
+    removing = {line.pk for line in lines}
+    item_ids = sorted({line.item_id for line in lines})
+    others = dict.fromkeys(item_ids, ZERO)
+    for row in (
+        BOMLine.objects.filter(project=project, item_id__in=item_ids)
+        .exclude(pk__in=removing)
+        .values('item_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        others[row['item_id']] = row['total'] or ZERO
+    used_by, pending_by = issued_by_item(project, item_ids), incoming_by_item(project, item_ids)
+    short = [item_id for item_id in item_ids if others[item_id] < used_by[item_id] + pending_by[item_id]]
+    item_orders = (
+        open_purchases_by(PurchaseLine.objects.filter(purchase__project=project, item_id__in=short), 'item_id')
+        if short
+        else {}
+    )
+    first = {}
+    for line in lines:
+        first.setdefault(line.item_id, line)
+    for item_id in short:
+        other, used, pending = others[item_id], used_by[item_id], pending_by[item_id]
+        item = first[item_id].item
+        orders = item_orders.get(item_id, '')
+        problems.append(
+            f'移除后 {item.code} {item.name} 其余单元合计 {other}，小于已领用 {used} 与在途采购 {pending}'
+            f'{f"（{orders}）" if orders else ""} 之和；请联系采购员取消未收余量或联系仓管退回未用材料，'
+            '也可用「修改此行」改为减少数量。'
+        )
     return problems
 
 

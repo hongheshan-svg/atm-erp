@@ -20,7 +20,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.error_messages import chinese_error
 
 from ..models import BOMLine, Item, PurchaseLine
-from .bom import blank_unit_message, revision, total_shortfalls, unit_conflict
+from .bom import blank_unit_message, by_item, revision, total_shortfalls, unit_conflict
 from .common import day, number, state
 from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
@@ -115,6 +115,7 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
 
 def read_xlsx(content, columns=3):
     # Bound decompression and reject entity declarations before openpyxl sees XML.
+    allowed = {get_column_letter(i) for i in range(1, columns + 1)}
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         infos = archive.infolist()
         if len(infos) > 200 or sum(info.file_size for info in infos) > 20 * 1024 * 1024:
@@ -132,7 +133,7 @@ def read_xlsx(content, columns=3):
                         column = re.match(r'[A-Z]+', cell.get('r', ''))
                         if (
                             column
-                            and column.group() not in {get_column_letter(i) for i in range(1, columns + 1)}
+                            and column.group() not in allowed
                             and any(child.tag.rsplit('}', 1)[-1] in {'v', 'is', 'f'} for child in cell)
                         ):
                             raise ValidationError({'file': f'表格只能包含{columns}列。'})
@@ -180,9 +181,11 @@ def preview(project, upload):
     codes = {str(row[0]).strip() for row in raw if row and row[0] is not None}
     items = {item.code: item for item in Item.objects.filter(code__in=codes, is_active=True)}
     existing = list(BOMLine.objects.filter(project=project).select_related('item'))
+    grouped = by_item(existing)
     current = {(line.item_id, line.assembly_unit): line for line in existing}
     known = {line.assembly_unit for line in existing}
     lines, errors, seen = [], [], set()
+    linked = None  # 各 BOM 行关联的未取消在途，首次修改已有行时一次读取。
     for row_number, row in enumerate(raw, 2):
         if all(value in (None, '') for value in row):
             continue
@@ -193,12 +196,10 @@ def preview(project, upload):
             if item is None:
                 raise ValidationError('物料编码不存在或已停用。')
             note = str(values[2] or '').strip()
+            matching = grouped.get(item.pk, [])
             assembly_unit = (
-                str(row[3] or '').strip()
-                if len(row) > 3
-                else next((line.assembly_unit for line in existing if line.item_id == item.pk), '')
+                str(row[3] or '').strip() if len(row) > 3 else next((line.assembly_unit for line in matching), '')
             )
-            matching = [line for line in existing if line.item_id == item.pk]
             if len(row) < 4 and len(matching) > 1:
                 raise ValidationError('此物料分属多个单元，请使用含单元列的新模板。')
             if not assembly_unit and matching and all(line.assembly_unit for line in matching):
@@ -239,12 +240,15 @@ def preview(project, upload):
             if len(note) > 500 or (action == 'update' and not note):
                 raise ValidationError('修改已有 BOM 必须填写变更说明，且不超过 500 字符。')
             if action == 'update':
-                pending = (
-                    PurchaseLine.objects.filter(bom_line=current[row_key])
-                    .exclude(purchase__status='cancelled')
-                    .aggregate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))['total']
-                    or 0
-                )
+                if linked is None:
+                    linked = {
+                        group['bom_line_id']: group['total']
+                        for group in PurchaseLine.objects.filter(bom_line__in=existing)
+                        .exclude(purchase__status='cancelled')
+                        .values('bom_line_id')
+                        .annotate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))
+                    }
+                pending = linked.get(current[row_key].pk) or 0
                 if qty < pending:
                     raise ValidationError('单元用量不能小于该行在途采购数量。')
             lines.append(
@@ -279,13 +283,11 @@ def preview(project, upload):
         for line in lines
         if line['bom_action'] != 'unchanged'
     ]
+    first_row = {}
+    for line in lines:
+        first_row.setdefault(line['item'], line['row'])
     for problem in total_shortfalls(project, existing, updates):
-        errors.append(
-            {
-                'row': next(line['row'] for line in lines if line['item'] == problem['item']),
-                'message': problem['message'],
-            }
-        )
+        errors.append({'row': first_row[problem['item']], 'message': problem['message']})
     listed = {(line['item'], line['assembly_unit']) for line in lines}
     # 导入只新增和修改，不会移除文件里没有的行；列出来，免得人以为上传整表就等于整批替换。
     untouched = [

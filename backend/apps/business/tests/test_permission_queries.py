@@ -1,5 +1,8 @@
 """Permission flags and sensitive projections stay scoped without per-row membership queries."""
 
+from contextlib import ExitStack
+from unittest import mock
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -19,6 +22,44 @@ from apps.business.models import (
 )
 
 from .test_commercial_chain import BusinessFixtures
+
+
+def counted_queries(run, *writers, sql=None):
+    """运行 run()，返回 (写入辅助函数之外的查询数, 总查询数)；传入列表 sql 时追加本次全部 SQL。
+
+    writers 是要扣除的逐行写入入口（如 'apps.business.services.supply.save'，或 (类, '方法名')）：
+    每行落库、校验和审计本来就随行数增长，扣掉后剩下的读取查询不应随行数增长。
+    """
+    inside, depth = [0], [0]
+
+    def wrap(original):
+        def counted(*args, **kwargs):
+            depth[0] += 1
+            start = len(connection.queries_log)
+            try:
+                return original(*args, **kwargs)
+            finally:
+                depth[0] -= 1
+                if not depth[0]:
+                    inside[0] += len(connection.queries_log) - start
+
+        return counted
+
+    with ExitStack() as stack:
+        for writer in writers:
+            if isinstance(writer, str):
+                module, name = writer.rsplit('.', 1)
+                owner = __import__(module, fromlist=[name])
+            else:
+                owner, name = writer
+            stack.enter_context(mock.patch.object(owner, name, wrap(getattr(owner, name))))
+        connection.queries_log.clear()
+        with CaptureQueriesContext(connection) as captured:
+            run()
+    assert len(captured) < connection.queries_log.maxlen, '查询日志已满，计数不可靠'
+    if sql is not None:
+        sql.extend(query['sql'] for query in captured.captured_queries)
+    return len(captured) - inside[0], len(captured)
 
 
 class PermissionQueryTests(BusinessFixtures, TestCase):

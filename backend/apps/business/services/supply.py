@@ -2,7 +2,7 @@ import copy
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import F, Q, Sum
+from django.db.models import F, Q, Sum, prefetch_related_objects
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -15,7 +15,7 @@ from apps.core.permissions import PURCHASE_APPROVERS, PURCHASERS, WAREHOUSE, has
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
 from .approval import independent_approval
-from .bom import check_line_limit, demand, incoming, issued, line_shortage
+from .bom import ItemSupply, allocation, check_line_limit, demand, issued, shortage
 from .common import (
     ZERO,
     audit,
@@ -168,8 +168,10 @@ def bom_cover(project, item_id, *, exclude_line=None):
         ),
         received=Sum(F('received_quantity') - F('returned_quantity')),
     )
-    used = issued(project, item_id)
-    pending, received = totals['pending'] or ZERO, totals['received'] or ZERO
+    return cover_values(needed, issued(project, item_id), totals['pending'] or ZERO, totals['received'] or ZERO)
+
+
+def cover_values(needed, used, pending, received):
     return {
         'needed': needed,
         'issued': used,
@@ -177,6 +179,15 @@ def bom_cover(project, item_id, *, exclude_line=None):
         'incoming': pending,
         'shortage': max(ZERO, needed - max(used, received) - pending),
     }
+
+
+def supply_cover(supply, item_id, extra=()):
+    """bom_cover 的同口径版本，读取来自 ItemSupply；extra 为本单应计入的明细（修改草稿时不含被修改的行）。"""
+    needed = supply.needed(item_id)
+    if needed is None:
+        return None
+    pending, received = supply.purchased(item_id, extra)
+    return cover_values(needed, supply.issued(item_id), pending, received)
 
 
 def bom_overrun(project, item, qty, *, exclude_line=None, cover=None):
@@ -285,7 +296,7 @@ def create_purchase(actor, key, data):
                 raise ValidationError('同一采购单不能重复添加同一 BOM 行或未关联 BOM 的物料。')
             prepared[row_key] = row
         items = lock_items({item_id for item_id, _ in prepared})
-        shortage = {row['bom_line']: Decimal(row['shortage']) for row in demand(project)} if from_demand else {}
+        gaps = {row['bom_line']: Decimal(row['shortage']) for row in demand(project)} if from_demand else {}
         overruns = []
         purchase = save(
             PurchaseOrder(
@@ -300,7 +311,9 @@ def create_purchase(actor, key, data):
             ),
             user,
         )
-        for index, ((item_id, _), row) in enumerate(prepared.items()):
+        # BOM 行、已领与在途按物料一次读取；本单前面已保存的明细在内存里计入在途，与逐行查库结果相同。
+        supply, written = ItemSupply(project, items), []
+        for index, ((item_id, bom_id), row) in enumerate(prepared.items()):
             if not items[item_id].is_active:
                 raise ValidationError('已停用物料不能新建采购。')
             try:
@@ -310,20 +323,27 @@ def create_purchase(actor, key, data):
                 raise ValidationError({'lines': {index: exc.detail}}) from exc
             bom = None
             if row.get('bom_line') is not None:
-                bom = lookup(BOMLine, row['bom_line'], 'bom_line', project=project, item_id=item_id)
-                check_line_limit(bom, qty)
-                needed = sum((line.quantity for line in BOMLine.objects.filter(project=project, item_id=item_id)), ZERO)
-                if qty > max(ZERO, needed - issued(project, item_id) - incoming(project, item_id)):
+                bom = supply.line(bom_id, item_id)
+                if bom is None:
+                    # 不在本项目在用 BOM 里：与原来一样按单条查询返回 404。
+                    bom = lookup(BOMLine, row['bom_line'], 'bom_line', project=project, item_id=item_id)
+                    _, plan = allocation(bom.project_id, item_id=bom.item_id)
+                else:
+                    plan = supply.plan(item_id, written)
+                check_line_limit(bom, qty, plan=plan)
+                pending, _ = supply.purchased(item_id, written)
+                if qty > max(ZERO, (supply.needed(item_id) or ZERO) - supply.issued(item_id) - pending):
                     raise Conflict('采购数量超过当前 BOM 剩余需求，请刷新后重新确认。')
-            if from_demand and (not bom or qty > shortage.get(bom.pk, ZERO)):
+            if from_demand and (not bom or qty > gaps.get(bom.pk, ZERO)):
                 raise Conflict('采购数量超过当前缺口，请刷新需求后重试。')
             if bom is None:
                 # 先于本行落库计算，本单前面已保存的同物料明细计入在途。
-                overrun = bom_overrun(project, items[item_id], qty)
+                cover = supply_cover(supply, item_id, written)
+                overrun = None if cover is None else bom_overrun(project, items[item_id], qty, cover=cover)
                 if overrun:
                     overruns.append(overrun)
             number(rounded(qty * price), 'line_amount')
-            save(
+            line = save(
                 PurchaseLine(
                     purchase=purchase,
                     item=items[item_id],
@@ -334,6 +354,7 @@ def create_purchase(actor, key, data):
                 ),
                 user,
             )
+            written.append((purchase.status, line))
         number(total(purchase), 'total_amount')
         require_overrun_reason(overruns, over_bom_reason)
         if overruns:
@@ -565,7 +586,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             )
             line.received_quantity += qty
             save(line, user)
-        purchase.status = receiving_status(lines.values())
+        purchase.status = receiving_status(purchase.lines.all())
         save(purchase, user)
         operation = 'purchase.quality_accept' if from_quarantine else 'purchase.receive'
         result = {'id': purchase.pk}
@@ -694,6 +715,11 @@ def reject(actor, key, purchase_id, data):
     return purchase_action(actor, key, 'purchase.reject', purchase_id, data, PURCHASE_APPROVERS, execute)
 
 
+def locked_lines(purchase):
+    """按主键顺序一次锁住本单全部明细，{明细ID: 明细}；采购单行锁已先持有。"""
+    return {line.pk: line for line in purchase.lines.select_for_update().order_by('pk')}
+
+
 def delivery_plan(actor, key, purchase_id, data):
     def execute(user, purchase):
         fields(data, {'lines', 'reason', 'expected_updated_at'})
@@ -707,13 +733,14 @@ def delivery_plan(actor, key, purchase_id, data):
             raise Conflict('采购已变化，请刷新到货计划。')
         reason = text(data, 'reason', default='') or '更新到货计划'
         before, after, seen = [], [], set()
+        lines = locked_lines(purchase)
         for row in rows(data):
             fields(row, {'id', 'due_date'})
             pk = identity(row.get('id'), 'id')
             if pk in seen:
                 raise ValidationError('明细重复。')
             seen.add(pk)
-            line = get_object_or_404(purchase.lines.select_for_update(), pk=pk)
+            line = lines.get(pk) or get_object_or_404(purchase.lines.select_for_update(), pk=pk)
             if line.received_quantity + line.cancelled_quantity >= line.quantity:
                 raise Conflict('已完成的明细不能更改到货计划。')
             before.append({'id': pk, 'due_date': str(line.due_date)})
@@ -772,6 +799,10 @@ def edit(actor, key, purchase_id, data):
         if set(selected) != set(lines):
             raise ValidationError('请保留所有采购明细；不再需要的采购请取消后重建。')
         before, overruns = [], []
+        # 其他单据的在途、本项目 BOM 与已领按物料一次读取；本单各行按内存中的当前值计入（前面改过的行已落库），
+        # 与逐行查库（扣除本行）的结果相同。
+        supply = ItemSupply(purchase.project, {line.item_id for line in lines.values()}, exclude_purchase=purchase)
+        items_loaded = False
         for index, (pk, row) in enumerate(selected.items()):
             line = lines[pk]
             before.append(
@@ -787,27 +818,34 @@ def edit(actor, key, purchase_id, data):
                 price = number(row.get('unit_price'), 'unit_price')
             except ValidationError as exc:
                 raise ValidationError({'lines': {index: exc.detail}}) from exc
+            others = [(purchase.status, other) for other in lines.values() if other.pk != pk]
             if line.bom_line_id:
-                check_line_limit(line.bom_line, qty, exclude_line=line.pk)
-                needed = sum(
-                    (b.quantity for b in BOMLine.objects.filter(project=purchase.project, item_id=line.item_id)), ZERO
-                )
-                if (
-                    qty
-                    > needed
-                    - issued(purchase.project, line.item_id)
-                    - incoming(purchase.project, line.item_id)
-                    + line.quantity
-                ):
+                bom = supply.line(line.bom_line_id, line.item_id)
+                if bom is None:
+                    # 关联的 BOM 行已不在本项目在用 BOM 里：按原来的逐行查库分摊，结果不变。
+                    bom = line.bom_line
+                    _, plan = allocation(bom.project_id, item_id=bom.item_id, exclude_line=line.pk)
+                else:
+                    plan = supply.plan(line.item_id, others)
+                check_line_limit(bom, qty, plan=plan)
+                pending, _ = supply.purchased(line.item_id, [*others, (purchase.status, line)])
+                needed = supply.needed(line.item_id) or ZERO
+                if qty > needed - supply.issued(line.item_id) - pending + line.quantity:
                     raise Conflict('修改数量超过 BOM 剩余需求。')
                 # 与按缺料下单同一缺口口径（扣除本项目已到货及共享库存）：调增不能占用已在库可领的数量；
                 # 只核对调增，库存后来到货不会让只改单价、交期的草稿无法保存。
-                if qty > line.quantity and qty > line_shortage(line.bom_line, exclude_line=line.pk):
+                if qty > line.quantity and qty > shortage(bom, plan[bom.pk]):
                     raise Conflict('采购数量超过当前缺口，请刷新需求后重试。')
             elif qty > line.quantity:
-                overrun = bom_overrun(purchase.project, line.item, qty, exclude_line=line.pk)
-                if overrun:
-                    overruns.append(overrun)
+                cover = supply_cover(supply, line.item_id, others)
+                if cover is not None:
+                    if not items_loaded:
+                        # 超缺口说明要用物料名称：本单明细的物料一次读出。
+                        prefetch_related_objects(list(lines.values()), 'item')
+                        items_loaded = True
+                    overrun = bom_overrun(purchase.project, line.item, qty, cover=cover)
+                    if overrun:
+                        overruns.append(overrun)
             line.quantity = qty
             line.unit_price = price
             line.due_date = day(row, 'due_date')
@@ -835,20 +873,21 @@ def quality_return(actor, key, purchase_id, data):
         state(purchase, {'approved', 'partial'})
         reason = text(data, 'reason')
         seen = set()
+        lines = locked_lines(purchase)
         for row in rows(data):
             fields(row, {'line', 'quantity'})
             pk = identity(row.get('line'), 'line')
             if pk in seen:
                 raise ValidationError('明细重复。')
             seen.add(pk)
-            line = get_object_or_404(purchase.lines.select_for_update(), pk=pk)
+            line = lines.get(pk) or get_object_or_404(purchase.lines.select_for_update(), pk=pk)
             qty = number(row.get('quantity'), 'quantity', 3, positive=True)
             if qty > line.pending_quantity:
                 raise Conflict('退回数量超过隔离中的到货。')
             line.pending_quantity -= qty
             save(line, user)
         # 隔离品退回后按合格已收与仍隔离数量重算；全部退回且无合格收货时回到已批准待收货。
-        purchase.status = receiving_status(purchase.lines.all())
+        purchase.status = receiving_status(lines.values())
         save(purchase, user)
         return audit(user, 'purchase.quality_return', purchase, lines=data['lines'], reason=reason)
 

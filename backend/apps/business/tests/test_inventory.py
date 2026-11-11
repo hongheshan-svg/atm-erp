@@ -5,10 +5,11 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
-from apps.business.models import Entry, IssueSlip, Item, Stock, StockMove, Task
+from apps.business.models import BOMLine, Entry, IssueSlip, Item, Stock, StockMove, Task
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import BusinessFixtures
+from .test_permission_queries import counted_queries
 
 
 class InventoryTests(BusinessFixtures, TestCase):
@@ -375,6 +376,61 @@ class IssueSlipTests(BusinessFixtures, TestCase):
         result = self.batch(payload)
         self.assertEqual(IssueSlip.objects.get().moves.count(), len(payload), result)
         self.assertEqual(result['count'], 2)
+
+    def test_batch_issue_reads_do_not_grow_with_lines(self):
+        """BOM 剩余、全库位在库与其他项目到货在锁物料后一次读取，逐行出库在内存里扣减（同一物料前面的库位照样计入）。"""
+        other = self.active_project()
+        # 第一张领料单会顺带建立编号规则：先建好，两次计数只比较领料本身。
+        CodeRule.objects.get_or_create(key='issue_slip', defaults={'prefix': 'LL'})
+
+        def scenario(size):
+            project = self.active_project()
+            items = Item.objects.bulk_create([Item(code=f'QI{project.pk}-{i}', name=f'领料件{i}') for i in range(size)])
+            BOMLine.objects.bulk_create(
+                [BOMLine(project=owner, item=item, quantity=5) for owner in (project, other) for item in items]
+            )
+            stocks = Stock.objects.bulk_create(
+                [
+                    Stock(item=item, location=place, quantity=3, value=30)
+                    for item in items
+                    for place in ('主仓', '二号仓')
+                ]
+            )
+            # 另一个在执行项目各到货 4 件未领：主仓领 2 后在库 4 仍够，二号仓再领 2 就会占用对方到货。
+            StockMove.objects.bulk_create(
+                [
+                    StockMove(stock=stock, project=other, kind='receipt', quantity=2, value=20, reason='到货')
+                    for stock in stocks
+                ]
+            )
+            payload = {
+                'project': project.pk,
+                'confirm_shared': True,
+                'lines': [{'stock': stock.pk, 'quantity': '2'} for stock in stocks],
+            }
+            result = {}
+            reads, _ = counted_queries(
+                lambda: result.update(self.post('warehouse', 'stocks/bom-issue/', payload)),
+                'apps.business.services.inventory.save',
+                'apps.business.services.inventory.audit',
+            )
+            self.assertEqual(result['count'], size * 2)
+            shared = {
+                move.stock.location: AuditLog.objects.get(resource=f'stockmove:{move.pk}').detail['shared_from']
+                for move in StockMove.objects.filter(pk__in=result['moves'], stock__item=items[0]).select_related(
+                    'stock'
+                )
+            }
+            self.assertEqual(shared, {'主仓': [], '二号仓': [{'project': other.code, 'quantity': '4.000'}]})
+            # 同一物料两个库位各领 1，合计超出 BOM 剩余 1：第二行按本单前一行扣减后的剩余拒绝，整单不出库。
+            payload['lines'] = [{'stock': stocks[0].pk, 'quantity': '1'}, {'stock': stocks[1].pk, 'quantity': '1'}]
+            denied = self.post('warehouse', 'stocks/bom-issue/', payload, status=409)
+            self.assertIn(f'{items[0].name}：领料超过 BOM 剩余需求', str(denied))
+            self.assertEqual(StockMove.objects.filter(project=project, kind='issue').count(), size * 2)
+            return reads
+
+        small, large = scenario(3), scenario(30)
+        self.assertEqual(small, large, f'3/30 种物料查询数: {small} / {large}')
 
     def test_slip_reads_follow_stock_move_scope(self):
         result = self.batch(
