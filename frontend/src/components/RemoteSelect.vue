@@ -289,4 +289,5 @@ onBeforeUnmount(() => { cancelSearch(); selectedGeneration++ })
 /* 浮层向下展开时不被对话框内容区裁掉：含远程选择的明细行留出候选列表的高度。 */
 .line-fields-dense .remote-select .remote-popup ul { max-height: 210px; }
 .action-fields:has(.line-fields-dense .remote-select) { min-height: 400px; }
+@media (max-width: 600px) { .line-fields-dense .remote-select .remote-popup { width: auto; right: 0; max-width: none; } }
 </style>
