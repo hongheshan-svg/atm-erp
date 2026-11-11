@@ -179,6 +179,29 @@ it('超过待收在数量下方直接提示并标记输入无效；少于待收�
   wrapper.unmount()
 })
 
+it('大批收货按明细标识取原始行：行序不同也对得上待收，输入数量时不逐行线性查找原始行', async () => {
+  const initial = Array.from({ length: 30 }, (_, i) => ({ ...material, line: i + 1, item_name: `零件${i + 1}`, material_label: `M${i + 1}\n零件${i + 1}`, remaining: `${i + 1}`, quantity: `${i + 1}`, quarantined: '0', pending_quantity: '0', remark: '' }))
+  const field = warehouseLines('receipt', initial, { cancel: true })
+  // 恢复草稿只带标识和填写值，顺序也与原始行相反：资料、待收仍按 line 取回。
+  const lines = initial.map(row => ({ line: row.line, selected: true, cancel_remainder: false, quantity: row.quantity, pending_quantity: '0', remark: '' })).reverse()
+  const find = vi.spyOn(initial, 'find')
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: lines, context: {} } })
+  const first = () => wrapper.get('tbody tr')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 30/30 行，本次合格 465.000 / 待收 465.000')
+  expect(wrapper.findAll('tbody tr')).toHaveLength(20)
+  expect(first().text()).toContain('零件30')
+  expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(0)
+  await first().get('input[aria-label="数量"]').setValue('31')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 466.000 / 待收 465.000')
+  expect(first().classes()).toContain('excess-line')
+  expect(first().text()).toContain('超过待收 30：')
+  await first().get('input[aria-label="数量"]').setValue('28')
+  expect(first().get('.remainder-cancel').text()).toBe('余量 2 不再到货')
+  expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(1)
+  expect(find).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
 it('无采购权限时不提供余量不再到货，只提示由采购取消未收余量', () => {
   const initial = [{ ...material, line: 1, remaining: '5.000', quantity: '2', selected: true, pending_quantity: '0', remark: '' }]
   const field = warehouseLines('receipt', initial)

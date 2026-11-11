@@ -1,12 +1,13 @@
 from datetime import timedelta
+from unittest import mock
 
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.business.models import Entry, Payment, Project
-from apps.business.services import budgets, reports
+from apps.business.models import Entry, Item, Payment, Project, PurchaseLine, Stock
+from apps.business.services import attention, budgets, reports
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -150,3 +151,46 @@ class ReportTests(BusinessFixtures, TestCase):
             self.assertEqual(self.clients['admin'].get('/api/business/reports/', params).status_code, 400)
         self.project.soft_delete(self.users['admin'])
         self.assertEqual(self.report()['summary']['contract_amount'], '0.00')
+
+    def test_attention_views_load_only_rows_that_can_be_listed(self):
+        today = timezone.localdate()
+        milestone = self.project.entries.get()  # 合同款到期日 TODAY 已过
+
+        def entry(title, kind, amount, days):
+            return Entry.objects.create(
+                project=self.project, title=title, kind=kind, amount=amount, due_date=today + timedelta(days=days)
+            )
+
+        soon = entry('三十天内', 'receivable', 100, 10)
+        entry('六十天后', 'receivable', 200, 60)
+        settled = entry('已结清', 'receivable', 300, -5)
+        Payment.objects.create(entry=settled, amount=300, date=today, reason='结清')
+        overdue = entry('已逾期', 'payable', 400, -20)
+        late = self.purchase(self.project, over_bom_reason='测试').lines.get()  # 未收货：应付无到期批次
+        PurchaseLine.objects.filter(pk=self.purchase(self.project, over_bom_reason='测试').lines.get().pk).update(
+            due_date=today + timedelta(days=5)
+        )
+
+        def listed(view):
+            with mock.patch.object(attention, 'schedule', wraps=attention.schedule) as spy:
+                result = attention.projection({'view': view, 'page_size': 200})
+            return [row['id'] for row in result['results']], sorted(call.args[0].pk for call in spy.call_args_list)
+
+        # Only entries with a batch due in the view are loaded and scheduled; rows still come from schedule().
+        self.assertEqual(listed('aging'), ([milestone.pk, overdue.pk], sorted([milestone.pk, overdue.pk])))
+        self.assertEqual(listed('cash30'), ([soon.pk], [soon.pk]))
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(
+                [row['id'] for row in attention.projection({'view': 'late_purchase'})['results']], [late.pk]
+            )
+        self.assertIn('COALESCE("lean_purchase_line"."due_date", "lean_purchase"."due_date") <', queries[0]['sql'])
+
+        Stock.objects.create(item=Item.objects.create(code='I2', name='常用件'), quantity=1)
+        stale = Stock.objects.create(item=Item.objects.create(code='I3', name='呆滞件'), quantity=2)
+        Stock.objects.filter(pk=stale.pk).update(created_at=timezone.now() - timedelta(days=120))
+        stale.refresh_from_db()
+        with mock.patch.object(attention.timezone, 'localdate', wraps=timezone.localdate) as spy:
+            rows = attention.projection({'view': 'stale_stock'})['results']
+        self.assertEqual([(row['id'], row['amount']) for row in rows], [(stale.pk, '2.000')])
+        # The 90-day test runs in SQL: the recently created balance is never loaded.
+        self.assertEqual([call.args for call in spy.call_args_list if call.args], [(stale.created_at,)])

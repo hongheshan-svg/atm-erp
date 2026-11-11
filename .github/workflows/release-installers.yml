@@ -40,11 +40,11 @@ jobs:
       - run: python scripts/ci/build_native_wheels.py --platform "$PLATFORM" --output wheels
         shell: bash
         env: {PLATFORM: '${{ runner.os == ''Linux'' && ''linux'' || runner.os == ''macOS'' && ''macos'' || ''windows'' }}'}
+      # 在全新虚拟环境中只用刚生成的 wheelhouse 离线安装运行时依赖、pip check 并导入 django/daphne/psycopg2/redis，
+      # 与用户安装路径一致；不再从 PyPI 另装一遍做同样的导入检查。
       - run: python scripts/ci/verify_native_wheels.py --wheels "wheels/$PLATFORM"
         shell: bash
         env: {PLATFORM: '${{ runner.os == ''Linux'' && ''linux'' || runner.os == ''macOS'' && ''macos'' || ''windows'' }}'}
-      - run: python -m pip install -r backend/requirements.txt
-      - run: python -c "import daphne, psycopg2, redis; print('Native dependencies import successfully')"
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |

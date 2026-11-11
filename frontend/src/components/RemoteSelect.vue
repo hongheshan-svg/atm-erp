@@ -215,7 +215,9 @@ watch([() => props.path, () => JSON.stringify(props.params ?? {}), () => referen
   rows.value = []; recentRows.value = []; search.value = ''; editing.value = false
   // 切换账号不能把上一位使用者的选中记录带入新会话。
   if (before.length && before[2] !== referenceSession.value) { model.value = ''; close() }
-  void load()
+  // 候选列表只在展开时读取（open 每次都重新读取）；挂载或上下文变化时收起状态下只核对已选值的名称，
+  // 明细行里的多个选择框不再各自预读一页同样的列表。
+  if (opened.value) void load()
   void resolveSelected()
 }, { immediate: true, flush: 'sync' })
 watch(() => model.value, () => { selecting.value = false; void resolveSelected() })

@@ -1,10 +1,10 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { reactive } from 'vue'
+import { nextTick, reactive } from 'vue'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import ResourcePanel from './ResourcePanel.vue'
 import { user } from '../session'
-import { endpoint } from '../business'
+import { actionNames, endpoint } from '../business'
 import { removableResources } from '../modules/deletions'
 import { read } from '../api'
 import { pageSize, setPageSize } from '../pagination'
@@ -17,9 +17,15 @@ import TransferTools from './TransferTools.vue'
 import ActionDialog from './ActionDialog.vue'
 import TaskTimeRecords from './TaskTimeRecords.vue'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
+import type { Row } from '../types'
 const route = reactive<{ query: Record<string, string> }>({ query: {} })
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace: vi.fn() }) }))
 
+// 只包一层计数，动作规则仍走真实实现。
+vi.mock('../business', async importOriginal => {
+  const actual = await importOriginal<typeof import('../business')>()
+  return { ...actual, actionNames: vi.fn(actual.actionNames) }
+})
 vi.mock('../api', () => ({
   read: vi.fn().mockResolvedValue({ count: 0, results: [] }),
   all: vi.fn().mockResolvedValue([]),
@@ -69,6 +75,35 @@ describe('列表创建入口', () => {
     await flushPromises()
     expect((returns.vm as any).primaryAction(issue)).toBe('退料')
     for (const w of [purchases, receipts, moves, returns]) w.unmount()
+  })
+  it('每行动作按记录与岗位只算一次：重绘（输入搜索词）复用结果，岗位变化后重算', async () => {
+    user.value = { id: 1, roles: ['finance'] }
+    vi.mocked(read).mockResolvedValue({ count: 2, results: [
+      { id: 1, title: '采购款', kind: 'payable', balance: '100', purchase: 5, status: 'open' },
+      { id: 2, title: '差旅费', kind: 'expense', balance: '0', status: 'paid' },
+    ] })
+    const wrapper = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '收付款' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const view = () => ({ width: vm.actionWidth, rows: vm.records.map((row: Row) => [vm.primaryAction(row), vm.soleAction(row), vm.menuGroups(row).map((group: Row) => `${group.key}:${group.actions.join('/')}`)]) })
+    const reference = 'reference:查看收付流水/查看到期明细'
+    vi.mocked(actionNames).mockClear()
+    const first = view()
+    expect(first).toEqual({ width: 180, rows: [
+      ['登记收付款', undefined, ['advance:生成对账单/申请预付款核准', reference]],
+      [undefined, undefined, ['correct:取消费用', reference]],
+    ] })
+    expect(view()).toEqual(first)
+    expect(actionNames).toHaveBeenCalledTimes(2)
+    vm.search = '差旅'
+    await nextTick()
+    expect(view()).toEqual(first)
+    expect(actionNames).toHaveBeenCalledTimes(2)
+    user.value = { id: 1, roles: ['member'] }
+    expect(view()).toEqual({ width: 96, rows: [[undefined, undefined, [reference]], [undefined, undefined, [reference]]] })
+    expect(actionNames).toHaveBeenCalledTimes(4)
+    wrapper.unmount()
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
   })
   it('空状态：页面给了 emptyHint 就用它，并且不再提示联系同事', async () => {
     user.value = { id: 1, role: 'admin' }

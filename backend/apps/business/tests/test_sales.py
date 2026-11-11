@@ -209,6 +209,55 @@ class SalesTests(BusinessFixtures, TestCase):
     def signing(self):
         return {'date': TODAY, 'milestones': [{'title': '合同款', 'amount': '100', 'due_date': TODAY}]}
 
+    def test_sale_actions_read_and_lock_the_sale_once(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        sale = self.sale()
+
+        def sale_reads(queries):
+            return [q['sql'] for q in queries.captured_queries if 'FROM "lean_sales_order"' in q['sql']]
+
+        with CaptureQueriesContext(connection) as queries:
+            self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '确认'})
+        # 视图取对象一次、授权时加锁一次；执行沿用同一把锁下的对象，不再重读重锁。
+        self.assertEqual(len([sql for sql in sale_reads(queries) if 'FOR UPDATE' in sql]), 1)
+        with CaptureQueriesContext(connection) as queries:
+            result = self.post('manager', f'sales/{sale.pk}/sign/', self.signing())
+        locks = [sql for sql in sale_reads(queries) if 'FOR UPDATE' in sql]
+        self.assertEqual(len(locks), 1, locks)
+        self.post(
+            'manager',
+            f'sales/{sale.pk}/transfer/',
+            {'manager': self.users['sales_manager'].pk, 'reason': '转交'},
+        )
+        sale.refresh_from_db()
+        self.assertEqual(
+            (sale.status, sale.project_id, sale.manager_id),
+            ('signed', result['project'], self.users['sales_manager'].pk),
+        )
+
+    def test_progress_receivable_queries_do_not_grow_with_nodes(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        counts = []
+        for nodes in (2, 10):
+            sale = self.sale()
+            self.post('manager', f'sales/{sale.pk}/quote/', {'amount': str(100 * nodes), 'reason': '确认'})
+            milestones = [{'title': f'节点{i}', 'amount': '100', 'due_date': TODAY} for i in range(nodes)]
+            result = self.post('manager', f'sales/{sale.pk}/sign/', {'date': TODAY, 'milestones': milestones})
+            entries = Entry.objects.filter(project_id=result['project']).order_by('pk')
+            for entry in entries[1:]:
+                self.post('finance', f'entries/{entry.pk}/pay/', {'amount': '30', 'date': TODAY, 'reason': '回款'})
+            with CaptureQueriesContext(connection) as queries:
+                detail = self.clients['manager'].get(f'/api/business/sales/{sale.pk}/progress/').data
+            amounts = [(row['title'], row['paid'], row['balance']) for row in detail['receivables']]
+            expected = [(f'节点{i}', '30.00' if i else '0.00', '70.00' if i else '100.00') for i in range(nodes)]
+            self.assertEqual(sorted(amounts), sorted(expected))
+            counts.append(len(queries))
+        self.assertEqual(counts[0], counts[1], counts)
+
     def test_edit_requires_requote_and_replay_does_not_invalidate_new_quote(self):
         sale = self.sale()
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100', 'reason': '确认'})

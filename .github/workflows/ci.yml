@@ -81,7 +81,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
-      - run: python3 -m unittest discover -s scripts/tests -p test_ci_workflows.py
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_ci_*.py'
       - uses: actions/cache@v4
         id: lint-cache
         with:

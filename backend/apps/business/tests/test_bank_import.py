@@ -7,8 +7,9 @@ from threading import Barrier
 
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from openpyxl import Workbook, load_workbook
 
 from apps.business.models import BankMatch, BankRecord, Payment
@@ -465,6 +466,55 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.confirm(preview['token'], status=400)
         self.assertEqual(BankRecord.objects.count(), 1)
         self.assertEqual(Payment.objects.count(), 0)
+
+    def test_confirmation_uses_one_receipt_and_bounded_queries_per_row(self):
+        def rows(minute, count):
+            return file(
+                [
+                    ['[HISTORYDETAIL]'],
+                    bank_import.ICBC,
+                    *[
+                        [
+                            f'{minute:03d}{index:06d}',
+                            '001234567890',
+                            f'2026-01-01 12:{minute:02d}:{index:02d}',
+                            '贷',
+                            '客户',
+                            '',
+                            '货款',
+                            '',
+                            '',
+                            '业务发生账号:123456789012',
+                            f'{index + 1}.00',
+                            '',
+                            '',
+                            f'{1000 + index}.00',
+                        ]
+                        for index in range(count)
+                    ],
+                ],
+                name=f'批量{minute}.xlsx',
+            )
+
+        statements = {}
+        for minute, count in ((1, 2), (2, 6)):
+            preview = self.preview(rows(minute, count))
+            self.assertTrue(preview['can_import'], preview['errors'])
+            with CaptureQueriesContext(connection) as queries:
+                self.assertEqual(self.confirm(preview['token']), {'count': count, 'skipped': 0})
+            sql = [query['sql'] for query in queries.captured_queries]
+            statements[count] = len(sql)
+            # The batch perform fetches the user and writes its receipt once; rows add no nested receipts.
+            self.assertEqual(sum('FROM "lean_user"' in query for query in sql), 1)
+            self.assertEqual(sum('"lean_action_receipt"' in query for query in sql), 3)
+        # Each new row: identity lookups, duplicate checks, model validation, insert and its two audit entries.
+        self.assertLessEqual(statements[6] - statements[2], 4 * 15)
+        self.assertEqual(
+            list(ActionReceipt.objects.values_list('operation', flat=True)), ['bank.import', 'bank.import']
+        )
+        self.assertEqual(BankRecord.objects.filter(import_fingerprint__isnull=False).count(), 8)
+        self.assertEqual(AuditLog.objects.filter(operation='bank.create').count(), 8)
+        self.assertEqual(AuditLog.objects.filter(operation='bank.import-evidence').count(), 8)
 
     def test_matching_pending_name_rejected_before_payment(self):
         project = self.active_project()

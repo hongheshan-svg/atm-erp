@@ -1,6 +1,6 @@
 import unicodedata
 
-from django.db.models import CharField, Func, Q, Value
+from django.db.models import Q
 from django.db.models.functions import Lower
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -8,7 +8,7 @@ from apps.core.actions import perform
 from apps.core.models import CodeRule
 from apps.core.permissions import ITEM_WRITERS, PURCHASERS, has_role, require_role
 
-from ..models import Item, Partner
+from ..models import Item, Partner, comparison_expression
 from .common import (
     audit,
     fields,
@@ -25,27 +25,6 @@ def normalized(value):
 def comparison_key(value):
     """用于查找候选，绝不写回供应商型号或名称。"""
     return ''.join(normalized(str(value)).split()).casefold()
-
-
-def comparison_expression(field):
-    # PostgreSQL 中先映射全角 ASCII，再消除空白；最终身份核对仍使用完整字段。
-    translated = Func(
-        field,
-        Value(''.join(chr(i) for i in range(0xFF01, 0xFF5F)) + '\u3000'),
-        Value(''.join(chr(i) for i in range(0x21, 0x7F)) + ' '),
-        function='TRANSLATE',
-        output_field=CharField(),
-    )
-    return Lower(
-        Func(
-            translated,
-            Value('[[:space:]]+'),
-            Value(''),
-            Value('g'),
-            function='REGEXP_REPLACE',
-            output_field=CharField(),
-        )
-    )
 
 
 def candidates(data):

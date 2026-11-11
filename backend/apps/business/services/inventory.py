@@ -1,4 +1,5 @@
 from django.db.models import Sum
+from django.db.models.functions import Collate
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -9,7 +10,7 @@ from apps.core.models import CodeRule
 from apps.core.permissions import ADMIN, WAREHOUSE, require_role
 
 from ..models import BOMLine, Entry, IssueSlip, Project, PurchaseLine, PurchaseOrder, Stock, StockMove, Task
-from .bom import claimed_by_others, issued
+from .bom import claimed_by_others, claimed_by_others_by_item, issued, issued_by_item
 from .common import (
     ZERO,
     audit,
@@ -109,14 +110,23 @@ def count(actor, key, stock_id, data):
 def shared_arrival(project, item_id, qty, confirm_shared, action):
     """库存不按项目预留：领料、采购退货扣减后若不足以覆盖其他项目已到货未领用量，须确认并留痕。"""
     claims = claimed_by_others(project, item_id)
-    claimed = sum(claims.values(), ZERO)
     on_hand = Stock.objects.filter(item_id=item_id).aggregate(total=Sum('quantity'))['total'] or ZERO
+    return shared_from(
+        claims,
+        on_hand,
+        qty,
+        confirm_shared,
+        action,
+        lambda: Project.objects.filter(pk__in=claims).order_by('code').values_list('pk', 'code'),
+    )
+
+
+def shared_from(claims, on_hand, qty, confirm_shared, action, codes):
+    """shared_arrival 的判断部分：claims 为 {项目: 占用量}，codes() 返回按编号排序的 (项目, 编号)，可多于 claims。"""
+    claimed = sum(claims.values(), ZERO)
     if on_hand - qty >= claimed:
         return []
-    shared = [
-        {'project': code, 'quantity': str(claims[pk])}
-        for pk, code in Project.objects.filter(pk__in=claims).order_by('code').values_list('pk', 'code')
-    ]
+    shared = [{'project': code, 'quantity': str(claims[pk])} for pk, code in codes() if pk in claims]
     if not confirm_shared:
         summary = '、'.join(f'{row["project"]} {row["quantity"]}' for row in shared)
         raise Conflict(
@@ -134,6 +144,62 @@ def bom_remaining(project, item_id):
     return required - issued(project, item_id)
 
 
+class IssueBatch:
+    """一张领料单多行出库时的共用读取：在锁住全部物料后，一次读出各物料 BOM 剩余、全库位在库与其他项目到货占用，
+    并按逐行出库的顺序（物料、库位、主键）一次锁住所选库存行；每出库一行在内存里扣减，校验与报错和逐行查询相同。
+
+    物料行锁在整单期间不放，其他请求改不了这些物料的库存，也就改不了在库合计；本项目已领由项目锁保护。
+    """
+
+    def __init__(self, project, sources, *, service):
+        item_ids = sorted({source.item_id for source in sources})
+        # 库位按码位排序（COLLATE "C"），与 Python 排好的出库顺序一致，加锁顺序不变。
+        self.stocks = {
+            stock.pk: stock
+            for stock in Stock.objects.select_for_update()
+            .filter(pk__in=[source.pk for source in sources])
+            .order_by('item_id', Collate('location', 'C'), 'pk')
+        }
+        self.remaining = {} if service else bom_remaining_by_item(project, item_ids)
+        self.on_hand = dict.fromkeys(item_ids, ZERO)
+        for row in Stock.objects.filter(item_id__in=item_ids).values('item_id').annotate(total=Sum('quantity')):
+            self.on_hand[row['item_id']] = row['total'] or ZERO
+        self.claims = claimed_by_others_by_item(project, item_ids)
+        self._codes = None
+
+    def stock(self, source, user):
+        stock = self.stocks.get(source.pk)
+        return stock if stock is not None else lock_stocks([source.item_id], source.location, user)[source.item_id]
+
+    def shared(self, item_id, qty, confirm_shared, action):
+        def codes():
+            # 被占用项目的编号只在第一次需要提示时读取一次，覆盖本单全部物料。
+            if self._codes is None:
+                claimed = {pk for claims in self.claims.values() for pk in claims}
+                self._codes = list(Project.objects.filter(pk__in=claimed).order_by('code').values_list('pk', 'code'))
+            return self._codes
+
+        return shared_from(self.claims[item_id], self.on_hand[item_id], qty, confirm_shared, action, codes)
+
+    def took(self, item_id, qty, service):
+        self.on_hand[item_id] -= qty
+        if not service:
+            self.remaining[item_id] -= qty
+
+
+def bom_remaining_by_item(project, item_ids):
+    """{物料: bom_remaining(project, 物料)}。"""
+    required = dict.fromkeys(item_ids, ZERO)
+    for row in (
+        BOMLine.objects.filter(project=project, item_id__in=list(required))
+        .values('item_id')
+        .annotate(total=Sum('quantity'))
+    ):
+        required[row['item_id']] = row['total'] or ZERO
+    used = issued_by_item(project, required)
+    return {item_id: total - used[item_id] for item_id, total in required.items()}
+
+
 def issue_task(project, data):
     """领料关联的任务：须为本项目未完成任务；已验收项目只能凭售后任务领料（售后领料不占 BOM 剩余）。"""
     task = lookup(Task, data['task'], 'task', project=project, status='open') if data.get('task') is not None else None
@@ -148,18 +214,30 @@ def open_slip(user, project, task, reason):
     return save(IssueSlip(code=CodeRule.generate_code('issue_slip'), project=project, task=task, reason=reason), user)
 
 
-def take_issue(user, project, source, qty, *, slip, remark, confirm_shared):
-    """在已加锁的项目内按领料单出库一条：校验 BOM 剩余（售后任务除外）、库存与共享到货，写库存流水和审计。"""
+def take_issue(user, project, source, qty, *, slip, remark, confirm_shared, batch=None):
+    """在已加锁的项目内按领料单出库一条：校验 BOM 剩余（售后任务除外）、库存与共享到货，写库存流水和审计。
+
+    batch 为多行领料共用的 IssueBatch；缺省（单行领料）时逐项查库。
+    """
     task = slip.task
     service = task is not None and task.kind == 'service'
     name = source.item.name
-    if not service and qty > bom_remaining(project, source.item_id):
+    if not service and qty > (
+        bom_remaining(project, source.item_id) if batch is None else batch.remaining[source.item_id]
+    ):
         raise Conflict(f'{name}：领料超过 BOM 剩余需求，请先修订 BOM。')
-    stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
+    if batch is None:
+        stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
+    else:
+        stock = batch.stock(source, user)
     if qty > stock.quantity:
         raise Conflict(f'{name}（{stock.location}）：可用库存不足，当前可用 {stock.quantity}，请刷新后重试。')
     value = take_value(stock, qty)
-    shared = shared_arrival(project, source.item_id, qty, confirm_shared, f'领料（{name}）')
+    action = f'领料（{name}）'
+    if batch is None:
+        shared = shared_arrival(project, source.item_id, qty, confirm_shared, action)
+    else:
+        shared = batch.shared(source.item_id, qty, confirm_shared, action)
     stock.quantity -= qty
     stock.value -= value
     save(stock, user)
@@ -178,6 +256,8 @@ def take_issue(user, project, source, qty, *, slip, remark, confirm_shared):
         user,
     )
     audit(user, 'stock.issue', move, shared_from=shared, slip=slip.code)
+    if batch is not None:
+        batch.took(source.item_id, qty, service)
     return move
 
 
@@ -292,6 +372,14 @@ def issue_batch(actor, key, data):
         task = issue_task(project, data)
         reason = text(data, 'reason', default='') or ('售后领料' if task and task.kind == 'service' else '项目领料')
         prepared, seen = [], set()
+        # 所选库存行连同物料一次读出；不存在的行仍在原来的位置按单条查询返回 404。
+        candidates = set()
+        for row in rows(data):
+            try:
+                candidates.add(identity(row.get('stock'), 'stock'))
+            except ValidationError:
+                continue
+        sources = Stock.objects.select_related('item').in_bulk(candidates)
         for index, row in enumerate(rows(data)):
             try:
                 fields(row, {'stock', 'quantity', 'remark'})
@@ -303,13 +391,18 @@ def issue_batch(actor, key, data):
             if stock_id in seen:
                 raise ValidationError({'lines': {index: {'stock': '同一库存行不能重复领料。'}}})
             seen.add(stock_id)
-            prepared.append((lookup(Stock, stock_id, 'stock'), qty, remark))
+            prepared.append((sources.get(stock_id) or lookup(Stock, stock_id, 'stock'), qty, remark))
         # 项目→单据→物料：先取领料单号，再按物料顺序统一加锁、逐库位扣减，与单行领料、收货的加锁顺序一致。
         slip = open_slip(user, project, task, reason)
         lock_items({source.item_id for source, _, _ in prepared})
+        ordered = sorted(prepared, key=lambda row: (row[0].item_id, row[0].location, row[0].pk))
+        # 领料单号的全局锁要持有到事务结束：锁内的读取按物料一次完成，不再逐行查库。
+        batch = IssueBatch(
+            project, [source for source, _, _ in ordered], service=task is not None and task.kind == 'service'
+        )
         moves = [
-            take_issue(user, project, source, qty, slip=slip, remark=remark, confirm_shared=confirm_shared)
-            for source, qty, remark in sorted(prepared, key=lambda row: (row[0].item_id, row[0].location, row[0].pk))
+            take_issue(user, project, source, qty, slip=slip, remark=remark, confirm_shared=confirm_shared, batch=batch)
+            for source, qty, remark in ordered
         ]
         return slip_result(slip, moves)
 

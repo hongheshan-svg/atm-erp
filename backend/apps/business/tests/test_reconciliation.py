@@ -60,6 +60,42 @@ class ReconciliationTests(BusinessFixtures, TestCase):
             )
         return purchase.entry
 
+    def test_create_takes_one_snapshot_and_inserts_once(self):
+        entry = self.purchase_entry()
+        with (
+            patch.object(reconciliation, 'snapshot', wraps=reconciliation.snapshot) as taken,
+            CaptureQueriesContext(connection) as queries,
+        ):
+            statement_id = self.statement(entry, confirm=False)
+        writes = [q['sql'].split(' ')[0] for q in queries.captured_queries if '"lean_reconciliation"' in q['sql']]
+        self.assertEqual(taken.call_count, 1)
+        self.assertEqual(writes.count('INSERT'), 1)
+        self.assertEqual(writes.count('UPDATE'), 0)
+        statement = Reconciliation.objects.get(pk=statement_id)
+        self.assertTrue(reconciliation.current(statement))
+        self.assertEqual(statement.snapshot['balance'], '500.00')
+
+    def test_monthly_confirm_reuses_provisional_snapshot(self):
+        entry = self.purchase_entry()
+        month = str(timezone.localdate())[:7]
+        path = 'reconciliations/supplier-monthly/'
+        report = self.clients['finance'].get('/api/business/' + path, {'supplier': self.supplier.pk, 'month': month})
+        data = {
+            'supplier': self.supplier.pk,
+            'month': month,
+            'expected_snapshot': report.data['snapshot_hash'],
+            'counterparty_balance': report.data['totals']['closing'],
+            'reason': '月结核对',
+        }
+        with patch.object(reconciliation, 'snapshot', wraps=reconciliation.snapshot) as taken:
+            result = self.request('finance', path, data)
+        # 预备快照直接用于建单，确认时仍按当前事实复核一次：原来每单 3 次，现在 2 次。
+        self.assertEqual(taken.call_count, 2)
+        statement = Reconciliation.objects.get(pk=result['reconciliations'][0])
+        self.assertEqual((statement.entry_id, statement.status), (entry.pk, 'confirmed'))
+        self.assertEqual(statement.snapshot['monthly']['month'], month)
+        self.assertTrue(reconciliation.current(statement))
+
     def statement(self, entry, amount='500', kind='settlement', counterparty=None, confirm=True):
         result = self.request(
             'finance',

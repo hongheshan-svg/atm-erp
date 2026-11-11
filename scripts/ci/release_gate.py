@@ -18,14 +18,22 @@ def git(*args):
     return subprocess.check_output(['git', *args], text=True).strip()
 
 
-def reusable_run(runs, repository, tree, jobs_for, fingerprint=None):
+# Release 工作流经 workflow_call 调用 ci.yml 时，子流程任务名带调用方任务 id 前缀。
+NESTED_PREFIX = 'validate / '
+
+
+def reusable_run(runs, repository, tree, jobs_for, fingerprint=None, nested=False):
     # 发版凭据：同一 Git tree 的 Release validation（计划指纹一致），或覆盖面更大的 Full validation。
     # 按影响范围的 Scoped validation 不含全部后端阶段与前端单测，不算发布凭据。
-    expected = {f'Full validation ({tree})'}
+    # nested=True 查找此前 Release 运行内的发版验证：镜像推送或上传失败会让整次 Release 失败，但验证本身
+    # 已通过；标记任务只在 CI gate 确认全部选中套件成功后运行，因此只认该任务成功，不看整次运行结论。
+    prefix = NESTED_PREFIX if nested else ''
+    expected = {f'{prefix}Full validation ({tree})'}
     if fingerprint:
-        expected.add(f'Release validation ({tree} {fingerprint})')
+        expected.add(f'{prefix}Release validation ({tree} {fingerprint})')
     for run in runs:
-        if run.get('conclusion') != 'success' or run.get('event') not in ('pull_request', 'workflow_dispatch', 'push'):
+        finished = run.get('status') == 'completed' if nested else run.get('conclusion') == 'success'
+        if not finished or run.get('event') not in ('pull_request', 'workflow_dispatch', 'push'):
             continue
         if (run.get('head_repository') or {}).get('full_name') != repository:
             continue
@@ -78,14 +86,16 @@ def preflight(tag, repository, force=False):
     base, scope = release_scope(commit, tag)
     run = None
     if not force:
+
+        def jobs(run_id):
+            return api(f'repos/{repository}/actions/runs/{run_id}/jobs?per_page=100')['jobs']
+
         runs = api(f'repos/{repository}/actions/workflows/ci.yml/runs?status=success&per_page=100')['workflow_runs']
-        run = reusable_run(
-            runs,
-            repository,
-            tree,
-            lambda run_id: api(f'repos/{repository}/actions/runs/{run_id}/jobs?per_page=100')['jobs'],
-            scope['fingerprint'],
-        )
+        run = reusable_run(runs, repository, tree, jobs, scope['fingerprint'])
+        if run is None:
+            # 重新派发 Release（如草稿重试、GHCR 推送失败后）复用此前 Release 内同 tree 同计划的发版验证。
+            releases = api(f'repos/{repository}/actions/workflows/release.yml/runs?status=completed&per_page=100')
+            run = reusable_run(releases['workflow_runs'], repository, tree, jobs, scope['fingerprint'], nested=True)
     return {
         'tag': tag,
         'commit': commit,

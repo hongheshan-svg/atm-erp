@@ -25,10 +25,16 @@ def receipt_data(data):
     return data
 
 
-def perform(*, actor, key, operation, payload, authorize, execute):
-    """Authorize each attempt; receipt creation and business writes commit together."""
+def require_key(key):
+    """Reject a missing or oversized Idempotency-Key; callers may check it before any slow or outbound work."""
     if not isinstance(key, str) or not key.strip() or len(key) > 128:
         raise ValidationError({'Idempotency-Key': '必须提供不超过 128 字符的操作标识。'})
+    return key
+
+
+def perform(*, actor, key, operation, payload, authorize, execute):
+    """Authorize each attempt; receipt creation and business writes commit together."""
+    require_key(key)
     try:
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
     except (TypeError, ValueError) as exc:

@@ -57,6 +57,45 @@ class TransferTests(BusinessFixtures, TestCase):
     def commit(self, resource, preview, role='admin', status=200):
         return self.post(role, resource + '/import-confirm/', {'token': preview.data['token']}, status=status)
 
+    def test_keyed_confirm_locks_once_and_still_authorizes_each_row(self):
+        from datetime import date, timedelta
+
+        from apps.business.services import task_supervision
+
+        engineer = self.users['mechanical_engineer']
+        project = self.active_project()
+        project.members.add(engineer)
+        Project.objects.filter(pk=project.pk).update(task_supervisors={'mechanical': engineer.pk})
+        task = Task.objects.create(
+            project=project, title='结构设计', kind='design', discipline='mechanical', assignee=engineer
+        )
+        today = date.fromisoformat(TODAY)
+        # 签约日即 TODAY，工时日期不能更早。
+        rows = [[str(task.pk), engineer.username, str(today + timedelta(days=i)), '1', '设计'] for i in range(3)]
+        preview = self.preview('time', rows, role='mechanical_engineer')
+        self.assertTrue(preview.data['can_import'], preview.data)
+        with (
+            patch.object(transfers, 'lock_batch', wraps=transfers.lock_batch) as locks,
+            patch.object(
+                task_supervision, 'require_confirmation', wraps=task_supervision.require_confirmation
+            ) as checks,
+        ):
+            result = self.commit('time', preview, role='mechanical_engineer')
+        self.assertEqual(result['count'], 3)
+        # 请求键与预览凭据两层回执嵌套在同一事务里：整批只加一次锁、每行只授权一次（原来 3 次加锁、每行 2 次）。
+        self.assertEqual(locks.call_count, 1)
+        self.assertEqual(checks.call_count, 3)
+        # 逐行授权仍在确认时按当前事实执行：预览后专业主管变更，确认被拒且整批不写入。
+        later = self.preview(
+            'time',
+            [[str(task.pk), engineer.username, str(today + timedelta(days=5)), '1', '设计']],
+            role='mechanical_engineer',
+        )
+        self.assertTrue(later.data['can_import'], later.data)
+        Project.objects.filter(pk=project.pk).update(task_supervisors={'mechanical': self.users['manager'].pk})
+        self.commit('time', later, role='mechanical_engineer', status=403)
+        self.assertEqual(TimeEntry.objects.filter(task=task).count(), 3)
+
     def test_preview_rollback_confirmation_idempotency_and_changed_data(self):
         counter = CodeRule.objects.get(key='item').counter
         receipts = ActionReceipt.objects.count()

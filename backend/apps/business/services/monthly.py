@@ -148,6 +148,8 @@ def confirm(actor, key, data):
                     'basis': f'供应商 {report["supplier"]} 月度核对 {report["month"]}',
                     'reason': reason,
                 },
+                # Same entry, kind and month under the locks held since the provisional snapshot above.
+                prepared=snap,
             )
             reconciliation.action(
                 user, str(uuid.uuid5(uuid.NAMESPACE_URL, f'{key}:confirm:{entry.pk}')), result['id'], {'reason': reason}

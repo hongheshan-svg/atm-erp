@@ -1,12 +1,38 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.postgres.indexes import HashIndex
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import F, Q
-from django.db.models.functions import Lower, Trim
+from django.db.models import CharField, F, Func, Q, Value
+from django.db.models.functions import Lower
 
 from apps.core.models import BaseModel, ImmutableLedger, LedgerModel
+
+
+def comparison_expression(field):
+    """物料查重用的规范化文本：全角 ASCII 转半角、去掉全部空白、转小写。
+
+    查重查询（services.masterdata）与下方函数索引共用这一表达式，数据库才能按索引精确匹配；
+    TRANSLATE、REGEXP_REPLACE 和 LOWER 都是不可变函数，可以建函数索引。最终身份核对仍使用完整字段。
+    """
+    translated = Func(
+        field,
+        Value(''.join(chr(i) for i in range(0xFF01, 0xFF5F)) + '\u3000'),
+        Value(''.join(chr(i) for i in range(0x21, 0x7F)) + ' '),
+        function='TRANSLATE',
+        output_field=CharField(),
+    )
+    return Lower(
+        Func(
+            translated,
+            Value('[[:space:]]+'),
+            Value(''),
+            Value('g'),
+            function='REGEXP_REPLACE',
+            output_field=CharField(),
+        )
+    )
 
 
 def money(**kwargs):
@@ -89,9 +115,11 @@ class Item(BaseModel):
     class Meta(BaseModel.Meta):
         db_table = 'lean_item'
         indexes = [
-            # 建料、改料和 BOM 物料导入的每一行都要按规范化名称、图号查重；
+            # 建料、改料和 BOM 物料导入的每一行都要按规范化名称、规格、图号查重；
             # 没有函数索引时这三处都是整表顺序扫描，导入 1000 行就扫 1000 次。
-            models.Index(Lower(Trim('name')), name='lean_item_name_key'),
+            models.Index(comparison_expression('name'), name='lean_item_name_match'),
+            # 规格最长 2000 字，中文可超过 B 树单条索引上限（约 2.7 KB），且查重只做等值比较，用哈希索引。
+            HashIndex(comparison_expression('specification'), name='lean_item_spec_match'),
             models.Index(Lower('drawing_number'), Lower('drawing_revision'), name='lean_item_drawing_key'),
         ]
 

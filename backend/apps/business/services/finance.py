@@ -81,7 +81,8 @@ def entry_action(actor, key, operation, entry_id, data, execute):
     def perform(user, project):
         current = get_object_or_404(Entry.objects.select_for_update(), pk=entry.pk, project=project)
         result = execute(user, current)
-        if balance(current) != ZERO:
+        # save() of this entry (cancel, due-date change) already restored hidden activity in this transaction.
+        if not getattr(current, '_activity_restored', False) and balance(current) != ZERO:
             from .deletions import restore_entry_activity
 
             restore_entry_activity(user, current)

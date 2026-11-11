@@ -429,18 +429,19 @@ def confirm(actor, token):
                     audit(user, 'bank.import-evidence', found)
                 skipped += 1
                 continue
-            result = banking.create(
-                user,
-                'bank-import:' + record['fingerprint'],
-                record['data'],
-                import_evidence={
-                    'import_fingerprint': record['fingerprint'],
-                    'source': record['source'],
-                    'needs_review': record['needs_review'],
-                },
-            )
-            bank = BankRecord.objects.get(pk=result['id'])
-            # Original evidence is stored by create; a second save would modify a locked historical record.
+            # One batch receipt covers every row: existing() above is the per-row replay guard (fingerprint
+            # and reference), so a nested per-row perform would only repeat the user, role and receipt queries.
+            with banking.duplicate_reference():
+                bank = banking.insert_record(
+                    user,
+                    record['data'],
+                    import_evidence={
+                        'import_fingerprint': record['fingerprint'],
+                        'source': record['source'],
+                        'needs_review': record['needs_review'],
+                    },
+                )
+            # Original evidence is stored by the insert; a second save would modify a locked historical record.
             audit(user, 'bank.import-evidence', bank)
             created += 1
         return dict(count=created, skipped=skipped)

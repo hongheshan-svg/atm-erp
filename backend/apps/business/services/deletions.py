@@ -10,7 +10,7 @@ import json
 import uuid
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import CharField, Exists, OuterRef, Q, Value
+from django.db.models import CharField, Exists, OuterRef, Value
 from django.db.models.functions import Cast, Concat
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
@@ -66,9 +66,14 @@ def unrestored(removals):
 
 def restore_entry_activity(user, entry):
     """A legitimate financial action reopened this entry; preserve deletion and append restoration audits."""
-    removals = AuditLog.objects.filter(operation=OPERATION).filter(
-        Q(resource=f'entry:{entry.pk}') | Q(detail__resource='payments', detail__record__entry=entry.pk)
-    )
+    # Look deletions up by exact resource so lean_audit_resource serves both the entry and its payments.
+    # Payments are immutable and never change entry, so their ids are exactly the payment removals whose
+    # snapshot names this entry (the former detail->record->entry JSON filter forced a scan of the audit log).
+    payments = models.Payment.all_objects.filter(entry_id=entry.pk).values_list('pk', flat=True)
+    resources = [f'entry:{entry.pk}', *(f'payment:{pk}' for pk in payments)]
+    removals = AuditLog.objects.filter(operation=OPERATION, resource__in=resources)
+    # entry_action re-checks after its own execute; one pass per entry and request is enough.
+    entry._activity_restored = True
     for deletion in unrestored(removals).order_by('pk'):
         AuditLog.objects.create(
             actor=user,
@@ -197,6 +202,8 @@ def mode_for(obj, actor):
         if obj.project.status == 'warranty':
             raise Conflict('项目已验收，BOM 已锁定，不能删除；如需调整请联系项目经理按变更流程处理。')
         return 'bom'
+    # references() runs one EXISTS per relation; compute it at most once per record.
+    used = None
     if isinstance(obj, models.Project):
         used = references(obj)
         if used:
@@ -223,11 +230,12 @@ def mode_for(obj, actor):
     elif isinstance(obj, models.Task):
         if obj.status == 'done':
             return 'archive'
-        if obj.started_date or obj.delivery_id or references(obj):
+        if obj.started_date or obj.delivery_id or (used := references(obj)):
             if obj.status not in {'cancelled', 'done'}:
                 raise Conflict('任务已开始或已有工时、账款或交付关联，请先完成或取消任务，再移入已删除记录。')
             return 'archive'
-    used = references(obj)
+    if used is None:
+        used = references(obj)
     if used:
         raise Conflict(f'此记录已被{used}使用，不能删除；基础资料可先停用，其他单据请先处理关联记录。')
     return 'soft'

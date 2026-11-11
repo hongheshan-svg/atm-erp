@@ -22,7 +22,7 @@ from apps.core.permissions import (
 
 from ..models import Delivery, Entry, StockMove, Task, TimeEntry
 from ..task_milestones import AUTOMATIC, DEFINITIONS, PHASES
-from .bom import issued
+from .bom import issued_by_item
 from .common import (
     ZERO,
     audit,
@@ -220,14 +220,17 @@ def proportional_plan(project, bom, shipped, qty, previous):
     return plan
 
 
-def material_problem(project, line, previous, planned, final):
-    """一条 BOM 物料的累计配套是否成立；返回拒绝原因，None 表示成立。发货与推进检查共用。"""
+def material_problem(line, previous, planned, final, issued):
+    """一条 BOM 物料的累计配套是否成立；返回拒绝原因，None 表示成立。发货与推进检查共用。
+
+    issued 为 bom.issued_by_item 一次读出的本项目各物料已领量。
+    """
     required = previous.get(line['item_id'], ZERO) + planned.get(line['item_id'], ZERO)
     if required > line['total']:
         return '累计交付配套数量超过BOM，请先核对清单或完成设计变更。'
     if final and required < line['total']:
         return '最后一批交付必须覆盖剩余BOM配套物料，请补齐清单。'
-    if issued(project, line['item_id']) < required:
+    if issued[line['item_id']] < required:
         return '累计领料不足以支持本批交付，请到库存完成领料。'
     return None
 
@@ -291,7 +294,8 @@ def ship_checks(project):
                 if multi_unit
                 else proportional_plan(project, bom, shipped, 1, previous)
             )
-            short = [line for line in bom if material_problem(project, line, previous, planned, final)]
+            issued = issued_by_item(project, [line['item_id'] for line in bom])
+            short = [line for line in bom if material_problem(line, previous, planned, final, issued)]
             items.append(
                 check(
                     'materials',
@@ -892,10 +896,11 @@ def ship(actor, key, project_id, data):
         if data.get('materials'):
             if not isinstance(data['materials'], list) or len(data['materials']) > 1000:
                 raise ValidationError({'materials': '本批配套清单必须为最多1000行的列表。'})
+            in_bom = {line['item_id'] for line in bom}
             for index, row in enumerate(data['materials']):
                 fields(row, {'item', 'quantity'})
                 item = identity(row.get('item'), 'item')
-                if item in planned or item not in {line['item_id'] for line in bom}:
+                if item in planned or item not in in_bom:
                     raise ValidationError({'materials': '物料重复或不属于本项目BOM。'})
                 try:
                     planned[item] = number(row.get('quantity'), 'quantity', 3, positive=True)
@@ -905,8 +910,9 @@ def ship(actor, key, project_id, data):
             if len({line.assembly_unit for line in project.bom_lines.all() if line.assembly_unit}) > 1:
                 raise Conflict('多单元项目请填写本批配套物料清单，明确本批实际用量。')
             planned = proportional_plan(project, bom, shipped, qty, previous)
+        issued = issued_by_item(project, [line['item_id'] for line in bom])
         for line in bom:
-            problem = material_problem(project, line, previous, planned, shipped + qty == project.equipment_quantity)
+            problem = material_problem(line, previous, planned, shipped + qty == project.equipment_quantity, issued)
             if problem:
                 raise Conflict(problem)
         date = event_date(data)

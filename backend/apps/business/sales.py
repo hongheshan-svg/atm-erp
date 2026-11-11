@@ -1,3 +1,5 @@
+from django.db.models import DecimalField, Sum, Value
+from django.db.models.functions import Coalesce
 from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -89,6 +91,12 @@ class SalesView(ImportableMixin, ReadView):
             return Response({'project_status': None, 'deliveries': [], 'receivables': [], 'amounts_visible': True})
         # 无该项目金额权限时整体不返回应收节点：标题、到期日和结清状态同样会透露合同款安排与回款进度。
         visible = sale_amounts_visible(request, sale)
+        # 净收款随款项一次汇总，finance.paid/balance 直接取注解，不再逐个应收节点各查一次流水。
+        receivables = sale.project.entries.filter(kind='receivable').annotate(
+            net_paid=Coalesce(
+                Sum('payments__amount'), Value(finance.ZERO), output_field=DecimalField(max_digits=18, decimal_places=2)
+            )
+        )
         return Response(
             {
                 'progress_project': sale.project_id
@@ -105,7 +113,7 @@ class SalesView(ImportableMixin, ReadView):
                         'paid': f'{finance.paid(entry):.2f}',
                         'balance': f'{finance.balance(entry):.2f}',
                     }
-                    for entry in (sale.project.entries.filter(kind='receivable') if visible else [])
+                    for entry in (receivables if visible else [])
                 ],
                 'amounts_visible': visible,
             }

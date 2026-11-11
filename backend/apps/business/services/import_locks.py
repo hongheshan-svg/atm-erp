@@ -1,6 +1,7 @@
 """Acquire a whole batch's shared resources before any row starts writing."""
 
 from django.db import connection
+from rest_framework.exceptions import ValidationError
 
 from apps.accounts.models import User
 from apps.core.periods import mutation_lock
@@ -48,15 +49,21 @@ def lock_batch(actor, resource, records):
     if resource == 'time':
         from .transfers import resolve_person
 
-        people = set()
+        people, resolved = set(), {}
         for row in rows:
-            # Invalid references stay row-level errors in the ordinary service validation.
-            from rest_framework.exceptions import ValidationError
-
-            try:
-                people.add(resolve_person(row['user']) if row.get('user') else actor.pk)
-            except ValidationError:
+            value = row.get('user')
+            if not value:
+                people.add(actor.pk)
                 continue
+            # A batch usually repeats the same few people; resolve each spelling once.
+            if value not in resolved:
+                try:
+                    resolved[value] = resolve_person(value)
+                except ValidationError:
+                    # Invalid references stay row-level errors in the ordinary service validation.
+                    resolved[value] = None
+            if resolved[value] is not None:
+                people.add(resolved[value])
         # Serialize daily totals/rate changes, while permitting deferred actor/audit
         # foreign-key KEY SHARE checks. Inner time services must keep this lock mode.
         list(User.objects.filter(pk__in=people).order_by('pk').select_for_update(no_key=True))

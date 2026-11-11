@@ -309,6 +309,18 @@ class UpgradeTests(TestCase):
         self.assertGreater(version('v1.10.0'), version('v1.9.0'))
         self.assertEqual(self.client.post('/api/core/upgrade/', {'target': 'v9.0.0'}, format='json').status_code, 400)
 
+    def test_missing_or_oversized_key_is_rejected_before_release_lookup(self):
+        body = {'target': 'v9.0.0', 'confirmed': True}
+        with patch('apps.core.ota.release_info', return_value=self.info) as fetch:
+            for headers in ({}, {'HTTP_IDEMPOTENCY_KEY': '  '}, {'HTTP_IDEMPOTENCY_KEY': 'k' * 129}):
+                with self.subTest(headers=headers):
+                    response = self.client.post('/api/core/upgrade/', body, format='json', **headers)
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(response.data, {'Idempotency-Key': '必须提供不超过 128 字符的操作标识。'})
+            fetch.assert_not_called()
+        self.assertFalse(UpgradeJob.objects.exists())
+        self.assertFalse(ActionReceipt.objects.exists())
+
     @override_settings(OTA_MODE='container')
     def test_prepared_update_requires_admin_restart_and_preserves_backup_order(self):
         def poll():

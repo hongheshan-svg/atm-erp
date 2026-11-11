@@ -150,6 +150,10 @@ describe('审查问题回归', () => {
     expect(command.fields.find(f => f.key === 'supplier')?.remotePath).toBe('/business/partners/')
     const wrapper = mount(RemoteSelect, { props: { path: '/business/items/', label: '物料' } })
     await flushPromises()
+    // 未选值的选择框挂载时不读取，展开时才按 20 条一页读取候选。
+    expect(read).not.toHaveBeenCalled()
+    await wrapper.get('input[role="combobox"]').trigger('focus')
+    await flushPromises()
     expect(read).toHaveBeenCalledExactlyOnceWith('/business/items/', { search: '', page: 1, page_size: 20 })
     wrapper.unmount()
   })
