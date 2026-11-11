@@ -1,5 +1,6 @@
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from threading import Barrier
 
 from django.db import close_old_connections, connection
@@ -93,10 +94,63 @@ class PurchaseChangeTests(PurchaseChangeFixtures, TestCase):
         self.post('manager', self.url + 'approve/')
         self.assertEqual(Entry.objects.get(purchase=self.order).amount, 500)
 
-    def test_submitted_cannot_edit_cancel_or_delete_even_without_a_request(self):
-        self.post('purchaser', self.url + 'edit/', {}, status=409)
+    def test_submitted_can_be_voided_like_draft_unless_a_change_request_is_pending(self):
+        request_id = self.request_change()
         for role in ['purchaser', 'purchase_manager', 'admin']:
-            self.post(role, self.url + 'cancel-remainder/', {'reason': '不能直接作废'}, status=409)
+            response = self.post(role, self.url + 'cancel-remainder/', {'reason': '供应商选错'}, status=409)
+            self.assertIn('待处理的修改申请', str(response))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'submitted')
+        self.assertEqual(pending_requests([self.order])[self.order.pk]['id'], request_id)
+        self.review(request_id, 'reject')
+        line = self.order.lines.get()
+        self.post('purchaser', self.url + 'cancel-remainder/', {}, status=400)
+        self.post('purchaser', self.url + 'cancel-remainder/', {'reason': ' '}, status=400)
+        response = self.post(
+            'purchaser',
+            self.url + 'cancel-remainder/',
+            {'reason': '整单作废', 'lines': [{'line': line.pk}]},
+            status=400,
+        )
+        self.assertIn('未批准采购请整单作废', str(response))
+        for role in ['warehouse', 'finance', 'member']:
+            self.post(role, self.url + 'cancel-remainder/', {'reason': '无权作废'}, status=403)
+        approvals = self.clients['manager'].get('/api/business/workbench/', {'bucket': 'approvals'}).data
+        self.assertEqual(approvals['approvals']['count'], 1)
+        self.post('purchaser', self.url + 'cancel-remainder/', {'reason': '供应商选错，作废重建'})
+        self.order.refresh_from_db()
+        line.refresh_from_db()
+        self.assertEqual(self.order.status, 'cancelled')
+        self.assertEqual(line.cancelled_quantity, line.quantity)
+        self.assertFalse(Entry.objects.filter(purchase=self.order).exists())
+        self.assertFalse(StockMove.objects.exists())
+        log = AuditLog.objects.get(operation='purchase.cancel_remainder', resource=f'purchaseorder:{self.order.pk}')
+        self.assertEqual(log.detail['reason'], '供应商选错，作废重建')
+        # 与草稿作废同一审计：记录作废金额；待审批单没有应付，不产生冲减。
+        self.assertEqual(Decimal(log.detail['credit']), Decimal('500.00'))
+        approvals = self.clients['manager'].get('/api/business/workbench/', {'bucket': 'approvals'}).data
+        self.assertEqual(approvals['approvals']['count'], 0)
+        for action, data in [
+            ('approve/', {}),
+            ('reject/', {'reason': '已作废'}),
+            ('request-change/', {'reason': '已作废'}),
+        ]:
+            self.post('manager' if action != 'request-change/' else 'purchaser', self.url + action, data, status=409)
+        self.post('purchaser', self.url + 'cancel-remainder/', {'reason': '重复作废'}, status=409)
+
+    def test_voiding_submitted_purchase_is_idempotent_for_a_repeated_key(self):
+        key = str(uuid.uuid4())
+        first = self.post('purchaser', self.url + 'cancel-remainder/', {'reason': '物料选错'}, key=key)
+        second = self.post('purchaser', self.url + 'cancel-remainder/', {'reason': '物料选错'}, key=key)
+        self.assertEqual(first, second)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'cancelled')
+        self.assertEqual(AuditLog.objects.filter(operation='purchase.cancel_remainder').count(), 1)
+        self.assertEqual(ActionReceipt.objects.filter(key=key).count(), 1)
+        self.post('purchaser', self.url + 'cancel-remainder/', {'reason': '另一原因'}, key=key, status=409)
+
+    def test_submitted_cannot_edit_or_delete_even_without_a_request(self):
+        self.post('purchaser', self.url + 'edit/', {}, status=409)
         draft = PurchaseOrder.objects.create(
             code='DRAFT',
             project=self.project,

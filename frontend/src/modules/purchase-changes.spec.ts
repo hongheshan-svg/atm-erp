@@ -8,11 +8,21 @@ const pending = { id: 25, reason: '数量应为3', requested_by: '采购张三',
 const submitted = { id: 9, code: 'PO000009', status: 'submitted', can_approve: true, lines: [] }
 beforeEach(() => { vi.resetAllMocks(); user.value = { id: 2, roles: ['purchaser'] } })
 
-it('待审批采购可申请修改，不能直接作废或编辑；批准后沿用原更正动作', () => {
+it('待审批采购可申请修改或直接作废，不能直接编辑；批准后沿用原更正动作', async () => {
   const actions = actionNames('purchases', submitted)
   expect(actions).toContain('申请修改')
-  expect(actions).not.toContain('作废采购')
+  expect(actions).toContain('作废采购')
   expect(actions).not.toContain('修改采购')
+  // 有待处理修改申请时服务端拒绝作废，前端不提供入口。
+  expect(actionNames('purchases', { ...submitted, change_request: pending })).not.toContain('作废采购')
+  user.value = { id: 3, roles: ['warehouse'] }
+  expect(actionNames('purchases', submitted)).not.toContain('作废采购')
+  user.value = { id: 2, roles: ['purchaser'] }
+  const voided = await actionCommand('purchases', submitted, '作废采购')
+  expect(voided.path).toBe('/business/purchases/9/cancel-remainder/')
+  expect(voided.fields.find(f => f.key === 'reason')?.optional).toBeFalsy()
+  expect(voided.notice?.text).toContain('审批人无需再处理')
+  expect((await actionCommand('purchases', { ...submitted, status: 'draft' }, '作废采购')).notice?.text).not.toContain('审批人')
   expect(actionNames('purchases', { ...submitted, status: 'draft' })).toContain('作废采购')
   expect(actionNames('purchases', { ...submitted, status: 'approved' })).not.toContain('申请修改')
   expect(actionNames('purchases', { ...submitted, status: 'approved' })).toContain('整单取消未收余量')

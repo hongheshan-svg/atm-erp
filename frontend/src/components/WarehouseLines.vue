@@ -85,7 +85,7 @@ async function focusPath(target: string) {
 defineExpose({ focusPath })
 </script>
 <template>
-  <fieldset ref="root" class="warehouse-lines">
+  <fieldset ref="root" class="warehouse-lines" :class="{ 'receipt-lines': receipt }">
     <legend>{{ field.label }} · {{ model.length }} 行<template v-if="projectLabel"> · 项目 {{ projectLabel }}</template></legend>
     <p class="form-hint">{{ field.hint }}</p>
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="loadProject">重试</button></p>
@@ -97,10 +97,10 @@ defineExpose({ focusPath })
     <p class="table-guide">手机上按每款物料逐项填写。</p>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
       <table :aria-label="`${field.label}明细`">
-        <thead><tr><th scope="col">序号</th><th v-for="column in columns" :key="column.key" scope="col">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
+        <thead><tr><th scope="col">序号</th><th v-for="column in columns" :key="column.key" scope="col" :class="`col-${column.key}`">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
         <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock" :class="{ 'partial-line': partial(model[i]!) }">
           <td data-label="序号" class="line-index">{{ i + 1 }}</td>
-          <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="{ 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark', 'material-cell': column.key === 'material_label' }" :data-field-path="path(i, column.key)">
+          <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="[`col-${column.key}`, { 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark', 'material-cell': column.key === 'material_label' }]" :data-field-path="path(i, column.key)">
             <span v-if="column.displayOnly" class="material-value">{{ shown(model[i]!, column.key) }}</span>
             <template v-else>
               <label class="input-label" :for="inputId(i, column.key)">{{ column.label }}</label>
@@ -121,13 +121,16 @@ legend { font-weight: 650; padding: 0 6px; }
 .table-guide { color: var(--mute); font-size: 12px; margin: 8px 0; }
 .warehouse-scroll { position: relative; overflow: auto; max-width: 100%; max-height: 520px; border: 1px solid var(--field-line); border-radius: 6px; }
 table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
-th, td { padding: 10px; min-width: 92px; border-bottom: 1px solid var(--field-line); border-right: 1px solid var(--field-line); text-align: left; vertical-align: top; }
+/* 列宽按「1366 桌面侧栏约 1040px 内放下全部列」收紧：只读数量列窄、表头可换行，数量与备注输入列不再需要横向滚动。 */
+th, td { padding: 8px; min-width: 64px; border-bottom: 1px solid var(--field-line); border-right: 1px solid var(--field-line); text-align: left; vertical-align: top; }
 th { position: sticky; top: 0; background: var(--subtle-2); z-index: 1; white-space: nowrap; }
-th:first-child, td:first-child { min-width: 44px; }
-.material-value { display: block; white-space: pre-line; overflow-wrap: anywhere; min-width: 90px; max-width: 260px; }
-.material-cell .material-value { min-width: 130px; }
-.editable-cell { min-width: 130px; }
-.remark-cell { min-width: 180px; }
+th.col-material_label, th.col-spec_label { white-space: normal; }
+th:first-child, td:first-child { min-width: 36px; }
+.material-value { display: block; white-space: pre-line; overflow-wrap: anywhere; max-width: 220px; }
+.material-cell .material-value { min-width: 110px; }
+.col-spec_label .material-value { min-width: 120px; }
+.editable-cell { min-width: 96px; }
+.remark-cell { min-width: 120px; }
 .warehouse-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 8px 0; }
 .warehouse-fill { display: inline-flex; gap: 6px; }
 .warehouse-fill button { min-height: 30px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--brand-ink); background: var(--paper, #fff); border: 1px solid var(--field-line); border-radius: 5px; cursor: pointer; }
@@ -153,5 +156,28 @@ small { display: block; color: var(--mute); font-size: 11px; line-height: 1.4; m
   .editable-cell { grid-template-columns: minmax(0, 1fr); }
   td:last-child { border-bottom: none; }
   input, textarea { font-size: 16px; }
+}
+/* 手机（≤600px）：每行一张紧凑卡片——标题为序号＋物料，单元/库位与单位同行，
+   需求、BOM 未领、待收/可用三项并排，下面是本次数量（收货时合格与隔离并排）和备注。 */
+@media (max-width: 600px) {
+  .warehouse-lines { padding: 8px; }
+  .warehouse-fill { display: flex; width: 100%; }
+  .warehouse-fill button { flex: 1 1 0; min-height: 40px; }
+  .table-guide { display: none; }
+  tr { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row dense; margin-bottom: 10px; }
+  td { display: block; grid-column: span 6; padding: 6px 10px; border-bottom: 0; }
+  td::before { display: block; font-size: 11px; line-height: 1.4; margin-bottom: 2px; }
+  .line-index { grid-column: span 1; display: flex; align-items: center; justify-content: center; padding: 8px 0; font-size: 13px; }
+  .line-index::before { content: none; }
+  .material-cell { grid-column: span 5; background: var(--subtle-2); font-weight: 650; padding: 8px 10px; }
+  .material-cell::before { content: none; }
+  .material-cell .material-value { white-space: normal; }
+  .col-spec_label .material-value { white-space: normal; color: var(--ink-3); }
+  .col-assembly_unit, .col-location { grid-column: span 4; }
+  .col-unit, .col-required_quantity, .col-bom_remaining, .col-remaining { grid-column: span 2; }
+  .receipt-lines .col-quantity, .col-pending_quantity { grid-column: span 3; }
+  .editable-cell small:not(.field-error) { display: none; }
+  .remark-cell textarea { min-height: 40px; }
+  .partial-line .material-cell { background: var(--warn-wash); }
 }
 </style>

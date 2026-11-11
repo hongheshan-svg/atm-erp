@@ -108,7 +108,8 @@ export function actionNames(resource: string, r: Row): string[] {
     if (r.status === 'submitted') {
       if (r.change_request) a.push(r.can_review_change ? '处理修改申请' : '查看修改申请')
       else {
-        if (buyer()) a.push('申请修改')
+        // 待审批单与草稿一样可整单作废（原因必填）；有待处理修改申请时须先由审批人处理。
+        if (buyer()) a.push('申请修改', '作废采购')
         if (purchaseApprover(r)) a.push('批准采购', '退回修改')
       }
     }
@@ -129,7 +130,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       submitLabel: '提交修改申请',
       fields: [{ ...reason, label: '修改原因', type: 'textarea', hint: '请写清哪项填错、准备怎样修改，例如第 3 项数量由 10 改为 5。' }],
       blocked: detail.status !== 'submitted' ? '仅待审批采购单可申请修改，请刷新采购单。' : pending ? '已有待处理的修改申请，请勿重复申请。' : undefined,
-      notice: { type: 'info', text: '提交申请后暂停本单采购审批。审批人同意后退回草稿，修改完成须重新提交审批。若物料或供应商选错，可在退回草稿后作废重建。已批准订单请按原流程取消余量或更正。' },
+      notice: { type: 'info', text: '提交申请后暂停本单采购审批。审批人同意后退回草稿，修改完成须重新提交审批。若物料或供应商选错，可直接“作废采购”后重建。已批准订单请按原流程取消余量或更正。' },
       prepare: data => ({ reason: data.reason }),
     }
     const readonly = name === '查看修改申请'
@@ -153,7 +154,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const remaining = detail.lines.filter((line: Row) => Number(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity)) > 0)
     const pending = remaining.filter((line: Row) => Number(line.pending_quantity || 0) > 0)
     const blocked = !['approved', 'partial'].includes(detail.status)
-      ? '采购状态已变化，请刷新列表；草稿可作废，待审批采购须先申请修改。'
+      ? '采购状态已变化，请刷新列表；草稿和待审批采购请用“作废采购”整单作废。'
       : pending.length
         ? `本单有 ${pending.length} 条明细仍在待检，请仓管先完成隔离品合格入库或退回供应商，再整单取消。也可按明细取消其他未收物料。`
         : !remaining.length ? '本单没有可取消的未收余量，请刷新采购单。' : undefined
@@ -323,7 +324,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   let prepare: Command['prepare']
   if (['收货', '隔离品合格入库', '隔离品退回供应商'].includes(name)) prepare = receiptLines
   const notice: Command['notice'] = name === '作废采购'
-    ? { type: 'warning', text: '将作废本单全部采购明细，请填写作废原因。' }
+    ? { type: 'warning', text: `将作废本单全部采购明细，请填写作废原因。${r.status === 'submitted' ? '待审批单作废后审批人无需再处理。' : ''}` }
     : name === '提交采购'
       ? { type: 'info', text: `${[r.supplier_name, r.project_code || r.project_name].filter(Boolean).join(' · ')} · ${(r.lines || []).length} 行明细 · 含税合计 ${purchaseTotal(r.lines || [])} 元。提交后由项目经理、采购经理或管理员审批，申请人不能审批本人提交的采购。` }
       : undefined
