@@ -37,7 +37,7 @@ async function entryReconciliationCommand(entry: Row, prepayment = false): Promi
     const eligible = (detail.payment_schedule || []).reduce((total: bigint, row: Row) => total + cents(row.amount), 0n)
     command.initial = { ...command.initial, approved_amount: eligible > 0n ? cappedAmount(entry.balance, amount(eligible)) : '' }
     command.fields = command.fields.map(field => field.key === 'approved_amount'
-      ? { ...field, hint: `当前普通结算可申请 ${amount(eligible)} 元；未收货部分请申请预付款核准。保存和确认时都会重新校验。` }
+      ? { ...field, hint: `当前普通结算可申请 ${formatMoney(amount(eligible))} 元；未收货部分请申请预付款核准。保存和确认时都会重新校验。` }
       : field)
   }
   return command
@@ -59,7 +59,7 @@ export const columns: Record<string, Column[]> = {
         return row.prepaid_excess ? `${label} · 含预付 ${row.prepaid_excess}` : label
       },
       tip: row => row.prepaid_excess
-        ? `已付超过合格收货净额 ${row.prepaid_excess} 元，视为预付；待后续到货或取消余量后再结算。`
+        ? `已付超过合格收货净额 ${formatMoney(row.prepaid_excess)} 元，视为预付；待后续到货或取消余量后再结算。`
         : undefined,
     },
   ],
@@ -186,7 +186,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     if (eligible.length === 1) {
       initial.reconciliation = eligible[0]!.id
       initial.amount = cappedAmount(r.balance, eligible[0]!.remaining_amount)
-      fields[0] = { ...fields[0]!, hint: `对账剩余额度 ${eligible[0]!.remaining_amount} 元；本次最多 ${initial.amount} 元，可按实际收付填写更小金额。` }
+      fields[0] = { ...fields[0]!, hint: `对账剩余额度 ${formatMoney(eligible[0]!.remaining_amount)} 元；本次最多 ${formatMoney(initial.amount)} 元，可按实际收付填写更小金额。` }
     } else if (eligible.length > 1) {
       initial.amount = ''
       fields[0] = { ...fields[0]!, optional: true, placeholder: '留空使用所选对账的本次默认金额', hint: `每张对账选项显示本次默认金额。留空时按所选对账默认值登记；手工填写时使用填写金额。${r.purchase || name === '退款' ? '' : `不选对账时默认 ${amount(cents(r.balance))} 元。`}` }

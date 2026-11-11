@@ -41,7 +41,7 @@ it('BOM 单行修改只提交这一行并带上当前版本', async () => {
   expect(actionNames('bom', { ...row, can_edit_bom: true })).toEqual(['修改此行', '替换物料', '移除'])
   const command = await actionCommand('bom', row, '修改此行')
   expect(command.path).toBe('/business/projects/7/revise-bom/')
-  expect(command.initial?.quantity).toBe('4.000')
+  expect(command.initial?.quantity).toBe('4')
   expect(command.prepare?.({ quantity: '6', assembly_unit: '主机', change_note: 'ECN-3', applicant: '' })).toEqual({
     expected_revision: 'rev-9',
     lines: [{ id: 5, item: 3, quantity: '6', assembly_unit: '主机', change_note: 'ECN-3', required_date: null, application_date: null, applicant: '' }],

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Row } from '../types'
 import { pageSize } from '../pagination'
 import { message } from '../utils/request'
@@ -10,9 +10,16 @@ const props = defineProps<{
   rows: Row[]; columns: { key: string; label: string }[]; errors: Row[]
   errorFile?: { name: string; content: string }; busy?: boolean
 }>()
+// 手机宽度下预览改成逐行卡片，免去横向滚动。
+const cardQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 600px)') : null
+const cardMode = ref(Boolean(cardQuery?.matches))
+const syncCards = () => { cardMode.value = Boolean(cardQuery?.matches) }
+onMounted(() => cardQuery?.addEventListener?.('change', syncCards))
+onBeforeUnmount(() => cardQuery?.removeEventListener?.('change', syncCards))
 const onlyErrors = ref(false)
 const page = ref(1)
 const table = ref<{ $el: HTMLElement }>()
+const cards = ref<HTMLElement>()
 const focusedRow = ref<number>()
 const issues = (row: number) => props.errors.filter(issue => issue.row === row)
 const errorRows = computed(() => new Set(props.errors.filter(issue => Number.isInteger(issue.row)).map(issue => issue.row)))
@@ -28,7 +35,7 @@ async function locate(issue: Row) {
   focusedRow.value = issue.row
   await nextTick()
   const field = props.columns.find(column => issue.fields?.includes(column.key)) || props.columns[0]
-  const cell = table.value?.$el.querySelector<HTMLElement>(`[data-import-row="${issue.row}"][data-import-field="${field?.key}"]`)
+  const cell = (cardMode.value ? cards.value : table.value?.$el)?.querySelector<HTMLElement>(`[data-import-row="${issue.row}"][data-import-field="${field?.key}"]`)
   cell?.focus({ preventScroll: true })
   cell?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
 }
@@ -56,7 +63,15 @@ function downloadErrors() {
       </p>
     </div>
     <p v-if="errorFile" class="muted">红色单元格的批注说明填写问题。修改后保存并重新上传，整批重新校验；保留原表头和全部数据行。</p>
-    <BusinessTable ref="table" label="导入预览" :numbered="false" :data="visible" :max-height="360" row-key="row" empty-text="没有符合条件的预览行">
+    <ol v-if="cardMode" ref="cards" class="import-cards" aria-label="导入预览">
+      <li v-for="row in visible" :key="row.row" class="import-card" :class="{ 'has-issue': issues(row.row).length }">
+        <strong class="import-card-head">第 {{ row.row }} 行</strong>
+        <p v-if="issues(row.row).length" class="import-card-issue">{{ issues(row.row).map(issue => issue.message).join('；') }}</p>
+        <div v-for="column in columns" :key="column.key" class="import-card-line"><span>{{ column.label }}：</span><b tabindex="-1" :data-import-row="row.row" :data-import-field="column.key" :class="{ 'error-cell': cellIssues(row.row, column.key).length, 'located-cell': focusedRow === row.row }">{{ row.data[column.key] ?? '—' }}<small v-if="row.matches?.[column.key]" class="matched-reference">已对应：{{ row.matches[column.key] }}</small></b></div>
+      </li>
+      <li v-if="!visible.length" class="import-card-empty">没有符合条件的预览行</li>
+    </ol>
+    <BusinessTable v-else ref="table" label="导入预览" :numbered="false" :data="visible" :max-height="360" row-key="row" empty-text="没有符合条件的预览行">
       <el-table-column prop="row" label="文件行号" width="100" fixed="left" />
       <el-table-column v-if="errors.length" label="填写问题" min-width="230"><template #default="{ row }">{{ issues(row.row).map(issue => issue.message).join('；') || '—' }}</template></el-table-column>
       <el-table-column v-for="column in columns" :key="column.key" :label="column.label" min-width="150">
@@ -74,4 +89,13 @@ function downloadErrors() {
 .matched-reference { display: block; color: var(--mute); }
 .error-cell { display: block; background: #fff0f0; color: #a12622; border-bottom: 2px solid #ce4640; padding: 4px; }
 .located-cell:focus { outline: 2px solid var(--el-color-primary); outline-offset: -2px; }
+.import-cards { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.import-card { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--surface-border); border-radius: 8px; font-size: 13px; }
+.import-card.has-issue { border-color: #ce4640; }
+.import-card-head { font-size: 13px; }
+.import-card-issue { margin: 0; color: #a12622; }
+.import-card-line { display: flex; gap: 6px; line-height: 1.6; }
+.import-card-line > span { color: var(--mute); flex: none; }
+.import-card-line > b { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.import-card-empty { color: var(--mute); padding: 8px 0; }
 </style>

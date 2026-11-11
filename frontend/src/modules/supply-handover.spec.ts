@@ -110,7 +110,7 @@ it('库存流水显示项目与来源采购单并可跳转', () => {
   expect(col('project_name').link!(move)).toBe('/projects/4')
   expect(col('purchase_code').link!(move)).toEqual({ path: '/purchases', query: { resource: 'purchases', focus: '8', project: '4' } })
   expect(col('item_name').format!(move)).toBe('M-1 · 伺服电机')
-  expect(col('quantity').format!(move)).toBe('-2.000 台')
+  expect(col('quantity').format!(move)).toBe('-2 台')
   expect(col('created_at').format!(move)).toBe('2026-11-11 09:30')
   expect(col('project_name').link!({ ...move, project: null })).toBeUndefined()
 })

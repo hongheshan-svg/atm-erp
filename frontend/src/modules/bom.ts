@@ -12,6 +12,7 @@ import { C } from './shared'
 import { item } from './shared'
 import { endpoint } from './shared'
 import { productCategories } from '../product-categories'
+import { quantityText } from '../utils/quantity'
 const qty: Field = { ...baseQty, numeric: { scale: 3, min: 0.001 } }
 export const columns: Record<string, Column[]> = {
   bom: [
@@ -21,7 +22,7 @@ export const columns: Record<string, Column[]> = {
     { key: 'product_category', label: '产品编码类别', format: r => productCategories[r.product_category] || '未分类' },
     C('brand', '品牌'),
     C('assembly_unit', '单元'),
-    C('quantity', '需求数量'),
+    { key: 'quantity', label: '需求数量', format: r => quantityText(r.quantity) },
     C('required_date', '需求日期'), C('application_date', '申请日期'), C('applicant', '申请人'),
     C('unit', '单位'),
     C('change_note', '变更说明'),
@@ -68,7 +69,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       ],
       initial: {
         item_label: [r.item_code, r.item_name, r.specification].filter(Boolean).join(' · '),
-        quantity: r.quantity,
+        quantity: quantityText(r.quantity, ''),
         assembly_unit: r.assembly_unit || '',
         required_date: r.required_date,
         application_date: r.application_date,
@@ -108,7 +109,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       ],
       initial: {
         item_label: [r.item_code, r.item_name, r.specification, r.assembly_unit || '未分单元'].filter(Boolean).join(' · '),
-        quantity: r.quantity,
+        quantity: quantityText(r.quantity, ''),
         required_date: r.required_date,
         application_date: r.application_date,
         applicant: r.applicant || '',
@@ -124,7 +125,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       title: `移除 ${r.item_code} ${r.item_name}（${unitName}）`,
       submitLabel: '确认移除',
       path: `${endpoint(resource)}${r.id}/remove/`,
-      notice: { type: 'warning', text: `将从本项目 BOM 移除「${unitName}」的这一行：${r.item_code} ${r.item_name}，需求 ${r.quantity}${r.unit ? ` ${r.unit}` : ''}。该行有在途采购，或移除后其余单元不够覆盖已领时会被拦截。` },
+      notice: { type: 'warning', text: `将从本项目 BOM 移除「${unitName}」的这一行：${r.item_code} ${r.item_name}，需求 ${quantityText(r.quantity)}${r.unit ? ` ${r.unit}` : ''}。该行有在途采购，或移除后其余单元不够覆盖已领时会被拦截。` },
       fields: [reason],
     }
   }

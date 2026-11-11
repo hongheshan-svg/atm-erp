@@ -15,6 +15,8 @@ import FormFields from './FormFields.vue'
 import StatusBadge from './StatusBadge.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import ProjectProgress from './ProjectProgress.vue'
+import { quantityText as qty } from '../utils/quantity'
+const qtyCell = (_row: Row, _column: unknown, value: unknown) => qty(value)
 const props = defineProps<{ command: Command | null; inline?: boolean }>()
 const command = computed(() => props.command ? industryCommand(props.command) : null)
 const emit = defineEmits<{ close: []; saved: [result: Row]; busy: [value: boolean]; replace: [command: Command] }>()
@@ -341,18 +343,18 @@ async function submit() {
         <template v-if="preview.changes?.length">
           <h3 class="preview-heading">本次提交 {{ preview.changes.length }} 行</h3>
           <BusinessTable label="本次提交的行" :data="preview.changes" :numbered="false" :max-height="mobile ? undefined : 220">
-            <el-table-column v-if="mobile" label="物料与变化"><template #default="{ row }"><span class="preview-change-head"><el-tag :type="row.action === 'create' ? 'warning' : 'info'" size="small">{{ row.action === 'create' ? '新增' : '修改' }}</el-tag><strong>{{ row.item_code }} {{ row.item_name }}</strong></span><small class="preview-change-line">{{ unitText(row) }} · 数量 {{ row.before ?? '0' }} → {{ row.after }}</small></template></el-table-column>
+            <el-table-column v-if="mobile" label="物料与变化"><template #default="{ row }"><span class="preview-change-head"><el-tag :type="row.action === 'create' ? 'warning' : 'info'" size="small">{{ row.action === 'create' ? '新增' : '修改' }}</el-tag><strong>{{ row.item_code }} {{ row.item_name }}</strong></span><small class="preview-change-line">{{ unitText(row) }} · 数量 {{ qty(row.before ?? '0') }} → {{ qty(row.after) }}</small></template></el-table-column>
             <template v-else>
             <el-table-column label="动作" width="72"><template #default="{ row }"><el-tag :type="row.action === 'create' ? 'warning' : 'info'" size="small">{{ row.action === 'create' ? '新增' : '修改' }}</el-tag></template></el-table-column>
             <el-table-column label="物料" min-width="180"><template #default="{ row }">{{ row.item_code }} {{ row.item_name }}</template></el-table-column>
             <el-table-column label="单元" min-width="140"><template #default="{ row }">{{ unitText(row) }}</template></el-table-column>
-            <el-table-column label="数量" min-width="130"><template #default="{ row }">{{ row.before ?? '0' }} → {{ row.after }}</template></el-table-column>
+            <el-table-column label="数量" min-width="130"><template #default="{ row }">{{ qty(row.before ?? '0') }} → {{ qty(row.after) }}</template></el-table-column>
             </template>
           </BusinessTable>
         </template>
         <template v-if="preview.items?.length">
           <h3 class="preview-heading">数量变化（按物料汇总）</h3>
-          <BusinessTable label="变更影响" :data="preview.items" :numbered="!mobile" :max-height="mobile ? undefined : 260"><el-table-column v-if="mobile" label="物料"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="preview-change-line">{{ row.quantity }} → {{ row.after }}（差异 {{ row.difference }}）</small><small v-if="Number(row.unresolved_quantity) > 0" class="preview-change-line">需处理已领/采购 {{ row.unresolved_quantity }}</small><small v-if="Number(row.received_in_stock) > 0" class="preview-change-line">已到货未领 {{ row.received_in_stock }}</small></template></el-table-column><template v-else><el-table-column prop="item_name" label="物料" min-width="140" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" min-width="120" /><el-table-column v-if="preview.items.some((row: Row) => Number(row.received_in_stock) > 0)" prop="received_in_stock" label="已到货未领" /></template></BusinessTable>
+          <BusinessTable label="变更影响" :data="preview.items" :numbered="!mobile" :max-height="mobile ? undefined : 260"><el-table-column v-if="mobile" label="物料"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="preview-change-line">{{ qty(row.quantity) }} → {{ qty(row.after) }}（差异 {{ qty(row.difference) }}）</small><small v-if="Number(row.unresolved_quantity) > 0" class="preview-change-line">需处理已领/采购 {{ qty(row.unresolved_quantity) }}</small><small v-if="Number(row.received_in_stock) > 0" class="preview-change-line">已到货未领 {{ qty(row.received_in_stock) }}</small></template></el-table-column><template v-else><el-table-column prop="item_name" label="物料" min-width="140" /><el-table-column prop="quantity" label="变更前" :formatter="qtyCell" /><el-table-column prop="after" label="变更后" :formatter="qtyCell" /><el-table-column prop="difference" label="差异" :formatter="qtyCell" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" min-width="120" :formatter="qtyCell" /><el-table-column v-if="preview.items.some((row: Row) => Number(row.received_in_stock) > 0)" prop="received_in_stock" label="已到货未领" :formatter="qtyCell" /></template></BusinessTable>
           <p v-if="preview.unchanged_items" class="muted">其余 {{ preview.unchanged_items }} 种物料数量不变，未列出。</p>
         </template>
         <p v-else-if="preview.changes && preview.can_apply" class="muted">本次没有数量变化（仅改了日期、单元或申请信息）。</p>

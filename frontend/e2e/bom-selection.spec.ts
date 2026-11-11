@@ -50,7 +50,7 @@ test('BOM 同屏采购跨页筛选保留草稿编辑，按准确含税金额保�
   expect(demand.lines[0].applicant).toBe('设计员')
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
-  const picker = page.getByRole('region', { name: 'BOM 勾选采购', exact: true })
+  const picker = page.getByRole('region', { name: '从 BOM 多选下单', exact: true })
   const order = picker.getByRole('region', { name: '采购草稿', exact: true })
   await expect(picker).toBeVisible()
   await expect(order).toBeVisible()

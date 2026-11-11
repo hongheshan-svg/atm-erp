@@ -224,7 +224,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   if (await shortageView.isVisible()) await shortageView.check()
   await purchaser.getByRole('button', { name: '全选筛选结果', exact: true }).click()
   await purchaser.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
-  const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
+  const purchaseWorkspace = purchaser.getByRole('region', { name: '从 BOM 多选下单', exact: true })
   const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
   await selectRemoteOption(purchaseDraft.getByLabel('供应商', { exact: true }), { text: names.supplier })
   await purchaseDraft.getByLabel('交期', { exact: true }).fill(day())

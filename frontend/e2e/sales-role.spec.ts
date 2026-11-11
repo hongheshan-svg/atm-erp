@@ -89,7 +89,7 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   expect(doc.status()).toBe(200)
   expect((await doc.json()).project).toBeTruthy()
   await action('交付与回款')
-  await expect(dialog()).toContainText('1000.00')
+  await expect(dialog()).toContainText('1,000.00')
   await expect(dialog()).toContainText('财务处理')
   await page.screenshot({ path: info.outputPath('sales-manager.png'), animations: 'disabled' })
   await dialog().getByRole('button', { name: '关闭', exact: true }).click()

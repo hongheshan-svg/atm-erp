@@ -40,7 +40,7 @@ it('BOM 预览先列本次提交的行并标出新增，警告新增到其他单
   const preview = wrapper.get('[aria-label="变更影响预览"]')
   expect(preview.text()).toContain('本次提交 1 行')
   expect(preview.text()).toContain('新增')
-  expect(preview.text()).toContain('0 → 3.000')
+  expect(preview.text()).toContain('0 → 3')
   expect(preview.text()).toContain('已在 5 个单元有用料')
   expect(preview.text()).toContain('其余 103 种物料数量不变')
   // 工程师看不到采购页签：给单号、状态和该找谁，不给点了无效的链接。

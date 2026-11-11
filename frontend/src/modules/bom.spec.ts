@@ -40,5 +40,5 @@ it('移除确认写明物料编码、名称、单元和数量', async () => {
   expect(command.title).toBe('移除 PK110001 电芯连接法兰（01 电芯上料工位）')
   expect(command.submitLabel).toBe('确认移除')
   expect(command.path).toBe('/business/bom/9/remove/')
-  expect(command.notice?.text).toContain('需求 2.000 件')
+  expect(command.notice?.text).toContain('需求 2 件')
 })

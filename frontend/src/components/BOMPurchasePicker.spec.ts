@@ -156,13 +156,13 @@ describe('BOM 并排选料与采购草稿', () => {
     demand[0] = { ...demand[0], shortage: '2.000' }
     await button(wrapper, '刷新缺料').trigger('click')
     await flushPromises()
-    expect(draft(wrapper).text()).toContain('数量超过当前缺料 2.000')
+    expect(draft(wrapper).text()).toContain('数量超过当前缺料 2')
     expect(draft(wrapper).get<HTMLInputElement>('input[aria-label="采购数量"]').element.value).toBe('4.000')
     expect(draft(wrapper).get<HTMLInputElement>('input[aria-label="含税单价（元）"]').element.value).toBe('10.20')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(write).not.toHaveBeenCalled()
-    expect(wrapper.get('[role="alert"]').text()).toContain('数量超过当前缺料 2.000')
+    expect(wrapper.get('[role="alert"]').text()).toContain('数量超过当前缺料 2')
     await draft(wrapper).get('input[aria-label="采购数量"]').setValue('2.000')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -288,7 +288,7 @@ describe('BOM 并排选料与采购草稿', () => {
   it('采购权限取兼任岗位并集，失去采购岗位后已打开的表单也不能提交', async () => {
     user.value = { id: 7, roles: ['mechanical_engineer'] }
     const wrapper = await picker()
-    expect(wrapper.find('section[aria-label="BOM 勾选采购"]').exists()).toBe(false)
+    expect(wrapper.find('section[aria-label="从 BOM 多选下单"]').exists()).toBe(false)
     user.value = { id: 7, roles: ['mechanical_engineer', 'purchaser'] }
     await flushPromises()
     await selectMotor(wrapper)
@@ -298,7 +298,7 @@ describe('BOM 并排选料与采购草稿', () => {
     await oldForm.trigger('submit')
     await flushPromises()
     expect(write).not.toHaveBeenCalled()
-    expect(wrapper.find('section[aria-label="BOM 勾选采购"]').exists()).toBe(false)
+    expect(wrapper.find('section[aria-label="从 BOM 多选下单"]').exists()).toBe(false)
   })
 
   it('同物料多单元：出现组标题与合计数量，组价写入各行，单独定价不被组价覆盖，提交仍逐 bom_line', async () => {
@@ -309,7 +309,7 @@ describe('BOM 并排选料与采购草稿', () => {
     const head = wrapper.get('[aria-label="物料组 2199000001"] .draft-group-head')
     expect(head.text()).toContain('伺服电机')
     expect(head.text()).toContain('2 个单元')
-    expect(head.text()).toContain('合计 16.000 件')
+    expect(head.text()).toContain('合计 16 件')
     const rowPrice = (unit: string) => draft(wrapper, unit).get<HTMLInputElement>('input[aria-label="含税单价（元）"]')
     expect(rowPrice('检测单元').element.value).toBe('10.20')
     const group = wrapper.get<HTMLInputElement>('input[aria-label="2199000001 组含税单价（元）"]')
@@ -330,7 +330,7 @@ describe('BOM 并排选料与采购草稿', () => {
     await flushPromises()
     expect(vi.mocked(write).mock.calls[0]![1]).toEqual(expect.objectContaining({
       lines: [
-        { item: 1, bom_line: 101, quantity: '8.000', unit_price: '13.00' },
+        { item: 1, bom_line: 101, quantity: '8', unit_price: '13.00' },
         { item: 1, bom_line: 102, quantity: '2.000', unit_price: '12.00' },
       ],
     }))
@@ -358,5 +358,20 @@ describe('BOM 并排选料与采购草稿', () => {
     await wrapper.get('select[aria-label="选料排序"]').setValue('unit')
     const rows = wrapper.findAll('tbody tr').map(value => value.text())
     expect(rows.findIndex(text => text.includes('夹紧单元'))).toBeLessThan(rows.findIndex(text => text.includes('输送单元')))
+  })
+
+  it('从 BOM 页打开时沿用该页的仅看缺料，保存后的提示写明采购单号并停留足够久', async () => {
+    const withFilter = await picker({ projectId: 10, shortageOnly: true } as never)
+    expect(withFilter.get<HTMLInputElement>('.inline-check input').element.checked).toBe(true)
+    expect(withFilter.get('section[aria-label="从 BOM 多选下单"] h2').text()).toBe('从 BOM 多选下单')
+    const plain = await picker()
+    expect(plain.get<HTMLInputElement>('.inline-check input').element.checked).toBe(false)
+    vi.mocked(write).mockResolvedValue({ id: 80, code: 'PO000080', status: 'draft' })
+    await selectMotor(plain)
+    await supplier(plain)
+    await plain.get('form').trigger('submit')
+    await flushPromises()
+    expect(plain.emitted('saved')).toHaveLength(1)
+    expect(document.body.textContent).toContain('PO000080')
   })
 })

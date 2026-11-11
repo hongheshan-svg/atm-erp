@@ -1,4 +1,5 @@
 import { choices } from './shared'
+import { dateTimeText } from '../utils/datetime'
 import { select } from './shared'
 export const userFields: Field[] = [
   t('username', '用户名'),
@@ -83,7 +84,7 @@ export const columns: Record<string, Column[]> = {
     { key: 'operation', label: '操作', format: r => auditOperation(r.operation) },
     { key: 'resource', label: '对象', format: r => auditObject(r) },
     { key: 'detail', label: '详情', format: r => auditDetail(r.detail) },
-    { key: 'created_at', label: '时间', format: r => new Date(r.created_at).toLocaleString('zh-CN', { hour12: false }) },
+    { key: 'created_at', label: '时间', format: r => dateTimeText(r.created_at) },
   ],
 }
 export function createLabel(resource: string) {

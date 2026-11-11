@@ -16,6 +16,8 @@ import { qty } from './shared'
 import { warehouse } from './shared'
 import { C } from './shared'
 import { project } from './shared'
+import { quantityText } from '../utils/quantity'
+import { dateTimeText } from '../utils/datetime'
 import { item } from './shared'
 import { endpoint } from './shared'
 const positiveQuantity: Field = { ...qty, numeric: { scale: 3, min: 0.001 } }
@@ -26,18 +28,18 @@ export const columns: Record<string, Column[]> = {
     C('specification', '规格'), C('brand', '品牌'),
     { key: 'part_type', label: '类别', format: row => (({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类') },
     C('location', '库位'),
-    { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${row.quantity}${row.unit ? ` ${row.unit}` : ''}`) },
+    { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
   ],
   // 领料领给了哪个项目、收货来自哪张采购单、谁在什么时候操作，都直接在流水里看到并可跳转。
   moves: [
     { key: 'item_name', label: '物料', format: row => [row.item_code, row.item_name].filter(Boolean).join(' · ') || '—' },
     C('kind', '类型'),
-    { key: 'quantity', label: '数量', format: row => (row.quantity == null ? '—' : `${row.quantity}${row.unit ? ` ${row.unit}` : ''}`) },
+    { key: 'quantity', label: '数量', format: row => (row.quantity == null ? '—' : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
     { key: 'project_name', label: '项目', format: row => [row.project_code, row.project_name].filter(Boolean).join(' · ') || '—', link: projectLink },
     { key: 'purchase_code', label: '来源采购单', format: row => row.purchase_code || '—', link: purchaseLink },
     C('location', '库位'),
     C('reason', '说明'),
-    { key: 'created_at', label: '时间', format: row => (row.created_at ? String(row.created_at).slice(0, 16).replace('T', ' ') : '—') },
+    { key: 'created_at', label: '时间', format: row => dateTimeText(row.created_at) },
     C('created_by_name', '操作人'),
     C('remark', '备注'),
   ],

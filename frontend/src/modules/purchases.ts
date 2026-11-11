@@ -30,6 +30,8 @@ export const purchaseFields = (): Field[] => [
 import { all, read } from '../api'
 import { purchaseApprover } from '../session'
 import { money } from '../session'
+import { money as formatMoney } from '../utils/money'
+import { quantityText } from '../utils/quantity'
 import { decimalDifference } from '../forms'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -209,8 +211,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '批准采购') {
     const check = await read(`/business/purchases/${r.id}/budget-check/`)
     const summary = check.scope === 'purchasing'
-      ? `本单 ¥${check.purchase_amount}；材料占用 ¥${check.materials_occupied}；累计采购净额 ¥${check.purchase_net}${check.configured ? `；材料预算 ¥${check.materials_budget}` : ''}。`
-      : `本单 ¥${check.purchase_amount}；批准后实际＋在途 ¥${check.occupied_total}；累计采购净额 ¥${check.purchase_net}。`
+      ? `本单 ¥${formatMoney(check.purchase_amount)}；材料占用 ¥${formatMoney(check.materials_occupied)}；累计采购净额 ¥${formatMoney(check.purchase_net)}${check.configured ? `；材料预算 ¥${formatMoney(check.materials_budget)}` : ''}。`
+      : `本单 ¥${formatMoney(check.purchase_amount)}；批准后实际＋在途 ¥${formatMoney(check.occupied_total)}；累计采购净额 ¥${formatMoney(check.purchase_net)}。`
     const bomWarnings: string[] = check.bom_warnings || []
     const bomText = bomWarnings.length ? `BOM 核对：${bomWarnings.join('；')}。` : ''
     const content = approvalContent(r, check)
@@ -276,7 +278,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           t('pending_quantity', '隔离待处理'),
         ]),
       ]
-      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []) }
+      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []), lines: (detail.lines || []).map((line: Row) => ({ ...line, ...Object.fromEntries(['quantity', 'received_quantity', 'cancelled_quantity', 'returned_quantity', 'pending_quantity'].filter(key => key in line).map(key => [key, quantityText(line[key])])), ...(line.unit_price == null || line.unit_price === '' ? {} : { unit_price: formatMoney(line.unit_price) }) })) }
     } else {
       const locations: string[] = name === '隔离品退回供应商' ? [] : await read('/business/stocks/locations/')
       // The API renders timestamps in the business timezone; preserve that date across browser timezones.

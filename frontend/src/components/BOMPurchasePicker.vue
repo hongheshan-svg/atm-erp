@@ -9,6 +9,7 @@ import { purchaseFields } from '../modules/purchases'
 import { termLabel, termLabels } from '../modules/payment-terms'
 import { defaults, payload, today, validateFields } from '../forms'
 import { formatPurchaseAmount, purchaseLineCents, quantityValue } from '../bom-purchase'
+import { quantityText as qty } from '../utils/quantity'
 import { message, recoveryActions, requestKey } from '../utils/request'
 import { pageSize } from '../pagination'
 import { productCategories } from '../product-categories'
@@ -16,7 +17,8 @@ import type { Row } from '../types'
 import RemoteSelect from './RemoteSelect.vue'
 import ListPagination from './ListPagination.vue'
 
-const props = defineProps<{ projectId?: number; initialSelection?: number[] }>()
+// shortageOnly：从 BOM 页打开时沿用该页当前的「仅看缺料」筛选；从采购页打开不传，默认显示全部。
+const props = defineProps<{ projectId?: number; initialSelection?: number[]; shortageOnly?: boolean }>()
 const emit = defineEmits<{ saved: [result: Row]; close: [] }>()
 const fields = purchaseFields()
 const freshForm = () => ({ ...defaults(fields), lines: [] })
@@ -28,7 +30,7 @@ const lines = ref<Row[]>([]), selected = ref<number[]>([])
 const edits = ref<Record<number, Row>>({})
 const search = ref(''), brands = ref<string[]>([]), units = ref<string[]>([]), types = ref<string[]>([]), categories = ref<string[]>([])
 const sortBy = ref<'date' | 'shortage' | 'unit'>('date')
-const shortageOnly = ref(false), page = ref(1), loading = ref(false), saving = ref(false), error = ref('')
+const shortageOnly = ref(Boolean(props.shortageOnly)), page = ref(1), loading = ref(false), saving = ref(false), error = ref('')
 const moreFilters = ref(false)
 const activeFilters = computed(() => brands.value.length + units.value.length + types.value.length + categories.value.length)
 // 结果被筛过却看不见条件会造成漏采，凡有生效的筛选项就默认展开「更多筛选」。
@@ -100,14 +102,14 @@ function selectedIssue(row: Row) {
   const latest = lines.value.find(line => line.bom_line === row.bom_line)
   if (!latest || !eligible(latest)) return '当前已无缺料或物料停用，请移除此项。'
   const quantity = quantityValue(row.quantity), shortage = quantityValue(latest.shortage)
-  return quantity != null && shortage != null && quantity > shortage ? `数量超过当前缺料 ${latest.shortage}，请调整。` : ''
+  return quantity != null && shortage != null && quantity > shortage ? `数量超过当前缺料 ${qty(latest.shortage)}，请调整。` : ''
 }
 // 单价模型：同物料一个组价（groupPrice），组内各行 unit_price 默认等于组价；
 // 某行「单独定价」后（own_price）脱离组价，组价改动不再覆盖它。提交仍是逐 bom_line 的明细。
 const groupPrice = ref<Record<number, string>>({})
 function add(row: Row) {
   if (selected.value.includes(row.bom_line) || !eligible(row)) return
-  edits.value[row.bom_line] = { ...row, quantity: row.shortage, unit_price: groupPrice.value[row.item] ?? '', own_price: false, due_date: '' }
+  edits.value[row.bom_line] = { ...row, quantity: qty(row.shortage, ''), unit_price: groupPrice.value[row.item] ?? '', own_price: false, due_date: '' }
   selected.value.push(row.bom_line)
 }
 const sameItemCount = (row: Row) => chosen.value.filter(value => value.item === row.item).length
@@ -127,7 +129,7 @@ const groups = computed(() => {
     const sums = rows.map(row => quantityValue(row.quantity))
     const sum = sums.some(value => value == null) ? null : sums.reduce<bigint>((acc, value) => acc + value!, 0n)
     return { item, first: rows[0]!, rows: rows.length > 1 ? [...rows].sort((x, y) => byText(x.assembly_unit, y.assembly_unit)) : rows, multi: rows.length > 1,
-      quantity: sum == null ? '—' : `${sum / 1000n}.${String(sum % 1000n).padStart(3, '0')}` }
+      quantity: sum == null ? '—' : qty(`${sum / 1000n}.${String(sum % 1000n).padStart(3, '0')}`) }
   })
 })
 function remove(id: number) { selected.value = selected.value.filter(value => value !== id); delete edits.value[id] }
@@ -215,7 +217,7 @@ async function save() {
     signature = next
     saving.value = true
     const result = await write('/business/purchases/', body, key)
-    ElMessage.success('采购草稿已保存，可在采购订单中提交审批。')
+    ElMessage({ type: 'success', duration: 8000, showClose: true, message: `采购草稿${result?.code ? ` ${result.code}` : ''} 已保存，可在采购订单中提交审批。` })
     emit('saved', result)
   } catch (e) {
     error.value = message(e); recovery.value = recoveryActions(e)
@@ -225,9 +227,9 @@ async function save() {
 }
 </script>
 <template>
-  <section v-if="buyer()" class="panel bom-purchase-workspace" aria-label="BOM 勾选采购">
+  <section v-if="buyer()" class="panel bom-purchase-workspace" aria-label="从 BOM 多选下单">
     <header class="panel-heading purchase-heading">
-      <div><h2 ref="heading" tabindex="-1">BOM 勾选采购</h2><p v-if="projectInfo" class="muted">{{ projectInfo.code }} · {{ projectInfo.name }}</p></div>
+      <div><h2 ref="heading" tabindex="-1">从 BOM 多选下单</h2><p v-if="projectInfo" class="muted">{{ projectInfo.code }} · {{ projectInfo.name }}</p></div>
       <div class="toolbar"><router-link v-if="project" :to="`/projects/${project}`">查看项目</router-link><el-button :disabled="saving" @click="emit('close')">返回列表</el-button></div>
     </header>
     <details v-if="!projectId" class="purchase-project" :open="!project"><summary>{{ project ? '更换采购项目' : '选择采购项目' }}</summary><label>采购项目<RemoteSelect v-model="project" path="/business/projects/" label="采购项目" :disabled="disabled" :accept="row => ['active', 'delivering', 'warranty'].includes(row.status)" /></label><p class="muted">一张采购单对应一个项目和一个供应商；切换项目会清空当前草稿。</p></details>
@@ -252,13 +254,13 @@ async function save() {
         <div class="purchase-selection"><span role="status" aria-label="BOM 选择状态">已选 <strong>{{ selected.length }}</strong> 项 · 筛选结果 {{ filtered.length }} 项</span><el-button text :disabled="disabled || !filtered.some(eligible)" @click="selectFiltered">全选筛选结果</el-button><el-button text :disabled="disabled || !selected.length" @click="clearSelection">清空选择</el-button><el-button text class="mobile-jump" :disabled="!chosen.length" @click="jumpToDraft">采购草稿 ↓</el-button></div>
         <BusinessTable label="采购选料" :numbered="false" v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'" @row-click="handleRowClick">
           <el-table-column label="选择" width="44"><template #default="{ row }"><input class="material-checkbox" type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="disabled || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
-          <el-table-column type="expand" width="28"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { drawing_number: '图号', drawing_revision: '图档版本', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ row[field] || '—' }}</dd></div><div><dt>类别</dt><dd>{{ typeName(row.part_type) }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div><div><dt>其他项目待领</dt><dd>{{ Number(row.other_demand) > 0 ? `${row.other_demand} · ${row.other_projects} 个在执行项目` : '—' }}</dd></div></dl></template></el-table-column>
-          <el-table-column label="物料" min-width="150"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small v-if="row.is_active === false"> 已停用</small><small class="material-code material-spec" :title="[row.item_code, row.specification].filter(Boolean).join(' · ')">{{ [row.item_code, row.specification].filter(Boolean).join(' · ') }}</small><small class="material-narrow" :class="{ 'overdue-date': overdue(row) }">缺 {{ row.shortage }}{{ row.required_date ? ` · 需 ${String(row.required_date).slice(5)}` : '' }}</small></template></el-table-column>
+          <el-table-column type="expand" width="28"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { drawing_number: '图号', drawing_revision: '图档版本', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ field === 'issued' ? qty(row[field]) : row[field] || '—' }}</dd></div><div><dt>类别</dt><dd>{{ typeName(row.part_type) }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div><div><dt>其他项目待领</dt><dd>{{ Number(row.other_demand) > 0 ? `${qty(row.other_demand)} · ${row.other_projects} 个在执行项目` : '—' }}</dd></div></dl></template></el-table-column>
+          <el-table-column label="物料" min-width="150"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small v-if="row.is_active === false"> 已停用</small><small class="material-code material-spec" :title="[row.item_code, row.specification].filter(Boolean).join(' · ')">{{ [row.item_code, row.specification].filter(Boolean).join(' · ') }}</small><small class="material-narrow" :class="{ 'overdue-date': overdue(row) }">缺 {{ qty(row.shortage) }}{{ row.required_date ? ` · 需 ${String(row.required_date).slice(5)}` : '' }}</small></template></el-table-column>
           <el-table-column label="单元 / 品牌" min-width="92"><template #default="{ row }"><span>{{ row.assembly_unit || '未分单元' }}</span><small class="material-code">{{ row.brand || '—' }}</small></template></el-table-column>
-          <el-table-column label="缺料" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column>
-          <el-table-column prop="quantity" label="需求" min-width="68" align="right" class-name="nowrap-col" />
+          <el-table-column label="缺料" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ qty(row.shortage) }}</strong></template></el-table-column>
+          <el-table-column label="需求" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }">{{ qty(row.quantity) }}</template></el-table-column>
           <el-table-column label="需求日期" min-width="104" class-name="nowrap-col"><template #default="{ row }"><span :class="{ 'overdue-date': overdue(row) }" :title="overdue(row) ? '需求日期已过' : ''">{{ row.required_date || '—' }}</span></template></el-table-column>
-          <el-table-column label="库存" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }"><span :class="{ 'contested-number': Number(row.available) > 0 && Number(row.other_demand) > 0 }" :title="Number(row.other_demand) > 0 ? `其他 ${row.other_projects} 个在执行项目还需 ${row.other_demand}` : ''">{{ row.available }}</span><small class="material-code">在途 {{ row.incoming }}</small></template></el-table-column>
+          <el-table-column label="库存" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }"><span :class="{ 'contested-number': Number(row.available) > 0 && Number(row.other_demand) > 0 }" :title="Number(row.other_demand) > 0 ? `其他 ${row.other_projects} 个在执行项目还需 ${qty(row.other_demand)}` : ''">{{ qty(row.available) }}</span><small class="material-code">在途 {{ qty(row.incoming) }}</small></template></el-table-column>
         </BusinessTable>
         <ListPagination :page="page" :total="filtered.length" @change="page = $event" />
         <p class="purchase-stock-note muted"><el-icon><InfoFilled /></el-icon>库存共享，不预留：标红的库存同时被其他在执行项目的 BOM 盯着，展开可看具体数量。跨单元的已领、在途和库存为按行分摊，并非单元实际领用记录。</p>
