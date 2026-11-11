@@ -124,6 +124,7 @@ test('U04 未收货付款先说明前置条件，可就近申请核准并查看�
   const detail = page.getByRole('dialog', { name: '查看对账明细', exact: true })
   await expect(detail).toContainText(basis)
   await expect(detail.getByRole('button', { name: '确认对账', exact: true })).toHaveCount(0)
+  await expect(detail.getByLabel('确认要求', { exact: true })).toHaveValue('预付款对账须由项目经理或管理员确认')
   await page.screenshot({ path: info.outputPath('prepayment-created-result.png'), animations: 'disabled' })
 })
 

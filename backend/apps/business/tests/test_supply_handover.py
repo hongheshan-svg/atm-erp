@@ -384,6 +384,8 @@ class OptionalForwardReasonTests(SupplyFixtures, TestCase):
         }
         statement = self.post('admin', 'reconciliations/', data, status=201)['id']
         self.assertEqual(Reconciliation.objects.get(pk=statement).reason, '发起对账')
+        # 前端据此提前提示“本对账单由你生成”；判定仍由服务端的申请人分离完成。
+        self.assertEqual(self.get('manager', f'reconciliations/{statement}/')['created_by'], self.users['admin'].pk)
         self.post('admin', f'reconciliations/{statement}/confirm/', {}, status=400)
         self.post('manager', f'reconciliations/{statement}/confirm/', {})
         self.assertEqual(AuditLog.objects.get(operation='reconciliation.confirm').detail['reason'], '确认对账')

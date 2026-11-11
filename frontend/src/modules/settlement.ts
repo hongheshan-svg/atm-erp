@@ -1,7 +1,7 @@
 import { codeField } from './shared'
 import { previewAction } from '../document-preview'
 import { all, download, read } from '../api'
-import { can } from '../session'
+import { can, user } from '../session'
 import type { Column, Command, Row } from '../types'
 import { C, date, finance, optionalReason, reason, remote, t } from './shared'
 import { termLabel } from './payment-terms'
@@ -55,7 +55,17 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     command.initial = { ...command.initial, sourceFacts: Object.entries({ 文件: r.source.file, 原文件行号: r.source.row, 银行原始编号: r.source.original_reference, 原始户名: r.source.counterparty || '原文件未提供', 对方账号: r.source.counterparty_account, 交易时间: r.source.timestamp, 银行余额: r.source.balance }).map(([label, value]) => ({ label, value })) }
     return command
   }
-  if (name === '确认对账' || name === '作废对账') return { title: name, path: `/business/reconciliations/${r.id}/${name === '确认对账' ? 'confirm' : 'void'}/`, fields: [name === '确认对账' ? { ...optionalReason(undefined, '选填；不填按「确认对账」记录'), hint: '管理员核准本人发起的预付款时须填写例外原因。' } : reason], notice: { type: 'info', text: name === '确认对账' ? '确认前请查看对账明细并核对对方余额、合同、收退货及原收付款。服务端将重新检查源数据和额度。' : '保留原对账及已关联流水，未使用额度立即失效。' } }
+  if (name === '确认对账') {
+    // 服务端只对预付款核准做申请人分离：生成人本人确认时管理员须写例外原因，其他岗位直接拒绝。前端仅提前提示。
+    const own = r.kind === 'prepayment' && r.created_by != null && r.created_by === user.value?.id
+    const admin = can(['admin'])
+    const check = '确认前请查看对账明细并核对对方余额、合同、收退货及原收付款。服务端将重新检查源数据和额度。'
+    return { title: name, path: `/business/reconciliations/${r.id}/confirm/`,
+      fields: [own && admin ? { ...reason, label: '例外原因', placeholder: '说明为何由本人确认本人生成的预付款核准' } : optionalReason(undefined, '选填；不填按「确认对账」记录')],
+      ...(own && !admin ? { blocked: '本对账单由你生成，须由其他项目经理或管理员确认。' } : {}),
+      notice: own && admin ? { type: 'warning', text: `本对账单由你生成，本人确认须填写例外原因。${check}` } : { type: 'info', text: check } }
+  }
+  if (name === '作废对账') return { title: name, path: `/business/reconciliations/${r.id}/void/`, fields: [reason], notice: { type: 'info', text: '保留原对账及已关联流水，未使用额度立即失效。' } }
   if (name === '查看对账明细') {
     const d = await read(`/business/reconciliations/${r.id}/`), s = d.snapshot
     const facts = [
@@ -67,8 +77,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       ...(s.purchase ? [['采购单', s.purchase.code], ['供应商', s.purchase.supplier], ['采购账期', termLabel(s.purchase)], ['收货净额', s.received_net]] : []),
       ...(s.contract ? [['合同编号', s.contract.contract_number || ''], ['现行合同金额', s.contract.amount]] : []),
     ].map(([label, value]) => ({ label, value }))
-    return { title: name, path: '', readonly: true, initial: { facts, lines: s.lines || [], payments: s.payments, deliveries: s.deliveries || [] },
+    // 预付款核准只有项目经理或管理员能确认；财务看不到「确认对账」时说明原因。
+    const confirmNote = d.kind === 'prepayment' && d.status === 'draft' && d.valid && !can(['admin', 'manager']) ? '预付款对账须由项目经理或管理员确认' : ''
+    return { title: name, path: '', readonly: true, initial: { confirm_note: confirmNote, facts, lines: s.lines || [], payments: s.payments, deliveries: s.deliveries || [] },
       fields: [
+        ...(confirmNote ? [{ key: 'confirm_note', label: '确认要求', readonly: true, displayOnly: true }] : []),
         { key: 'facts', label: '对账依据与差异', type: 'rows', fields: [t('label', '项目'), t('value', '内容')] },
         { key: 'lines', label: '采购明细快照', type: 'rows', fields: [t('item__name', '物料'), t('quantity', '采购数量'), t('unit_price', '单价'), t('received_quantity', '已收'), t('returned_quantity', '已退'), t('cancelled_quantity', '取消'), t('pending_quantity', '隔离')] },
         { key: 'payments', label: '原资金流水', type: 'rows', fields: [t('id', '流水ID'), t('amount', '金额'), t('reversal_of', '冲销原记录')] },
