@@ -15,6 +15,8 @@ from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 
 from apps.core.actions import perform
+from apps.core.api import Conflict
+from apps.core.periods import check_record
 from apps.core.permissions import FINANCE, require_role
 
 from ..models import BankRecord
@@ -56,6 +58,7 @@ HXB = [
     '记账日期',
 ]
 UNKNOWN = '原流水未提供户名（待核实）'
+LOCKED_SKIP = '已登记（锁账期内保留原记录，跳过）'
 
 
 def string(value):
@@ -222,6 +225,21 @@ def existing(record, *, lock=False):
     return matches[0] if matches else None
 
 
+def kept_locked(found):
+    """An earlier record without import evidence whose bank date is locked keeps its original content.
+
+    Attaching evidence would modify a locked-period raw record (save -> check_record). Preview and confirm
+    skip it instead of failing the whole batch; the evidence is attached by a re-import after reopening.
+    """
+    if found.import_fingerprint:
+        return False
+    try:
+        check_record(found)
+    except Conflict:
+        return True
+    return False
+
+
 def parse(upload):
     content, rows = read(upload)
     sha = hashlib.sha256(content).hexdigest()
@@ -309,7 +327,10 @@ def parse(upload):
                 legacy_reference=f'IMPORT-ICBC-{sha[:16]}-{index}' if bank == 'ICBC' else reference,
             )
             prior = existing(record)
-            record['status'] = '已导入（跳过）' if prior else '待核实户名' if not name else '可导入'
+            if prior:
+                record['status'] = LOCKED_SKIP if kept_locked(prior) else '已导入（跳过）'
+            else:
+                record['status'] = '待核实户名' if not name else '可导入'
             records.append(record)
             income += incoming
             expense += outgoing
@@ -400,7 +421,7 @@ def confirm(actor, token):
             record = normalized(original)
             found = existing(record, lock=True)
             if found:
-                if not found.import_fingerprint:
+                if not found.import_fingerprint and not kept_locked(found):
                     found.import_fingerprint = record['fingerprint']
                     found.source = record['source']
                     found.needs_review = record['needs_review']

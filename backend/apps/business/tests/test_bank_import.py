@@ -17,6 +17,9 @@ from apps.core.models import ActionReceipt, AuditLog, Company
 
 from .test_commercial_chain import BusinessFixtures
 
+# A matched record without import evidence inside the locked period stays as recorded (contract: locked raw records).
+LOCKED_SKIP = '已登记（锁账期内保留原记录，跳过）'
+
 
 def file(rows=None, name='bank.xlsx', missing=False, income='100.00'):
     book = Workbook()
@@ -533,18 +536,60 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertTrue(bank.needs_review)
         self.assertEqual(bank.source['counterparty'], '')
 
-    def test_locked_legacy_record_enrichment_rejects_and_rolls_back_new_rows(self):
+    def test_locked_legacy_record_is_kept_unchanged_while_new_rows_import(self):
         preview = self.preview()
         last = preview['rows'][1]
         bank = self.post(
             'finance', 'bank-records/', {**last['data'], 'reference': last['legacy_reference']}, status=201
         )['id']
+        original = BankRecord.objects.get(pk=bank)
         self.lock_history()
-        counts = (ActionReceipt.objects.count(), AuditLog.objects.count())
-        self.confirm(preview['token'], status=409)
+        # The preview taken before the manual record existed is rechecked at confirmation: no batch rollback.
+        self.assertEqual(self.confirm(preview['token']), {'count': 1, 'skipped': 1})
+        self.assertEqual(BankRecord.objects.count(), 2)
+        kept = BankRecord.objects.get(pk=bank)
+        self.assertIsNone(kept.import_fingerprint)
+        self.assertEqual((kept.source, kept.updated_at), ({}, original.updated_at))
+        self.assertTrue(BankRecord.objects.exclude(pk=bank).get().import_fingerprint)
+        self.assertFalse(AuditLog.objects.filter(operation='bank.import-evidence', resource=f'bankrecord:{bank}'))
+        repeated = self.preview(file(name='历史流水副本.xlsx'))
+        self.assertTrue(repeated['can_import'], repeated['errors'])
+        self.assertEqual([row['status'] for row in repeated['rows']], ['已导入（跳过）', LOCKED_SKIP])
+        self.assertEqual(self.confirm(repeated['token']), {'count': 0, 'skipped': 2})
+        self.assertEqual(BankRecord.objects.count(), 2)
+
+    def test_locked_manual_record_is_skipped_until_its_date_leaves_the_locked_period(self):
+        bank = self.manual('000123')
+        original = BankRecord.objects.get(pk=bank)
+        self.lock_history()
+        for attempt in range(2):
+            with self.subTest(attempt=attempt):
+                preview = self.preview(huaxia())
+                self.assertTrue(preview['can_import'], preview['errors'])
+                self.assertEqual(preview['rows'][0]['status'], LOCKED_SKIP)
+                self.assertEqual(self.confirm(preview['token']), {'count': 0, 'skipped': 1})
+                kept = BankRecord.objects.get()
+                self.assertEqual(kept.pk, bank)
+                self.assertEqual(
+                    (kept.import_fingerprint, kept.source, kept.updated_at), (None, {}, original.updated_at)
+                )
+        self.assertFalse(AuditLog.objects.filter(operation='bank.import-evidence').exists())
+        # Moving the cutoff before the bank date restores today's enrichment, once, without a second record.
+        Company.objects.filter(pk=1).update(locked_through=date(2025, 12, 31))
+        preview = self.preview(huaxia())
+        self.assertEqual(preview['rows'][0]['status'], '已导入（跳过）')
+        self.assertEqual(self.confirm(preview['token']), {'count': 0, 'skipped': 1})
+        enriched = BankRecord.objects.get()
+        self.assertEqual(enriched.pk, bank)
+        self.assertEqual(enriched.import_fingerprint, preview['rows'][0]['fingerprint'])
+        self.assertEqual(enriched.source['original_reference'], '000123')
+        self.assertEqual(AuditLog.objects.filter(operation='bank.import-evidence').count(), 1)
+        self.lock_history()
+        again = self.preview(huaxia())
+        self.assertEqual(again['rows'][0]['status'], '已导入（跳过）')
+        self.assertEqual(self.confirm(again['token']), {'count': 0, 'skipped': 1})
         self.assertEqual(BankRecord.objects.count(), 1)
-        self.assertIsNone(BankRecord.objects.get(pk=bank).import_fingerprint)
-        self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), counts)
+        self.assertEqual(AuditLog.objects.filter(operation='bank.import-evidence').count(), 1)
 
 
 class BankImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
