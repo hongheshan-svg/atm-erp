@@ -96,5 +96,14 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
 .finance-total small { color: var(--ink-6); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .finance-risk { color: var(--risk); }
 .finance-muted { opacity: 0.55; }
-@media (max-width: 560px) { .finance-total { border-right: 0; border-bottom: 1px solid var(--line-2); } }
+/* 手机：两列小卡，金额不在「¥」后折行；普通说明收起，逾期提示仍保留。 */
+@media (max-width: 600px) {
+  .finance-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-total { gap: 0; padding: 7px 12px; border-right: 0; border-bottom: 1px solid var(--line-2); }
+  .finance-total:nth-child(odd) { border-right: 1px solid var(--line-2); }
+  .finance-total:nth-last-child(-n + 2):nth-child(odd), .finance-total:last-child { border-bottom: 0; }
+  .finance-total:last-child:nth-child(odd) { grid-column: 1 / -1; border-right: 0; }
+  .finance-total strong { font-size: 15px; white-space: nowrap; overflow-wrap: normal; }
+  .finance-total small:not(.finance-risk) { display: none; }
+}
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { read } from '../api'
 import { readinessPath } from '../modules/projects'
 import { message } from '../utils/request'
@@ -12,6 +12,12 @@ const emit = defineEmits<{ act: [name: string] }>()
 const result = ref<Row | null>(null)
 const error = ref(''), open = ref(false)
 const listId = useId()
+// 手机默认只留一行「发货前还差 N 项」，缺项芯片和全部检查展开后再看。
+const compact = ref(window.innerWidth <= 600), mobileOpen = ref(false)
+const collapsed = computed(() => compact.value && !mobileOpen.value)
+function resize() { compact.value = window.innerWidth <= 600 }
+onMounted(() => window.addEventListener('resize', resize))
+onBeforeUnmount(() => window.removeEventListener('resize', resize))
 watch(() => [props.project.id, props.project.status, props.revision], async (_, __, onCleanup) => {
   let current = true
   onCleanup(() => { current = false })
@@ -41,17 +47,19 @@ const path = (item: Check) => readinessPath(props.project.id, item.target)
     <span v-if="error" class="readiness-error" role="alert">推进检查未加载：{{ error }}</span>
     <span v-for="group in groups" :key="group.key" class="readiness-group" :data-group="group.key">
       <template v-if="group.missing.length">
-        <strong class="readiness-blocked">{{ group.title }}前还差</strong>
-        <router-link v-for="item in group.missing" :key="item.key" class="readiness-chip" :to="path(item)" :title="item.detail">{{ item.label }} · {{ item.detail }}</router-link>
+        <strong class="readiness-blocked">{{ group.title }}前还差{{ collapsed ? ` ${group.missing.length} 项` : '' }}</strong>
+        <template v-if="!collapsed"><router-link v-for="item in group.missing" :key="item.key" class="readiness-chip" :to="path(item)" :title="item.detail">{{ item.label }} · {{ item.detail }}</router-link></template>
       </template>
       <template v-else-if="group.action">
         <strong class="readiness-ready">{{ group.title }}条件已满足</strong>
         <el-button type="primary" size="small" @click="emit('act', group.action)">{{ group.button }}</el-button>
       </template>
-      <router-link v-for="item in group.warnings" :key="item.key" class="readiness-chip readiness-warning" :to="path(item)" :title="item.detail">{{ item.label }} · {{ item.detail }}</router-link>
+      <small v-if="collapsed && group.warnings.length" class="readiness-warning-count">{{ group.warnings.length }} 项提示</small>
+      <template v-else><router-link v-for="item in group.warnings" :key="item.key" class="readiness-chip readiness-warning" :to="path(item)" :title="item.detail">{{ item.label }} · {{ item.detail }}</router-link></template>
     </span>
-    <button v-if="groups.length" type="button" class="readiness-toggle" :aria-expanded="open" :aria-controls="listId" @click="open = !open">{{ open ? '收起检查' : '全部检查' }}</button>
-    <ul v-if="groups.length" v-show="open" :id="listId" class="readiness-list">
+    <button v-if="compact && groups.length" type="button" class="readiness-expand" :aria-expanded="!collapsed" :aria-label="collapsed ? '展开推进检查' : '收起推进检查'" @click="mobileOpen = !mobileOpen">{{ collapsed ? '展开' : '收起' }} <span aria-hidden="true">{{ collapsed ? '▾' : '▴' }}</span></button>
+    <button v-if="groups.length && !collapsed" type="button" class="readiness-toggle" :aria-expanded="open" :aria-controls="listId" @click="open = !open">{{ open ? '收起检查' : '全部检查' }}</button>
+    <ul v-if="groups.length" v-show="open && !collapsed" :id="listId" class="readiness-list">
       <li v-for="item in groups.flatMap(group => group.items.map(check => ({ ...check, group: group.title })))" :key="`${item.group}-${item.key}`" :class="item.ok ? 'readiness-ok' : item.blocking === false ? 'readiness-note' : 'readiness-missing'">
         <span class="readiness-mark"><span aria-hidden="true">{{ item.ok ? '✓' : item.blocking === false ? '!' : '✗' }}</span><span class="visually-hidden">{{ item.ok ? '已满足' : item.blocking === false ? '提示' : '未满足' }}</span></span>
         <small>{{ item.group }}</small><strong>{{ item.label }}</strong><span>{{ item.detail }}</span>
@@ -80,5 +88,8 @@ const path = (item: Check) => readinessPath(props.project.id, item.target)
 .readiness-missing .readiness-mark { color: var(--risk); font-weight: 700; }
 .readiness-note .readiness-mark { color: var(--warn); font-weight: 700; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (max-width: 600px) { .readiness-chip { max-width: 100%; } .readiness-list li { grid-template-columns: 16px 36px 1fr; } .readiness-list li > span:last-child { grid-column: 3; } }
+.readiness-warning-count { color: var(--risk); font-size: 12px; }
+.readiness-expand { margin-left: auto; border: 0; background: transparent; color: var(--brand); cursor: pointer; font: inherit; font-size: 12px; padding: 2px 0; white-space: nowrap; }
+.readiness-expand:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 3px; }
+@media (max-width: 600px) { .project-readiness { gap: 4px 8px; } .readiness-chip { max-width: 100%; } .readiness-list li { grid-template-columns: 16px 36px 1fr; } .readiness-list li > span:last-child { grid-column: 3; } }
 </style>

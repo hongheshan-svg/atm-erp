@@ -112,13 +112,14 @@ onMounted(load)
     ><header class="page-heading project-heading">
       <div>
         <p class="project-crumb">
-          <router-link to="/projects" class="muted">← 项目列表</router-link><span class="eyebrow">{{ project.code }}</span
+          <span class="project-back"><router-link to="/projects" class="muted">← 项目列表</router-link><span class="eyebrow">{{ project.code }}</span></span
           ><span class="project-meta">{{ project.customer_name }} · {{ project.manager_name }}<template v-if="!overview"> · <span class="project-brief">{{ brief }}</span></template></span>
         </p>
         <div class="project-name"><h1>{{ project.name }}</h1><StatusBadge :value="project.status" :text="display(project.status)" /></div>
       </div>
       <div class="toolbar">
-        <el-button @click="overview = !overview" :aria-expanded="overview">{{ overview ? '收起项目概览' : '展开项目概览' }}</el-button>
+        <!-- 手机上按钮与返回同一行：概览按钮显示短字，读屏和按名称查找仍用完整名称。 -->
+        <el-button @click="overview = !overview" :aria-expanded="overview" :aria-label="overview ? '收起项目概览' : '展开项目概览'"><span class="label-full">{{ overview ? '收起项目概览' : '展开项目概览' }}</span><span class="label-short" aria-hidden="true">概览 {{ overview ? '▴' : '▾' }}</span></el-button>
         <el-button @click="load">刷新</el-button
         ><el-dropdown
           v-if="actionNames('projects', project).length"
@@ -281,4 +282,22 @@ onMounted(load)
 .requirement-clamped { max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .requirement-toggle { flex: none; align-self: flex-start; }
 @media (max-width: 760px) { .project-summary { row-gap: 20px; } .project-summary > div { padding: 0 16px; } }
+.project-back { display: contents; }
+.label-short { display: none; }
+/* 手机：返回与按钮一行，名称最多两行，客户·负责人·交期最多两行；推进块压紧，任务表尽量进首屏。 */
+@media (max-width: 600px) {
+  .project-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'back tools' 'name name' 'meta meta'; align-items: center; gap: 2px 8px; margin-bottom: 8px; }
+  .project-heading > div:first-child, .project-crumb { display: contents; }
+  .project-back { grid-area: back; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 13px; white-space: nowrap; }
+  .project-back .eyebrow { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .project-name { grid-area: name; margin-top: 2px; }
+  .project-name h1 { margin: 0; font-size: 18px; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .project-meta { grid-area: meta; font-size: 12px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .project-heading > .toolbar { grid-area: tools; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; margin: 0; }
+  .project-heading > .toolbar :deep(.el-button) { height: 30px; min-height: 30px; padding: 4px 8px; margin: 0; font-size: 12px; }
+  .label-full { display: none; }
+  .label-short { display: inline; }
+  .project-status { gap: 6px 10px; padding: 8px 12px; }
+  .project-status :deep(.project-readiness), .project-status :deep(.project-attention) { flex-basis: 100%; }
+}
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { read } from '../api'
 import { milestoneTemplateCommand } from '../modules/milestones'
 import { message } from '../utils/request'
@@ -28,6 +28,13 @@ watch(() => [props.projectId, props.revision], async (_, __, onCleanup) => {
     if (current) { summary.value = result; error.value = '' }
   } catch (e) { if (current) error.value = message(e) }
 }, { immediate: true })
+// 手机上阶段卡横向滑动：从推进检查跳来的阶段要滚进可视区。
+const grid = ref<HTMLElement>()
+watch(() => [props.phase, summary.value.stages?.length], async () => {
+  await nextTick()
+  const bar = grid.value, card = bar?.querySelector<HTMLElement>('.phase-card.selected')
+  if (bar && card && bar.scrollWidth > bar.clientWidth) bar.scrollLeft += card.getBoundingClientRect().left - bar.getBoundingClientRect().left - 8
+})
 async function generate() {
   busy.value = true
   try { command.value = await milestoneTemplateCommand(props.projectId); error.value = '' }
@@ -39,7 +46,7 @@ async function generate() {
   <section class="panel milestones" aria-label="项目六阶段里程碑">
     <div class="milestone-strip">
       <h2>里程碑<el-tooltip :content="note" placement="bottom-start"><button type="button" class="milestone-help" :aria-label="`里程碑说明：${note}`">?</button></el-tooltip></h2>
-      <div class="phase-grid">
+      <div ref="grid" class="phase-grid">
         <!-- 「全部」常驻在阶段前面，选中阶段后布局不跳动；读屏名称沿用「查看全部阶段」。 -->
         <button type="button" class="phase-all" :class="{ selected: !phase }" :aria-pressed="!phase" aria-label="查看全部阶段" @click="emit('phase', '')">全部</button>
         <button v-for="stage in summary.stages" :key="stage.key" type="button" class="phase-card" :class="{ selected: phase === stage.key, late: stage.overdue }" :aria-pressed="phase === stage.key" @click="emit('phase', phase === stage.key ? '' : stage.key)">
@@ -82,5 +89,12 @@ async function generate() {
 .milestone-actions { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
 .milestone-complete { font-size: 12px; white-space: nowrap; }
 @media (max-width: 1100px) { .phase-grid { flex-basis: 100%; } }
-@media (max-width: 600px) { .phase-card { flex-basis: calc(50% - 3px); } }
+/* 手机：标题与「节点已全部生成」同一行，阶段卡横向滑动排成一行，说明只在「?」里。 */
+@media (max-width: 600px) {
+  .milestones { padding: 6px 10px; }
+  .milestone-strip { gap: 6px 10px; }
+  .milestone-actions { order: 1; }
+  .phase-grid { order: 2; flex-wrap: nowrap; overflow-x: auto; padding: 3px 2px; scrollbar-width: thin; overscroll-behavior-x: contain; }
+  .phase-card { flex: none; }
+}
 </style>

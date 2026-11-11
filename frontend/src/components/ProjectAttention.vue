@@ -57,12 +57,11 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 
 <template>
   <section class="panel project-attention" aria-label="项目待办摘要" :aria-busy="loading">
-    <header><h2>项目待办</h2><el-tooltip :content="note" placement="bottom"><button type="button" class="attention-help" :aria-label="`项目待办说明：${note}`">?</button></el-tooltip><button v-if="compact" type="button" class="attention-toggle" :aria-expanded="expanded" :aria-controls="detailsId" @click="mobileExpanded = !mobileExpanded">{{ expanded ? '收起项目待办' : '展开项目待办' }}</button><span v-else class="muted">点击查看当前项目的对应事项</span></header>
-    <template v-if="!expanded">
-      <p class="compact-summary">任务 {{ summary.tasks ?? '—' }} 项 · 缺料 {{ summary.shortage ?? '—' }} 行 · 验收 {{ summary.acceptance ?? '—' }} 项</p>
-      <small class="compact-hint muted">点击“展开项目待办”查看 {{ cards.length }} 类事项及入口</small>
-      <p v-if="error" role="alert" class="compact-error">部分摘要未加载，展开查看详情。</p>
-    </template>
+    <!-- 手机收起时压成一行：标题、三项计数、展开按钮；按钮显示短字，读屏名称保留「展开项目待办」。 -->
+    <header><h2>项目待办</h2><el-tooltip v-if="expanded" :content="note" placement="bottom"><button type="button" class="attention-help" :aria-label="`项目待办说明：${note}`">?</button></el-tooltip
+      ><span v-if="!expanded" class="compact-summary">任务 {{ summary.tasks ?? '—' }} 项 · 缺料 {{ summary.shortage ?? '—' }} 行 · 验收 {{ summary.acceptance ?? '—' }} 项</span
+      ><button v-if="compact" type="button" class="attention-toggle" :aria-expanded="expanded" :aria-controls="detailsId" :aria-label="expanded ? '收起项目待办' : '展开项目待办'" :title="expanded ? undefined : `展开查看 ${cards.length} 类事项及入口`" @click="mobileExpanded = !mobileExpanded">{{ expanded ? '收起' : '展开' }} <span aria-hidden="true">{{ expanded ? '▴' : '▾' }}</span></button><span v-else class="muted">点击查看当前项目的对应事项</span></header>
+    <p v-if="!expanded && error" role="alert" class="compact-error">部分摘要未加载，展开查看详情。</p>
     <div :id="detailsId" v-show="expanded" class="attention-details">
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <div class="attention-grid">
@@ -91,13 +90,13 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 .attention-help:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .attention-toggle { border: 0; background: transparent; color: var(--brand); cursor: pointer; font: inherit; font-size: 13px; padding: 5px 0; flex-shrink: 0; }
 .attention-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px; }
-.compact-hint { display: block; margin-top: 2px; font-size: 11px; line-height: 1.5; }
 .compact-error { color: var(--risk); }
 @media (max-width: 600px) {
-  .project-attention { display: block; padding: 12px 14px; }
-  .project-attention header { justify-content: space-between; flex-wrap: nowrap; margin-bottom: 0; }
-  .project-attention h2 { font-size: 16px; }
-  .project-attention .compact-summary { margin: 4px 0 0; font-size: 12px; }
-  .attention-details { margin-top: 10px; }
+  .project-attention { display: block; padding: 10px 12px; }
+  .project-attention header { flex-wrap: nowrap; gap: 8px; margin-bottom: 0; }
+  .project-attention h2 { font-size: 13px; }
+  .project-attention .compact-summary { flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  .attention-toggle { margin-left: auto; padding: 2px 0; font-size: 12px; white-space: nowrap; }
+  .attention-details { margin-top: 8px; }
 }
 </style>
