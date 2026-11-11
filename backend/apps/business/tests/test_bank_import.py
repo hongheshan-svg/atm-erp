@@ -3,6 +3,7 @@ import io
 import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from threading import Barrier
 
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -576,10 +577,13 @@ class BankImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
         }
         self.post('finance', 'bank-records/', manual, status=201)
         counts = (ActionReceipt.objects.count(), AuditLog.objects.count())
+        # 两个确认同时出发，才能证明锁内重查而不是先后执行碰巧没撞上；Barrier 可循环复用于两轮。
+        start = Barrier(2)
 
         def run(job):
             close_old_connections()
             try:
+                start.wait(timeout=10)
                 return bank_import.confirm(*job)
             except ValidationError as exc:
                 return str(exc.detail)
@@ -603,9 +607,12 @@ class BankImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
             for role, upload in zip(['admin', 'finance'], uploads, strict=True)
         ]
 
+        start = Barrier(2)
+
         def run(job):
             close_old_connections()
             try:
+                start.wait(timeout=10)
                 return bank_import.confirm(*job)
             finally:
                 close_old_connections()

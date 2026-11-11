@@ -45,7 +45,9 @@ test('概念图全部页面与子模块在真实数据下可查看，侧边详�
     ['masterdata-partners', '/masterdata?section=partners', '基础资料'],
     ...['reconciliations', 'monthly', 'payments', 'bank'].map(section => [`finance-${section}`, `/finance?section=${section}&project=${project}`, '收付款']),
     ...['company', 'codes', 'audit', 'account'].map(section => [`settings-${section}`, `/settings?section=${section}`, '设置']),
-    ...[['tasks', 'time'], ['bom', 'demand'], ['bom', 'lines'], ['deliveries', 'deliveries'], ['deliveries', 'service'], ['finance', 'entries'], ['finance', 'reconciliations'], ['finance', 'payments'], ['cost', 'budget'], ['cost', 'actual']].map(([tab, section]) => [`project-${tab}-${section}`, `/projects/${project}?tab=${tab}&section=${section}`, '转子自动装配检测线 · 界面验收']),
+    // BOM 页签只有一张表、成本与预算合为一个面板，二者没有子页签。
+    ...[['tasks', 'time'], ['deliveries', 'deliveries'], ['deliveries', 'service'], ['finance', 'entries'], ['finance', 'reconciliations'], ['finance', 'payments']].map(([tab, section]) => [`project-${tab}-${section}`, `/projects/${project}?tab=${tab}&section=${section}`, '转子自动装配检测线 · 界面验收']),
+    ...['bom', 'cost'].map(tab => [`project-${tab}`, `/projects/${project}?tab=${tab}`, '转子自动装配检测线 · 界面验收']),
     ['project-purchases', `/projects/${project}?tab=purchases`, '转子自动装配检测线 · 界面验收'],
     ['project-documents', `/projects/${project}?tab=documents`, '转子自动装配检测线 · 界面验收'],
   ]

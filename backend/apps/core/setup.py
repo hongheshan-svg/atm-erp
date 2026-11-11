@@ -16,7 +16,7 @@ from apps.accounts.passwords import validate_password
 from .actions import perform
 from .api import Conflict
 from .codes import configure
-from .models import AuditLog, CodeRule, Company
+from .models import CODE_MODELS, AuditLog, CodeRule, Company
 from .permissions import ADMIN, require_role, roles
 from .views import CodeSerializer
 
@@ -33,7 +33,8 @@ class SetupInput(serializers.Serializer):
     new_password = serializers.CharField(trim_whitespace=False)
     company = CompanyInput()
     team = serializers.ListField(child=serializers.DictField(), max_length=50)
-    codes = serializers.ListField(child=serializers.DictField(), max_length=7)
+    # 上限跟随编号规则种类：新增领料单后有 8 种，写死 7 会让全部规则都改过的首次安装被拒。
+    codes = serializers.ListField(child=serializers.DictField(), max_length=len(CODE_MODELS))
     confirmed = serializers.BooleanField()
 
 

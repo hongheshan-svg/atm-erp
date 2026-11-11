@@ -114,6 +114,19 @@ class SchemaVersion(models.Model):
         db_table = 'lean_schema'
 
 
+# 每种编号规则对应的业务模型（手填编号查重用）；安装向导可配置的规则数量也以此为准。
+CODE_MODELS = {
+    'project': 'Project',
+    'sale': 'SalesOrder',
+    'purchase': 'PurchaseOrder',
+    'delivery': 'Delivery',
+    'item': 'Item',
+    'partner': 'Partner',
+    'reconciliation': 'Reconciliation',
+    'issue_slip': 'IssueSlip',
+}
+
+
 class CodeRule(models.Model):
     product_counters = models.JSONField(default=dict, editable=False)
     key = models.CharField(max_length=30, unique=True)
@@ -143,19 +156,7 @@ class CodeRule(models.Model):
 
         with transaction.atomic():
             rule = cls.objects.select_for_update().get(key=key)
-            model = apps.get_model(
-                'business',
-                {
-                    'project': 'Project',
-                    'sale': 'SalesOrder',
-                    'purchase': 'PurchaseOrder',
-                    'delivery': 'Delivery',
-                    'item': 'Item',
-                    'partner': 'Partner',
-                    'reconciliation': 'Reconciliation',
-                    'issue_slip': 'IssueSlip',
-                }[key],
-            )
+            model = apps.get_model('business', CODE_MODELS[key])
             if not isinstance(custom, str):
                 raise ValidationError({'code': '编号请按文本填写，保留前导零。'})
             custom = custom.strip()

@@ -148,6 +148,7 @@ MODULE_TESTS = {
         'transfers',
         'import_feedback',
         'supply_handover',
+        'bom_selection',
     ),
     'inventory': (
         'deletions',
@@ -202,7 +203,8 @@ MODULE_TESTS = {
         'concurrency',
         'hardening',
         'transfers',
-        'import_feedback',
+        'commercial_chain',
+        'payment_terms',
     ),
     'accounts': ('deletions', 'auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
     'reports': (
@@ -242,6 +244,9 @@ def validate_coverage():
         )
     if not all(TARGETS.values()):
         raise SystemExit('每个后端测试阶段都必须显式登记测试目标。')
+    repeated = {module: cases for module, cases in MODULE_TESTS.items() if len(cases) != len(set(cases))}
+    if repeated:
+        raise SystemExit(f'模块测试映射内有重复登记：{sorted(repeated)}')
 
 
 def build_matrix():
