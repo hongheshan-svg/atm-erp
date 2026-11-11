@@ -78,7 +78,6 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
     ],
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.ScopedRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
     # 按真实开销分档：导出一次最多序列化两万行，最贵；导入要解析整张表格，但

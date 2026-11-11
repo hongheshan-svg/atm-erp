@@ -1,5 +1,3 @@
-from ..task_milestones import AUTOMATIC, DEFINITIONS, stage_label
-
 """Read-only collaboration projection; never exposes commercial payloads or grants actions."""
 
 from django.core.paginator import Paginator
@@ -25,6 +23,7 @@ from apps.core.permissions import (
 
 from ..models import Delivery, Entry, PurchaseOrder, Reconciliation, Task
 from ..serializers import ambiguous_people, person_name
+from ..task_milestones import AUTOMATIC, DEFINITIONS, stage_label
 from . import finance, payment_terms
 from . import reconciliation as statements
 from .common import ZERO

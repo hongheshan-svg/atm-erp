@@ -11,7 +11,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.api import Conflict
 from apps.core.permissions import MANAGERS, MONEY_READERS, project_allowed
 
-from ..models import Entry, PurchaseLine, PurchaseOrder
+from ..models import Entry, PurchaseLine
 from .common import ZERO, audit, fields, number, project_action, rounded, save, state, text
 from .finance import cost
 
@@ -184,9 +184,7 @@ def purchase_check(purchase):
     return report
 
 
-def purchase_visibility(user, report, project=None):
-    if project is None:
-        project = PurchaseOrder.objects.select_related('project').get(pk=report['purchase']).project
+def purchase_visibility(user, report, project):
     if project_allowed(user, project, MONEY_READERS):
         return report
     materials = next(row for row in report['rows'] if row['key'] == 'materials')

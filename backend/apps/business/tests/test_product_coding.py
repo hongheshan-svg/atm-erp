@@ -113,6 +113,35 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         self.assertEqual(third.brand, '浩亭')
         self.assertEqual(BOMLine.objects.get(project=project, item=third).quantity, 3)
 
+    def test_bom_import_locks_existing_items_in_key_order_before_backfilling(self):
+        import re
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        project = self.active_project()
+        low = Item.objects.create(code='LK-001', name='锁序甲', specification='A-1', unit='件')
+        high = Item.objects.create(code='LK-002', name='锁序乙', specification='B-1', unit='件')
+        # 文件先写主键大的物料：逐行补填品牌会先锁它，与按主键顺序加锁的其他单据交错时死锁。
+        rows = [
+            [item.code, '上料', '1', '新增', '', '', '', item.name, item.specification, '', '', '', '哈丁', '', '件']
+            for item in (high, low)
+        ]
+        preview = self.auto_preview(project, rows)
+        self.assertTrue(preview['can_import'], preview)
+        with CaptureQueriesContext(connection) as queries:
+            self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+        locks = [
+            query['sql']
+            for query in queries.captured_queries
+            if 'FOR UPDATE' in query['sql'] and re.search(r'FROM "lean_item" WHERE', query['sql'])
+        ]
+        self.assertTrue(locks)
+        locked = re.search(r'"lean_item"\."id" IN \(([^)]*)\)', locks[0])
+        self.assertIsNotNone(locked, locks[0])
+        self.assertEqual({int(value) for value in locked.group(1).split(',')}, {low.pk, high.pk})
+        self.assertEqual(set(Item.objects.filter(pk__in=[low.pk, high.pk]).values_list('brand', flat=True)), {'哈丁'})
+
     def test_bom_import_without_code_backfills_unbranded_same_item_instead_of_duplicating(self):
         project = self.active_project()
         row = ['', '上料', '2', '新增', '', '', '', '长方形接头', 'KDM10P-08', '', '', '21', '', 'standard', '件']

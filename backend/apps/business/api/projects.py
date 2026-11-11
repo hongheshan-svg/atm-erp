@@ -21,6 +21,7 @@ from ..models import (
 )
 from ..serializers import (
     ProjectSerializer,
+    person_name,
 )
 from ..services import (
     bom,
@@ -212,7 +213,7 @@ class ProjectView(ImportableMixin, ReadView):
             )
 
             def describe(row):
-                return f'{row.task.title} · {row.user.display_name} · {row.hours}小时'
+                return f'{row.task.title} · {person_name(row.user, ())} · {row.hours}小时'
         elif category == 'expenses':
             records = Entry.objects.filter(project=project, kind='expense', cancelled=False).annotate(
                 contribution=F('amount')

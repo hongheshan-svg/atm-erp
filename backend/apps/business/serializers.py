@@ -379,7 +379,8 @@ class PurchaseSerializer(serializers.ModelSerializer):
         dates = [
             line.due_date or obj.due_date
             for line in obj.lines.all()
-            if line.quantity > line.received_quantity + line.cancelled_quantity
+            # 已到货待检（隔离）的数量算已到货，与流程进度同一口径，不误报未交货逾期。
+            if line.quantity > line.received_quantity + line.cancelled_quantity + line.pending_quantity
         ]
         return min(dates) if dates else None
 
@@ -930,7 +931,7 @@ class PaymentSerializer(serializers.ModelSerializer):
                 'name': row.document.original_name,
                 'reason': row.reason,
                 'date': row.created_at,
-                'actor': row.created_by.display_name,
+                'actor': person_name(row.created_by, ()),
             }
             for row in obj.evidence.all()
         )

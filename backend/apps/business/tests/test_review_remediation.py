@@ -142,6 +142,16 @@ class ReviewRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(Entry.objects.get(purchase=purchase).amount, 240)
         response = self.clients['purchaser'].get('/api/business/workbench/')
         self.assertEqual(response.data['overdue_purchases']['count'], 1)
+        # 全部到货待检（隔离）算已到货：不再报未交货逾期，最近待到货日清空。
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {'location': '主仓', 'lines': [{'line': line.pk, 'quantity': '0', 'pending_quantity': '3'}]},
+        )
+        self.assertNotIn('overdue_purchases', self.clients['purchaser'].get('/api/business/workbench/').data)
+        self.assertIsNone(self.clients['purchaser'].get(f'/api/business/{url}').data['next_delivery_date'])
+        late = self.clients['admin'].get('/api/business/reports/', {'view': 'late_purchase'}).data
+        self.assertEqual(late['count'], 0)
 
     def document(self, category):
         return Document.objects.create(

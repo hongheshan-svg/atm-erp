@@ -145,6 +145,7 @@ class TransferTests(BusinessFixtures, TestCase):
         payment = self.preview('payments', [[str(entry.pk), '30', TODAY, '支付']], role='finance')
         self.commit('payments', payment, role='finance')
         self.assertEqual(Payment.objects.get(entry=entry).amount, 30)
+        self.assertEqual(Payment.objects.get(entry=entry).method, 'bank')
         excessive = self.preview('payments', [[str(entry.pk), '80', TODAY, '超付']], role='finance')
         self.assertFalse(excessive.data['can_import'])
         self.commit('stocks', self.preview('stocks', [['I1', '主仓', '2', '10', '期初']]))

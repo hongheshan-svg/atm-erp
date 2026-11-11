@@ -481,6 +481,21 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         results = self.get('admin', 'core/audit/', {'search': '王经理', 'operation': 'project.edit'}).data['results']
         self.assertEqual([(row['operation'], row['actor_name']) for row in results], [('project.edit', '王经理')])
         self.assertEqual(results[0]['resource_label'], project.code)
+        # 整页编号按模型批量查询：多一行同类记录不多一条查询。
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def page_queries():
+            with CaptureQueriesContext(connection) as queries:
+                rows = self.get('admin', 'core/audit/', {'operation': 'project.edit'}).data['results']
+            return len(queries.captured_queries), rows
+
+        before, _ = page_queries()
+        other = self.active_project()
+        self.post('manager', f'projects/{other.pk}/edit/', {'name': '再改名', 'reason': '更正名称'})
+        after, rows = page_queries()
+        self.assertEqual(after, before)
+        self.assertEqual({row['resource_label'] for row in rows}, {project.code, other.code})
         today = timezone.localdate().isoformat()
         self.assertTrue(self.get('admin', 'core/audit/', {'date_from': today, 'date_to': today}).data['count'])
         self.assertEqual(self.get('admin', 'core/audit/', {'date_to': '2000-01-01'}).data['count'], 0)

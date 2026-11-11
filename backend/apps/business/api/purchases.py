@@ -17,6 +17,7 @@ from ..models import (
 from ..serializers import (
     PurchaseDetailSerializer,
     PurchaseSerializer,
+    person_name,
 )
 from ..services import budgets, purchase_changes, supply
 from .common import ImportableMixin, ReadView, key
@@ -144,7 +145,7 @@ class PurchaseView(ImportableMixin, ReadView):
                 {
                     'id': log.pk,
                     'date': log.created_at,
-                    'actor': log.actor.display_name,
+                    'actor': person_name(log.actor, ()),
                     'operation': log.operation,
                     'reason': log.detail.get('reason', ''),
                     'decision': log.detail.get('decision', ''),

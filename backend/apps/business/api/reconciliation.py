@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from apps.core.permissions import FINANCE, MANAGERS, MONEY_READERS
 
 from ..models import BankMatch, BankOffset, BankRecord, Reconciliation
+from ..serializers import person_name
 from ..services import bank_import, banking, reconciliation
 from .common import ImportableMixin, ReadView, key
 
@@ -19,7 +20,10 @@ class ReconciliationSerializer(serializers.ModelSerializer):
     valid = serializers.SerializerMethodField()
     difference = serializers.SerializerMethodField()
     remaining_amount = serializers.SerializerMethodField()
-    confirmed_name = serializers.CharField(source='confirmed_by.display_name', read_only=True, default='')
+    confirmed_name = serializers.SerializerMethodField()
+
+    def get_confirmed_name(self, obj):
+        return person_name(obj.confirmed_by, ())
 
     def get_valid(self, obj):
         return obj.status != 'void' and reconciliation.current(obj)

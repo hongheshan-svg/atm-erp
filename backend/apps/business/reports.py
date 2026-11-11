@@ -3,11 +3,17 @@ from rest_framework.views import APIView
 
 from apps.core.permissions import projects_for, require_reports
 
+from .api.common import ExportThrottle
 from .services.reports import summary
 from .services.tabular import export_rows
 
 
 class ReportsView(APIView):
+    def get_throttles(self):
+        # 导出要汇总全部项目，与其他导出共用导出限流。
+        throttles = super().get_throttles()
+        return [*throttles, ExportThrottle()] if self.request.query_params.get('file_format') else throttles
+
     def get(self, request):
         require_reports(request.user)
         if request.query_params.get('view'):

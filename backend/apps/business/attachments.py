@@ -60,8 +60,9 @@ class DocumentSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         owner = obj.sale if obj.sale_id else obj.purchase if obj.purchase_id else None
         project = obj.project or (owner.project if owner else None)
-        result['can_remove'] = obj.created_by_id == user.pk or bool(
-            project and project.status != 'closed' and project_allowed(user, project, MANAGERS)
+        # 已结项项目谁都不能删附件（先重新打开），按钮与后端口径一致。
+        result['can_remove'] = not (project and project.status == 'closed') and (
+            obj.created_by_id == user.pk or bool(project and project_allowed(user, project, MANAGERS))
         )
         return result
 

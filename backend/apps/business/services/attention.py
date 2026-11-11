@@ -42,7 +42,8 @@ def projection(params):
         definition = '按原应收应付的剩余到期批次列示，净付款先抵最早到期；采购未收货部分不计入到期，不含负余额退款。'
     elif view == 'late_purchase':
         for line in PurchaseLine.objects.filter(
-            purchase__status__in=['approved', 'partial'], quantity__gt=F('received_quantity') + F('cancelled_quantity')
+            purchase__status__in=['approved', 'partial'],
+            quantity__gt=F('received_quantity') + F('cancelled_quantity') + F('pending_quantity'),
         ).select_related('purchase__project', 'item'):
             due = line.due_date or line.purchase.due_date
             if due < today:
