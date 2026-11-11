@@ -21,6 +21,7 @@ from .models import (
     BOMLine,
     Delivery,
     Entry,
+    IssueSlip,
     Item,
     Partner,
     Payment,
@@ -423,6 +424,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True, default='')
     purchase = serializers.IntegerField(source='purchase_line.purchase_id', read_only=True, default=None)
     purchase_code = serializers.CharField(source='purchase_line.purchase.code', read_only=True, default='')
+    slip_code = serializers.CharField(source='slip.code', read_only=True, default='')
     created_by_name = PersonNameField(source='created_by')
 
     class Meta:
@@ -442,6 +444,8 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'purchase',
             'purchase_code',
             'purchase_line',
+            'slip',
+            'slip_code',
             'source',
             'kind',
             'quantity',
@@ -454,6 +458,71 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'created_by',
             'created_by_name',
         ]
+
+
+class IssueSlipSerializer(serializers.ModelSerializer):
+    """领料单列表：单头加物料摘要；明细行在详情里给出（列表按页预取流水，查询数不随行数增长）。"""
+
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True, default='')
+    created_by_name = PersonNameField(source='created_by')
+    line_count = serializers.SerializerMethodField()
+    items_summary = serializers.SerializerMethodField()
+
+    def get_line_count(self, obj):
+        return len(obj.moves.all())
+
+    def get_items_summary(self, obj):
+        names = list(dict.fromkeys(move.stock.item.name for move in obj.moves.all()))
+        return '、'.join(names[:3]) + (f' 等 {len(names)} 种' if len(names) > 3 else '')
+
+    class Meta:
+        model = IssueSlip
+        fields = [
+            'id',
+            'code',
+            'project',
+            'project_code',
+            'project_name',
+            'task',
+            'task_title',
+            'reason',
+            'line_count',
+            'items_summary',
+            'created_at',
+            'created_by',
+            'created_by_name',
+        ]
+
+
+class IssueSlipDetailSerializer(IssueSlipSerializer):
+    """领料单详情（打印）：逐条领料流水，数量取正数；不含成本金额。"""
+
+    lines = serializers.SerializerMethodField()
+
+    def get_lines(self, obj):
+        return [
+            {
+                'id': move.pk,
+                'stock': move.stock_id,
+                'item': move.stock.item_id,
+                'item_code': move.stock.item.code,
+                'item_name': move.stock.item.name,
+                'specification': move.stock.item.specification,
+                'brand': move.stock.item.brand,
+                'drawing_number': move.stock.item.drawing_number,
+                'drawing_revision': move.stock.item.drawing_revision,
+                'unit': move.stock.item.unit,
+                'location': move.stock.location,
+                'quantity': str(-move.quantity),
+                'remark': move.remark,
+            }
+            for move in sorted(obj.moves.all(), key=lambda move: move.pk)
+        ]
+
+    class Meta(IssueSlipSerializer.Meta):
+        fields = [*IssueSlipSerializer.Meta.fields, 'lines']
 
 
 class EntrySerializer(serializers.ModelSerializer):

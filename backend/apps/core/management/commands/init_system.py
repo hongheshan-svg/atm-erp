@@ -26,6 +26,7 @@ class Command(BaseCommand):
                 ('item', 'MAT'),
                 ('partner', 'PTY'),
                 ('reconciliation', 'DZ'),
+                ('issue_slip', 'LL'),
             ]:
                 defaults = {'prefix': prefix}
                 if key == 'project':
