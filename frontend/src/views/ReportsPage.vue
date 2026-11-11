@@ -131,11 +131,18 @@ watch(pageSize, () => load())
 @media (max-width: 560px) { .report-filters label { min-width: 0; width: 100%; } .report-metric { padding: 16px; } .report-metric strong { font-size: 21px; } }
 /* 手机端（≤600px）：筛选每项独占一行、汇总金额不折行、明细摘要与口径说明收起。 */
 @media (max-width: 600px) {
-  .report-filters form { flex-direction: column; align-items: stretch; gap: 12px; }
-  .report-filters label { flex: none; }
-  .report-filters input, .report-filters select { min-height: 40px; box-sizing: border-box; width: 100%; }
-  .report-filters .el-button { width: 100%; min-height: 40px; }
-  .report-metric strong { font-size: 18px; white-space: nowrap; }
+  /* 筛选：项目搜索与查询按钮各占一行，两个下拉并排，少占首屏高度。 */
+  .report-filters { padding: 12px 16px; }
+  .report-filters form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; align-items: end; }
+  .report-filters label { flex: none; min-width: 0; width: auto; gap: 6px; }
+  .report-filters label:first-child, .report-filters .el-button { grid-column: 1 / -1; }
+  .report-filters input, .report-filters select { min-height: 40px; box-sizing: border-box; width: 100%; min-width: 0; }
+  .report-filters .el-button { width: 100%; min-height: 40px; margin: 0; }
+  /* 汇总：两列卡片放不下千万级金额，改单列「名称 … 金额」一行，说明在下。 */
+  .report-metrics { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px; }
+  .report-metric { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 2px 12px; padding: 10px 12px; }
+  .report-metric strong { font-size: 18px; text-align: right; white-space: nowrap; }
+  .report-metric small { grid-column: 1 / -1; }
   .report-mobile-summary { display: block; margin-top: 5px; color: var(--ink-6); font-size: 12px; line-height: 1.6; font-weight: 400; }
   .report-watch { gap: 6px 12px; font-size: 12px; }
   .report-basis-details { margin-top: 12px; font-size: 12px; }
