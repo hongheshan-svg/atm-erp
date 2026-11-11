@@ -203,4 +203,22 @@ onBeforeUnmount(() => { generation++ })
   .work-category { padding: 14px 16px; }
   .work-refresh { flex-wrap: wrap; gap: 8px; }
 }
+/* 手机端：优先事项表只留「事项、截止、状态、处理」四列，「处理」入口不用横滚也能看到；窄屏隐藏类型列，单据类别仍可从事项名称和「处理」进入的页面看出。 */
+@media (max-width: 600px) {
+  .work-priority :deep(.business-row-number),
+  .work-priority :deep(.el-table__header th:nth-child(3)),
+  .work-priority :deep(.el-table__body td:nth-child(3)),
+  .work-priority :deep(colgroup col:nth-child(3)) { display: none !important; }
+  .work-priority :deep(colgroup col:first-child) { display: none !important; }
+  .work-priority :deep(table) { width: 100% !important; }
+  .work-priority :deep(colgroup col) { width: auto !important; }
+  .work-priority :deep(colgroup col:nth-child(2)) { width: 34% !important; }
+  .work-priority :deep(colgroup col:nth-child(4)) { width: 24% !important; }
+  .work-priority :deep(colgroup col:nth-child(5)) { width: 22% !important; }
+  .work-priority :deep(colgroup col:nth-child(6)) { width: 20% !important; }
+  .work-priority :deep(.el-table__cell) { padding: 8px 4px; }
+  .work-priority :deep(td:nth-child(4)) { white-space: nowrap; font-size: 12px; }
+  .work-priority :deep(td:nth-child(6) a) { white-space: nowrap; }
+  .work-priority .work-status { padding: 3px 4px; font-size: 11px; white-space: nowrap; }
+}
 </style>
