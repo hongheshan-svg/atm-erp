@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { read } from '../api'
 import { manager } from '../session'
 import { message } from '../utils/request'
@@ -10,7 +10,8 @@ import ActionDialog from './ActionDialog.vue'
 import CostSources from './CostSources.vue'
 const showSources = ref(false)
 const amount = (value: unknown) => money(value, { placeholder: '未设置' })
-const props = defineProps<{ projectId: number; revision: number; status: string; canManage?: boolean }>()
+// contract 只在有金额权限时由项目页传入，用于指标带里的毛利；不传则不显示合同与毛利。
+const props = defineProps<{ projectId: number; revision: number; status: string; canManage?: boolean; contract?: unknown }>()
 const report = ref<Row | null>(null)
 const error = ref('')
 const command = ref<Command | null>(null)
@@ -26,6 +27,31 @@ async function load() {
   }
 }
 watch(() => [props.projectId, props.revision], load, { immediate: true })
+const figure = (value: unknown) => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value)
+// 合同—预算—实际—预计完工—毛利放在同一行，不再分到两个子页签。金额均为含税经营口径。
+const metrics = computed(() => {
+  const data = report.value
+  if (!data) return []
+  const contract = figure(props.contract), actual = figure(data.actual_total), forecast = figure(data.forecast_total), budget = figure(data.budget_total)
+  const signed = props.contract !== undefined
+  const margin = (cost: number | null, missing: string) => {
+    if (!contract || contract <= 0) return { value: '未签合同金额', risk: false }
+    if (cost == null) return { value: missing, risk: false }
+    const value = contract - cost
+    return { value: `${money(value.toFixed(2), { currency: true })}（${((value / contract) * 100).toFixed(1)}%）`, risk: value < 0 }
+  }
+  return [
+    ...(signed ? [{ key: 'contract', label: '合同金额', value: money(props.contract, { currency: true, placeholder: '未设置' }), risk: false }] : []),
+    { key: 'budget', label: '预算合计', value: money(data.budget_total, { currency: true, placeholder: '未设置' }), risk: false },
+    { key: 'actual', label: '实际成本', value: money(data.actual_total, { currency: true }), risk: budget != null && actual != null && actual > budget },
+    { key: 'occupied', label: '实际＋在途', value: money(data.occupied_total, { currency: true }), risk: Boolean(data.over_budget) },
+    { key: 'forecast', label: '预计完工成本', value: money(data.forecast_total, { currency: true, placeholder: '未估算' }), risk: budget != null && forecast != null && forecast > budget },
+    ...(signed ? [
+      { key: 'margin', label: '毛利（按实际）', ...margin(actual, '—') },
+      { key: 'forecast_margin', label: '预计毛利（按完工估算）', ...margin(forecast, '未估算') },
+    ] : []),
+  ]
+})
 function edit() {
   if (!report.value) return
   const version = report.value.budget_revision
@@ -46,7 +72,7 @@ function estimate() {
   if (!report.value) return
   const version = report.value.forecast_revision
   command.value = { title: '更新完工估算', path: `/business/projects/${props.projectId}/forecast/`, fields: [
-    { key: 'remaining_materials', label: '预计剩余材料成本（元）', hint: '包含未来领用共享库存和未下单材料；排除已计入实际成本、在途采购的部分。' }, { key: 'remaining_labor', label: '预计剩余人工成本（元）' }, { key: 'remaining_expenses', label: '预计剩余费用（元）' }, { key: 'reason', label: '估算依据', type: 'textarea' },
+    { key: 'remaining_materials', label: '预计剩余材料成本（元）', hint: '包含未来领用共享库存和未下单材料；排除已计入实际成本、在途采购的部分。' }, { key: 'remaining_labor', label: '预计剩余人工成本（元）' }, { key: 'remaining_expenses', label: '预计剩余费用（元）' }, { key: 'reason', label: '估算依据', type: 'textarea', optional: true },
   ], initial: { remaining_materials: report.value.remaining_materials ?? '', remaining_labor: report.value.remaining_labor ?? '0.00', remaining_expenses: report.value.remaining_expenses ?? '0.00' }, notice: { type: 'info', text: '估算不生成成本或付款流水。预测包含实际、在途及剩余材料、人工和费用。材料估算需扣除已计入实际和在途部分，避免重复。' }, prepare: data => ({ ...data, expected_revision: version }) }
 }
 </script>
@@ -58,6 +84,9 @@ function estimate() {
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <template v-if="report">
+      <dl class="cost-metrics" aria-label="项目成本指标">
+        <div v-for="item in metrics" :key="item.key" :class="{ 'metric-risk': item.risk }"><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
+      </dl>
       <el-alert v-if="!report.configured" title="尚未设置预算，当前仅展示成本，不拦截采购审批。" type="info" :closable="false" />
       <el-alert v-else-if="report.over_budget" :title="report.warnings.join('；')" type="warning" :closable="false" show-icon role="alert" />
       <BusinessTable label="项目预算" :data="report.rows" style="width:100%">
@@ -78,6 +107,12 @@ function estimate() {
   </section>
 </template>
 <style scoped>
+/* 换行后每行仍铺满；单元格的右、下边线用负外边距压进外框，不会出现双线或空格。 */
+.cost-metrics { display: flex; flex-wrap: wrap; margin: 0 0 14px; border: 1px solid var(--surface-border); border-radius: 8px; overflow: hidden; }
+.cost-metrics > div { flex: 1 1 130px; padding: 10px 14px; min-width: 0; border-right: 1px solid var(--surface-border); border-bottom: 1px solid var(--surface-border); margin: 0 -1px -1px 0; }
+.cost-metrics dt { color: var(--mute); font-size: 12px; }
+.cost-metrics dd { margin: 4px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.metric-risk dd { color: var(--risk); }
 .budget-totals { display: flex; flex-wrap: wrap; gap: 16px 28px; margin-top: 20px; font-size: 13px; }
 .budget-totals strong { margin-left: 8px; font-variant-numeric: tabular-nums; }
 .budget-basis { font-size: 12px; line-height: 1.8; margin-bottom: 0; }

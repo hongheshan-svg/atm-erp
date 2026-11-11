@@ -4,7 +4,7 @@ import ElementPlus from 'element-plus'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import ProjectPage from './ProjectPage.vue'
 import { read } from '../api'
-import { money } from '../session'
+import { money, user } from '../session'
 import { confirmFormNavigation } from '../form-experience'
 vi.mock('../api', () => ({ read: vi.fn() }))
 vi.mock('../form-experience', async importOriginal => ({
@@ -23,14 +23,16 @@ const project = {
   equipment_quantity: 12, due_date: '2026-12-20', warranty_months: 12, contract_amount: '2860000.00',
   requirements: '第一行需求说明\n第二行需求说明',
 }
-async function render() {
+// 子页签桩把每个具名插槽都渲染出来，便于检查页签内的入口。
+const ModuleTabsSlots = { props: ['tabs'], template: '<div><template v-for="item in tabs" :key="item.key"><slot :name="item.key" /></template></div>' }
+async function render(path = '/projects/7', slots = false) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/projects/:id', component: { template: '<div />' } }, { path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
-  await router.push('/projects/7')
+  await router.push(path)
   await router.isReady()
   const wrapper = mount(ProjectPage, {
     global: {
       plugins: [ElementPlus, router],
-      stubs: { ProcessSteps: true, ProjectAttention: true, ModuleTabs: true, ResourcePanel: true, BOMDemand: true, BudgetPanel: true, ActionDialog: true },
+      stubs: { ProcessSteps: true, ProjectAttention: true, ProjectReadiness: true, FinanceTotals: true, ModuleTabs: slots ? ModuleTabsSlots : true, ResourcePanel: true, BOMDemand: true, BudgetPanel: true, ActionDialog: true, ProjectMilestones: true, ProjectTaskSupervisors: true },
     },
   })
   await flushPromises()
@@ -41,6 +43,8 @@ const button = (wrapper: Awaited<ReturnType<typeof render>>, label: string) =>
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  sessionStorage.clear()
+  user.value = null
   vi.mocked(read).mockResolvedValue(project)
   vi.mocked(money).mockReturnValue(true)
 })
@@ -101,5 +105,43 @@ it('主项目页签经过统一未保存表单守卫，拒绝离开时保留当�
   await wrapper.get('#tab-bom').trigger('click')
   await flushPromises()
   expect(wrapper.get('#tab-bom').attributes('aria-selected')).toBe('true')
+  wrapper.unmount()
+})
+it('项目经理在页头一行看到流程步骤和推进检查，其他角色不请求推进检查', async () => {
+  user.value = { id: 1, roles: ['manager'] }
+  const wrapper = await render()
+  expect(wrapper.findComponent({ name: 'ProcessSteps' }).props('inline')).toBe(true)
+  expect(wrapper.findComponent({ name: 'ProjectReadiness' }).exists()).toBe(true)
+  wrapper.unmount()
+  user.value = { id: 2, roles: ['mechanical_engineer'] }
+  const engineer = await render()
+  expect(engineer.findComponent({ name: 'ProjectReadiness' }).exists()).toBe(false)
+  engineer.unmount()
+})
+it('成本页不再拆子页签，预算面板带合同金额以显示毛利指标带', async () => {
+  const wrapper = await render('/projects/7?tab=cost')
+  const panel = wrapper.findComponent({ name: 'BudgetPanel' })
+  expect(panel.props('contract')).toBe('2860000.00')
+  expect(wrapper.text()).not.toContain('实际成本')
+  expect(wrapper.findAllComponents({ name: 'ModuleTabs' })).toHaveLength(0)
+  wrapper.unmount()
+})
+it('交付页签内可直接登记发货，空状态说明发货后的安排而不是让经理找同事', async () => {
+  user.value = { id: 1, roles: ['manager'] }
+  const wrapper = await render('/projects/7?tab=deliveries', true)
+  expect(wrapper.find('.tab-actions').text()).toContain('登记发货')
+  const panel = wrapper.findAllComponents({ name: 'ResourcePanel' }).find(item => item.attributes('resource') === 'deliveries' || item.props?.('resource') === 'deliveries')!
+  expect(String(panel.attributes('empty-hint') ?? panel.props?.('emptyHint'))).toContain('每批发货会自动生成安装和验收任务')
+  wrapper.unmount()
+  user.value = { id: 3, roles: ['finance'] }
+  const reader = await render('/projects/7?tab=deliveries', true)
+  expect(reader.find('.tab-actions').exists()).toBe(false)
+  reader.unmount()
+})
+it('收付款页签顶部显示项目款项汇总', async () => {
+  const wrapper = await render('/projects/7?tab=finance')
+  const totals = wrapper.findComponent({ name: 'FinanceTotals' })
+  expect(totals.exists()).toBe(true)
+  expect(totals.attributes('project')).toBeDefined()
   wrapper.unmount()
 })

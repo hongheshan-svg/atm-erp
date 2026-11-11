@@ -44,6 +44,52 @@ def readable_projects(user, queryset):
     return queryset.filter(scope).distinct()
 
 
+def open_line_dates(purchase, lines):
+    """采购单未到齐明细的交货日期；流程进度的行与分类逾期数共用。"""
+    return [
+        line.due_date or purchase.due_date
+        for line in lines
+        if line.quantity > line.received_quantity + line.cancelled_quantity + line.pending_quantity
+    ]
+
+
+def delivery_following(delivery):
+    """批次当前跟进的任务：先安装，安装都完成后是验收。"""
+    tasks = [task for task in delivery.tasks.all() if task.status == 'open']
+    install = [task for task in tasks if task.kind == 'install']
+    return install, install or [task for task in tasks if task.kind == 'acceptance']
+
+
+def earliest(dates):
+    dates = [value for value in dates if value]
+    return min(dates) if dates else None
+
+
+def overdue_counts(project, opened, today):
+    """每个分类里待跟进且已过期限的条数，期限口径与逐条的 overdue 相同；已结项、取消的项目不提示逾期。"""
+    if project.status in {'closed', 'cancelled'}:
+        return dict.fromkeys(GROUPS, 0)
+
+    def late(value):
+        return bool(value and value < today)
+
+    return {
+        'tasks': opened['tasks'].filter(due_date__lt=today).count(),
+        'purchases': sum(
+            late(earliest(open_line_dates(purchase, purchase.lines.all())))
+            for purchase in opened['purchases'].prefetch_related('lines')
+        ),
+        'deliveries': sum(
+            late(earliest(task.due_date for task in delivery_following(delivery)[1]))
+            for delivery in opened['deliveries'].prefetch_related('tasks')
+        ),
+        'entries': sum(
+            late((payment_terms.schedule(entry) or [{}])[0].get('due_date'))
+            for entry in payment_terms.with_sources(opened['entries'])
+        ),
+    }
+
+
 def person(user, ambiguous):
     return {'id': user.pk, 'name': person_name(user, ambiguous), 'active': user.is_active} if user else None
 
@@ -115,7 +161,8 @@ class Progress:
             record={'status': task.status},
         )
         row.update(handlers=[self.person(person) for person in task.assigned_people()], handler_label='执行人')
-        row['hint'] = '由项目经理登记验收后完成。' if task.kind == 'acceptance' else '按任务要求完成后更新状态。'
+        # 普通任务不再重复「按要求完成」之类的固定提示，条目保持一行；只有需要特别说明的才给提示。
+        row['hint'] = '由项目经理登记验收后完成。' if task.kind == 'acceptance' else ''
         if task.milestone in AUTOMATIC:
             row['hint'] = DEFINITIONS[task.milestone]['description']
         if not row['pending']:
@@ -127,11 +174,7 @@ class Progress:
     def purchase(self, purchase):
         pending = purchase.status not in {'received', 'cancelled'}
         lines = list(purchase.lines.all())
-        dates = [
-            line.due_date or purchase.due_date
-            for line in lines
-            if line.quantity > line.received_quantity + line.cancelled_quantity + line.pending_quantity
-        ]
+        dates = open_line_dates(purchase, lines)
         quarantine = sum((line.pending_quantity for line in lines), ZERO)
         status = purchase.get_status_display()
         if purchase.pk in self.change_requests:
@@ -183,9 +226,7 @@ class Progress:
 
     def delivery(self, delivery):
         pending = not delivery.accepted_date
-        tasks = [task for task in delivery.tasks.all() if task.status == 'open']
-        install = [task for task in tasks if task.kind == 'install']
-        following = install or [task for task in tasks if task.kind == 'acceptance']
+        install, following = delivery_following(delivery)
         dates = [task.due_date for task in following if task.due_date]
         status = '安装中' if install else '待客户验收' if pending else '已验收'
         if not pending and delivery.warranty_until:
@@ -319,8 +360,9 @@ def summary(user, project, params):
         .exclude(amount=F('credit_amount') + F('net_paid'))
         .filter(Q(cancelled=False) | Q(amount__lt=F('credit_amount') + F('net_paid'))),
     }
+    late = overdue_counts(project, opened, timezone.localdate())
     counts = [
-        {'key': key, 'label': label, 'open': opened[key].count(), 'total': queries[key].count()}
+        {'key': key, 'label': label, 'open': opened[key].count(), 'total': queries[key].count(), 'overdue': late[key]}
         for key, label in GROUPS.items()
     ]
     query = (opened if state == 'open' else queries)[category]

@@ -260,7 +260,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(manager, '预计剩余材料成本（元）', '120')
   await fill(manager, '预计剩余人工成本（元）', '500')
   await fill(manager, '预计剩余费用（元）', '50')
-  await fill(manager, '估算依据', '剩余安装与差旅')
+  await fill(manager, '估算依据（选填）', '剩余安装与差旅')
   await save(manager)
   expect((await read(manager, `projects/${id}/cost-analysis/`)).forecast_total).toBe('670.00')
   await manager.getByRole('button', { name: '追溯成本明细', exact: true }).click()

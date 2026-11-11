@@ -418,6 +418,11 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         report = self.get('member', f'milestone-summary/?project={self.project.pk}')
         self.assertEqual(sum(stage['total'] for stage in report['stages']), 3)
         self.assertEqual(sum(stage['done'] for stage in report['stages']), 1)
+        # 尚未生成的模板节点数供「补充里程碑节点（缺 N 个）」使用。
+        self.assertEqual(
+            report['missing'],
+            20 - len(set(self.project.tasks.exclude(milestone='').values_list('milestone', flat=True))),
+        )
 
     def test_single_node_creation_rejects_duplicate_and_wrong_phase(self):
         row = {**self.rows(['design_3d'])[0], 'project': self.project.pk}
@@ -484,10 +489,15 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         for action in ('cancel', 'reopen'):
             self.post('manager', f'tasks/{node.pk}/{action}/', {'reason': '不能改变实际验收'}, status=409)
         report = self.get('member', f'milestone-summary/?project={self.project.pk}')
-        self.assertEqual(sum(stage['total'] for stage in report['stages']), 20)
-        self.assertEqual(sum(stage['done'] for stage in report['stages']), 20)
+        # 阶段卡与阶段筛选同一口径：客户终验收阶段计入两批的安装、验收任务（20 个节点 + 4 个批次任务）。
+        self.assertEqual(sum(stage['total'] for stage in report['stages']), 24)
+        self.assertEqual(sum(stage['done'] for stage in report['stages']), 24)
+        stages = {stage['key']: stage for stage in report['stages']}
+        self.assertEqual((stages['shipping']['shipped'], stages['shipping']['equipment']), (2, 2))
+        self.assertEqual(report['missing'], 0)
         final_stage = self.get('member', f'?project={self.project.pk}&phase=site')
         self.assertEqual(final_stage['count'], 7)
+        self.assertEqual(stages['site']['total'], final_stage['count'])
         self.assertEqual({row['kind'] for row in final_stage['results']}, {'site', 'install', 'acceptance'})
         self.get('member', f'?project={self.project.pk}&phase=unknown', status=400)
 

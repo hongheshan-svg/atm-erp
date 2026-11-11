@@ -150,15 +150,19 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('quote_amount', 'contract_amount')
     customer_name = serializers.CharField(source='customer.name', read_only=True)
     manager_name = PersonNameField(source='manager')
-    # 仅项目列表、详情的查询带这两个统计；其他入口（如删除快照）没有统计时返回空。
+    # 仅项目列表、详情的查询带这些统计；其他入口（如删除快照）没有统计时返回空。
     task_total = serializers.SerializerMethodField()
     task_done = serializers.SerializerMethodField()
+    task_overdue = serializers.SerializerMethodField()
 
     def get_task_total(self, obj):
         return getattr(obj, 'task_total', None)
 
     def get_task_done(self, obj):
         return getattr(obj, 'task_done', None)
+
+    def get_task_overdue(self, obj):
+        return getattr(obj, 'task_overdue', None)
 
     class Meta:
         model = Project
@@ -187,6 +191,7 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
             'warranty_months',
             'task_total',
             'task_done',
+            'task_overdue',
             'close_reason',
             'created_at',
             'updated_at',
@@ -688,6 +693,35 @@ class TaskSerializer(serializers.ModelSerializer):
 
 
 class DeliverySerializer(serializers.ModelSerializer):
+    """批次进度由本批的安装、验收任务推导：待安装 → 待验收 → 已验收（含质保状态）。"""
+
+    stage = serializers.SerializerMethodField()
+    installer_name = serializers.SerializerMethodField()
+    acceptor_name = serializers.SerializerMethodField()
+
+    def batch_tasks(self, obj, kind):
+        return [task for task in obj.tasks.all() if task.kind == kind and task.status != 'cancelled']
+
+    def people(self, obj, kind):
+        if not hasattr(self.root, '_ambiguous_people'):
+            self.root._ambiguous_people = ambiguous_people()
+        names = []
+        for task in self.batch_tasks(obj, kind):
+            names += [person_name(person, self.root._ambiguous_people) for person in task.assigned_people()]
+        return '；'.join(dict.fromkeys(names))
+
+    def get_stage(self, obj):
+        if obj.accepted_date:
+            return 'accepted'
+        installs = self.batch_tasks(obj, 'install')
+        return 'awaiting_acceptance' if installs and all(task.status == 'done' for task in installs) else 'installing'
+
+    def get_installer_name(self, obj):
+        return self.people(obj, 'install')
+
+    def get_acceptor_name(self, obj):
+        return self.people(obj, 'acceptance')
+
     class Meta:
         model = Delivery
         fields = [
@@ -696,6 +730,9 @@ class DeliverySerializer(serializers.ModelSerializer):
             'project',
             'quantity',
             'shipped_date',
+            'stage',
+            'installer_name',
+            'acceptor_name',
             'material_requirements',
             'accepted_date',
             'warranty_until',

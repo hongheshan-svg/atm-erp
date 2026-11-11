@@ -691,3 +691,307 @@ class ProjectTaskProgressTests(ExecutionFixtures, TestCase):
         self.assertEqual((row['task_total'], row['task_done']), (total + 2, done + 1))
         detail = self.clients['manager'].get(f'/api/business/projects/{project.pk}/').data
         self.assertEqual((detail['task_total'], detail['task_done']), (total + 2, done + 1))
+
+
+class ProjectReadinessTests(ExecutionFixtures, TestCase):
+    """推进检查只读复用发货、验收、结项的同一组判断；不满足的项与实际动作的拒绝一致。"""
+
+    def setUp(self):
+        self.setup_execution()
+
+    def readiness(self, project, role='manager', status=200):
+        response = self.clients[role].get(f'/api/business/projects/{project.pk}/readiness/')
+        self.assertEqual(response.status_code, status, response.data)
+        return response.data
+
+    def items(self, result, group='ship'):
+        return {item['key']: item for item in result[group]}
+
+    def test_ship_checks_list_every_gap_before_submitting_and_match_ship(self):
+        project = self.active_project(equipment=2)
+        self.complete(self.task(project, 'design'))
+        self.task(project, 'assembly')
+        shipping = self.task(project, 'shipping', title='客户预验收')
+        before = AuditLog.objects.count()
+        items = self.items(self.readiness(project))
+        self.assertEqual(AuditLog.objects.count(), before)
+        self.assertTrue(items['stage_design']['ok'])
+        self.assertEqual(items['stage_design']['detail'], '已完成 1 / 1')
+        self.assertEqual((items['stage_assembly']['ok'], items['stage_assembly']['detail']), (False, '已完成 0 / 1'))
+        self.assertEqual(items['stage_assembly']['target'], {'tab': 'tasks', 'phase': 'assembly'})
+        self.assertEqual((items['stage_test']['ok'], items['stage_test']['detail']), (False, '尚未建立调试阶段任务'))
+        self.assertFalse(items['follow_up']['ok'])
+        self.assertIn('客户预验收', items['follow_up']['detail'])
+        self.assertEqual((items['bom']['ok'], items['bom']['detail']), (False, '尚未登记 BOM'))
+        self.assertTrue(items['quantity']['ok'])
+        self.assertNotIn('materials', items)
+        self.assertFalse(items['receivable']['blocking'])
+        self.assertTrue(all(item['blocking'] for key, item in items.items() if key != 'receivable'))
+        self.assertTrue(all('message' not in item for item in items.values()))
+        # 发货时仍按同样顺序逐条拒绝，报错写明差几项。
+        denied = self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        self.assertIn('组装阶段', str(denied))
+        self.assertIn('还有 1 项未完成', str(denied))
+        self.complete(project.tasks.get(kind='assembly'))
+        denied = self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        self.assertIn('尚未建立调试阶段任务', str(denied))
+        self.complete(self.task(project, 'test'))
+        denied = self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        self.assertIn('采购跟进、客户预验收和整改', str(denied))
+        self.complete(shipping)
+        self.post(
+            'manager',
+            f'projects/{project.pk}/revise-bom/',
+            {'expected_revision': self.bom_version(project.pk), 'lines': [{'item': self.item.pk, 'quantity': '4'}]},
+        )
+        items = self.items(self.readiness(project))
+        self.assertEqual(items['materials']['ok'], False)
+        self.assertIn('1 种物料领料不足', items['materials']['detail'])
+        self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        stock = self.stock_and_issue(project, quantity='2')
+        items = self.items(self.readiness(project))
+        self.assertTrue(all(item['ok'] for item in items.values() if item['blocking']), items)
+        self.deliver(project)
+        # 第二台是最后一台，须覆盖剩余 BOM：领料只够一半时提示不足，与发货拒绝一致。
+        project.refresh_from_db()
+        result = self.readiness(project)
+        items = self.items(result)
+        self.assertEqual(items['quantity']['detail'], '已发货 1 / 2 台，还可发 1 台')
+        self.assertFalse(items['materials']['ok'])
+        self.assertIn('最后一台', items['materials']['detail'])
+        self.assertEqual([item['key'] for item in result['accept']], ['install', 'acceptance'])
+        self.assertFalse(self.items(result, 'accept')['install']['ok'])
+        self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
+        self.post(
+            'warehouse',
+            'stocks/issue/',
+            {'project': project.pk, 'stock': stock.pk, 'quantity': '2', 'reason': '第二台领料'},
+        )
+        self.assertTrue(self.items(self.readiness(project))['materials']['ok'])
+        self.deliver(project)
+        result = self.readiness(project)
+        # 全部发货后不再列发货条件，只剩验收进度。
+        self.assertEqual(result['ship'], [])
+        self.assertEqual(self.items(result, 'accept')['acceptance']['detail'], '已验收 0 / 2 批')
+
+    def test_close_checks_match_close_and_scope_is_project_manager(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        delivery = self.deliver(project)
+        self.accept(delivery)
+        project.refresh_from_db()
+        self.assertEqual(project.status, 'warranty')
+        result = self.readiness(project)
+        self.assertEqual((result['ship'], result['accept']), ([], []))
+        items = self.items(result, 'close')
+        self.assertEqual(list(items), ['tasks', 'deliveries', 'purchases', 'entries', 'banking'])
+        self.assertTrue(items['tasks']['ok'])
+        self.assertTrue(items['deliveries']['ok'])
+        self.assertFalse(items['entries']['ok'])
+        self.assertEqual(items['entries']['detail'], '还有 1 笔未结清或待退款')
+        self.assertTrue(items['banking']['ok'])
+        denied = self.post('manager', f'projects/{project.pk}/close/', {'reason': '尝试结项'}, status=409)
+        self.assertIn('未结清款项', str(denied))
+        project.members.add(self.users['production_manager'])
+        for role in ('member', 'production_manager', 'finance', 'purchaser'):
+            with self.subTest(role=role):
+                self.readiness(project, role, status=403)
+        outside = Project.objects.create(
+            code='OUT-1', name='未参与项目', customer=self.customer, manager=self.users['admin'], status='active'
+        )
+        self.readiness(outside, status=404)
+
+    def test_receivable_status_is_a_hint_and_never_blocks_shipping(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        entry = project.entries.get(kind='receivable')
+        Entry.objects.filter(pk=entry.pk).update(due_date=date.fromisoformat(TODAY) - timedelta(days=5))
+        items = self.items(self.readiness(project))
+        receivable = items['receivable']
+        self.assertEqual((receivable['ok'], receivable['blocking']), (False, False))
+        self.assertIn('已逾期 1 笔 ¥10,000.00', receivable['detail'])
+        self.assertTrue(all(item['ok'] for item in items.values() if item['blocking']))
+        self.deliver(project)
+
+
+class TaskEditAndDailyNoteTests(ExecutionFixtures, TestCase):
+    """正向日常登记的说明选填并缺省为动作名；纠错与逆向动作仍须写明原因。"""
+
+    def setUp(self):
+        self.setup_execution()
+        self.project = self.active_project()
+
+    def last_audit(self, operation):
+        return AuditLog.objects.filter(operation=operation).latest('pk')
+
+    def test_edit_task_changes_only_title_and_requirements_with_audit(self):
+        task = self.task(self.project)
+        self.project.members.add(self.users['production_manager'])
+        self.post('manager', f'tasks/{task.pk}/edit/', {'title': '3D画图', 'description': '明确图档版本'}, status=400)
+        self.post('member', f'tasks/{task.pk}/edit/', {'title': '3D画图', 'reason': '越权'}, status=403)
+        self.post('production_manager', f'tasks/{task.pk}/edit/', {'title': '3D画图', 'reason': '越权'}, status=403)
+        self.post('manager', f'tasks/{task.pk}/edit/', {'title': task.title, 'reason': '没改'}, status=400)
+        self.post('manager', f'tasks/{task.pk}/edit/', {'title': '', 'reason': '清空'}, status=400)
+        self.post(
+            'manager', f'tasks/{task.pk}/edit/', {'title': 'x', 'due_date': TODAY, 'reason': '多字段'}, status=400
+        )
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/edit/',
+            {'title': '3D画图', 'description': '完成布局并明确图档版本 V2', 'reason': '补充完成要求'},
+        )
+        task.refresh_from_db()
+        self.assertEqual((task.title, task.description), ('3D画图', '完成布局并明确图档版本 V2'))
+        record = self.last_audit('task.edit')
+        self.assertEqual(record.detail['before'], {'title': 'design', 'description': ''})
+        self.assertEqual(record.detail['reason'], '补充完成要求')
+        detail = self.clients['member'].get(f'/api/business/tasks/{task.pk}/').data
+        self.assertEqual(detail['description'], '完成布局并明确图档版本 V2')
+        self.complete(task)
+        self.post('manager', f'tasks/{task.pk}/edit/', {'title': '3D画图（定稿）', 'reason': '完成后更正名称'})
+        self.post('manager', f'tasks/{task.pk}/cancel/', {'reason': '退出计划'})
+        self.post('manager', f'tasks/{task.pk}/edit/', {'title': '已取消', 'reason': '不可改'}, status=409)
+        node = Task.objects.create(
+            project=self.project,
+            kind='shipping',
+            milestone='shipping_dispatch',
+            title='发货',
+            assignee=self.users['manager'],
+        )
+        self.post('manager', f'tasks/{node.pk}/edit/', {'title': '改名', 'reason': '汇总节点'}, status=409)
+
+    def test_start_complete_and_time_notes_default_to_action_names(self):
+        task = self.task(self.project)
+        self.post('manager', f'tasks/{task.pk}/start/', {'started_date': TODAY})
+        self.assertEqual(self.last_audit('task.start').detail['reason'], '开始任务')
+        self.post('manager', f'tasks/{task.pk}/complete/', {'completed_date': TODAY})
+        self.assertEqual(self.last_audit('task.complete').detail['reason'], '完成任务')
+        other = self.task(self.project, title='另一任务')
+        self.post('manager', f'tasks/{other.pk}/complete/', {'reason': '  '})
+        self.assertEqual(self.last_audit('task.complete').detail['reason'], '完成任务')
+        receipt = self.post(
+            'manager', f'tasks/{task.pk}/time/', {'user': self.users['member'].pk, 'hours': '2', 'date': TODAY}
+        )
+        self.assertEqual(TimeEntry.objects.get(pk=receipt['id']).reason, '登记工时')
+        self.post('manager', f'tasks/{task.pk}/time/', {'hours': '1', 'date': TODAY, 'reason': '画装配图'})
+        self.assertEqual(TimeEntry.objects.latest('pk').reason, '画装配图')
+
+    def test_corrections_and_reverse_actions_still_require_reason(self):
+        task = self.task(self.project)
+        self.post('manager', f'tasks/{task.pk}/start/', {'started_date': TODAY})
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/start-date/',
+            {'started_date': TODAY, 'expected_started_date': TODAY},
+            status=400,
+        )
+        self.complete(task)
+        self.post(
+            'manager',
+            f'tasks/{task.pk}/completion-date/',
+            {'completed_date': TODAY, 'expected_completed_date': TODAY},
+            status=400,
+        )
+        receipt = self.time(task, '2')
+        self.post('manager', f'time/{receipt["id"]}/amend/', {'hours': '1', 'date': TODAY}, status=400)
+        self.post('manager', f'tasks/{task.pk}/reopen/', {}, status=400)
+        other = self.task(self.project, title='待取消')
+        self.post('manager', f'tasks/{other.pk}/cancel/', {}, status=400)
+        self.post('manager', f'tasks/{other.pk}/assign/', {'assignees': [self.users['member'].pk]}, status=400)
+        self.assertEqual(Task.objects.get(pk=other.pk).status, 'open')
+        self.assertEqual(Task.objects.get(pk=task.pk).status, 'done')
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/budget/',
+            {'materials': '1', 'labor': '1', 'expenses': '1', 'expected_revision': 0},
+            status=400,
+        )
+
+    def test_acceptance_forecast_and_supervisors_notes_are_optional(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        delivery = self.deliver(project)
+        self.complete(delivery.tasks.get(kind='install'))
+        self.post('manager', f'deliveries/{delivery.pk}/accept/', {'date': TODAY})
+        self.assertEqual(self.last_audit('delivery.accept').detail['reason'], '交付验收')
+        self.post(
+            'manager',
+            f'projects/{project.pk}/forecast/',
+            {'remaining_labor': '0', 'remaining_expenses': '0', 'expected_revision': project.forecast_revision},
+        )
+        self.assertEqual(self.last_audit('project.forecast').detail['reason'], '更新完工估算')
+        project.refresh_from_db()
+        self.post(
+            'manager',
+            f'projects/{project.pk}/task-supervisors/',
+            {'supervisors': {'mechanical': self.users['member'].pk}, 'expected_revision': project.supervisor_revision},
+        )
+        self.assertEqual(self.last_audit('project.supervisors').detail['reason'], '设置专业主管')
+
+
+class ProjectRiskListTests(ExecutionFixtures, TestCase):
+    """项目列表的逾期任务数、只看有逾期和排序；任务的进行中筛选与交付批次进度。"""
+
+    def setUp(self):
+        self.setup_execution()
+
+    def rows(self, role='manager', **params):
+        response = self.clients[role].get('/api/business/projects/', params)
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data['results']
+
+    def test_overdue_count_filter_and_ordering(self):
+        late, calm, past = (self.active_project() for _ in range(3))
+        today = date.fromisoformat(TODAY)
+        Project.objects.filter(pk=late.pk).update(due_date=today + timedelta(days=60))
+        Project.objects.filter(pk=calm.pk).update(due_date=today + timedelta(days=30))
+        Project.objects.filter(pk=past.pk).update(due_date=today - timedelta(days=3))
+        overdue = [self.task(late, title=f'逾期{index}') for index in range(3)]
+        Task.objects.filter(pk__in=[task.pk for task in overdue]).update(due_date=today - timedelta(days=1))
+        self.complete(overdue[0])
+        self.post('manager', f'tasks/{overdue[1].pk}/cancel/', {'reason': '不再需要'})
+        Task.objects.filter(pk=self.task(calm, title='明天到期').pk).update(due_date=today + timedelta(days=1))
+        Task.objects.filter(pk=self.task(calm, title='今天到期').pk).update(due_date=today)
+        counts = {row['id']: row['task_overdue'] for row in self.rows()}
+        self.assertEqual((counts[late.pk], counts[calm.pk], counts[past.pk]), (1, 0, 0))
+        detail = self.clients['manager'].get(f'/api/business/projects/{late.pk}/').data
+        self.assertEqual(detail['task_overdue'], 1)
+        self.assertEqual({row['id'] for row in self.rows(overdue='true')}, {late.pk, past.pk})
+        self.assertEqual([row['id'] for row in self.rows(ordering='due_date')], [past.pk, calm.pk, late.pk])
+        self.assertEqual([row['id'] for row in self.rows(ordering='-due_date')], [late.pk, calm.pk, past.pk])
+        self.assertEqual(self.rows(ordering='-task_overdue')[0]['id'], late.pk)
+        self.assertEqual([row['id'] for row in self.rows()], [past.pk, calm.pk, late.pk])
+        Project.objects.filter(pk=past.pk).update(status='warranty')
+        self.assertEqual({row['id'] for row in self.rows(overdue='true')}, {late.pk})
+        for params in ({'ordering': 'name'}, {'overdue': 'yes'}):
+            with self.subTest(params=params):
+                self.assertEqual(self.clients['manager'].get('/api/business/projects/', params).status_code, 400)
+
+    def test_started_filter_and_delivery_stage(self):
+        project = self.ready_project()
+        started, waiting = self.task(project, title='已开工'), self.task(project, title='未开工')
+        self.post('manager', f'tasks/{started.pk}/start/', {'started_date': TODAY})
+
+        def ids(value):
+            response = self.clients['manager'].get('/api/business/tasks/', {'project': project.pk, 'started': value})
+            return {row['id'] for row in response.data['results']}
+
+        self.assertEqual(ids('true'), {started.pk})
+        self.assertIn(waiting.pk, ids('false'))
+        self.assertNotIn(started.pk, ids('false'))
+        self.assertTrue(all(Task.objects.get(pk=pk).status == 'open' for pk in ids('false')))
+        self.complete(started)
+        self.complete(waiting)
+        self.stock_and_issue(project)
+        delivery = self.deliver(project)
+        row = self.clients['manager'].get('/api/business/deliveries/', {'project': project.pk}).data['results'][0]
+        self.assertEqual(
+            (row['stage'], row['installer_name'], row['acceptor_name']), ('installing', 'member', 'manager')
+        )
+        self.complete(delivery.tasks.get(kind='install'))
+        row = self.clients['manager'].get(f'/api/business/deliveries/{delivery.pk}/').data
+        self.assertEqual(row['stage'], 'awaiting_acceptance')
+        self.post('manager', f'deliveries/{delivery.pk}/accept/', {'date': TODAY, 'reason': '客户签字'})
+        self.assertEqual(
+            self.clients['manager'].get(f'/api/business/deliveries/{delivery.pk}/').data['stage'], 'accepted'
+        )

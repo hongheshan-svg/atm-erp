@@ -68,6 +68,8 @@ export type Column = {
   tip?: (row: Row) => string | undefined
   // 单元格链接到关联单据（项目、采购单等）；返回 undefined 时按普通文本显示。
   link?: (row: Row) => RouteLocationRaw | undefined
+  // 值下方的一行小字（如「3 项逾期」「剩 20 天」）；risk 时用风险色。
+  flag?: (row: Row) => { text: string; risk?: boolean } | undefined
 }
 export type FlowNode = { key: string; label: string; hint?: string }
 export type Flow = {

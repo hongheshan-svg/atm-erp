@@ -141,7 +141,8 @@ def forecast(actor, key, project_id, data):
         state(project, {'active', 'delivering', 'warranty'})
         if type(data.get('expected_revision')) is not int or data['expected_revision'] != project.forecast_revision:
             raise Conflict('完工估算已更新，请刷新后重试。')
-        reason = text(data, 'reason')
+        # 完工估算是日常更新，依据选填，缺省记为动作名；修订预算仍须写明原因。
+        reason = text(data, 'reason', default='') or '更新完工估算'
         before = {
             'materials': str(project.remaining_materials),
             'labor': str(project.remaining_labor),

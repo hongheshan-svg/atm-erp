@@ -21,6 +21,9 @@ it('固定专业选择限制项目成员，提交版本和说明，未指定由�
   await wrapper.setProps({ project: { ...project, supervisor_revision: 3 } })
   expect(command.fields[0].options.map((option: any) => option.value)).toEqual([2, 3])
   expect(command.prepare({ mechanical: 3, reason: '确认分工' })).toEqual({ supervisors: { mechanical: 3, electrical: null, purchasing: null, production: null, delivery: null }, expected_revision: 2, reason: '确认分工' })
+  // 设置说明选填：留空时不提交，服务端记为「设置专业主管」。
+  expect(command.fields.find((field: any) => field.key === 'reason')).toMatchObject({ label: '设置说明', optional: true })
+  expect(command.prepare({ mechanical: 3 })).toEqual({ supervisors: { mechanical: 3, electrical: null, purchasing: null, production: null, delivery: null }, expected_revision: 2 })
   wrapper.unmount()
 })
 it('普通员工可查看主管但不能设置', async () => {
