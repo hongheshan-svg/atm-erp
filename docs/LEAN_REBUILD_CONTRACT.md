@@ -172,21 +172,23 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 修改申请与处理结果复用原不可删除审计记录，不新增审批表或可配置工作流；在项目锁、采购单锁和原幂等凭据内执行，旧申请编号不能处理新申请。列表、工作台和项目进度显示“修改申请待处理”，处理记录保留双方原因及同意/驳回结果；待办排除原申请人和当前修改申请人。
 - `purchases/{id}/approve-over-budget/` POST reason/confirmed/expected_snapshot：经理或管理员明确批准超额，confirmed 必须为 true，reason 必填，snapshot 必须等于锁内实时核算结果，否则 409 要求重新查看。保存批准人、原因及完整预算检查快照，不自动增加项目预算。预算设置和超额批准沿用经理角色，但最近预算调整人不能自行批准超额采购（403）；其他经理复核，管理员例外也必须填原因。不增加独立审批角色或多级流程；审计保留两类动作。
 - `receive/`：location/reason?/received_date?/backfill_reason?/lines[{line,quantity,pending_quantity?,remark?}]，line 是本单采购明细 id；quantity是合格入库数量，pending_quantity是隔离待处理数量（默认0）。说明 `reason` 选填（可写送货单号，缺省“采购收货”）；补录原因 `backfill_reason` 仍按日期规则必填。本次未到货行允许两者均为0并跳过，整批至少一行有正数量且每行不超过实际未到数量；重复明细仍拒绝。实际日期早于采购创建日时必须填写补录原因，并继续遵守锁账限制，包括全部隔离的到货。采购返回只读 created_at 供页面判断是否提示补录原因。隔离不计可用库存、不减少承诺或应付；仓管分批合格入库，累计金额保留分角差。采购页面根据原明细的合格/隔离数量显示“已到货待检”及隔离数量，不增加独立状态事实。
+- `receive/` 另接受明细 `cancel_remainder`（布尔，余量不再到货）与整单 `cancel_reason`：勾选的行在本次收货后把剩余未收数量（采购数 − 已收 − 已取消，含本次）一并取消，本次数量可为 0（只取消不收货）；有勾选时原因必填，无勾选时传原因拒绝。取消与收货在同一操作、同一事务和同一防重复凭据中完成，任一校验失败整单不收货也不取消；取消沿用 `cancel-remainder/` 的规则（采购权限及项目范围、隔离未清拒绝、应付按累计舍入差额冲减并写取消审计），纯仓库岗位勾选返回 403。本次已收足的行没有余量可取消返回 400。响应在有取消时附 `cancelled[{line,quantity}]`。页面收货表格逐行勾选“到货”（默认全选并按待收填入，取消勾选的行数量清零且不提交），入库日期放在第一项；多送（合格＋隔离超过待收）在提交前逐行提示，引导采购“新建采购”补单；仅采购/管理员看到“余量 X 不再到货”及原因。
 - `cancel-remainder/`：reason、可选 lines[{line,quantity?}]。已批准采购支持按明细、按数量取消；quantity 省略时取消所选明细全部未收余量，未选明细保留。所选明细有隔离数量时先处理隔离品。草稿和待审批采购允许整单作废（原因必填、不接受 lines，待审批单尚无应付）；待审批单有待处理修改申请时拒绝作废，须先由审批人处理申请。不传 lines 整单取消。采购页面对已批准、部分收货单提供“整单取消未收余量”，只填一次原因；原按明细取消与整单取消弹窗可相互切换。整单取消范围由服务端锁内计算，任何剩余明细仍有待检数量则整单拒绝，不跳过；已收货、库存和付款流水保留。应付仅按本次取消数量的累计舍入差额冲减，已付多出部分形成待退款余额；审计保留明细与原因，重复请求不再次冲减。
 
 ## 库存与纠错
 
-- `stocks/` GET；`stocks/opening/` 管理员 POST item/location/quantity/unit_cost/reason?（选填，缺省“期初库存”），只允许无历史库位。
+- `stocks/` GET 另返回只读 `last_received_date`（该库位最近一次采购合格入库日期，取流水 received_date，历史流水无日期时按登记当天；无采购入库为 null），列表与导出列为“最近入库日期”；`stocks/opening/` 管理员 POST item/location/quantity/unit_cost/reason?（选填，缺省“期初库存”），只允许无历史库位。
 - `stocks/issue/`：project/stock/task?/quantity/reason/remark?；生产领料受 BOM 上限约束，已验收项目必须关联未完成的售后任务。`reason` 选填（缺省“项目领料”，售后任务为“售后领料”）。
 - `stocks/bom-issue/` 按项目 BOM 批量领料（仓库岗位，项目范围）：GET `?project=` 列出本项目 BOM 仍有未领需求且有库存的物料，按库位逐行返回 stock/物料信息/required_quantity/issued_quantity/bom_remaining/available 及预填 quantity（同物料多库位按库位顺序依次填满还可领量），并返回 pending_items、missing_items（缺库存物料数）。POST project/lines[{stock,quantity,remark?}]/reason?/confirm_shared?（操作名 `stock.issue_batch`，需 Idempotency-Key）：项目须执行中或交付中，同一库存行不得重复，逐行沿用单行领料的 BOM 剩余、库存与共享到货校验，任一行不通过整单不出库；返回 moves 与 count。
 - `stocks/{id}/count/`：quantity/expected_quantity/expected_updated_at/reason，拒绝过时盘点快照；只有零库存盘盈可由管理员额外给 unit_cost。
 - `moves/` GET；`moves/{id}/return-material/`：quantity/reason，不能超原领料或退回已交付部分的必要材料。
-- `moves/` 与 `payments/` 列表可追到来源单据：库存流水另返回 item_code/unit/project_code/project_name/purchase/purchase_code/created_by_name；收付款流水另返回 kind/project_code/project_name/partner_name/purchase/reconciliation_code，对账单显示编号而不是内部 ID。`entries/` 另返回 purchase_code，列表按“未结在前、到期日先后、编号”排序。
+- `moves/` 与 `payments/` 列表可追到来源单据：库存流水另返回 item_code/unit/project_code/project_name/purchase/purchase_code/created_by_name，页面“入库日期”列取采购收货流水的 received_date（历史无日期按登记当天）；收付款流水另返回 kind/project_code/project_name/partner_name/purchase/reconciliation_code，对账单显示编号而不是内部 ID。`entries/` 另返回 purchase_code，列表按“未结在前、到期日先后、编号”排序。
 - `return-purchase/`：quantity/reason，供应商冲减按原采购成本，库存按移动平均价值退出，价差单列。采购退货与领料一样，会占用其他项目已到货未领用物料时须勾选 `confirm_shared` 确认并留审计。
 
 ### 收货与项目出库操作明细
 
-- 收货和项目领料页面展示项目号、产品编号、零件名称、图号/型号、版本/品牌、单位、需求数量、零件类型及末列备注；收货保留BOM单元，区分待收、本次合格和隔离数量。图号与型号、版本与品牌分别标明来源；数据直接取原物料资料，不允许在收货/领料时改物料资料。电脑为可横向滚动表格，手机逐项展示，20行分页且翻页保留输入。
+- 收货和项目领料页面展示项目号、产品编号、零件名称、图号/型号、版本/品牌、单位、需求数量、零件类型及末列备注；收货保留BOM单元，区分待收、本次合格和隔离数量。图号与型号、版本与品牌分别标明来源；数据直接取原物料资料，不允许在收货/领料时改物料资料。电脑为可横向滚动表格，手机逐项展示，20行分页且翻页保留输入。收货逐行勾选本次到货，表头可全选，摘要显示入库日期、已勾选行数和本次合格/待收合计。
+- `purchases/{id}/` 明细（仅单条读取）另返回 `receipts[{id,received_date,quantity,location}]`（该明细逐批合格入库流水，按日期排序）和 `last_received_date`；列表接口不返回，避免列表逐行展开流水。查看明细首列合并名称、编码、规格（及图号、品牌），项目号与单元同列，另列待收与入库日期（分批时列出最近 3 批），表头显示最近入库日期；手机按行卡片显示，短值两栏并排。
 - 收货需求数量取关联BOM单元数量；无BOM采购取本单明细数量。领料需求随所选项目读取并汇总同物料BOM数量，售后按任务领用；库存仍是公司共享库存，不建立虚构的单元库存。
 - 逐条备注 `remark` 选填、最多500字符。合格收货和领料写入原不可覆盖库存流水的备注字段，分批记录互不覆盖；仅隔离到货的备注保留在原采购处理审计中。库存流水列表末列显示备注，采购处理记录提供到货备注。历史流水默认空备注，数量、金额及原原因不变；本次不改导出/打印布局。
 - 采购明细只读补充图号、版本、型号、品牌、编码类别、单位和BOM需求，采购头补充项目编号；库存只读补充图号、版本及编码类别。仓管继续无权读取采购单价和库存成本，服务端仍在锁内校验权限、项目状态、数量和重复提交。
