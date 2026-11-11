@@ -203,6 +203,39 @@ class InventoryTests(BusinessFixtures, TestCase):
         self.assertNotIn('value', response.data['results'][0])
         self.assertNotIn('supplier_credit', response.data['results'][0])
 
+    def test_stock_value_is_limited_to_cost_roles_and_authorized_general_manager(self):
+        stock = self.open_stock()
+        self.issue(stock, '1')
+        general = User.objects.create_user(username='general', role='manager', management_reports=True)
+        self.clients['general'] = APIClient()
+        self.clients['general'].force_authenticate(general)
+        readers = {'admin', 'finance', 'purchaser', 'purchase_manager', 'general'}
+        global_moves = {'admin', 'finance', 'purchaser', 'purchase_manager', 'warehouse'}
+        for role in ('admin', 'finance', 'purchaser', 'purchase_manager', 'general', 'manager', 'warehouse'):
+            with self.subTest(role=role):
+                client = self.clients[role]
+                listed = client.get('/api/business/stocks/').data['results'][0]
+                detail = client.get(f'/api/business/stocks/{stock.pk}/').data
+                header = client.get('/api/business/stocks/export/').content.decode('utf-8-sig').splitlines()[0]
+                # 库存结存没有项目归属，按库存金额口径；项目经理即便负责领料项目也看不到。
+                self.assertEqual('value' in listed, role in readers)
+                self.assertEqual('value' in detail, role in readers)
+                self.assertEqual('库存金额' in header, role in readers)
+                moves = {row['kind']: row for row in client.get('/api/business/moves/').data['results']}
+                # 期初流水同样没有项目归属（只有全局岗位读得到流水本身），金额与库存结存同口径。
+                self.assertEqual('opening' in moves, role in global_moves)
+                if role in global_moves:
+                    self.assertEqual('value' in moves['opening'], role in readers)
+                # 关联项目的领料流水仍按项目金额范围：负责项目的经理可见，采购岗位不因此看到项目成本。
+                self.assertEqual('issue' in moves, role != 'general')
+                if role != 'general':
+                    self.assertEqual('value' in moves['issue'], role in {'admin', 'finance', 'manager'})
+        self.assertEqual(Decimal(self.clients['finance'].get('/api/business/stocks/').data['results'][0]['value']), 80)
+        general.management_reports = False
+        general.save(update_fields=['management_reports'])
+        self.clients['general'].force_authenticate(general)
+        self.assertNotIn('value', self.clients['general'].get(f'/api/business/stocks/{stock.pk}/').data)
+
 
 class IssueSlipTests(BusinessFixtures, TestCase):
     """领料单：单行、库存勾选批量、按 BOM 领料都各开一张；批量可带任务，规则与单行领料相同。"""

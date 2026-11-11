@@ -523,7 +523,8 @@ class ProgressTests(BusinessFixtures, TestCase):
         self.assertEqual(response.status_code, 403)
         response = self.clients['admin'].post(f'/api/business/projects/{self.project.pk}/progress/', {}, format='json')
         self.assertEqual(response.status_code, 405)
-        self.assertEqual(APIClient().get(f'/api/business/projects/{self.project.pk}/progress/').status_code, 403)
+        # 未登录返回 401（请先登录），与权限不足的 403 区分。
+        self.assertEqual(APIClient().get(f'/api/business/projects/{self.project.pk}/progress/').status_code, 401)
 
     def test_closed_project_does_not_display_false_overdue(self):
         Project.objects.filter(pk=self.project.pk).update(status='closed')

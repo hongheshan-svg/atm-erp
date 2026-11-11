@@ -46,7 +46,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 - `POST /api/business/record-deletions/`：`resource`、`ids`（1～1000个不重复的正整数，所有支持删除的资源使用同一上限）、`reason`（必填，最多500字），必须提供 `Idempotency-Key`。仅管理员含兼任管理员可调用，每次回放重新检查启用状态和权限。单条与勾选批量共用此接口；事务内按编号锁定，关联检查与业务写入互斥，任何一条拒绝则整批回滚，不留下删除审计或成功回执。
 - 删除关联检查拒绝时返回409，`detail`显示业务编号和名称；BOM包含物料编码、名称、单元及项目编号。`blocked_id`为不能删除的记录ID（字符串），仅用于定位本次已选记录，不是列表序号。确认框自动定位、高亮并支持按编码、名称或单元搜索，不自动跳过或删除其他明细。
 - 支持物料、往来单位、销售、项目、BOM、采购、库存余额、库存流水、应收应付及费用、收付款、对账、银行流水及匹配、任务、交付、工时、附件和用户。公司资料、编号规则和审计日志不提供删除入口。
-- 未被使用的普通记录调用原有软删除；采购草稿同时软删除自有明细；BOM沿用原移除服务，仍检查领用和在途采购。基础资料有引用时拒绝。执行中的关联项目、已签约销售及尚待收货的采购须先完成或取消业务；已结项/取消项目与相关销售、已收货/取消采购、已完成任务移入历史，保留原始事实及子记录。
+- 未被使用的普通记录调用原有软删除；采购草稿同时软删除自有明细；BOM沿用原移除服务，仍检查领用和在途采购。基础资料有引用时拒绝；物料与资料维护同一口径，已移除的 BOM 行、已删草稿的采购明细等历史引用也计入（提示如“已移除的BOM明细”），不再使用的物料可先停用。执行中的关联项目、已签约销售及尚待收货的采购须先完成或取消业务；已结项/取消项目与相关销售、已收货/取消采购、已完成任务移入历史，保留原始事实及子记录。
 - 仍在办理的记录拒绝移入“已删除记录”，整批回滚：应收应付或费用余额不为0（含已取消但待退款）或有草稿对账；收付款流水所属款项余额不为0；对账单为草稿，或已确认但仍有未使用核准额度（需先作废剩余额度）；银行流水未作废且待复核户名或仍有未认领/未匹配金额；银行匹配所属银行流水仍在办；交付批次在项目未结项/未取消时未验收，或已验收但仍在质保期内（质保最后一天仍算在办）。项目已结项或取消后，其交付可整理。
 - 已验收（warranty）项目的 BOM 行拒绝删除，提示“项目已验收，BOM 已锁定”。
 - 未在办理的库存、资金、工时、对账、银行及交付事实仅移出默认列表，原记录不置删除标记，不改变库存、余额、授权额度、成本或报表。业务错误仍用原冲销、更正、取消动作；锁定期间也允许这种仅列表整理。非零库存行拒绝整理；零库存行隐藏后再次收货会自动显示。用户删除为停用并隐藏，保留人员身份及历史，原用户名不能再次使用，禁止删除当前登录账号。已被业务使用的附件保留原文件和鉴权下载。
@@ -105,7 +105,7 @@ BOM写入/读取新增 required_date、application_date（可空日期）、appl
 
 `/api/auth/login/` 接收 username/password，返回 access/refresh；`refresh/` 接收 refresh；`me/` 返回 id、username、display_name、role、roles、management_reports；`directory/` 返回启用人员 id/display_name/role/roles 数组。`password/` 接收 old_password/new_password，修改后令牌撤销，重新登录。
 
-`/api/auth/users/` 管理员 GET/POST，`users/{id}/` GET/PATCH：username、display_name、roles（兼容旧 role）、hourly_cost、is_active、password、management_reports。新增必填非空密码；管理员创建/重设密码及首次向导添加人员不限制密码长度、常见密码或字符组合。页面支持本地安全随机生成20位初始密码，也可手动设置；编辑时不提交密码则保留原密码。密码不回显、不入日志/审计，仅哈希存储。用户后续在“设置 → 我的账户”自行改密，仍校验原密码与新密码强度（至少12位等），所有密码校验提示固定中文，不新增强制改密流程。不可移除最后管理员。management_reports 默认为 false，包含 manager 角色时允许设为 true；管理员自动可看经营报表。授权更正留审计，me 返回本人此开关，不接受用户自行更改。
+`/api/auth/users/` 管理员 GET/POST，`users/{id}/` GET/PATCH：username、display_name、roles（兼容旧 role）、hourly_cost、is_active、password、management_reports。新增必填非空密码；管理员创建/重设密码及首次向导添加人员不限制密码长度、常见密码或字符组合。页面支持本地安全随机生成20位初始密码，也可手动设置；编辑时不提交密码则保留原密码。密码不回显、不入日志/审计，仅哈希存储。用户后续在“设置 → 我的账户”自行改密，仍校验原密码与新密码强度（至少12位等），所有密码校验提示固定中文，不新增强制改密流程。新增与修改沿用业务写入的幂等链路：必须带 Idempotency-Key（缺失 400），同一标识重试回放首次结果（新增仍返回 201 与同一用户，不再报用户名重复），数据不同返回 409；回执只保存加盐后的密码摘要，不存明文。不可移除最后管理员。management_reports 默认为 false，包含 manager 角色时允许设为 true；管理员自动可看经营报表。授权更正留审计，me 返回本人此开关，不接受用户自行更改。
 
 APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有效且未撤销的令牌刷新使用独立的每账号30次/分钟限制，无效、停用或已撤销令牌的刷新使用独立的每IP 10次/分钟限制。刷新先验签并检查账号状态，不能使用伪造账号标识切换限制桶。development关闭上述登录及刷新限流，其他环境值拒绝启动。Compose/安装器通过 LEAN_ENVIRONMENT 设置该值，默认 production；发布时不得沿用 development 配置。DEBUG 独立且默认关闭。
 
@@ -117,7 +117,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 ## 公司与编号
 
-`/api/core/company/` GET、`company/1/` 管理员 PATCH name/address/phone；`codes/`、`audit/` 管理员可读。`/api/health/` 返回 schema 版本。
+`/api/core/company/` GET、`company/1/` 管理员 PATCH name/address/phone（需 Idempotency-Key，同一标识回放首次结果，数据不同返回 409）；`codes/`、`audit/` 管理员可读。`/api/health/` 返回 schema 版本。
 
 `/api/core/codes/{id}/configure/` 管理员 POST，提供 Idempotency-Key，完整提交 prefix/date_format/padding/reset_cycle/reason/expected_revision。前缀为 1–10 位字母、数字、短横线或下划线；日期可为空或 YY/YYYY/YYYYMM/YYYYMMDD；普通流水补零位数 1–10，超出位数自然增长；项目采用ATM/YY/2规范时序号上限99，满额拒绝取号；周期 never/year/month/day，日期必须覆盖重置周期。生成格式为前缀＋服务器本地日期＋流水；修改配置不回退现有序号，配置保存不重置计数；后续取号遇到新的重置周期才从1起，已存在编码（含软删除）自动跳过。规则版本过期拒绝，修改原因及前后配置留审计；不允许编辑计数器、用途或历史业务编号。
 
@@ -170,7 +170,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 待审批采购提供 `request-change/` POST `{reason}`，沿用采购维护岗位与项目范围。申请只记录修改原因，不改变数量、单价、库存或应付；同一单只允许一条待处理申请。`review-change/` POST `{request_id,decision:approve|reject,reason}` 由有范围的采购审批人处理：同意退回草稿，修改后重新提交审批；驳回保留待审批和原内容。审批分离覆盖原创建人、最近提交人、数量/单价修改人及当前修改申请人，兼任角色不能自批；管理员例外须说明原因并留审计。旧 `reject/` 退回也执行人员分离，有待处理申请时必须先处理申请，不能通过旧接口绕过。
 - `change_request` 只读返回当前待处理申请的编号、申请人、时间和原因；`can_review_change` 表示是否允许当前人员处理。待处理期间普通批准、超预算批准、直接退回均拒绝；待处理期间待审批单直接作废也拒绝；无待处理申请时采购维护人员可填写原因整单作废。待审批单删除（含管理员批量删除）仍拒绝。已批准、部分/全部收货的单据不支持此申请，继续用原取消余量、更正流程。草稿修改仍限原明细数量/单价/交期、账期、备注和质保；供应商或物料选错时，可直接作废后重建。
 - 修改申请与处理结果复用原不可删除审计记录，不新增审批表或可配置工作流；在项目锁、采购单锁和原幂等凭据内执行，旧申请编号不能处理新申请。列表、工作台和项目进度显示“修改申请待处理”，处理记录保留双方原因及同意/驳回结果；待办排除原申请人和当前修改申请人。
-- `purchases/{id}/approve-over-budget/` POST reason/confirmed/expected_snapshot：经理或管理员明确批准超额，confirmed 必须为 true，reason 必填，snapshot 必须等于锁内实时核算结果，否则 409 要求重新查看。保存批准人、原因及完整预算检查快照，不自动增加项目预算。预算设置和超额批准沿用经理角色，但最近预算调整人不能自行批准超额采购（403）；其他经理复核，管理员例外也必须填原因。不增加独立审批角色或多级流程；审计保留两类动作。
+- `purchases/{id}/approve-over-budget/` POST reason/confirmed/expected_snapshot：经理或管理员明确批准超额，confirmed 必须为 true，reason 必填，snapshot 必须等于锁内实时核算结果，否则 409 要求重新查看。保存批准人、原因及完整预算检查快照，不自动增加项目预算；管理员调整预算后自己批准超额时，审计与普通批准一样标记 `budget_adjuster_approval`。预算设置和超额批准沿用经理角色，但最近预算调整人不能自行批准超额采购（403）；其他经理复核，管理员例外也必须填原因。不增加独立审批角色或多级流程；审计保留两类动作。
 - `receive/`：location/reason?/received_date?/backfill_reason?/lines[{line,quantity,pending_quantity?,remark?}]，line 是本单采购明细 id；quantity是合格入库数量，pending_quantity是隔离待处理数量（默认0）。说明 `reason` 选填（可写送货单号，缺省“采购收货”）；补录原因 `backfill_reason` 仍按日期规则必填。本次未到货行允许两者均为0并跳过，整批至少一行有正数量且每行不超过实际未到数量；重复明细仍拒绝。实际日期早于采购创建日时必须填写补录原因，并继续遵守锁账限制，包括全部隔离的到货。采购返回只读 created_at 供页面判断是否提示补录原因。隔离不计可用库存、不减少承诺或应付；仓管分批合格入库，累计金额保留分角差。采购页面根据原明细的合格/隔离数量显示“已到货待检”及隔离数量，不增加独立状态事实。
 - `receive/` 另接受明细 `cancel_remainder`（布尔，余量不再到货）与整单 `cancel_reason`：勾选的行在本次收货后把剩余未收数量（采购数 − 已收 − 已取消，含本次）一并取消，本次数量可为 0（只取消不收货）；有勾选时原因必填，无勾选时传原因拒绝。取消与收货在同一操作、同一事务和同一防重复凭据中完成，任一校验失败整单不收货也不取消；取消沿用 `cancel-remainder/` 的规则（采购权限及项目范围、隔离未清拒绝、应付按累计舍入差额冲减并写取消审计），纯仓库岗位勾选返回 403。本次已收足的行没有余量可取消返回 400。响应在有取消时附 `cancelled[{line,quantity}]`。页面收货表格逐行勾选“到货”（默认全选并按待收填入，取消勾选的行数量清零且不提交），入库日期放在第一项；多送（合格＋隔离超过待收）在提交前逐行提示，引导采购“新建采购”补单；仅采购/管理员看到“余量 X 不再到货”及原因。
 - `cancel-remainder/`：reason、可选 lines[{line,quantity?}]。已批准采购支持按明细、按数量取消；quantity 省略时取消所选明细全部未收余量，未选明细保留。所选明细有隔离数量时先处理隔离品。草稿和待审批采购允许整单作废（原因必填、不接受 lines，待审批单尚无应付）；待审批单有待处理修改申请时拒绝作废，须先由审批人处理申请。不传 lines 整单取消。采购页面对已批准、部分收货单提供“整单取消未收余量”，只填一次原因；原按明细取消与整单取消弹窗可相互切换。整单取消范围由服务端锁内计算，任何剩余明细仍有待检数量则整单拒绝，不跳过；已收货、库存和付款流水保留。应付仅按本次取消数量的累计舍入差额冲减，已付多出部分形成待退款余额；审计保留明细与原因，重复请求不再次冲减。
@@ -203,7 +203,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 任务支持多人共同执行：创建、模板生成、重新分配与重开接受 `assignees: [人员ID,...]`，至少一名、不得重复、均须已启用且有项目访问权限。兼容原单人 `assignee`，两种输入不得同时传入。响应保留首位 `assignee`，增加完整 `assignees`，`assignee_name` 展示全部姓名。我的任务筛选、工作台及进度人员展示包含每位执行人；仍按项目权限过滤。任务列表及导出先按项目、六阶段、模板节点顺序排序再分页，自定义任务排在所属阶段固定节点之后。
 - `tasks/{id}/complete/`：reason?/completed_date?/started_date?（仅未记录开始日期时允许同时补录），实际完成日期不能晚于今天，旧客户端省略时用确认当天；completed_at仍保留系统提交时刻，对应专业主管或有权项目经理/管理员确认整项完成；完成说明 `reason` 选填（缺省“完成任务”）；六阶段允许交叉推进，不以其他阶段完成作为手动任务完成/重开的前置条件。`assign/`：assignees（兼容assignee）/reason/due_date?/discipline?；省略日期保留原值，null清空，实际批次安装/验收期限不得早于发货日。`cancel/`：reason；`reopen/`：reason、assignees?，省略执行人时保留并重验全部原执行人。重新分配替换完整执行人集合，审计保留变更前后人员；同一任务多人同时确认仍仅完成一次。生产经理仅管理assembly/test/install/service，验收仍必须从交付登记；安装不可取消，已验收安装及已交付生产阶段不可重开。
 - `tasks/{id}/start/` 接受 started_date/reason?（选填，缺省“开始任务”；`start-date/` 更正仍须原因），对应专业主管或有权项目经理/管理员记录手动任务的实际开工日；仅待完成且未开始可用。`start-date/` 接受 started_date/expected_started_date/reason，由对应专业主管或有权项目经理/管理员补录已完成任务或更正未结束/已完成任务开始日，快照过时拒绝覆盖。started_at为首次登记时刻；更正保留该时刻和前后日期审计。不能晚于今天或已知实际完成日；安装不早于发货，售后不早于售后发生日。汇总节点与批次验收从实际业务办理，不提供手动开始。
-- `tasks/{id}/reschedule/` POST due_date/reason（均必填，需 Idempotency-Key）：只改待完成任务的计划完成日期，执行人与专业不变；权限与重新分配相同（对应阶段的任务管理岗位，生产经理仅限装配/调试/安装/售后），新日期不得与原日期相同，批次安装/验收任务不得早于本批发货日。成功后同步里程碑，站内通知执行人，审计 `task.reschedule` 保留原日期、新日期与原因。`tasks/{id}/edit/` POST title/description/reason（reason 必填，权限同上）：只改任务名称与完成要求，自动汇总节点不可改，审计保留原文。`tasks/?started=true|false` 筛选待完成任务中已/未记录实际开始日期的部分（“进行中”不新增状态值）。
+- `tasks/{id}/reschedule/` POST due_date/reason（均必填，需 Idempotency-Key）：只改待完成任务的计划完成日期，执行人与专业不变；权限与重新分配相同（对应阶段的任务管理岗位，生产经理仅限装配/调试/安装/售后），新日期不得与原日期相同，批次安装/验收任务不得早于本批发货日。计划日期不影响按交付事实汇总的自动节点，改期与重新分配不重算里程碑（取消、重开仍重算）；成功后站内通知执行人，审计 `task.reschedule` 保留原日期、新日期与原因。`tasks/{id}/edit/` POST title/description/reason（reason 必填，权限同上）：只改任务名称与完成要求，自动汇总节点不可改，审计保留原文。`tasks/?started=true|false` 筛选待完成任务中已/未记录实际开始日期的部分（“进行中”不新增状态值）。
 - 列表、详情及导出返回 started_date/started_at/elapsed_days/schedule_variance_days。历时为实际完成日减实际开始日加1（自然日含首尾，同日为1天）；待完成任务算至今天，已完成缺少任一实际日期时为空，已取消任务不再计算。计划偏差为实际完成日减计划完成日，正数延期、负数提前、0按期；待完成任务只显示已逾期天数或未逾期，不显示虚构提前。未设置计划日期则不计算偏差。由日期实时派生，不按人数乘算，不新增人天、TimeEntry或人工成本。重开保留原开始日期，清空完成日期后历时继续累计，包含返工。已开始任务不再作为未使用记录直接删除，须结束后按原归档规则处理；发货后已开工的生产阶段任务不能通过取消绕过后续发货校验。
 - 任务的 due_date 在页面与导出中显示为“计划完成日期”，其后展示 completed_date“实际完成日期”。旧手动任务不从点击时间推算实际日期；迁移只从实际交付/验收记录补齐对应业务节点。`tasks/{id}/completion-date/` 接受 completed_date/expected_completed_date/reason，由对应专业主管或有权项目经理/管理员为已完成的手动任务补录或更正；原值不一致拒绝并提示刷新，保留原完成提交时间和日期前后值审计。重开清空当前完成日期，原值保留在完成及更正审计中。
 - 安装实际完成日期不能早于本批发货、不能晚于已登记的验收；验收不能早于已知安装实际完成日。售后完成不能早于售后发生日，不受原批次验收日上限限制。三个自动汇总节点分别取全部发货、全部安装完成、全部验收的最晚实际日期；历史安装日期未齐时保持日期空值。更正安装日期同步更新汇总，不能直接修改自动汇总或批次验收的完成日期。日期登记本身不产生工时或人工成本。
@@ -213,7 +213,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 工时登记成功回执返回 `id/task/date/hours/user_name`，沿用幂等请求回放；前端显示本次实际保存值，直接打开任务工时明细。
 - 任务列表、详情、导出返回 `logged_hours`（净小时）和 `time_entry_count`（含冲销的流水条数），从原工时聚合，无逐行查询。`GET tasks/{id}/time-records/` 按任务项目范围鉴权，支持分页及 `mine=true`；返回工时原记录、冲销、更正和 `archived` 标记，按提交时间倒序。`summary.logged_hours/my_hours` 为整项/当前人员全部分页净工时，含移出默认列表的历史事实；不按任务历时生成工时，金额仍按原岗位过滤。
 - `time/{id}/amend/`：date/hours/reason，对应专业主管或有权项目经理/管理员更正，hours=0 撤销。冲销+替代记录保留历史与原费率，重复更正拒绝。
-- `projects/{id}/ship/`：quantity/date/installer/acceptor/note，原设计/装配/调试必需阶段全部完成，已安排的采购跟进和发货前手动任务完成或取消，且累计领料覆盖本批数量后才可发货，创建安装与验收任务。可选 `install_due_date`、`acceptance_due_date`（不得早于发货日期），写入自动生成的安装/验收任务期限；留空保持无期限。成功响应对金额可读人员另带 `receivables`（未收应收节点 entry/title/outstanding/due_date/overdue，无未收为空数组），其他人员不返回该字段；只提示，不改变发货规则与权限。
+- `projects/{id}/ship/`：quantity/date/installer/acceptor/note（installer/acceptor 缺省为项目负责人；所选人员或缺省负责人已停用时按该字段返回 400，任务执行人同样按 assignee 字段返回 400），原设计/装配/调试必需阶段全部完成，已安排的采购跟进和发货前手动任务完成或取消，且累计领料覆盖本批数量后才可发货，创建安装与验收任务。可选 `install_due_date`、`acceptance_due_date`（不得早于发货日期），写入自动生成的安装/验收任务期限；留空保持无期限。成功响应对金额可读人员另带 `receivables`（未收应收节点 entry/title/outstanding/due_date/overdue，无未收为空数组），其他人员不返回该字段；只提示，不改变发货规则与权限。
 - `deliveries/{id}/accept/`：date/reason，经理确认安装完成后的验收；每批独立保修截止日。`reason` 选填（缺省“交付验收”）。
 - `projects/{id}/service/`：delivery/date/title/description/assignee/due_date/fee/fee_due_date?。due_date 为维修截止日，收费时页面独立填写客户付款到期日 fee_due_date，保存到原售后应收；旧客户端省略时以售后业务日期兼容，不再使用维修期限。任务保留完整标题，应收摘要按字段长度截取并保留任务关联。质保期内（含截止当天）可登记收费售后，仅项目经理/管理员，且须填写 `charge_reason`（非质保责任原因，记审计）；期外收费为正数并生成应收，期外免费（fee=0）须由项目经理填写 free_reason 并记入审计，不生成应收。生产经理仅可为参与项目已验收保内批次创建fee=0售后；过保或非零费用请求403，由项目经理确认。生产经理可派工既有收费售后，指定为该专业主管后可确认完成，但其取消/重开涉及账款，必须由项目经理操作。售后材料、工时纳入实际成本。
 
@@ -240,7 +240,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 ## 评审整改补充契约
 
 - `projects/{id}/bom-impact/` GET，经理/管理员可读。返回按物料汇总的需求、已领、在途、当前最低可改量和未完成采购链接；不创建新的变更台账。减少用量先取消采购余量、处理隔离品和退回未用材料；已交付所需材料不能退。
-- `purchases/{id}/reject/` POST reason，经理将待批准采购退回草稿。`edit/` POST expected_updated_at/reason/due_date/note/lines[{id,quantity,unit_price,due_date}]，采购权限仅改草稿，保留原明细ID，重新校验BOM总缺口、金额及版本；不得漏行或重复行，重新提交后才可批准。
+- `purchases/{id}/reject/` POST reason，经理将待批准采购退回草稿。`edit/` POST expected_updated_at/reason/due_date/note/lines[{id,quantity,unit_price,due_date}]，采购权限仅改草稿，保留原明细ID，重新校验BOM总缺口、金额及版本；关联 BOM 行调增数量时与按缺料下单同一缺口口径（扣除已领、在途及在库可领），超出返回 409“采购数量超过当前缺口”，只改单价、交期或调减不受后到库存影响；不得漏行或重复行，重新提交后才可批准。
 - `purchases/{id}/delivery-plan/` POST expected_updated_at/reason?/lines[{id,due_date}]，说明 `reason` 选填（缺省“更新到货计划”）；采购权限维护已批准/部分收货的未完成明细承诺日期；不改变原应付期限。工作台为采购及仓库提供逾期未完成明细对应采购入口。
 - `purchases/{id}/quality-accept/` POST location/reason?/lines[{line,quantity}]，仓库将隔离数量转入合格库存（说明选填，缺省“隔离品合格入库”），数量不能超过隔离余额；合格入库日期（received_date）不得早于该明细最近一次隔离到货日期。`quality-return/` POST reason（必填）/lines[{line,quantity}]，仓库将隔离品退回供应商，继续保留待补货数量及原应付；不再补货需采购另行取消余量；退回后按合格收货与隔离数量重算状态，都没有时回到“已批准待收货”。隔离余额未清不能取消余量。`handling-history/` GET 沿用采购可读角色，分页展示上述动作的人员、时间、原因，不向仓库暴露价格。
 - `sales/{id}/amend/` POST expected_updated_at/reason/document/date/amount/equipment_quantity/warranty_months/milestones?/credits?。经理提交正式补充协议，document必须是同项目合同附件；amount为变更后总额。增额milestones[{title,amount,due_date}]合计必须等于差额；减额credits[{entry,amount}]必须指向同项目合同应收，合计等于减少金额且不超过原款项可抵减额。已收款抵减后保留负余额供财务退款。无金额差额时不允许节点或抵减。已发货不能改变总设备数；质保仅改变后续批次。原签约金额original_contract_amount保留，ContractAmendment不可变记录保存前后快照与附件，现行contract_amount作为协议后的事实投影。`amendments/` GET 返回协议记录，仅销售可读角色可访问。失败回滚全部应收、协议、审计及ActionReceipt。
@@ -256,7 +256,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 全部业务列表、报表及表单明细统一显示序号：分页列表按当前筛选/排序结果连续计数，单据明细按当前行顺序计数；序号仅供界面定位，不作为记录ID或业务编号，不参与提交和导出映射。导入及表格附件沿用原文件行号，合同沿用原明细序号。宽表统一提供横向滚动条及左右查看按钮，窄屏解除固定列遮挡；编辑卡片显示行/项序号，不挤压输入字段。复用 `BusinessTable` / `TableScroll`，后续业务表格沿用同一控件。
 
 - 用户列表支持 `search`（账号、姓名）、`is_active` 和 `role`；角色匹配主岗位及兼任岗位，管理员选项包含超级管理员。仍仅管理员可读取和维护用户。
-- 库存列表支持 `search`（物料编码、名称、规格、品牌），以及 `location`、`item__brand`、`item__part_type`。响应中的 `specification/brand/part_type/unit` 只读派生自物料，不重复维护，库存金额仍按岗位过滤。
+- 库存列表支持 `search`（物料编码、名称、规格、品牌），以及 `location`、`item__brand`、`item__part_type`。响应中的 `specification/brand/part_type/unit` 只读派生自物料，不重复维护。库存金额按岗位过滤：库存列表、详情及导出的 `value`（导出列“库存金额”），以及不归属项目的期初、盘点流水的 `value/supplier_credit`，只对管理员、财务、采购员、采购经理和获经营报表授权的总经理（manager 且 management_reports=true）返回；普通项目经理、仓管不返回。关联项目的流水金额仍按项目金额范围。
 - 款项列表支持 `search`（款项标题、项目名称和编号）和 `unsettled=true`。未结判断为原金额不等于冲减加净已结算；负余额待退款同样保留，不以大于零过滤退款。沿用原项目范围与金额权限。
 - 列表查询、分页、导出复用已应用的同一组筛选参数；状态页签不改变单据状态。
 
@@ -282,7 +282,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 ## 业务对账与银行核对
 
-- `reconciliations/` 财务/管理员 POST `entry/kind/counterparty_balance/approved_amount/basis?/document?/reason?`，kind 为 settlement/prepayment/refund；金额按两位小数字符串，退款对方余额为负数。生成 DZ 编号及原业务快照（发起说明选填，缺省“发起对账”）；列表与详情另返回只读 `created_by`；GET 列表和详情仅金额可读角色，支持 `entry/entry__project/status/kind` 筛选及原导出入口。
+- `reconciliations/` 财务/管理员 POST `entry/kind/counterparty_balance/approved_amount/basis?/document?/reason?`，kind 为 settlement/prepayment/refund；金额按两位小数字符串，退款对方余额为负数。生成 DZ 编号及原业务快照（发起说明选填，缺省“发起对账”）；列表与详情另返回只读 `created_by`；原业务快照 `snapshot` 只在详情和导出中返回，列表不带；GET 列表和详情仅金额可读角色，支持 `entry/entry__project/status/kind` 筛选及原导出入口。
 - `reconciliations/{id}/confirm/` POST reason?（选填，缺省“确认对账”；预付款核准人即发起人的管理员例外仍须原因）。普通对账/退款由财务或管理员确认，预付款由项目经理或管理员核准；原数据变化、差异非零、额度超过可结算金额时拒绝。采购普通结算额度=min(未结余额, 收货净值-原净付款)，不含隔离品；未收货部分必须填写合同依据并申请 prepayment。`void/` 财务 POST reason 作废剩余额度，历史不删除。
 - 生成申请时即核验 approved_amount 不超过当时可结算额度，确认时继续复核。对账有效性比较金额、主体ID、合同和账期、收退货、交付及资金事实；显示名称、款项标题和备注的变化不使授权失效，原展示快照仍保留。付款表单默认金额不超过原款项余额及所选确认单剩余额度，服务器锁内独立重算，用户手填金额不被静默截断。
 - `entries/{id}/pay/`、`refund/` 增加可选 reconciliation。采购付款和所有退款必须提供同款项的有效确认单；普通客户收款、费用支付不强制。核准额度可分次使用，原单、收退货或其他资金流水改变后重新对账；原操作同键回放仍重新授权，冲销不能恢复旧授权额度。历史付款保留，无需倒补虚构对账。收付款导入追加“对账单ID”第9列，兼容旧4/8列；采购付款缺有效对账仍拒绝导入，不能绕过服务。
@@ -292,7 +292,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 手工收付款与银行导入共用交易身份：有华夏银行原始证据时，原核心流水号、日期加核心号及该条历史导入标识视为同笔，仍核对账户、方向和实际交易日期；不同日期复用核心号分开处理，工行凭证号不作为唯一交易号别名。保留原记录字符串，不覆盖历史事实。
 - 同一银行账户的登记、认领、匹配、撤销、退回、导入和结项检查在事务内共用账户锁（结项按项目、款项、排序后的账户、流水行的顺序加锁；推进检查只读不加锁），跨项目也必须等待前一笔提交后重验余额；批量操作先锁全部关联项目，再按固定顺序锁全部账户，避免反向等待。已有手工登记尚未匹配的金额占用该笔银行可用额度，不能被另一项目或无流水号的收付款重复使用。
 - `bank-records/{id}/allocate/` POST `entry/amount/reason?/reconciliation?`：仅实际收入，客户收款或供应商退款经原 finance.pay 生成 Payment 后建立银行匹配，事务失败全部回滚；供应商退款仍需有效退款对账。允许分次认领或跨项目拆分，已明确项目的记录不能认领到其他项目。同账户同流水号、未冲销且未匹配的手工收款已存在时拒绝认领，提示先“匹配已有收付款”，匹配后剩余额度可继续认领。
-- `bank-records/{id}/match/` POST payment/reason?：匹配已有未冲销、未匹配的银行方式付款，核对账户、方向、流水号（原记录有填写时）和可用金额。允许一条银行记录匹配多笔付款，不新增资金流水。`unmatch/` POST match/reason（必填） 追加撤销匹配，不冲销付款；已匹配付款须先解除银行关联后才能冲销，已结项相关项目须先重开。
+- `bank-records/{id}/match/` POST payment/reason?：匹配已有未冲销、未匹配的银行方式付款，核对账户、方向、流水号（原记录有填写时）和可用金额。允许一条银行记录匹配多笔付款，不新增资金流水。`unmatch/` POST match/reason（必填） 追加撤销匹配，不冲销付款，是解除匹配的唯一入口（不提供 `bank-matches/{id}/reverse/`）；已匹配付款须先解除银行关联后才能冲销，已结项相关项目须先重开。
 - `bank-records/{id}/return-unclaimed/` POST returned/amount/reason：未认领收入关联真实银行退款支出，核对账户、对方户名、项目及双方未匹配金额，并分别扣除双方同笔已手工登记但未匹配的金额；仅真正未使用的余款可退回，已登记部分应先匹配，误登记应先冲销。追加不可变关联，不生成虚构项目款项。`reverse-return/` POST offset/reason 追加撤销关联，保留原始银行事实。
 - 银行列表仅财务/管理员访问，对账单沿用金额可读权限，附件仍走原鉴权下载；新表为快照、银行原始记录及其关联，既有应收、应付、费用、成本仍只有原业务事实。工作台按角色展示预付款核准、财务对账、银行待认领；已结项项目实际银行流水仍可登记，但相关核销纠错需重新打开。
 
@@ -351,3 +351,4 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 新建（含模板、导入、交付/售后派生）、重新分配/重开/取消、专业主管变更，在同一事务向负责主管写TaskNotice；幂等回放不重复创建，失败回滚。主管变更通知受影响未完成任务，经理更换时通知代管任务。
 - `GET task-notices/?unread=true|false` 返回当前收件人且仍可访问项目的提醒，分页与unread_count；默认未读。`POST task-notices/{id}/read/` 空body、幂等键，记录read_at并审计；不改变任务状态。任务软删除后提醒不再展示，提醒不阻碍误建任务软删除。
 - 工作台`supervised_tasks`为当前主管负责的未完成任务；`tasks/?supervisor=用户ID`沿用项目可见范围过滤。工作台显示未读提醒、查看全部及直接定位任务，页面每分钟及重新聚焦刷新，不发送外部消息。确认与代录每次重验当前专业归属，包括幂等回放及导入确认；更换主管立即撤销旧主管的该项权限。
+- `tasks/?project_open=true|false` 只取/排除项目处于执行中、交付中、已验收的任务（与 can_confirm 的项目状态口径一致），主管代录工时入口按 `supervisor` 加该条件取任务判断；`tasks/?kind__in=assembly,test,install,service` 按多类任务筛选，工作台“生产与售后派工”进入任务清单时使用，原单值 kind 筛选不变。

@@ -5,8 +5,9 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from .actions import perform, receipt_data
 from .models import AuditLog, CodeRule, Company
-from .permissions import ADMIN, PermissionMixin
+from .permissions import ADMIN, PermissionMixin, require_role
 
 
 @api_view(['GET'])
@@ -40,6 +41,27 @@ class CompanyView(PermissionMixin, mixins.ListModelMixin, mixins.UpdateModelMixi
             raise ValidationError('公司资料尚未初始化，请先在设置中完成公司资料后再锁账。')
         self.get_object()
         return Response(configure(request.user, request.headers.get('Idempotency-Key'), request.data))
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+
+        def execute(actor):
+            # 校验放在回执之后：同一操作标识的重试直接回放首次结果，不再按当时数据重新校验。
+            serializer = self.get_serializer(self.get_object(), data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return serializer.data
+
+        return Response(
+            perform(
+                actor=request.user,
+                key=request.headers.get('Idempotency-Key'),
+                operation='company.update',
+                payload={'company': self.kwargs.get('pk'), 'data': receipt_data(request.data)},
+                authorize=lambda actor: require_role(actor, ADMIN),
+                execute=execute,
+            )
+        )
 
     def perform_update(self, serializer):
         from django.db import transaction

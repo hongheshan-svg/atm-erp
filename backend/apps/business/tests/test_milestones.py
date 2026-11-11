@@ -4,6 +4,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from threading import Barrier
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import close_old_connections, connections
@@ -328,6 +329,18 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         result = self.clients[role].get('/api/business/tasks/' + suffix)
         self.assertEqual(result.status_code, status, result.data)
         return result.data
+
+    def test_only_cancel_and_reopen_resync_automatic_nodes(self):
+        task = self.task(self.project)
+        url = f'tasks/{task.pk}/'
+        with patch('apps.business.services.milestones.sync_milestones') as sync:
+            # 计划日期和人员不影响按交付事实汇总的自动节点，改期、重新分配不再重算并锁定这些节点。
+            self.post('manager', url + 'reschedule/', {'due_date': '2026-12-01', 'reason': '客户推迟'})
+            self.post('manager', url + 'assign/', {'assignee': self.users['manager'].pk, 'reason': '换人'})
+            sync.assert_not_called()
+            self.post('manager', url + 'cancel/', {'reason': '退出计划'})
+            self.post('manager', url + 'reopen/', {'reason': '恢复计划'})
+        self.assertEqual(sync.call_count, 2)
 
     def test_template_is_optional_idempotent_and_preserves_existing_tasks(self):
         old = self.task(self.project, title='已有设计')

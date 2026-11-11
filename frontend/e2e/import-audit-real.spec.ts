@@ -170,7 +170,7 @@ test('生产经理真实批量导入仅接受参与项目的装配调试，混�
 
   await test.step('真实 HTTP：经理降为生产经理后，同操作键的旧设计凭据拒绝，装配凭据仍可重试', async () => {
     async function setRoles(roles: string[]) {
-      const response = await page.request.patch(`/api/auth/users/${producer.id}/`, { headers: adminHeaders, data: { roles } })
+      const response = await page.request.patch(`/api/auth/users/${producer.id}/`, { headers: { ...adminHeaders, 'Idempotency-Key': crypto.randomUUID() }, data: { roles } })
       expect(response.status(), await response.text()).toBe(200)
     }
     const producerToken = await page.evaluate(() => localStorage.getItem('access_token'))

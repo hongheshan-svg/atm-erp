@@ -153,6 +153,41 @@ class ExecutionTests(ExecutionFixtures, TestCase):
             400,
         )
 
+    def test_task_list_filters_open_projects_and_several_kinds(self):
+        engineer = self.users['mechanical_engineer']
+        # 报价项目先建、排在前面：主管代录入口只看第一条时会被它的 can_confirm=False 误导。
+        quoted = Project.objects.create(
+            code='QUOTED', name='报价项目', customer=self.customer, manager=self.users['manager'], status='quoted'
+        )
+        active = self.active_project()
+        for project in (quoted, active):
+            project.members.add(engineer)
+            project.task_supervisors = {'mechanical': engineer.pk}
+            project.save(update_fields=['task_supervisors'])
+        early = Task.objects.create(
+            project=quoted, kind='design', discipline='mechanical', title='报价期设计', assignee=self.users['member']
+        )
+        running = Task.objects.create(
+            project=active, kind='design', discipline='mechanical', title='执行期设计', assignee=self.users['member']
+        )
+        url = '/api/business/tasks/'
+        client = self.clients['mechanical_engineer']
+        supervised = client.get(url, {'supervisor': engineer.pk}).data['results']
+        self.assertEqual(supervised[0]['id'], early.pk)
+        self.assertFalse(supervised[0]['can_confirm'])
+        opened = client.get(url, {'supervisor': engineer.pk, 'project_open': 'true', 'page_size': 1}).data
+        self.assertEqual(opened['results'][0]['project'], active.pk)
+        self.assertTrue(opened['results'][0]['can_confirm'])
+        self.assertIn(running.pk, [row['id'] for row in client.get(url, {'project_open': 'true'}).data['results']])
+        others = client.get(url, {'supervisor': engineer.pk, 'project_open': 'false'}).data['results']
+        self.assertEqual([row['id'] for row in others], [early.pk])
+        Task.objects.create(project=active, kind='assembly', title='整机装配', assignee=self.users['member'])
+        Task.objects.create(project=active, kind='service', title='售后维修', assignee=self.users['member'])
+        kinds = self.clients['manager'].get(url, {'project': active.pk, 'kind__in': 'assembly,service'}).data
+        self.assertEqual(sorted(row['kind'] for row in kinds['results']), ['assembly', 'service'])
+        single = self.clients['manager'].get(url, {'project': active.pk, 'kind': 'design'}).data['results']
+        self.assertTrue(single and all(row['kind'] == 'design' for row in single))
+
     def test_manager_only_change_rejects_when_old_manager_has_open_task(self):
         project = self.active_project()
         old = self.users['manager']

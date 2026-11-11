@@ -13,6 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from apps.core.actions import perform, receipt_data
 from apps.core.models import AuditLog, Company
 from apps.core.permissions import ADMIN, PermissionMixin, has_role, require_role, role, roles
 
@@ -257,25 +258,41 @@ class UserView(
             queryset = queryset.filter(predicate)
         return queryset
 
-    def perform_create(self, serializer):
-        with transaction.atomic():
-            self._lock_admin()
+    def _write(self, request, operation, payload, execute):
+        """用户新增和修改沿用业务写入的幂等链路：同一操作标识的重试回放首次结果（含 201），不再报重名。"""
+
+        def authorize(actor):
+            # 与管理员删除用户共用公司行锁：等并发的角色变更提交后再按最新角色授权，保留最后管理员保护。
+            Company.objects.select_for_update().get(pk=1)
+            actor.refresh_from_db()
+            require_role(actor, ADMIN)
+
+        return perform(
+            actor=request.user,
+            key=request.headers.get('Idempotency-Key'),
+            operation=operation,
+            payload={**payload, 'data': receipt_data(request.data)},
+            authorize=authorize,
+            execute=execute,
+        )
+
+    def create(self, request, *args, **kwargs):
+        def execute(actor):
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
             user = serializer.save()
             AuditLog.objects.create(
-                actor=self.request.user,
+                actor=actor,
                 operation='user.create',
                 resource=f'user:{user.pk}',
                 detail={'management_reports': user.management_reports, 'roles': sorted(roles(user))},
             )
+            return serializer.data
 
-    def _lock_admin(self):
-        Company.objects.select_for_update().get(pk=1)
-        actor = User.objects.get(pk=self.request.user.pk)
-        require_role(actor, ADMIN)
+        return Response(self._write(request, 'user.create', {}, execute), status=201)
 
     def update(self, request, *args, **kwargs):
-        with transaction.atomic():
-            self._lock_admin()
+        def execute(actor):
             user = User.objects.select_for_update().get(pk=self.get_object().pk)
             serializer = self.get_serializer(user, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
@@ -295,7 +312,7 @@ class UserView(
             previous_roles = sorted(roles(user))
             serializer.save()
             AuditLog.objects.create(
-                actor=request.user,
+                actor=actor,
                 operation='user.update',
                 resource=f'user:{user.pk}',
                 detail={
@@ -304,4 +321,6 @@ class UserView(
                     'roles': {'before': previous_roles, 'after': sorted(roles(user))},
                 },
             )
-            return Response(serializer.data)
+            return serializer.data
+
+        return Response(self._write(request, 'user.update', {'user': self.kwargs.get('pk')}, execute))

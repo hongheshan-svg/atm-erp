@@ -42,7 +42,7 @@ test('管理员分配采购兼仓库，保存回显并即时撤销采购权限',
   await expect(nav.getByRole('link', { name: '经营报表', exact: true, includeHidden: true })).toHaveCount(0)
   await page.goto('/erp/purchases')
   await expect(page.getByRole('button', { name: '新建采购', exact: true })).toBeVisible()
-  const updated = await page.request.patch(`/api/auth/users/${account.id}/`, { headers, data: { roles: ['warehouse'] } })
+  const updated = await page.request.patch(`/api/auth/users/${account.id}/`, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { roles: ['warehouse'] } })
   expect(updated.status(), await updated.text()).toBe(200)
   await page.reload()
   await expect(page.getByRole('button', { name: '新建采购', exact: true })).toHaveCount(0)

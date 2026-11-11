@@ -103,14 +103,22 @@ def visible_rows(queryset):
 
 
 def references(obj, *, ignore=()):
+    # 物料按含已移除行判断，与 masterdata.referenced 同一口径：被替换或移除的 BOM 行、已删草稿的采购明细仍指向它，
+    # 删除物料会释放其图号版本，历史记录就失去唯一对应。其他记录只看现行引用：已移除的附件、已删的草稿本身
+    # 不能再处理，计入只会让记录永远删不掉，而删除这些记录也不释放任何编号或图号。
+    include_removed = isinstance(obj, models.Item)
+    removed = ''
     for relation in obj._meta.related_objects:
         if relation.many_to_many or relation.related_model in (*ignore, models.TaskNotice):
             continue
         model = relation.related_model
-        if model.objects.filter(**{relation.field.name: obj}).exists():
-            label = next((title for candidate, title in RESOURCES.values() if candidate is model), '关联记录')
+        label = next((title for candidate, title in RESOURCES.values() if candidate is model), '关联记录')
+        lookup = {relation.field.name: obj}
+        if model.objects.filter(**lookup).exists():
             return label
-    return ''
+        if include_removed and not removed and hasattr(model, 'all_objects'):
+            removed = f'已移除的{label}' if model.all_objects.filter(**lookup).exists() else ''
+    return removed
 
 
 def bank_pending(bank):

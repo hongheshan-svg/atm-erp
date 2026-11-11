@@ -57,6 +57,36 @@ class BOMSelectionTests(BusinessFixtures, TestCase):
         data['lines'][0]['bom_line'] = second.pk
         self.post('purchaser', 'purchases/', data, status=404)
 
+    def test_editing_demand_purchase_cannot_buy_stock_already_available(self):
+        line = BOMLine.objects.create(project=self.project, item=self.item, quantity=10)
+        self.post(
+            'admin', 'stocks/opening/', {'item': self.item.pk, 'quantity': '6', 'unit_cost': '1', 'reason': '期初'}
+        )
+        data = {
+            'project': self.project.pk,
+            'supplier': self.supplier.pk,
+            'due_date': TODAY,
+            'from_demand': True,
+            'lines': [{'item': self.item.pk, 'bom_line': line.pk, 'quantity': '4', 'unit_price': '1'}],
+        }
+        order = self.post('purchaser', 'purchases/', data, status=201)['id']
+
+        def edit(quantity, price='1', status=200):
+            detail = self.clients['purchaser'].get(f'/api/business/purchases/{order}/').data
+            row = {'id': detail['lines'][0]['id'], 'quantity': quantity, 'unit_price': price, 'due_date': TODAY}
+            payload = {'expected_updated_at': detail['updated_at'], 'reason': '调整', 'due_date': TODAY, 'lines': [row]}
+            return self.post('purchaser', f'purchases/{order}/edit/', payload, status=status)
+
+        # 缺口 = 用量 10 - 在库 6 = 4；改单与按缺料下单同一口径，不能把在库可领的 6 件再买一遍。
+        self.assertIn('超过当前缺口', str(edit('10', status=409)))
+        edit('4', price='2')
+        # 之后又有库存到货，只改单价或调减的草稿仍可保存，调增按最新缺口拒绝。
+        Stock.objects.filter(item=self.item).update(quantity=Decimal('8'))
+        edit('4', price='3')
+        edit('3')
+        edit('4', status=409)
+        self.assertEqual(PurchaseLine.objects.get(purchase_id=order).quantity, Decimal('3'))
+
     def test_invalid_bom_reference_shape_does_not_change_existing_purchase(self):
         bom = BOMLine.objects.create(project=self.project, item=self.item, quantity=10, assembly_unit='上料')
         data = {

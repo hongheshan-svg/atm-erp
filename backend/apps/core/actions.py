@@ -3,10 +3,26 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils.crypto import salted_hmac
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .api import Conflict
 from .models import ActionReceipt
+
+
+def receipt_data(data):
+    """把请求数据整理成回执指纹用的普通对象（表单多值字段保留全部值）。
+
+    回执不存密码，也不存含密码的无盐摘要（与首次配置一致）：密码只以加盐 HMAC 参与比对。
+    """
+    if hasattr(data, 'lists'):
+        data = dict(data.lists())
+    elif isinstance(data, dict):
+        data = dict(data)
+    if isinstance(data, dict) and 'password' in data:
+        secret = json.dumps(data['password'], ensure_ascii=False, default=str)
+        data['password'] = salted_hmac('action-receipt-password', secret).hexdigest()
+    return data
 
 
 def perform(*, actor, key, operation, payload, authorize, execute):

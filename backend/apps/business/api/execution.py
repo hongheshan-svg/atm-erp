@@ -31,9 +31,16 @@ class TaskFilter(filters.FilterSet):
     supervisor = filters.NumberFilter(method='filter_supervisor')
     # 「进行中」只是未完成任务里已记录实际开始日期的那部分，不新增状态值。
     started = filters.BooleanFilter(method='filter_started')
+    # 项目处于执行中、交付中或已验收（与 TaskSerializer.can_confirm 的项目状态口径一致）：
+    # 主管代录工时入口按它取任务，不会因草稿、报价项目的任务排在前面而误判没有可确认任务。
+    project_open = filters.BooleanFilter(method='filter_project_open')
 
     def filter_started(self, queryset, name, value):
         return queryset.filter(status='open', started_date__isnull=not value)
+
+    def filter_project_open(self, queryset, name, value):
+        scope = Q(project__status__in=execution.OPEN_PROJECT)
+        return queryset.filter(scope) if value else queryset.exclude(scope)
 
     def filter_supervisor(self, queryset, name, value):
         return supervised_tasks(
@@ -46,7 +53,15 @@ class TaskFilter(filters.FilterSet):
 
     class Meta:
         model = Task
-        fields = ['project', 'kind', 'milestone', 'status', 'assignee', 'delivery']
+        # kind__in：工作台「生产与售后派工」按装配、调试、安装、售后多类任务一起列出，与工作台计数同一口径。
+        fields = {
+            'project': ['exact'],
+            'kind': ['exact', 'in'],
+            'milestone': ['exact'],
+            'status': ['exact'],
+            'assignee': ['exact'],
+            'delivery': ['exact'],
+        }
 
 
 class TaskView(ImportableMixin, ReadView):
