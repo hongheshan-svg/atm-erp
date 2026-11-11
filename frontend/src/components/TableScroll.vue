@@ -70,6 +70,7 @@ onBeforeUnmount(() => { resize?.disconnect(); mutation?.disconnect(); viewport?.
 .table-scroll { min-width: 0; max-width: 100%; }
 .table-scroll-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 0; }
 .table-scroll-tools .el-button + .el-button { margin-left: 0; }
+@media (max-width: 600px) { .table-scroll-tools .el-button { min-height: 40px; } }
 .table-scroll :deep(.el-scrollbar__bar.is-horizontal) { height: 12px; bottom: 2px; }
 .table-scroll :deep(.el-scrollbar__bar.is-horizontal .el-scrollbar__thumb) { background: #64748b; opacity: .8; }
 .table-scroll :deep([data-table-scroll]) { max-width: 100%; overflow-x: auto; }

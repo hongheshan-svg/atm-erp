@@ -43,4 +43,13 @@ describe('销售列表与签约对话框', () => {
     const cancel = await salesCommand({ id: 3, status: 'draft', manager: 1 }, '取消销售')
     expect(cancel.fields.find(field => field.key === 'reason')?.optional).toBeUndefined()
   })
+
+  it('销售明细与交付回款的金额统一千分位', async () => {
+    const api = await import('../api')
+    vi.mocked(api.read).mockResolvedValueOnce({ deliveries: [], receivables: [{ title: '验收款', balance: '150000.00', paid: '0.00', amount: '150000.00', credit_amount: '0.00' }] })
+    const progress = await salesCommand({ id: 5, status: 'signed' }, '交付与回款')
+    expect(progress.initial?.receivables[0]).toMatchObject({ balance: '150,000.00', amount: '150,000.00', paid: '0.00' })
+    const detail = await salesCommand({ id: 5, status: 'signed', quote_amount: '500000.00', contract_amount: '500000.00', original_contract_amount: null }, '查看明细')
+    expect(detail.initial).toMatchObject({ quote_amount: '500,000.00', contract_amount: '500,000.00', original_contract_amount: null })
+  })
 })

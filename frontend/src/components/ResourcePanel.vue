@@ -681,6 +681,6 @@ async function inspect(row: Row) {
   .resource-search > input[type='search'] { flex: 1 1 140px; min-width: 0; }
 }
 .mobile-primary-action { display: none; margin-top: 6px; }
-@media (max-width: 600px) { .mobile-primary-action { display: inline-flex; } }
+@media (max-width: 600px) { .mobile-primary-action { display: inline-flex; min-height: 40px; } .row-actions :deep(.el-button) { min-height: 40px; } }
 .task-sync-hint { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; line-height: 1.5; color: var(--el-text-color-secondary); }
 </style>

@@ -3,7 +3,7 @@ import BusinessTable from './BusinessTable.vue'
 import { ElSelect, ElOption } from 'element-plus'
 import type { Field, Row } from '../types'
 import { applicableFields, defaults } from '../forms'
-import { computed, nextTick, reactive, ref, useId, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watchEffect } from 'vue'
 import InlineDocumentField from './InlineDocumentField.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
@@ -34,6 +34,12 @@ async function focusPath(path: string) {
     target?.querySelector<HTMLElement>('input, select, textarea, button')?.focus()
   }
 }
+// 手机宽度下只读明细表改成逐行卡片：横滚会把待收、金额等关键列挤出屏外。
+const cardQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 600px)') : null
+const cardMode = ref(Boolean(cardQuery?.matches))
+const syncCards = () => { cardMode.value = Boolean(cardQuery?.matches) }
+onMounted(() => cardQuery?.addEventListener?.('change', syncCards))
+onBeforeUnmount(() => cardQuery?.removeEventListener?.('change', syncCards))
 defineExpose({ focusPath })
 const model = defineModel<Row>({ required: true })
 const visibleFields = computed(() => applicableFields(props.fields, model.value))
@@ -68,7 +74,16 @@ function readonlyValue(field: Field) {
       <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact || field.dense, 'row-list-dense': field.dense }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
-        <BusinessTable v-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
+        <ol v-if="readonly && cardMode" class="row-cards" :aria-label="field.label">
+          <li v-for="(row, index) in model[field.key]" :key="index" class="row-card">
+            <template v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key">
+              <div v-if="column.flow && flowFor(column.flow, row)" class="row-card-flow"><span>{{ column.label }}：</span><ProcessSteps :flow="flowFor(column.flow, row)!" compact /></div>
+              <div v-else class="row-card-line"><span>{{ column.label }}：</span><b>{{ row[column.key] == null || row[column.key] === '' ? '—' : row[column.key] }}</b></div>
+            </template>
+          </li>
+          <li v-if="!model[field.key]?.length" class="row-card-empty">暂无明细</li>
+        </ol>
+        <BusinessTable v-else-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
           <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : column.width ?? 140" :show-overflow-tooltip="!column.flow"
             ><template v-if="column.flow" #default="{ row }"
               ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
@@ -159,6 +174,14 @@ function readonlyValue(field: Field) {
   </div>
 </template>
 <style scoped>
+.row-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.row-card { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--surface-border); border-radius: 8px; background: var(--surface, #fff); font-size: 13px; }
+.row-card-line { display: flex; gap: 6px; line-height: 1.6; }
+.row-card-line > span { color: var(--mute); flex: none; }
+.row-card-line > b { font-weight: 500; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.row-card-flow { display: grid; gap: 4px; }
+.row-card-flow > span { color: var(--mute); }
+.row-card-empty { color: var(--mute); font-size: 13px; padding: 8px 0; }
 .readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: var(--ink); padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: var(--ink); }
 .readonly-fields .field > label { color: var(--mute); font-size: 12px; }
 .readonly-fields .field { gap: 4px; }

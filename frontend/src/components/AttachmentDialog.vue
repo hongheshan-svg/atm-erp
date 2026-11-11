@@ -106,4 +106,8 @@ watch(pageSize, () => { page.value = 1; void load(true) })
 .attachment-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
 .toolbar { margin-bottom: 12px; }
 .attachment-name { border: 0; background: none; padding: 0; color: var(--el-color-primary); cursor: pointer; text-align: left; overflow-wrap: anywhere; font: inherit; }
+@media (max-width: 600px) {
+  .toolbar .el-button, .attachment-batch-selection .el-button { min-height: 40px; }
+  :global(.transfer-dialog .el-dialog__footer .el-button) { min-height: 40px; }
+}
 </style>
