@@ -3,7 +3,7 @@ import { all, read } from '../api'
 import { fieldIssues } from '../forms'
 import { industryCommand } from '../industry-forms'
 import { user } from '../session'
-import { actionCommand, createCommand } from './inventory'
+import { actionCommand, columns, createCommand, receivedDate } from './inventory'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn() }))
 
@@ -58,4 +58,15 @@ it('管理员零库存盘盈仍填写单位成本', async () => {
 it('非零库存盘点不出现零库存处理提示', async () => {
   const command = await actionCommand('stocks', { id: 1, quantity: '5.000' }, '盘点')
   expect(command.fields.find(field => field.key === 'quantity')?.hint).toBeUndefined()
+})
+
+it('库存流水显示采购收货的入库日期，现有库存显示最近入库日期', () => {
+  expect(receivedDate({ kind: 'receipt', received_date: '2026-11-03', created_at: '2026-11-05T10:00:00+08:00' })).toBe('2026-11-03')
+  // 历史流水没有实际收货日时按登记当天。
+  expect(receivedDate({ kind: 'receipt', received_date: null, created_at: '2026-11-05T01:00:00+08:00' })).toBe('2026-11-05')
+  expect(receivedDate({ kind: 'issue', received_date: null, created_at: '2026-11-05T01:00:00+08:00' })).toBe('—')
+  expect(columns.moves!.map(c => c.label)).toContain('入库日期')
+  const last = columns.stocks!.find(c => c.key === 'last_received_date')!
+  expect(last.label).toBe('最近入库日期')
+  expect([last.format!({ last_received_date: '2026-11-08' }), last.format!({ last_received_date: null })]).toEqual(['2026-11-08', '—'])
 })

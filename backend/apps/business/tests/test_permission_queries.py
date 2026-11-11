@@ -5,7 +5,18 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.business.models import BOMLine, Document, Project, PurchaseLine, PurchaseOrder, SalesOrder, Task
+from apps.business.models import (
+    BOMLine,
+    Document,
+    Item,
+    Project,
+    PurchaseLine,
+    PurchaseOrder,
+    SalesOrder,
+    Stock,
+    StockMove,
+    Task,
+)
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -134,6 +145,55 @@ class PermissionQueryTests(BusinessFixtures, TestCase):
             [PurchaseLine(purchase=p, item=self.item, quantity=1, unit_price=1) for p in purchases]
         )
         self.assert_bounded('purchases', flag='can_manage')
+
+    def test_stock_last_receipt_date_is_bounded(self):
+        items = Item.objects.bulk_create([Item(code=f'QS{i}', name=f'库存查询{i}') for i in range(200)])
+        stocks = Stock.objects.bulk_create([Stock(item=item, quantity=2, value=2) for item in items])
+        today = timezone.localdate()
+        StockMove.objects.bulk_create(
+            [
+                StockMove(stock=stock, kind='receipt', quantity=1, value=1, received_date=today, reason='入库')
+                for stock in stocks
+                for _ in range(2)
+            ]
+        )
+        self.assert_bounded('stocks', 'warehouse')
+        rows = self.clients['warehouse'].get('/api/business/stocks/', {'page_size': 5}).data['results']
+        self.assertTrue(all(row['last_received_date'] == today.isoformat() for row in rows))
+
+    def test_purchase_detail_receipts_are_bounded(self):
+        counts = []
+        today = timezone.localdate()
+        for size in (2, 40):
+            items = Item.objects.bulk_create([Item(code=f'QD{size}-{i}', name='明细查询') for i in range(size)])
+            order = PurchaseOrder.objects.create(
+                code=f'PD{size}', project=self.projects[0], supplier=self.supplier, due_date=today, status='partial'
+            )
+            lines = PurchaseLine.objects.bulk_create(
+                [PurchaseLine(purchase=order, item=item, quantity=3, unit_price=1) for item in items]
+            )
+            stocks = Stock.objects.bulk_create([Stock(item=item, quantity=2, value=2) for item in items])
+            StockMove.objects.bulk_create(
+                [
+                    StockMove(
+                        stock=stock,
+                        purchase_line=line,
+                        kind='receipt',
+                        quantity=1,
+                        value=1,
+                        received_date=today,
+                        reason='r',
+                    )
+                    for line, stock in zip(lines, stocks, strict=True)
+                    for _ in range(2)
+                ]
+            )
+            with CaptureQueriesContext(connection) as queries:
+                response = self.clients['warehouse'].get(f'/api/business/purchases/{order.pk}/')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertTrue(all(len(line['receipts']) == 2 for line in response.data['lines']))
+            counts.append(len(queries))
+        self.assertEqual(counts[0], counts[1], f'采购详情 2/40 行查询数: {counts}')
 
     def test_task_membership_is_bounded(self):
         Task.objects.bulk_create(

@@ -301,6 +301,39 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
         ]
 
 
+class PurchaseLineDetailSerializer(PurchaseLineSerializer):
+    """采购详情里的明细另带逐批合格入库记录，便于追溯每批到货日期；列表和导出不带，避免多读流水。"""
+
+    receipts = serializers.SerializerMethodField()
+    last_received_date = serializers.SerializerMethodField()
+
+    def _receipts(self, obj):
+        moves = getattr(obj, 'receipt_moves', None)
+        if moves is None:
+            moves = list(StockMove.objects.filter(purchase_line=obj, kind='receipt').select_related('stock'))
+        # 历史流水没有填写实际收货日时按登记当天计，与账期、质保起算口径一致。
+        dated = [(move.received_date or timezone.localdate(move.created_at), move) for move in moves]
+        return sorted(dated, key=lambda pair: (pair[0], pair[1].pk))
+
+    def get_receipts(self, obj):
+        return [
+            {
+                'id': move.pk,
+                'received_date': day.isoformat(),
+                'quantity': str(move.quantity),
+                'location': move.stock.location,
+            }
+            for day, move in self._receipts(obj)
+        ]
+
+    def get_last_received_date(self, obj):
+        receipts = self._receipts(obj)
+        return receipts[-1][0].isoformat() if receipts else None
+
+    class Meta(PurchaseLineSerializer.Meta):
+        fields = [*PurchaseLineSerializer.Meta.fields, 'receipts', 'last_received_date']
+
+
 class PurchaseSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
     can_approve = serializers.SerializerMethodField()
@@ -377,6 +410,10 @@ class PurchaseSerializer(serializers.ModelSerializer):
         ]
 
 
+class PurchaseDetailSerializer(PurchaseSerializer):
+    lines = PurchaseLineDetailSerializer(many=True, read_only=True)
+
+
 class StockSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('value',)
     item_code = serializers.CharField(source='item.code', read_only=True)
@@ -389,6 +426,8 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
     drawing_number = serializers.CharField(source='item.drawing_number', read_only=True)
     drawing_revision = serializers.CharField(source='item.drawing_revision', read_only=True)
     product_category = serializers.CharField(source='item.product_category', read_only=True)
+    # 库存列表按库位行附带最近一次采购合格入库日期（列表查询注解，不另存字段）。
+    last_received_date = serializers.DateField(read_only=True, default=None)
 
     class Meta:
         model = Stock
@@ -407,6 +446,7 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
             'location',
             'quantity',
             'value',
+            'last_received_date',
             'updated_at',
         ]
 

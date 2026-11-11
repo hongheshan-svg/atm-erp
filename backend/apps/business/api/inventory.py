@@ -1,3 +1,5 @@
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Coalesce, TruncDate
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -19,10 +21,18 @@ from ..serializers import (
 from ..services import inventory
 from .common import ImportableMixin, ReadView, key
 
+# 每个库位行最近一次采购合格入库的日期（历史流水无实际收货日时按登记当天），列表一条子查询带出。
+LAST_RECEIPT = (
+    StockMove.objects.filter(stock=OuterRef('pk'), kind='receipt')
+    .annotate(day=Coalesce('received_date', TruncDate('created_at')))
+    .order_by('-day', '-id')
+    .values('day')[:1]
+)
+
 
 class StockView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
-    queryset = Stock.objects.select_related('item')
+    queryset = Stock.objects.select_related('item').annotate(last_received_date=Subquery(LAST_RECEIPT))
     serializer_class = StockSerializer
     # 库位和品牌按关键词匹配；精确匹配要求把完整值输对，实际用起来只会得到空列表。
     filterset_fields = {

@@ -127,6 +127,8 @@ describe('列表创建入口', () => {
       expect(mv.shownColumns.map((c: { key: string }) => c.key)).toEqual(['item_name', 'kind'])
       const move = { id: 1, project: 4, project_code: 'ATM2680', project_name: '上料线', purchase: 8, purchase_code: 'PO-8', item_code: 'M-1', item_name: '伺服电机', quantity: '2.000', unit: '台', created_at: '2026-11-11T09:30:00+08:00' }
       expect(mv.mobileSummary(move)).toEqual(['2 台 · 2026-11-11 09:30'])
+      // 采购收货流水在摘要里带入库日期（实际到货日），与登记时间区分。
+      expect(mv.mobileSummary({ ...move, kind: 'receipt', received_date: '2026-11-10' })).toEqual(['2 台 · 入库 2026-11-10 · 2026-11-11 09:30'])
       expect(mv.mobileLinks(move)).toEqual([
         { text: 'ATM2680 · 上料线', to: '/projects/4' },
         { text: 'PO-8', to: { path: '/purchases', query: { resource: 'purchases', focus: '8', project: '4' } } },
@@ -135,6 +137,11 @@ describe('列表创建入口', () => {
       expect(mv.mobileNote({ ...move, remark: '一号工位' })).toBe('一号工位')
       expect(mv.mobileNote(move)).toBe('')
       moves.unmount()
+      // 现有库存窄屏摘要：最近入库日期带「入库」字样。
+      const stocks = shallowMount(ResourcePanel, { props: { resource: 'stocks', title: '现有库存' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      expect((stocks.vm as any).mobileSummary({ item_code: 'M-1', item_name: '伺服电机', location: '主仓', quantity: '3.000', unit: '台', last_received_date: '2026-11-08' }).join(' ')).toContain('入库 2026-11-08')
+      stocks.unmount()
       user.value = { id: 1, role: 'admin' }
       const projects = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
       await flushPromises()

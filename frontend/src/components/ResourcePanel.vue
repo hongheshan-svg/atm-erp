@@ -308,7 +308,7 @@ function mobileSummary(row: Row): string[] {
   if (props.resource === 'entries') return lines(`待结算 ${cell(row, 'balance')} · ${display(row.kind)}`, mobileTasks.value ? joined(row.partner_name, props.projectId ? '' : row.project_name, row.due_date ? `到期 ${row.due_date}` : '') : '')
   if (props.resource === 'payments' && !mobileTasks.value) return [`${cell(row, 'amount')} 元 · ${row.date}`]
   // 库存流水：首行「数量 · 日期」；项目与来源采购单在下一行以链接显示（mobileLinks）。
-  if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), columnText(row, 'created_at'))]
+  if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), row.kind === 'receipt' ? `入库 ${columnText(row, 'received_date')}` : '', columnText(row, 'created_at'))]
   // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
   if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
   if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
@@ -331,7 +331,8 @@ function mobileSummary(row: Row): string[] {
       return lines(joined(row.date, columns[props.resource]?.find(col => col.key === 'amount')?.format?.(row), ledger === '有效' ? '' : ledger), joined(row.partner_name, row.reconciliation_code, props.projectId ? '' : row.project_name))
     }
     if (props.resource === 'users') return lines(joined(row.username, (row.roles || [row.role]).map((role: string) => labels[role] || role).join('、')))
-    const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
+    // 现有库存的最近入库日期在窄屏摘要里带上「入库」字样，不和其他日期混淆。
+    const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => (col.key === 'last_received_date' && row.last_received_date ? `入库 ${row.last_received_date}` : col.format ? col.format(row) : cell(row, col.key)))
     return lines(joined(...rest))
   }
   return [joined(row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : '')]

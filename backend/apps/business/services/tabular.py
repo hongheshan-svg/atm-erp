@@ -19,6 +19,7 @@ LABELS = {
     'payment_schedule': '未结到期明细',
     'due_amount': '当前到期金额',
     'received_date': '实际合格收货日期',
+    'last_received_date': '最近入库日期',
     'next_delivery_date': '最近待到货日',
     'material_requirements': '交付配套快照',
     'evidence': '关联凭证记录',

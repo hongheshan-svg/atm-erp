@@ -21,6 +21,8 @@ import { dateTimeText } from '../utils/datetime'
 import { item } from './shared'
 import { endpoint } from './shared'
 const positiveQuantity: Field = { ...qty, numeric: { scale: 3, min: 0.001 } }
+// 采购收货流水的入库日期取收货时填写的实际到货 / 合格收货日；历史流水没有填写时按登记当天（接口时间已是业务时区）。
+export const receivedDate = (row: Row) => (row.kind === 'receipt' ? row.received_date || String(row.created_at || '').slice(0, 10) || '—' : '—')
 export const columns: Record<string, Column[]> = {
   stocks: [
     C('item_code', '物料编码'),
@@ -29,12 +31,15 @@ export const columns: Record<string, Column[]> = {
     { key: 'part_type', label: '类别', format: row => (({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类') },
     C('location', '库位'),
     { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
+    // 本库位最近一次采购合格入库的日期，便于追溯到货时间；没有采购入库（如只有期初）显示「—」。
+    { key: 'last_received_date', label: '最近入库日期', format: row => row.last_received_date || '—' },
   ],
   // 领料领给了哪个项目、收货来自哪张采购单、谁在什么时候操作，都直接在流水里看到并可跳转。
   moves: [
     { key: 'item_name', label: '物料', format: row => [row.item_code, row.item_name].filter(Boolean).join(' · ') || '—' },
     C('kind', '类型'),
     { key: 'quantity', label: '数量', format: row => (row.quantity == null ? '—' : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
+    { key: 'received_date', label: '入库日期', format: receivedDate },
     { key: 'project_name', label: '项目', format: row => [row.project_code, row.project_name].filter(Boolean).join(' · ') || '—', link: projectLink },
     { key: 'purchase_code', label: '来源采购单', format: row => row.purchase_code || '—', link: purchaseLink },
     C('location', '库位'),

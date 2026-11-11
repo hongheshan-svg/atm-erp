@@ -39,6 +39,10 @@ export type Field = {
   remoteLabel?: (row: Row) => string
   // Renders the row's position in this flow instead of a plain value (read-only row tables).
   flow?: string
+  // 只读明细表：值按换行拆成多行，首行为主值、其余为小字，不截断（如名称下列出编码、规格）。
+  multiline?: boolean
+  // 只读明细在手机卡片里两项并排（数量、日期等短值），其余项仍占整行。
+  short?: boolean
   upload?: { context: Row; category: string }
 }
 export type Command = {

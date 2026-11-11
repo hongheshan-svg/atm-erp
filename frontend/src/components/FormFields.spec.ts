@@ -1,8 +1,8 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import FormFields from './FormFields.vue'
 import BusinessTable from './BusinessTable.vue'
-import { ElSelect } from 'element-plus'
+import ElementPlus, { ElSelect } from 'element-plus'
 import { reactive } from 'vue'
 import { wideCommand } from '../form-experience'
 
@@ -108,6 +108,28 @@ describe('明细表单编辑', () => {
     expect(wide.find('.row-card').exists()).toBe(false)
     expect(wide.findComponent(BusinessTable).exists()).toBe(true)
     wide.unmount()
+    vi.unstubAllGlobals()
+  })
+  it('只读明细的多行列：桌面表格不截断、首行为主值；手机卡片中短值两两并排、标签在上', async () => {
+    const rows = { key: 'rows', label: '采购明细', type: 'rows' as const, fields: [
+      { key: 'material', label: '物料 / 编码 / 规格', multiline: true },
+      { key: 'quantity', label: '采购数量', short: true },
+      { key: 'received', label: '已收', short: true },
+    ] }
+    const data = { rows: [{ material: '伺服电机\n编码 M-1 · 规格 400W', quantity: '5', received: '3' }] }
+    vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const wide = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true }, global: { plugins: [ElementPlus] } })
+    await flushPromises()
+    const cell = wide.get('.cell-lines')
+    expect(cell.findAll('span').map(span => [span.classes()[0], span.text()])).toEqual([['cell-main', '伺服电机'], ['cell-sub', '编码 M-1 · 规格 400W']])
+    wide.unmount()
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+    const narrow = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true } })
+    const card = narrow.get('.row-card')
+    expect(card.get('.is-multiline').text()).toBe('物料 / 编码 / 规格：伺服电机编码 M-1 · 规格 400W')
+    // 短值两栏中标签在上、值在下，不带冒号。
+    expect(card.findAll('.is-short').map(line => [line.get('span').text(), line.get('b').text()])).toEqual([['采购数量', '5'], ['已收', '3']])
+    narrow.unmount()
     vi.unstubAllGlobals()
   })
 })
