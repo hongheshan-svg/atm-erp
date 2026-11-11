@@ -117,6 +117,10 @@ class DocumentView(ReadView):
     def remove(self, request, pk=None):
         return Response(documents.remove(request.user, key(request), self.get_object().pk, request.data))
 
+    @action(detail=False, methods=['post'], url_path='remove-batch', parser_classes=[JSONParser])
+    def remove_batch(self, request):
+        return Response(documents.remove_many(request.user, key(request), request.data))
+
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
         document = self.get_object()

@@ -8,8 +8,10 @@ from threading import Barrier
 
 from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.accounts.models import User
 from apps.business.models import (
     BOMLine,
     Delivery,
@@ -395,6 +397,170 @@ class AuditBusinessTests(AuditBusinessFixtures, TestCase):
         self.post('warehouse', f'purchases/{order.pk}/cancel-remainder/', {'reason': '越权'}, status=403)
         self.post('purchaser', f'purchases/{order.pk}/cancel-remainder/', {'reason': '整单仍有隔离'}, status=409)
 
+    def warehouse_buyer(self):
+        """仓管兼采购：既能收货，也有取消未收余量的采购权限。"""
+        user = User.objects.create_user(username='wh_buyer', role='warehouse', additional_roles=['purchaser'])
+        client = APIClient()
+        client.force_authenticate(user)
+        self.clients['wh_buyer'] = client
+        return user
+
+    def test_receive_with_remainder_cancel_is_one_atomic_replayable_action(self):
+        self.warehouse_buyer()
+        order, (first, other) = self.multi_purchase()
+        url = f'purchases/{order.pk}/receive/'
+        payload = {
+            'reason': '送货单SH009',
+            'cancel_reason': '供应商停产，余量不再供货',
+            'lines': [
+                {'line': first.pk, 'quantity': '2', 'cancel_remainder': True, 'remark': '只到两件'},
+                {'line': other.pk, 'quantity': '1'},
+            ],
+        }
+        key = str(uuid.uuid4())
+        receipts = ActionReceipt.objects.count()
+        result = self.post('wh_buyer', url, payload, key=key)
+        self.assertEqual(result, {'id': order.pk, 'cancelled': [{'line': first.pk, 'quantity': '3.000'}]})
+        self.assertEqual(result, self.post('wh_buyer', url, payload, key=key))
+        self.assertEqual(ActionReceipt.objects.count(), receipts + 1)
+        first.refresh_from_db()
+        other.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual((first.received_quantity, first.cancelled_quantity), (2, 3))
+        self.assertEqual((other.received_quantity, other.cancelled_quantity), (1, 0))
+        self.assertEqual(order.status, 'partial')
+        # 与「取消未收余量」同样只冲减取消部分的应付，收货流水和库存照常写入。
+        self.assertEqual(Entry.objects.get(purchase=order).credit_amount, 30)
+        self.assertEqual(StockMove.objects.filter(kind='receipt').count(), 2)
+        self.assertEqual(Stock.objects.get(item=self.item).quantity, 2)
+        arrival = AuditLog.objects.get(operation='purchase.receive')
+        self.assertEqual(arrival.detail['reason'], '送货单SH009')
+        cancel = AuditLog.objects.get(operation='purchase.cancel_remainder')
+        self.assertEqual(cancel.actor.username, 'wh_buyer')
+        self.assertEqual(
+            (cancel.detail['reason'], cancel.detail['credit'], cancel.detail['lines']),
+            ('供应商停产，余量不再供货', '30.00', [{'line': first.pk, 'quantity': '3.000'}]),
+        )
+        # 其余明细收齐后整单结束；已取消的余量不再出现在待收里。
+        self.post('warehouse', url, {'lines': [{'line': other.pk, 'quantity': '2'}]})
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'received')
+        self.post('warehouse', url, {'lines': [{'line': first.pk, 'quantity': '1'}]}, status=409)
+
+    def test_receive_can_cancel_unarrived_line_and_finish_order(self):
+        self.warehouse_buyer()
+        order, (first, other) = self.multi_purchase()
+        url = f'purchases/{order.pk}/receive/'
+        resource = f'purchaseorder:{order.pk}'
+        # 只取消、本次无到货：不写到货记录，只写取消记录，采购仍待收其他明细。
+        result = self.post(
+            'wh_buyer',
+            url,
+            {
+                'cancel_reason': '气缸改由库存调拨',
+                'lines': [{'line': other.pk, 'quantity': '0', 'cancel_remainder': True}],
+            },
+        )
+        self.assertEqual(result['cancelled'], [{'line': other.pk, 'quantity': '3.000'}])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'approved')
+        self.assertFalse(AuditLog.objects.filter(operation='purchase.receive', resource=resource).exists())
+        self.assertTrue(AuditLog.objects.filter(operation='purchase.cancel_remainder', resource=resource).exists())
+        self.post('warehouse', url, {'lines': [{'line': first.pk, 'quantity': '5'}]})
+        order.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual((order.status, other.received_quantity, other.cancelled_quantity), ('received', 0, 3))
+        self.assertEqual(Entry.objects.get(purchase=order).credit_amount, 60)
+
+    def test_receive_remainder_cancel_keeps_cancel_rules_and_rolls_back(self):
+        self.warehouse_buyer()
+        order, (first, other) = self.multi_purchase()
+        self.post(
+            'warehouse',
+            f'purchases/{order.pk}/receive/',
+            {'lines': [{'line': other.pk, 'quantity': '0', 'pending_quantity': '1'}]},
+        )
+        url = f'purchases/{order.pk}/receive/'
+        counts = (ActionReceipt.objects.count(), AuditLog.objects.count(), StockMove.objects.count())
+
+        def unchanged():
+            self.assertEqual(
+                (ActionReceipt.objects.count(), AuditLog.objects.count(), StockMove.objects.count()), counts
+            )
+            first.refresh_from_db()
+            self.assertEqual((first.received_quantity, first.cancelled_quantity), (0, 0))
+            self.assertEqual(Entry.objects.get(purchase=order).credit_amount, 0)
+
+        flagged = [{'line': first.pk, 'quantity': '2', 'cancel_remainder': True}]
+        # 纯仓管不能顺带取消余量（采购职责），整笔收货不落地。
+        denied = self.post('warehouse', url, {'cancel_reason': '越权', 'lines': flagged}, status=403)
+        self.assertIn('采购权限', str(denied))
+        unchanged()
+        cases = [
+            ({'lines': flagged}, 400, 'cancel_reason'),
+            ({'cancel_reason': '  ', 'lines': flagged}, 400, 'cancel_reason'),
+            ({'cancel_reason': '无勾选', 'lines': [{'line': first.pk, 'quantity': '2'}]}, 400, 'cancel_reason'),
+            ({'cancel_reason': '类型', 'lines': [{**flagged[0], 'cancel_remainder': 'true'}]}, 400, 'cancel_remainder'),
+            # 本次已收足，没有余量可取消。
+            ({'cancel_reason': '收足', 'lines': [{**flagged[0], 'quantity': '5'}]}, 400, 'cancel_remainder'),
+            # 本次有隔离数量或明细原有隔离：与取消余量一样先处理隔离品。
+            ({'cancel_reason': '隔离', 'lines': [{**flagged[0], 'pending_quantity': '1'}]}, 409, '隔离'),
+            (
+                {'cancel_reason': '原有隔离', 'lines': [{'line': other.pk, 'quantity': '1', 'cancel_remainder': True}]},
+                409,
+                '隔离',
+            ),
+            # 多送仍拒绝。
+            ({'cancel_reason': '多送', 'lines': [{**flagged[0], 'quantity': '6'}]}, 409, '超过未收余量'),
+        ]
+        for data, status, text in cases:
+            with self.subTest(data=data):
+                self.assertIn(text, str(self.post('wh_buyer', url, data, status=status)))
+                unchanged()
+        accept = {'lines': [{'line': other.pk, 'quantity': '1', 'cancel_remainder': True}]}
+        self.post('wh_buyer', f'purchases/{order.pk}/quality-accept/', accept, status=400)
+        unchanged()
+
+    def test_purchase_detail_lists_receipt_batches_with_dates(self):
+        order, (first, other) = self.multi_purchase()
+        url = f'purchases/{order.pk}/'
+        today = timezone.localdate().isoformat()
+        yesterday = (timezone.localdate() - timedelta(days=1)).isoformat()
+        self.post('warehouse', url + 'receive/', {'lines': [{'line': first.pk, 'quantity': '2'}]})
+        self.post(
+            'warehouse',
+            url + 'receive/',
+            {
+                'received_date': yesterday,
+                'backfill_reason': '补录昨日签收单',
+                'location': 'A区',
+                'new_location': True,
+                'lines': [{'line': first.pk, 'quantity': '1'}],
+            },
+        )
+        detail = self.clients['warehouse'].get('/api/business/' + url).data
+        line = next(row for row in detail['lines'] if row['id'] == first.pk)
+        self.assertNotIn('unit_price', line)
+        # 按入库日期排序列出每一批，最近入库日期取最后一批。
+        self.assertEqual(
+            [(r['received_date'], r['quantity'], r['location']) for r in line['receipts']],
+            [(yesterday, '1.000', 'A区'), (today, '2.000', '主仓')],
+        )
+        self.assertEqual(line['last_received_date'], today)
+        untouched = next(row for row in detail['lines'] if row['id'] == other.pk)
+        self.assertEqual((untouched['receipts'], untouched['last_received_date']), ([], None))
+        listing = self.clients['warehouse'].get('/api/business/purchases/', {'search': order.code}).data['results'][0]
+        self.assertNotIn('receipts', listing['lines'][0])
+        # 库存列表按库位行带出最近入库日期，库存流水保留每批入库日期。
+        stocks = self.clients['warehouse'].get('/api/business/stocks/', {'item': self.item.pk}).data['results']
+        self.assertEqual(
+            {row['location']: row['last_received_date'] for row in stocks}, {'A区': yesterday, '主仓': today}
+        )
+        moves = self.clients['warehouse'].get('/api/business/moves/', {'kind': 'receipt'}).data['results']
+        self.assertEqual(sorted(move['received_date'] for move in moves), [yesterday, today])
+        exported = self.clients['warehouse'].get('/api/business/stocks/export/', {'file_format': 'csv'})
+        self.assertIn('最近入库日期', exported.content.decode('utf-8-sig').splitlines()[0])
+
     def test_draft_cancellation_stays_whole_order_without_approval_amount_ambiguity(self):
         order, (first, _) = self.multi_purchase(approve=False)
         url = f'purchases/{order.pk}/cancel-remainder/'
@@ -616,6 +782,22 @@ class AuditCancellationConcurrencyTests(AuditBusinessFixtures, TransactionTestCa
         self.assertEqual(line.received_quantity + line.cancelled_quantity, 4)
         self.assertEqual(Entry.objects.get(purchase=order).credit_amount, line.cancelled_quantity)
         self.assertEqual(sum(StockMove.objects.values_list('quantity', flat=True)), line.received_quantity)
+
+    def test_parallel_receive_with_remainder_cancel_cannot_double_consume(self):
+        order = self.purchase(self.project, qty='5', price='1')
+        line = order.lines.get()
+        request = (
+            'admin',
+            f'purchases/{order.pk}/receive/',
+            {'cancel_reason': '余量不再到货', 'lines': [{'line': line.pk, 'quantity': '2', 'cancel_remainder': True}]},
+        )
+        result = self.together([request, request])
+        self.assertEqual(sorted(status for status, _ in result), [200, 409], result)
+        line.refresh_from_db()
+        self.assertEqual((line.received_quantity, line.cancelled_quantity), (2, 3))
+        self.assertEqual(Entry.objects.get(purchase=order).credit_amount, 3)
+        self.assertEqual(AuditLog.objects.filter(operation='purchase.cancel_remainder').count(), 1)
+        self.assertEqual(StockMove.objects.filter(kind='receipt').count(), 1)
 
     def test_parallel_cancellations_cannot_double_credit(self):
         order = self.purchase(self.project, qty='5', price='1')

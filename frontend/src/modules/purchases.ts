@@ -235,6 +235,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   let initial: Row = {}
   let method: 'post' | 'patch' = 'post'
   let readonly = false
+  let receive: Command['prepare']
   const routes: Record<string, string> = {
     提交采购: 'submit',
     批准采购: 'approve',
@@ -256,40 +257,47 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const detail = await read(endpoint(resource) + r.id + '/')
     readonly = name === '查看明细'
     if (readonly) {
+      const lines = (detail.lines || []).map((line: Row) => purchaseDetailLine(line, detail))
+      const has = (key: string) => lines.some((line: Row) => Number(line[key] || 0) > 0)
+      const latest = lines.map((line: Row) => line.last_received_date).filter(Boolean).sort().pop() || ''
       fields = [
         { key: 'supplier_name', label: '供应商' },
         { key: 'project_label', label: '项目' },
         { key: 'receipt_status', label: '到货与检验状态' },
+        { key: 'last_received_label', label: '最近入库日期' },
         { key: 'due_date', label: '交期' },
         ...(money() || buyer() ? [{ key: 'total_label', label: '含税合计（元）' }] : []),
         { key: 'payment_term_label', label: '采购账期' },
         { key: 'payment_due_date', label: '付款到期日', optional: true },
         { key: 'warranty_months', label: '供应商质保月数' },
         { key: 'note', label: '说明', optional: true, wide: true },
+        // 明细首列合并名称、编码、规格（窄面板不用横向找编码）；入库日期列出最近一批，分批到货逐批列出。
         rows('lines', '采购明细', [
-          t('item_name', '物料'),
-          t('assembly_unit', '单元'),
-          t('due_date', '明细交期'),
-          qty,
-          ...(money() || buyer() ? [price] : []),
-          t('received_quantity', '已收'),
-          t('cancelled_quantity', '已取消'),
-          t('returned_quantity', '已退货'),
-          t('pending_quantity', '隔离待处理'),
+          // 列宽按 1366 宽屏的明细工作区（约 1010px）收紧，入库日期列不用横向滚动就能看到。
+          { key: 'material_text', label: '物料 / 编码 / 规格', multiline: true, width: 192 },
+          { key: 'project_unit', label: '项目号 / 单元', multiline: true, width: 110 },
+          { ...t('due_date', '明细交期'), width: 116, short: true },
+          { ...qty, label: '采购数量', width: 80, short: true },
+          ...(money() || buyer() ? [{ ...price, width: 100, short: true }] : []),
+          { ...t('received_quantity', '已收'), width: 64, short: true },
+          { ...t('remaining', '待收'), width: 64, short: true },
+          { ...t('cancelled_quantity', '已取消'), width: 72, short: true },
+          ...(has('returned_quantity') ? [{ ...t('returned_quantity', '已退货'), width: 64, short: true }] : []),
+          ...(has('pending_quantity') ? [{ ...t('pending_quantity', '隔离待处理'), width: 88, short: true }] : []),
+          { key: 'received_label', label: '入库日期', multiline: true, width: 136 },
         ]),
       ]
-      initial = { ...detail, receipt_status: receiptStatus(detail), payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []), lines: (detail.lines || []).map((line: Row) => ({ ...line, ...Object.fromEntries(['quantity', 'received_quantity', 'cancelled_quantity', 'returned_quantity', 'pending_quantity'].filter(key => key in line).map(key => [key, quantityText(line[key])])), ...(line.unit_price == null || line.unit_price === '' ? {} : { unit_price: formatMoney(line.unit_price) }) })) }
+      initial = { ...detail, receipt_status: receiptStatus(detail), last_received_label: latest, payment_term_label: termLabel(detail), project_label: [detail.project_code, detail.project_name].filter(Boolean).join(' · '), total_label: purchaseTotal(detail.lines || []), lines: lines.map((line: Row) => ({ ...line, ...Object.fromEntries(['quantity', 'received_quantity', 'cancelled_quantity', 'returned_quantity', 'pending_quantity', 'remaining'].filter(key => key in line).map(key => [key, quantityText(line[key])])), ...(line.unit_price == null || line.unit_price === '' ? {} : { unit_price: formatMoney(line.unit_price) }) })) }
     } else {
       const locations: string[] = name === '隔离品退回供应商' ? [] : await read('/business/stocks/locations/')
       // The API renders timestamps in the business timezone; preserve that date across browser timezones.
       const createdDate = String(detail.created_at || '').slice(0, 10)
+      // 入库日期放在第一项：保存后写入库存流水，在库存流水、现有库存和采购明细中都能查到。
       fields = [
         ...(name === '隔离品退回供应商' ? [] : [
+          { ...date('received_date', name === '收货' ? '入库日期（实际到货 / 合格收货日）' : '入库日期（检验合格日）'), hint: name === '收货' ? '按实际到货当天填写，记入库存流水，可在「库存流水」「现有库存」和采购明细中查到；仅隔离的到货也按实际日期登记。早于采购创建日期须填补录原因，锁账期间不能补录。' : '按检验合格当天填写，记入库存流水；不能早于该明细的隔离到货日期。早于采购创建日期须填补录原因，锁账期间不能补录。' },
           { key: 'location', label: '库位', initial: '主仓', suggestions: locations, hint: '从已有库位中选择；全角字符和多余空格会自动统一。' },
           { key: 'new_location', label: '新建库位', type: 'boolean' as const, initial: false, optional: true, hint: '仅首次使用某个库位时勾选，避免同一库位录成多种写法。' },
-        ]),
-        ...(name === '隔离品退回供应商' ? [] : [
-          { ...date('received_date', name === '收货' ? '实际到货 / 合格收货日期' : '实际合格收货日期'), hint: '仅隔离的到货也按实际日期登记；早于采购创建日期须填写补录原因，锁账期间不能补录。' },
           { key: 'backfill_reason', label: '补录原因', type: 'textarea' as const, optional: !createdDate, visibleWhen: (data: Row) => !createdDate || (!!data.received_date && data.received_date < createdDate), hint: `采购创建日期${createdDate ? `为 ${createdDate}` : '以前'}，请说明实际到货依据与迟录原因；补录保留审计。` },
         ]),
         name === '隔离品退回供应商' ? reason : optionalReason(name === '收货' ? '送货单号 / 备注' : undefined, `选填，如送货单号、检验记录；不填按「${name === '收货' ? '采购收货' : '隔离品合格入库'}」记录`),
@@ -311,26 +319,62 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           .filter((l: Row) => Number(l.quantity) > 0),
       }
       if (name === '收货') {
+        // 默认全部勾选并按待收填入（一键整单收货不变）；未到货的行取消勾选即可。
+        const cancel = buyer()
         const lines = detail.lines.map((line: Row) => ({
           ...materialDetails(line), line: line.id, project_code: detail.project_code,
           required_quantity: line.bom_quantity ?? line.quantity,
           remaining: decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity, line.pending_quantity || '0'),
           quantity: decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity, line.pending_quantity || '0'),
+          quarantined: line.pending_quantity || '0',
+          selected: true, ...(cancel ? { cancel_remainder: false } : {}),
           pending_quantity: '0', remark: '',
         })).filter((line: Row) => Number(line.remaining) > 0)
-        fields[fields.length - 1] = warehouseLines('receipt', lines)
+        fields[fields.length - 1] = warehouseLines('receipt', lines, { cancel })
+        // 「余量不再到货」与「取消未收余量」同一规则：原因必填，应付按取消金额冲减，需采购权限。
+        if (cancel) fields.push({
+          key: 'cancel_reason', label: '余量不再到货原因', type: 'textarea',
+          visibleWhen: (data: Row) => (data.lines || []).some((line: Row) => line.selected !== false && line.cancel_remainder === true),
+          placeholder: '如 供应商停产不再补货、改用库存、设计变更不再需要',
+          hint: '勾选「余量不再到货」的行将同时取消剩余未收数量，应付按取消金额冲减，与「取消未收余量」相同并保留记录。',
+        })
         initial = { lines }
+        const limits = Object.fromEntries(lines.map((line: Row) => [String(line.line), String(line.remaining)]))
+        receive = data => receiptLines(data, limits)
       }
     }
   }
   let prepare: Command['prepare']
-  if (['收货', '隔离品合格入库', '隔离品退回供应商'].includes(name)) prepare = receiptLines
+  if (['收货', '隔离品合格入库', '隔离品退回供应商'].includes(name)) prepare = receive || receiptLines
   const notice: Command['notice'] = name === '作废采购'
     ? { type: 'warning', text: `将作废本单全部采购明细，请填写作废原因。${r.status === 'submitted' ? '待审批单作废后审批人无需再处理。' : ''}` }
     : name === '提交采购'
       ? { type: 'info', text: `${[r.supplier_name, r.project_code || r.project_name].filter(Boolean).join(' · ')} · ${(r.lines || []).length} 行明细 · 含税合计 ${purchaseTotal(r.lines || [])} 元。提交后由项目经理、采购经理或管理员审批，申请人不能审批本人提交的采购。` }
       : undefined
-  return { title: name, path, fields, initial, method, readonly, ...(prepare ? { prepare } : {}), ...(notice ? { notice } : {}) }
+  const successNote: Command['successNote'] = name === '收货' ? result => (result.cancelled?.length ? `已同时取消 ${result.cancelled.length} 行未收余量，应付已按取消金额冲减。` : '') : undefined
+  return { title: name, path, fields, initial, method, readonly, ...(prepare ? { prepare } : {}), ...(notice ? { notice } : {}), ...(successNote ? { successNote } : {}) }
+}
+// 采购详情明细：首列合并名称、编码、规格（及图号、品牌），项目号与单元一列；入库日期取逐批合格入库记录。
+export function purchaseDetailLine(line: Row, detail: Row): Row {
+  const receipts: Row[] = line.receipts || []
+  const remaining = decimalDifference(line.quantity || '0', line.received_quantity || '0', line.cancelled_quantity || '0', line.pending_quantity || '0')
+  const drawing = line.drawing_number ? `图号 ${line.drawing_number}${line.drawing_revision ? `（${line.drawing_revision}）` : ''}` : ''
+  return {
+    ...line,
+    material_text: [
+      line.item_name || '—',
+      [line.item_code && `编码 ${line.item_code}`, line.specification && `规格 ${line.specification}`].filter(Boolean).join(' · '),
+      [drawing, line.brand && `品牌 ${line.brand}`].filter(Boolean).join(' · '),
+    ].filter(Boolean).join('\n'),
+    project_unit: [detail.project_code || '—', line.assembly_unit || '未分单元'].join('\n'),
+    remaining: remaining.startsWith('-') ? '0' : remaining,
+    // 首行是最近入库日期；分批到货时逐批列出日期和数量，批次多时只列最近 3 批，单元格不被撑得过高。
+    received_label: !receipts.length ? '—' : receipts.length === 1 ? receipts[0]!.received_date : [
+      line.last_received_date || receipts[receipts.length - 1]!.received_date,
+      `共 ${receipts.length} 批${receipts.length > 3 ? '，列出最近 3 批' : ''}`,
+      ...receipts.slice(-3).map(receipt => `${receipt.received_date} 入库 ${quantityText(receipt.quantity)}`),
+    ].join('\n'),
+  }
 }
 // 审批、退回前不离开对话框就能核对的采购内容：供应商、项目、交期、账期、合计和逐行明细（含 BOM 核对结果）。
 // 只用列表行已有的数据，不额外读取明细；明细按“一行一条”的只读文本列出，侧栏和窄屏里也不会撑成逐行表单。
@@ -362,9 +406,21 @@ export function approvalContent(r: Row, check: Row): { fields: Field[]; initial:
     },
   }
 }
-// 未到货的明细（合格与隔离数量均为 0）本次不提交；全部为 0 时在前端直接提示，服务端锁内仍会重新校验。
-export function receiptLines(data: Row): Row {
-  const lines = (data.lines || []).filter((l: Row) => Number(l.quantity || 0) !== 0 || Number(l.pending_quantity || 0) !== 0)
+// 未勾选或未到货的明细（合格与隔离数量均为 0）本次不提交，勾选了「余量不再到货」的行即使本次为 0 也提交；
+// 全部为 0 时在前端直接提示。limits 为各明细待收数量：多送在前端先拦下，服务端锁内仍会重新校验。
+export function receiptLines(data: Row, limits?: Record<string, string>): Row {
+  const all: Row[] = data.lines || []
+  if (limits && !all.some(l => l.selected !== false)) throw new Error('请至少勾选一条本次到货的明细。')
+  const lines: Row[] = []
+  all.forEach(({ selected, cancel_remainder: cancel, ...line }, index) => {
+    if (selected === false) return
+    if (Number(line.quantity || 0) === 0 && Number(line.pending_quantity || 0) === 0 && cancel !== true) return
+    const limit = limits?.[String(line.line)]
+    if (limit != null && decimalDifference(limit, String(line.quantity || '0'), String(line.pending_quantity || '0')).startsWith('-')) {
+      throw new Error(`第 ${index + 1} 行超过待收 ${quantityText(limit)}：多送部分不能入本单，请联系采购「新建采购」补单后再收。`)
+    }
+    lines.push(cancel === true ? { ...line, cancel_remainder: true } : line)
+  })
   if (!lines.length) throw new Error('请至少填写一条到货数量。')
   return { ...data, lines }
 }

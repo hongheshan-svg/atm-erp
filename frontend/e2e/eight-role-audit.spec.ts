@@ -114,7 +114,7 @@ for (const identity of identities) {
       const tabCount: Record<string, number> = {
         settings: identity.key === 'admin' ? 7 : 1,
         masterdata: identity.key === 'sales_manager' ? 1 : 2,
-        inventory: ['admin', 'warehouse'].includes(identity.key) ? 3 : 2,
+        inventory: ['admin', 'warehouse'].includes(identity.key) ? 4 : 3,
         projects: 3,
         finance: ['admin', 'finance'].includes(identity.key) ? 5 : 4,
       }

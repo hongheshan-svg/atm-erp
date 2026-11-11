@@ -59,7 +59,7 @@ MODULE_FILES = {
         'PurchaseContractPage',
         'business-date',
     ),
-    'inventory': ('inventory', 'corrections', 'InventoryPage', 'warehouse-lines', 'WarehouseLines'),
+    'inventory': ('inventory', 'corrections', 'InventoryPage', 'IssueSlipPage', 'warehouse-lines', 'WarehouseLines'),
     'finance': (
         'progress',
         'ProjectProgress',
@@ -209,6 +209,7 @@ SHARED_PATHS = (
             'frontend/e2e/fixtures/document-preview/',
             'frontend/src/components/AttachmentDialog.vue',
             'frontend/src/components/AttachmentDialog.spec.ts',
+            'frontend/src/components/AttachmentRemovalDialog.vue',
             'frontend/src/components/InlineDocumentField.vue',
             'frontend/src/modules/documents.ts',
         ),

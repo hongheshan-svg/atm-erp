@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -11,8 +12,10 @@ from apps.core.permissions import (
 
 from ..models import (
     PurchaseOrder,
+    StockMove,
 )
 from ..serializers import (
+    PurchaseDetailSerializer,
     PurchaseSerializer,
 )
 from ..services import budgets, purchase_changes, supply
@@ -28,6 +31,17 @@ class PurchaseView(ImportableMixin, ReadView):
     serializer_class = PurchaseSerializer
     filterset_fields = ['project', 'supplier', 'status']
     search_fields = ['code', 'supplier__name', 'project__name']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == 'retrieve':
+            # 详情逐行列出合格入库批次（入库日期、数量、库位），一次预取，不按行查询。
+            receipts = StockMove.objects.filter(kind='receipt').select_related('stock')
+            queryset = queryset.prefetch_related(Prefetch('lines__stockmove_set', receipts, to_attr='receipt_moves'))
+        return queryset
+
+    def get_serializer_class(self):
+        return PurchaseDetailSerializer if self.action == 'retrieve' else PurchaseSerializer
 
     @action(detail=True, methods=['get', 'post'])
     def warranty(self, request, pk=None):

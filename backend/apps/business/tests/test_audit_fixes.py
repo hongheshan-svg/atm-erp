@@ -10,9 +10,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from apps.business.models import Document, Entry, SalesOrder, Stock
+from apps.business.models import Document, Entry, Project, SalesOrder, Stock
 from apps.business.services import documents
-from apps.core.models import Company
+from apps.core.models import AuditLog, Company
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -247,3 +247,106 @@ class DocumentRemovalTests(BusinessFixtures, TestCase):
         SalesOrder.objects.filter(pk=sale.pk).update(project=None)
         self.post('sales_manager', f'documents/{document}/remove/', {'reason': '传错文件'})
         self.assertTrue(Document.all_objects.get(pk=document).is_deleted)
+
+
+class DocumentBatchRemovalTests(BusinessFixtures, TestCase):
+    """附件批量删除：授权和拦截与单个删除一致，整批原子。"""
+
+    setUp = DocumentRemovalTests.setUp
+    upload = DocumentRemovalTests.upload
+
+    def remove_many(self, role, ids, reason='传错了', status=200, **extra):
+        return self.post(role, 'documents/remove-batch/', {'documents': ids, 'reason': reason, **extra}, status=status)
+
+    def deleted(self, document):
+        return Document.all_objects.get(pk=document).is_deleted
+
+    def test_uploader_removes_several_own_files_in_one_receipt(self):
+        first, second = self.upload(name='比价表1.png'), self.upload(name='比价表2.png')
+        keep = self.upload(name='保留.pdf')
+        result = self.remove_many('member', [first, second])
+        self.assertEqual(result['removed'], 2)
+        self.assertTrue(self.deleted(first) and self.deleted(second))
+        self.assertFalse(self.deleted(keep))
+        listing = self.clients['member'].get(f'/api/business/documents/?project={self.project.pk}').data['results']
+        self.assertEqual([row['id'] for row in listing], [keep])
+        self.assertEqual(AuditLog.objects.filter(operation='document.remove').count(), 2)
+        # 删除记录和文件本体保留，与单个删除一致。
+        self.assertTrue(
+            Document.all_objects.get(pk=first).file.storage.exists(Document.all_objects.get(pk=first).file.name)
+        )
+
+    def test_double_submit_does_not_remove_or_audit_twice(self):
+        first = self.upload()
+        key = str(uuid.uuid4())
+        self.post('member', 'documents/remove-batch/', {'documents': [first], 'reason': 'x'}, key=key)
+        self.post('member', 'documents/remove-batch/', {'documents': [first], 'reason': 'x'}, key=key, status=404)
+        self.assertEqual(AuditLog.objects.filter(operation='document.remove').count(), 1)
+
+    def test_someone_elses_file_rejects_the_whole_batch_and_names_it(self):
+        mine = self.upload(role='member', name='我的.pdf')
+        theirs = self.upload(role='manager', name='别人的.pdf')
+        response = self.clients['member'].post(
+            '/api/business/documents/remove-batch/',
+            {'documents': [mine, theirs], 'reason': '整理'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('别人的.pdf', str(response.data))
+        self.assertFalse(self.deleted(mine) or self.deleted(theirs))
+        # 项目经理可以整理他人上传的文件。
+        self.remove_many('manager', [mine, theirs])
+        self.assertTrue(self.deleted(mine) and self.deleted(theirs))
+
+    def test_referenced_document_blocks_the_batch(self):
+        receipt = self.upload(role='finance', category='receipt', name='回单.pdf')
+        other = self.upload(role='finance', category='receipt', name='多余.pdf')
+        entry = Entry.objects.filter(project=self.project, kind='receivable').first()
+        self.post(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {'amount': '100', 'date': TODAY, 'reason': '客户回款', 'document': receipt},
+        )
+        response = self.remove_many('finance', [other, receipt], status=409)
+        self.assertIn('回单.pdf', str(response))
+        self.assertFalse(self.deleted(other) or self.deleted(receipt))
+
+    def test_closed_project_blocks_the_batch(self):
+        first, second = self.upload(name='甲.pdf'), self.upload(name='乙.pdf')
+        Project.objects.filter(pk=self.project.pk).update(status='closed')
+        response = self.remove_many('manager', [first, second], status=409)
+        self.assertIn('结项', str(response))
+        self.assertFalse(self.deleted(first) or self.deleted(second))
+
+    def test_invalid_batches_are_rejected(self):
+        first = self.upload()
+        self.remove_many('member', [first, first], status=400)
+        self.remove_many('member', [], status=400)
+        self.remove_many('member', [first], reason='', status=400)
+        self.remove_many('member', list(range(1, documents.MAX_REMOVE_BATCH + 2)), status=400)
+        self.remove_many('member', ['abc'], status=400)
+        self.remove_many('member', [first], status=400, extra='x')
+        self.assertFalse(self.deleted(first))
+
+    def test_files_the_user_cannot_see_are_not_found(self):
+        first = self.upload(role='finance', category='receipt', name='回单.pdf')
+        self.remove_many('warehouse', [first], status=404)
+        self.remove_many('member', [first, 99999999], status=404)
+        self.assertFalse(self.deleted(first))
+
+    def test_purchase_and_sale_attachments_batch_in_one_call(self):
+        sale = SalesOrder.objects.create(
+            code='SO-BATCH', name='批量', customer=self.customer, manager=self.users['sales_manager']
+        )
+        ids = []
+        for name in ('方案1.pdf', '方案2.pdf'):
+            response = self.clients['sales_manager'].post(
+                '/api/business/documents/',
+                {'sale': sale.pk, 'category': 'other', 'file': SimpleUploadedFile(name, b'demo')},
+                format='multipart',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            )
+            ids.append(response.data['id'])
+        self.remove_many('sales_manager', ids)
+        self.assertTrue(all(self.deleted(pk) for pk in ids))

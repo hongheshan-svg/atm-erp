@@ -4,6 +4,7 @@ import { read } from '../api'
 import { defaults, payload } from '../forms'
 import { draftKey, loadDraft, saveDraft } from '../form-experience'
 import { materialDetails, warehouseLines } from '../modules/warehouse-lines'
+import { receiptLines } from '../modules/purchases'
 import FormFields from './FormFields.vue'
 import WarehouseLines from './WarehouseLines.vue'
 import type { Row } from '../types'
@@ -19,7 +20,7 @@ it('收货表包含截图资料，末列备注；输入按行保留且资料不�
   // 1366 宽度下不横向滚动：项目号移到表头，编号与名称、图号型号版本品牌与类型各并成一列，数量输入紧随待收。
   expect(wrapper.findAll('th').map(th => th.text()).slice(1)).toEqual(['产品编号 / 零件名称', '单元', '图号 / 型号 / 版本 / 类型', '单位', '需求数量', '待收数量', '本次合格数量', '不合格隔离数量', '备注'])
   expect(wrapper.get('legend').text()).toContain('项目 A2608')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 2.000 / 待收 4.000，共 2 行')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/2 行，本次合格 2.000 / 待收 4.000')
   // 待收 2、本次只填 1：两行都高亮提醒部分到货。
   expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(2)
   expect(wrapper.text()).toContain('001226000006')
@@ -113,5 +114,94 @@ it('需求读取失败显示重试提示，不显示旧项目需求', async () =
   await wrapper.get('button').trigger('click'); await flushPromises()
   expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   expect(wrapper.text()).toContain('A2608')
+  wrapper.unmount()
+})
+
+it('收货逐行勾选到货：取消勾选清零并禁用、不提交，重新勾选恢复待收，全选一键切换', async () => {
+  const initial = [1, 2, 3].map(line => ({ ...material, line, item_name: `物料${line}`, required_quantity: '3', remaining: '3.000', quantity: '3.000', selected: true, pending_quantity: '0', remark: '' }))
+  const field = warehouseLines('receipt', initial)
+  const data = defaults([field], { lines: initial })
+  const wrapper = mount(FormFields, { props: { fields: [field], modelValue: data } })
+  const row = (n: number) => wrapper.findAll('tbody tr')[n]!
+  const pick = (n: number) => row(n).get('input[type="checkbox"]')
+  expect(wrapper.get('th').text()).toBe('到货')
+  expect(pick(1).attributes('aria-label')).toContain('物料2')
+  await pick(1).setValue(false)
+  expect(data.lines[1]).toMatchObject({ selected: false, quantity: '0', pending_quantity: '0' })
+  expect(row(1).classes()).toContain('unpicked-line')
+  expect((row(1).get('input[aria-label="数量"]').element as HTMLInputElement).disabled).toBe(true)
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/3 行，本次合格 6.000 / 待收 6.000')
+  expect(receiptLines(payload([field], data), { 1: '3.000', 2: '3.000', 3: '3.000' }).lines.map((l: Row) => l.line)).toEqual([1, 3])
+  await pick(1).setValue(true)
+  expect(data.lines[1]).toMatchObject({ selected: true, quantity: '3.000' })
+  const all = wrapper.get('th input[type="checkbox"]')
+  await all.setValue(false)
+  expect(data.lines.every((l: Row) => l.selected === false && l.quantity === '0')).toBe(true)
+  expect(() => receiptLines(payload([field], data), {})).toThrow('请至少勾选一条本次到货的明细')
+  await all.setValue(true)
+  expect(data.lines.map((l: Row) => l.quantity)).toEqual(['3.000', '3.000', '3.000'])
+  wrapper.unmount()
+})
+
+it('超过待收在数量下方直接提示并标记输入无效；少于待收时可勾选余量不再到货', async () => {
+  const initial = [1, 2].map(line => ({ ...material, line, remaining: '5.000', quantity: '5.000', quarantined: line === 2 ? '1.000' : '0', selected: true, cancel_remainder: false, pending_quantity: '0', remark: '' }))
+  const field = warehouseLines('receipt', initial, { cancel: true })
+  const data = defaults([field], { lines: initial })
+  const wrapper = mount(FormFields, { props: { fields: [field], modelValue: data } })
+  const row = (n: number) => wrapper.findAll('tbody tr')[n]!
+  const quantity = (n: number) => row(n).get('input[aria-label="数量"]')
+  await quantity(0).setValue('7')
+  expect(row(0).text()).toContain('超过待收 5：多送部分不能入本单，请联系采购「新建采购」补单后再收。')
+  expect((quantity(0).element as HTMLInputElement).validationMessage).toContain('超过待收')
+  expect(row(0).classes()).toContain('excess-line')
+  expect(row(0).find('.remainder-cancel').exists()).toBe(false)
+  expect(() => receiptLines(payload([field], data), { 1: '5.000', 2: '5.000' })).toThrow('第 1 行超过待收 5')
+  await quantity(0).setValue('2')
+  expect((quantity(0).element as HTMLInputElement).validationMessage).toBe('')
+  const cancel = row(0).get('.remainder-cancel input')
+  expect(row(0).get('.remainder-cancel').text()).toBe('余量 3 不再到货')
+  await cancel.setValue(true)
+  expect(row(0).classes()).not.toContain('partial-line')
+  expect(receiptLines(payload([field], data), { 1: '5.000', 2: '5.000' }).lines[0]).toEqual({ line: 1, quantity: '2', pending_quantity: '0', cancel_remainder: true })
+  // 本次填了隔离数量：与取消余量规则一致须先处理隔离品，已勾选的取消自动撤销。
+  await row(0).get('input[aria-label="不合格隔离数量"]').setValue('1')
+  await flushPromises()
+  expect(data.lines[0].cancel_remainder).toBe(false)
+  expect((row(0).get('.remainder-cancel input').element as HTMLInputElement).disabled).toBe(true)
+  expect(row(0).text()).toContain('隔离品处理后才能取消余量')
+  // 原有隔离待处理的行同样不能取消。
+  await quantity(1).setValue('1')
+  expect((row(1).get('.remainder-cancel input').element as HTMLInputElement).disabled).toBe(true)
+  expect(row(1).text()).toContain('本行已有隔离待处理 1')
+  // 收足后不再提供取消。
+  await quantity(1).setValue('5')
+  expect(row(1).find('.remainder-cancel').exists()).toBe(false)
+  wrapper.unmount()
+})
+
+it('无采购权限时不提供余量不再到货，只提示由采购取消未收余量', () => {
+  const initial = [{ ...material, line: 1, remaining: '5.000', quantity: '2', selected: true, pending_quantity: '0', remark: '' }]
+  const field = warehouseLines('receipt', initial)
+  const wrapper = mount(FormFields, { props: { fields: [field], modelValue: defaults([field], { lines: initial, received_date: '2026-11-10' }) } })
+  expect(wrapper.find('.remainder-cancel').exists()).toBe(false)
+  expect(wrapper.get('.warehouse-summary').text()).toContain('请采购在「取消未收余量」中处理')
+  wrapper.unmount()
+})
+
+it('库存勾选批量领料：逐行显示库位，数量默认留空，可一键按可用填入或清空，并读取所选项目需求', async () => {
+  const initial = [{ ...material, stock: 1, location: '主仓', remaining: '5.000', quantity: '', remark: '' }, { ...materialDetails({ item: 2, item_code: 'M-2', item_name: '气缸', unit: '个' }), stock: 2, location: '二号仓', remaining: '1.500', quantity: '', remark: '' }]
+  vi.mocked(read).mockImplementation(async path => String(path).endsWith('/demand/') ? { lines: [{ item: 1, quantity: '4.000' }] } : { id: 7, code: 'ATM01', name: '上料线' })
+  const field = warehouseLines('issue', initial, { location: true })
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: initial.map(row => ({ stock: row.stock, quantity: '', remark: '' })), context: { project: 7 } } })
+  await flushPromises()
+  expect(wrapper.findAll('th').map(th => th.text()).slice(1)).toEqual(['产品编号 / 零件名称', '库位', '图号 / 型号 / 版本 / 类型', '单位', '需求数量', '本库位可用', '本次出库数量', '备注'])
+  expect(wrapper.get('legend').text()).toContain('项目 ATM01 · 上料线')
+  expect(wrapper.findAll('tbody tr')[0]!.text()).toContain('4.000')
+  const button = (text: string) => wrapper.findAll('.warehouse-fill button').find(item => item.text() === text)!
+  expect(wrapper.findAll('.warehouse-fill button').map(item => item.text())).toEqual(['全部按可用填入', '全部清空'])
+  await button('全部按可用填入').trigger('click')
+  expect(wrapper.props('modelValue').map((row: Row) => row.quantity)).toEqual(['5.000', '1.500'])
+  await button('全部清空').trigger('click')
+  expect(wrapper.props('modelValue').map((row: Row) => row.quantity)).toEqual(['', ''])
   wrapper.unmount()
 })

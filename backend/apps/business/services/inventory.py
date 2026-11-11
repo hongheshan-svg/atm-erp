@@ -5,9 +5,10 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
 from apps.core.api import Conflict
+from apps.core.models import CodeRule
 from apps.core.permissions import ADMIN, WAREHOUSE, require_role
 
-from ..models import BOMLine, Entry, Project, PurchaseLine, PurchaseOrder, Stock, StockMove, Task
+from ..models import BOMLine, Entry, IssueSlip, Project, PurchaseLine, PurchaseOrder, Stock, StockMove, Task
 from .bom import claimed_by_others, issued
 from .common import (
     ZERO,
@@ -133,14 +134,32 @@ def bom_remaining(project, item_id):
     return required - issued(project, item_id)
 
 
-def take_issue(user, project, source, qty, *, task, reason, remark, confirm_shared):
-    """在已加锁的项目内出库一条领料：校验 BOM 剩余（售后任务除外）、库存与共享到货，写库存流水和审计。"""
+def issue_task(project, data):
+    """领料关联的任务：须为本项目未完成任务；已验收项目只能凭售后任务领料（售后领料不占 BOM 剩余）。"""
+    task = lookup(Task, data['task'], 'task', project=project, status='open') if data.get('task') is not None else None
+    if project.status == 'warranty' and (task is None or task.kind != 'service'):
+        raise ValidationError({'task': '已验收项目领料必须关联未完成的售后任务。'})
+    return task
+
+
+def open_slip(user, project, task, reason):
+    """开一张领料单（项目→单据→物料的加锁顺序：在锁物料、扣库存之前取号）；事务回滚时单据和号码一起撤销。"""
+    CodeRule.objects.get_or_create(key='issue_slip', defaults={'prefix': 'LL'})
+    return save(IssueSlip(code=CodeRule.generate_code('issue_slip'), project=project, task=task, reason=reason), user)
+
+
+def take_issue(user, project, source, qty, *, slip, remark, confirm_shared):
+    """在已加锁的项目内按领料单出库一条：校验 BOM 剩余（售后任务除外）、库存与共享到货，写库存流水和审计。"""
+    task = slip.task
     service = task is not None and task.kind == 'service'
+    name = source.item.name
     if not service and qty > bom_remaining(project, source.item_id):
-        raise Conflict(f'{source.item.name}：领料超过 BOM 剩余需求，请先修订 BOM。')
+        raise Conflict(f'{name}：领料超过 BOM 剩余需求，请先修订 BOM。')
     stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
+    if qty > stock.quantity:
+        raise Conflict(f'{name}（{stock.location}）：可用库存不足，当前可用 {stock.quantity}，请刷新后重试。')
     value = take_value(stock, qty)
-    shared = shared_arrival(project, source.item_id, qty, confirm_shared, '领料')
+    shared = shared_arrival(project, source.item_id, qty, confirm_shared, f'领料（{name}）')
     stock.quantity -= qty
     stock.value -= value
     save(stock, user)
@@ -149,16 +168,21 @@ def take_issue(user, project, source, qty, *, task, reason, remark, confirm_shar
             stock=stock,
             project=project,
             task=task,
+            slip=slip,
             kind='issue',
             quantity=-qty,
             value=-value,
-            reason=reason,
+            reason=slip.reason,
             remark=remark,
         ),
         user,
     )
-    audit(user, 'stock.issue', move, shared_from=shared)
+    audit(user, 'stock.issue', move, shared_from=shared, slip=slip.code)
     return move
+
+
+def slip_result(slip, moves):
+    return {'slip': slip.pk, 'slip_code': slip.code, 'moves': [move.pk for move in moves], 'count': len(moves)}
 
 
 def confirmation(data):
@@ -174,20 +198,15 @@ def issue(actor, key, data):
         confirm_shared = confirmation(data)
         state(project, {'active', 'delivering', 'warranty'})
         source = lookup(Stock, data.get('stock'), 'stock')
-        task = (
-            lookup(Task, data['task'], 'task', project=project, status='open') if data.get('task') is not None else None
-        )
-        service = task is not None and task.kind == 'service'
-        if project.status == 'warranty' and not service:
-            raise ValidationError({'task': '已验收项目领料必须关联未完成的售后任务。'})
+        task = issue_task(project, data)
         qty = number(data.get('quantity'), 'quantity', 3, positive=True)
         # 正常领料的说明选填，缺省记为动作名；退料、采购退货等纠错动作仍须写明原因。
-        reason = text(data, 'reason', default='') or ('售后领料' if service else '项目领料')
+        reason = text(data, 'reason', default='') or ('售后领料' if task and task.kind == 'service' else '项目领料')
         remark = text(data, 'remark', default='')
-        move = take_issue(
-            user, project, source, qty, task=task, reason=reason, remark=remark, confirm_shared=confirm_shared
-        )
-        return {'id': move.pk}
+        # 单行领料也开一张单行领料单，领料记录不再零散。
+        slip = open_slip(user, project, task, reason)
+        move = take_issue(user, project, source, qty, slip=slip, remark=remark, confirm_shared=confirm_shared)
+        return {'id': move.pk, **slip_result(slip, [move])}
 
     return project_action(actor, key, 'stock.issue', data.get('project'), data, WAREHOUSE, execute)
 
@@ -257,13 +276,21 @@ def bom_issue_lines(project):
 
 
 def issue_batch(actor, key, data):
-    """按项目 BOM 一次领多行：同一事务内逐行沿用单行领料的全部校验，任一行不通过整单不出库。"""
+    """一次领多行、开一张领料单（按 BOM 领料、库存页勾选批量领料共用）：同一事务内逐行沿用单行领料的全部校验，
+    任一行不通过整单不出库、不留单号。可选 task 与单行领料规则相同：已验收项目须关联本项目未完成的售后任务，
+    售后领料不占 BOM 剩余。"""
 
     def execute(user, project):
-        fields(data, {'project', 'lines', 'reason', 'confirm_shared'})
+        fields(data, {'project', 'lines', 'task', 'reason', 'confirm_shared'})
         confirm_shared = confirmation(data)
-        state(project, {'active', 'delivering'})
-        reason = text(data, 'reason', default='') or '项目领料'
+        if data.get('task') is None and project.status == 'warranty':
+            # 按 BOM 领料没有任务栏，保持原来的 409；提示改用库存页勾选领料并选售后任务。
+            raise Conflict(
+                '已验收项目领料必须关联未完成的售后任务：请在「现有库存」勾选物料批量领料，并选择该项目的售后任务。'
+            )
+        state(project, {'active', 'delivering', 'warranty'})
+        task = issue_task(project, data)
+        reason = text(data, 'reason', default='') or ('售后领料' if task and task.kind == 'service' else '项目领料')
         prepared, seen = [], set()
         for index, row in enumerate(rows(data)):
             try:
@@ -277,15 +304,14 @@ def issue_batch(actor, key, data):
                 raise ValidationError({'lines': {index: {'stock': '同一库存行不能重复领料。'}}})
             seen.add(stock_id)
             prepared.append((lookup(Stock, stock_id, 'stock'), qty, remark))
-        # 先按物料顺序统一加锁，再逐库位扣减，与单行领料、收货的加锁顺序一致，避免互相等待。
+        # 项目→单据→物料：先取领料单号，再按物料顺序统一加锁、逐库位扣减，与单行领料、收货的加锁顺序一致。
+        slip = open_slip(user, project, task, reason)
         lock_items({source.item_id for source, _, _ in prepared})
-        moves = []
-        for source, qty, remark in sorted(prepared, key=lambda row: (row[0].item_id, row[0].location, row[0].pk)):
-            move = take_issue(
-                user, project, source, qty, task=None, reason=reason, remark=remark, confirm_shared=confirm_shared
-            )
-            moves.append(move.pk)
-        return {'moves': moves, 'count': len(moves)}
+        moves = [
+            take_issue(user, project, source, qty, slip=slip, remark=remark, confirm_shared=confirm_shared)
+            for source, qty, remark in sorted(prepared, key=lambda row: (row[0].item_id, row[0].location, row[0].pk))
+        ]
+        return slip_result(slip, moves)
 
     return project_action(actor, key, 'stock.issue_batch', data.get('project'), data, WAREHOUSE, execute)
 

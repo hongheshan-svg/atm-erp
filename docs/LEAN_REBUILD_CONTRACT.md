@@ -14,7 +14,7 @@
 
 自动编号沿用 Word 规范：项目默认采用 ATMYYNN，不以历史BOM中的AYYNN缩写定义自动规则；用户选择手工编号时按所填编号保存。历史编号不自动转换或建立同一项目映射。Excel空产品编号按规范分类建码，图号不作为物料编码；缺型号/规格与图号身份冲突需核对，不能推测补全。
 
-`projects/bom-template/` 返回15列BOM模板，兼容旧三/四/七列。`projects/{id}/import-preview/` 接受空编码及物料信息，按完整物料身份复用或预演新建；不持久化物料、编号计数或业务记录。新模板校验通过后返回签名token，`projects/{id}/bom-import-confirm/` POST `{token}`，绑定当前用户、项目和BOM版本，30分钟有效；锁内重新解析物料并原子保存BOM，以token派生幂等键。既有编码的补填资料不得覆盖主数据，多个相同候选要求显式编码。旧模板继续使用原BOM修订确认。
+`projects/bom-template/` 返回15列BOM模板，兼容旧三/四/七列。`projects/{id}/import-preview/` 接受空编码及物料信息，按完整物料身份复用或预演新建；不持久化物料、编号计数或业务记录。新模板校验通过后返回签名token，`projects/{id}/bom-import-confirm/` POST `{token}`，绑定当前用户、项目和BOM版本，30分钟有效；锁内重新解析物料并原子保存BOM，以token派生幂等键。既有编码的补填资料不得覆盖主数据，多个相同候选要求显式编码；唯一例外是品牌：已有物料品牌为空而文件填了品牌时，确认在同一事务内补填（material_action「沿用已有物料，补填品牌」，审计写物料修改），已有品牌须与文件一致。编码留空且身份字段相同、只差品牌时，若恰有一条无品牌物料则补填并复用，多条则要求填写编码，不重复建料。仅补品牌、BOM 行无变化时确认不提升 BOM 版本。旧模板继续使用原BOM修订确认。
 
 新15列模板逐行收集物料和BOM校验错误，`errors`包含文件行号及中文原因；`lines`保留所有非空原始行及解析成功的展示信息，`validation_error`标记该行已发现的问题。失败时仍返回可核对的明细，`can_import=false`且不签发token，整批预演回滚；成功行中的临时新物料ID不对外返回。确认仍在锁内重验，不能凭展示明细绕过校验。页面选择文件后立即打开预览窗口，显示处理中、读取失败或校验结果；关闭、切换项目或BOM版本后忽略旧请求结果。
 
@@ -172,21 +172,25 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - 修改申请与处理结果复用原不可删除审计记录，不新增审批表或可配置工作流；在项目锁、采购单锁和原幂等凭据内执行，旧申请编号不能处理新申请。列表、工作台和项目进度显示“修改申请待处理”，处理记录保留双方原因及同意/驳回结果；待办排除原申请人和当前修改申请人。
 - `purchases/{id}/approve-over-budget/` POST reason/confirmed/expected_snapshot：经理或管理员明确批准超额，confirmed 必须为 true，reason 必填，snapshot 必须等于锁内实时核算结果，否则 409 要求重新查看。保存批准人、原因及完整预算检查快照，不自动增加项目预算。预算设置和超额批准沿用经理角色，但最近预算调整人不能自行批准超额采购（403）；其他经理复核，管理员例外也必须填原因。不增加独立审批角色或多级流程；审计保留两类动作。
 - `receive/`：location/reason?/received_date?/backfill_reason?/lines[{line,quantity,pending_quantity?,remark?}]，line 是本单采购明细 id；quantity是合格入库数量，pending_quantity是隔离待处理数量（默认0）。说明 `reason` 选填（可写送货单号，缺省“采购收货”）；补录原因 `backfill_reason` 仍按日期规则必填。本次未到货行允许两者均为0并跳过，整批至少一行有正数量且每行不超过实际未到数量；重复明细仍拒绝。实际日期早于采购创建日时必须填写补录原因，并继续遵守锁账限制，包括全部隔离的到货。采购返回只读 created_at 供页面判断是否提示补录原因。隔离不计可用库存、不减少承诺或应付；仓管分批合格入库，累计金额保留分角差。采购页面根据原明细的合格/隔离数量显示“已到货待检”及隔离数量，不增加独立状态事实。
+- `receive/` 另接受明细 `cancel_remainder`（布尔，余量不再到货）与整单 `cancel_reason`：勾选的行在本次收货后把剩余未收数量（采购数 − 已收 − 已取消，含本次）一并取消，本次数量可为 0（只取消不收货）；有勾选时原因必填，无勾选时传原因拒绝。取消与收货在同一操作、同一事务和同一防重复凭据中完成，任一校验失败整单不收货也不取消；取消沿用 `cancel-remainder/` 的规则（采购权限及项目范围、隔离未清拒绝、应付按累计舍入差额冲减并写取消审计），纯仓库岗位勾选返回 403。本次已收足的行没有余量可取消返回 400。响应在有取消时附 `cancelled[{line,quantity}]`。页面收货表格逐行勾选“到货”（默认全选并按待收填入，取消勾选的行数量清零且不提交），入库日期放在第一项；多送（合格＋隔离超过待收）在提交前逐行提示，引导采购“新建采购”补单；仅采购/管理员看到“余量 X 不再到货”及原因。
 - `cancel-remainder/`：reason、可选 lines[{line,quantity?}]。已批准采购支持按明细、按数量取消；quantity 省略时取消所选明细全部未收余量，未选明细保留。所选明细有隔离数量时先处理隔离品。草稿和待审批采购允许整单作废（原因必填、不接受 lines，待审批单尚无应付）；待审批单有待处理修改申请时拒绝作废，须先由审批人处理申请。不传 lines 整单取消。采购页面对已批准、部分收货单提供“整单取消未收余量”，只填一次原因；原按明细取消与整单取消弹窗可相互切换。整单取消范围由服务端锁内计算，任何剩余明细仍有待检数量则整单拒绝，不跳过；已收货、库存和付款流水保留。应付仅按本次取消数量的累计舍入差额冲减，已付多出部分形成待退款余额；审计保留明细与原因，重复请求不再次冲减。
 
 ## 库存与纠错
 
-- `stocks/` GET；`stocks/opening/` 管理员 POST item/location/quantity/unit_cost/reason?（选填，缺省“期初库存”），只允许无历史库位。
-- `stocks/issue/`：project/stock/task?/quantity/reason/remark?；生产领料受 BOM 上限约束，已验收项目必须关联未完成的售后任务。`reason` 选填（缺省“项目领料”，售后任务为“售后领料”）。
-- `stocks/bom-issue/` 按项目 BOM 批量领料（仓库岗位，项目范围）：GET `?project=` 列出本项目 BOM 仍有未领需求且有库存的物料，按库位逐行返回 stock/物料信息/required_quantity/issued_quantity/bom_remaining/available 及预填 quantity（同物料多库位按库位顺序依次填满还可领量），并返回 pending_items、missing_items（缺库存物料数）。POST project/lines[{stock,quantity,remark?}]/reason?/confirm_shared?（操作名 `stock.issue_batch`，需 Idempotency-Key）：项目须执行中或交付中，同一库存行不得重复，逐行沿用单行领料的 BOM 剩余、库存与共享到货校验，任一行不通过整单不出库；返回 moves 与 count。
+- `stocks/` GET（另支持 `id__in=1,2,3` 一次读取指定库存行，供勾选批量领料重读当前数量），另返回只读 `last_received_date`（该库位最近一次采购合格入库日期，取流水 received_date，历史流水无日期时按登记当天；无采购入库为 null），列表显示在“库存数量”下方（“入库 日期”），导出列为“最近入库日期”；`stocks/opening/` 管理员 POST item/location/quantity/unit_cost/reason?（选填，缺省“期初库存”），只允许无历史库位。
+- 领料单 `IssueSlip`（表 `lean_issue_slip`，迁移 `business.0027_issue_slip`）：每次领料提交生成一张，单号走编号规则 `issue_slip`（缺省前缀 `LL`，`init_system` 与首次领料按需建立），单头为 project/task?/reason，经办人与时间取 created_by/created_at；明细即其下的领料流水（`StockMove.slip`，历史领料与其他流水为空）。领料单与流水同为不可覆盖、不可删除的记录；退料仍按原领料流水登记，不改领料单。表格导入领料（`moves` 导入）逐行沿用单行领料，每行各生成一张领料单。
+- `stocks/issue/`：project/stock/task?/quantity/reason/remark?；生产领料受 BOM 上限约束，已验收项目必须关联未完成的售后任务。`reason` 选填（缺省“项目领料”，售后任务为“售后领料”）。生成一张单行领料单，返回 id（流水）/slip/slip_code/moves/count。
+- `stocks/bom-issue/` 批量领料（仓库岗位，项目范围），按 BOM 领料与库存页勾选批量领料共用：GET `?project=` 列出本项目 BOM 仍有未领需求且有库存的物料，按库位逐行返回 stock/物料信息/required_quantity/issued_quantity/bom_remaining/available 及预填 quantity（同物料多库位按库位顺序依次填满还可领量），并返回 pending_items、missing_items（缺库存物料数）。POST project/lines[{stock,quantity,remark?}]/task?/reason?/confirm_shared?（操作名 `stock.issue_batch`，需 Idempotency-Key）：同一库存行不得重复，逐行沿用单行领料的 BOM 剩余、库存与共享到货校验，错误提示带物料名（库存不足另带库位与当前可用量），任一行不通过整单不出库、不生成领料单也不占用单号。不带 task 时项目须执行中或交付中（已验收项目返回 409 并提示改用勾选领料选售后任务）；带 task 时与单行领料相同：须为本项目未完成任务，已验收项目只能是售后任务（否则 400），售后任务领料不占 BOM 剩余，`reason` 缺省“售后领料”。整批生成一张领料单，返回 slip/slip_code/moves/count。
+- `issue-slips/` 只读（读取岗位与项目范围同 `moves/`）：列表返回 code/project/project_code/project_name/task/task_title/reason/line_count/items_summary/created_at/created_by/created_by_name，支持 `project`、`task`、`date_from`/`date_to`（领料本地日期）筛选和单号、项目编号名称、物料编码名称搜索，可导出；详情另返回 company_name（打印抬头）与 lines[{id,stock,item,item_code,item_name,specification,brand,drawing_number,drawing_revision,unit,location,quantity(正数),remark}]，不含成本金额。
 - `stocks/{id}/count/`：quantity/expected_quantity/expected_updated_at/reason，拒绝过时盘点快照；只有零库存盘盈可由管理员额外给 unit_cost。
 - `moves/` GET；`moves/{id}/return-material/`：quantity/reason，不能超原领料或退回已交付部分的必要材料。
-- `moves/` 与 `payments/` 列表可追到来源单据：库存流水另返回 item_code/unit/project_code/project_name/purchase/purchase_code/created_by_name；收付款流水另返回 kind/project_code/project_name/partner_name/purchase/reconciliation_code，对账单显示编号而不是内部 ID。`entries/` 另返回 purchase_code，列表按“未结在前、到期日先后、编号”排序。
+- `moves/` 与 `payments/` 列表可追到来源单据：库存流水另返回 item_code/unit/project_code/project_name/purchase/purchase_code/slip/slip_code/created_by_name，可按 `slip` 筛选，页面“入库日期”列取采购收货流水的 received_date（历史无日期按登记当天）；收付款流水另返回 kind/project_code/project_name/partner_name/purchase/reconciliation_code，对账单显示编号而不是内部 ID。`entries/` 另返回 purchase_code，列表按“未结在前、到期日先后、编号”排序。
 - `return-purchase/`：quantity/reason，供应商冲减按原采购成本，库存按移动平均价值退出，价差单列。采购退货与领料一样，会占用其他项目已到货未领用物料时须勾选 `confirm_shared` 确认并留审计。
 
 ### 收货与项目出库操作明细
 
-- 收货和项目领料页面展示项目号、产品编号、零件名称、图号/型号、版本/品牌、单位、需求数量、零件类型及末列备注；收货保留BOM单元，区分待收、本次合格和隔离数量。图号与型号、版本与品牌分别标明来源；数据直接取原物料资料，不允许在收货/领料时改物料资料。电脑为可横向滚动表格，手机逐项展示，20行分页且翻页保留输入。
+- 收货和项目领料页面展示项目号、产品编号、零件名称、图号/型号、版本/品牌、单位、需求数量、零件类型及末列备注；收货保留BOM单元，区分待收、本次合格和隔离数量。图号与型号、版本与品牌分别标明来源；数据直接取原物料资料，不允许在收货/领料时改物料资料。电脑为可横向滚动表格，手机逐项展示，20行分页且翻页保留输入。收货逐行勾选本次到货，表头可全选，摘要显示入库日期、已勾选行数和本次合格/待收合计。
+- `purchases/{id}/` 明细（仅单条读取）另返回 `receipts[{id,received_date,quantity,location}]`（该明细逐批合格入库流水，按日期排序）和 `last_received_date`；列表接口不返回，避免列表逐行展开流水。查看明细首列合并名称、编码、规格（及图号、品牌），项目号与单元同列，另列待收与入库日期（分批时列出最近 3 批），表头显示最近入库日期；手机按行卡片显示，短值两栏并排。
 - 收货需求数量取关联BOM单元数量；无BOM采购取本单明细数量。领料需求随所选项目读取并汇总同物料BOM数量，售后按任务领用；库存仍是公司共享库存，不建立虚构的单元库存。
 - 逐条备注 `remark` 选填、最多500字符。合格收货和领料写入原不可覆盖库存流水的备注字段，分批记录互不覆盖；仅隔离到货的备注保留在原采购处理审计中。库存流水列表末列显示备注，采购处理记录提供到货备注。历史流水默认空备注，数量、金额及原原因不变；本次不改导出/打印布局。
 - 采购明细只读补充图号、版本、型号、品牌、编码类别、单位和BOM需求，采购头补充项目编号；库存只读补充图号、版本及编码类别。仓管继续无权读取采购单价和库存成本，服务端仍在锁内校验权限、项目状态、数量和重复提交。
@@ -223,6 +227,8 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - `payments/` 与 `time/` 的 `reversed_by` 为关联冲销记录 id，未冲销为 null；与 `reversal_of` 一起供页面展示原记录、冲销记录及有效记录，后端仍独立校验重复操作。
 - `documents/` multipart POST project/category/file（20MB 上限）。分类 drawing/contract/receipt/delivery/other；合同经理上传，凭据财务上传；敏感分类仅金额可见角色读取。
 - `documents/{id}/download/`：鉴权下载，无公开 media 路由；返回附件流、private/no-store、nosniff。
+- `documents/{id}/remove/` POST reason：软删除误传附件，保留记录、文件本体与 `document.remove` 审计；上传人或项目经理（项目已结项除外）可删，已作为收付款流水、补录凭证、对账单、补充协议、归档采购合同依据的附件及已结项项目拒绝。锁序固定为项目 → 采购/销售单 → 附件。
+- `documents/remove-batch/` POST documents[]/reason：与 `remove/` 同一授权与拦截（共用 `_lock_for_removal`/`_remove_locked`），一次事务、一个幂等回执，1～50 份附件，重复编号、空列表或超过 50 份返回 400，看不到的附件返回 404；任一份被拦截则整批不动，提示写明文件名（例如「别人的.pdf」：只能删除本人上传的附件）。加锁按项目、采购单、销售单、附件的主键升序。返回 `{removed, documents}`，每份写一条 `document.remove` 审计。与管理员 `record-deletions/` 不同，不进入“已删除记录”。
 - `documents/{id}/preview/?sheet=N&page=N`：鉴权只读预览，与下载共用原单据、项目及敏感分类范围；每次重新授权，错误响应同样 private/no-store、nosniff。不新建预览表或持久缓存，不执行公式、宏或外部链接。公共返回 `name/kind/warnings`；XLSX/XLS/CSV 返回可见 `sheets[{index,name}]`、`sheet`、`columns`、`rows[{number,cells}]`、`page/page_size/total_rows/total_pages`；工作表从0编号，默认首个可见页，页码从1开始，每页100行，最多10000行、100列。DOCX 返回按100个段落/表格分页的 `blocks[{kind,text|rows}]`；TXT返回 `text`。单元格值均为纯文本，保留常见数字、日期及前导零格式；仅显示已保存公式结果，不还原Office完整排版、图表或嵌入图片，超限与未计算值明确提醒。
 - PDF及PNG/JPEG/GIF/WebP/BMP预览返回 `file_url`，指向 `documents/{id}/preview-file/`；文件流再次鉴权，按扩展名及文件签名白名单返回正确类型，inline、private/no-store、nosniff及限制性CSP，不内联HTML/SVG。PDF由前端随包提供的PDF.js、字体及解码资源显示，文件不送第三方网站。源文件仍不超过20MB；Office展开不超过64MB、1000部件，文字响应最多20万字符。损坏、加密、缺失或无权限返回中文错误；不支持格式返回 `kind=unsupported/message`，提供下载或转PDF说明。
 - PDF worker通过构建产出 `.js`，兼容现有原生及Docker Nginx的MIME配置；使用JavaScript解码回退，不启用WebAssembly执行，也不放宽现行CSP。字体、CMap及解码资源随前端目录完整分发。

@@ -59,7 +59,7 @@ test('仓管收货及项目出库展示完整物料资料并逐条保存备注',
     await lower.getByLabel('不合格隔离数量', { exact: true }).fill('1')
     await lower.getByLabel('备注', { exact: true }).fill('下料板1件孔位待复检')
     await expect(dialog(wh).locator('.warehouse-lines legend')).toContainText(project.code)
-    await expect(dialog(wh).locator('.warehouse-summary')).toContainText('共 2 行')
+    await expect(dialog(wh).locator('.warehouse-summary')).toContainText('已勾选 2/2 行')
     // 正常到货的说明选填，可写送货单号。
     await dialog(wh).getByLabel('送货单号 / 备注', { exact: true }).fill('送货单SH001，按实物分单元收货')
     const viewport = await wh.evaluate(() => ({ body: document.body.scrollWidth, visible: document.documentElement.clientWidth }))

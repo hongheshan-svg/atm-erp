@@ -35,7 +35,8 @@ import { extraFilters, filterQuery, isOverdueCell, resourceFilters, searchableRe
 import { today } from '../forms'
 import { actionGroup, actionGroups, primaryActions } from '../row-actions'
 import { flowFor } from '../flows'
-import { buyer, labels } from '../modules/shared'
+import { buyer, labels, warehouse } from '../modules/shared'
+import { issueSelectable, issueSelectionLimit, slipRoute, stockIssueCommand } from '../modules/inventory'
 import { canDeleteRecords, deletionLimit, deletionLabel } from '../modules/deletions'
 import { useBatchSelection } from '../utils/batch-selection'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
@@ -68,7 +69,7 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   onBeforeUnmount(() => query.removeEventListener?.('change', sync))
 }
 // 手机宽度的窄屏列表：只留名称、状态和操作，其余信息并入名称格的副行（完整信息在详情里）。
-const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || ['projects', 'moves'].includes(props.resource)))
+const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || ['projects', 'moves', 'issue-slips'].includes(props.resource)))
 const emit = defineEmits<{ changed: [] }>()
 const records = ref<Row[]>([])
 const count = ref(0)
@@ -82,7 +83,7 @@ const error = ref('')
 const command = ref<Command | null>(null)
 const actionDialog = ref<{ confirmLeave: () => Promise<boolean> }>()
 const wide = computed(() => wideCommand(command.value))
-const savedRecord = ref<{ title: string; resource: string; id: number; project?: number; timeTask?: number } | null>(null)
+const savedRecord = ref<{ title: string; resource: string; id: number; project?: number; timeTask?: number; slip?: boolean } | null>(null)
 const timeTask = ref<number | null>(null)
 const hasFilter = computed(() => !!(appliedSearch.value || filterValue.value || Object.keys(appliedExtra.value).length))
 const fallbackHint = computed(() => ({
@@ -90,6 +91,7 @@ const fallbackHint = computed(() => ({
   projects: '已签约销售请从销售单生成项目，避免重复创建。',
   entries: '签约、批准采购会自动产生应收应付；费用通过登记费用添加。',
   stocks: '采购收货后自动增加库存；首次启用可登记期初库存。',
+  'issue-slips': '每次领料（单行领料、勾选批量领料、按 BOM 领料）都会生成一张领料单。',
   documents: '上传图纸、合同或业务凭证，便于项目成员协作。',
   tasks: '先新增任务，选择执行人和计划完成日期，任务会出现在执行人的工作台。',
 } as Record<string, string>)[props.resource] || (createLabel(props.resource) && props.allowCreate ? '可通过页面上方的新增或导入入口建立记录。' : '当前账号可查看的业务尚无记录。'))
@@ -115,7 +117,8 @@ const extraConfig = computed(() => extraFilters[props.resource] || [])
 const filterId = useId()
 const filtersOpen = ref(false)
 // 窄屏下筛选控件多于 2 个时收起，只留搜索框和「筛选 · N」；N 为已填写的筛选数。
-const filterControls = computed(() => (props.resource === 'users' && filterConfig.value ? 1 : 0) + (['users', 'items', 'partners'].includes(props.resource) ? 1 : 0) + (props.resource === 'stocks' ? 1 : 0) + (['stocks', 'items'].includes(props.resource) ? 1 : 0) + (['purchases', 'entries'].includes(props.resource) ? 1 : 0) + (props.resource === 'audit' ? 2 : 0) + extraConfig.value.length)
+const datedResource = computed(() => ['audit', 'issue-slips'].includes(props.resource))
+const filterControls = computed(() => (props.resource === 'users' && filterConfig.value ? 1 : 0) + (['users', 'items', 'partners'].includes(props.resource) ? 1 : 0) + (props.resource === 'stocks' ? 1 : 0) + (['stocks', 'items'].includes(props.resource) ? 1 : 0) + (['purchases', 'entries'].includes(props.resource) ? 1 : 0) + (datedResource.value ? 2 : 0) + extraConfig.value.length)
 const collapsible = computed(() => mobile.value && filterControls.value > 2)
 const activeFilters = computed(() => [
   props.resource === 'users' && filterValue.value, enabledFilter.value, locationFilter.value, brandFilter.value, unsettled.value, dateFrom.value, dateTo.value, supplierFilter.value != null && props.resource === 'purchases',
@@ -148,6 +151,25 @@ onBeforeUnmount(() => { selectionGeneration++ })
 watch(deletionAllowed, allowed => {
   if (!allowed) { selectionGeneration++; selectingAll.value = false; deletionSelection.value = [] }
 })
+// 库存勾选批量领料（仓管、管理员）：勾选跨页、跨搜索保留，一次领出并生成一张领料单。
+// 与管理员「批量管理」互斥：开批量管理时让出勾选列和领料条，退出后恢复原勾选，不会两列勾选并排。
+const issueSelection = ref<Row[]>([])
+const issuePicking = computed(() => props.resource === 'stocks' && warehouse() && !batchVisible.value)
+const issueBatch = useBatchSelection(issueSelection, 'id', () => issueSelectionLimit)
+const issuePage = computed(() => records.value.filter(issueSelectable))
+async function openIssueBatch() {
+  if (!issuePicking.value || !issueSelection.value.length || !(await leaveCurrent())) return
+  selectedId.value = null
+  selectedRow.value = null
+  const current = ++commandGeneration
+  preparing.value = true
+  try {
+    const next = await stockIssueCommand(issueSelection.value)
+    if (current === commandGeneration) command.value = next
+  } catch (e) {
+    if (current === commandGeneration) error.value = message(e)
+  } finally { if (current === commandGeneration) preparing.value = false }
+}
 async function selectFilteredRows() {
   if (!deletionAllowed.value || loading.value || actionBusy.value || selectingAll.value) return
   const current = ++selectionGeneration
@@ -197,7 +219,8 @@ const merged: Record<string, Record<string, string | string[]>> = {
   entries: { title: 'kind', partner_name: 'project_name', due_date: ['due_amount', 'agreed_payment_date'], balance: 'paid_amount' },
   tasks: { title: 'project_name', stage_label: 'milestone_label', assignee_name: ['supervisor_name', 'discipline_label'], due_date: ['completed_date', 'schedule_variance_days'], logged_hours: ['elapsed_days', 'started_date'] },
   time: { task_title: 'project_name' },
-  stocks: { item_name: 'item_code', specification: 'brand' },
+  // 最近入库日期作为库存数量的副行：勾选领料列加入后 1366 宽仍不被右侧操作列挡住。
+  stocks: { item_name: 'item_code', specification: 'brand', quantity: 'last_received_date' },
   purchases: { supplier_name: 'project_name', payment_term: 'payment_due_date' },
   items: { drawing_number: 'drawing_revision', specification: ['unit', 'brand'], product_category: 'part_type' },
 }
@@ -216,7 +239,7 @@ function secondaryText(row: Row, key: string) {
   return text === '—' ? '' : text
 }
 // 合并列的表头里，副列名用简称，免得表头折成三四行。
-const shortLabels: Record<string, string> = { supervisor_name: '主管', discipline_label: '专业', completed_date: '实际完成', schedule_variance_days: '提前/延期', started_date: '开始日', elapsed_days: '历时', milestone_label: '节点', due_amount: '到期金额', agreed_payment_date: '约定付款日' }
+const shortLabels: Record<string, string> = { supervisor_name: '主管', discipline_label: '专业', completed_date: '实际完成', schedule_variance_days: '提前/延期', started_date: '开始日', elapsed_days: '历时', milestone_label: '节点', due_amount: '到期金额', agreed_payment_date: '约定付款日', last_received_date: '最近入库' }
 function columnLabel(col: { key: string; label: string }) {
   const secondary = pairs.value[col.key]
   return secondary ? [col.label, ...secondary.map(key => shortLabels[key] || labelOf(key))].join(' / ') : col.label
@@ -308,7 +331,7 @@ function mobileSummary(row: Row): string[] {
   if (props.resource === 'entries') return lines(`待结算 ${cell(row, 'balance')} · ${display(row.kind)}`, mobileTasks.value ? joined(row.partner_name, props.projectId ? '' : row.project_name, row.due_date ? `到期 ${row.due_date}` : '') : '')
   if (props.resource === 'payments' && !mobileTasks.value) return [`${cell(row, 'amount')} 元 · ${row.date}`]
   // 库存流水：首行「数量 · 日期」；项目与来源采购单在下一行以链接显示（mobileLinks）。
-  if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), columnText(row, 'created_at'))]
+  if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), row.kind === 'receipt' ? `入库 ${columnText(row, 'received_date')}` : '', columnText(row, 'created_at'))]
   // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
   if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
   if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
@@ -331,6 +354,8 @@ function mobileSummary(row: Row): string[] {
       return lines(joined(row.date, columns[props.resource]?.find(col => col.key === 'amount')?.format?.(row), ledger === '有效' ? '' : ledger), joined(row.partner_name, row.reconciliation_code, props.projectId ? '' : row.project_name))
     }
     if (props.resource === 'users') return lines(joined(row.username, (row.roles || [row.role]).map((role: string) => labels[role] || role).join('、')))
+    // 领料单：首行「项目 · 领料时间」，次行「物料摘要 · 售后任务 · 经办人」。
+    if (props.resource === 'issue-slips') return lines(joined(props.projectId ? '' : row.project_code, columnText(row, 'created_at')), joined(columnText(row, 'items_summary'), row.task_title, row.created_by_name))
     const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
     return lines(joined(...rest))
   }
@@ -367,6 +392,11 @@ async function load(preserveSelection: unknown = false) {
     if (current !== generation) return
     records.value = result.results
     count.value = result.count
+    // 已勾选的库存行按最新数量更新；被领完的行自动移出勾选。
+    if (props.resource === 'stocks' && issueSelection.value.length) {
+      const fresh = new Map(records.value.map(row => [row.id, row]))
+      issueSelection.value = issueSelection.value.flatMap(row => { const now = fresh.get(row.id); return !now ? [row] : issueSelectable(now) ? [now] : [] })
+    }
     const focus = String(route.query.focus || '')
     if (route.query.resource === props.resource && /^\d+$/.test(focus) && focused !== focus) {
       const row = await read(`${endpoint(props.resource)}${focus}/`)
@@ -435,6 +465,10 @@ async function action(row: Row, name: string) {
       await router.push(`/purchases/${row.id}/contract`)
       return
     }
+    if (props.resource === 'issue-slips' && name === '查看 / 打印') {
+      await router.push(slipRoute(row.id))
+      return
+    }
     if (name === '附件' && ['sales', 'purchases'].includes(props.resource)) {
       command.value = null
       attachmentRow.value = row
@@ -469,6 +503,10 @@ function saved(result?: Row) {
     savedRecord.value = null
     flashId.value = selectedId.value
     clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashId.value = null }, 2000)
+  } else if (result?.slip && command.value) {
+    // 领料（单行、勾选批量）都生成领料单：提示单号并直达查看 / 打印。
+    savedRecord.value = { title: `${command.value.title}成功 · 领料单 ${result.slip_code}`, resource: 'issue-slips', id: Number(result.slip), slip: true }
+    if (command.value.title === '批量领料') issueSelection.value = []
   } else if (result && command.value) {
     const target = savedTarget(command.value, result, selectedId.value)
     savedRecord.value = target ? { title: `${command.value.title}成功${result.code ? ` · ${result.code}` : ''}`, ...target, project: Number(selectedRow.value?.project || command.value.initial?.project || props.projectId) || undefined } : null
@@ -484,6 +522,7 @@ async function viewSaved() {
   const record = savedRecord.value
   if (!record || !(await leaveCurrent())) return
   if (record.timeTask) { command.value = null; timeTask.value = record.timeTask; return }
+  if (record.slip) { await router.push(slipRoute(record.id)); return }
   if (record.resource === 'projects') { await router.push(`/projects/${record.id}`); return }
   if (record.resource !== props.resource) {
     const module = ['entries', 'payments', 'reconciliations', 'bank-records'].includes(record.resource) ? 'finance' : ['items', 'partners'].includes(record.resource) ? 'masterdata' : record.resource
@@ -504,8 +543,8 @@ function searchRecords() {
     ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand__icontains' : 'brand__icontains']: brandFilter.value } : {}),
     ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
     ...(supplierFilter.value != null && props.resource === 'purchases' ? { supplier: supplierFilter.value } : {}),
-    ...(props.resource === 'audit' && dateFrom.value ? { date_from: dateFrom.value } : {}),
-    ...(props.resource === 'audit' && dateTo.value ? { date_to: dateTo.value } : {}),
+    ...(datedResource.value && dateFrom.value ? { date_from: dateFrom.value } : {}),
+    ...(datedResource.value && dateTo.value ? { date_to: dateTo.value } : {}),
     ...Object.fromEntries(Object.entries(extraValues.value).filter(([, value]) => value)),
   }
   appliedSearch.value = search.value
@@ -571,7 +610,7 @@ async function inspect(row: Row) {
         <el-button v-if="createLabel(resource) && allowCreate !== false" :type="resource === 'purchases' ? undefined : 'primary'" @click="create">{{
           createLabel(resource)
         }}</el-button>
-        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="resource !== 'stocks'" :path="endpoint(resource)" :project-id="scopedImportProject(params, projectId)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
+        <TransferTools v-if="!['users', 'company', 'codes', 'audit'].includes(resource)" :resource="resource" :allow-import="!['stocks', 'issue-slips'].includes(resource)" :path="endpoint(resource)" :project-id="scopedImportProject(params, projectId)" :params="{ ...params, ...filterParams, search: appliedSearch }" :table-columns="columns[resource]" @changed="saved" />
         <el-button :icon="Refresh" aria-label="刷新列表" title="刷新列表" @click="load" />
         <el-button v-if="deletionAllowed" :type="batchMode ? 'primary' : undefined" :plain="batchMode" :aria-pressed="batchMode" :disabled="actionBusy" @click="setBatchMode(!batchMode)">{{ batchMode ? '退出批量管理' : '批量管理' }}</el-button>
       </div></Teleport>
@@ -586,7 +625,7 @@ async function inspect(row: Row) {
       <input v-if="['stocks', 'items'].includes(resource)" v-model="brandFilter" aria-label="筛选品牌" placeholder="品牌关键词" />
       <RemoteSelect v-if="resource === 'purchases'" v-model="supplierFilter" path="/business/partners/" label="供应商筛选" :accept="notCustomer" commit-on-select />
       <label v-if="resource === 'entries'" class="inline-check"><input v-model="unsettled" type="checkbox" @change="searchRecords" />仅看未结</label>
-      <template v-if="resource === 'audit'"><input v-model="dateFrom" type="date" aria-label="开始日期" title="开始日期" /><input v-model="dateTo" type="date" aria-label="结束日期" title="结束日期" /></template>
+      <template v-if="datedResource"><input v-model="dateFrom" type="date" aria-label="开始日期" title="开始日期" /><input v-model="dateTo" type="date" aria-label="结束日期" title="结束日期" /></template>
       <template v-for="item in extraConfig" :key="item.key">
         <select v-if="item.kind === 'person'" v-model="extraValues[item.key]" :aria-label="`筛选${item.label}`" @change="searchRecords"><option value="">全部{{ item.label }}</option><option v-for="option in personOptions(item.roles)" :key="option.value" :value="String(option.value)">{{ option.label }}</option></select>
         <select v-else-if="item.kind === 'sort'" v-model="extraValues[item.key]" :aria-label="item.label" @change="searchRecords"><option v-for="(label, value) in item.options" :key="value" :value="value">{{ label }}</option></select>
@@ -597,10 +636,15 @@ async function inspect(row: Row) {
       <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierFilter != null || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
     </form>
     <p v-if="resource === 'tasks' && records.some(row => !row.can_confirm && !row.system_managed)" class="task-confirm-note">本项目任务由对应专业主管确认完成并登记工时。</p>
-    <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : '下一步：查看结果并继续处理。' }}</span><el-button @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
+    <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : savedRecord.slip ? '可查看并打印领料单，交领料人签字。' : '下一步：查看结果并继续处理。' }}</span><el-button :type="savedRecord.slip ? 'primary' : undefined" @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : savedRecord.slip ? '查看 / 打印领料单' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
     <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint || fallbackHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!emptyHint && !hideContactHint && (!createLabel(resource) || !allowCreate)">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
+    <div v-if="issuePicking && issueSelection.length" class="record-batch-selection issue-selection" aria-label="批量领料选择">
+      <span>已选 <strong>{{ issueSelection.length }}</strong> 项物料（跨页、换搜索都保留），一次最多 {{ issueSelectionLimit }} 项</span>
+      <el-button type="primary" :disabled="actionBusy || loading || preparing" @click="openIssueBatch">批量领料（{{ issueSelection.length }}）</el-button>
+      <el-button text :disabled="actionBusy || preparing" @click="issueSelection = []">清空选择</el-button>
+    </div>
     <div v-if="batchVisible" class="record-batch-selection" :aria-label="title + '批量选择'">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit(resource) }} 项</span>
       <el-button :loading="selectingAll" :disabled="loading || actionBusy || !count" @click="selectFilteredRows">{{ count > deletionLimit(resource) ? '选择筛选结果前' + deletionLimit(resource) + '项（跨页）' : '全选筛选结果（' + count + '项，跨页）' }}</el-button>
@@ -617,6 +661,10 @@ async function inspect(row: Row) {
       empty-text="暂无记录"
       style="width: 100%"
     >
+      <el-table-column v-if="issuePicking" :label="mobileTasks ? '' : '选择'" :width="mobileTasks ? 40 : 44">
+        <template #header><input type="checkbox" aria-label="选择本页可领料的库存" title="只勾选本页有库存的行；翻页后勾选保留" :checked="issueBatch.all(issuePage)" :indeterminate="issueBatch.some(issuePage)" :disabled="actionBusy || loading || !issuePage.length || (issueSelection.length >= issueSelectionLimit && !issueBatch.all(issuePage))" @change="issueBatch.togglePage(issuePage)" /></template>
+        <template #default="{ row }"><input type="checkbox" :aria-label="'选择领料 ' + [row.item_code, row.item_name, row.location].filter(Boolean).join(' ')" :title="issueSelectable(row) ? undefined : '库存为零，不能领料'" :checked="issueBatch.has(row)" :disabled="actionBusy || (!issueBatch.has(row) && (!issueSelectable(row) || !issueBatch.selectable(row)))" @change="issueBatch.toggle(row)" /></template>
+      </el-table-column>
       <el-table-column v-if="batchVisible" label="选择" width="44">
         <template #header><input type="checkbox" :aria-label="'选择本页' + title" :checked="batch.all(records)" :indeterminate="batch.some(records)" :disabled="actionBusy || loading || selectingAll || !records.length || (deletionSelection.length >= deletionLimit(resource) && !batch.all(records))" @change="batch.togglePage(records)" /></template>
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择' + title + ' ' + deletionLabel(row)" :checked="batch.has(row)" :disabled="actionBusy || loading || selectingAll || !batch.selectable(row)" @change="batch.toggle(row)" /></template>

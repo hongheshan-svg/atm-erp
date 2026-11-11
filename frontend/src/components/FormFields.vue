@@ -60,6 +60,8 @@ watchEffect(() => {
 const pages = reactive<Record<string, number>>({})
 const start = (key: string) => Math.min(pages[key] || 0, Math.max(0, Math.ceil((model.value[key]?.length || 0) / 20) - 1)) * 20
 const indices = (key: string) => Array.from({ length: Math.min(20, (model.value[key]?.length || 0) - start(key)) }, (_, i) => start(key) + i)
+// 多行只读单元格：首行为主值，其余行为小字。
+const cellLines = (value: unknown) => (value == null || value === '' ? '—' : String(value)).split('\n').filter(Boolean)
 function readonlyValue(field: Field) {
   const value = model.value[field.key]
   const options = optionsOf(field)
@@ -78,15 +80,18 @@ function readonlyValue(field: Field) {
           <li v-for="(row, index) in model[field.key]" :key="index" class="row-card">
             <template v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key">
               <div v-if="column.flow && flowFor(column.flow, row)" class="row-card-flow"><span>{{ column.label }}：</span><ProcessSteps :flow="flowFor(column.flow, row)!" compact /></div>
-              <div v-else class="row-card-line"><span>{{ column.label }}：</span><b>{{ row[column.key] == null || row[column.key] === '' ? '—' : row[column.key] }}</b></div>
+              <div v-else-if="column.multiline" class="row-card-line is-multiline" :class="{ 'is-short': column.short }"><span>{{ column.label }}{{ column.short ? '' : '：' }}</span><b class="cell-lines"><span v-for="(line, n) in cellLines(row[column.key])" :key="n" :class="n ? 'cell-sub' : 'cell-main'">{{ line }}</span></b></div>
+              <div v-else class="row-card-line" :class="{ 'is-short': column.short }"><span>{{ column.label }}{{ column.short ? '' : '：' }}</span><b>{{ row[column.key] == null || row[column.key] === '' ? '—' : row[column.key] }}</b></div>
             </template>
           </li>
           <li v-if="!model[field.key]?.length" class="row-card-empty">暂无明细</li>
         </ol>
         <BusinessTable v-else-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
-          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : column.width ?? 140" :show-overflow-tooltip="!column.flow"
+          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : column.width ?? 140" :show-overflow-tooltip="!column.flow && !column.multiline"
             ><template v-if="column.flow" #default="{ row }"
               ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
+            ><template v-else-if="column.multiline" #default="{ row }"
+              ><span class="cell-lines"><span v-for="(line, n) in cellLines(row[column.key])" :key="n" :class="n ? 'cell-sub' : 'cell-main'">{{ line }}</span></span></template
             ></el-table-column
           >
         </BusinessTable>
@@ -182,6 +187,16 @@ function readonlyValue(field: Field) {
 .row-card-flow { display: grid; gap: 4px; }
 .row-card-flow > span { color: var(--mute); }
 .row-card-empty { color: var(--mute); font-size: 13px; padding: 8px 0; }
+/* 带「短值」列的卡片排成两栏：数量、日期两两并排，名称等长值仍占整行。 */
+.row-card:has(> .is-short) { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+.row-card:has(> .is-short) > :not(.is-short) { grid-column: 1 / -1; }
+/* 两栏里的短值标签在上、值在下，窄屏上日期不会被拆成两行。 */
+.row-card-line.is-short { flex-direction: column; gap: 0; line-height: 1.5; }
+.row-card-line.is-short > span { font-size: 12px; }
+.cell-lines { display: grid; gap: 2px; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.cell-lines .cell-main { font-weight: 600; color: var(--ink); }
+.cell-lines .cell-sub { font-size: 12px; font-weight: 400; color: var(--ink-4); }
+.row-card-line.is-multiline > b { display: grid; }
 .readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: var(--ink); padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: var(--ink); }
 .readonly-fields .field > label { color: var(--mute); font-size: 12px; }
 .readonly-fields .field { gap: 4px; }
