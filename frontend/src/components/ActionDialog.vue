@@ -150,6 +150,15 @@ const previewedSignature = ref('')
 // 预览后又改了填写内容：结果可能已过期，提示重新预览，保存按钮也不再沿用预览里的「新增 N 行」。
 const previewStale = computed(() => Boolean(preview.value) && previewedSignature.value !== formSignature(data.value))
 const purchaseStatus: Record<string, string> = { draft: '草稿', submitted: '待批准', approved: '待收货', partial: '部分收货' }
+// 手机宽度下预览表改成单列摘要，不在对话框里再套一层横向滚动。
+const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const query = window.matchMedia('(max-width: 600px)')
+  const sync = () => { mobile.value = query.matches }
+  query.addEventListener?.('change', sync)
+  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
+}
+const unitText = (row: Row) => `${row.before_unit != null && row.before_unit !== row.assembly_unit ? `${row.before_unit || '未分单元'} → ` : ''}${row.assembly_unit || '未分单元'}`
 const purchaseList = computed(() => (preview.value?.purchases || []).map((purchase: Row) => `${purchase.code}（${purchaseStatus[purchase.status] || purchase.status}）`).join('、'))
 // 只有被拦截或确有已领/在途要处理时才叫人去找采购；只改日期或单元时采购单仅作参考。
 const purchaseAction = computed(() => {
@@ -331,16 +340,19 @@ async function submit() {
         <el-alert v-for="warning in preview.warnings || []" :key="warning" :title="warning" type="warning" :closable="false" show-icon role="status" />
         <template v-if="preview.changes?.length">
           <h3 class="preview-heading">本次提交 {{ preview.changes.length }} 行</h3>
-          <BusinessTable label="本次提交的行" :data="preview.changes" :numbered="false" max-height="220">
+          <BusinessTable label="本次提交的行" :data="preview.changes" :numbered="false" :max-height="mobile ? undefined : 220">
+            <el-table-column v-if="mobile" label="物料与变化"><template #default="{ row }"><span class="preview-change-head"><el-tag :type="row.action === 'create' ? 'warning' : 'info'" size="small">{{ row.action === 'create' ? '新增' : '修改' }}</el-tag><strong>{{ row.item_code }} {{ row.item_name }}</strong></span><small class="preview-change-line">{{ unitText(row) }} · 数量 {{ row.before ?? '0' }} → {{ row.after }}</small></template></el-table-column>
+            <template v-else>
             <el-table-column label="动作" width="72"><template #default="{ row }"><el-tag :type="row.action === 'create' ? 'warning' : 'info'" size="small">{{ row.action === 'create' ? '新增' : '修改' }}</el-tag></template></el-table-column>
             <el-table-column label="物料" min-width="180"><template #default="{ row }">{{ row.item_code }} {{ row.item_name }}</template></el-table-column>
-            <el-table-column label="单元" min-width="140"><template #default="{ row }">{{ row.before_unit != null && row.before_unit !== row.assembly_unit ? `${row.before_unit || '未分单元'} → ` : '' }}{{ row.assembly_unit || '未分单元' }}</template></el-table-column>
+            <el-table-column label="单元" min-width="140"><template #default="{ row }">{{ unitText(row) }}</template></el-table-column>
             <el-table-column label="数量" min-width="130"><template #default="{ row }">{{ row.before ?? '0' }} → {{ row.after }}</template></el-table-column>
+            </template>
           </BusinessTable>
         </template>
         <template v-if="preview.items?.length">
           <h3 class="preview-heading">数量变化（按物料汇总）</h3>
-          <BusinessTable label="变更影响" :data="preview.items" max-height="260"><el-table-column prop="item_name" label="物料" min-width="140" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" min-width="120" /><el-table-column v-if="preview.items.some((row: Row) => Number(row.received_in_stock) > 0)" prop="received_in_stock" label="已到货未领" /></BusinessTable>
+          <BusinessTable label="变更影响" :data="preview.items" :numbered="!mobile" :max-height="mobile ? undefined : 260"><el-table-column v-if="mobile" label="物料"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="preview-change-line">{{ row.quantity }} → {{ row.after }}（差异 {{ row.difference }}）</small><small v-if="Number(row.unresolved_quantity) > 0" class="preview-change-line">需处理已领/采购 {{ row.unresolved_quantity }}</small><small v-if="Number(row.received_in_stock) > 0" class="preview-change-line">已到货未领 {{ row.received_in_stock }}</small></template></el-table-column><template v-else><el-table-column prop="item_name" label="物料" min-width="140" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" min-width="120" /><el-table-column v-if="preview.items.some((row: Row) => Number(row.received_in_stock) > 0)" prop="received_in_stock" label="已到货未领" /></template></BusinessTable>
           <p v-if="preview.unchanged_items" class="muted">其余 {{ preview.unchanged_items }} 种物料数量不变，未列出。</p>
         </template>
         <p v-else-if="preview.changes && preview.can_apply" class="muted">本次没有数量变化（仅改了日期、单元或申请信息）。</p>
@@ -378,6 +390,8 @@ async function submit() {
 .draft-notice span { flex: 1 1 240px; }
 .change-preview { display: grid; gap: 10px; margin-top: 12px; }
 .change-preview .preview-heading { margin: 4px 0 0; font-size: 14px; }
+.preview-change-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.preview-change-line { display: block; margin-top: 2px; color: var(--ink-3); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .change-preview .muted { margin: 0; }
 .preview-purchases { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
 .recovery-action { margin: 8px 0; }

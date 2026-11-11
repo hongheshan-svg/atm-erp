@@ -27,11 +27,15 @@ test('导入纠错与BOM双视图在桌面和手机可操作', async ({ page }, 
   await page.goto('/erp/bom?project=7')
   const region = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
   await expect(region.getByRole('button', { name: '维护 BOM', exact: true })).toBeVisible()
-  await expect(region.getByRole('columnheader', { name: '需求数量', exact: true })).toBeVisible()
+  // 手机窄屏模式把数量、缺料、日期并进「物料」格的摘要行，不再横向滚动。
+  const mobile = info.project.name === 'mobile'
+  if (mobile) await expect(region.locator('.bom-mobile-summary').first()).toContainText('需求')
+  else await expect(region.getByRole('columnheader', { name: '需求数量', exact: true })).toBeVisible()
   await expect(region.getByRole('columnheader', { name: '图号', exact: true })).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('bom-prepare.png'), animations: 'disabled', fullPage: true })
   await region.getByLabel('采购缺料', { exact: true }).check()
-  await expect(region.getByRole('columnheader', { name: '缺料', exact: true })).toBeVisible()
+  if (mobile) await expect(region.locator('.bom-mobile-summary').first()).toContainText('缺')
+  else await expect(region.getByRole('columnheader', { name: '缺料', exact: true })).toBeVisible()
   await region.getByLabel('选择 M001 上料单元', { exact: true }).check()
   await region.getByLabel('选择 M001 检测单元', { exact: true }).check()
   await expect(region.locator('.bom-selection-bar')).toContainText('已选 2 项')

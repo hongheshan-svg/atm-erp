@@ -417,3 +417,47 @@ it('导入预览区分新增、修改、不变，列出文件外现有行，确�
   expect(command.notice.text).toContain('将新增 1 行、修改 1 行，与现有一致的 1 行跳过，新建物料 1 个。')
   wrapper.unmount()
 })
+
+it('手机窄屏只留勾选、物料摘要和操作，筛选收起显示生效数，采购选择栏压成一行', async () => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  user.value = { roles: ['mechanical_engineer'] }
+  const lines = [
+    { bom_line: 1, item: 1, item_code: 'A1', item_name: '支架', specification: 'SUS304', assembly_unit: '01 上料', quantity: '2', unit: '件', issued: '0', incoming: '1', unapproved: '1', available: '0', shortage: '1', required_date: '2026-01-06' },
+    { bom_line: 2, item: 2, item_code: 'B2', item_name: '气缸', specification: 'CDQ2B', assembly_unit: '02 检测', quantity: '1', unit: '个', issued: '0', incoming: '0', unapproved: '0', available: '1', shortage: '0', required_date: '2099-01-01' },
+  ]
+  let wrapper = mountFull(lines)
+  await flushPromises()
+  const headers = wrapper.findAll('.bom-details-table thead th').map(th => th.text()).filter(Boolean)
+  expect(headers).toEqual(['物料', '操作'])
+  const first = wrapper.findAll('.bom-details-table tbody tr')[0]!
+  expect(first.get('.bom-mobile-summary').text()).toContain('SUS304 · 01 上料')
+  expect(first.get('.bom-mobile-summary').text()).toContain('需求 2 件 · 缺 1 · 2026-01-06')
+  expect(first.text()).toContain('已逾期·缺料')
+  expect(wrapper.text()).not.toContain('展开完整列')
+  // 次级筛选收起，只留搜索框和「筛选 ▾」；点单元概览后显示生效数。
+  const toggle = wrapper.get('.bom-filter-toggle')
+  expect(toggle.text()).toBe('筛选 ▾')
+  expect(wrapper.get('.bom-filter-group').classes()).toContain('is-collapsed')
+  await wrapper.findAll('.bom-unit-chip')[0]!.trigger('click')
+  expect(toggle.text()).toBe('筛选 · 1 ▾')
+  await toggle.trigger('click')
+  expect(wrapper.get('.bom-filter-group').classes()).not.toContain('is-collapsed')
+  expect(wrapper.find('[aria-label="排序方式"]').exists()).toBe(true)
+  // 说明默认收起。
+  expect(wrapper.text()).not.toContain('按单元核对规格')
+  await wrapper.get('.bom-help-toggle').trigger('click')
+  expect(wrapper.text()).toContain('按单元核对规格')
+  wrapper.unmount()
+
+  user.value = { roles: ['purchaser'] }
+  wrapper = mountFull(lines, { canEditBom: false })
+  await flushPromises()
+  const summary = wrapper.findAll('.bom-details-table tbody tr')[0]!.get('.bom-mobile-summary').text()
+  expect(summary).toContain('缺 1 · 在途 0.000（待批 1） · 可用 0')
+  expect(summary).toContain('01 上料 · 需 2026-01-06')
+  const bar = wrapper.get('.bom-selection-bar')
+  expect(bar.findAll('button').map(button => button.attributes('aria-label') || button.text())).toEqual(['全选筛选结果', '清空选择', '按缺料采购'])
+  expect(bar.text()).toContain('全选')
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})
