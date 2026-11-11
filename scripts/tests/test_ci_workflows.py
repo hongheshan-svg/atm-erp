@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.ci.impact import BROWSERS, BUSINESS, FULL_ONLY_BROWSERS, ROOT, SHARED_UI_BROWSERS, plan, version_only_paths
-from scripts.ci.publish_release import verify
+from scripts.ci.publish_release import is_highest_stable, verify
+from scripts.ci.publish_release import main as publish_main
 from scripts.ci.release_gate import preflight, release_scope, reusable_run
 from scripts.ci.run_selected import command
 from scripts.ci.select_suites import BROWSER_MAX_SHARDS, BROWSER_SECONDS, SUITES, browser_matrix, browser_shards, select
@@ -120,14 +121,33 @@ class RoutingTests(unittest.TestCase):
 
     def test_release_screenshots_are_documentation_but_unknown_sources_are_not(self):
         screenshots = [f'docs/releases/assets/v1.8.11/desktop.{ext}' for ext in ('png', 'jpg', 'jpeg', 'webp')]
-        self.assertEqual(select(screenshots), set())
+        documents = ['docs/screenshots/login.png', 'docs/output/手册.docx', 'docs/output/分析.pptx']
+        self.assertEqual(select([*screenshots, *documents]), set())
         self.assertEqual(
             plan(['backend/apps/business/services/supply.py', *screenshots]),
             plan(['backend/apps/business/services/supply.py']),
         )
-        for path in ('docs/releases/assets/helper.py', 'docs/releases/assets/page.html', 'docs/unknown.png'):
+        for path in ('docs/releases/assets/helper.py', 'docs/releases/assets/page.html', 'docs/tool.sh', 'unknown.png'):
             with self.assertRaises(ValueError):
                 select([path])
+
+    def test_root_tooling_files_are_classified(self):
+        # 镜像内容由 .dockerignore 决定，与 docker/ 一样运行安装器与升级演练。
+        scope = plan(['.dockerignore'])
+        self.assertTrue(scope['ota'] and scope['installers'] and scope['ops'])
+        # 升级演练实际执行 install.sh、backup.py，并以 .env.example 直接 Compose 启动。
+        for path in ('install.sh', 'scripts/backup.py', '.env.example'):
+            self.assertTrue(plan([path])['ota'], path)
+        self.assertFalse(plan(['install-native.sh'])['ota'])
+        # ci-fast 的后端任务通过 run_all_tests.py 执行静态检查。
+        self.assertEqual(plan(['run_all_tests.py']), plan(['.github/workflows/ci-fast.yml']))
+        # 本地钩子与仓库元数据只运行运维脚本测试，不选业务模块。
+        for path in ('.githooks/pre-push', '.pre-commit-config.yaml', '.gitattributes', '.codex'):
+            scope = plan([path])
+            self.assertEqual(select([path]), {'fast'}, path)
+            self.assertTrue(scope['ops'], path)
+            self.assertFalse(scope['backend'] or scope['frontend'] or scope['ota'] or scope['installers'], path)
+            self.assertEqual(scope['modules'], [], path)
 
     def test_backend_and_migration_changes(self):
         self.assertEqual(select(['backend/apps/business/services/supply.py']), {'fast', 'browser'})
@@ -216,9 +236,10 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(specs - routed, set(FULL_ONLY_BROWSERS))
 
     def test_every_tracked_source_file_is_classified(self):
-        paths = subprocess.check_output(['git', 'ls-files', 'backend', 'frontend'], cwd=ROOT, text=True).split()
+        # 覆盖整个仓库，不只 backend/frontend；-z 保留含空格或中文的路径原样（与 select_suites 读取差异一致）。
+        paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT, text=True).split('\0')
         unclassified = []
-        for path in paths:
+        for path in filter(None, paths):
             if path == 'frontend/e2e/full-chain.spec.ts':
                 continue  # 完整业务链改动按设计只能通过显式 full 验证
             try:
@@ -278,6 +299,12 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(scope['modules'], [])
         self.assertTrue(scope['backend'] and scope['frontend'])
         self.assertEqual(scope['browser_specs'], [])
+        # requirements-dev.txt 只固定 Ruff：只跑后端静态检查，不像运行时依赖那样覆盖全部业务模块。
+        dev = plan(['backend/requirements-dev.txt'])
+        self.assertEqual(dev['modules'], [])
+        self.assertTrue(dev['backend'])
+        self.assertEqual(dev['browser_specs'], [])
+        self.assertFalse(dev['ota'] or dev['installers'])
 
     def test_changed_workflow_and_wheel_delivery_are_exercised(self):
         self.assertTrue(plan(['.github/workflows/ci-ota.yml'])['ota'])
@@ -489,7 +516,11 @@ class ReleaseEvidenceTests(unittest.TestCase):
         cases = {
             'backend/apps/business/migrations/0001_initial.py': (True, False),
             'backend/requirements.txt': (True, True),
-            'install.sh': (False, True),
+            'install.sh': (True, True),
+            'install-native.sh': (False, True),
+            'scripts/backup.py': (True, True),
+            '.env.example': (True, True),
+            '.dockerignore': (True, True),
             'docker/app/Dockerfile': (True, True),
             'backend/apps/core/ota.py': (True, False),
             'backend/apps/business/services/reports.py': (False, False),
@@ -541,6 +572,43 @@ class ReleaseEvidenceTests(unittest.TestCase):
             path.write_bytes(b'tampered')
             with self.assertRaises(ValueError):
                 verify(folder, 'v2.0.0', 'commit')
+
+    def test_publish_marks_latest_only_for_the_highest_stable_tag(self):
+        # 按数值比较版本；预发布与其他 tag 不参与。
+        self.assertTrue(is_highest_stable('v1.10.0', ['v1.9.9', 'v1.10.0', 'v1.11.0-rc1', 'nightly']))
+        self.assertFalse(is_highest_stable('v1.9.9', ['v1.9.9', 'v1.10.0']))
+
+        def publish(tag, tags):
+            def fake_git(*args):
+                return '\n'.join(tags) if args[0] == 'tag' else 'commit'
+
+            digest = 'f' * 64
+            draft = {
+                'tag_name': tag,
+                'draft': True,
+                'assets': [{'name': 'a.zip', 'state': 'uploaded', 'digest': 'sha256:' + digest}],
+            }
+            with (
+                patch('sys.argv', ['publish_release', '--tag', tag, '--folder', 'dist', '--upload', '--publish']),
+                patch.dict('os.environ', {'GITHUB_REPOSITORY': 'owner/erp'}),
+                patch('scripts.ci.publish_release.git', side_effect=fake_git),
+                patch('scripts.ci.publish_release.verify', return_value={'a.zip': digest}),
+                patch('scripts.ci.publish_release.api', return_value=[draft]),
+                patch('scripts.ci.publish_release.subprocess.run') as run,
+                patch('builtins.print'),
+            ):
+                publish_main()
+            return run.call_args_list[-1].args[0]
+
+        # 旧 tag 的发布（或草稿重试）晚于新版本完成时，不能把 Latest 挤回旧版本，否则 OTA 不再提示新版本。
+        self.assertEqual(
+            publish('v1.8.28', ['v1.8.27', 'v1.8.28', 'v1.8.29']),
+            ['gh', 'release', 'edit', 'v1.8.28', '--draft=false', '--latest=false'],
+        )
+        self.assertEqual(
+            publish('v1.8.29', ['v1.8.27', 'v1.8.28', 'v1.8.29', 'v1.9.0-rc1']),
+            ['gh', 'release', 'edit', 'v1.8.29', '--draft=false', '--latest'],
+        )
 
     def test_preflight_reuses_only_valid_release_evidence(self):
         def git_result(*args):

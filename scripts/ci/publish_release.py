@@ -74,6 +74,16 @@ def verify(folder, tag, commit):
     }
 
 
+def is_highest_stable(tag, tags):
+    """只有最高的正式 vX.Y.Z tag 才能标记为 Latest；旧 tag 的发布或草稿重试晚于新版本完成时不能把它挤下去。"""
+
+    def version(value):
+        return tuple(map(int, value[1:].split('.')))
+
+    stable = [value for value in tags if re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', value)]
+    return all(version(tag) >= version(value) for value in stable)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--tag', required=True)
@@ -123,7 +133,11 @@ def main():
         if asset['state'] != 'uploaded' or asset['digest'] != 'sha256:' + expected[asset['name']]:
             raise ValueError('已上传附件的校验值与本地安装包不一致')
     if args.publish:
-        subprocess.run(['gh', 'release', 'edit', args.tag, '--draft=false', '--latest'], check=True)
+        # OTA 通过 releases/latest 发现新版本；不同 tag 的 Release 并行运行，Latest 只能指向最高正式版本。
+        latest = is_highest_stable(args.tag, git('tag', '--list', 'v*').splitlines())
+        subprocess.run(
+            ['gh', 'release', 'edit', args.tag, '--draft=false', '--latest' if latest else '--latest=false'], check=True
+        )
     print('远端安装包校验通过；' + ('已正式发布' if args.publish else '草稿已就绪'))
 
 

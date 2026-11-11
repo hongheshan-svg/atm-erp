@@ -15,6 +15,7 @@ ops = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ops)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 try:
+    import backup
     import backup_cycle
 finally:
     sys.path.pop(0)
@@ -87,6 +88,16 @@ class OpsCheckTests(unittest.TestCase):
             result = ops.inspect(root, root, min_free_gb=0)
             self.assertFalse(result['ok'])
             self.assertTrue(any('不完整' in message for message in result['failures']))
+
+    def test_backup_defaults_to_env_and_keeps_legacy_env_lean(self):
+        # 与 install.sh 相同：新部署用 .env；只有旧部署仅存在 .env.lean 时才沿用它。
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(backup.default_env_file(root), root / '.env')
+            (root / '.env.lean').write_text('LEAN_PROJECT_NAME=legacy\n')
+            self.assertEqual(backup.default_env_file(root), root / '.env.lean')
+            (root / '.env').write_text('LEAN_PROJECT_NAME=current\n')
+            self.assertEqual(backup.default_env_file(root), root / '.env')
 
 
 if __name__ == '__main__':

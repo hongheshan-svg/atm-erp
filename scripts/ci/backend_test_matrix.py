@@ -1,7 +1,5 @@
 """Single registry of backend test targets, shared by local runs and CI."""
 
-import argparse
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -247,25 +245,3 @@ def validate_coverage():
     repeated = {module: cases for module, cases in MODULE_TESTS.items() if len(cases) != len(set(cases))}
     if repeated:
         raise SystemExit(f'模块测试映射内有重复登记：{sorted(repeated)}')
-
-
-def build_matrix():
-    validate_coverage()
-    return {
-        'include': [{'name': stage, 'stage': stage, 'targets': ','.join(targets)} for stage, targets in TARGETS.items()]
-    }
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--github-output', type=Path)
-    args = parser.parse_args()
-    matrix = json.dumps(build_matrix(), separators=(',', ':'))
-    if args.github_output:
-        with args.github_output.open('a') as output:
-            output.write(f'matrix={matrix}\n')
-    print(matrix)
-
-
-if __name__ == '__main__':
-    main()

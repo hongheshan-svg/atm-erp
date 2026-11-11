@@ -96,6 +96,8 @@ jobs:
           TAG: ${{ needs.preflight.outputs.tag }}
           ARCH: ${{ matrix.arch }}
           DIGEST: ${{ steps.image.outputs.digest }}
+        # 显式 bash 才带 pipefail：docker save 中途失败时 gzip 仍会正常结束，不能让截断的归档继续计算校验值。
+        shell: bash
         run: |
           mkdir images
           image="ghcr.io/hongheshan-svg/atm-erp:$TAG-$ARCH"
@@ -103,6 +105,9 @@ jobs:
           docker tag "ghcr.io/hongheshan-svg/atm-erp@$DIGEST" "$image"
           test "$(docker run --rm --entrypoint python "$image" -c 'from apps.core.version import VERSION; print(VERSION)')" = "${TAG#v}"
           docker save "$image" | gzip -1 > "images/$ARCH.tar.gz"
+          # 先确认压缩流完整且是 docker save 归档，再记录 SHA256；否则损坏的镜像会带着“有效”校验值发布。
+          gzip -t "images/$ARCH.tar.gz"
+          tar -tzf "images/$ARCH.tar.gz" manifest.json > /dev/null
           docker image inspect "$image" --format '{{.Id}}' > "images/$ARCH.id"
           python - <<'PY'
           import hashlib,json,os,pathlib

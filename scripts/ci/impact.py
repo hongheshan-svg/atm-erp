@@ -326,6 +326,8 @@ SHARED_PATHS = (
 # 只影响静态检查或测试运行器的配置：执行对应一侧的 lint/typecheck/build 与单测，不选业务模块。
 CHECK_ONLY = (
     'backend/pyproject.toml',
+    # 开发依赖只在运行时依赖之外固定 Ruff 版本；运行时依赖 requirements.txt 仍走共享映射。
+    'backend/requirements-dev.txt',
     'backend/apps/business/tests/__init__.py',
     'backend/apps/core/tests/__init__.py',
     'frontend/eslint.config.js',
@@ -333,6 +335,13 @@ CHECK_ONLY = (
     'frontend/tsconfig.node.json',
     'frontend/vitest.config.ts',
 )
+# 本地 Git 钩子与仓库元数据：不进入镜像、安装包或 CI 运行路径，只运行运维脚本测试（含本计划自检）。
+OPS_ONLY = ('.githooks/', '.pre-commit-config.yaml', '.gitattributes', '.codex')
+# 真实升级演练直接执行这些文件：ota_smoke 运行 install.sh，宿主机升级先调用 backup.py 备份，
+# 直接 Compose 启动演练读取 .env.example；.dockerignore 决定镜像内容。
+OTA_PATHS = ('install.sh', 'scripts/backup.py', '.env.example', '.dockerignore')
+# docs 下不可执行的图片和 Office/PDF 文档只作说明，与 Markdown 一样不选择测试；其他类型仍须登记。
+DOC_SUFFIXES = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.docx', '.pptx', '.xlsx')
 
 
 def version_only_paths(base, head, paths, read_blob):
@@ -366,25 +375,29 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
     for path in sorted(set(paths)):
         if path.endswith('.md') or Path(path).name in ('.gitignore', '.editorconfig', 'LICENSE'):
             continue
-        if path.startswith('docs/releases/assets/') and Path(path).suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'):
-            # 发布说明的实际界面截图仅为文档附件；可执行文件仍须经过影响范围判定。
+        if path.startswith('docs/') and Path(path).suffix.lower() in DOC_SUFFIXES:
+            # 文档截图与附件仅作说明；可执行文件仍须经过影响范围判定。
+            continue
+        if path.startswith(OPS_ONLY):
+            ops = True
             continue
         stem = Path(path).stem.removesuffix('.spec')
         if path.startswith(('docker/', 'deploy/', 'install', 'scripts/')) or path in (
             'docker-compose.yml',
             '.env.example',
+            '.dockerignore',
         ):
             ops = True
             if not path.startswith(('scripts/ci/', 'scripts/tests/test_ci_')):
                 installers = True
             if stem in ('build_native_wheels', 'verify_native_wheels', 'assemble_images', 'publish_release'):
                 installers = True
-            if any(
+            if path in OTA_PATHS or any(
                 word in path for word in ('ota', 'container_runtime', 'docker/', 'docker-compose', 'release_install')
             ):
                 selected.add('ota')
             continue
-        if path.startswith('.github/'):
+        if path.startswith('.github/') or path == 'run_all_tests.py':
             ops = True
             if path.endswith('ci-ota.yml'):
                 selected.add('ota')
@@ -392,7 +405,8 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
                 installers = True
             if path.endswith('ci-browser.yml'):
                 selected.add('accounts')
-            if path.endswith(('ci.yml', 'ci-fast.yml')):
+            # ci-fast 的后端任务通过 run_all_tests.py 执行静态检查，与 ci-fast.yml 同样处理。
+            if path.endswith(('ci.yml', 'ci-fast.yml')) or path == 'run_all_tests.py':
                 checks_backend = checks_frontend = True
                 backend.add('apps.core.tests.test_platform')
             continue

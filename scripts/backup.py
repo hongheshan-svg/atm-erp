@@ -30,10 +30,18 @@ def validate_uploads(path):
                 raise ValueError('附件归档包含不安全路径或链接。')
 
 
+def default_env_file(root=ROOT):
+    """与 install.sh 一致：默认使用 .env；只有旧部署仅存在 .env.lean 时才沿用它。"""
+    current, legacy = root / '.env', root / '.env.lean'
+    return legacy if legacy.is_file() and not current.is_file() else current
+
+
 def main():
     parser = argparse.ArgumentParser(description='备份数据库与附件；恢复只允许写入全新的空部署')
     parser.add_argument('operation', choices=['backup', 'restore'])
-    parser.add_argument('--env-file', type=Path, default=ROOT / '.env.lean')
+    parser.add_argument(
+        '--env-file', type=Path, default=default_env_file(), help='默认 .env；仅存在旧 .env.lean 时沿用 .env.lean'
+    )
     parser.add_argument('--archive', type=Path, required=True)
     args = parser.parse_args()
     compose = ['docker', 'compose', '--env-file', str(args.env_file.resolve()), '-f', str(ROOT / 'docker-compose.yml')]

@@ -77,7 +77,7 @@ jobs:
             frontend/test-results
             frontend/test-results-first-install
           retention-days: 7
+      # 全新检出没有 .env.lean，install.sh 总是写入 .env。
       - if: always()
         run: |
-          if [[ -f .env ]]; then docker compose --env-file .env down -v;
-          elif [[ -f .env.lean ]]; then docker compose --env-file .env.lean down -v; fi
+          if [[ -f .env ]]; then docker compose --env-file .env down -v; fi

@@ -1,4 +1,4 @@
-# 配置与密钥由安装器写入 .env.lean；升级保留项目名和下方数据卷。
+# 配置与密钥写在 .env（由 .env.example 复制或安装器生成；旧部署沿用原 .env.lean）；升级保留项目名和下方数据卷。
 # 正式包由安装器锁定 LEAN_IMAGE 摘要，不使用 latest，不在生产现场构建。
 name: ${LEAN_PROJECT_NAME:-atm-erp-lean}
 x-logging: &bounded-logging
