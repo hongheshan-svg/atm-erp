@@ -171,6 +171,22 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertTrue(Item.objects.filter(pk=self.item.pk).exists())
         self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
 
+    def test_item_used_only_by_removed_bom_line_stays_protected(self):
+        line = BOMLine.objects.create(project=self.project, item=self.item, quantity=2)
+        self.remove('bom', [line.pk])
+        self.assertFalse(BOMLine.objects.filter(item=self.item).exists())
+        # 已移除的 BOM 行仍指向该物料；删除物料会释放其图号版本，历史 BOM 就失去唯一对应。
+        self.assert_batch_rejected('items', [self.item.pk], '已移除的BOM明细')
+        self.assertFalse(Item.all_objects.get(pk=self.item.pk).is_deleted)
+        live = Item.objects.create(code='LIVE', name='在用物料')
+        BOMLine.objects.create(project=self.project, item=live, quantity=1)
+        detail = str(self.remove('items', [live.pk], status=409))
+        self.assertIn('BOM明细', detail)
+        self.assertNotIn('已移除', detail)
+        unused = Item.objects.create(code='FREE', name='未用物料')
+        self.remove('items', [unused.pk])
+        self.assertTrue(Item.all_objects.get(pk=unused.pk).is_deleted)
+
     def test_bulk_material_reference_failure_rolls_back_all_rows(self):
         items = Item.objects.bulk_create([Item(code=f'ROLL-{i}', name=f'回滚物料{i}') for i in range(201)])
         BOMLine.objects.create(project=self.project, item=items[-1], quantity=1)
@@ -454,6 +470,11 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         return {row['id']: row for row in response.data['results']}
 
+    def enable(self, url):
+        return self.clients['admin'].patch(
+            url, {'is_active': True}, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4())
+        )
+
     def test_user_restore_reappears_disabled_with_audit_until_admin_enables(self):
         member = self.users['member']
         self.project.members.add(member)
@@ -462,7 +483,7 @@ class DeletionTests(BusinessFixtures, TestCase):
         deletion = AuditLog.objects.get(operation='record.delete', resource=f'user:{member.pk}')
         self.assertFalse(self.history('users')[0]['restored'])
         # 仍处于已删除状态的账号，普通编辑不能启用。
-        self.assertEqual(self.clients['admin'].patch(url, {'is_active': True}, format='json').status_code, 404)
+        self.assertEqual(self.enable(url).status_code, 404)
         result = self.restore(member.pk)
         self.assertEqual(result['id'], member.pk)
         self.assertEqual(result['deletion'], deletion.pk)
@@ -486,15 +507,19 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertEqual(history['restored_by'], 'admin')
         self.assertIsNotNone(history['restored_at'])
         self.assertIn(member, self.project.members.all())
-        response = self.clients['admin'].patch(url, {'is_active': True}, format='json')
+        response = self.enable(url)
         self.assertEqual(response.status_code, 200, response.data)
         member.refresh_from_db()
         self.assertTrue(member.is_active)
         # 用户名仍归该账号所有，不能新建同名账号。
         response = self.clients['admin'].post(
-            '/api/auth/users/', {'username': 'member', 'password': 'temporary', 'role': 'member'}, format='json'
+            '/api/auth/users/',
+            {'username': 'member', 'password': 'temporary', 'role': 'member'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
         )
         self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('username', response.data)
 
     def test_user_restore_rejects_live_accounts_and_replays_receipt(self):
         member = self.users['member']
@@ -555,7 +580,7 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.restore(member.pk)
         self.remove('users', [member.pk], reason='再次删除')
         self.assertNotIn(member.pk, self.user_rows())
-        self.assertEqual(self.clients['admin'].patch(url, {'is_active': True}, format='json').status_code, 404)
+        self.assertEqual(self.enable(url).status_code, 404)
         self.assertEqual([row['restored'] for row in self.history('users')], [False, True])
         self.restore(member.pk, reason='再次恢复')
         self.assertIn(member.pk, self.user_rows())
@@ -566,7 +591,7 @@ class DeletionTests(BusinessFixtures, TestCase):
         removals = AuditLog.objects.filter(operation='record.delete', resource=f'user:{member.pk}').order_by('pk')
         restores = AuditLog.objects.filter(operation='record.restore', resource=f'user:{member.pk}').order_by('pk')
         self.assertEqual([log.detail['deletion'] for log in restores], [log.pk for log in removals])
-        self.assertEqual(self.clients['admin'].patch(url, {'is_active': True}, format='json').status_code, 200)
+        self.assertEqual(self.enable(url).status_code, 200)
 
     def test_unused_attachment_preserves_file_reference(self):
         doc = Document.objects.create(

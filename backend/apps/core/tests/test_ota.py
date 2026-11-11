@@ -177,7 +177,9 @@ class UpgradeTests(TestCase):
             self.assertEqual(self.client.get('/api/core/upgrade/?check=1').status_code, 403)
             self.assertEqual(self.queue().status_code, 403)
         self.client.force_authenticate(None)
-        self.assertEqual(self.client.get('/api/core/upgrade/').status_code, 403)
+        # 未登录是 401（请先登录），不是 403（权限不足）。
+        self.assertEqual(self.client.get('/api/core/upgrade/').status_code, 401)
+        self.assertEqual(self.queue().status_code, 401)
 
     def test_check_cache_force_refresh_and_poll_without_external_request(self):
         with patch('apps.core.ota.release_info', return_value=self.info) as fetch:

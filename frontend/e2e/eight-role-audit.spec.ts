@@ -29,7 +29,7 @@ test.beforeAll(async ({ request }) => {
   // 每个岗位使用独立账号；管理员也不继承前序用例累计的每分钟请求额度。
   // 保留正式限流和所有错误断言，避免快速巡检因共享测试身份产生顺序依赖。
   for (const identity of identities) {
-    const response = await request.post('/api/auth/users/', { headers, data: {
+    const response = await request.post('/api/auth/users/', { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: {
       username: `audit_${identity.key}_${suffix}`, display_name: `岗位验收${identity.key}`,
       roles: identity.roles, password, management_reports: identity.key === 'general_manager',
     } })

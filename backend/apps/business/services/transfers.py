@@ -29,6 +29,7 @@ from apps.core.permissions import (
     SALES,
     WAREHOUSE,
     has_role,
+    project_allowed,
     require_project,
     require_role,
     task_management_roles,
@@ -366,12 +367,18 @@ def resolve_person(value):
     return obj.pk
 
 
+UNREACHABLE = '记录不存在或不在你的权限范围内。'
+
+
 def resolve(model, value, field='code'):
     if model is User:
         return resolve_person(value)
     obj = model.objects.filter(**{field: value}).first()
     if obj is None:
-        label = {Item: '物料', Partner: '往来单位', Project: '项目'}[model]
+        if model is Project:
+            # 与越权项目同一提示（见 check_references），不能借导入试出哪些项目编号存在。
+            raise ValidationError({'project': UNREACHABLE})
+        label = {Item: '物料', Partner: '往来单位'}[model]
         raise ValidationError(f'找不到{label}：{value}，请核对系统中的编号。')
     return obj.pk
 
@@ -415,9 +422,6 @@ def payload(raw, people=None):
     return data
 
 
-UNREACHABLE = '记录不存在或不在你的权限范围内。'
-
-
 def check_references(actor, resource, data):
     """Locate ID columns before the business service, using the service's own lookup filters.
 
@@ -438,6 +442,11 @@ def check_references(actor, resource, data):
                 raise ValidationError({key: UNREACHABLE}) from exc
         return found
 
+    if data.get('project') not in (None, ''):
+        # 编号已在 payload 中解析为 ID；存在但不在本岗位项目范围内时，与编号不存在给同一提示。
+        project = Project.objects.filter(pk=data['project']).first()
+        if project is None or not project_allowed(actor, project, SCHEMAS[resource][0]):
+            raise ValidationError({'project': UNREACHABLE})
     if resource == 'payments':
         entry = need('entry', Entry)
         if entry is not None:

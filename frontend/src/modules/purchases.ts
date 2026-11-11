@@ -29,7 +29,7 @@ export const purchaseFields = (): Field[] => [
 ]
 import { all, read } from '../api'
 import { purchaseApprover } from '../session'
-import { money } from '../session'
+import { contractReader, money } from '../session'
 import { money as formatMoney } from '../utils/money'
 import { quantityText } from '../utils/quantity'
 import { dateTimeText } from '../utils/datetime'
@@ -103,7 +103,7 @@ export function actionNames(resource: string, r: Row): string[] {
       if (buyer() || warehouse()) a.push('登记采购质保', '处理采购质保')
     }
     if (buyer() || money()) a.push('附件')
-    if (buyer() || money()) a.push('预览采购合同')
+    if (contractReader()) a.push('预览采购合同')
     if (buyer() && r.status === 'draft') a.push('修改采购', '提交采购')
     if (r.status === 'submitted') {
       if (r.change_request) a.push(r.can_review_change ? '处理修改申请' : '查看修改申请')

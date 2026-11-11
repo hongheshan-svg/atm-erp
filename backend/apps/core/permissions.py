@@ -20,6 +20,9 @@ ALL_ROLES = OPERATION_ROLES | {'sales_manager'}
 SALES = MANAGERS | {'sales_manager'}
 SALES_READERS = MONEY_READERS | {'sales_manager'}
 GLOBAL_PROJECT_ROLES = {'admin', 'purchaser', 'purchase_manager', 'warehouse', 'finance'}
+# 没有项目归属的库存金额（库存结存、期初与盘点流水）汇总了各项目的采购成本：只对管理员、财务和采购岗位开放，
+# 外加获授权的总经理（见 can_read_stock_value）；普通项目经理只看负责或参与项目的金额，仓管不可见成本。
+STOCK_VALUE_READERS = {'admin', 'finance', 'purchaser', 'purchase_manager'}
 
 
 def sales_for(user, queryset):
@@ -50,10 +53,19 @@ def require_role(user, allowed):
         raise PermissionDenied('没有此操作权限。')
 
 
+def reports_allowed(user):
+    """经营报表：管理员默认可看；总经理沿用 manager 角色，由管理员显式开启 management_reports。"""
+    return has_role(user, ADMIN) or (has_role(user, MANAGERS) and user.management_reports)
+
+
 def require_reports(user):
     require_role(user, MANAGERS)
-    if not has_role(user, ADMIN) and not user.management_reports:
+    if not reports_allowed(user):
         raise PermissionDenied('未获得总经理报表授权。')
+
+
+def can_read_stock_value(user):
+    return has_role(user, STOCK_VALUE_READERS) or reports_allowed(user)
 
 
 def projects_for(user, queryset, allowed=OPERATION_ROLES):
@@ -110,6 +122,9 @@ def can_manage_task(user, task):
 
 class RolePermission(BasePermission):
     def has_permission(self, request, view):
+        # 未登录返回 False，由 DRF 转成 401「请先登录」；require_role 直接抛 403 会让前端误以为是权限不足。
+        if not request.user or not request.user.is_authenticated:
+            return False
         allowed = view.read_roles if request.method in ('GET', 'HEAD', 'OPTIONS') else view.write_roles
         require_role(request.user, allowed)
         return True

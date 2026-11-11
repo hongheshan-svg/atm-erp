@@ -107,6 +107,20 @@ describe('模块边界', () => {
     ])
   })
 
+  it('上传项目候选与服务端一致：已结项不可选，已取消项目只能补传结算凭证', async () => {
+    user.value = { id: 1, roles: ['manager', 'finance'] }
+    const command = await createCommand('documents')
+    const field = command.fields.find(item => item.key === 'project')!
+    const accept = (category: string) => field.remoteFilterFor!({ category })
+    for (const category of ['drawing', 'contract', 'delivery', 'other', '']) {
+      expect([{ status: 'active' }, { status: 'cancelled' }, { status: 'closed' }].map(accept(category))).toEqual([true, false, false])
+    }
+    expect([{ status: 'active' }, { status: 'cancelled' }, { status: 'closed' }].map(accept('receipt'))).toEqual([true, true, false])
+    // 同一范围返回同一个函数，远程选择框只在范围真正变化时重新校验已选项目。
+    expect(accept('drawing')).toBe(accept('other'))
+    expect(accept('receipt')).not.toBe(accept('drawing'))
+  })
+
   it('冲销后保留流水，但不再提供重复冲销和工时更正', () => {
     user.value = { role: 'finance' }
     expect(actionNames('payments', { reversal_of: null, reversed_by: null })).toContain('冲销付款')

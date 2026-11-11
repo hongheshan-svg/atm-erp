@@ -118,7 +118,8 @@ for (const [role, label, category] of [
     const output = info.outputPath(filename)
     await download.saveAs(output)
     expect(await readFile(output, 'utf8')).toBe(content)
-    expect((await page.request.get(`/api/business/documents/${doc.id}/download/`)).status()).toBe(403)
+    // 不带登录凭据直接请求下载地址：未登录返回 401（需要登录），不暴露附件。
+    expect((await page.request.get(`/api/business/documents/${doc.id}/download/`)).status()).toBe(401)
     await page.screenshot({ path: info.outputPath(`${role}-documents.png`), fullPage: true, animations: 'disabled' })
     await page.getByRole('tab', { name: '任务与工时', exact: true }).click()
     await action(page, row(page, label + '设计任务' + suffix), '完成任务')

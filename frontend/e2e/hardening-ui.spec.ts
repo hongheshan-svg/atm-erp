@@ -14,7 +14,7 @@ test('签署版本归档后保持原资料，整套打印且经营关注只读�
   const companyResponse = await page.request.get('/api/core/company/', { headers })
   const listing = await companyResponse.json(), company = (listing.results || listing)[0]
   const oldCompany = { name: company.name, address: company.address, phone: company.phone }
-  const configured = await page.request.patch('/api/core/company/1/', { headers, data: { address: '隔离测试采购方地址', phone: '000-12345' } })
+  const configured = await page.request.patch('/api/core/company/1/', { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: { address: '隔离测试采购方地址', phone: '000-12345' } })
   expect(configured.ok()).toBeTruthy()
   try {
     const me = await (await page.request.get('/api/auth/me/', { headers })).json()
@@ -71,7 +71,7 @@ test('签署版本归档后保持原资料，整套打印且经营关注只读�
     }
     await page.screenshot({ path: info.outputPath('report-attention.png'), animations: 'disabled', fullPage: true })
   } finally {
-    const restored = await page.request.patch('/api/core/company/1/', { headers, data: oldCompany })
+    const restored = await page.request.patch('/api/core/company/1/', { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data: oldCompany })
     expect(restored.ok()).toBeTruthy()
   }
 })

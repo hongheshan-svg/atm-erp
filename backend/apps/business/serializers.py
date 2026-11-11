@@ -12,6 +12,7 @@ from apps.core.permissions import (
     PURCHASE_APPROVERS,
     PURCHASERS,
     can_manage_task,
+    can_read_stock_value,
     has_role,
     project_allowed,
     project_read_allowed,
@@ -73,9 +74,11 @@ class PersonNameField(serializers.Field):
 class MoneyFilter:
     sensitive_fields = ()
     money_roles = MONEY_READERS
+    # 没有项目归属的行不受项目范围约束；设置后这类行改按它判断（如库存金额 can_read_stock_value），
+    # 否则沿用 money_roles。
+    unscoped_money = None
 
-    def to_representation(self, instance):
-        result = super().to_representation(instance)
+    def money_visible(self, instance):
         if isinstance(instance, Project):
             project_id = instance.pk
         elif isinstance(instance, PurchaseLine):
@@ -84,7 +87,18 @@ class MoneyFilter:
             project_id = instance.task.project_id
         else:
             project_id = getattr(instance, 'project_id', None)
-        if not project_read_allowed(self.context['request'], project_id, self.money_roles):
+        request = self.context['request']
+        if project_id is None and self.unscoped_money is not None:
+            return self.unscoped_money(request.user)
+        return project_read_allowed(request, project_id, self.money_roles)
+
+    def exports_money(self, user):
+        """导出是否保留金额列：有任一类行可见即保留表头，逐行仍由 to_representation 过滤。"""
+        return has_role(user, self.money_roles) or bool(self.unscoped_money and self.unscoped_money(user))
+
+    def to_representation(self, instance):
+        result = super().to_representation(instance)
+        if not self.money_visible(instance):
             for field in self.sensitive_fields:
                 result.pop(field, None)
         return result
@@ -418,6 +432,9 @@ class PurchaseDetailSerializer(PurchaseSerializer):
 
 class StockSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('value',)
+    # 库存行没有项目归属，结存金额汇总了各项目的采购成本：只按库存金额口径授权，不因经理身份可见。
+    money_roles = frozenset()
+    unscoped_money = staticmethod(can_read_stock_value)
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     specification = serializers.CharField(source='item.specification', read_only=True)
@@ -455,6 +472,8 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
 
 class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('value', 'supplier_credit')
+    # 关联项目的流水沿用项目金额范围；期初、盘点等无项目流水与库存结存同一口径。
+    unscoped_money = staticmethod(can_read_stock_value)
     item_name = serializers.CharField(source='stock.item.name', read_only=True)
     item_code = serializers.CharField(source='stock.item.code', read_only=True)
     unit = serializers.CharField(source='stock.item.unit', read_only=True)

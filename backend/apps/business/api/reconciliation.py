@@ -63,6 +63,13 @@ class ReconciliationSerializer(serializers.ModelSerializer):
         ]
 
 
+class ReconciliationListSerializer(ReconciliationSerializer):
+    """列表不回传生成时的原业务快照：每行一大段 JSON，只有「查看对账明细」读详情时才用到。"""
+
+    class Meta(ReconciliationSerializer.Meta):
+        fields = [field for field in ReconciliationSerializer.Meta.fields if field != 'snapshot']
+
+
 class ReconciliationView(ImportableMixin, ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE | MANAGERS
@@ -70,6 +77,9 @@ class ReconciliationView(ImportableMixin, ReadView):
     serializer_class = ReconciliationSerializer
     filterset_fields = ['entry', 'entry__project', 'status', 'kind']
     search_fields = ['code', 'entry__title', 'entry__project__name']
+
+    def get_serializer_class(self):
+        return ReconciliationListSerializer if self.action == 'list' else ReconciliationSerializer
 
     @action(detail=False, methods=['get', 'post'], url_path='supplier-monthly')
     def supplier_monthly(self, request):
@@ -250,7 +260,3 @@ class BankMatchView(ReadView):
     queryset = BankMatch.objects.all().order_by('-id')
     serializer_class = BankMatchSerializer
     filterset_fields = ['bank', 'payment']
-
-    @action(detail=True, methods=['post'])
-    def reverse(self, request, pk=None):
-        return Response(banking.unmatch(request.user, key(request), self.get_object().pk, request.data))

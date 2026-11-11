@@ -10,11 +10,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.business.models import Document, Entry, Project, SalesOrder, Stock
 from apps.business.services import documents
 from apps.core.models import AuditLog, Company
 
 from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_execution import ExecutionFixtures
 
 
 class PeriodLockScopeTests(BusinessFixtures, TestCase):
@@ -350,3 +352,45 @@ class DocumentBatchRemovalTests(BusinessFixtures, TestCase):
             ids.append(response.data['id'])
         self.remove_many('sales_manager', ids)
         self.assertTrue(all(self.deleted(pk) for pk in ids))
+
+
+class InactivePersonTests(ExecutionFixtures, TestCase):
+    """停用人员被选为执行人、安装人或验收负责人时，按所选字段报 400，而不是笼统的 404「未找到」。"""
+
+    def setUp(self):
+        self.setup_execution()
+
+    def deactivate(self, role):
+        User.objects.filter(pk=self.users[role].pk).update(is_active=False)
+
+    def test_inactive_assignee_on_create_and_reopen_names_the_field(self):
+        project = self.active_project()
+        done = self.task(project)
+        self.complete(done)
+        self.deactivate('member')
+        payload = {'project': project.pk, 'kind': 'design', 'title': '新任务', 'assignee': self.users['member'].pk}
+        detail = self.post('manager', 'tasks/', payload, status=400)
+        self.assertIn('已停用', str(detail['assignee']))
+        # 重开沿用原执行人；原执行人已停用时提示另选，而不是报任务或人员不存在。
+        detail = self.post('manager', f'tasks/{done.pk}/reopen/', {'reason': '返工'}, status=400)
+        self.assertIn('原执行人已停用', str(detail['assignee']))
+        self.post('manager', f'tasks/{done.pk}/reopen/', {'reason': '返工', 'assignee': self.users['manager'].pk})
+        done.refresh_from_db()
+        self.assertEqual((done.status, done.assignee_id), ('open', self.users['manager'].pk))
+
+    def test_inactive_installer_or_acceptor_is_reported_on_its_own_field(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        self.deactivate('member')
+        url = f'projects/{project.pk}/ship/'
+        people = {'installer': self.users['member'].pk, 'acceptor': self.users['manager'].pk}
+        detail = self.post('manager', url, {'date': TODAY, 'quantity': 1, **people}, status=400)
+        self.assertEqual(set(detail), {'installer'})
+        swapped = {'installer': self.users['manager'].pk, 'acceptor': self.users['member'].pk}
+        detail = self.post('manager', url, {'date': TODAY, 'quantity': 1, **swapped}, status=400)
+        self.assertEqual(set(detail), {'acceptor'})
+        # 未指定时由项目负责人承担；负责人已停用时提示在安装人字段另选。
+        self.deactivate('manager')
+        detail = self.post('admin', url, {'date': TODAY, 'quantity': 1}, status=400)
+        self.assertIn('项目负责人已停用', str(detail['installer']))
+        self.assertFalse(project.deliveries.exists())

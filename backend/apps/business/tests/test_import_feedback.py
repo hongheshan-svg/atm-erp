@@ -191,7 +191,8 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
         self.assertFalse(result.data['can_import'])
         self.assertIsNone(result.data['token'])
         self.assertNotIn('matches', result.data['rows'][0])
-        self.assertIn('无权访问', result.data['errors'][0]['message'])
+        # 越权项目与不存在的编号同一提示（S2-26），不借预览暴露项目是否存在。
+        self.assertIn('记录不存在或不在你的权限范围内', result.data['errors'][0]['message'])
         for name in [self.project.name, self.users['member'].display_name]:
             self.assertNotIn(name, str(result.data))
         book = self.workbook(result.data)

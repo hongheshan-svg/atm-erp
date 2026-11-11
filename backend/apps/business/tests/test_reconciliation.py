@@ -461,6 +461,46 @@ class ReconciliationTests(BusinessFixtures, TestCase):
         self.assertEqual(banking.remaining(bank), 500)
         self.assertEqual(finance.balance(entry), 10000)
 
+    def test_bank_match_is_only_unmatched_through_its_bank_record(self):
+        entry = self.project.entries.get(kind='receivable')
+        bank_id = self.bank()
+        bank = BankRecord.objects.get(pk=bank_id)
+        payment = self.request(
+            'finance',
+            f'entries/{entry.pk}/pay/',
+            {
+                'amount': '500',
+                'date': TODAY,
+                'reason': '登记到账',
+                'method': 'bank',
+                'account': bank.account,
+                'reference': bank.reference,
+            },
+        )['id']
+        match = self.request('finance', f'bank-records/{bank_id}/match/', {'payment': payment, 'reason': '核对'})['id']
+        # 解除匹配只有 bank-records/{id}/unmatch/ 一个入口，旧的 bank-matches/{id}/reverse/ 已移除。
+        response = self.clients['finance'].post(
+            f'/api/business/bank-matches/{match}/reverse/',
+            {'match': match, 'reason': '旧入口'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(BankMatch.objects.count(), 1)
+        self.assertEqual(banking.remaining(bank), 0)
+        self.request('finance', f'bank-records/{bank_id}/unmatch/', {'match': match, 'reason': '认领有误'})
+        self.assertEqual(banking.remaining(bank), 500)
+
+    def test_reconciliation_list_omits_snapshot_that_detail_keeps(self):
+        statement = self.statement(self.purchase_entry())
+        listed = self.clients['finance'].get('/api/business/reconciliations/')
+        self.assertEqual(listed.status_code, 200, listed.data)
+        row = next(row for row in listed.data['results'] if row['id'] == statement)
+        self.assertNotIn('snapshot', row)
+        detail = self.clients['finance'].get(f'/api/business/reconciliations/{statement}/').data
+        self.assertTrue(detail['snapshot'])
+        self.assertEqual({key: value for key, value in detail.items() if key != 'snapshot'}, row)
+
     def bank_with(self, amount, reference, account='A1', project=True):
         return self.request(
             'finance',

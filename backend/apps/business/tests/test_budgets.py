@@ -248,3 +248,19 @@ class BudgetTests(BusinessFixtures, TestCase):
         log = self.approval_log(purchase)
         self.assertTrue(log.detail['budget_adjuster_approval'])
         self.assertFalse(log.detail['self_approval'])
+
+    def test_admin_budget_adjuster_over_budget_approval_is_marked_in_audit(self):
+        self.budget('100', '0', '0', role='admin')
+        purchase = self.purchase(self.project, approve=False)
+        check = self.check(purchase)
+        self.assertTrue(check['over_budget'])
+        payload = {'reason': '客户书面同意承担超额', 'confirmed': True, 'expected_snapshot': check['snapshot']}
+        self.post('admin', f'purchases/{purchase.pk}/approve-over-budget/', payload)
+        # 管理员调整预算后自己批准超预算采购，与普通批准的同类例外一样在审计中标记。
+        log = self.approval_log(purchase)
+        self.assertTrue(log.detail['over_budget'])
+        self.assertTrue(log.detail['budget_adjuster_approval'])
+        other = self.purchase(self.project, approve=False)
+        payload['expected_snapshot'] = self.check(other)['snapshot']
+        self.post('manager', f'purchases/{other.pk}/approve-over-budget/', payload)
+        self.assertFalse(self.approval_log(other).detail['budget_adjuster_approval'])

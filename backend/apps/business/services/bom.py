@@ -350,6 +350,18 @@ def allocation(project, *, item_id=None, exclude_line=None):
     return lines, plan
 
 
+def shortage(line, entry):
+    """BOM 行缺料量：用量扣除已领、在途（含草稿与待批）和可计入的共享库存，缺料表与按缺料采购同一口径。"""
+    ordered = entry['assigned'] + entry['shared'] + entry['shared_unapproved']
+    return max(ZERO, max(ZERO, line.quantity - entry['used']) - ordered - entry['available'])
+
+
+def line_shortage(bom_line, *, exclude_line=None):
+    """单个 BOM 行的当前缺料量；修改采购草稿时 exclude_line 扣除本行原数量，只核对改后的数量。"""
+    _, plan = allocation(bom_line.project_id, item_id=bom_line.item_id, exclude_line=exclude_line)
+    return shortage(bom_line, plan[bom_line.pk])
+
+
 def demand(project):
     result = []
     lines, plan = allocation(project)
@@ -359,7 +371,6 @@ def demand(project):
         used, available = entry['used'], entry['available']
         ordered = entry['assigned'] + entry['shared'] + entry['shared_unapproved']
         unapproved = entry['assigned_unapproved'] + entry['shared_unapproved']
-        needed = max(ZERO, line.quantity - used)
         result.append(
             {
                 'bom_line': line.pk,
@@ -387,7 +398,7 @@ def demand(project):
                 'available': str(available),
                 'other_demand': str(competing.get(line.item_id, {}).get('quantity', ZERO)),
                 'other_projects': competing.get(line.item_id, {}).get('projects', 0),
-                'shortage': str(max(ZERO, needed - ordered - available)),
+                'shortage': str(shortage(line, entry)),
             }
         )
     return result

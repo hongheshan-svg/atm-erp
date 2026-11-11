@@ -35,6 +35,9 @@ export type Field = {
   remotePath?: string
   remoteParams?: Row
   remoteFilter?: (row: Row) => boolean
+  // 远程选项的可选范围依赖同一表单其他字段时用它（如附件分类决定能否选已取消项目）；返回固定的筛选函数，
+  // 只有范围真正变化时才换一个，原选中值不在新范围内会提示重新选择，范围放宽后自动恢复。
+  remoteFilterFor?: (data: Row) => (row: Row) => boolean
   // 远程选项的标签；不给就用 catalog 的通用「编码 · 名称 · 规格」拼法。
   remoteLabel?: (row: Row) => string
   // Renders the row's position in this flow instead of a plain value (read-only row tables).

@@ -15,7 +15,7 @@ from apps.core.permissions import PURCHASE_APPROVERS, PURCHASERS, WAREHOUSE, has
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
 from .approval import independent_approval
-from .bom import check_line_limit, demand, incoming, issued
+from .bom import check_line_limit, demand, incoming, issued, line_shortage
 from .common import (
     ZERO,
     audit,
@@ -401,6 +401,8 @@ def approve(actor, key, purchase_id, data, *, override=False):
                 raise Conflict('当前没有超预算，请使用普通批准。')
             if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
                 raise PermissionDenied('预算调整人不能批准本项目超预算采购，请由其他经理审批；管理员例外必须填写原因。')
+            # 走到这里的预算调整人只能是管理员例外（原因已必填），审计与普通批准的同类例外同样标记。
+            budget_adjuster_approval = user.pk == purchase.project.budget_changed_by_id
         elif report['over_budget']:
             warnings = purchase_visibility(user, report, purchase.project)['warnings']
             raise Conflict('；'.join(warnings) + '。请重新打开审批，填写超预算批准原因。')
@@ -798,6 +800,10 @@ def edit(actor, key, purchase_id, data):
                     + line.quantity
                 ):
                     raise Conflict('修改数量超过 BOM 剩余需求。')
+                # 与按缺料下单同一缺口口径（扣除本项目已到货及共享库存）：调增不能占用已在库可领的数量；
+                # 只核对调增，库存后来到货不会让只改单价、交期的草稿无法保存。
+                if qty > line.quantity and qty > line_shortage(line.bom_line, exclude_line=line.pk):
+                    raise Conflict('采购数量超过当前缺口，请刷新需求后重试。')
             elif qty > line.quantity:
                 overrun = bom_overrun(purchase.project, line.item, qty, exclude_line=line.pk)
                 if overrun:

@@ -412,6 +412,30 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertFalse(project.tasks.exists())
         self.assertFalse(Stock.objects.exists())
 
+    def test_import_does_not_reveal_which_outside_project_codes_exist(self):
+        outside = self.active_project()
+        stranger = User.objects.create_user(username='manager2', role='manager')
+        Project.objects.filter(pk=outside.pk).update(manager=stranger)
+        outside.members.clear()
+        own = self.active_project()
+        cases = [
+            ('tasks', lambda code: [code, 'design', '设计', '', 'member', TODAY]),
+            ('purchases', lambda code: ['P1', code, 'S1', TODAY, '', 'I1', '2', '10']),
+        ]
+        for resource, row in cases:
+            with self.subTest(resource=resource):
+                messages = []
+                for code in (outside.code, 'PRJ-MISSING'):
+                    preview = self.preview(resource, [row(code)], role='manager')
+                    self.assertFalse(preview.data['can_import'], preview.data)
+                    messages.append(preview.data['errors'][0]['message'])
+                # 越权项目与不存在的编号给同一提示，不能借导入预览试出别的项目编号。
+                self.assertEqual(messages[0], messages[1])
+                self.assertIn('权限范围', messages[0])
+                self.assertTrue(self.preview(resource, [row(own.code)], role='manager').data['can_import'])
+        self.assertFalse(outside.tasks.exists())
+        self.assertFalse(PurchaseOrder.objects.exists())
+
     def downloaded_preview(self, resource, rows, fmt='csv', *, previous=False):
         response = self.clients['admin'].get(f'/api/business/{resource}/import-template/', {'file_format': fmt})
         self.assertEqual(response.status_code, 200)

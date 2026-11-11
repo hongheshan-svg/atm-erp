@@ -1,5 +1,5 @@
 import { businessDate } from './fixtures'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { crc32 } from 'node:zlib'
 import { test, expect, login, expectHttpError, type Page, openRowAction, openImport } from './fixtures'
 
@@ -59,7 +59,7 @@ test('财务原生银行导入缺失户名先核实，保留原凭据且重复�
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const adminToken = await page.evaluate(() => localStorage.getItem('access_token'))
   const adminHeaders = { Authorization: `Bearer ${adminToken}` }
-  const financeResponse = await page.request.post('/api/auth/users/', { headers: adminHeaders, data: {
+  const financeResponse = await page.request.post('/api/auth/users/', { headers: { ...adminHeaders, 'Idempotency-Key': randomUUID() }, data: {
     username: `bankreview_${suffix}`, display_name: `银行验收财务${suffix}`, roles: ['finance'], password: 'Bank-review-audit-2026-only',
   } })
   expect(financeResponse.status(), await financeResponse.text()).toBe(201)

@@ -349,9 +349,11 @@ def change_task(actor, key, task_id, data, operation):
             discipline=task.discipline,
             assignees=[person.pk for person in task.assigned_people()],
         )
-        from .milestones import sync_milestones
+        if operation != 'assign':
+            # 取消、重开会改变节点是否计入汇总；重新分配只改人员、专业和计划日期，自动节点不受影响。
+            from .milestones import sync_milestones
 
-        sync_milestones(user, project)
+            sync_milestones(user, project)
         from .task_supervision import notify_task
 
         notify_task(user, task, {'assign': '任务分配已调整', 'reopen': '任务已重开', 'cancel': '任务已取消'}[operation])

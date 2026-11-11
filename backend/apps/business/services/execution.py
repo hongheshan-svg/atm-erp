@@ -103,8 +103,12 @@ def participant(project, user, key='assignee'):
     return user
 
 
-def assignee(project, value):
-    return participant(project, lookup(User, value, 'assignee', is_active=True))
+def assignee(project, value, key='assignee', missing='所选人员不存在或已停用，请重新选择。'):
+    """单个被指派人（执行人、发货时的安装/验收负责人）：不存在或已停用按字段报 400，不是 404。"""
+    person = User.objects.filter(pk=identity(value, key), is_active=True).first()
+    if person is None:
+        raise ValidationError({key: missing})
+    return participant(project, person, key)
 
 
 def assigned_people(project, data, task=None):
@@ -125,7 +129,7 @@ def assigned_people(project, data, task=None):
     if 'assignee' in data or task is None:
         return [assignee(project, data.get('assignee'))]
     if not task.co_assignees.exists():
-        return [assignee(project, task.assignee_id)]
+        return [assignee(project, task.assignee_id, missing='原执行人已停用，请重新选择执行人。')]
     return assigned_people(project, {'assignees': [person.pk for person in task.assigned_people()]})
 
 
@@ -699,9 +703,7 @@ def reschedule_task(actor, key, task_id, data):
         previous = task.due_date
         task.due_date = due_date
         save(task, user)
-        from .milestones import sync_milestones
-
-        sync_milestones(user, project)
+        # 自动汇总节点只取交付、安装与验收事实，计划日期不影响，不必重算。
         notify_task(user, task, '任务计划完成日期已调整')
         return audit(
             user,
@@ -919,8 +921,13 @@ def ship(actor, key, project_id, data):
             deadlines[kind] = day(data, field, optional=True)
             if deadlines[kind] and deadlines[kind] < date:
                 raise ValidationError({field: f'{label}不能早于发货日期 {date.isoformat()}，请重新选择或留空。'})
-        installer = assignee(project, data.get('installer', project.manager_id))
-        acceptor = assignee(project, data.get('acceptor', project.manager_id))
+        # 未指定时由项目负责人承担；负责人已停用时提示在对应字段另选，而不是一句「未找到」。
+        installer, acceptor = (
+            assignee(project, data[key], key)
+            if key in data
+            else assignee(project, project.manager_id, key, missing=f'项目负责人已停用，请指定{label}。')
+            for key, label in [('installer', '安装人'), ('acceptor', '验收负责人')]
+        )
         delivery = save(
             Delivery(
                 code=CodeRule.generate_code('delivery', custom=text(data, 'code', default='', maximum=30)),

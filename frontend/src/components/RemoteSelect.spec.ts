@@ -284,6 +284,29 @@ describe('单一远程搜索组合框', () => {
     expect(control(wrapper).element.checkValidity()).toBe(false)
   })
 
+  it('调用方筛选收窄时提示重选，随表单放宽后恢复原选项且不重复读取', async () => {
+    const cancelled = { ...item(3, '已取消项目'), status: 'cancelled' }
+    vi.mocked(read).mockImplementation(url => Promise.resolve(url === `${path}3/` ? cancelled : { results: [] }))
+    const open_ = (row: Row) => row.status !== 'cancelled'
+    const receipt = () => true
+    const wrapper = open({ modelValue: 3, accept: open_ })
+    await flushPromises()
+    expect(control(wrapper).element.value).toBe('')
+    expect(wrapper.text()).toContain('原选项已不在可选范围')
+    const reads = vi.mocked(read).mock.calls.length
+    await wrapper.setProps({ accept: receipt })
+    expect(control(wrapper).element.value).toBe('已取消项目 · M003')
+    expect(wrapper.text()).not.toContain('原选项已不在可选范围')
+    expect(control(wrapper).element.checkValidity()).toBe(true)
+    await wrapper.setProps({ accept: open_ })
+    expect(control(wrapper).element.value).toBe('')
+    expect(control(wrapper).element.checkValidity()).toBe(false)
+    await wrapper.setProps({ accept: receipt })
+    expect(control(wrapper).element.value).toBe('已取消项目 · M003')
+    expect(vi.mocked(read).mock.calls.length).toBe(reads)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
   it('输入自由文字不能冒充已选ID；IME回车不选择，清空按钮移除已选项', async () => {
     const wrapper = open({ required: true })
     await search(wrapper, '任意文字')

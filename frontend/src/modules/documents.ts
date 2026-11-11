@@ -31,12 +31,15 @@ export function fileSize(bytes: unknown) {
 export function createLabel(resource: string) {
   return ({ documents: '上传附件' } as Record<string, string | boolean>)[resource] || ''
 }
+// 与服务端 documents.upload 一致：已结项项目不能再上传；已取消项目只能补传结算凭证（退款、冲抵依据）。
+const uploadableProject = (row: Row) => !['closed', 'cancelled'].includes(String(row.status))
+const receiptProject = (row: Row) => row.status !== 'closed'
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
   let fields: Field[] = []
   let path = endpoint(resource)
   if (resource === 'documents')
     fields = [
-      remote('project', '项目', '/business/projects/', { remoteFilter: row => row.status !== 'closed' }),
+      remote('project', '项目', '/business/projects/', { remoteFilter: uploadableProject, remoteFilterFor: data => data.category === 'receipt' ? receiptProject : uploadableProject, hint: '已结项项目不能再上传；已取消项目只能上传结算凭证。' }),
       // 分类名称与列表、服务端取值同一份 categoryLabels；合同仅项目经理、结算凭证仅财务可上传。
       select(
         'category',

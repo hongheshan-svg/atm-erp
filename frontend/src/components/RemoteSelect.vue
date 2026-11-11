@@ -23,6 +23,9 @@ const opened = ref(false), editing = ref(false), active = ref(-1), selecting = r
 const locked = computed(() => props.disabled || selecting.value)
 const recentRows = ref<Row[]>([])
 let generation = 0, selectedGeneration = 0
+// 已选记录因调用方筛选（accept）收窄而失效时先记下；筛选随表单其他字段放宽后可原样恢复，不必重新读取或重选。
+let outOfRange: Row | undefined
+const OUT_OF_RANGE = '原选项已不在可选范围，请重新选择。'
 let attemptedPage = 1
 let timer: ReturnType<typeof setTimeout> | undefined
 const hasValue = (value: unknown) => value !== '' && value != null
@@ -173,6 +176,7 @@ function keydown(event: KeyboardEvent) {
 async function resolveSelected() {
   const current = ++selectedGeneration
   selectedError.value = ''
+  outOfRange = undefined
   if (!hasValue(model.value)) { selected.value = undefined; return }
   const found = rows.value.find(row => idOf(row) === String(model.value))
   if (found) { selected.value = found; return }
@@ -181,7 +185,7 @@ async function resolveSelected() {
   try {
     const result = await read(`${props.path}${encodeURIComponent(String(model.value))}/`, props.params)
     if (current !== selectedGeneration) return
-    if (!valid(result)) throw new Error('原选项已不在可选范围，请重新选择。')
+    if (!valid(result)) { outOfRange = result; throw new Error(OUT_OF_RANGE) }
     selected.value = result
   } catch (e) { if (current === selectedGeneration) selectedError.value = message(e) }
 }
@@ -219,8 +223,13 @@ watch(() => props.accept, () => {
   rows.value = rows.value.filter(valid)
   recentRows.value = recentRows.value.filter(valid)
   if (selected.value && !valid(selected.value)) {
+    outOfRange = selected.value
     selected.value = undefined
-    selectedError.value = '原选项已不在可选范围，请重新选择。'
+    selectedError.value = OUT_OF_RANGE
+  } else if (!selected.value && outOfRange && idOf(outOfRange) === String(model.value) && valid(outOfRange)) {
+    selected.value = outOfRange
+    selectedError.value = ''
+    outOfRange = undefined
   }
 })
 watch(() => props.disabled, value => { if (value) close() })

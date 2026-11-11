@@ -130,9 +130,10 @@ async function downloadOriginal(page: Page, dialog: Locator, info: TestInfo, fil
 async function deniedPreview(page: Page, outsider: ReturnType<typeof api>, id: number, binary = false) {
   for (const action of binary ? ['preview', 'preview-file', 'download'] : ['preview', 'download']) {
     const path = business + `documents/${id}/${action}/`
-    for (const headers of [outsider.headers, {}]) {
+    // 未参与成员按权限拒绝（403/404）；不带凭据的匿名请求返回 401（需要登录）。
+    for (const [headers, denied] of [[outsider.headers, [403, 404]], [{}, [401]]] as const) {
       const response = await page.request.get(path, { headers })
-      expect([403, 404], `${action} 不应向未参与成员或匿名请求暴露附件`).toContain(response.status())
+      expect(denied, `${action} 不应向未参与成员或匿名请求暴露附件`).toContain(response.status())
       expect(response.headers()['content-type']).toContain('application/json')
     }
   }

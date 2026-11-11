@@ -1,3 +1,5 @@
+import uuid
+
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
@@ -7,6 +9,15 @@ from apps.accounts.models import User
 from apps.core.models import AuditLog, Company
 
 PASSWORD = 'Test-Accounts-Only-982'
+
+
+class KeyedClient(APIClient):
+    """用户维护与业务写入同走幂等链路：写请求没有显式操作标识时，每次带一个新的 Idempotency-Key。"""
+
+    def generic(self, method, path, *args, **extra):
+        if method in ('POST', 'PATCH') and 'HTTP_IDEMPOTENCY_KEY' not in extra:
+            extra['HTTP_IDEMPOTENCY_KEY'] = str(uuid.uuid4())
+        return super().generic(method, path, *args, **extra)
 
 
 class AuthenticationTests(TestCase):
@@ -51,7 +62,7 @@ class AuthenticationTests(TestCase):
         self.users = {
             role: User.objects.create_user(username=role, password=PASSWORD, role=role) for role in User.Role.values
         }
-        self.client = APIClient()
+        self.client = KeyedClient()
 
     def login(self, role='admin', *, remote_addr='127.0.0.1'):
         response = self.client.post(
@@ -313,6 +324,45 @@ class AuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertNotIn('password', response.data)
         self.assertFalse(User.objects.get(username='new').is_superuser)
+
+    def test_user_writes_replay_by_operation_key_without_storing_password(self):
+        from apps.core.models import ActionReceipt
+
+        self.login()
+        bare = APIClient()
+        bare.force_authenticate(self.users['admin'])
+        data = {'username': 'retried', 'role': 'member', 'password': PASSWORD}
+        response = bare.post('/api/auth/users/', data, format='json')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('Idempotency-Key', response.data)
+        self.assertFalse(User.objects.filter(username='retried').exists())
+        key = str(uuid.uuid4())
+        first = self.client.post('/api/auth/users/', data, HTTP_IDEMPOTENCY_KEY=key)
+        # 网络重试带同一操作标识：回放首次的 201 和同一用户，而不是报「用户名已存在」。
+        retry = self.client.post('/api/auth/users/', data, HTTP_IDEMPOTENCY_KEY=key)
+        self.assertEqual((first.status_code, retry.status_code), (201, 201), retry.data)
+        self.assertEqual(retry.data['id'], first.data['id'])
+        self.assertEqual(User.objects.filter(username='retried').count(), 1)
+        self.assertEqual(
+            AuditLog.objects.filter(operation='user.create', resource=f'user:{first.data["id"]}').count(), 1
+        )
+        changed = self.client.post('/api/auth/users/', {**data, 'password': 'other'}, HTTP_IDEMPOTENCY_KEY=key)
+        self.assertEqual(changed.status_code, 409, changed.data)
+        receipt = ActionReceipt.objects.get(key=key)
+        self.assertNotIn(PASSWORD, str(receipt.result) + receipt.fingerprint)
+        self.assertNotIn('password', receipt.result)
+
+        target = User.objects.get(username='retried')
+        key = str(uuid.uuid4())
+        url = f'/api/auth/users/{target.pk}/'
+        for _ in range(2):
+            response = self.client.patch(url, {'display_name': '重试改名'}, HTTP_IDEMPOTENCY_KEY=key)
+            self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(AuditLog.objects.filter(operation='user.update', resource=f'user:{target.pk}').count(), 1)
+        self.assertEqual(self.client.patch(url, {'display_name': '另一个'}, HTTP_IDEMPOTENCY_KEY=key).status_code, 409)
+        self.assertEqual(bare.patch(url, {'display_name': '缺标识'}, format='json').status_code, 400)
+        target.refresh_from_db()
+        self.assertEqual(target.display_name, '重试改名')
 
     def test_admin_can_assign_short_common_numeric_and_custom_passwords(self):
         self.login()

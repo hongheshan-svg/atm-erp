@@ -1,4 +1,5 @@
 import io
+import uuid
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -207,15 +208,19 @@ class PlatformTests(TestCase):
         client = APIClient()
         client.force_authenticate(self.actor)
         url = f'/api/auth/users/{self.actor.pk}/'
+
+        def patch(data):
+            return client.patch(url, data, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()))
+
         for selected in [[], ['unknown'], ['admin', 'admin']]:
-            self.assertEqual(client.patch(url, {'roles': selected}, format='json').status_code, 400)
-        result = client.patch(url, {'roles': ['purchaser', 'admin']}, format='json')
+            self.assertEqual(patch({'roles': selected}).status_code, 400)
+        result = patch({'roles': ['purchaser', 'admin']})
         self.assertEqual(result.status_code, 200, result.data)
         self.actor.refresh_from_db()
         self.assertEqual(roles(self.actor), {'purchaser', 'admin'})
         self.assertEqual(set(client.get('/api/auth/me/').data['roles']), {'purchaser', 'admin'})
-        self.assertEqual(client.patch(url, {'roles': ['purchaser']}, format='json').status_code, 400)
-        self.assertEqual(client.patch(url, {'is_active': False}, format='json').status_code, 400)
+        self.assertEqual(patch({'roles': ['purchaser']}).status_code, 400)
+        self.assertEqual(patch({'is_active': False}).status_code, 400)
         log = AuditLog.objects.filter(operation='user.update').last()
         self.assertEqual(log.detail['roles']['after'], ['admin', 'purchaser'])
         self.assertEqual(client.get('/api/auth/users/').status_code, 200)
@@ -230,12 +235,16 @@ class PlatformTests(TestCase):
         client.force_authenticate(self.actor)
         target = User.objects.create_user(username='dual', role='purchaser')
         url = f'/api/auth/users/{target.pk}/'
-        result = client.patch(url, {'roles': ['finance', 'manager'], 'management_reports': True}, format='json')
+
+        def patch(data):
+            return client.patch(url, data, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()))
+
+        result = patch({'roles': ['finance', 'manager'], 'management_reports': True})
         self.assertEqual(result.status_code, 200, result.data)
         target.refresh_from_db()
         require_reports(target)
-        self.assertEqual(client.patch(url, {'roles': ['finance']}, format='json').status_code, 400)
-        result = client.patch(url, {'role': 'member', 'management_reports': False}, format='json')
+        self.assertEqual(patch({'roles': ['finance']}).status_code, 400)
+        result = patch({'role': 'member', 'management_reports': False})
         self.assertEqual(result.status_code, 200, result.data)
         target.refresh_from_db()
         self.assertEqual(roles(target), {'member'})
@@ -316,6 +325,37 @@ class PlatformTests(TestCase):
             authorize=lambda user: require_role(user, ADMIN),
             execute=execute or (lambda user: {'code': CodeRule.generate_code('project')}),
         )
+
+    def test_company_update_requires_operation_key_and_replays_once(self):
+        from rest_framework.test import APIClient
+
+        Company.objects.create(pk=1, name='旧名称')
+        client = APIClient()
+        client.force_authenticate(self.actor)
+        url = '/api/core/company/1/'
+        missing = client.patch(url, {'name': '缺标识'}, format='json')
+        self.assertEqual(missing.status_code, 400, missing.data)
+        self.assertIn('Idempotency-Key', missing.data)
+        for _ in range(2):
+            response = client.patch(url, {'name': '新名称'}, format='json', HTTP_IDEMPOTENCY_KEY='company-edit')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data['name'], '新名称')
+        self.assertEqual(AuditLog.objects.filter(operation='company.update').count(), 1)
+        changed = client.patch(url, {'name': '别的名称'}, format='json', HTTP_IDEMPOTENCY_KEY='company-edit')
+        self.assertEqual(changed.status_code, 409, changed.data)
+        self.assertEqual(Company.objects.get(pk=1).name, '新名称')
+        User.objects.filter(pk=self.actor.pk).update(role='manager')
+        replay = client.patch(url, {'name': '新名称'}, format='json', HTTP_IDEMPOTENCY_KEY='company-edit')
+        self.assertEqual(replay.status_code, 403, replay.data)
+
+    def test_anonymous_requests_are_unauthenticated_not_forbidden(self):
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        for url in ('/api/business/stocks/', '/api/business/projects/', '/api/core/company/', '/api/auth/users/'):
+            with self.subTest(url=url):
+                self.assertEqual(client.get(url).status_code, 401)
+        self.assertEqual(client.post('/api/business/tasks/', {}, format='json').status_code, 401)
 
     def test_replay_does_not_generate_second_code(self):
         first = self.action()

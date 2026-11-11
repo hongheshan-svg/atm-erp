@@ -210,6 +210,46 @@ describe('列表创建入口', () => {
     wrapper.unmount()
     vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
   })
+  it('任务提醒深链与点行打开同一份详情：行高亮，并先确认放弃未保存的表单', async () => {
+    user.value = { id: 1, roles: ['admin'] }
+    const task = { id: 25, title: '3D画图', project: 7, project_name: '甲项目', status: 'open', kind: 'design', started_date: '2026-11-01', elapsed_days: 3, schedule_variance_days: -2, due_date: '2099-01-01', description: '' }
+    vi.mocked(read).mockImplementation(async path => path.endsWith('/25/') ? task : { count: 1, results: [task] })
+    let leave = true
+    const ActionDialogStub = { name: 'ActionDialog', props: ['command'], setup(_: unknown, { expose }: { expose: (value: object) => void }) { expose({ confirmLeave: async () => leave }) }, template: '<div />' }
+    const mountTasks = () => shallowMount(ResourcePanel, { props: { resource: 'tasks', title: '项目任务', projectId: 7 }, global: { plugins: [ElementPlus], stubs: { BusinessTable: { name: 'BusinessTable', props: ['rowClassName'], template: '<div />' }, ActionDialog: ActionDialogStub } } })
+    const viaRow = mountTasks()
+    await flushPromises()
+    await (viaRow.vm as any).inspect(task)
+    const fromRow = viaRow.findComponent(ActionDialogStub).props('command')
+    viaRow.unmount()
+    route.query = { resource: 'tasks', focus: '25' }
+    const wrapper = mountTasks()
+    await flushPromises()
+    const command = wrapper.findComponent(ActionDialogStub).props('command')
+    expect(command.title).toBe('项目任务详情')
+    expect(command.subject).toBe('3D画图')
+    expect(command.fields.map((field: { key: string }) => field.key)).toEqual(fromRow.fields.map((field: { key: string }) => field.key))
+    expect(command.initial).toEqual(fromRow.initial)
+    expect(command.initial.description).toBe('未填写')
+    expect(command.initial.elapsed_days).toBe('3 天（进行中）')
+    const rowClass = wrapper.findComponent({ name: 'BusinessTable' }).props('rowClassName')
+    expect(rowClass({ row: task })).toContain('selected-record')
+    wrapper.unmount()
+    // 已有未保存的表单且用户选择留下：深链不覆盖当前表单。
+    leave = false
+    route.query = {}
+    const dirty = mountTasks()
+    await flushPromises()
+    const draft = { title: '登记工时', path: '/business/tasks/9/time/', fields: [] }
+    ;(dirty.vm as any).command = draft
+    route.query = { resource: 'tasks', focus: '25' }
+    await flushPromises()
+    expect(read).toHaveBeenCalledWith('/business/tasks/25/')
+    expect(dirty.findComponent(ActionDialogStub).props('command')).toEqual(draft)
+    dirty.unmount()
+    route.query = {}
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+  })
   it.each(['payments', 'reconciliations', 'time'])('%s 不打开其他项目的 focus，范围变化也不重新打开旧记录', async resource => {
     user.value = { id: 1, roles: ['finance'] }
     route.query = { resource, focus: '25' }
