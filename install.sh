@@ -16,7 +16,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 PYTHON_BIN="${PYTHON:-python3.11}"
-if [[ "$OTA" == true ]]; then
+RELEASE=false
+if [[ -f "$ROOT/INSTALL-MANIFEST.json" ]]; then RELEASE=true; fi
+# 发布包的镜像校验导入和可选升级服务都需要宿主机 Python 3.11；在生成配置或改动容器前确认。
+if [[ "$OTA" == true || "$RELEASE" == true ]]; then
   "$PYTHON_BIN" -c 'import sys; assert sys.version_info[:2] == (3, 11), "需要宿主机 Python 3.11"'
 fi
 command -v docker >/dev/null
@@ -24,11 +27,15 @@ docker compose version >/dev/null
 docker info >/dev/null
 if [[ ! -f "$ENV_FILE" ]]; then
   command -v openssl >/dev/null
+  # 发布包留空 LEAN_IMAGE，沿用 Compose 内置的固定摘要，校验导入后由 release_install.py 写入；
+  # 写入本地构建镜像名会遮蔽该摘要，安装中断后直接 Compose 启动就会找不到镜像。
+  IMAGE=""
+  if [[ "$RELEASE" == false ]]; then IMAGE="${LEAN_IMAGE:-atm-erp-lean:local}"; fi
   umask 077
   (set -o noclobber
     cat > "$ENV_FILE" <<EOF
 LEAN_PROJECT_NAME=${LEAN_PROJECT_NAME:-atm-erp-lean}
-LEAN_IMAGE=${LEAN_IMAGE:-atm-erp-lean:local}
+LEAN_IMAGE=$IMAGE
 LEAN_HTTP_PORT=${LEAN_HTTP_PORT:-8080}
 LEAN_BIND_ADDRESS=${LEAN_BIND_ADDRESS:-127.0.0.1}
 LEAN_ALLOWED_HOSTS=${LEAN_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -48,7 +55,7 @@ if [[ "$OTA" == true ]]; then
 fi
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$ROOT/docker-compose.yml")
 "${COMPOSE[@]}" config --quiet
-if [[ -f "$ROOT/INSTALL-MANIFEST.json" ]]; then
+if [[ "$RELEASE" == true ]]; then
   "$PYTHON_BIN" "$ROOT/scripts/release_install.py" --root "$ROOT" --config "$ENV_FILE"
 elif [[ "$BUILD" == true ]]; then
   "${COMPOSE[@]}" build app

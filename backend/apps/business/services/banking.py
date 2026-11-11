@@ -346,18 +346,23 @@ def unmatch(actor, key, match_id, data):
     )
 
 
-def check_close(project):
+def check_close(project, *, lock=True):
+    """结项前的对账与银行款项检查。lock=False 供只读的推进检查使用：不加任何锁，判断与提示相同。"""
     if Reconciliation.objects.filter(entry__project=project, status='draft').exists():
         raise Conflict('项目还有待确认或存在差异的对账单，请确认或作废后结项。')
     banks = BankRecord.objects.filter(
         Q(project=project) | Q(matches__payment__entry__project=project), void_reason=''
     ).distinct()
-    locked = list(
-        BankRecord.objects.filter(pk__in=banks.values('pk'))
-        .select_for_update()
-        .order_by('pk')
-        .values_list('pk', flat=True)
-    )
-    # 先加锁、再另起一条语句一次算出余额：锁等待期间别人提交的认领也能看到，又不用逐条查三次。
-    if with_remaining(BankRecord.objects.filter(pk__in=locked)).exclude(net_remaining=0).exists():
+    if lock:
+        # bank_identity 锁序：调用方已锁项目和款项，这里先锁排序后的全部账户，再按主键锁流水行，
+        # 与导入、认领、退回同序，避免交叉等待。新的项目流水或匹配都要先拿项目锁，账户集合不会再增加。
+        bank_identity.lock_accounts(banks.values_list('account', flat=True))
+        banks = list(
+            BankRecord.objects.filter(pk__in=banks.values('pk'))
+            .select_for_update()
+            .order_by('pk')
+            .values_list('pk', flat=True)
+        )
+    # 加锁时先锁行、再另起一条语句一次算出余额：锁等待期间别人提交的认领也能看到，又不用逐条查三次。
+    if with_remaining(BankRecord.objects.filter(pk__in=banks)).exclude(net_remaining=0).exists():
         raise Conflict('项目还有未认领或未匹配的银行款项，请处理后结项。')

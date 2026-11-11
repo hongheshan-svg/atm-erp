@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bomEditor, canImportResource, materialEditor, money, partnerEditor, productionProject, purchaseApprover, purchasing, reports, roleLabels, taskManager, timeAmender, user } from './session'
+import { resetSession } from './utils/request'
 import { navigation } from './navigation'
 import { actionNames, createLabel } from './business'
 import { userFields } from './modules/settings'
@@ -104,5 +105,66 @@ describe('固定岗位与权限并集', () => {
     expect(taskManager({ kind: 'assembly', can_manage: false })).toBe(false)
     expect(taskManager({ kind: 'assembly' })).toBe(false)
     expect(timeAmender({ user: 9 })).toBe(false)
+  })
+})
+
+describe('跨标签页登录同步', () => {
+  const draft = 'erp-form-draft:1:post:/business/purchases/:新建采购:{}:'
+  const jwt = (id: number, jti: string) => `h.${btoa(JSON.stringify({ user_id: id, jti })).replace(/=+$/, '')}.s`
+  let shared = new Map<string, string>()
+  function open(replace = vi.fn()) {
+    shared = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => shared.get(key) ?? null,
+      setItem: (key: string, value: string) => shared.set(key, value),
+      removeItem: (key: string) => shared.delete(key),
+    })
+    vi.stubGlobal('location', { replace })
+    resetSession('access-1', jwt(1, 'a'))
+    user.value = { id: 1, roles: ['manager'] }
+    sessionStorage.setItem(draft, '{}')
+    return replace
+  }
+  // 其他标签页写入共享存储后，本页收到的 storage 事件。
+  function otherTab(key: string, access: string | null, refresh: string | null) {
+    for (const [name, value] of [['access_token', access], ['refresh_token', refresh]] as const) {
+      if (value == null) shared.delete(name)
+      else shared.set(name, value)
+    }
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue: key === 'access_token' ? access : refresh }))
+  }
+  afterEach(() => { resetSession(); sessionStorage.clear(); vi.unstubAllGlobals() })
+
+  it('其他标签页例行续期：本页资料、菜单与填写暂存保持不变', () => {
+    const replace = open()
+    otherTab('access_token', 'access-1-renewed', jwt(1, 'a'))
+    expect(user.value).toEqual({ id: 1, roles: ['manager'] })
+    expect(sessionStorage.getItem(draft)).toBe('{}')
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('同一账号在其他标签页重新登录：本页不打断', () => {
+    const replace = open()
+    otherTab('refresh_token', 'access-1b', jwt(1, 'b'))
+    expect(user.value).toEqual({ id: 1, roles: ['manager'] })
+    expect(sessionStorage.getItem(draft)).toBe('{}')
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('其他标签页退出：本页清掉账号资料与暂存，回到未登录状态', () => {
+    const replace = open()
+    otherTab('refresh_token', null, null)
+    expect(user.value).toBeNull()
+    expect(sessionStorage.getItem(draft)).toBeNull()
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('其他标签页换成另一账号：清掉原账号资料与暂存，整页载入新账号的工作台', () => {
+    const replace = open()
+    otherTab('refresh_token', 'access-2', jwt(2, 'c'))
+    expect(user.value).toBeNull()
+    expect(sessionStorage.getItem(draft)).toBeNull()
+    expect(replace).toHaveBeenCalledExactlyOnceWith(import.meta.env.BASE_URL)
+    expect(shared.get('refresh_token')).toBe(jwt(2, 'c'))
   })
 })

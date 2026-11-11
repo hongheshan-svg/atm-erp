@@ -1,17 +1,21 @@
 import axios, { AxiosError, AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { message, request, requestKey, resetSession } from './request'
+import { beforeEach, afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { download, readBlob, write } from '../api'
+import { downloadBOM } from '../api/bom'
+import { message, request, requestKey, resetSession, REQUEST_TIMEOUT, TRANSFER_TIMEOUT } from './request'
 
 const adapter = request.defaults.adapter
 function response(config: InternalAxiosRequestConfig, status = 200): AxiosResponse {
   return { config, status, data: { ok: true }, statusText: '', headers: new AxiosHeaders() }
 }
+// 浏览器共用的 localStorage；直接改这里就是「其他标签页」写入，本页不会收到自己写入的 storage 事件。
+let shared = new Map<string, string>()
 beforeEach(() => {
-  const values = new Map<string, string>()
+  shared = new Map<string, string>()
   vi.stubGlobal('localStorage', {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-    removeItem: (key: string) => values.delete(key),
+    getItem: (key: string) => shared.get(key) ?? null,
+    setItem: (key: string, value: string) => shared.set(key, value),
+    removeItem: (key: string) => shared.delete(key),
   })
   resetSession('old-token', 'refresh-token')
 })
@@ -67,6 +71,243 @@ describe('JWT 会话与刷新', () => {
     expect(localStorage.getItem('refresh_token')).toBe('refresh-token')
     await expect(request.get('/business/projects/')).rejects.toBeTruthy()
     expect(localStorage.getItem('refresh_token')).toBeNull()
+  })
+})
+
+// 挂起每个请求，由测试决定何时返回；记录每次实际发出的请求。
+function deferredAdapter() {
+  const sent: { config: InternalAxiosRequestConfig; finish: (status?: number) => void }[] = []
+  request.defaults.adapter = config => new Promise((resolve, reject) => {
+    sent.push({ config, finish: (status = 200) => status < 400 ? resolve(response(config, status)) : reject(new AxiosError('failed', String(status), config, {}, response(config, status))) })
+  })
+  return sent
+}
+function sessionEvents() {
+  const seen: string[] = []
+  const record = (event: Event) => { seen.push(event.type) }
+  window.addEventListener('erp-session', record)
+  window.addEventListener('erp-session-replaced', record)
+  onTestFinished(() => {
+    window.removeEventListener('erp-session', record)
+    window.removeEventListener('erp-session-replaced', record)
+  })
+  return seen
+}
+
+describe('请求期间登录变化', () => {
+  it('已提交的写动作照常返回结果，读取和导出结果仍作废', async () => {
+    const sent = deferredAdapter()
+    const saved = write('/business/purchases/', { supplier: 1 }, 'key-1')
+    const listed = request.get('/business/projects/')
+    const exported = request.post('/business/bom/export/', { project: 7 }, { responseType: 'blob' })
+    const listedAssertion = expect(listed).rejects.toThrow('登录状态已变化')
+    const exportedAssertion = expect(exported).rejects.toThrow('登录状态已变化')
+    await vi.waitFor(() => expect(sent).toHaveLength(3))
+    resetSession()
+    for (const entry of sent) entry.finish()
+    await expect(saved).resolves.toEqual({ ok: true })
+    await listedAssertion
+    await exportedAssertion
+  })
+
+  it('写动作遇到 401 时登录已变化：不续期也不重试，不会以新登录的身份重新提交', async () => {
+    const refresh = vi.spyOn(axios, 'post')
+    const sent = deferredAdapter()
+    const saved = write('/business/purchases/', { supplier: 1 }, 'key-1')
+    const assertion = expect(saved).rejects.toMatchObject({ response: { status: 401 } })
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    resetSession('second-access', 'second-refresh')
+    sent[0]!.finish(401)
+    await assertion
+    expect(refresh).not.toHaveBeenCalled()
+    expect(sent).toHaveLength(1)
+  })
+})
+
+// JWT 里只有 user_id 用于判断是否同一账号；签名不参与。
+function jwt(user: number, id: string) {
+  const payload = btoa(JSON.stringify({ token_type: 'refresh', user_id: user, jti: id })).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `eyJhbGciOiJIUzI1NiJ9.${payload}.signature`
+}
+// 其他标签页登录、续期或退出：只改共享存储，随后（可能稍晚）收到 storage 事件。
+function otherTab(access: string | null, refresh: string | null, notify = true) {
+  for (const [key, value] of [['access_token', access], ['refresh_token', refresh]] as const) {
+    if (value == null) shared.delete(key)
+    else shared.set(key, value)
+  }
+  if (notify) window.dispatchEvent(new StorageEvent('storage', { key: 'refresh_token', newValue: refresh }))
+}
+
+describe('跨标签页登录同步', () => {
+  it('其他标签页例行续期只换访问令牌：本页不重新载入、不退出，后续请求用新令牌', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    const seen = sessionEvents()
+    const sent = deferredAdapter()
+    const pending = request.get('/business/projects/')
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    shared.set('access_token', 'access-1-renewed')
+    window.dispatchEvent(new StorageEvent('storage', { key: 'access_token', newValue: 'access-1-renewed' }))
+    sent[0]!.finish()
+    await expect(pending).resolves.toMatchObject({ data: { ok: true } })
+    const next = request.get('/business/items/')
+    await vi.waitFor(() => expect(sent).toHaveLength(2))
+    expect(sent[1]!.config.headers.Authorization).toBe('Bearer access-1-renewed')
+    sent[1]!.finish()
+    await next
+    expect(seen).toEqual([])
+  })
+
+  it('其他标签页退出：本页按退出处理，进行中的读取作废，不再带旧令牌', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    const seen = sessionEvents()
+    const sent = deferredAdapter()
+    const pending = request.get('/business/projects/')
+    const assertion = expect(pending).rejects.toThrow('登录状态已变化')
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    otherTab(null, null)
+    expect(seen).toEqual(['erp-session'])
+    sent[0]!.finish()
+    await assertion
+    const next = request.get('/auth/me/')
+    await vi.waitFor(() => expect(sent).toHaveLength(2))
+    expect(sent[1]!.config.headers.Authorization).toBeUndefined()
+    sent[1]!.finish()
+    await next
+  })
+
+  it('其他标签页换成另一账号：本页清空原账号并整页载入，载入前不带新账号令牌发出任何请求', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    const seen = sessionEvents()
+    const sent = deferredAdapter()
+    const pending = request.get('/business/projects/')
+    const assertion = expect(pending).rejects.toThrow('登录状态已变化')
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    otherTab('access-2', jwt(2, 'b'))
+    expect(seen).toEqual(['erp-session', 'erp-session-replaced'])
+    sent[0]!.finish()
+    await assertion
+    await expect(write('/business/purchases/', { supplier: 1 }, 'key-1')).rejects.toThrow('其他标签页已切换为另一账号登录')
+    await expect(request.get('/auth/me/')).rejects.toThrow('其他标签页已切换为另一账号登录')
+    expect(sent).toHaveLength(1)
+    // 只通知一次；本页不改动另一账号的令牌。
+    otherTab('access-2', jwt(2, 'b'))
+    expect(seen).toEqual(['erp-session', 'erp-session-replaced'])
+    expect(shared.get('access_token')).toBe('access-2')
+    expect(shared.get('refresh_token')).toBe(jwt(2, 'b'))
+  })
+
+  it('本页重新登录后恢复正常请求', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    otherTab('access-2', jwt(2, 'b'))
+    await expect(request.get('/auth/me/')).rejects.toThrow('其他标签页已切换为另一账号登录')
+    resetSession('access-3', jwt(3, 'c'))
+    const sent = deferredAdapter()
+    const next = request.get('/auth/me/')
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]!.config.headers.Authorization).toBe('Bearer access-3')
+    sent[0]!.finish()
+    await next
+  })
+
+  it('同一账号在其他标签页重新登录：沿用新登录，进行中的请求和页面不受影响', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    const seen = sessionEvents()
+    const sent = deferredAdapter()
+    const pending = request.get('/business/projects/')
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    otherTab('access-1b', jwt(1, 'c'))
+    sent[0]!.finish()
+    await expect(pending).resolves.toMatchObject({ data: { ok: true } })
+    const next = request.get('/business/items/')
+    await vi.waitFor(() => expect(sent).toHaveLength(2))
+    expect(sent[1]!.config.headers.Authorization).toBe('Bearer access-1b')
+    sent[1]!.finish()
+    await next
+    expect(seen).toEqual([])
+  })
+
+  it('storage 事件尚未送到时，发请求前也能发现换号，不会带着新账号令牌提交', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    const seen = sessionEvents()
+    const sent = deferredAdapter()
+    otherTab('access-2', jwt(2, 'b'), false)
+    await expect(write('/business/purchases/', { supplier: 1 }, 'key-1')).rejects.toThrow('其他标签页已切换为另一账号登录')
+    expect(sent).toHaveLength(0)
+    expect(seen).toEqual(['erp-session', 'erp-session-replaced'])
+  })
+
+  it('续期期间其他标签页换号：续期结果不覆盖新账号令牌，也不重试原请求', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    let finish!: (value: unknown) => void
+    const refresh = vi.spyOn(axios, 'post').mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const sent = deferredAdapter()
+    const pending = request.get('/business/projects/')
+    const assertion = expect(pending).rejects.toThrow('登录状态已变化')
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    sent[0]!.finish(401)
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+    otherTab('access-2', jwt(2, 'b'), false)
+    finish({ data: { access: 'late-access-1' } })
+    await assertion
+    expect(shared.get('access_token')).toBe('access-2')
+    expect(sent).toHaveLength(1)
+  })
+
+  it('其他标签页换号后本页续期失败：不清除另一账号的登录', async () => {
+    resetSession('access-1', jwt(1, 'a'))
+    let fail!: (reason: unknown) => void
+    vi.spyOn(axios, 'post').mockImplementation(() => new Promise((_resolve, reject) => { fail = reject }))
+    const sent = deferredAdapter()
+    const pending = request.get('/business/projects/')
+    const assertion = expect(pending).rejects.toBeTruthy()
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    sent[0]!.finish(401)
+    await vi.waitFor(() => expect(fail).toBeTypeOf('function'))
+    otherTab('access-2', jwt(2, 'b'), false)
+    fail({ response: { status: 401 } })
+    await assertion
+    expect(shared.get('access_token')).toBe('access-2')
+    expect(shared.get('refresh_token')).toBe(jwt(2, 'b'))
+  })
+})
+
+describe('上传、导入与导出超时', () => {
+  it('普通请求保持 25 秒，附件上传、文件导入与各类下载放宽到数分钟', async () => {
+    const seen: [string, number | undefined][] = []
+    request.defaults.adapter = async config => {
+      seen.push([`${config.method} ${config.url}`, config.timeout])
+      return { ...response(config), data: config.responseType === 'blob' ? new Blob(['x']) : { ok: true } }
+    }
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:file')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const file = () => { const body = new FormData(); body.append('file', new Blob(['x']), 'a.xlsx'); return body }
+    await request.get('/business/projects/')
+    await write('/business/purchases/', { supplier: 1 }, 'key-1')
+    await write('/business/documents/', file(), 'key-2')
+    await write('/business/tasks/import-file/', file(), 'key-3')
+    await write('/business/tasks/import-confirm/', { token: 't' }, 'key-4')
+    await write('/business/projects/3/import-preview/', file(), 'key-5')
+    await write('/business/projects/3/bom-import-confirm/', { token: 't' }, 'key-6')
+    await download('/business/tasks/export/', '任务.xlsx')
+    await readBlob('/api/business/documents/1/file/')
+    await downloadBOM(7, [1], 'xlsx', 'BOM.xlsx')
+    await request.get('/business/projects/', { timeout: 1000 })
+    expect(seen).toEqual([
+      ['get /business/projects/', REQUEST_TIMEOUT],
+      ['post /business/purchases/', REQUEST_TIMEOUT],
+      ['post /business/documents/', TRANSFER_TIMEOUT],
+      ['post /business/tasks/import-file/', TRANSFER_TIMEOUT],
+      ['post /business/tasks/import-confirm/', TRANSFER_TIMEOUT],
+      ['post /business/projects/3/import-preview/', TRANSFER_TIMEOUT],
+      ['post /business/projects/3/bom-import-confirm/', TRANSFER_TIMEOUT],
+      ['get /business/tasks/export/', TRANSFER_TIMEOUT],
+      ['get /business/documents/1/file/', TRANSFER_TIMEOUT],
+      ['post /business/bom/export/', TRANSFER_TIMEOUT],
+      ['get /business/projects/', 1000],
+    ])
+    expect(REQUEST_TIMEOUT).toBe(25000)
+    expect(TRANSFER_TIMEOUT).toBeGreaterThanOrEqual(3 * 60_000)
   })
 })
 

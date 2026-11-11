@@ -1,9 +1,13 @@
+import hashlib
+import re
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from apps.accounts.models import User
 from apps.business.models import BOMLine, Delivery, Entry, Project, Stock, StockMove, Task, TimeEntry
@@ -802,6 +806,74 @@ class ProjectReadinessTests(ExecutionFixtures, TestCase):
             code='OUT-1', name='未参与项目', customer=self.customer, manager=self.users['admin'], status='active'
         )
         self.readiness(outside, status=404)
+
+    def warranty_with_banks(self):
+        """质保期项目：合同款经「基本户」认领结清，另有一笔「一般户」未认领流水挡住结项。"""
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        self.accept(self.deliver(project))
+        entry = project.entries.get(kind='receivable')
+
+        def bank(account, amount, **extra):
+            data = {
+                'amount': amount,
+                'date': TODAY,
+                'account': account,
+                'reference': str(uuid.uuid4()),
+                'counterparty': '客户',
+                'reason': '银行实际记录',
+                **extra,
+            }
+            return self.post('finance', 'bank-records/', data, status=201)['id']
+
+        claimed = bank('基本户', str(entry.amount))
+        self.post(
+            'finance',
+            f'bank-records/{claimed}/allocate/',
+            {'entry': entry.pk, 'amount': str(entry.amount), 'reason': '认领合同款'},
+        )
+        stray = bank('一般户', '100', project=project.pk)
+        return project, stray
+
+    BANK_BLOCKER = '项目还有未认领或未匹配的银行款项，请处理后结项。'
+
+    def test_banking_readiness_is_a_plain_read_with_the_close_wording(self):
+        project, stray = self.warranty_with_banks()
+        with CaptureQueriesContext(connection) as queries:
+            banking = self.items(self.readiness(project), 'close')['banking']
+        self.assertEqual((banking['ok'], banking['detail']), (False, self.BANK_BLOCKER))
+        # 只读检查不锁银行流水或账户，不会排在长时间导入之后，也不参与锁序。
+        locks = [q['sql'] for q in queries.captured_queries if 'FOR UPDATE' in q['sql'] or 'pg_advisory' in q['sql']]
+        self.assertEqual(locks, [])
+        denied = self.post('manager', f'projects/{project.pk}/close/', {'reason': '尝试结项'}, status=409)
+        self.assertIn(self.BANK_BLOCKER, str(denied))
+        self.post('finance', f'bank-records/{stray}/void/', {'reason': '误录'})
+        banking = self.items(self.readiness(project), 'close')['banking']
+        self.assertEqual((banking['ok'], banking['detail']), (True, '没有待确认对账单或未匹配的银行款项'))
+
+    def test_close_locks_bank_accounts_before_bank_rows(self):
+        project, stray = self.warranty_with_banks()
+        with CaptureQueriesContext(connection) as queries:
+            denied = self.post('manager', f'projects/{project.pk}/close/', {'reason': '尝试结项'}, status=409)
+        self.assertIn(self.BANK_BLOCKER, str(denied))
+        sql = [q['sql'] for q in queries.captured_queries]
+        rows = [i for i, statement in enumerate(sql) if 'FOR UPDATE' in statement and '"lean_bank_record"' in statement]
+        self.assertTrue(rows)
+        # bank_identity 锁序：项目/款项 → 排序后的账户 → 银行流水行；与导入、认领相同，避免反向等待。
+        taken = [
+            int(found.group(1))
+            for statement in sql[: rows[0]]
+            if (found := re.fullmatch(r'SELECT pg_advisory_xact_lock\(\s*(-?\d+)\)', statement))
+        ]
+        expected = sorted(
+            int.from_bytes(hashlib.sha256(f'lean-bank-account:{account}'.encode()).digest()[:8], signed=True)
+            for account in ('基本户', '一般户')
+        )
+        self.assertEqual(taken, expected)
+        self.post('finance', f'bank-records/{stray}/void/', {'reason': '误录'})
+        self.post('manager', f'projects/{project.pk}/close/', {'reason': '全部履约并结清'})
+        project.refresh_from_db()
+        self.assertEqual(project.status, 'closed')
 
     def test_receivable_status_is_a_hint_and_never_blocks_shipping(self):
         project = self.ready_project()

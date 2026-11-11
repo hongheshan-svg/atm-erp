@@ -406,7 +406,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       { key: 'hours', label: '更正后工时', hint: '填 0 撤销原工时，保留纠错记录。' },
       reason,
     ]
-    initial = r
+    // 更正原因必须由更正人填写：原记录的工作内容不能预填进来，否则不写原因也能提交。
+    initial = { date: r.date, hours: r.hours }
   }
   if (name === '改计划日期') {
     fields = [{ ...date('due_date', '新的计划完成日期'), hint: `${r.due_date ? `原计划 ${r.due_date}` : '原未设计划日期'}。执行人和专业不变，保存后通知执行人。` }, reason]

@@ -1,7 +1,6 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db import transaction
 from django.db.models import Count, DecimalField, Exists, Min, OuterRef, Subquery, Sum, Value, prefetch_related_objects
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
@@ -429,10 +428,9 @@ def readiness(user, project):
         result['close'] = close_checks(project)
         from .banking import check_close
 
-        # 对账与银行款项沿用结项时的同一函数；它会短暂锁定相关银行流水，放在只读事务里立即释放。
+        # 对账与银行款项沿用结项时的同一函数；只读检查不锁账户或流水，不会排在导入之后等待。
         try:
-            with transaction.atomic():
-                check_close(project)
+            check_close(project, lock=False)
             result['close'].append(
                 check(
                     'banking', True, '对账单与银行款项', '没有待确认对账单或未匹配的银行款项', target={'tab': 'finance'}
@@ -1111,7 +1109,7 @@ def close(actor, key, project_id, data):
                 raise Conflict(item['message'])
         from .banking import check_close
 
-        check_close(project)
+        check_close(project, lock=True)
         reason = text(data, 'reason')
         project.status, project.close_reason = 'closed', reason
         save(project, user)
