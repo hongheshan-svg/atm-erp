@@ -29,6 +29,7 @@ onMounted(async () => {
       :project-id="projectId"
       :status="projects.find((p) => p.id === projectId)?.status"
       :can-edit-bom="projects.find((p) => p.id === projectId)?.can_edit_bom"
+      :initial-view="route.query.view === 'purchase' ? 'purchase' : undefined"
       :revision="revision"
       @changed="refresh"
     />

@@ -223,7 +223,7 @@ it('交接待办：待启动项目、已批准待下单、缺料项目与逾期�
     ['电气图纸确认', '已逾期', '/projects/5?tab=tasks&resource=tasks&focus=21'],
     ['ATM2682 新上料线', '待启动', '/projects/82'],
     ['PO000049', '待下单', '/projects/82?tab=purchases&resource=purchases&focus=49'],
-    ['ATM2681 旧线', '缺料', '/purchases?project=81'],
+    ['ATM2681 旧线', '缺料', '/bom?project=81&view=purchase'],
   ])
   expect(wrapper.text()).toContain('缺任务计划、BOM、预算')
   expect(wrapper.text()).toContain('缺料 3 行')

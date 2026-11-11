@@ -261,6 +261,10 @@ PREVIOUS_CODE_COLUMNS = {resource: SCHEMAS[resource][1][:] for resource in MANUA
 for resource, label in MANUAL_CODE_LABELS.items():
     SCHEMAS[resource][1].append((label, 'code'))
 
+# 超 BOM 原因列加在最后；不含此列的上一版采购模板仍可导入，未超出缺口时无需填写。
+PREVIOUS_PURCHASE_COLUMNS = SCHEMAS['purchases'][1][:]
+SCHEMAS['purchases'][1].append(('超 BOM 采购原因', 'over_bom_reason'))
+
 TABLE_KEYS = {
     'item': ['item_code', 'item_name'],
     'project': ['project_name'],
@@ -487,6 +491,7 @@ def accepted_schemas(resource):
         PREVIOUS_SCHEMAS[resource],
         *([PREVIOUS_CODE_COLUMNS[resource]] if resource in PREVIOUS_CODE_COLUMNS else []),
         *([PREVIOUS_TASK_COLUMNS] if resource == 'tasks' else []),
+        *([PREVIOUS_PURCHASE_COLUMNS] if resource == 'purchases' else []),
         old,
         *[old[:size] for size in sizes.get(resource, [])],
         *([PREVIOUS_ITEM_COLUMNS] if resource == 'items' else []),

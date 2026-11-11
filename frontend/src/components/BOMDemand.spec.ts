@@ -317,6 +317,23 @@ it('采购草稿照常扣缺料但在途只算已批准，单独标「待批」�
   batchMode.value = true
 })
 
+it('工作台缺料直达：带 initialView=purchase 时兼任工程师的管理员也直接落在采购缺料视图', async () => {
+  user.value = { roles: ['admin'] }
+  const lines = [
+    { bom_line: 1, item: 1, item_code: 'A', item_name: '缺料件', assembly_unit: '01', quantity: '2', issued: '0', incoming: '0', unapproved: '0', available: '0', shortage: '2', required_date: '2999-01-01' },
+    { bom_line: 2, item: 2, item_code: 'B', item_name: '已配齐', assembly_unit: '01', quantity: '1', issued: '0', incoming: '0', unapproved: '0', available: '1', shortage: '0', required_date: '2999-01-01' },
+  ]
+  const direct = mountFull(lines, { initialView: 'purchase' })
+  await flushPromises()
+  expect((direct.get('input[type=radio][value="purchase"]').element as HTMLInputElement).checked).toBe(true)
+  expect(names(direct)).toEqual(['缺料件'])
+  direct.unmount()
+  const normal = mountFull(lines)
+  await flushPromises()
+  expect((normal.get('input[type=radio][value="prepare"]').element as HTMLInputElement).checked).toBe(true)
+  normal.unmount()
+})
+
 it('编制视图按单元自然排序，单元概览可点筛选，表头可按需求日期排序', async () => {
   user.value = { roles: ['mechanical_engineer'] }
   const wrapper = mountFull([

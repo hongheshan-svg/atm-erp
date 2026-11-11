@@ -36,7 +36,7 @@ const notes: Record<string, string> = {
   handover_projects: '本人负责的新项目，尽快排任务计划、建 BOM、设预算', supervised_tasks: '按负责专业确认完成，并按人员和日期登记实际工时', tasks: '按计划推进项目任务', production_tasks: '参与项目的装配、调试、安装与售后任务，安排人员并跟进完成', overdue_purchases: '跟进超出承诺交期的未到货物料', approvals: '确认采购，衔接后续执行',
   prepayments: '按合同条款核准预付款', settlements: '处理到期款项与退款', reconciliations: '核对差异，确认可结算额度',
   bank_records: '核实户名和用途后认领或匹配', receipts: '核对到货，及时更新库存', drafts: '完善采购明细后提交',
-  approved_purchases: '归档采购合同、向供应商下单并跟进到货', shortage_projects: '项目 BOM 仍有缺料，进入后用「从 BOM 多选下单」补齐',
+  approved_purchases: '归档采购合同、向供应商下单并跟进到货', shortage_projects: '项目 BOM 仍有缺料，点项目直接打开 BOM 缺料清单，勾选后「从 BOM 多选下单」',
   sale_receivables: '本人销售合同已过到期日的应收，联系客户回款', quoted_sales: '跟进客户确认，及时签约', sales: '跟进报价、签约、交付和回款',
 }
 const count = (key: string) => work.value[key]?.count || 0
@@ -75,8 +75,8 @@ function target(key: string, row: Row) {
   // 销售经理看本人合同的逾期应收：落到该销售单，从「交付与回款」查看；收款由财务登记。
   if (key === 'sale_receivables') return { path: '/sales', query: { search: row.sale_code || '' } }
   if (key === 'handover_projects') return { path: `/projects/${row.project}` }
-  // 缺料项目直接进入该项目的采购页，用「从 BOM 多选下单」补缺。
-  if (key === 'shortage_projects') return { path: '/purchases', query: { project: String(row.project) } }
+  // 缺料项目直接打开该项目 BOM 的采购缺料视图（默认只看缺料），勾选后「从 BOM 多选下单」。
+  if (key === 'shortage_projects') return { path: '/bom', query: { project: String(row.project), view: 'purchase' } }
   const resource = ['tasks', 'production_tasks', 'supervised_tasks'].includes(key) ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
   if (!row.project) return { ...collection(key), query: { ...collection(key).query, resource, focus: row.id } }
   return { path: `/projects/${row.project}`, query: { tab: resource === 'tasks' ? 'tasks' : resource === 'entries' ? 'finance' : 'purchases', resource, focus: row.id } }

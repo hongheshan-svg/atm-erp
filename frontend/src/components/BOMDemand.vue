@@ -23,7 +23,7 @@ import { canDeleteRecords, deletionLimit } from '../modules/deletions'
 import { useBatchSelection } from '../utils/batch-selection'
 import { quantityText as qty } from '../utils/quantity'
 const qtyCell = (_row: Row, _column: unknown, value: unknown) => qty(value)
-const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean }>()
+const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean; initialView?: 'prepare' | 'purchase' }>()
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
 const preview = ref<Row | null>(null)
@@ -36,7 +36,8 @@ const importResult = ref<HTMLElement>()
 const projectContext = ref<Row | null>(null)
 const mismatch = ref<ReturnType<typeof templateMismatch>>(null)
 const destination = computed(() => mismatch.value ? importDestination(mismatch.value.resource, props.projectId) : null)
-const view = ref<'prepare' | 'purchase'>(bomEditor({ can_edit_bom: props.canEditBom }) || engineer() ? 'prepare' : 'purchase')
+// 工作台「缺料待采购」带 view=purchase 进来时直接落在采购缺料视图，兼任工程师的采购也不必再切换。
+const view = ref<'prepare' | 'purchase'>(props.initialView || (bomEditor({ can_edit_bom: props.canEditBom }) || engineer() ? 'prepare' : 'purchase'))
 const fullColumns = ref(false)
 // 手机宽度（≤600px）走窄屏模式：明细只留勾选、物料（名称、编码与摘要）和操作，不再左右翻；筛选和说明默认收起。
 const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)

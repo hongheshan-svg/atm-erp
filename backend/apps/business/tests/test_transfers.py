@@ -687,3 +687,59 @@ class TransferTests(BusinessFixtures, TestCase):
         purchase = PurchaseOrder.objects.get()
         self.assertEqual(purchase.status, 'draft')
         self.assertEqual(list(purchase.lines.order_by('id').values_list('quantity', 'unit_price')), [(2, 10), (3, 20)])
+
+    def test_purchase_import_over_bom_requires_group_reason_and_keeps_previous_template(self):
+        project = self.active_project()
+        BOMLine.objects.create(project=project, item=self.item, quantity=1, assembly_unit='上料')
+
+        def upload(rows, columns=None):
+            columns = columns or transfers.SCHEMAS['purchases'][1]
+            stream = io.StringIO()
+            writer = csv.writer(stream)
+            writer.writerow([label for label, _ in columns])
+            writer.writerows([[row.get(key, '') for _, key in columns] for row in rows])
+            return self.clients['admin'].post(
+                '/api/business/purchases/import-file/',
+                {'file': SimpleUploadedFile('rows.csv', stream.getvalue().encode())},
+                format='multipart',
+            )
+
+        row = {
+            'group': 'G1',
+            'project': project.code,
+            'supplier': 'S1',
+            'due_date': TODAY,
+            'item': 'I1',
+            'quantity': '3',
+            'unit_price': '10',
+        }
+        self.assertEqual(transfers.SCHEMAS['purchases'][1][-1], ('超 BOM 采购原因', 'over_bom_reason'))
+        # 不填原因：超出缺口的行被拒绝，错误落在原因列并写明超出数量。
+        rejected = upload([row])
+        self.assertEqual(rejected.status_code, 200, rejected.data)
+        self.assertFalse(rejected.data['can_import'])
+        error = rejected.data['errors'][0]
+        self.assertEqual((error['row'], error['fields']), (2, ['over_bom_reason']))
+        self.assertIn('超 BOM 采购原因', error['message'])
+        self.assertIn('超出 2', error['message'])
+        # 上一版模板（没有原因列）仍可识别，超出缺口时同样提示填写原因。
+        previous = upload([row], transfers.PREVIOUS_PURCHASE_COLUMNS)
+        self.assertEqual(previous.status_code, 200, previous.data)
+        self.assertFalse(previous.data['can_import'])
+        # 同组原因不一致整组拒绝。
+        other = Item.objects.create(code='SPARE', name='备件')
+        mixed = upload(
+            [
+                {**row, 'over_bom_reason': '备件随设备发运'},
+                {**row, 'item': other.code, 'quantity': '1', 'over_bom_reason': '另一原因'},
+            ]
+        )
+        self.assertEqual(mixed.status_code, 400, mixed.data)
+        self.assertIn('分组号G1的单据信息不一致', str(mixed.data))
+        accepted = upload([{**row, 'over_bom_reason': '备件随设备发运'}])
+        self.assertTrue(accepted.data['can_import'], accepted.data)
+        self.commit('purchases', accepted)
+        purchase = PurchaseOrder.objects.get()
+        log = AuditLog.objects.get(resource=f'purchaseorder:{purchase.pk}', operation='purchase.create')
+        self.assertEqual(log.detail['over_bom_reason'], '备件随设备发运')
+        self.assertEqual(log.detail['over_bom'][0]['excess'], '2.000')
