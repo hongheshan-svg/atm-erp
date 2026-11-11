@@ -1,10 +1,11 @@
+import { businessDate } from './fixtures'
 import { test, expect, login } from './fixtures'
 
 test('签署版本归档后保持原资料，整套打印且经营关注只读展开', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const headers = { Authorization: `Bearer ${token}` }, prefix = `版本验收${Date.now()}`
-  const day = new Date().toISOString().slice(0, 10)
+  const day = businessDate()
   async function post(path: string, data: object) {
     const response = await page.request.post('/api/business/' + path, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data })
     expect(response.status(), await response.text()).toBeLessThan(300)

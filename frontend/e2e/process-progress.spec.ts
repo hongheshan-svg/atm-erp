@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { test, expect, login, openRowAction } from './fixtures'
 
 test('项目相关人员和销售可查看流程节点与跟进人员，原单权限继续隔离', async ({ page }, info) => {
@@ -6,8 +7,8 @@ test('项目相关人员和销售可查看流程节点与跟进人员，原单�
   const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': '' }
   const suffix = `${Date.now()}-${info.project.name}`
   const password = 'Progress-Isolated-2026'
-  const today = new Date().toISOString().slice(0, 10)
-  const due = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const today = businessDate()
+  const due = businessDate(1)
   const post = async (path: string, data: object, auth = headers) => {
     const response = await page.request.post(`/api/${path}`, { headers: { ...auth, 'Idempotency-Key': crypto.randomUUID() }, data })
     expect(response.ok(), await response.text()).toBeTruthy()

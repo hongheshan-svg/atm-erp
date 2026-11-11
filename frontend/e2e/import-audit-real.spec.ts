@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { test, expect, login, openImport, expectHttpError } from './fixtures'
 
 test('真实导入：项目上下文、字段纠错、确认重验、内容去重及准确结果入口', async ({ page }, info) => {
@@ -20,8 +21,7 @@ test('真实导入：项目上下文、字段纠错、确认重验、内容去�
   const createdProject = await post('business/projects/', { name: `导入验证项目${suffix}`, customer: customer.id, manager: actor.id })
   const project = await get(`business/projects/${createdProject.id}/`)
   const task = await post('business/tasks/', { project: project.id, kind: 'design', title: '导入工时任务', assignee: actor.id })
-  const now = new Date()
-  const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+  const today = businessDate()
   async function preview(resource: string, row: Record<string, unknown>, filename: string) {
     const schema = await get(`business/${resource}/import-schema/`)
     const csv = [schema.columns.map((column: { label: string }) => column.label), schema.columns.map((column: { key: string }) => row[column.key] ?? '')]

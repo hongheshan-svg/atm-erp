@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { randomUUID } from 'node:crypto'
 import { test, expect, login, detailAction, type Page } from './fixtures'
 
@@ -49,7 +50,7 @@ async function fixture(page: Page) {
     name: `付款易用性-${suffix}`, customer: partner.id, manager: me.id,
   }, 201)
   const purchase = await admin.post(business + 'purchases/', {
-    project: project.id, supplier: partner.id, due_date: '2026-12-31', payment_term: 'month30',
+    project: project.id, supplier: partner.id, due_date: businessDate(60), payment_term: 'month30',
     lines: [{ item: item.id, quantity: '5', unit_price: '100' }],
   }, 201)
   await admin.post(business + `purchases/${purchase.id}/submit/`, {}, 200)
@@ -150,7 +151,7 @@ test('U14 有效核准后在付款表单上传并选中凭证，实际付款及�
   await expect(form.locator('.action-blocker')).toHaveCount(0)
   await expect(form.getByLabel('已确认对账 / 预付款核准', { exact: true })).toHaveValue(String(statement.id))
   await form.getByLabel('金额（元）', { exact: true }).fill(paymentAmount)
-  await form.getByLabel('日期', { exact: true }).fill(new Date().toISOString().slice(0, 10))
+  await form.getByLabel('日期', { exact: true }).fill(businessDate())
   await form.getByLabel('原因 / 说明', { exact: true }).fill('隔离验收：按核准登记一次真实预付')
   await form.getByLabel('结算方式', { exact: true }).selectOption('bank')
   await form.getByLabel('账户标识', { exact: true }).fill('隔离测试账户')

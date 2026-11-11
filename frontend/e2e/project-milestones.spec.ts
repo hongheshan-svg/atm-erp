@@ -23,6 +23,11 @@ async function taskDetail(page: Page, row: Locator, expected: [label: string, va
   await close()
 }
 
+// 计划日期按业务日期往后推算，不写死具体日子，测试不会随日历过期。
+const nodeDue = businessDate(40)
+const stageDue = businessDate(45)
+const replanned = businessDate(38)
+
 test('项目六阶段模板支持一键生成、并行任务、日期调整和增删节点', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
@@ -67,9 +72,9 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await expect(dialog).toContainText('项目里程碑 · 20 行')
   await selectExecutors(page, dialog.locator('.line-fields').first(), [me.display_name || me.username, colleague.display_name])
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(info.project.use.viewport!.width)
-  await dialog.getByLabel('计划完成日期', { exact: true }).first().fill('2026-12-20')
+  await dialog.getByLabel('计划完成日期', { exact: true }).first().fill(nodeDue)
   // 按阶段批量填日期：同阶段未单独填写的节点沿用阶段日期，行内已填的不被覆盖。
-  await dialog.getByLabel(/计划完成$/).first().fill('2026-12-25')
+  await dialog.getByLabel(/计划完成$/).first().fill(stageDue)
   await page.screenshot({ path: info.outputPath('milestone-template.png'), animations: 'disabled' })
   const generated = page.waitForResponse(response => response.url().includes('/tasks/apply-milestones/') && response.request().method() === 'POST')
   await dialog.getByRole('button', { name: '确认生成里程碑', exact: true }).click()
@@ -77,11 +82,11 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await expect(dialog).toHaveCount(0)
   let tasks = (await get('business/tasks/?project=' + project + '&page_size=100')).results
   expect(tasks).toHaveLength(21)
-  expect(tasks.find((row: any) => row.milestone === 'design_3d').due_date).toBe('2026-12-20')
+  expect(tasks.find((row: any) => row.milestone === 'design_3d').due_date).toBe(nodeDue)
   const firstNode = tasks.find((row: any) => row.milestone === 'design_3d')
   const stagePeers = tasks.filter((row: any) => row.kind === firstNode.kind && row.id !== firstNode.id && row.milestone && !row.system_managed)
   expect(stagePeers.length).toBeGreaterThan(0)
-  expect(stagePeers.map((row: any) => row.due_date)).toEqual(stagePeers.map(() => '2026-12-25'))
+  expect(stagePeers.map((row: any) => row.due_date)).toEqual(stagePeers.map(() => stageDue))
   expect(tasks.filter((row: any) => row.system_managed)).toHaveLength(3)
   expect(tasks[0].milestone).toBe('design_3d')
   expect(tasks.find((row: any) => row.milestone === 'design_3d').assignees).toEqual([me.id, colleague.id])
@@ -92,11 +97,11 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: '长交期' })
   await expect(row).toHaveCount(1)
   await openRowAction(page, row, '重新分配')
-  await dialog.getByLabel('计划完成日期', { exact: true }).fill('2026-12-18')
+  await dialog.getByLabel('计划完成日期', { exact: true }).fill(replanned)
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('关键采购计划调整')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(row).toContainText('2026-12-18')
+  await expect(row).toContainText(replanned)
   await openRowAction(page, row, '开始任务')
   const actualStart = businessDate(-2)
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(actualStart)

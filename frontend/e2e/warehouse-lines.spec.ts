@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { test, expect, login, openRowAction, type Page } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 const dialog = (page: Page) => page.getByRole('dialog')
@@ -34,7 +35,7 @@ test('仓管收货及项目出库展示完整物料资料并逐条保存备注',
     { item: item.id, quantity: '3', assembly_unit: '下料单元', change_note: '首版' },
   ] })
   const bom = await api(page, `business/projects/${project.id}/demand/`)
-  let purchase = await api(page, 'business/purchases/', { project: project.id, supplier: supplier.id, due_date: '2026-12-31', lines: bom.lines.map((line: { bom_line: number; quantity: string }) => ({ item: item.id, bom_line: line.bom_line, quantity: line.quantity, unit_price: '10' })) })
+  let purchase = await api(page, 'business/purchases/', { project: project.id, supplier: supplier.id, due_date: businessDate(60), lines: bom.lines.map((line: { bom_line: number; quantity: string }) => ({ item: item.id, bom_line: line.bom_line, quantity: line.quantity, unit_price: '10' })) })
   await api(page, `business/purchases/${purchase.id}/submit/`, {})
   await api(page, `business/purchases/${purchase.id}/approve/`, { reason: '隔离验收管理员审批例外' })
   project = await api(page, `business/projects/${project.id}/`)

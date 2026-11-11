@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -9,7 +10,7 @@ const contexts: BrowserContext[] = []
 const errors: string[] = []
 const d = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
-const date = () => new Date().toISOString().slice(0, 10)
+const date = () => businessDate()
 async function api(page: Page, path: string, data?: Record<string, unknown>, status = 200) {
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }

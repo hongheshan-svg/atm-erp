@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { cancelEditing, choosePeople } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, expectHttpError, login, detailAction, type Page, type Locator, openRowAction } from './fixtures'
@@ -56,7 +57,7 @@ test('对账差异阻断确认，银行到账认领匹配和多汇退回不重�
   // 报价保存后列表重新加载；等本行显示「已报价」再签约，手机上「签约」按钮随刷新出现在名称格里。
   await expect(saleRow).toContainText('已报价')
   await action(page, saleRow, '签约')
-  await dialog(page).getByLabel('收款到期日', { exact: true }).fill('2026-12-31')
+  await dialog(page).getByLabel('收款到期日', { exact: true }).fill(businessDate(60))
   const signed = await save(page, `/sales/${sale.id}/sign/`)
   const id = signed.project
   const entry = (await read(page, `entries/?project=${id}`)).results[0]

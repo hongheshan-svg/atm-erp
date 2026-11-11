@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { test, expect, login } from './fixtures'
 
 test('自编BOM编号保留前导零和厂家型号，确认后采购合同沿用原文', async ({ page }, info) => {
@@ -42,7 +43,7 @@ test('自编BOM编号保留前导零和厂家型号，确认后采购合同沿�
   expect(item.specification).toBe(specification)
   const supplier = await post('partners/', { name: '编号供应商' + suffix, kind: 'supplier' })
   const po = await post('purchases/', {
-    code: 'PO-' + suffix, project: project.id, supplier: supplier.id, due_date: new Date().toISOString().slice(0, 10),
+    code: 'PO-' + suffix, project: project.id, supplier: supplier.id, due_date: businessDate(),
     lines: [{ item: item.id, quantity: '2', unit_price: '10' }],
   })
   const contract = await get('business/purchases/' + po.id + '/contract-preview/')

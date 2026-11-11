@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { test, expect, login, openRowAction, expectHttpError, goToListPage } from './fixtures'
 
 // 删除入口默认收起，本文件的用例都在「批量管理」开启的状态下进行；开关本身由下面第一条用例验证。
@@ -49,7 +50,7 @@ test('BOM删除失败自动定位具体单元，完整列始终可横向查看',
   await post('projects/' + project.id + '/revise-bom/', { expected_revision: initial.revision, lines: Array.from({ length: 160 }, (_, i) => ({ item: item.id, assembly_unit: '单元' + String(i + 1).padStart(3, '0'), quantity: '1', change_note: '隔离定位验收' })) })
   const before = await get(demandPath)
   const protectedLine = before.lines.find((row: { assembly_unit: string }) => row.assembly_unit === '单元133')
-  await post('purchases/', { project: project.id, supplier: partner.id, due_date: '2026-12-31', lines: [{ item: item.id, bom_line: protectedLine.bom_line, quantity: '1', unit_price: '10' }] })
+  await post('purchases/', { project: project.id, supplier: partner.id, due_date: businessDate(60), lines: [{ item: item.id, bom_line: protectedLine.bom_line, quantity: '1', unit_price: '10' }] })
   await page.goto('/erp/bom?project=' + project.id)
   const bom = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
   await bom.getByLabel('每页显示条目').selectOption('10')
@@ -114,7 +115,7 @@ test('已整理的收款冲销后重新出现在待收列表并保留删除和�
   const headers = { Authorization: `Bearer ${token}` }
   const suffix = `${Date.now()}-${info.project.name}`
   const title = `冲销恢复${suffix}`
-  const today = new Date().toISOString().slice(0, 10)
+  const today = businessDate()
   const get = async (path: string) => {
     const response = await page.request.get(`/api/${path}`, { headers })
     expect(response.ok(), await response.text()).toBeTruthy()
@@ -407,7 +408,7 @@ test('采购订单可跨页全选21张草稿并整批删除', async ({ page }, i
   const partner = await post('partners/', { name: '批量采购验收' + suffix, kind: 'both' })
   const project = await post('projects/', { name: '跨页采购' + suffix, customer: partner.id, manager: me.id })
   const item = await post('items/', { name: '跨页采购用料' + suffix, unit: '件' })
-  for (let i = 0; i < 21; i++) await post('purchases/', { project: project.id, supplier: partner.id, due_date: '2026-12-31', lines: [{ item: item.id, quantity: '1', unit_price: '10' }] })
+  for (let i = 0; i < 21; i++) await post('purchases/', { project: project.id, supplier: partner.id, due_date: businessDate(60), lines: [{ item: item.id, quantity: '1', unit_price: '10' }] })
   await page.goto('/erp/projects/' + project.id + '?tab=purchases')
   const allPage = page.getByRole('checkbox', { name: /^选择本页/ })
   await page.getByLabel('每页显示条目').selectOption('10')

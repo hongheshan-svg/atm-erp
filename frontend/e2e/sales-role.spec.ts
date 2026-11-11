@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, openRowAction, choosePeople } from './fixtures'
 import { selectRoles } from './role-helpers'
@@ -96,7 +97,7 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await manager.press('Escape')
   await expect(people).toHaveCount(0)
   await choose('项目负责人', '管理员')
-  await dialog().getByLabel('收款到期日', { exact: true }).fill('2026-12-31')
+  await dialog().getByLabel('收款到期日', { exact: true }).fill(businessDate(60))
   await save()
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const doc = await page.request.get(`/api/business/documents/${documentId}/`, { headers: { Authorization: `Bearer ${token}` } })

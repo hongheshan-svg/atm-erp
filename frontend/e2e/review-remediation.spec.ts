@@ -85,7 +85,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   // 报价保存后列表重新加载；等本行显示「已报价」再签约，手机上「签约」按钮随刷新出现在名称格里。
   await expect(row(manager, name)).toContainText('已报价')
   await action(manager, row(manager, name), '签约')
-  await fill(manager, '收款到期日', '2026-12-31')
+  await fill(manager, '收款到期日', businessDate(60))
   await save(manager)
   const sales = (await read(manager, `sales/?search=${name}`)).results[0]
   const id = sales.project
@@ -123,8 +123,8 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
   await selectRemoteOption(purchaseDraft.getByLabel('供应商', { exact: true }), { text: `supplier${suffix}` })
   await purchaseDraft.getByLabel('结算方式', { exact: true }).selectOption('manual')
-  await purchaseDraft.getByLabel('付款到期日', { exact: true }).fill('2026-12-31')
-  await purchaseDraft.getByLabel('交期', { exact: true }).fill('2026-12-31')
+  await purchaseDraft.getByLabel('付款到期日', { exact: true }).fill(businessDate(60))
+  await purchaseDraft.getByLabel('交期', { exact: true }).fill(businessDate(60))
   await purchaseDraft.getByLabel('含税单价（元）', { exact: true }).fill('100')
   const savePurchase = purchaseDraft.getByRole('button', { name: '保存采购草稿', exact: true })
   await savePurchase.scrollIntoViewIfNeeded()
@@ -320,7 +320,7 @@ test('整单取消55条采购未收余量，只填一次原因并保留已收货
     const item = await request('business/items/', { name: `整单物料${suffix}-${i}`, unit: '件' })
     lines.push({ item: item.id, quantity: '2', unit_price: '10' })
   }
-  const created = await request('business/purchases/', { project: project.id, supplier: supplier.id, due_date: '2026-12-31', lines })
+  const created = await request('business/purchases/', { project: project.id, supplier: supplier.id, due_date: businessDate(60), lines })
   await request(`business/purchases/${created.id}/submit/`, {})
   await request(`business/purchases/${created.id}/approve/`, { reason: '隔离验收管理员审批例外' })
   let order = await read(page, `purchases/${created.id}/`)
