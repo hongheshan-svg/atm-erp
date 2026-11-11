@@ -1,7 +1,7 @@
 import { disciplineField } from './milestones'
 import { codeField } from './shared'
 import { today } from '../forms'
-import { daysUntil, executorField, milestoneFields, taskAssignees, taskElapsedLabel, taskVarianceLabel } from './milestones'
+import { daysUntil, executorField, milestoneFields, personField, taskAssignees, taskElapsedLabel, taskVarianceLabel } from './milestones'
 import type { Catalog } from '../catalog'
 import { customer } from './shared'
 import { participants } from './shared'
@@ -10,7 +10,8 @@ export const projectFields = (c: Catalog): Field[] => [
   t('name', '项目名称'),
   customer(),
   select('manager', '负责人', options(c.users.filter(u => hasRoles(u, ['admin', 'manager'])))),
-  { key: 'members', label: '项目成员', type: 'multi', optional: true, options: options(c.users) },
+  // 成员决定谁能看到项目、被派工和当专业主管：用可搜索的多选，单击即可增减，不会误清空原有成员。
+  { key: 'members', label: '项目成员', type: 'multi', searchableMulti: true, optional: true, options: options(c.users) },
   t('requirements', '需求说明', true),
   date('due_date', '计划交期', true),
   { ...qty, key: 'equipment_quantity', label: '设备数量', initial: 1 },
@@ -40,7 +41,6 @@ import { select } from './shared'
 import { reason } from './shared'
 import { qty } from './shared'
 import { C } from './shared'
-import { person } from './shared'
 import { endpoint, ledgerStatus } from './shared'
 import { display } from './shared'
 // 列表上的任务完成进度；尚未安排任务时明确说明，而不是显示 0/0。
@@ -180,7 +180,8 @@ export function actionNames(resource: string, r: Row): string[] {
       if (r.status === 'done' && !r.system_managed && r.kind !== 'acceptance') a.push(r.completed_date ? '更正完成日期' : '补录完成日期')
     }
     if (taskManager(r)) {
-      if (r.status === 'open') a.push('重新分配')
+      // 改期是最常见的调整，单独给入口；重新分配仍可同时改执行人、专业和日期。
+      if (r.status === 'open') a.push('改计划日期', '重新分配')
       // 名称和完成要求写错时直接更正，不必取消重建；业务同步节点按实际记录生成，不在这里改。
       if (['open', 'done'].includes(r.status) && !r.system_managed) a.push('编辑任务')
       if (!['install', 'acceptance'].includes(r.kind) && (r.can_cancel ?? (manager() && r.status === 'open'))) a.push('取消任务')
@@ -287,6 +288,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     补录完成日期: 'completion-date',
     更正完成日期: 'completion-date',
     重新分配: 'assign',
+    改计划日期: 'reschedule',
     取消任务: 'cancel',
     重开任务: 'reopen',
     验收: 'accept',
@@ -312,14 +314,16 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       codeField('交付单号'),
       qty,
       date(),
-      person(c, 'installer', '安装人', scope),
-      person(c, 'acceptor', '验收负责人', scope),
+      personField(c, 'installer', '安装人', scope),
+      personField(c, 'acceptor', '验收负责人', scope),
       { ...date('install_due_date', '安装完成期限', true), hint: '可选，写入本批自动生成的安装任务；不得早于发货日期，留空则不设期限。' },
       { ...date('acceptance_due_date', '验收期限', true), hint: '可选，写入本批验收任务；流程进度和工作台按期限提示逾期，不得早于发货日期。' },
       t('note', '说明', true),
       { key: 'materials', label: '本批配套物料（多单元必填；同配置可留空按比例）', type: 'rows', optional: true, fields: [{ key: 'item', label: '物料', type: 'select', options: shipMaterialOptions((await read(`/business/projects/${r.id}/demand/`)).lines) }, { ...qty, numeric: { scale: 3, min: 0.001 } }] },
     ]
-    initial = { quantity: '1', installer: r.manager, acceptor: r.manager, materials: [] }
+    // 安装人默认取本项目生产专业主管，未指定时回落项目经理。
+    const producer = r.task_supervisors?.production
+    initial = { quantity: '1', installer: producer && inScope(producer) ? producer : r.manager, acceptor: r.manager, materials: [] }
   }
   if (name === '登记售后') {
     const managesProject = manager() && r.can_manage !== false
@@ -334,7 +338,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       date(),
       t('title', '售后事项'),
       t('description', '说明', true),
-      person(c, 'assignee', '执行人', scope),
+      personField(c, 'assignee', '执行人', scope),
       date('due_date', '维修截止日期', true),
       ...(managesProject ? [{
         key: 'fee',
@@ -383,7 +387,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     initial = { started_date: name === '开始任务' ? today() : r.started_date || '' }
   }
   if (name === '登记工时') {
-    fields = [date(), t('hours', '工时'), optionalNote('工作内容'), person(c, 'user', '人员', scope)]
+    fields = [date(), t('hours', '工时'), optionalNote('工作内容'), personField(c, 'user', '人员', scope)]
     // 原执行人若已被移出项目，就不预选一个注定被服务端拒绝的人。
     initial = { user: taskAssignees(r).includes(user.value?.id) ? user.value?.id : inScope(r.assignee) ? r.assignee : '' }
   }
@@ -394,6 +398,10 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       reason,
     ]
     initial = r
+  }
+  if (name === '改计划日期') {
+    fields = [{ ...date('due_date', '新的计划完成日期'), hint: `${r.due_date ? `原计划 ${r.due_date}` : '原未设计划日期'}。执行人和专业不变，保存后通知执行人。` }, reason]
+    initial = { due_date: r.due_date || '' }
   }
   if (name === '重新分配') {
     fields = [executorField(c, scope), disciplineField(), date('due_date', '计划完成日期', true), reason]

@@ -668,6 +668,38 @@ def edit_task(actor, key, task_id, data):
     return task_action(actor, key, 'task.edit', task_id, data, task_management_roles(source.kind), execute)
 
 
+def reschedule_task(actor, key, task_id, data):
+    """只改计划完成日期：权限与重新分配相同，执行人和专业不变；与重新分配里改日期一样必须写原因。"""
+    source = lookup(Task, task_id)
+
+    def execute(user, project, task):
+        fields(data, {'due_date', 'reason'})
+        state(task, {'open'})
+        due_date = day(data, 'due_date')
+        if due_date == task.due_date:
+            raise ValidationError({'due_date': '新的计划完成日期与原日期相同。'})
+        if task.delivery_id and task.kind in {'install', 'acceptance'} and due_date < task.delivery.shipped_date:
+            raise ValidationError({'due_date': '安装或验收截止日期不能早于本批发货日期。'})
+        reason = text(data, 'reason')
+        previous = task.due_date
+        task.due_date = due_date
+        save(task, user)
+        from .milestones import sync_milestones
+
+        sync_milestones(user, project)
+        notify_task(user, task, '任务计划完成日期已调整')
+        return audit(
+            user,
+            'task.reschedule',
+            task,
+            reason=reason,
+            previous_due_date=previous.isoformat() if previous else None,
+            due_date=due_date.isoformat(),
+        )
+
+    return task_action(actor, key, 'task.reschedule', task_id, data, task_management_roles(source.kind), execute)
+
+
 def log_time(actor, key, task_id, data):
     def authorize(user, task):
         require_confirmation(user, task)

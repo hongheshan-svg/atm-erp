@@ -14,7 +14,7 @@ const summary = (extra = {}) => ({
   stages: [
     stage('design', '设计阶段', { total: 7, done: 7 }),
     stage('purchase', '采购阶段'),
-    stage('assembly', '组装阶段', { total: 2, done: 1, overdue: 1 }),
+    stage('assembly', '装配阶段', { total: 2, done: 1, overdue: 1 }),
     stage('test', '调试阶段'),
     stage('shipping', '发货阶段', { shipped: 2, equipment: 2 }),
     stage('site', '客户终验收阶段', { total: 4, done: 4 }),

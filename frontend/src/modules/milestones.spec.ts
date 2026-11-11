@@ -54,7 +54,7 @@ it('单项任务支持六阶段和联动节点，自动节点不显示手动完�
   expect(command.fields.find(field => field.key === 'kind')?.options).toEqual(stages)
   expect(command.fields.find(field => field.key === 'milestone')?.optionsFor?.({ kind: 'design' })).toHaveLength(1)
   const row = { id: 1, status: 'open', kind: 'shipping', system_managed: true, can_manage: true, can_cancel: true, can_reopen: false }
-  expect(actionNames('tasks', row)).toEqual(['查看工时', '重新分配', '取消任务'])
+  expect(actionNames('tasks', row)).toEqual(['查看工时', '改计划日期', '重新分配', '取消任务'])
   expect(actionNames('tasks', { ...row, status: 'done', can_cancel: false })).toEqual(['查看工时'])
 })
 it('调整负责人保留原日期，也可明确清空日期', async () => {
@@ -234,7 +234,7 @@ it('发货、结项前读取推进检查：缺项一次列全并给出跳转，�
   const project = { id: 7, manager: 1, members: [], can_manage: true, status: 'active', equipment_quantity: 1 }
   vi.mocked(read).mockImplementation(async path => {
     if (path.endsWith('/readiness/')) return { status: 'active', ship: [
-      { key: 'stage_assembly', ok: false, label: '组装阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
+      { key: 'stage_assembly', ok: false, label: '装配阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
       { key: 'stage_test', ok: false, label: '调试阶段', detail: '已完成 0 / 3', blocking: true, target: { tab: 'tasks', phase: 'test' } },
       { key: 'bom', ok: true, label: '设备 BOM', detail: '已登记 3 种物料', blocking: true, target: { tab: 'bom' } },
       { key: 'receivable', ok: false, label: '应收状态', detail: '未收 1 笔，共 ¥100.00；其中已逾期 1 笔', blocking: false, target: { tab: 'finance' } },
@@ -243,9 +243,9 @@ it('发货、结项前读取推进检查：缺项一次列全并给出跳转，�
     return project
   })
   const ship = await actionCommand('projects', project, '发货')
-  expect(ship.blocked).toBe('发货前还差：组装阶段（已完成 0 / 2）；调试阶段（已完成 0 / 3）')
+  expect(ship.blocked).toBe('发货前还差：装配阶段（已完成 0 / 2）；调试阶段（已完成 0 / 3）')
   expect(ship.links).toEqual([
-    { label: '查看组装阶段', path: '/projects/7?tab=tasks&section=tasks&phase=assembly' },
+    { label: '查看装配阶段', path: '/projects/7?tab=tasks&section=tasks&phase=assembly' },
     { label: '查看调试阶段', path: '/projects/7?tab=tasks&section=tasks&phase=test' },
   ])
   expect(ship.notice).toEqual({ type: 'warning', text: '应收状态：未收 1 笔，共 ¥100.00；其中已逾期 1 笔。仅作提示，不影响发货。' })
@@ -264,3 +264,31 @@ it('发货、结项前读取推进检查：缺项一次列全并给出跳转，�
   expect(readinessPath(7, { tab: 'tasks', attention: 'open-tasks' })).toBe('/projects/7?tab=tasks&section=tasks&attention=open-tasks')
 })
 
+it('改计划日期单独入口：只填日期和原因，走 reschedule 接口', async () => {
+  const row = { id: 4, project: 7, assignee: 1, kind: 'design', status: 'open', can_manage: true, due_date: '2026-12-20' }
+  expect(actionNames('tasks', row)).toContain('改计划日期')
+  expect(actionNames('tasks', { ...row, status: 'done' })).not.toContain('改计划日期')
+  const command = await actionCommand('tasks', row, '改计划日期')
+  expect(command.path).toBe('/business/tasks/4/reschedule/')
+  expect(command.fields.map(field => [field.key, field.optional ?? false])).toEqual([['due_date', false], ['reason', false]])
+  expect(command.fields[0]!.hint).toContain('原计划 2026-12-20')
+  expect(command.initial).toEqual({ due_date: '2026-12-20' })
+  expect(all).not.toHaveBeenCalled()
+})
+it('发货安装人、验收人可搜索，本项目负责人和成员排在前面并注明，默认安装人取生产主管', async () => {
+  vi.mocked(all).mockImplementation(async path => path.includes('directory') ? [
+    { id: 1, roles: ['manager'], display_name: '张经理' },
+    { id: 2, roles: ['finance'], display_name: '财务甲' },
+    { id: 3, roles: ['member'], display_name: '装配乙' },
+    { id: 4, roles: ['production_manager'], display_name: '生产丙' },
+    { id: 5, roles: ['mechanical_engineer'], display_name: '项目外工程师' },
+  ] : [])
+  vi.mocked(read).mockImplementation(async path => path.endsWith('/demand/') ? { lines: [] } : path.endsWith('/readiness/') ? { ship: [] } : {})
+  const project = { id: 7, status: 'active', manager: 1, members: [3, 4], can_manage: true, task_supervisors: { production: 4 } }
+  const command = await actionCommand('projects', project, '发货')
+  const installer = command.fields.find(field => field.key === 'installer')!
+  expect(installer.searchable).toBe(true)
+  expect(installer.options!.map(option => option.label)).toEqual(['张经理 · 项目经理', '装配乙 · 本项目成员', '生产丙 · 本项目成员', '财务甲'])
+  expect(command.fields.find(field => field.key === 'acceptor')!.searchable).toBe(true)
+  expect(command.initial).toMatchObject({ installer: 4, acceptor: 1 })
+})
