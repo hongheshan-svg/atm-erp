@@ -434,12 +434,13 @@ it('仓管在 BOM 页可直接进入按 BOM 领料', async () => {
 
 it('导入预览区分新增、修改、不变，列出文件外现有行，确认按钮不重复「确认」', async () => {
   vi.mocked(write).mockResolvedValueOnce({ can_import: true, token: 't1', note: '预览不占用编号。',
-    lines: [{ row: 2, item_code: 'A', bom_action: 'update', before_quantity: '2.000', quantity: '3.000', product_category: '21' }, { row: 3, item_code: 'B', bom_action: 'unchanged', quantity: '1.000' }, { row: 4, item_code: 'N', bom_action: 'create', quantity: '1.000', new_material: true }],
+    lines: [{ row: 2, item_code: 'A', bom_action: 'update', before_quantity: '2.000', quantity: '3.000', product_category: '21' }, { row: 3, item_code: 'B', bom_action: 'unchanged', quantity: '1.000', material_action: '沿用已有物料，补填品牌' }, { row: 4, item_code: 'N', bom_action: 'create', quantity: '1.000', new_material: true }],
     summary: { create: 1, update: 1, unchanged: 1, untouched: 1 }, untouched: [{ item_code: 'Z', item_name: '旧件', assembly_unit: '05', quantity: '2.000' }], errors: [] })
   const wrapper = mountImport()
   await uploadFile(wrapper)
   await flushPromises()
   expect(wrapper.text()).toContain('新增 1 行、修改 1 行、不变 1 行')
+  expect(wrapper.text()).toContain('；为 1 行已有物料补填品牌。')
   expect(wrapper.text()).toContain('文件中未出现的现有行 1 条：导入不会移除这些行')
   expect(wrapper.text()).toContain('下载并填写模板（需要时可重新下载）')
   const rows = wrapper.getComponent({ name: 'ImportFeedback' }).props('rows')
@@ -448,7 +449,7 @@ it('导入预览区分新增、修改、不变，列出文件外现有行，确�
   await wrapper.findAll('el-button-stub').find(button => button.text() === '确认导入')!.trigger('click')
   const command = wrapper.getComponent({ name: 'ActionDialog' }).props('command')
   expect(command.submitLabel).toBe('确认导入')
-  expect(command.notice.text).toContain('将新增 1 行、修改 1 行，与现有一致的 1 行跳过，新建物料 1 个。')
+  expect(command.notice.text).toContain('将新增 1 行、修改 1 行，与现有一致的 1 行跳过，新建物料 1 个，为 1 行已有物料补填品牌。')
   wrapper.unmount()
 })
 

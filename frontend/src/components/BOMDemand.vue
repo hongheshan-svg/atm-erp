@@ -352,12 +352,15 @@ async function importFile(event: Event) {
     }
   }
 }
+// 「可回导模板」补上品牌列再导回：已有物料原来没有品牌的，按文件补填到物料资料。
+const previewBrandFills = computed(() => (preview.value?.lines || []).filter((row: Row) => row.material_action === '沿用已有物料，补填品牌').length)
 function confirmImport() {
   if (!preview.value?.can_import) return
   const result = preview.value
   const summary = result.summary || {}
   const materials = (result.lines || []).filter((row: Row) => row.new_material).length
-  const text = `将新增 ${summary.create ?? 0} 行、修改 ${summary.update ?? 0} 行${summary.unchanged ? `，与现有一致的 ${summary.unchanged} 行跳过` : ''}${result.token ? `，新建物料 ${materials} 个` : ''}。`
+  const brands = previewBrandFills.value
+  const text = `将新增 ${summary.create ?? 0} 行、修改 ${summary.update ?? 0} 行${summary.unchanged ? `，与现有一致的 ${summary.unchanged} 行跳过` : ''}${result.token ? `，新建物料 ${materials} 个` : ''}${brands ? `，为 ${brands} 行已有物料补填品牌` : ''}。`
   if (result.token) {
     command.value = {
       title: '确认导入 BOM 与物料',
@@ -567,7 +570,7 @@ function saved() {
           <p v-if="mismatch"><router-link v-if="destination" :to="destination" @click="closeImport">前往{{ mismatch.title }}导入入口</router-link><span v-else>请联系具备相应权限的同事，在{{ mismatch.entry }}操作。</span> 切换后请重新选择文件。</p>
           <template v-if="preview">
             <p role="status">{{ preview.can_import ? `校验通过，共 ${preview.lines.length} 条明细。请核对后确认导入。` : '校验未通过，尚未导入任何数据。请按文件行号修改后重新上传。' }}</p>
-            <p v-if="preview.summary" class="bom-import-summary">新增 <strong>{{ preview.summary.create }}</strong> 行、修改 <strong>{{ preview.summary.update }}</strong> 行、不变 <strong>{{ preview.summary.unchanged }}</strong> 行<template v-if="preview.summary.unchanged">（与现有一致，跳过，不需要变更说明）</template>。</p>
+            <p v-if="preview.summary" class="bom-import-summary">新增 <strong>{{ preview.summary.create }}</strong> 行、修改 <strong>{{ preview.summary.update }}</strong> 行、不变 <strong>{{ preview.summary.unchanged }}</strong> 行<template v-if="preview.summary.unchanged">（与现有一致，跳过，不需要变更说明）</template><template v-if="previewBrandFills">；为 <strong>{{ previewBrandFills }}</strong> 行已有物料补填品牌</template>。</p>
             <details v-if="preview.untouched?.length" class="bom-import-untouched"><summary>文件中未出现的现有行 {{ preview.untouched.length }} 条：导入不会移除这些行，需移除请在列表行尾「操作」里移除</summary><ul><li v-for="line in preview.untouched" :key="`${line.item_code}-${line.assembly_unit}`">{{ line.assembly_unit || '未分单元' }} · {{ line.item_code }} {{ line.item_name }} · {{ qty(line.quantity) }}</li></ul></details>
             <ImportFeedback :rows="previewRows" :columns="[{ key: 'item_name', label: '物料名称' }, ...importColumns, { key: 'brand', label: '品牌' }, { key: 'specification', label: '规格' }]" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
           </template>
