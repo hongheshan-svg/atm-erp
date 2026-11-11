@@ -98,3 +98,11 @@ it('仅销售经理仍只能选择客户且不显示供应商账期', async () =
   expect(wrapper.find(days).exists()).toBe(false)
   wrapper.unmount()
 })
+
+it('已编码的物料编辑对话框说明类别、规格、图号、版本为何不可改', async () => {
+  const { actionCommand } = await import('./masterdata')
+  const coded = await actionCommand('items', { id: 1, name: '导轨', product_category: '1M', specification: 'A' }, '编辑')
+  expect(coded.notice?.text).toContain('版本升级请新增物料编码')
+  const free = await actionCommand('items', { id: 2, name: '螺钉', product_category: '' }, '编辑')
+  expect(free.notice).toBeUndefined()
+})
