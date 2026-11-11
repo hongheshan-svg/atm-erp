@@ -27,7 +27,7 @@ export const extraFilters: Record<string, ExtraFilter[]> = {
     { key: 'ordering', label: '排序', kind: 'sort', options: { '': '默认排序', due_date: '计划交期最近', '-due_date': '计划交期最远', '-task_overdue': '逾期任务最多' } },
   ],
 }
-export const searchableResources = ['sales', 'projects', 'tasks', 'purchases', 'items', 'partners', 'documents', 'reconciliations', 'bank-records', 'users', 'stocks', 'entries', 'audit']
+export const searchableResources = ['sales', 'projects', 'tasks', 'purchases', 'items', 'partners', 'documents', 'reconciliations', 'bank-records', 'users', 'stocks', 'entries', 'audit', 'issue-slips']
 export const sidePanelResources = ['sales', 'purchases', 'items', 'partners', 'users', 'company', 'codes', 'audit', 'stocks', 'tasks', 'deliveries', 'entries', 'reconciliations', 'bank-records', 'payments']
 
 // 未完成且早于今天（上海业务日期）的计划日期，与工作台逾期口径一致；只改展示，不改数据。

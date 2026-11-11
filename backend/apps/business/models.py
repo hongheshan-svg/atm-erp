@@ -425,6 +425,21 @@ class TaskNotice(BaseModel):
         indexes = [models.Index(fields=['recipient', 'read_at'], name='lean_task_notice_unread')]
 
 
+class IssueSlip(ImmutableLedger):
+    """领料单：每次领料提交（单行领料、库存勾选批量领料、按 BOM 领料）生成一张，明细即挂在它下面的领料流水。
+
+    单头只记项目、任务和领料说明；经办人与时间取 created_by/created_at，数量、库位和成本仍以流水为准。
+    """
+
+    code = models.CharField(max_length=30, unique=True)
+    project = models.ForeignKey(Project, models.PROTECT, related_name='issue_slips')
+    task = models.ForeignKey(Task, models.PROTECT, null=True, blank=True, related_name='issue_slips')
+    reason = models.CharField(max_length=500)
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_issue_slip'
+
+
 class StockMove(ImmutableLedger):
     class Kind(models.TextChoices):
         OPENING = 'opening', '期初'
@@ -439,6 +454,8 @@ class StockMove(ImmutableLedger):
     task = models.ForeignKey(Task, models.PROTECT, null=True, blank=True)
     purchase_line = models.ForeignKey(PurchaseLine, models.PROTECT, null=True, blank=True)
     source = models.ForeignKey('self', models.PROTECT, null=True, blank=True, related_name='returns')
+    # 领料流水所属领料单；领料单上线前的历史领料和其他类型流水为空。
+    slip = models.ForeignKey(IssueSlip, models.PROTECT, null=True, blank=True, related_name='moves')
     kind = models.CharField(max_length=30, choices=Kind.choices)
     quantity = quantity()
     value = money()

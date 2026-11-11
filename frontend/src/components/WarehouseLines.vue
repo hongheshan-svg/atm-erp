@@ -15,6 +15,8 @@ const columns = computed(() => props.field.fields!.filter(field => !field.hidden
 // 按 BOM 批量领料：行数据（需求、BOM 未领、可用）由服务端按项目算好，不再逐行读取项目需求。
 const batch = computed(() => props.field.fields!.some(field => field.key === 'bom_remaining'))
 const receipt = computed(() => props.field.warehouse === 'receipt')
+// 库存页勾选多行领料：没有建议数量，提供「全部按可用填入」和「全部清空」。
+const picked = computed(() => props.field.warehouse === 'issue' && !batch.value)
 const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(model.value.length / 20) - 1)) * 20)
 const indices = computed(() => Array.from({ length: Math.min(20, model.value.length - start.value) }, (_, i) => start.value + i))
 const path = (i: number, key: string) => `${props.prefix}.${i}.${key}`
@@ -42,9 +44,9 @@ function partial(row: Row) {
   const arrived = Number(row.quantity || 0) + Number(row.pending_quantity || 0)
   return arrived !== Number(source(row).remaining || 0)
 }
-function fill(mode: 'pending' | 'suggested' | 'zero') {
+function fill(mode: 'pending' | 'suggested' | 'zero' | 'clear') {
   for (const row of model.value) {
-    if (mode === 'zero') row.quantity = '0'
+    if (mode === 'zero' || mode === 'clear') row.quantity = mode === 'zero' ? '0' : ''
     else row.quantity = mode === 'pending' ? source(row).remaining : source(row).quantity
     if (receipt.value) row.pending_quantity = '0'
   }
@@ -90,9 +92,9 @@ defineExpose({ focusPath })
     <p class="form-hint">{{ field.hint }}</p>
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="loadProject">重试</button></p>
     <div class="warehouse-summary" role="status"><strong>{{ summary }}</strong><span v-if="receipt || model.length > 1" class="warehouse-fill"
-      ><button v-if="receipt" type="button" :disabled="disabled" @click="fill('pending')">全部按待收填入</button
+      ><button v-if="receipt || picked" type="button" :disabled="disabled" @click="fill('pending')">{{ receipt ? '全部按待收填入' : '全部按可用填入' }}</button
       ><button v-else type="button" :disabled="disabled" @click="fill('suggested')">恢复建议数量</button
-      ><button type="button" :disabled="disabled" @click="fill('zero')">全部清零</button></span
+      ><button type="button" :disabled="disabled" @click="fill(picked ? 'clear' : 'zero')">{{ picked ? '全部清空' : '全部清零' }}</button></span
     ><small v-if="receipt" class="muted">合格与隔离合计不等于待收的行已高亮，部分到货请逐行核对。</small></div>
     <p class="table-guide">手机上按每款物料逐项填写。</p>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">

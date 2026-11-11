@@ -6,7 +6,7 @@ from .api.data_checks import DataCheckView
 from .api.deletions import DeletionView
 from .api.execution import DeliveryView, TaskView, TimeView
 from .api.finance import EntryView, PaymentView
-from .api.inventory import MoveView, StockView
+from .api.inventory import IssueSlipView, MoveView, StockView
 from .api.masterdata import ItemView, PartnerView
 from .api.projects import ProjectView
 from .api.purchases import PurchaseView
@@ -27,6 +27,7 @@ router.register('bom', BOMView)
 router.register('purchases', PurchaseView)
 router.register('stocks', StockView)
 router.register('moves', MoveView)
+router.register('issue-slips', IssueSlipView)
 router.register('entries', EntryView)
 router.register('payments', PaymentView)
 router.register('reconciliations', ReconciliationView)

@@ -50,6 +50,7 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             'payment': 'entry__project',
             'reconciliation': 'entry__project',
             'stockmove': 'project',
+            'issueslip': 'project',
         }.get(queryset.model._meta.model_name)
         if path and not has_role(self.request.user, GLOBAL_PROJECT_ROLES & self.read_roles):
             queryset = queryset.filter(

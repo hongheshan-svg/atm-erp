@@ -1,9 +1,12 @@
+import uuid
 from decimal import Decimal
 
 from django.test import TestCase
+from rest_framework.test import APIClient
 
-from apps.business.models import Entry, Stock, StockMove, Task
-from apps.core.models import ActionReceipt, AuditLog
+from apps.accounts.models import User
+from apps.business.models import Entry, IssueSlip, Item, Stock, StockMove, Task
+from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
 from .test_commercial_chain import BusinessFixtures
 
@@ -199,3 +202,200 @@ class InventoryTests(BusinessFixtures, TestCase):
         response = self.clients['warehouse'].get('/api/business/moves/')
         self.assertNotIn('value', response.data['results'][0])
         self.assertNotIn('supplier_credit', response.data['results'][0])
+
+
+class IssueSlipTests(BusinessFixtures, TestCase):
+    """领料单：单行、库存勾选批量、按 BOM 领料都各开一张；批量可带任务，规则与单行领料相同。"""
+
+    def setUp(self):
+        self.setup_business()
+        self.project = self.active_project()
+        self.cylinder = Item.objects.create(code='I2', name='气缸', specification='SC63', unit='个')
+        self.spare = Item.objects.create(code='I3', name='密封圈', unit='个')
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/revise-bom/',
+            {
+                'expected_revision': self.bom_version(self.project.pk),
+                'lines': [{'item': self.item.pk, 'quantity': '5'}, {'item': self.cylinder.pk, 'quantity': '2'}],
+            },
+        )
+        self.motor = self.opening(self.item, '6')
+        self.cylinders = self.opening(self.cylinder, '4', location='二号仓')
+        self.seals = self.opening(self.spare, '10')
+
+    def opening(self, item, quantity, location='主仓'):
+        self.post(
+            'admin',
+            'stocks/opening/',
+            {'item': item.pk, 'location': location, 'quantity': quantity, 'unit_cost': '10', 'reason': '期初'},
+        )
+        return Stock.objects.get(item=item, location=location)
+
+    def batch(self, lines, status=200, **extra):
+        payload = {'project': self.project.pk, 'lines': lines, **extra}
+        return self.post('warehouse', 'stocks/bom-issue/', payload, status=status)
+
+    def task(self, kind='service', project=None, title='现场换件'):
+        return Task.objects.create(
+            project=project or self.project, title=title, kind=kind, assignee=self.users['member']
+        )
+
+    def warranty(self):
+        self.project.status = 'warranty'
+        self.project.save()
+
+    def test_single_issue_opens_one_line_slip_with_sequential_code(self):
+        first = self.post(
+            'warehouse',
+            'stocks/issue/',
+            {'project': self.project.pk, 'stock': self.motor.pk, 'quantity': '2', 'remark': '一号工位'},
+        )
+        second = self.post(
+            'warehouse', 'stocks/issue/', {'project': self.project.pk, 'stock': self.motor.pk, 'quantity': '1'}
+        )
+        self.assertEqual((first['slip_code'], second['slip_code']), ('LL000001', 'LL000002'))
+        slip = IssueSlip.objects.get(pk=first['slip'])
+        self.assertEqual(
+            (slip.project_id, slip.task_id, slip.reason, slip.created_by),
+            (self.project.pk, None, '项目领料', self.users['warehouse']),
+        )
+        self.assertEqual(list(slip.moves.values_list('pk', flat=True)), [first['id']])
+        self.assertEqual(StockMove.objects.get(pk=first['id']).remark, '一号工位')
+        move = self.clients['warehouse'].get(f'/api/business/moves/{first["id"]}/').data
+        self.assertEqual((move['slip'], move['slip_code']), (slip.pk, 'LL000001'))
+        self.assertEqual(self.clients['warehouse'].get('/api/business/moves/', {'slip': slip.pk}).data['count'], 1)
+
+    def test_stock_batch_issue_is_one_slip_and_replays_without_a_second_slip(self):
+        key = str(uuid.uuid4())
+        payload = {
+            'project': self.project.pk,
+            'reason': '装配一线领料',
+            'lines': [
+                {'stock': self.cylinders.pk, 'quantity': '2', 'remark': '夹爪'},
+                {'stock': self.motor.pk, 'quantity': '5'},
+            ],
+        }
+        result = self.post('warehouse', 'stocks/bom-issue/', payload, key=key)
+        self.assertEqual(self.post('warehouse', 'stocks/bom-issue/', payload, key=key), result)
+        slip = IssueSlip.objects.get()
+        self.assertEqual((result['slip'], result['slip_code'], result['count']), (slip.pk, 'LL000001', 2))
+        self.assertEqual(set(slip.moves.values_list('pk', flat=True)), set(result['moves']))
+        self.assertEqual(set(slip.moves.values_list('reason', flat=True)), {'装配一线领料'})
+        self.motor.refresh_from_db()
+        self.assertEqual(self.motor.quantity, Decimal('1'))
+
+    def test_batch_with_service_task_allowed_in_warranty_and_skips_bom(self):
+        self.warranty()
+        service = self.task()
+        # 密封圈不在 BOM、电机超出 BOM 剩余：售后领料不占 BOM 剩余，均可领。
+        result = self.batch(
+            [{'stock': self.seals.pk, 'quantity': '3'}, {'stock': self.motor.pk, 'quantity': '6'}], task=service.pk
+        )
+        slip = IssueSlip.objects.get(pk=result['slip'])
+        self.assertEqual((slip.task_id, slip.reason), (service.pk, '售后领料'))
+        self.assertEqual(set(slip.moves.values_list('task_id', flat=True)), {service.pk})
+        self.assertEqual(slip.moves.count(), 2)
+
+    def test_batch_task_rules_match_single_issue(self):
+        line = [{'stock': self.motor.pk, 'quantity': '1'}]
+        other = self.active_project()
+        self.batch(line, status=404, task=self.task(project=other).pk)
+        done = self.task(title='已完成售后')
+        done.status = 'done'
+        done.save()
+        self.batch(line, status=404, task=done.pk)
+        self.warranty()
+        assembly = self.task(kind='assembly', title='装配')
+        self.assertIn('task', self.batch(line, status=400, task=assembly.pk))
+        # 按 BOM 领料不带任务时仍按原规则拒绝（409），并提示改用勾选领料选售后任务。
+        self.assertIn('售后任务', str(self.batch(line, status=409)))
+        self.assertFalse(IssueSlip.objects.exists())
+        self.assertFalse(StockMove.objects.filter(kind='issue').exists())
+
+    def test_bom_overrun_still_rejected_without_service_task(self):
+        assembly = self.task(kind='assembly', title='装配')
+        response = self.batch([{'stock': self.motor.pk, 'quantity': '6'}], status=409, task=assembly.pk)
+        self.assertIn('伺服电机', str(response))
+        response = self.batch([{'stock': self.seals.pk, 'quantity': '1'}], status=409)
+        self.assertIn('密封圈', str(response))
+        result = self.batch([{'stock': self.motor.pk, 'quantity': '5'}], task=assembly.pk)
+        self.assertEqual(IssueSlip.objects.get(pk=result['slip']).task_id, assembly.pk)
+        # 执行中项目选售后任务同样不占 BOM 剩余。
+        self.batch([{'stock': self.motor.pk, 'quantity': '1'}], task=self.task().pk)
+
+    def test_failed_line_rolls_back_whole_slip_and_its_number(self):
+        response = self.batch(
+            [{'stock': self.cylinders.pk, 'quantity': '1'}, {'stock': self.motor.pk, 'quantity': '7'}], status=409
+        )
+        self.assertIn('伺服电机', str(response))
+        self.assertFalse(IssueSlip.objects.exists())
+        self.assertFalse(StockMove.objects.filter(kind='issue').exists())
+        self.cylinders.refresh_from_db()
+        self.assertEqual(self.cylinders.quantity, Decimal('4'))
+        self.assertFalse(CodeRule.objects.filter(key='issue_slip', counter__gt=0).exists())
+        self.assertEqual(self.batch([{'stock': self.cylinders.pk, 'quantity': '1'}])['slip_code'], 'LL000001')
+
+    def test_bom_issue_opens_one_slip_for_all_lines(self):
+        lines = self.clients['warehouse'].get('/api/business/stocks/bom-issue/', {'project': self.project.pk}).data
+        payload = [{'stock': row['stock'], 'quantity': row['quantity']} for row in lines['lines']]
+        result = self.batch(payload)
+        self.assertEqual(IssueSlip.objects.get().moves.count(), len(payload), result)
+        self.assertEqual(result['count'], 2)
+
+    def test_slip_reads_follow_stock_move_scope(self):
+        result = self.batch(
+            [
+                {'stock': self.cylinders.pk, 'quantity': '2', 'remark': '夹爪'},
+                {'stock': self.motor.pk, 'quantity': '1'},
+            ],
+            reason='装配领料',
+        )
+        slip = IssueSlip.objects.get(pk=result['slip'])
+        detail = self.clients['warehouse'].get(f'/api/business/issue-slips/{slip.pk}/').data
+        self.assertEqual(
+            (detail['code'], detail['project_code'], detail['reason']), (slip.code, self.project.code, '装配领料')
+        )
+        self.assertEqual(detail['created_by_name'], 'warehouse')
+        self.assertEqual(detail['line_count'], 2)
+        line = next(row for row in detail['lines'] if row['item_code'] == 'I2')
+        self.assertEqual(
+            {key: line[key] for key in ('item_name', 'specification', 'location', 'quantity', 'unit', 'remark')},
+            {
+                'item_name': '气缸',
+                'specification': 'SC63',
+                'location': '二号仓',
+                'quantity': '2.000',
+                'unit': '个',
+                'remark': '夹爪',
+            },
+        )
+        self.assertNotIn('value', line)
+        self.assertIn('company_name', detail)
+        listed = self.clients['finance'].get('/api/business/issue-slips/', {'project': self.project.pk}).data
+        self.assertEqual(listed['count'], 1)
+        self.assertEqual(listed['results'][0]['items_summary'], '伺服电机、气缸')
+        for search in (slip.code, '气缸', 'I1'):
+            self.assertEqual(
+                self.clients['purchaser'].get('/api/business/issue-slips/', {'search': search}).data['count'], 1
+            )
+        self.assertEqual(
+            self.clients['purchaser'].get('/api/business/issue-slips/', {'search': '密封圈'}).data['count'], 0
+        )
+        today = slip.created_at.astimezone().date().isoformat()
+        dated = self.clients['warehouse'].get('/api/business/issue-slips/', {'date_from': today, 'date_to': today})
+        self.assertEqual(dated.data['count'], 1)
+        self.assertEqual(
+            self.clients['warehouse'].get('/api/business/issue-slips/', {'date_from': '2999-01-01'}).data['count'], 0
+        )
+        self.assertEqual(self.clients['manager'].get(f'/api/business/issue-slips/{slip.pk}/').status_code, 200)
+        outsider = User.objects.create_user(username='other_manager', role='manager')
+        client = APIClient()
+        client.force_authenticate(outsider)
+        self.assertEqual(client.get('/api/business/issue-slips/').data['count'], 0)
+        self.assertEqual(client.get(f'/api/business/issue-slips/{slip.pk}/').status_code, 404)
+        for role in ('member', 'sales_manager', 'mechanical_engineer', 'production_manager'):
+            self.assertEqual(self.clients[role].get('/api/business/issue-slips/').status_code, 403, role)
+        self.assertEqual(
+            self.clients['warehouse'].post('/api/business/issue-slips/', {}, format='json').status_code, 405
+        )

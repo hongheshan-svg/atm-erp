@@ -153,6 +153,7 @@ class CodeRule(models.Model):
                     'item': 'Item',
                     'partner': 'Partner',
                     'reconciliation': 'Reconciliation',
+                    'issue_slip': 'IssueSlip',
                 }[key],
             )
             if not isinstance(custom, str):
