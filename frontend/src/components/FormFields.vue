@@ -189,4 +189,10 @@ function readonlyValue(field: Field) {
 .field-help { display: grid; gap: 4px; }
 .field-error { color: var(--risk); font-size: 13px; }
 .field :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--risk); }
+@media (max-width: 600px) {
+  /* 复选框（启用等）默认只有 16px 高：整行作为 40px 触控区。 */
+  .field:has(> input[type='checkbox']) { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 40px; }
+  .field:has(> input[type='checkbox']) > label { display: flex; align-items: center; min-height: 40px; }
+  .role-checks label { display: flex; align-items: center; min-height: 40px; }
+}
 </style>

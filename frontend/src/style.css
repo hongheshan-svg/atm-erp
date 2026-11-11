@@ -944,3 +944,8 @@ textarea:focus { border-color: var(--brand); }
   .mobile-menu-toggle { height: 40px; min-height: 40px; min-width: 56px; }
   .topbar > .el-button { height: 40px; min-height: 40px; }
 }
+
+/* 窄屏：所有对话框里的按钮触控区不小于 40px（导入、批量删除、附件、工时明细等）。 */
+@media (max-width: 600px) {
+  .el-dialog .el-button:not(.el-button--small):not(.is-text) { min-height: 40px; }
+}
