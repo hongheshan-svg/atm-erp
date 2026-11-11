@@ -210,4 +210,9 @@ async function confirm() {
 .import-quick-start { padding: 4px 16px; border: 1px solid #c6dbf5; border-radius: 8px; background: #f2f7ff; }
 .import-duplicate { padding: 12px; margin-bottom: 12px; border: 1px solid #e6a23c; border-radius: 8px; background: #fdf6ec; }
 .import-duplicate input { margin-right: 8px; }
+/* 手机端：导入、批量删除等对话框内的操作按钮达到 40px 触控区。 */
+@media (max-width: 600px) {
+  .transfer-dialog .el-button { min-height: 40px; }
+  .transfer-dialog .el-dialog__footer .el-button { min-width: 72px; }
+}
 </style>

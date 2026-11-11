@@ -108,4 +108,8 @@ onBeforeUnmount(() => { generation++ })
 .quick-reference button:disabled { opacity: .55; cursor: default; }
 .quick-help, .quick-similar, [role='alert'] { font-size: 13px; line-height: 1.6; }
 [role='alert'] { color: #b42318; }
+/* 手机端：选择器内的新增与相似资料按钮达到 40px 触控区。 */
+@media (max-width: 600px) {
+  .quick-reference button { min-height: 40px; }
+}
 </style>
