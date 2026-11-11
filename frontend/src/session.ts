@@ -49,6 +49,9 @@ window.addEventListener('erp-session', () => {
   clearFormDrafts()
   user.value = null
 })
+// 其他标签页换成另一账号登录（见 utils/request.ts 的 syncSession）：原账号的资料与暂存已随 erp-session 清掉，
+// 整页载入新账号的工作台，菜单、权限和各模块缓存全部按新账号重建；原页面地址可能是新账号无权查看的单据。
+window.addEventListener('erp-session-replaced', () => window.location.replace(import.meta.env.BASE_URL))
 export async function loadUser() {
   user.value = await read('/auth/me/')
 }

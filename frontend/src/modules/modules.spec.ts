@@ -118,6 +118,16 @@ describe('模块边界', () => {
     expect(actionNames('time', { hours: '3', reversed_by: 4 })).toEqual([])
   })
 
+  it('更正工时沿用原日期与工时，更正原因留空必须由更正人填写', async () => {
+    user.value = { id: 3, roles: ['manager'] }
+    const entry = { id: 5, task: 2, project: 1, user: 9, date: '2026-11-02', hours: '3.00', reason: '装配二号工位', can_amend: true }
+    const command = await actionCommand('time', entry, '更正工时')
+    expect(command.path).toBe('/business/time/5/amend/')
+    expect(command.fields.map(f => f.key)).toEqual(['date', 'hours', 'reason'])
+    expect(command.fields.find(f => f.key === 'reason')?.optional).toBeFalsy()
+    expect(command.initial).toEqual({ date: '2026-11-02', hours: '3.00' })
+  })
+
   it('无销售合同的已交付项目也隐藏交付约定编辑', async () => {
     const command = await actionCommand('projects', { id: 1, status: 'delivering', contract_date: null }, '编辑项目')
     expect(command.fields.map(f => f.key)).not.toContain('equipment_quantity')

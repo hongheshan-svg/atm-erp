@@ -1,43 +1,115 @@
-import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosError, AxiosHeaders, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { localStore } from './storage'
-export const request = axios.create({ baseURL: '/api', timeout: 25000 })
+// 普通接口 25 秒超时。附件上传（单个上限 20 MB）、文件导入和导出要传完整份文件或在服务端逐行处理，
+// 慢速网络下 25 秒不够：客户端先报超时而服务端仍在写入，用户会去重试一项其实已经成功的操作。
+export const REQUEST_TIMEOUT = 25_000
+export const TRANSFER_TIMEOUT = 5 * 60_000
+export const request = axios.create({ baseURL: '/api', timeout: REQUEST_TIMEOUT })
+// 上传附件和导入文件走 multipart，导出、模板和附件下载按 blob 接收；导入确认只带预览令牌，但服务端要逐行写入整份文件。
+const IMPORT_PATH = /import-(?:file|preview|confirm)\/$/
+const transfer = (config: InternalAxiosRequestConfig) =>
+  config.data instanceof FormData || config.responseType === 'blob' || IMPORT_PATH.test(config.url ?? '')
+const ACCESS = 'access_token'
+const REFRESH = 'refresh_token'
+const CHANGED = '登录状态已变化，请重试。'
+const SUPERSEDED = '其他标签页已切换为另一账号登录，请刷新页面后继续。'
 let epoch = 0
 let flight: Promise<void> | undefined
+// 本页正在使用的登录，以登录时写入的刷新令牌标识。令牌存在各标签页共用的 localStorage 里；
+// 例行续期只换访问令牌、不改刷新令牌，只有退出或重新登录（本页或其他标签页）才会改变它。
+let session = localStore.get(REFRESH)
+// 其他标签页已换成另一账号登录：本页界面仍属原账号，重新载入前不再发出任何请求。
+let superseded = false
 export function resetSession(access?: string, refresh?: string) {
   epoch++
   flight = undefined
+  superseded = false
   for (const [key, value] of [
-    ['access_token', access],
-    ['refresh_token', refresh],
+    [ACCESS, access],
+    [REFRESH, refresh],
   ]) {
     if (value) localStore.set(key!, value)
     else localStore.remove(key!)
   }
+  // 以实际写入结果为准：存储被禁用或写满时与共享存储保持一致，不会误判成其他标签页改了登录。
+  session = localStore.get(REFRESH)
   window.dispatchEvent(new Event('erp-session'))
 }
+// 只用来判断两次登录是否同一账号，不作任何授权依据；解析不了按不同账号处理。
+function account(token: string | null) {
+  try {
+    const part = token!.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')
+    const id = JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, '=')))?.user_id
+    return id == null ? null : String(id)
+  } catch {
+    return null
+  }
+}
+export type SessionChange = 'unchanged' | 'renewed' | 'ended' | 'superseded'
+// 与共享存储里的登录对齐：storage 事件到达时、发请求前和续期前各调用一次。
+// - 其他标签页例行续期只改访问令牌：不算变化，本页直接用新的访问令牌。
+// - 同一账号在其他标签页重新登录：沿用新登录，不打断本页、不丢填写内容。
+// - 其他标签页退出：本页按退出处理（不再改动存储），回到登录页。
+// - 换成另一账号（或本页未登录时其他标签页登录）：先按退出清掉原账号的资料，再通知整页载入新账号。
+export function syncSession(): SessionChange {
+  if (superseded) return 'superseded'
+  const stored = localStore.get(REFRESH)
+  if (stored === session) return 'unchanged'
+  const owner = account(stored)
+  if (session && owner != null && owner === account(session)) {
+    session = stored
+    flight = undefined
+    return 'renewed'
+  }
+  epoch++
+  flight = undefined
+  if (stored) superseded = true
+  else session = null
+  window.dispatchEvent(new Event('erp-session'))
+  if (!superseded) return 'ended'
+  window.dispatchEvent(new Event('erp-session-replaced'))
+  return 'superseded'
+}
+window.addEventListener('storage', (event) => {
+  if (event.key === REFRESH || event.key === null) syncSession()
+})
+// 从往返缓存恢复的页面收不到离开期间的 storage 事件。
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) syncSession()
+})
 type Config = InternalAxiosRequestConfig & { epoch?: number; retried?: boolean }
+// 写动作统一经 api.write 发出，带 Idempotency-Key；请求到达服务端即已提交。
+const isWrite = (config: Config) =>
+  !['get', 'head', 'options'].includes((config.method ?? 'get').toLowerCase()) &&
+  AxiosHeaders.from(config.headers).has('Idempotency-Key')
 request.interceptors.request.use((config: Config) => {
+  // storage 事件可能还没送到：发请求前再对齐一次，绝不让原账号的界面带着另一账号的令牌提交。
+  const change = syncSession()
+  if (change === 'superseded') throw new Error(SUPERSEDED)
+  if (change === 'ended') throw new Error(CHANGED)
   config.epoch = epoch
-  const token = localStore.get('access_token')
+  if (config.timeout === REQUEST_TIMEOUT && transfer(config)) config.timeout = TRANSFER_TIMEOUT
+  const token = localStore.get(ACCESS)
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 request.interceptors.response.use(
   (response) => {
-    if ((response.config as Config).epoch !== epoch) throw new Error('登录状态已变化，请重试。')
+    const config = response.config as Config
+    // 请求期间登录已变化（退出、过期或其他标签页换了账号）：读到的是原登录的数据，不能进入当前页面。
+    // 写动作到达服务端时已经提交，照常返回结果，免得用户以为失败而重复提交；
+    // 界面的重新同步已由改变登录的 resetSession / syncSession 通知。
+    if (config.epoch !== epoch && !isWrite(config)) throw new Error(CHANGED)
     return response
   },
   async (error: AxiosError) => {
     const config = error.config as Config | undefined
-    if (
-      !config ||
-      config.epoch !== epoch ||
-      error.response?.status !== 401 ||
-      config.retried ||
-      config.url?.startsWith('/auth/login')
-    )
-      throw error
-    const refresh = localStore.get('refresh_token')
+    if (!config || error.response?.status !== 401 || config.retried || config.url?.startsWith('/auth/login')) throw error
+    // 续期前与共享存储对齐：其他标签页已退出或换了账号时，不能拿别人的刷新令牌续期，也不能清掉别人的登录。
+    syncSession()
+    // 登录已变化后不重试：重试会带上新登录的令牌，把原账号的操作记到另一账号名下。
+    if (config.epoch !== epoch) throw error
+    const refresh = session
     if (!refresh) {
       resetSession()
       throw error
@@ -47,11 +119,12 @@ request.interceptors.response.use(
       const current = axios
         .post('/api/auth/refresh/', { refresh }, { timeout: 15000 })
         .then(({ data }) => {
-          if (epoch !== started) throw new Error('登录状态已变化。')
-          localStore.set('access_token', data.access)
+          // 续期期间本页或其他标签页退出、重新登录：新令牌属于已结束的登录，不能写回共享存储。
+          if (epoch !== started || localStore.get(REFRESH) !== refresh) throw new Error('登录状态已变化。')
+          localStore.set(ACCESS, data.access)
         })
         .catch((e) => {
-          if (epoch === started && [400, 401, 403].includes(e.response?.status)) resetSession()
+          if (epoch === started && localStore.get(REFRESH) === refresh && [400, 401, 403].includes(e.response?.status)) resetSession()
           throw e
         })
         .finally(() => {
