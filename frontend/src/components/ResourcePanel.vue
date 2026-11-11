@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
 import { taskSyncHint } from '../modules/milestones'
-import { computed, inject, nextTick, onBeforeUnmount, ref, useId, watch, type Ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, toRaw, useId, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { all, read, download } from '../api'
 import {
@@ -297,29 +297,32 @@ const actionWidth = computed(() => {
   if (!records.value.length) return 180
   return Math.max(...records.value.map(row => {
     if (props.resource === 'tasks' && taskSyncHint(row)) return 180
-    const primary = !mobileTasks.value && primaryAction(row)
+    const primary = primaryAction(row)
     const menu = menuGroups(row).length > 0
     return primary && menu ? 180 : menu || primary ? 96 : 60
   }))
 })
-// 菜单里只有一项（且没有主按钮）时直接显示成文字按钮，不套下拉。
-function soleAction(row: Row) {
-  if (primaryAction(row) && !mobileTasks.value) return undefined
-  const groups = menuGroups(row)
-  return groups.length === 1 && groups[0]!.actions.length === 1 ? groups[0]!.actions[0] : undefined
-}
-function primaryAction(row: Row) {
-  const actions = actionNames(props.resource, row)
+type RowActions = { primary?: string; groups: (typeof actionGroups[number] & { actions: string[] })[]; sole?: string }
+function rowActions(row: Row): RowActions {
+  const names = actionNames(props.resource, row)
   // 「退料」是纠错动作：只在从「项目退料」进入的原领料流水（params.kind=issue）里作主按钮，普通库存流水里降为次要按钮。
-  return primaryActions.find(name => actions.includes(name) && (name !== '退料' || props.params?.kind === 'issue'))
-}
-// The menu never repeats the headline button, and only labels its groups when there is more than one.
-function menuGroups(row: Row) {
-  const rest = actionNames(props.resource, row).filter(name => name !== primaryAction(row))
-  return actionGroups
+  const primary = primaryActions.find(name => names.includes(name) && (name !== '退料' || props.params?.kind === 'issue'))
+  // The menu never repeats the headline button, and only labels its groups when there is more than one.
+  const rest = names.filter(name => name !== primary)
+  const groups = actionGroups
     .map(group => ({ ...group, actions: rest.filter(name => actionGroup(name) === group.key) }))
     .filter(group => group.actions.length)
+  // 菜单里只有一项（且没有主按钮）时直接显示成文字按钮，不套下拉。
+  const sole = primary && !mobileTasks.value ? undefined : groups.length === 1 && groups[0]!.actions.length === 1 ? groups[0]!.actions[0] : undefined
+  return { primary, groups, sole }
 }
+// 每行动作按当前记录、资源、筛选参数、窄屏状态和会话权限只算一次：模板与操作列宽每次重绘都要逐行取用多遍，
+// 搜索框每输入一个字都会重绘整表。不在本页记录里的行（如外部传入）仍即时计算。
+const actionsByRow = computed(() => new Map(records.value.map(row => [toRaw(row), rowActions(row)])))
+const actionsOf = (row: Row) => actionsByRow.value.get(toRaw(row)) ?? rowActions(row)
+const primaryAction = (row: Row) => actionsOf(row).primary
+const menuGroups = (row: Row) => actionsOf(row).groups
+const soleAction = (row: Row) => actionsOf(row).sole
 const moneyKeys = new Set(['amount', 'credit_amount', 'paid_amount', 'balance', 'due_amount', 'value', 'unit_price', 'contract_amount', 'quote_amount', 'fee', 'hourly_cost', 'supplier_credit'])
 const day = today()
 function cell(row: Row, key: string) {

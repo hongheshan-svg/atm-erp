@@ -6,6 +6,7 @@ import { actionCommand as settlementCommand, actionNames, createLabel, reconcili
 import { draftKey, loadDraft, saveDraft } from '../form-experience'
 import { purchaseFields } from './purchases'
 import { defaults, fieldIssues, payload } from '../forms'
+import type { Row } from '../types'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), download: vi.fn() }))
 beforeEach(() => { vi.resetAllMocks(); user.value = { id: 1, role: 'finance' }; vi.mocked(all).mockResolvedValue([]) })
@@ -112,6 +113,24 @@ it('采购付款缺少核准时先给可执行的处理入口，客户到账保�
   const receipt = await paymentCommand('entries', { id: 6, project: 3, balance: '80' }, '登记收付款')
   expect(receipt.blocked).toBeUndefined()
   expect(receipt.fields.find(f => f.key === 'document')?.upload?.context).toEqual({ project: 3 })
+})
+
+it('对账附件只按分类读取合同、结算凭证和单据附件，不整批下载图纸；选项顺序与服务端一致', async () => {
+  const docs: Row[] = [
+    { id: 9, category: 'drawing', original_name: '总装图.pdf' },
+    { id: 8, category: 'other', original_name: '项目备忘.docx' },
+    { id: 7, category: 'other', purchase: 4, original_name: '采购报价.pdf' },
+    { id: 6, category: 'receipt', original_name: '付款回单.pdf' },
+    { id: 5, category: 'contract', sale: 2, original_name: '销售合同.pdf' },
+    { id: 4, category: 'delivery', original_name: '验收单.pdf' },
+    { id: 3, category: 'contract', original_name: '项目合同.pdf' },
+  ]
+  vi.mocked(all).mockImplementation(async (_path, params) => docs.filter(d => !params?.category || d.category === params.category))
+  const command = await reconciliationCommand({ id: 7, project: 3, title: '采购款', balance: '80' })
+  expect(vi.mocked(all).mock.calls.map(([path, params]) => [path, params])).toEqual(['contract', 'receipt', 'other'].map(category => ['/business/documents/', { project: 3, category }]))
+  expect(command.fields.find(f => f.key === 'document')?.options).toEqual([
+    { value: 7, label: '采购报价.pdf' }, { value: 6, label: '付款回单.pdf' }, { value: 5, label: '销售合同.pdf' }, { value: 3, label: '项目合同.pdf' },
+  ])
 })
 
 it('余额和名称相同的两笔款项，对账草稿仍按款项身份隔离', async () => {

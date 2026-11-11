@@ -42,6 +42,33 @@ afterEach(() => {
 })
 
 describe('单一远程搜索组合框', () => {
+  it('挂载只核对已选值名称，不预读候选；展开时才读取列表，收起时筛选变化也不预读', async () => {
+    vi.mocked(read).mockImplementation(url => Promise.resolve(url === `${path}1/` ? item(1) : { results: [item(1), item(2)], next: null }))
+    const blank = open()
+    const chosen = open({ modelValue: 1, params: { is_active: true } })
+    await flushPromises()
+    // 明细行里多个选择框：空值不发请求，已选值只读一次详情显示名称。
+    expect(vi.mocked(read).mock.calls).toEqual([[`${path}1/`, { is_active: true }]])
+    expect(control(chosen).element.value).toBe('物料1 · M001')
+    expect(blank.findAll('[role="option"]')).toHaveLength(0)
+    await chosen.setProps({ params: { is_active: true, brand: '新范围' } })
+    await flushPromises()
+    expect(vi.mocked(read).mock.calls.map(([url]) => url)).toEqual([`${path}1/`, `${path}1/`])
+    expect(control(chosen).element.value).toBe('物料1 · M001')
+    await control(blank).trigger('focus')
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith(path, { search: '', page: 1, page_size: 20 })
+    expect(blank.findAll('[role="option"]')).toHaveLength(2)
+    // 展开期间筛选变化，立即按新条件重读候选。
+    await control(chosen).trigger('focus')
+    await flushPromises()
+    vi.mocked(read).mockClear()
+    await chosen.setProps({ params: { is_active: true } })
+    await flushPromises()
+    expect(read).toHaveBeenCalledWith(path, { is_active: true, search: '', page: 1, page_size: 20 })
+    expect(chosen.findAll('[role="option"]')).toHaveLength(2)
+  })
+
   it('父表单重绘但筛选条件不变时，保留已选资料和原生表单有效性', async () => {
     vi.mocked(read).mockImplementation(url => Promise.resolve(url === `${path}1/` ? item(1) : { results: [item(1)] }))
     const wrapper = open({ modelValue: 1, required: true, params: { is_active: true } })
@@ -247,6 +274,8 @@ describe('单一远程搜索组合框', () => {
     rememberReference(path, 3)
     vi.mocked(read).mockResolvedValue({ results: [item(1), item(2, '更新后的名称')], next: null })
     const wrapper = open()
+    // 候选在展开时读取，最近使用只从这次取回的授权结果里重建。
+    await control(wrapper).trigger('focus')
     await flushPromises()
     expect(wrapper.findAll('[role="option"]')[0]!.text()).toContain('更新后的名称')
     expect(wrapper.findAll('[role="option"]')[0]!.text()).toContain('最近使用')
@@ -262,6 +291,11 @@ describe('单一远程搜索组合框', () => {
     old.resolve({ results: [item(5, '旧用户机密')] })
     await flushPromises()
     expect(control(wrapper).element.value).toBe('')
+    expect(control(wrapper).attributes('aria-expanded')).toBe('false')
+    expect(wrapper.text()).not.toMatch(/更新后的名称|旧用户机密|最近使用/)
+    // 换用户后候选收起；再次展开按新会话读取。
+    await control(wrapper).trigger('focus')
+    await flushPromises()
     expect(wrapper.text()).toContain('新用户可见')
     expect(wrapper.text()).not.toMatch(/更新后的名称|旧用户机密|最近使用/)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
@@ -327,6 +361,7 @@ describe('单一远程搜索组合框', () => {
   it('选A后输入B立即清空ID，未选候选时保持搜索词与可定位的自定义错误', async () => {
     vi.mocked(read).mockResolvedValue({ results: [item(1, '客户A')] })
     const wrapper = open()
+    await control(wrapper).trigger('focus')
     await flushPromises()
     await wrapper.get('[role="option"]').trigger('click')
     await control(wrapper).setValue('客户B')

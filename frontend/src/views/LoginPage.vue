@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '../session'
 import { message } from '../utils/request'
 import { View, Hide } from '@element-plus/icons-vue'
-import automation from '../assets/login-automation.png'
+import automation from '../assets/login-automation.jpg'
 import { version } from '../../package.json'
+// 与下方 760px 断点一致：上下堆叠（手机）时插图本就隐藏，不渲染 <img> 才不会白白下载；窗口变宽后再加载。
+const stacked = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 760px)').matches)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const query = window.matchMedia('(max-width: 760px)')
+  const sync = () => { stacked.value = query.matches }
+  query.addEventListener?.('change', sync)
+  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
+}
 const router = useRouter()
 const route = useRoute()
 const username = ref('')
@@ -32,7 +40,7 @@ async function submit() {
       <div class="brand"><span class="brand-mark">P</span><div>项目 ERP<small>v{{ version }}</small></div></div>
       <h1>以项目为中心，<br /><span>让协作简单一些</span></h1>
       <p>从需求到交付，协作有序。</p>
-      <img :src="automation" alt="自动化装配工作站线稿" width="720" height="460" />
+      <img v-if="!stacked" :src="automation" alt="自动化装配工作站线稿" width="720" height="460" />
     </section>
     <section class="login-card">
       <h1>欢迎登录</h1>

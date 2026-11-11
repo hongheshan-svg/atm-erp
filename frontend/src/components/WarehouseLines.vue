@@ -26,9 +26,15 @@ const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(model.va
 const indices = computed(() => Array.from({ length: Math.min(20, model.value.length - start.value) }, (_, i) => start.value + i))
 const path = (i: number, key: string) => `${props.prefix}.${i}.${key}`
 const inputId = (i: number, key: string) => `${uid}-${i}-${key}`
+const identity = computed(() => props.field.warehouse === 'receipt' ? 'line' : 'stock')
+// 原始行按明细标识建一次索引（同标识取第一行）：摘要、逐行提示和校验在每次输入时都要取原始行，不能逐行线性查找。
+const sources = computed(() => {
+  const index = new Map<unknown, Row>()
+  for (const item of props.field.initial as Row[]) if (!index.has(item[identity.value])) index.set(item[identity.value], item)
+  return index
+})
 function source(row: Row) {
-  const identity = props.field.warehouse === 'receipt' ? 'line' : 'stock'
-  return (props.field.initial as Row[]).find(item => item[identity] === row[identity]) || row
+  return sources.value.get(row[identity.value]) || row
 }
 // 同一张单据的明细必然同项目：项目号放在表头，不在每行重复。
 const projectLabel = computed(() => {

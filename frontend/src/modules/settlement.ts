@@ -27,8 +27,14 @@ export async function createCommand(resource: string, projectId?: number): Promi
     remote('project', '已知项目（不确定可留空）', '/business/projects/', { optional: true }), optionalReason(undefined, '选填；不填按「登记银行流水」记录'),
   ], initial: projectId ? { project: projectId } : {}, notice: { type: 'info', text: '按银行实际记录登记，不直接改变项目余额。已登记过收付款的请选择匹配；尚未登记的收入请选择认领，避免重复收款。未知项目的记录保留在全局待认领列表。' } }
 }
+// 对账可选附件：项目内的合同与结算凭证，加上销售单、采购单上的附件（单据附件只能是合同或其他）。
+// 按分类分别读取，图纸、交付验收等不相关附件不再整批下载；合并后按服务端默认的新上传在前排序。
+async function reconciliationDocuments(project: unknown) {
+  const groups = await Promise.all(['contract', 'receipt', 'other'].map(category => all('/business/documents/', { project, category })))
+  return groups.flat().filter(d => d.sale || d.purchase || ['contract', 'receipt'].includes(d.category)).sort((a, b) => Number(b.id) - Number(a.id))
+}
 export async function reconciliationCommand(entry: Row, prepayment = false): Promise<Command> {
-  const docs = (await all('/business/documents/', { project: entry.project })).filter(d => d.sale || d.purchase || ['contract', 'receipt'].includes(d.category))
+  const docs = await reconciliationDocuments(entry.project)
   const kind = prepayment ? 'prepayment' : Number(entry.balance) < 0 ? 'refund' : 'settlement'
   return { title: prepayment ? '申请预付款核准' : '生成对账单', path: '/business/reconciliations/', draftScope: `entry:${entry.id}:${kind}`, subject: entry.title || `款项 ${entry.id}`,
     fields: [codeField('对账单号'), t('counterparty_balance', '对方确认余额（待退款填负数）'), t('approved_amount', '本次申请额度（元）'),
