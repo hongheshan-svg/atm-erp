@@ -2,7 +2,7 @@
 
 面向约 50 人非标自动化公司，以项目串联销售、采购、交付和收付款。
 
-**当前版本：v1.6.0** · [下载最新版本](https://github.com/hongheshan-svg/atm-erp/releases/latest) · [版本说明](docs/releases/v1.6.0.md) · [历史版本](https://github.com/hongheshan-svg/atm-erp/releases)
+[下载最新版本及版本说明](https://github.com/hongheshan-svg/atm-erp/releases/latest) · [历史版本](https://github.com/hongheshan-svg/atm-erp/releases)（当前版本以发布页为准，本页不写固定版本号）
 
 [系统概览](#系统概览) · [安装](#安装) · [首次启用](#首次启用) · [日常使用](#日常使用) · [升级与备份](#升级与备份) · [常见问题](#常见问题) · [开发与验证](#开发与验证)
 
@@ -41,18 +41,18 @@
 <details>
 <summary>下载校验（SHA256）</summary>
 
-同时下载发布页的 `atm-erp-v1.6.0-SHA256SUMS.txt`，在安装包目录执行。其他版本请替换版本号。
+同时下载发布页的 `atm-erp-v<版本>-SHA256SUMS.txt`，在安装包目录执行；命令中的 `<版本>` 换成所下载的实际版本号。
 
 ```bash
 # Linux
-sha256sum -c atm-erp-v1.6.0-SHA256SUMS.txt
+sha256sum -c atm-erp-v<版本>-SHA256SUMS.txt
 # macOS
-shasum -a 256 -c atm-erp-v1.6.0-SHA256SUMS.txt
+shasum -a 256 -c atm-erp-v<版本>-SHA256SUMS.txt
 ```
 
 ```powershell
 # Windows：将输出与清单中对应文件的哈希比较
-Get-FileHash .\atm-erp-v1.6.0-windows-native.zip -Algorithm SHA256
+Get-FileHash .\atm-erp-v<版本>-windows-native.zip -Algorithm SHA256
 ```
 
 仅下载一个包时，其他未下载文件会提示不存在，核对所下载包的哈希即可。
@@ -190,13 +190,13 @@ Docker 与三平台原生安装启动后共用网页向导，无需在网页填�
 ### 服务状态与日志（Docker）
 
 ```bash
-docker compose --env-file .env.lean ps
-docker compose --env-file .env.lean logs --tail 100 app
-docker compose --env-file .env.lean stop
-docker compose --env-file .env.lean start
+docker compose --env-file .env ps
+docker compose --env-file .env logs --tail 100 app
+docker compose --env-file .env stop
+docker compose --env-file .env start
 ```
 
-**不要使用 `down -v`，它会删除数据卷。** 原生运行方式、日志目录和开机自启要求见上方原生安装步骤。
+旧安装沿用 `.env.lean` 时，把本节及下文命令中的 `--env-file .env` 换成 `--env-file .env.lean`，不要另建 `.env`。**不要使用 `down -v`，它会删除数据卷。** 原生运行方式、日志目录和开机自启要求见上方原生安装步骤。
 
 ### 备份与恢复
 
@@ -205,10 +205,12 @@ docker compose --env-file .env.lean start
 Python 3.11+：
 
 ```bash
-python3 scripts/backup.py backup --env-file .env.lean --archive backups/erp-20260909.zip
+python3 scripts/backup.py backup --env-file .env --archive backups/erp-20260909.zip
 ```
 
-备份短暂停止应用写入，一起保存数据库和附件，完成后恢复服务。归档有校验和，Unix 系统中备份文件默认仅当前用户可读，**不包含 `.env.lean` 密钥**。另行安全保存环境配置。
+省略 `--env-file` 时默认读取 `.env`，不存在时沿用旧 `.env.lean`。
+
+备份短暂停止应用写入，一起保存数据库和附件，完成后恢复服务。归档有校验和，Unix 系统中备份文件默认仅当前用户可读，**不包含 `.env`（或旧 `.env.lean`）密钥**。另行安全保存环境配置。
 
 恢复必须使用新的 Compose 项目名、端口、数据库卷与附件卷。准备目标配置但不要先初始化应用，然后运行：
 
@@ -222,7 +224,7 @@ python3 scripts/backup.py restore --env-file .env.restore --archive backups/erp-
 
 原生升级：先停止应用，备份 PostgreSQL（pg_dump 自定义格式）、DATA_DIR/uploads 附件及私有配置。新目录解压新版本，沿用原 native-config.json 和 DATA_DIR，执行 install，再 start。
 
-Docker 升级：在旧目录执行 `docker compose --env-file .env.lean stop app`，保留数据库服务供备份脚本使用。备份完成后，将原 .env.lean 私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1 导入已构建镜像、重建应用容器并前向迁移，不在本机编译。
+Docker 升级：在旧目录执行 `docker compose --env-file .env stop app`（旧安装为 `.env.lean`），保留数据库服务供备份脚本使用。备份完成后，将原配置文件私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1（优先使用 `.env`，否则沿用 `.env.lean`）校验导入随包镜像、重建应用容器并前向迁移，不在本机编译。`LEAN_IMAGE` 留空的配置也可在新目录直接 `docker compose --env-file .env up -d`，按新包固定摘要拉取镜像；安装器写入过 `LEAN_IMAGE` 的配置会继续指向旧镜像，须走安装器。
 
 禁止将已升级的数据库交给旧版本运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
 
@@ -243,12 +245,12 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 ### Docker
 
 - Docker 连接失败：确认 Docker 已启动，Windows/macOS 的 Docker Desktop 使用 Linux 容器模式。
-- 拉取或构建失败：检查镜像仓库、npm、PyPI 网络连接；本包不含离线镜像。
-- 端口被占用：修改 .env.lean 的 LEAN_HTTP_PORT 后重跑安装器。
+- 镜像拉取失败：直接 Compose 按固定摘要从 GHCR 拉取，请检查镜像仓库网络连接；正式 Docker 包携带离线镜像归档，无法访问 GHCR 时用兼容安装器 `bash install.sh` / `.\install.ps1`（需要 Python 3.11）校验并导入随包镜像。仅从源码构建时才需检查 npm、PyPI 连接。
+- 端口被占用：修改 `.env`（旧安装为 `.env.lean`）的 LEAN_HTTP_PORT 后执行 `docker compose --env-file .env up -d`。
 - 默认仅能在本机打开；局域网部署需显式设置 LEAN_BIND_ADDRESS 和 LEAN_ALLOWED_HOSTS。两者只改其一时安装器会在结尾提示：
   只开放端口而未放行主机名，真实 IP 访问会被服务端拒绝（HTTP 400）；只放行主机名而未开放端口，局域网仍然连不上。
-- 初始密码见 .env.lean 的 LEAN_ADMIN_PASSWORD，仅在完成安装向导前有效；向导要求修改初始密码，之后请使用新密码。重新安装不会重置已有用户密码。
-- 忘记管理员密码：新版 Docker 用 `docker compose --env-file .env.lean -f docker-compose.yml exec app python /opt/erp/container_runtime.py manage changepassword admin`（自动选中 OTA 后的实际程序），
+- 初始密码见 `.env`（旧安装为 `.env.lean`）的 LEAN_ADMIN_PASSWORD，仅在完成安装向导前有效；向导要求修改初始密码，之后请使用新密码。重新安装不会重置已有用户密码。
+- 忘记管理员密码：新版 Docker 用 `docker compose --env-file .env -f docker-compose.yml exec app python /opt/erp/container_runtime.py manage changepassword admin`（旧安装用 `.env.lean`；自动选中 OTA 后的实际程序），
   原生安装用 `bash install-native.sh reset-password`（Windows 为 `.\install-native.ps1 reset-password`）。
 
 ### 原生安装
@@ -258,7 +260,7 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 - 数据库或 Redis 连接失败：核对配置、专用数据库、账号、密码和服务监听地址。
 - 端口占用：停止已有应用，或为 HTTP_PORT 与 APP_PORT 分别设置空闲端口。
 - 配置文件已存在：configure 不覆盖既有配置，直接编辑原文件后运行 install。
-- 终端关闭后应用停止：start 为前台进程；开机自启需运维使用操作系统服务管理器配置。
+- 终端关闭后应用停止：Linux 用 `service-install` 注册 systemd 服务后终端关闭不停止、开机自动启动；macOS / Windows 的 start 仍为前台进程，开机自启需运维使用操作系统服务管理器配置。
 
 ## 开发与验证
 
@@ -280,7 +282,7 @@ npm run build
 E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm run test:e2e
 ```
 
-本地前端 `npm run dev`，默认端口 18310，API 代理默认 `127.0.0.1:18301`，可用 `VITE_API_BASE_URL` 修改。后端显式设置 `SECRET_KEY`、`DB_*`、`REDIS_URL` 后运行 `migrate`、`init_system`、`runserver`；它不读取旧 `.env`。
+本地前端 `npm run dev`，默认端口 18310，API 代理默认 `127.0.0.1:18301`，可用 `VITE_API_BASE_URL` 修改。后端显式设置 `SECRET_KEY`、`DB_*`、`REDIS_URL`、`ADMIN_PASSWORD` 后运行 `migrate`、`init_system`、`runserver`；它不读取旧 `.env`。
 
 测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|backend|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
 
@@ -290,13 +292,13 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 
 ### GitHub CI 与发布
 
-进入 [GitHub Actions](https://github.com/hongheshan-svg/atm-erp/actions)，选择工作流后点击 **Run workflow**（需登录有权限的账号）：
+进入 [GitHub Actions](https://github.com/hongheshan-svg/atm-erp/actions)，选择工作流后点击 **Run workflow**（需登录有权限的账号）。Fast checks 与 Browser validation 是可复用子流程，没有独立的 Run workflow 入口，只能经 Lean ERP CI 运行：
 
 | 工作流 | 手动运行内容 |
 | --- | --- |
 | Lean ERP CI | 全量、单项，或 `custom` 勾选组合 |
-| Fast checks | 前后端快速检查 |
-| Browser validation | 桌面、手机或两端并行 |
+| Fast checks | 前后端快速检查：在 Lean ERP CI 选 `suite=fast` |
+| Browser validation | 桌面、手机或两端并行：在 Lean ERP CI 选 `suite=browser` 及 `browser_projects` |
 | OTA validation | Docker 与原生升级演练 |
 | Installer validation | 三平台安装器验证 |
 | Release | 已存在 tag 的验证、打包及草稿/正式发布 |
