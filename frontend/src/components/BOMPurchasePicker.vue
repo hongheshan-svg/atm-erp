@@ -45,7 +45,7 @@ function fitDraft() {
   // 否则保存按钮始终贴在视口下沿之外，越滚动越追不上。
   const block = (selector: string) => pane.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0
   const rows = Math.min(Math.max(chosen.value.length, 1), 3)
-  const needed = block('.purchase-pane-heading') + block('.draft-fields') + block('.draft-footer') + 50 + rows * 112
+  const needed = block('.purchase-pane-heading') + block('.draft-fields') + block('.draft-footer') + 50 + rows * 112 + (groups.value.some(group => group.multi) ? 110 : 0)
   draftHeight.value = `${Math.max(440, needed, window.innerHeight - Math.max(18, pane.getBoundingClientRect().top) - 20)}px`
 }
 const disabled = computed(() => loading.value || saving.value)
@@ -102,32 +102,41 @@ function selectedIssue(row: Row) {
   const quantity = quantityValue(row.quantity), shortage = quantityValue(latest.shortage)
   return quantity != null && shortage != null && quantity > shortage ? `数量超过当前缺料 ${latest.shortage}，请调整。` : ''
 }
+// 单价模型：同物料一个组价（groupPrice），组内各行 unit_price 默认等于组价；
+// 某行「单独定价」后（own_price）脱离组价，组价改动不再覆盖它。提交仍是逐 bom_line 的明细。
+const groupPrice = ref<Record<number, string>>({})
 function add(row: Row) {
   if (selected.value.includes(row.bom_line) || !eligible(row)) return
-  // 同一物料分在多个单元时，新勾选的行沿用已填的单价（可再改），避免同价重复录入。
-  const sibling = chosen.value.find(value => value.item === row.item && String(value.unit_price) !== '')
-  edits.value[row.bom_line] = { ...row, quantity: row.shortage, unit_price: sibling ? sibling.unit_price : '', due_date: '' }
-  if (sibling) synced.add(row.bom_line)
+  edits.value[row.bom_line] = { ...row, quantity: row.shortage, unit_price: groupPrice.value[row.item] ?? '', own_price: false, due_date: '' }
   selected.value.push(row.bom_line)
 }
-// 单价由同物料带入、尚未手工改过的行；再次填写某一行单价时，只同步这些行和仍为空的行。
-const synced = new Set<number>()
-function setPrice(row: Row, value: string) {
-  row.unit_price = value
-  synced.delete(row.bom_line)
-  for (const other of chosen.value) {
-    if (other.item !== row.item || other.bom_line === row.bom_line) continue
-    if (String(other.unit_price) === '' || synced.has(other.bom_line)) { other.unit_price = value; synced.add(other.bom_line) }
-  }
-}
 const sameItemCount = (row: Row) => chosen.value.filter(value => value.item === row.item).length
-function remove(id: number) { selected.value = selected.value.filter(value => value !== id); delete edits.value[id]; synced.delete(id) }
+function setGroupPrice(item: number, value: string) {
+  groupPrice.value[item] = value
+  for (const row of chosen.value) if (row.item === item && !row.own_price) row.unit_price = value
+}
+// 单个单元的行直接填价即是组价；多单元时行内填价视为单独定价。
+function setRowPrice(row: Row, value: string) {
+  if (sameItemCount(row) > 1) { row.own_price = true; row.unit_price = value } else setGroupPrice(row.item, value)
+}
+function useGroupPrice(row: Row) { row.own_price = false; row.unit_price = groupPrice.value[row.item] ?? '' }
+const groups = computed(() => {
+  const map = new Map<number, Row[]>()
+  for (const row of chosen.value) map.set(row.item, [...(map.get(row.item) || []), row])
+  return [...map.entries()].map(([item, rows]) => {
+    const sums = rows.map(row => quantityValue(row.quantity))
+    const sum = sums.some(value => value == null) ? null : sums.reduce<bigint>((acc, value) => acc + value!, 0n)
+    return { item, first: rows[0]!, rows: rows.length > 1 ? [...rows].sort((x, y) => byText(x.assembly_unit, y.assembly_unit)) : rows, multi: rows.length > 1,
+      quantity: sum == null ? '—' : `${sum / 1000n}.${String(sum % 1000n).padStart(3, '0')}` }
+  })
+})
+function remove(id: number) { selected.value = selected.value.filter(value => value !== id); delete edits.value[id] }
 function toggle(row: Row) {
   if (disabled.value) return
   if (selected.value.includes(row.bom_line)) remove(row.bom_line)
   else add(row)
 }
-function clearSelection() { selected.value = []; edits.value = {}; synced.clear() }
+function clearSelection() { selected.value = []; edits.value = {}; groupPrice.value = {} }
 function selectFiltered() { filtered.value.filter(eligible).forEach(add) }
 function handleRowClick(row: Row, column?: { label?: string; type?: string }) {
   if (disabled.value || column?.label === '选择' || column?.type === 'expand') return
@@ -137,7 +146,7 @@ function jumpToDraft() { draftPane.value?.scrollIntoView({ block: 'start', behav
 function jumpToMaterials() { materialsPane.value?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }
 watch([search, brands, units, types, categories, shortageOnly, sortBy, pageSize], () => { page.value = 1 }, { deep: true })
 watch(effectiveTerm, term => { if (term !== 'manual') form.value.payment_due_date = ''; if (term !== 'custom') form.value.payment_days = '' })
-watch([effectiveTerm, () => Math.min(chosen.value.length, 3)], async () => { await nextTick(); fitDraft() })
+watch([effectiveTerm, () => Math.min(chosen.value.length, 3), () => groups.value.some(group => group.multi)], async () => { await nextTick(); fitDraft() })
 let generation = 0, supplierGeneration = 0
 let key = requestKey(), signature = ''
 async function load() {
@@ -270,10 +279,23 @@ async function save() {
           </div>
           <div class="draft-items">
             <p v-if="!chosen.length" class="draft-empty">在 BOM 选料区勾选有缺料的物料，采购明细会显示在这里。</p>
-            <div v-for="(row, index) in chosen" :key="row.bom_line" class="draft-item" :aria-label="`采购明细 ${row.item_code} ${row.assembly_unit || ''}`">
-              <div class="draft-item-title"><div><strong><span class="draft-index">{{ index + 1 }}.</span> {{ row.item_name }}</strong><small>{{ row.item_code }} · {{ row.assembly_unit || '未分单元' }}</small><small v-if="row.specification || row.required_date"><span v-if="row.specification" class="draft-spec" :title="row.specification">{{ row.specification }}</span><span v-if="row.required_date" :class="{ 'overdue-date': overdue(row) }">{{ row.specification ? ' · ' : '' }}需求 {{ row.required_date }}</span></small></div><el-button text :icon="Close" :aria-label="`移除 ${row.item_code} ${row.assembly_unit || ''}`" :disabled="saving" @click="remove(row.bom_line)" /></div>
-              <div class="draft-price-row"><label>数量<span><input v-model="row.quantity" inputmode="decimal" aria-label="采购数量" required :disabled="saving" /><small>{{ row.unit }}</small></span></label><label>含税单价（元）<input :value="row.unit_price" inputmode="decimal" aria-label="含税单价（元）" :placeholder="sameItemCount(row) > 1 ? '同物料自动同价' : '请填写'" required :disabled="saving" @input="setPrice(row, ($event.target as HTMLInputElement).value)" /></label><div><small>小计（元）</small><output>{{ formatPurchaseAmount(purchaseLineCents(row.quantity, row.unit_price)) }}</output></div></div>
-              <p v-if="selectedIssue(row)" class="draft-line-error">{{ selectedIssue(row) }}</p>
+            <div v-for="group in groups" :key="group.item" class="draft-group" :class="{ 'draft-group-multi': group.multi }" :aria-label="group.multi ? `物料组 ${group.first.item_code}` : undefined">
+              <div v-if="group.multi" class="draft-group-head">
+                <div class="draft-group-title"><strong>{{ group.first.item_name }}</strong><small>{{ group.first.item_code }} · {{ group.rows.length }} 个单元 · 合计 {{ group.quantity }} {{ group.first.unit }}</small><small v-if="group.first.specification" class="draft-spec" :title="group.first.specification">{{ group.first.specification }}</small></div>
+                <label>组含税单价（元）<input :value="groupPrice[group.item] ?? ''" inputmode="decimal" :aria-label="`${group.first.item_code} 组含税单价（元）`" placeholder="填一次，各单元同价" :disabled="saving" @input="setGroupPrice(group.item, ($event.target as HTMLInputElement).value)" /></label>
+              </div>
+              <div v-for="row in group.rows" :key="row.bom_line" class="draft-item" :aria-label="`采购明细 ${row.item_code} ${row.assembly_unit || ''}`">
+                <div class="draft-item-title"><div>
+                  <strong v-if="group.multi">{{ row.assembly_unit || '未分单元' }}<small v-if="row.required_date" class="draft-due" :class="{ 'overdue-date': overdue(row) }">需求 {{ row.required_date }}</small></strong>
+                  <template v-else><strong>{{ row.item_name }}</strong><small>{{ row.item_code }} · {{ row.assembly_unit || '未分单元' }}</small><small v-if="row.specification || row.required_date"><span v-if="row.specification" class="draft-spec" :title="row.specification">{{ row.specification }}</span><span v-if="row.required_date" :class="{ 'overdue-date': overdue(row) }">{{ row.specification ? ' · ' : '' }}需求 {{ row.required_date }}</span></small></template>
+                </div><el-button text :icon="Close" :aria-label="`移除 ${row.item_code} ${row.assembly_unit || ''}`" :disabled="saving" @click="remove(row.bom_line)" /></div>
+                <div class="draft-price-row" :class="{ 'draft-price-row-grouped': group.multi }"><label>数量<span><input v-model="row.quantity" inputmode="decimal" aria-label="采购数量" required :disabled="saving" /><small>{{ row.unit }}</small></span></label>
+                  <label v-if="!group.multi">含税单价（元）<input :value="row.unit_price" inputmode="decimal" aria-label="含税单价（元）" placeholder="请填写" required :disabled="saving" @input="setRowPrice(row, ($event.target as HTMLInputElement).value)" /></label>
+                  <div v-else class="draft-line-price"><small>单价 {{ row.unit_price === '' ? '待填' : row.unit_price }}<em v-if="row.own_price"> · 单独定价</em></small></div>
+                  <div><small>小计（元）</small><output>{{ formatPurchaseAmount(purchaseLineCents(row.quantity, row.unit_price)) }}</output></div></div>
+                <details v-if="group.multi" class="draft-own-price" :open="row.own_price"><summary>单独定价</summary><label>含税单价（元）<input :value="row.unit_price" inputmode="decimal" aria-label="含税单价（元）" required :disabled="saving" @input="setRowPrice(row, ($event.target as HTMLInputElement).value)" /></label><el-button v-if="row.own_price" text size="small" :disabled="saving" @click="useGroupPrice(row)">恢复组价</el-button></details>
+                <p v-if="selectedIssue(row)" class="draft-line-error">{{ selectedIssue(row) }}</p>
+              </div>
             </div>
           </div>
           <footer class="draft-footer"><div class="draft-total"><strong>含税合计</strong><output aria-label="含税合计">{{ total == null ? '待填写' : `¥ ${formatPurchaseAmount(total)}` }}</output></div><el-button type="primary" native-type="submit" :loading="saving" :disabled="loading || supplierLoading || !chosen.length">保存采购草稿</el-button><small>保存后可提交审批</small></footer>
@@ -344,7 +366,7 @@ async function save() {
 .draft-extra summary { cursor: pointer; }
 .draft-extra[open] { max-height: 180px; overflow: auto; }
 .draft-extra label { margin: 10px 0; }
-.draft-items { overflow-y: auto; flex: 1 1 auto; min-height: 90px; max-height: 370px; margin-top: 16px; border-top: 1px solid var(--surface-border); }
+.draft-items { overflow-y: auto; flex: 1 1 auto; min-height: 90px; max-height: 480px; margin-top: 16px; border-top: 1px solid var(--surface-border); }
 .draft-empty { padding: 24px 0; line-height: 1.7; color: var(--ink-5); font-size: 13px; }
 .draft-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--surface-border); }
 .draft-item-title { display: flex; justify-content: space-between; align-items: center; position: relative; padding-right: 16px; }
@@ -359,6 +381,23 @@ async function save() {
 .draft-price-row > div { display: grid; gap: 10px; text-align: right; padding-bottom: 8px; }
 .draft-price-row small { font-size: 11px; }
 .draft-price-row output { font-size: 13px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.draft-group-head { display: grid; gap: 8px; padding: 10px 0 4px; border-bottom: 1px dashed var(--surface-border); }
+.draft-group-title strong { font-size: 13px; }
+.draft-group-title small { display: block; font-size: 11px; line-height: 1.5; margin-top: 3px; overflow-wrap: anywhere; }
+.draft-group-head label { display: grid; gap: 5px; font-size: 11px; color: var(--mute); }
+.draft-group-head input { min-height: 32px; padding: 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.draft-group-multi .draft-item { padding: 6px 0 6px 12px; gap: 4px; }
+.draft-item-title strong .draft-due { display: inline; margin: 0 0 0 8px; font-weight: 400; }
+.draft-group-multi .draft-price-row > label, .draft-group-multi .draft-price-row > div:last-child { font-size: 0; }
+.draft-group-multi .draft-price-row > label > span { font-size: 11px; }
+.draft-group-multi .draft-price-row > div:last-child { gap: 0; padding-bottom: 6px; }
+.draft-group-multi .draft-price-row > div:last-child output { font-size: 13px; }
+.draft-price-row-grouped { grid-template-columns: minmax(70px, 1fr) minmax(60px, 1fr) minmax(60px, 1fr); }
+.draft-line-price { padding-bottom: 8px; font-size: 11px; color: var(--mute); text-align: center; }
+.draft-line-price em { color: var(--el-color-warning); font-style: normal; }
+.draft-own-price { font-size: 11px; color: var(--mute); }
+.draft-own-price summary { cursor: pointer; }
+.draft-own-price label { display: grid; gap: 4px; margin: 6px 0; max-width: 180px; }
 .draft-line-error { grid-column: 1 / -1; font-size: 12px; margin: 8px 0 0; }
 .draft-footer { flex-shrink: 0; padding-top: 18px; background: white; display: grid; gap: 12px; }
 .draft-total { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
