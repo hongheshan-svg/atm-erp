@@ -21,6 +21,8 @@ import { importDestination, templateMismatch } from '../utils/import-context'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { canDeleteRecords, deletionLimit } from '../modules/deletions'
 import { useBatchSelection } from '../utils/batch-selection'
+import { quantityText as qty } from '../utils/quantity'
+const qtyCell = (_row: Row, _column: unknown, value: unknown) => qty(value)
 const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
@@ -69,8 +71,9 @@ const importActions: Record<string, string> = { create: '新增', unchanged: '�
 // 预览表一眼分出新增行和修改行，修改行直接给出原数量；产品编码类别显示中文。
 const previewRows = computed(() => (preview.value?.lines || []).map((row: Row) => ({ row: row.row, data: {
   ...row,
-  bom_change: row.bom_action === 'update' ? `修改 ${row.before_quantity} → ${row.quantity}` : importActions[row.bom_action] || '',
+  bom_change: row.bom_action === 'update' ? `修改 ${qty(row.before_quantity)} → ${qty(row.quantity)}` : importActions[row.bom_action] || '',
   product_category: productCategories[row.product_category] || row.product_category,
+  quantity: qty(row.quantity),
 } })))
 const command = ref<Command | null>(null)
 const search = ref(''), brand = ref(''), unit = ref(''), partType = ref(''), shortageOnly = ref(view.value === 'purchase')
@@ -386,7 +389,7 @@ function saved() {
 }
 </script>
 <template>
-  <BOMPurchasePicker v-if="pickingBom && canPurchase" :project-id="projectId" :initial-selection="selected" @close="closePurchase" @saved="savedPurchase" />
+  <BOMPurchasePicker v-if="pickingBom && canPurchase" :project-id="projectId" :initial-selection="selected" :shortage-only="shortageOnly" @close="closePurchase" @saved="savedPurchase" />
   <section v-else class="panel" aria-label="BOM 缺料需求">
     <header class="panel-heading">
       <h2 class="bom-panel-title">BOM 与缺料</h2>
@@ -459,7 +462,7 @@ function saved() {
       </template>
     </div>
     <el-dialog :model-value="Boolean(impact)" title="BOM 变更影响与处理" class="bom-mobile-dialog" width="min(900px, 94vw)" @close="impact = null">
-      <template v-if="impact"><p>{{ impact.note }}</p><BusinessTable label="BOM变更影响" :data="impactRows" :numbered="!mobile" :max-height="mobile ? undefined : 360" empty-text="本项目物料都没有已领或在途"><el-table-column v-if="mobile" label="物料"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small><small class="bom-mobile-summary"><span>需求 {{ row.quantity }} · 已领 {{ row.issued }} · 在途 {{ row.incoming }}<template v-if="Number(row.unapproved) > 0">（待批 {{ row.unapproved }}）</template></span><span>当前最低可改量 <strong>{{ row.minimum }}</strong></span></small></template></el-table-column><template v-else><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" /><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途（含待批）" /><el-table-column prop="unapproved" label="其中待批" /><el-table-column prop="minimum" label="当前最低可改量" /></template></BusinessTable><p v-if="impactHidden && !impactAll" class="muted">其余 {{ impactHidden }} 种物料没有已领或在途，可直接修改。<el-button link type="primary" @click="impactAll = true">展开全部</el-button></p><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}（{{ purchaseStatus[purchase.status] || purchase.status }}）：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
+      <template v-if="impact"><p>{{ impact.note }}</p><BusinessTable label="BOM变更影响" :data="impactRows" :numbered="!mobile" :max-height="mobile ? undefined : 360" empty-text="本项目物料都没有已领或在途"><el-table-column v-if="mobile" label="物料"><template #default="{ row }"><strong>{{ row.item_name }}</strong><small class="bom-item-code">{{ row.item_code }}</small><small class="bom-mobile-summary"><span>需求 {{ qty(row.quantity) }} · 已领 {{ qty(row.issued) }} · 在途 {{ qty(row.incoming) }}<template v-if="Number(row.unapproved) > 0">（待批 {{ qty(row.unapproved) }}）</template></span><span>当前最低可改量 <strong>{{ qty(row.minimum) }}</strong></span></small></template></el-table-column><template v-else><el-table-column prop="item_code" label="物料编码" /><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="需求总量" :formatter="qtyCell" /><el-table-column prop="issued" label="已领" :formatter="qtyCell" /><el-table-column prop="incoming" label="在途（含待批）" :formatter="qtyCell" /><el-table-column prop="unapproved" label="其中待批" :formatter="qtyCell" /><el-table-column prop="minimum" label="当前最低可改量" :formatter="qtyCell" /></template></BusinessTable><p v-if="impactHidden && !impactAll" class="muted">其余 {{ impactHidden }} 种物料没有已领或在途，可直接修改。<el-button link type="primary" @click="impactAll = true">展开全部</el-button></p><template v-if="purchaseReader()"><p v-for="purchase in impact.purchases" :key="purchase.id"><router-link :to="{ path: `/projects/${projectId}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }" @click="impact = null">{{ purchase.code }}（{{ purchaseStatus[purchase.status] || purchase.status }}）：查看采购并处理未收余量</router-link></p><router-link :to="{ path: '/inventory', query: { section: 'moves', project: projectId } }">查看本项目库存流水，处理未用材料退回</router-link></template><p v-else class="muted">涉及在途采购或领料时，请联系采购和仓库处理原单，再提交 BOM 变更。</p></template>
       <template #footer><el-button @click="impact = null">关闭</el-button></template>
     </el-dialog>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
@@ -474,21 +477,21 @@ function saved() {
       </el-table-column>
       <el-table-column v-if="canPurchase && view === 'purchase'" :label="mobile ? '' : '选择'" :width="mobile ? 40 : 60" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" :title="purchaseBlocked(row)" @change="toggle(row)" /></template></el-table-column>
       <el-table-column :label="mobile ? '物料' : '物料名称 / 编码'" :min-width="mobile ? 150 : 160" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><el-tag v-if="inactive(row)" size="small" type="info" class="bom-inactive-tag" :title="purchaseBlocked(row)">已停用</el-tag><small class="bom-item-code" :class="{ 'is-inline': !mobile }">{{ row.item_code }}</small>
-        <small v-if="mobile && view === 'purchase'" class="bom-mobile-summary"><span><b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ row.shortage }}</b> · <i>在途 {{ approvedIncoming(row) }}</i><em v-if="unapproved(row) > 0" class="unapproved-inline">（待批 {{ row.unapproved }}）</em> · <i>可用 {{ row.available }}</i></span><span>{{ row.assembly_unit || '未分单元' }}<template v-if="row.required_date"> · <i>需 {{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
-        <small v-else-if="mobile" class="bom-mobile-summary"><span>{{ [row.specification, row.assembly_unit || '未分单元'].filter(Boolean).join(' · ') }}</span><span><i>需求 {{ row.quantity }}{{ row.unit ? ` ${row.unit}` : '' }}</i> · <b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ row.shortage }}</b><template v-if="row.required_date"> · <i>{{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
+        <small v-if="mobile && view === 'purchase'" class="bom-mobile-summary"><span><b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b> · <i>在途 {{ qty(approvedIncoming(row)) }}</i><em v-if="unapproved(row) > 0" class="unapproved-inline">（待批 {{ qty(row.unapproved) }}）</em> · <i>可用 {{ qty(row.available) }}</i></span><span>{{ row.assembly_unit || '未分单元' }}<template v-if="row.required_date"> · <i>需 {{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
+        <small v-else-if="mobile" class="bom-mobile-summary"><span>{{ [row.specification, row.assembly_unit || '未分单元'].filter(Boolean).join(' · ') }}</span><span><i>需求 {{ qty(row.quantity) }}{{ row.unit ? ` ${row.unit}` : '' }}</i> · <b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b><template v-if="row.required_date"> · <i>{{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
       </template></el-table-column>
       <template v-if="!mobile">
       <el-table-column v-if="view === 'prepare'" prop="specification" label="规格" min-width="140" />
       <el-table-column prop="assembly_unit" label="单元" min-width="130" class-name="bom-unit-cell"><template #header><button type="button" class="sort-header" title="按单元、物料编码排序" @click="sortBy('unit')">单元{{ sortMark('unit') }}</button></template></el-table-column>
-      <el-table-column prop="quantity" label="需求数量" width="86" align="right" />
+      <el-table-column prop="quantity" label="需求数量" width="86" align="right" :formatter="qtyCell" />
       <el-table-column prop="unit" label="单位" width="56" />
       <template v-if="view === 'purchase'">
-        <el-table-column prop="issued" label="已领" width="70" align="right" />
-        <el-table-column label="在途" width="84" align="right"><template #default="{ row }">{{ approvedIncoming(row) }}<small v-if="unapproved(row) > 0" class="unapproved-number" :title="'草稿或待批准的采购 ' + row.unapproved + '，缺料已扣除，批准后转为在途'">待批 {{ row.unapproved }}</small></template></el-table-column>
-        <el-table-column prop="available" label="可用库存" width="88" align="right" />
-        <el-table-column label="缺料" width="76" align="right"><template #header><button type="button" class="sort-header" title="缺料多的排前" @click="sortBy('shortage')">缺料{{ sortMark('shortage') }}</button></template><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ row.shortage }}</strong></template></el-table-column>
+        <el-table-column prop="issued" label="已领" width="70" align="right" :formatter="qtyCell" />
+        <el-table-column label="在途" width="84" align="right"><template #default="{ row }">{{ qty(approvedIncoming(row)) }}<small v-if="unapproved(row) > 0" class="unapproved-number" :title="'草稿或待批准的采购 ' + qty(row.unapproved) + '，缺料已扣除，批准后转为在途'">待批 {{ qty(row.unapproved) }}</small></template></el-table-column>
+        <el-table-column prop="available" label="可用库存" width="88" align="right" :formatter="qtyCell" />
+        <el-table-column label="缺料" width="76" align="right"><template #header><button type="button" class="sort-header" title="缺料多的排前" @click="sortBy('shortage')">缺料{{ sortMark('shortage') }}</button></template><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ qty(row.shortage) }}</strong></template></el-table-column>
       </template>
-      <el-table-column v-if="(view === 'purchase' && showOtherDemand) || fullColumns" label="其他项目待领" min-width="110" align="right"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ row.other_demand }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column>
+      <el-table-column v-if="(view === 'purchase' && showOtherDemand) || fullColumns" label="其他项目待领" min-width="110" align="right"><template #default="{ row }"><span v-if="Number(row.other_demand) > 0" :class="Number(row.available) > 0 ? 'contested-number' : 'muted'">{{ qty(row.other_demand) }}<small> · {{ row.other_projects }} 个项目</small></span><span v-else class="muted">—</span></template></el-table-column>
       <el-table-column label="需求日期" min-width="108"><template #header><button type="button" class="sort-header" title="需求日期早的排前" @click="sortBy('required_date')">需求日期{{ sortMark('required_date') }}</button></template><template #default="{ row }"><span v-if="overdue(row)" class="overdue-cell">{{ row.required_date }}<strong :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></span><span v-else>{{ row.required_date }}</span></template></el-table-column>
       <template v-if="fullColumns">
         <el-table-column v-if="view === 'purchase'" prop="specification" label="规格" min-width="140" />
@@ -497,7 +500,7 @@ function saved() {
         <el-table-column prop="application_date" label="申请日期" min-width="110" /><el-table-column prop="applicant" label="申请人" min-width="100" />
         <el-table-column prop="brand" label="品牌" min-width="95" /><el-table-column label="物料类别" min-width="100"><template #default="{ row }">{{ ({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类' }}</template></el-table-column>
         <el-table-column prop="change_note" label="变更说明" min-width="150" />
-        <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" /><el-table-column prop="incoming" label="在途（含待批）" min-width="110" /><el-table-column prop="available" label="可用库存" /><el-table-column prop="shortage" label="缺料" /></template>
+        <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" :formatter="qtyCell" /><el-table-column prop="incoming" label="在途（含待批）" min-width="110" :formatter="qtyCell" /><el-table-column prop="available" label="可用库存" :formatter="qtyCell" /><el-table-column prop="shortage" label="缺料" :formatter="qtyCell" /></template>
       </template>
       </template>
       <el-table-column v-if="batchVisible || (canMaintain && view === 'prepare')" label="操作" :width="mobile ? 76 : batchVisible && canMaintain && view === 'prepare' ? 150 : 96" fixed="right"><template #default="{ row }"><div class="row-actions">
@@ -555,7 +558,7 @@ function saved() {
           <template v-if="preview">
             <p role="status">{{ preview.can_import ? `校验通过，共 ${preview.lines.length} 条明细。请核对后确认导入。` : '校验未通过，尚未导入任何数据。请按文件行号修改后重新上传。' }}</p>
             <p v-if="preview.summary" class="bom-import-summary">新增 <strong>{{ preview.summary.create }}</strong> 行、修改 <strong>{{ preview.summary.update }}</strong> 行、不变 <strong>{{ preview.summary.unchanged }}</strong> 行<template v-if="preview.summary.unchanged">（与现有一致，跳过，不需要变更说明）</template>。</p>
-            <details v-if="preview.untouched?.length" class="bom-import-untouched"><summary>文件中未出现的现有行 {{ preview.untouched.length }} 条：导入不会移除这些行，需移除请在列表行尾「操作」里移除</summary><ul><li v-for="line in preview.untouched" :key="`${line.item_code}-${line.assembly_unit}`">{{ line.assembly_unit || '未分单元' }} · {{ line.item_code }} {{ line.item_name }} · {{ line.quantity }}</li></ul></details>
+            <details v-if="preview.untouched?.length" class="bom-import-untouched"><summary>文件中未出现的现有行 {{ preview.untouched.length }} 条：导入不会移除这些行，需移除请在列表行尾「操作」里移除</summary><ul><li v-for="line in preview.untouched" :key="`${line.item_code}-${line.assembly_unit}`">{{ line.assembly_unit || '未分单元' }} · {{ line.item_code }} {{ line.item_name }} · {{ qty(line.quantity) }}</li></ul></details>
             <ImportFeedback :rows="previewRows" :columns="[{ key: 'item_name', label: '物料名称' }, ...importColumns, { key: 'brand', label: '品牌' }, { key: 'specification', label: '规格' }]" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
           </template>
         </div>

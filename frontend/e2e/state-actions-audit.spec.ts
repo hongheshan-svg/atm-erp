@@ -110,7 +110,7 @@ test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本�
   await dialog(warehouse).getByLabel('实盘数量', { exact: true }).fill('4')
   await reason(warehouse, '重新核对实盘四件')
   await submit(warehouse, `business/stocks/${stock.id}/count/`)
-  await expect(row(warehouse, itemName)).toContainText('4.000')
+  await expect(row(warehouse, itemName)).toContainText(/(^|\s)4(\s|$)/)
   expect(await api(page, `business/stocks/${stock.id}/`)).toMatchObject({ quantity: '4.000', value: '80.00' })
   const moves = await api(page, `business/moves/?stock=${stock.id}&kind=count`)
   expect(moves.count).toBe(2)
@@ -148,7 +148,7 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
   await dialog(warehouse).getByLabel('数量', { exact: true }).fill('1')
   await reason(warehouse, '尺寸不符供应商确认退一件')
   await submit(warehouse, `business/moves/${receipt.id}/return-purchase/`)
-  await expect(row(warehouse, itemName).filter({ hasText: '采购退货' })).toContainText('-1.000')
+  await expect(row(warehouse, itemName).filter({ hasText: '采购退货' })).toContainText(/-1(\s|$)/)
   expect(await api(page, `business/stocks/${receipt.stock}/`)).toMatchObject({ quantity: '2.000', value: '200.00' })
   const entry = (await api(page, `business/entries/?project=${current.id}&kind=payable`)).results[0]
   expect(entry).toMatchObject({ amount: '300.00', credit_amount: '100.00', balance: '200.00' })

@@ -44,7 +44,7 @@ it.each([
   statements([{ ...statement, remaining_amount: remaining }, { ...statement, id: 2, valid: false }])
   const command = await actionCommand('entries', { ...entry, balance }, '登记收付款')
   expect(command.initial).toEqual({ amount: expected, reconciliation: 1 })
-  expect(command.fields.find(field => field.key === 'amount')?.hint).toContain(remaining)
+  expect(command.fields.find(field => field.key === 'amount')?.hint).toContain(remaining.replace(/\B(?=(\d{3})+(?!\d))/g, ','))
 })
 
 it('多张对账各自显示默认值，留空按所选额度提交且手填金额不被覆盖', async () => {

@@ -126,7 +126,7 @@ describe('列表创建入口', () => {
       const mv = moves.vm as any
       expect(mv.shownColumns.map((c: { key: string }) => c.key)).toEqual(['item_name', 'kind'])
       const move = { id: 1, project: 4, project_code: 'ATM2680', project_name: '上料线', purchase: 8, purchase_code: 'PO-8', item_code: 'M-1', item_name: '伺服电机', quantity: '2.000', unit: '台', created_at: '2026-11-11T09:30:00+08:00' }
-      expect(mv.mobileSummary(move)).toEqual(['2.000 台 · 2026-11-11 09:30'])
+      expect(mv.mobileSummary(move)).toEqual(['2 台 · 2026-11-11 09:30'])
       expect(mv.mobileLinks(move)).toEqual([
         { text: 'ATM2680 · 上料线', to: '/projects/4' },
         { text: 'PO-8', to: { path: '/purchases', query: { resource: 'purchases', focus: '8', project: '4' } } },

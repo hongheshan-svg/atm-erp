@@ -5,6 +5,7 @@ import { can, user } from '../session'
 import type { Column, Command, Row } from '../types'
 import { C, date, finance, optionalReason, reason, remote, t } from './shared'
 import { termLabel } from './payment-terms'
+import { money } from '../utils/money'
 
 const kinds: Record<string, string> = { settlement: '业务对账', prepayment: '预付款核准', refund: '退款对账' }
 const states: Record<string, string> = { draft: '待确认', confirmed: '已确认', void: '已作废' }
@@ -12,7 +13,7 @@ export const columns: Record<string, Column[]> = {
   reconciliations: [C('code', '对账单号'), C('project_name', '项目'), C('entry_title', '款项'),
     { key: 'kind', label: '类型', format: r => kinds[String(r.kind)] || String(r.kind) },
     { key: 'status', label: '状态', format: r => r.status !== 'void' && !r.valid ? '原业务已变化' : states[String(r.status)] || String(r.status) },
-    C('difference', '对账差异'), C('approved_amount', '核准金额'), C('remaining_amount', '剩余额度'), C('confirmed_name', '确认人')],
+    { key: 'difference', label: '对账差异', format: r => money(r.difference) }, { key: 'approved_amount', label: '核准金额', format: r => money(r.approved_amount) }, { key: 'remaining_amount', label: '剩余额度', format: r => money(r.remaining_amount) }, C('confirmed_name', '确认人')],
   'bank-records': [C('date', '银行日期'), C('account', '账户'), C('reference', '流水号 / 导入标识'), C('counterparty', '对方户名'), C('project_name', '项目'), C('amount', '收入 / 支出'), C('remaining_amount', '未匹配金额'),
     { key: 'void_reason', label: '状态', format: r => r.void_reason ? '已作废' : r.needs_review ? '待核实户名' : Number(r.remaining_amount) === 0 ? '已核对' : '待认领 / 匹配' }],
 }

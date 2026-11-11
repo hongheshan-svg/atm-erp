@@ -51,7 +51,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   const demand = await api(page, `business/projects/${project.id}/demand/`)
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
-  const workspace = page.getByRole('region', { name: 'BOM 勾选采购', exact: true })
+  const workspace = page.getByRole('region', { name: '从 BOM 多选下单', exact: true })
   const draft = workspace.getByRole('region', { name: '采购草稿', exact: true })
   const selection = workspace.getByRole('status', { name: 'BOM 选择状态', exact: true })
   const materialPane = workspace.locator('.purchase-materials')
@@ -116,7 +116,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
     expect(draftBox.y).toBeGreaterThanOrEqual(materialsBox.y + materialsBox.height)
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
-  if (!desktop) await workspace.getByRole('heading', { name: 'BOM 勾选采购', exact: true }).scrollIntoViewIfNeeded()
+  if (!desktop) await workspace.getByRole('heading', { name: '从 BOM 多选下单', exact: true }).scrollIntoViewIfNeeded()
   if (desktop) {
     await expect(materialPane.locator('.el-table__body tbody tr').first()).toBeInViewport({ ratio: 0.9 })
     await expect(materialPane.locator('.el-table__body tbody tr').last()).toBeInViewport({ ratio: 0.9 })
