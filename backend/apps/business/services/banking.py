@@ -93,14 +93,27 @@ def create(actor, key, data, *, import_evidence=None):
             raise Conflict('银行金额不能为零，收入填正数，支出填负数。')
         account = text(data, 'account', maximum=100)
         reference = text(data, 'reference', maximum=100)
+        date = event_date(data)
         bank_identity.lock_accounts([account])
         if BankRecord.objects.filter(account=account, reference=reference, void_reason='').exists():
             raise Conflict(duplicate)
+        # Imports resolve their own aliases first (bank_import.existing); only a manual entry can add a
+        # second copy of a recorded Huaxia transfer under the other reference spelling.
+        alias = not import_evidence and bank_identity.recorded_aliases(account, reference, date).order_by('pk').first()
+        if alias:
+            raise Conflict(
+                {
+                    'reference': (
+                        f'此账户已登记同一笔银行流水（记录 ID {alias.pk}，流水号“{alias.reference}”，{alias.date}）：'
+                        '华夏银行核心流水号与“日期:核心流水号”视为同一笔交易，请打开原记录核对，不要重复登记。'
+                    )
+                }
+            )
         bank = save(
             BankRecord(
                 project=project,
                 amount=amount,
-                date=event_date(data),
+                date=date,
                 account=account,
                 reference=reference,
                 counterparty=text(data, 'counterparty', maximum=150),
