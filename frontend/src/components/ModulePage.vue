@@ -36,12 +36,13 @@ provide('moduleFocusedFlow', focusedFlow)
 const error = ref('')
 async function loadProjects() {
   error.value = ''
+  const selected = projectId.value
   try {
-    const selected = projectId.value
     const result = selected ? await read(`/business/projects/${selected}/`) : null
     if (selected === projectId.value) projects.value = result ? [result] : []
   } catch (e) {
-    error.value = message(e)
+    // 已经切到别的项目时，旧项目的读取失败不能覆盖新项目的状态。
+    if (selected === projectId.value) error.value = message(e)
   }
 }
 async function chooseProject(value: string | number | undefined) {

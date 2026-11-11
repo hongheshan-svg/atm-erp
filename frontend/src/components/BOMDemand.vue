@@ -208,6 +208,7 @@ const impactHidden = computed(() => (impact.value?.items.length || 0) - impactRo
 const purchaseStatus: Record<string, string> = { draft: '草稿', submitted: '待批准', approved: '待收货', partial: '部分收货' }
 async function inspectImpact() {
   impactAll.value = false
+  error.value = ''
   try { impact.value = await read(`/business/projects/${props.projectId}/bom-impact/`) } catch (e) { error.value = message(e) }
 }
 // BOM 变更记录：谁在什么时候把哪行从多少改成多少，取自修订审计，项目成员可读。
@@ -247,6 +248,8 @@ async function load() {
   maintainSelection.value = []
   const id = ++generation
   deletionLoading.value = true
+  // 重新读取前清掉上次失败的提示，刷新成功后不再顶着旧错误显示新数据。
+  error.value = ''
   try {
     const result = await read(`/business/projects/${props.projectId}/demand/`)
     if (id === generation) {
@@ -394,7 +397,8 @@ function confirmImport() {
 function saved() {
   selected.value = []
   closeImport()
-  void load()
+  // 父页面收到 changed 会递增 revision 并触发重新读取；这里再读一次就是同一份需求重复请求。
+  if (props.revision === undefined) void load()
   emit('changed')
 }
 </script>
@@ -617,7 +621,6 @@ function saved() {
 :deep(.bom-import-dialog .el-dialog__header), :deep(.bom-import-dialog .el-dialog__footer) { flex-shrink: 0; }
 .import-preview { min-width: 0; }
 .import-filename { overflow-wrap: anywhere; }
-.import-preview .import-errors { max-height: 160px; overflow: auto; }
 .bom-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
 .bom-unit-summary { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
 .bom-unit-chip { display: inline-flex; align-items: baseline; gap: 6px; text-align: left; padding: 4px 10px; border: 1px solid var(--field-line); border-radius: 6px; background: var(--subtle-2); color: inherit; cursor: pointer; font-size: 13px; line-height: 1.35; white-space: nowrap; }

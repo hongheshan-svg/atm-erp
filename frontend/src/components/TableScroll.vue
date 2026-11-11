@@ -56,13 +56,10 @@ onBeforeUnmount(() => { resize?.disconnect(); mutation?.disconnect(); viewport?.
     <el-scrollbar v-if="native && position.maximum > 1" ref="horizontal" class="table-scroll-native" height="16px" always :aria-label="`${label}横向滚动条`" @scroll="drag">
       <div :style="{ width: `${position.maximum + controlWidth}px`, height: '1px' }" />
     </el-scrollbar>
-    <div v-if="position.maximum > 1 || $slots.tools" class="table-scroll-tools" role="group" :aria-label="`${label}左右查看`">
-      <template v-if="position.maximum > 1">
-        <el-button :disabled="position.left <= 1" @click="move(-1)">← 向左查看</el-button>
-        <el-button :disabled="position.left >= position.maximum - 1" @click="move(1)">向右查看 →</el-button>
-        <span class="muted">拖动表格底部横向滚动条，或点击左右查看。</span>
-      </template>
-      <slot name="tools" />
+    <div v-if="position.maximum > 1" class="table-scroll-tools" role="group" :aria-label="`${label}左右查看`">
+      <el-button :disabled="position.left <= 1" @click="move(-1)">← 向左查看</el-button>
+      <el-button :disabled="position.left >= position.maximum - 1" @click="move(1)">向右查看 →</el-button>
+      <span class="muted">拖动表格底部横向滚动条，或点击左右查看。</span>
     </div>
   </div>
 </template>

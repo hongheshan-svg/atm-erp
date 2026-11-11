@@ -16,6 +16,7 @@ import StatusBadge from './StatusBadge.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import ProjectProgress from './ProjectProgress.vue'
 import { quantityText as qty } from '../utils/quantity'
+import { primaryActions } from '../row-actions'
 const qtyCell = (_row: Row, _column: unknown, value: unknown) => qty(value)
 const props = defineProps<{ command: Command | null; inline?: boolean }>()
 const command = computed(() => props.command ? industryCommand(props.command) : null)
@@ -65,6 +66,16 @@ async function openAlternative(open: () => Promise<Command>) {
   try { emit('replace', await open()) } catch (e) { error.value = message(e) } finally { busy.value = false }
 }
 async function requestClose() { if (await confirmLeave(false)) emit('close') }
+// 弹窗专用属性只交给 ElDialog；内嵌详情面板是普通 section，不能落成 title/width 等 DOM 属性（否则整块悬停都冒出原生提示）。
+const dialogProps = computed(() => props.inline ? {} : {
+  modelValue: Boolean(command.value),
+  title: command.value?.title,
+  width: dense.value ? 'min(1400px, 96vw)' : wide.value ? 'min(1080px, 96vw)' : 'min(760px, 94vw)',
+  appendToBody: true,
+  closeOnClickModal: false,
+  beforeClose: requestClose,
+  destroyOnClose: true,
+})
 function keepAndClose() {
   if (!rememberDraft()) { ElMessage.error('浏览器未能暂存，请保留此页面或提交后再关闭。'); return }
   baseline.value = formSignature(data.value); emit('close')
@@ -112,8 +123,11 @@ function fitPanel() {
 }
 onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
-  window.addEventListener('resize', fitPanel)
-  window.addEventListener('scroll', fitPanel, true)
+  // 只有内嵌详情面板需要随视口调整高度。
+  if (props.inline) {
+    window.addEventListener('resize', fitPanel)
+    window.addEventListener('scroll', fitPanel, true)
+  }
 })
 onBeforeUnmount(() => {
   unregisterGuard()
@@ -177,7 +191,8 @@ const submitText = computed(() => {
   const updated = changes.length - created
   return `确认新增 ${created} 行${updated ? `、修改 ${updated} 行` : ''}`
 })
-const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '开始任务', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
+// 与列表行同一张「下一步」清单（row-actions.ts），详情和列表突出同一个动作；「退料」是纠错动作，详情里不作主按钮。
+const primary = computed(() => primaryActions.find(label => label !== '退料' && command.value?.actions?.some(action => action.label === label)))
 // 详情底部只留下一步，其余动作收进菜单：十个按钮平铺会把明细挤出面板。
 const shownActions = computed(() => {
   const actions = command.value?.actions || []
@@ -310,13 +325,7 @@ async function submit() {
     :role="inline ? 'dialog' : undefined"
     :aria-modal="inline ? 'false' : undefined"
     :aria-label="command?.title"
-    :model-value="Boolean(command)"
-    :title="command?.title"
-    :width="dense ? 'min(1400px, 96vw)' : wide ? 'min(1080px, 96vw)' : 'min(760px, 94vw)'"
-    append-to-body
-    :close-on-click-modal="false"
-    :before-close="requestClose"
-    destroy-on-close
+    v-bind="dialogProps"
   >
     <header v-if="inline" class="detail-pane-heading"><h2 ref="panelHeading" tabindex="-1">{{ command?.title }}</h2><el-button :icon="Close" text :disabled="locked" aria-label="关闭详情" @click="requestClose" /></header>
     <form v-if="command" class="action-form" novalidate @submit.prevent="submit">

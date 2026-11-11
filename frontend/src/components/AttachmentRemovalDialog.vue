@@ -11,6 +11,8 @@ const reason = ref(''), busy = ref(false), error = ref('')
 let key = requestKey(), closed = false
 onBeforeUnmount(() => { closed = true })
 watch(reason, () => { key = requestKey() })
+// 删除请求发出后不能关闭：否则请求成功了列表也不刷新，已删的附件还留在弹窗里。
+function close() { if (!busy.value) emit('close') }
 async function submit() {
   if (busy.value) return
   if (!props.rows.length || !reason.value.trim()) { error.value = '请填写删除原因。'; return }
@@ -23,7 +25,7 @@ async function submit() {
 }
 </script>
 <template>
-  <el-dialog class="transfer-dialog" :model-value="true" :title="`删除附件（${rows.length}）`" width="min(520px, 94vw)" append-to-body @close="emit('close')">
+  <el-dialog class="transfer-dialog" :model-value="true" :title="`删除附件（${rows.length}）`" width="min(520px, 94vw)" append-to-body :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" @close="close">
     <el-alert type="warning" :closable="false" title="所选附件将移出附件列表，文件本体和上传审计仍然保留；已作为收付款、对账或合同依据的附件不能删除，且任一份被拦截时整批都不会删除。" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" class="removal-error" />
     <ol class="removal-files" aria-label="将删除的附件">
@@ -34,7 +36,7 @@ async function submit() {
       <textarea id="attachment-removal-reason" v-model="reason" maxlength="500" rows="2" :disabled="busy" placeholder="例如：比价表传错了" required />
     </form>
     <template #footer>
-      <el-button @click="emit('close')">取消</el-button>
+      <el-button :disabled="busy" @click="close">取消</el-button>
       <el-button type="danger" :loading="busy" :disabled="!reason.trim()" @click="submit">确认删除</el-button>
     </template>
   </el-dialog>

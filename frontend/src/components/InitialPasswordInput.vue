@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { randomPassword } from '../utils/password'
-defineProps<{ label: string; required?: boolean; disabled?: boolean }>()
+// inputId/describedBy 让表单的 <label for> 和提示、错误文字关联到这个输入框。
+defineProps<{ label: string; required?: boolean; disabled?: boolean; inputId?: string; describedBy?: string }>()
 const model = defineModel<string>({ required: true })
 const visible = ref(false)
 function generate() {
@@ -11,7 +12,7 @@ function generate() {
 </script>
 <template>
   <div class="initial-password">
-    <input v-model="model" :aria-label="label" :type="visible ? 'text' : 'password'" :required="required" :disabled="disabled" autocomplete="new-password" placeholder="手动填写或点击随机生成" />
+    <input :id="inputId" v-model="model" :aria-label="label" :aria-describedby="describedBy" :type="visible ? 'text' : 'password'" :required="required" :disabled="disabled" autocomplete="new-password" placeholder="手动填写或点击随机生成" />
     <div class="password-actions">
       <button type="button" :disabled="disabled" @click="generate">随机生成</button>
       <button type="button" :disabled="disabled" :aria-pressed="visible" @click="visible = !visible">{{ visible ? '隐藏密码' : '显示密码' }}</button>

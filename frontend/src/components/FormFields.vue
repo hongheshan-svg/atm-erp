@@ -115,7 +115,7 @@ function readonlyValue(field: Field) {
         <textarea v-if="readonly" :value="readonlyValue(field)" :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label" readonly rows="1" class="readonly-text" />
         <InlineDocumentField v-else-if="field.upload" v-model="model[field.key]" :field="field" :disabled="disabled || field.readonly" :id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" @busy="emit('uploading', $event)" />
         <RemoteSelect v-else-if="field.remotePath" v-model="model[field.key]" :path="field.remotePath" :params="field.remoteParams" :accept="field.remoteFilter" :describe="field.remoteLabel" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" :input-id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" />
-        <InitialPasswordInput v-else-if="field.type === 'password' && field.randomPassword" v-model="model[field.key]" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
+        <InitialPasswordInput v-else-if="field.type === 'password' && field.randomPassword" v-model="model[field.key]" :input-id="fieldId(field.key)" :described-by="`${fieldId(field.key)}-help`" :label="field.label" :required="!field.optional" :disabled="disabled || field.readonly" />
         <ElSelect v-else-if="field.type === 'multi' && field.searchableMulti" v-model="model[field.key]" :ref="(el: any) => { if (el) multiSelects.set(field.key, el); else multiSelects.delete(field.key) }" multiple filterable fit-input-width popper-class="executor-options" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" :id="fieldId(field.key)" :aria-label="field.label" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly" placeholder="可搜索姓名并选择多人" no-match-text="没有匹配的人员" no-data-text="暂无可选人员">
           <ElOption v-for="option in optionsOf(field)" :key="option.value" :label="option.label" :value="option.value" />
           <template #footer><div class="executor-options-footer"><span>已选 {{ model[field.key]?.length || 0 }} 人</span><el-button size="small" type="primary" @click="multiSelects.get(field.key)?.blur()">完成选择</el-button></div></template>
@@ -169,10 +169,10 @@ function readonlyValue(field: Field) {
           :required="!field.optional"
           :autocomplete="field.type === 'password' ? 'new-password' : 'off'"
           :placeholder="field.placeholder"
-          :list="field.suggestions ? `suggestions-${field.key}` : undefined"
+          :list="field.suggestions ? `${fieldId(field.key)}-suggestions` : undefined"
           :inputmode="field.numeric ? (field.numeric.signed ? 'text' : field.numeric.scale ? 'decimal' : 'numeric') : undefined"
         />
-        <datalist v-if="field.suggestions && !readonly" :id="`suggestions-${field.key}`"><option v-for="value in field.suggestions" :key="value" :value="value" /></datalist>
+        <datalist v-if="field.suggestions && !readonly" :id="`${fieldId(field.key)}-suggestions`"><option v-for="value in field.suggestions" :key="value" :value="value" /></datalist>
         <span :id="`${fieldId(field.key)}-help`" class="field-help"><small v-if="field.hint && !readonly">{{ field.hint }}</small><small v-if="issue(field.key)" class="field-error">{{ issue(field.key) }}</small></span>
       </div>
     </template>

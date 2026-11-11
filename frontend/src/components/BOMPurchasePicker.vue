@@ -349,7 +349,6 @@ async function save() {
 .sort-select { display: grid; gap: 6px; font-size: 13px; }
 .sort-select select { min-height: 38px; }
 .draft-spec { color: var(--ink-4); }
-.draft-index { color: var(--ink-5); font-weight: 400; }
 .purchase-materials :deep(.el-table .cell) { padding: 0 8px; }
 .purchase-materials :deep(.el-table__cell) { padding: 5px 0; }
 .purchase-materials :deep(.el-table .selected-bom-row) { --el-table-tr-bg-color: var(--brand-wash); }
