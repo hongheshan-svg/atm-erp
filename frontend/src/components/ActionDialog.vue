@@ -388,5 +388,7 @@ async function submit() {
   :is(.action-dialog, .detail-pane, .el-message-box) .el-button:not(.el-button--small):not(.is-text) { min-height: 40px; }
   .detail-pane .detail-pane-heading .el-button.is-text { min-width: 40px; min-height: 40px; }
   .detail-pane .dialog-footer > .el-button--primary { order: initial; flex: 1 1 auto; }
+  /* 多选人员标签的删除叉：默认 14px 太小，放大触控区。 */
+  :is(.action-dialog, .detail-pane) .el-select__tags .el-tag__close { width: 24px; height: 24px; font-size: 14px; }
 }
 </style>
