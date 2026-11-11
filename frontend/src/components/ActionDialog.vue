@@ -288,6 +288,8 @@ async function submit() {
     emit('saved', result)
     emit('close')
     ElMessage.success(`${c.title}成功${result?.code ? ` · ${result.code}` : ''}`)
+    const note = c.successNote?.(result || {})
+    if (note) ElMessage({ type: 'warning', message: note, duration: 10000, showClose: true, grouping: true })
   } catch (e) {
     error.value = message(e)
     mapServerIssues(e)
@@ -388,6 +390,7 @@ async function submit() {
 .field-issues { color: var(--risk); }
 .field-issues button { border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; padding: 6px 0; text-decoration: underline; }
 .field-issues ul { padding-left: 18px; margin: 6px 0; }
+:is(.action-dialog, .detail-pane) .el-alert__title { overflow-wrap: anywhere; }
 .draft-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .draft-notice span { flex: 1 1 240px; }
 .change-preview { display: grid; gap: 10px; margin-top: 12px; }

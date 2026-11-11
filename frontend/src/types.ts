@@ -55,6 +55,7 @@ export type Command = {
   initial?: Row
   readonly?: boolean
   notice?: { type: 'warning' | 'info'; text: string }
+  successNote?: (result: Row) => string
   prepare?: (data: Row) => Row
   actions?: { label: string; run: () => void | Promise<void> }[]
   previewPath?: string

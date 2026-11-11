@@ -10,7 +10,7 @@ import { display } from './shared'
 import { salesColumns } from './sales'
 import { auditDetail, auditObject, auditOperation } from './settings'
 import { fileSize } from './documents'
-import { shipMaterialOptions } from './projects'
+import { shipMaterialOptions, shipReceivableNote } from './projects'
 import { purchaseFields } from './purchases'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn(), write: vi.fn(), download: vi.fn() }))
@@ -126,4 +126,13 @@ it('发货配套物料按物料合并并列出全部单元', () => {
     { value: 3, label: 'M1 · 导轨 · A单元、B单元 · BOM 合计 3.500' },
     { value: 4, label: 'M2 · 螺钉 · 未分单元 · BOM 合计 10.000' },
   ])
+})
+
+it('ship success note lists open receivables only when the server returned them', () => {
+  expect(shipReceivableNote({ id: 1 })).toBe('')
+  expect(shipReceivableNote({ id: 1, receivables: [] })).toBe('')
+  const note = shipReceivableNote({ receivables: [{ title: '发货款', outstanding: '150000.00', due_date: '2027-02-28', overdue: false }, { title: '预付款', outstanding: '30000', due_date: '2026-10-01', overdue: true }] })
+  expect(note).toContain('发货款 ¥ 150,000.00（到期 2027-02-28）')
+  expect(note).toContain('预付款 ¥ 30,000.00（已逾期，到期 2026-10-01）')
+  expect(note).toContain('通知财务调整到期日')
 })
