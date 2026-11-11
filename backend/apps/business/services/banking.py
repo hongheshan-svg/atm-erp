@@ -1,6 +1,7 @@
 """Bank evidence and allocation reuse Payment; bank records do not post a second cash ledger."""
 
 import hashlib
+from contextlib import contextmanager
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
@@ -79,57 +80,16 @@ def bank_action(actor, key, operation, payload, execute):
     )
 
 
-def create(actor, key, data, *, import_evidence=None):
-    duplicate = {'reference': '此账户和银行流水号已登记，请核对流水号或打开原记录。'}
+DUPLICATE_REFERENCE = '此账户和银行流水号已登记，请核对流水号或打开原记录。'
 
-    def execute(user):
-        fields(data, {'project', 'amount', 'date', 'account', 'reference', 'counterparty', 'reason'})
-        project = lookup(Project, data['project'], 'project') if data.get('project') else None
-        # An actual bank movement must be recordable even if its project is already closed.
-        if project:
-            Project.objects.select_for_update().get(pk=project.pk)
-        amount = signed_number(data.get('amount'), 'amount')
-        if not amount:
-            raise Conflict('银行金额不能为零，收入填正数，支出填负数。')
-        account = text(data, 'account', maximum=100)
-        reference = text(data, 'reference', maximum=100)
-        date = event_date(data)
-        bank_identity.lock_accounts([account])
-        if BankRecord.objects.filter(account=account, reference=reference, void_reason='').exists():
-            raise Conflict(duplicate)
-        # Imports resolve their own aliases first (bank_import.existing); only a manual entry can add a
-        # second copy of a recorded Huaxia transfer under the other reference spelling.
-        alias = not import_evidence and bank_identity.recorded_aliases(account, reference, date).order_by('pk').first()
-        if alias:
-            raise Conflict(
-                {
-                    'reference': (
-                        f'此账户已登记同一笔银行流水（记录 ID {alias.pk}，流水号“{alias.reference}”，{alias.date}）：'
-                        '华夏银行核心流水号与“日期:核心流水号”视为同一笔交易，请打开原记录核对，不要重复登记。'
-                    )
-                }
-            )
-        bank = save(
-            BankRecord(
-                project=project,
-                amount=amount,
-                date=date,
-                account=account,
-                reference=reference,
-                counterparty=text(data, 'counterparty', maximum=150),
-                reason=text(data, 'reason', default='') or '登记银行流水',
-                # Internal signed-import evidence is part of the first insert, never a public request field.
-                **(import_evidence or {}),
-            ),
-            user,
-        )
-        return audit(user, 'bank.create', bank)
 
+@contextmanager
+def duplicate_reference():
+    """A competing insert may win after our precheck but before full_clean validates the constraint."""
+    duplicate = {'reference': DUPLICATE_REFERENCE}
     try:
-        payload = data if import_evidence is None else {'data': data, 'import_evidence': import_evidence}
-        return bank_action(actor, key, 'bank.create', payload, execute)
+        yield
     except DjangoValidationError as exc:
-        # A competing insert may win after our precheck but before full_clean validates the constraint.
         constraint = next(c for c in BankRecord._meta.constraints if c.name == 'lean_bank_reference_unique')
         if exc.messages == [constraint.get_violation_error_message()]:
             raise Conflict(duplicate) from exc
@@ -141,6 +101,62 @@ def create(actor, key, data, *, import_evidence=None):
         if sqlstate == '23505' and constraint == 'lean_bank_reference_unique':
             raise Conflict(duplicate) from exc
         raise
+
+
+def insert_record(user, data, *, import_evidence=None):
+    """Validate and insert one bank record inside the caller's perform (transaction, authorization, receipt).
+
+    Callers wrap it in duplicate_reference(). A signed bank import calls it once per new row under its single
+    batch perform, which already re-fetched and authorized the user and holds the import and account locks.
+    """
+    duplicate = {'reference': DUPLICATE_REFERENCE}
+    fields(data, {'project', 'amount', 'date', 'account', 'reference', 'counterparty', 'reason'})
+    project = lookup(Project, data['project'], 'project') if data.get('project') else None
+    # An actual bank movement must be recordable even if its project is already closed.
+    if project:
+        Project.objects.select_for_update().get(pk=project.pk)
+    amount = signed_number(data.get('amount'), 'amount')
+    if not amount:
+        raise Conflict('银行金额不能为零，收入填正数，支出填负数。')
+    account = text(data, 'account', maximum=100)
+    reference = text(data, 'reference', maximum=100)
+    date = event_date(data)
+    bank_identity.lock_accounts([account])
+    if BankRecord.objects.filter(account=account, reference=reference, void_reason='').exists():
+        raise Conflict(duplicate)
+    # Imports resolve their own aliases first (bank_import.existing); only a manual entry can add a
+    # second copy of a recorded Huaxia transfer under the other reference spelling.
+    alias = not import_evidence and bank_identity.recorded_aliases(account, reference, date).order_by('pk').first()
+    if alias:
+        raise Conflict(
+            {
+                'reference': (
+                    f'此账户已登记同一笔银行流水（记录 ID {alias.pk}，流水号“{alias.reference}”，{alias.date}）：'
+                    '华夏银行核心流水号与“日期:核心流水号”视为同一笔交易，请打开原记录核对，不要重复登记。'
+                )
+            }
+        )
+    bank = save(
+        BankRecord(
+            project=project,
+            amount=amount,
+            date=date,
+            account=account,
+            reference=reference,
+            counterparty=text(data, 'counterparty', maximum=150),
+            reason=text(data, 'reason', default='') or '登记银行流水',
+            # Internal signed-import evidence is part of the first insert, never a public request field.
+            **(import_evidence or {}),
+        ),
+        user,
+    )
+    audit(user, 'bank.create', bank)
+    return bank
+
+
+def create(actor, key, data):
+    with duplicate_reference():
+        return bank_action(actor, key, 'bank.create', data, lambda user: {'id': insert_record(user, data).pk})
 
 
 def closed_project(bank):

@@ -15,7 +15,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .actions import perform
+from .actions import perform, require_key
 from .api import Conflict
 from .models import ActionReceipt, AuditLog, Company, UpgradeJob
 from .permissions import ADMIN, PermissionMixin, has_role, require_role
@@ -135,8 +135,9 @@ class UpgradeView(PermissionMixin, APIView):
         if not isinstance(payload, dict) or set(payload) != {'target', 'confirmed'} or payload['confirmed'] is not True:
             raise ValidationError('请确认升级期间暂停业务操作及升级前自动备份。')
         version(payload['target'])
+        # 缺少操作标识的请求在访问 GitHub 之前就拒绝（与 perform 同一校验和提示）。
+        key = require_key(request.headers.get('Idempotency-Key'))
         # 仅用存在性检查避免已完成请求重放依赖外网；结果、请求指纹和当前授权仍由 perform 锁内核验。
-        key = request.headers.get('Idempotency-Key')
         release = None
         if not ActionReceipt.objects.filter(actor=request.user, key=key).exists():
             release = release_info()

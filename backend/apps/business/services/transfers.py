@@ -10,7 +10,7 @@ from uuid import uuid4
 from django.core import signing
 from django.core.exceptions import ValidationError as ModelValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, prefetch_related_objects
 from django.http import Http404
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
@@ -586,10 +586,12 @@ def executable_records(resource, records):
     return records
 
 
-def run(actor, resource, records, *, preview=False):
+def run(actor, resource, records, *, preview=False, locked=False):
     results, errors = [], []
     with transaction.atomic():
-        lock_batch(actor, resource, records)
+        # Confirmation already took the whole batch's locks while authorizing, in this same transaction.
+        if not locked:
+            lock_batch(actor, resource, records)
         for record in records:
             try:
                 with transaction.atomic():
@@ -717,14 +719,30 @@ def confirm(actor, resource, token, *, allow_duplicate=False, key=None):
     if any('normalized' not in record for record in batch['records']):
         raise ValidationError('导入校验已更新，请重新上传预览。')
     digest = content_digest(resource, batch['records'])
+    authorized = set()
 
     def authorize(user):
         schema(user, resource)
+        if user.pk in authorized:
+            # With a request key the token perform runs nested inside the request perform, right after the
+            # identical checks below: same transaction, same user and the batch locks still held.
+            return
         projects_by_id = {project.pk: project for project in lock_batch(user, resource, batch['records'])}
         user.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
         schema(user, resource)
+        # Membership is read once for the locked projects instead of once per row.
+        prefetch_related_objects(list(projects_by_id.values()), 'members')
         for project in projects_by_id.values():
             require_project(user, project, SCHEMAS[resource][0])
+        tasks = {}
+        if resource == 'time':
+            ids = set()
+            for record in batch['records']:
+                try:
+                    ids.add(int(Decimal(record['normalized']['task'])))
+                except (ArithmeticError, KeyError, TypeError, ValueError):
+                    continue
+            tasks = Task.objects.select_related('project').prefetch_related('project__members').in_bulk(ids)
         for record in batch['records']:
             data = record['normalized']
             if resource == 'tasks':
@@ -735,19 +753,20 @@ def confirm(actor, resource, token, *, allow_duplicate=False, key=None):
             if resource == 'sales' and not has_role(user, MANAGERS) and data.get('manager') != user.pk:
                 raise PermissionDenied('仅能操作自己负责的销售单。')
             if resource == 'time':
-                task = Task.objects.filter(pk=int(Decimal(data['task']))).first()
+                task = tasks.get(int(Decimal(data['task'])))
                 if task is None:
                     raise ValidationError({'task': UNREACHABLE})
                 from .task_supervision import require_confirmation
 
                 require_confirmation(user, task)
+        authorized.add(user.pk)
 
     def execute(user):
         lock_content(digest)
         if imported(resource, digest) and not allow_duplicate:
             raise Conflict({'duplicate_import': {'message': DUPLICATE_MESSAGE}})
         try:
-            results, _ = run(user, resource, batch['records'])
+            results, _ = run(user, resource, batch['records'], locked=True)
         except ValidationError as exc:
             if not isinstance(exc.detail, dict) or 'rows' not in exc.detail:
                 raise

@@ -1,7 +1,34 @@
+from contextlib import nullcontext
+
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.core.exceptions import FieldError, ValidationError
+from django.db import DatabaseError, connections, models, router, transaction
+from django.db.models import BooleanField, Q, Value
+from django.db.models.functions import Coalesce
+from django.db.models.sql import Query
+from django.db.models.sql.constants import SINGLE
 from django.utils import timezone
+
+
+def loaded_relation(instance, field):
+    """The foreign key points at a related row already loaded on this instance.
+
+    That row was read from the database (the actor set as created_by/updated_by, the parent passed to the
+    constructor), and business rows are never physically deleted, so the existence query full_clean runs for
+    every foreign key would only re-read it.
+    """
+    if not isinstance(field, models.ForeignKey) or field.remote_field.parent_link or field.choices:
+        return False
+    if field.validators or not field.is_cached(instance):
+        return False
+    value = getattr(instance, field.attname)
+    related = field.get_cached_value(instance)
+    return (
+        value is not None
+        and related is not None
+        and not related._state.adding
+        and getattr(related, field.target_field.attname) == value
+    )
 
 
 class ProtectedQuerySet(models.QuerySet):
@@ -36,6 +63,75 @@ class BaseModel(models.Model):
         self.deleted_at = timezone.now()
         self.updated_by = actor
         self.save(update_fields=['is_deleted', 'deleted_at', 'updated_by', 'updated_at'])
+
+    # 业务写入统一经 services.common.save → full_clean。Django 对每个外键查一次存在性、对每条 CHECK 约束
+    # 各开一个保存点再查一次；批量收货、建采购时这些校验占了绝大多数 SQL。下面两处只减少查询次数，
+    # 校验规则、错误内容与顺序不变。
+
+    def clean_fields(self, exclude=None):
+        # 已加载在实例上的关联行（经办人、构造时传入的上级单据）无需再查存在性；其余字段照常校验。
+        # 这些外键没有 choices 或自定义校验器，值非空且等于已加载行的主键，按原逻辑也必然通过。
+        exclude = set(exclude or ())
+        loaded = {field.name for field in self._meta.fields if loaded_relation(self, field)}
+        if not self._state.adding:
+            # 创建人只在新增时由 save() 写入，之后从不改写；更新时它是库里已有、受 PROTECT 保护的原值。
+            loaded.add('created_by')
+        return super().clean_fields(exclude=exclude | loaded)
+
+    def validate_constraints(self, exclude=None):
+        # 同一模型的多条 CHECK 约束合并成一次查询，再按 Django 原有顺序逐条给出相同的错误；
+        # 唯一约束等其他约束仍走 Django 自身逻辑。任何特殊情况（字段已出错被排除、数据库报错）退回原逻辑。
+        constraints = self.get_constraints()
+        checks = [c for _, group in constraints for c in group if type(c) is models.CheckConstraint]
+        if len(constraints) != 1 or len(checks) < 2:
+            return super().validate_constraints(exclude=exclude)
+        passed = self._passed_checks(checks, exclude)
+        if passed is None:
+            return super().validate_constraints(exclude=exclude)
+        model_class, model_constraints = constraints[0]
+        using = router.db_for_write(self.__class__, instance=self)
+        errors = {}
+        for constraint in model_constraints:
+            try:
+                if type(constraint) is models.CheckConstraint:
+                    if not passed[id(constraint)]:
+                        raise ValidationError(
+                            constraint.get_violation_error_message(), code=constraint.violation_error_code
+                        )
+                else:
+                    constraint.validate(model_class, self, exclude=exclude, using=using)
+            except ValidationError as e:
+                if getattr(e, 'code', None) == 'unique' and len(constraint.fields) == 1:
+                    errors.setdefault(constraint.fields[0], []).append(e)
+                else:
+                    errors = e.update_error_dict(errors)
+        if errors:
+            raise ValidationError(errors)
+
+    def _passed_checks(self, checks, exclude):
+        """Evaluate CheckConstraint conditions in one SELECT, exactly as Q.check does for each of them."""
+        using = router.db_for_write(self.__class__, instance=self)
+        connection = connections[using]
+        if not connection.features.supports_comparing_boolean_expr:
+            return None
+        query = Query(None)
+        for name, value in self._get_field_expression_map(meta=self._meta, exclude=exclude).items():
+            query.add_annotation(value if hasattr(value, 'resolve_expression') else Value(value), name, select=False)
+        try:
+            for index, constraint in enumerate(checks):
+                condition = Coalesce(Q(constraint.condition), True, output_field=BooleanField())
+                query.add_annotation(condition, f'_check_{index}')
+        except FieldError:
+            return None
+        compiler = query.get_compiler(using=using)
+        try:
+            with transaction.atomic(using=using) if connection.in_atomic_block else nullcontext():
+                row = compiler.execute_sql(SINGLE)
+        except DatabaseError:
+            return None
+        if row is None or len(row) != len(checks):
+            return None
+        return {id(constraint): value is True for constraint, value in zip(checks, row, strict=True)}
 
 
 class LedgerModel(BaseModel):
@@ -222,7 +318,11 @@ class AuditLog(models.Model):
         db_table = 'lean_audit'
         ordering = ['-id']
         # 采购审批要回查提交人、质保和处理记录要按单据回查；审计表增长最快，没有索引就是全表扫描。
-        indexes = [models.Index(fields=['resource', 'operation'], name='lean_audit_resource')]
+        # 已删除记录列表和审计页按动作筛选、按编号倒序分页，没有以动作开头的索引同样是全表扫描。
+        indexes = [
+            models.Index(fields=['resource', 'operation'], name='lean_audit_resource'),
+            models.Index(fields=['operation', 'id'], name='lean_audit_operation'),
+        ]
 
 
 class ActionReceipt(models.Model):
@@ -236,3 +336,5 @@ class ActionReceipt(models.Model):
     class Meta:
         db_table = 'lean_action_receipt'
         constraints = [models.UniqueConstraint(fields=['actor', 'key'], name='lean_unique_action')]
+        # 表格导入的预览和确认都按动作与内容指纹判断是否已导入；回执随每次写入增长，导入还逐行各写一条。
+        indexes = [models.Index(fields=['operation', 'fingerprint'], name='lean_receipt_fingerprint')]

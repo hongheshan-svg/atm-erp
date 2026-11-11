@@ -187,7 +187,8 @@ def difference(statement):
     return statement.counterparty_balance - Decimal(statement.snapshot['balance'])
 
 
-def create(actor, key, data):
+def create(actor, key, data, *, prepared=None):
+    """prepared: a snapshot the caller already took for this entry's settlement under the same locks."""
     entry = lookup(Entry, data.get('entry'), 'entry')
 
     def execute(user, project):
@@ -247,13 +248,20 @@ def create(actor, key, data):
             document=doc,
             reason=text(data, 'reason', default='') or '发起对账',
         )
+        # snapshot() reads only the entry facts and this statement's kind/month; a new statement owns no payments
+        # yet, so taking it before the insert gives the same result and avoids a second full_clean and UPDATE.
+        reuse = (
+            prepared is not None
+            and kind == 'settlement'
+            and prepared['entry']['id'] == source.pk
+            and (prepared.get('monthly') or {}).get('month', '') == month
+        )
+        statement.snapshot = prepared if reuse else snapshot(statement)
         save(statement, user)
-        statement.snapshot = snapshot(statement)
         remaining = Decimal(statement.snapshot['balance'])
         if (kind == 'refund') != (remaining < 0) or remaining == 0:
             raise Conflict('请按当前待收付或待退款余额选择对账类型。')
         check_allowance(statement)
-        save(statement, user)
         return audit(user, 'reconciliation.create', statement)
 
     return project_action(actor, key, 'reconciliation.create', entry.project_id, data, FINANCE, execute)

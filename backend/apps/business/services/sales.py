@@ -86,6 +86,8 @@ def action(actor, key, operation, sale_id, data, execute, *, project_first=False
             return sale
         return get_object_or_404(SalesOrder.objects.select_for_update(), pk=identity(sale_id))
 
+    context = {}
+
     def authorize(user):
         if roles:
             require_role(user, roles)
@@ -93,6 +95,8 @@ def action(actor, key, operation, sale_id, data, execute, *, project_first=False
         require_sale(user, sale)
         if check:
             check(user, sale)
+        # perform runs execute right after authorize in the same transaction; the rows stay locked.
+        context['sale'] = sale
 
     return perform(
         actor=actor,
@@ -100,7 +104,7 @@ def action(actor, key, operation, sale_id, data, execute, *, project_first=False
         operation=operation,
         payload={'id': sale_id, 'data': data},
         authorize=authorize,
-        execute=lambda user: execute(user, locked()),
+        execute=lambda user: execute(user, context['sale']),
     )
 
 

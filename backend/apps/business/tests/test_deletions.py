@@ -21,6 +21,7 @@ from apps.business.models import (
     Item,
     Partner,
     Payment,
+    Project,
     PurchaseLine,
     PurchaseOrder,
     Reconciliation,
@@ -86,6 +87,50 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertEqual(AuditLog.objects.filter(operation='record.restore').count(), 2)
         self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 2)
         self.assertEqual(Payment.objects.count(), 2)
+
+    def test_cancelled_expense_restores_entry_and_payment_once_by_resource(self):
+        expense = self.post(
+            'finance',
+            'entries/expense/',
+            {'project': self.project.pk, 'title': '外协加工', 'amount': '800', 'due_date': '2026-09-09'},
+            status=201,
+        )
+        payment = self.post(
+            'finance', f'entries/{expense["id"]}/pay/', {'amount': '800', 'date': '2026-09-09', 'reason': '付清'}
+        )
+        self.remove('entries', [expense['id']])
+        self.remove('payments', [payment['id']])
+        with CaptureQueriesContext(connection) as queries:
+            self.post('finance', f'entries/{expense["id"]}/cancel-expense/', {'reason': '合同取消待退款'})
+        lookups = [
+            q['sql']
+            for q in queries.captured_queries
+            if q['sql'].startswith('SELECT') and "'record.delete'" in q['sql']
+        ]
+        # save() 已恢复过一次，entry_action 不再重复查；按资源名精确查找，不再按 JSON 快照扫描审计表。
+        self.assertEqual(len(lookups), 1, lookups)
+        self.assertIn(f"'payment:{payment['id']}'", lookups[0])
+        self.assertNotIn('"lean_audit"."detail" ->', lookups[0])
+        restored = AuditLog.objects.filter(operation='record.restore').order_by('pk')
+        self.assertEqual([log.resource for log in restored], [f'entry:{expense["id"]}', f'payment:{payment["id"]}'])
+        self.assertIn(expense['id'], self.listed('entries', 'finance'))
+        self.assertIn(payment['id'], self.listed('payments', 'finance'))
+
+    def test_unreferenced_project_and_task_check_references_once(self):
+        from apps.business.services import deletions
+
+        draft = Project.objects.create(
+            code='DRAFT1', name='草稿项目', customer=self.customer, manager=self.users['manager']
+        )
+        task = Task.objects.create(
+            project=self.project, title='误建任务', kind='design', assignee=self.users['manager']
+        )
+        with patch.object(deletions, 'references', wraps=deletions.references) as checked:
+            self.remove('projects', [draft.pk])
+            self.remove('tasks', [task.pk])
+        self.assertEqual([call.args[0] for call in checked.call_args_list], [draft, task])
+        self.assertFalse(Project.objects.filter(pk=draft.pk).exists())
+        self.assertFalse(Task.objects.filter(pk=task.pk).exists())
 
     def setUp(self):
         self.setup_business()
