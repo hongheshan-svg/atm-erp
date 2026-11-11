@@ -10,7 +10,7 @@ const emit = defineEmits<{ change: [page: number] }>()
 </script>
 <template>
   <div class="list-pagination">
-    <label>每页显示
+    <label><span class="page-size-text">每页显示</span>
       <select :value="pageSize" aria-label="每页显示条目" @change="setPageSize(Number(($event.target as HTMLSelectElement).value))">
         <option v-for="size in pageSizes" :key="size" :value="size">{{ size }} 条</option>
       </select>
@@ -32,7 +32,11 @@ const emit = defineEmits<{ change: [page: number] }>()
   .list-pagination :deep(.el-pagination) { display: none; }
   .pager-compact { display: flex; flex: 1; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; font-size: 12px; color: var(--ink-4); }
   .pager-compact span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pager-compact button { min-height: 40px; min-width: 52px; padding: 0 8px; border: 1px solid var(--field-line); border-radius: 6px; background: #fff; color: var(--ink-2); font: inherit; font-size: 13px; cursor: pointer; }
+  .pager-compact button { flex: none; white-space: nowrap; min-height: 40px; min-width: 52px; padding: 0 8px; border: 1px solid var(--field-line); border-radius: 6px; background: #fff; color: var(--ink-2); font: inherit; font-size: 13px; cursor: pointer; }
   .pager-compact button:disabled { opacity: .45; cursor: default; }
+}
+/* 360 宽且列表放在带内边距的面板里时，省掉「每页显示」字样（下拉自带无障碍名称），把空间留给页码。 */
+@media (max-width: 400px) {
+  .page-size-text { display: none; }
 }
 </style>
