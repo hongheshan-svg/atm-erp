@@ -90,7 +90,7 @@ docker compose up -d
 | `LEAN_BIND_ADDRESS`、`LEAN_ALLOWED_HOSTS` | 默认仅本机访问；局域网部署时显式配置 |
 | `LEAN_ENVIRONMENT` | 正式部署保持 `production`（默认） |
 
-修改配置后执行 `docker compose up -d`。已有 `.env.lean` 的部署必须显式使用 `docker compose --env-file .env.lean up -d`，不要新建 `.env` 丢失原项目名或密钥；兼容安装器优先使用已有 `.env`，否则沿用 `.env.lean`。保留配置和数据卷，多实例须分别设置项目名和端口。升级前备份，不能把本命令当成自动备份流程。
+修改配置后执行 `docker compose up -d`。已有 `.env.lean` 的部署必须显式使用 `docker compose --env-file .env.lean up -d`，不要新建 `.env` 丢失原项目名或密钥；兼容安装器优先使用已有 `.env`，否则沿用 `.env.lean`。保留配置和数据卷，多实例须分别设置项目名和端口。升级前备份，不能把本命令当成自动备份流程，步骤见下文“手动升级”。
 
 ### 原生安装
 
@@ -212,19 +212,39 @@ python3 scripts/backup.py backup --env-file .env --archive backups/erp-20260909.
 
 备份短暂停止应用写入，一起保存数据库和附件，完成后恢复服务。归档有校验和，Unix 系统中备份文件默认仅当前用户可读，**不包含 `.env`（或旧 `.env.lean`）密钥**。另行安全保存环境配置。
 
+归档清单同时记录备份时实际运行的程序版本，完成时一并显示；网页升级过的部署记录的是 `lean_runtime` 卷中已升级程序的版本，而不是原安装包镜像的版本。备份**不包含 `lean_runtime` 卷**（网页升级安装的程序、离线依赖、升级日志及升级前备份），恢复时这些内容不会随归档迁移，由目标镜像或发布包提供程序。
+
 恢复必须使用新的 Compose 项目名、端口、数据库卷与附件卷。准备目标配置但不要先初始化应用，然后运行：
 
 ```bash
 python3 scripts/backup.py restore --env-file .env.restore --archive backups/erp-20260909.zip
 ```
 
-目标环境需使用已构建的当前应用镜像；若镜像标签不同，设置 `LEAN_IMAGE`。恢复拒绝非空数据库、非空附件卷和正在运行的应用，绝不覆盖现有业务数据。原账户密码保持备份时的值。
+**恢复需使用不低于备份程序版本的 Docker 包或镜像**：在该版本或更新版本发布包的目录中运行上述命令（`LEAN_IMAGE` 留空即使用包内固定摘要），或用 `LEAN_IMAGE` 指定该版本或更新的镜像；镜像须已在本机，可先执行 `docker compose --env-file .env.restore pull app`（不要用安装器准备恢复目标，它会启动并初始化应用）。目标程序较旧时，脚本在写入数据库和附件之前拒绝，否则还原后应用会以“旧迁移历史”拒绝启动。网页升级过的部署通常比原安装包新，须按备份显示的版本准备发布包。没有版本记录的早期备份不做此核对；无法确认目标程序版本时（如没有版本文件的早期镜像）只打印警告并继续，须自行核对版本。恢复拒绝非空数据库、非空附件卷和正在运行的应用，绝不覆盖现有业务数据。原账户密码保持备份时的值。
 
 ### 手动升级
 
 原生升级：先停止应用，备份 PostgreSQL（pg_dump 自定义格式）、DATA_DIR/uploads 附件及私有配置。新目录解压新版本，沿用原 native-config.json 和 DATA_DIR，执行 install，再 start。
 
 Docker 升级：在旧目录执行 `docker compose --env-file .env stop app`（旧安装为 `.env.lean`），保留数据库服务供备份脚本使用。备份完成后，将原配置文件私密复制到新版本目录，保留项目名、密钥、数据库密码和原数据卷，再运行新目录的 install.sh 或 install.ps1（优先使用 `.env`，否则沿用 `.env.lean`）校验导入随包镜像、重建应用容器并前向迁移，不在本机编译。`LEAN_IMAGE` 留空的配置也可在新目录直接 `docker compose --env-file .env up -d`，按新包固定摘要拉取镜像；安装器写入过 `LEAN_IMAGE` 的配置会继续指向旧镜像，须走安装器。
+
+直接 Compose 部署（`.env` 加 `docker compose up -d`，未用安装器）手动换包时同样先备份再启动新版本：新版本应用启动即前向迁移数据库，**不会自动备份**，不能解压新包后直接 `up -d`。网页升级（OTA）由升级流程自动先备份，不需要以下步骤。
+
+```bash
+# 1. 旧版本目录：停止应用写入，再完整备份数据库与附件（需要宿主机 Python 3.11+；Windows 用 py -3.11 运行同一脚本）
+docker compose --env-file .env stop app
+python3 scripts/backup.py backup --env-file .env --archive "backups/erp-before-upgrade-$(date +%Y%m%d-%H%M).zip"
+# 2. 看到“备份完成”后，把原配置私密复制到新版本目录（保留项目名、密钥、数据库密码和 LEAN_IMAGE 留空）
+NEW=/path/to/新版本目录
+cp -p .env "$NEW/.env"
+# 3. 新版本目录：启动后自动前向迁移，确认健康
+cd "$NEW"
+docker compose --env-file .env up -d
+docker compose --env-file .env ps
+docker compose --env-file .env logs --tail 100 app
+```
+
+备份失败时不要在新目录启动；此时数据库尚未迁移，可在旧目录执行 `docker compose --env-file .env start app` 恢复原服务。备份归档留在旧目录的 `backups/`，升级后不要随旧目录删除，并另行异地保存。新版本启动后数据库即已迁移，不能再回到旧目录启动。
 
 禁止将已升级的数据库交给旧版本运行；回退只能恢复匹配旧版本的独立备份库与附件。不要覆盖密钥或生成新配置替代原配置。
 
@@ -251,7 +271,7 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
   只开放端口而未放行主机名，真实 IP 访问会被服务端拒绝（HTTP 400）；只放行主机名而未开放端口，局域网仍然连不上。
 - 初始密码见 `.env`（旧安装为 `.env.lean`）的 LEAN_ADMIN_PASSWORD，仅在完成安装向导前有效；向导要求修改初始密码，之后请使用新密码。重新安装不会重置已有用户密码。
 - 忘记管理员密码：新版 Docker 用 `docker compose --env-file .env -f docker-compose.yml exec app python /opt/erp/container_runtime.py manage changepassword admin`（旧安装用 `.env.lean`；自动选中 OTA 后的实际程序），
-  原生安装用 `bash install-native.sh reset-password`（Windows 为 `.\install-native.ps1 reset-password`）。
+  原生安装用 `bash install-native.sh reset-password`（Windows 为 `.\install-native.ps1 reset-password`），重设其他账户加 `--user 用户名`（Windows 为 `-User 用户名`）。
 
 ### 原生安装
 

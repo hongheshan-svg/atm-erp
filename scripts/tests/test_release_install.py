@@ -2,6 +2,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -238,6 +240,80 @@ class ReleaseInstallTests(unittest.TestCase):
         self.assertIn('LEAN_DB_PASSWORD=keep-secret', text)
         self.assertIn('LEAN_PROJECT_NAME=keep', text)
         self.assertEqual(text.count('LEAN_IMAGE='), 1)
+
+
+@unittest.skipIf(
+    os.name == 'nt' or not shutil.which('bash') or not shutil.which('openssl'), 'install.sh 仅用于类 Unix 宿主机'
+)
+class InstallScriptTests(unittest.TestCase):
+    """Run the real install.sh with recording docker and host-Python stand-ins."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        base = Path(temporary.name)
+        self.root = base / 'package'
+        self.root.mkdir()
+        shutil.copy(Path(__file__).parents[2] / 'install.sh', self.root / 'install.sh')
+        stubs = base / 'bin'
+        stubs.mkdir()
+        self.log = base / 'calls.log'
+        self.stub(stubs / 'docker', 'echo "docker $*" >> "$STUB_LOG"')
+        self.stub(
+            base / 'python3.11',
+            'echo "python $*" >> "$STUB_LOG"\n'
+            'case "$1" in\n'
+            '  -c) exit "${STUB_PYTHON_CHECK:-0}" ;;\n'
+            '  */release_install.py) exit "${STUB_RELEASE_EXIT:-0}" ;;\n'
+            'esac',
+        )
+        self.environment = {key: value for key, value in os.environ.items() if not key.startswith('LEAN_')}
+        self.environment.update(
+            PATH=str(stubs) + os.pathsep + os.environ['PATH'], PYTHON=str(base / 'python3.11'), STUB_LOG=str(self.log)
+        )
+
+    @staticmethod
+    def stub(path, body):
+        path.write_text('#!/bin/sh\n' + body + '\nexit 0\n')
+        path.chmod(0o755)
+
+    def install(self, **environment):
+        result = subprocess.run(
+            ['bash', str(self.root / 'install.sh')],
+            env={**self.environment, **environment},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        calls = self.log.read_text().splitlines() if self.log.exists() else []
+        return result, calls
+
+    def test_release_package_leaves_image_to_compose_digest(self):
+        (self.root / 'INSTALL-MANIFEST.json').write_text('{}')
+        result, calls = self.install(STUB_RELEASE_EXIT='3')
+        self.assertNotEqual(result.returncode, 0)
+        config = (self.root / '.env').read_text()
+        # An interrupted install must not leave a local image name that shadows the packaged digest.
+        self.assertRegex(config, r'(?m)^LEAN_IMAGE=$')
+        self.assertNotIn('atm-erp-lean:local', config)
+        self.assertTrue(
+            any(call.endswith('--config ' + str(self.root / '.env')) for call in calls if 'release_install.py' in call)
+        )
+        self.assertFalse(any(' up -d ' in call or call.endswith(' build app') for call in calls))
+
+    def test_release_package_checks_python_before_writing_config(self):
+        (self.root / 'INSTALL-MANIFEST.json').write_text('{}')
+        result, calls = self.install(STUB_PYTHON_CHECK='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / '.env').exists())
+        self.assertFalse(any(call.startswith('docker ') for call in calls))
+
+    def test_source_checkout_keeps_local_image_build(self):
+        result, calls = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex((self.root / '.env').read_text(), r'(?m)^LEAN_IMAGE=atm-erp-lean:local$')
+        self.assertTrue(any(call.endswith(' build app') for call in calls))
+        self.assertFalse(any('release_install.py' in call for call in calls))
 
 
 if __name__ == '__main__':
