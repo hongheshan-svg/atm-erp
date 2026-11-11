@@ -234,7 +234,7 @@ it('发货、结项前读取推进检查：缺项一次列全并给出跳转，�
   const project = { id: 7, manager: 1, members: [], can_manage: true, status: 'active', equipment_quantity: 1 }
   vi.mocked(read).mockImplementation(async path => {
     if (path.endsWith('/readiness/')) return { status: 'active', ship: [
-      { key: 'stage_assembly', ok: false, label: '组装阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
+      { key: 'stage_assembly', ok: false, label: '装配阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
       { key: 'stage_test', ok: false, label: '调试阶段', detail: '已完成 0 / 3', blocking: true, target: { tab: 'tasks', phase: 'test' } },
       { key: 'bom', ok: true, label: '设备 BOM', detail: '已登记 3 种物料', blocking: true, target: { tab: 'bom' } },
       { key: 'receivable', ok: false, label: '应收状态', detail: '未收 1 笔，共 ¥100.00；其中已逾期 1 笔', blocking: false, target: { tab: 'finance' } },
@@ -243,9 +243,9 @@ it('发货、结项前读取推进检查：缺项一次列全并给出跳转，�
     return project
   })
   const ship = await actionCommand('projects', project, '发货')
-  expect(ship.blocked).toBe('发货前还差：组装阶段（已完成 0 / 2）；调试阶段（已完成 0 / 3）')
+  expect(ship.blocked).toBe('发货前还差：装配阶段（已完成 0 / 2）；调试阶段（已完成 0 / 3）')
   expect(ship.links).toEqual([
-    { label: '查看组装阶段', path: '/projects/7?tab=tasks&section=tasks&phase=assembly' },
+    { label: '查看装配阶段', path: '/projects/7?tab=tasks&section=tasks&phase=assembly' },
     { label: '查看调试阶段', path: '/projects/7?tab=tasks&section=tasks&phase=test' },
   ])
   expect(ship.notice).toEqual({ type: 'warning', text: '应收状态：未收 1 笔，共 ¥100.00；其中已逾期 1 笔。仅作提示，不影响发货。' })

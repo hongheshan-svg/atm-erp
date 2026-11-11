@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllGlobals())
 it('发货前一次列出全部缺项并可跳到对应阶段，应收逾期只作提示', async () => {
   vi.mocked(read).mockResolvedValue({ status: 'active', ship: [
     { key: 'stage_design', ok: true, label: '设计阶段', detail: '已完成 6 / 6', blocking: true, target: { tab: 'tasks', phase: 'design' } },
-    { key: 'stage_assembly', ok: false, label: '组装阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
+    { key: 'stage_assembly', ok: false, label: '装配阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
     { key: 'bom', ok: false, label: '设备 BOM', detail: '尚未登记 BOM', blocking: true, target: { tab: 'bom' } },
     { key: 'receivable', ok: false, label: '应收状态', detail: '其中已逾期 1 笔', blocking: false, target: { tab: 'finance' } },
   ], accept: [], close: [] })
@@ -22,7 +22,7 @@ it('发货前一次列出全部缺项并可跳到对应阶段，应收逾期只�
   expect(wrapper.text()).toContain('发货前还差')
   const links = wrapper.findAll('a').map(link => [link.text(), link.attributes('href')])
   expect(links).toEqual([
-    ['组装阶段 · 已完成 0 / 2', '/projects/81?tab=tasks&section=tasks&phase=assembly'],
+    ['装配阶段 · 已完成 0 / 2', '/projects/81?tab=tasks&section=tasks&phase=assembly'],
     ['设备 BOM · 尚未登记 BOM', '/projects/81?tab=bom'],
     ['应收状态 · 其中已逾期 1 笔', '/projects/81?tab=finance'],
   ])
@@ -51,7 +51,7 @@ it('接口异常或返回格式不符时不渲染检查，也不报脚本错误'
 it('手机默认一行「发货前还差 N 项」，展开后才列出缺项和全部检查', async () => {
   vi.stubGlobal('innerWidth', 390)
   vi.mocked(read).mockResolvedValue({ status: 'active', ship: [
-    { key: 'stage_assembly', ok: false, label: '组装阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
+    { key: 'stage_assembly', ok: false, label: '装配阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
     { key: 'bom', ok: false, label: '设备 BOM', detail: '尚未登记 BOM', blocking: true, target: { tab: 'bom' } },
     { key: 'receivable', ok: false, label: '应收状态', detail: '其中已逾期 1 笔', blocking: false, target: { tab: 'finance' } },
   ], accept: [], close: [] })

@@ -71,7 +71,7 @@ const command = ref<Command | null>(null)
 const attention = computed(() => String(route.query.attention || ''))
 const taskAttention = computed(() => tab.value === 'tasks' && (!route.query.section || route.query.section === 'tasks') && ['open-tasks', 'acceptance'].includes(attention.value))
 const purchaseAttention = computed(() => tab.value === 'purchases' && ['draft', 'submitted', 'approved', 'partial'].includes(attention.value))
-// 阶段筛选跟随地址，推进检查里的「组装阶段」等链接可以直接落到对应任务。
+// 阶段筛选跟随地址，推进检查里的「装配阶段」等链接可以直接落到对应任务。
 const phase = ref(String(route.query.phase || ''))
 watch(() => route.query.phase, value => { phase.value = String(value || '') })
 function selectPhase(value: string) {

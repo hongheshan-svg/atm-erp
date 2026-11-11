@@ -730,7 +730,7 @@ class ProjectReadinessTests(ExecutionFixtures, TestCase):
         self.assertTrue(all('message' not in item for item in items.values()))
         # 发货时仍按同样顺序逐条拒绝，报错写明差几项。
         denied = self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
-        self.assertIn('组装阶段', str(denied))
+        self.assertIn('装配阶段', str(denied))
         self.assertIn('还有 1 项未完成', str(denied))
         self.complete(project.tasks.get(kind='assembly'))
         denied = self.post('manager', f'projects/{project.pk}/ship/', {'quantity': 1, 'date': TODAY}, status=409)
