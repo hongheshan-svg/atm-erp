@@ -1,6 +1,7 @@
 from decimal import ROUND_CEILING, Decimal
 
 from dateutil.relativedelta import relativedelta
+from django.db import transaction
 from django.db.models import Count, DecimalField, Exists, Min, OuterRef, Subquery, Sum, Value, prefetch_related_objects
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
@@ -13,6 +14,7 @@ from apps.core.models import CodeRule
 from apps.core.permissions import (
     ALL_ROLES,
     MANAGERS,
+    MONEY_READERS,
     PRODUCTION_MANAGERS,
     project_allowed,
     require_project,
@@ -38,7 +40,7 @@ from .common import (
     state,
     text,
 )
-from .finance import balance
+from .finance import balance, split_balance
 from .task_supervision import can_confirm_task, default_discipline, discipline_value, notify_task, require_confirmation
 
 STAGES = ('design', 'assembly', 'test')
@@ -137,10 +139,296 @@ def save_new_task(user, values):
     return task
 
 
-def completed_stage(project, kind):
+def check(key, ok, label, detail, *, blocking=True, target=None, message=''):
+    """推进检查的一项。blocking 的项不满足时发货或结项会被服务端拒绝；非 blocking 只提示。
+
+    message 是动作被拒时的报错原文，只在服务端内部使用，不随推进检查返回。
+    """
+    return {
+        'key': key,
+        'ok': ok,
+        'label': label,
+        'detail': detail,
+        'blocking': blocking,
+        'target': target or {},
+        'message': message,
+    }
+
+
+def stage_check(project, kind):
+    """发货前一个生产阶段是否完成：已取消的不计，必须至少有一项且全部完成。"""
     tasks = project.tasks.filter(kind=kind).exclude(status='cancelled')
-    if not tasks.exists() or tasks.exclude(status='done').exists():
-        raise Conflict(f'请先完成所有{Task.Kind(kind).label}任务。')
+    total, done = tasks.count(), tasks.filter(status='done').count()
+    label = dict(PHASES)[kind]
+    if not total:
+        return check(
+            f'stage_{kind}',
+            False,
+            label,
+            f'尚未建立{label}任务',
+            target={'tab': 'tasks', 'phase': kind},
+            message=f'尚未建立{label}任务，请先安排并完成{label}任务再登记发货。',
+        )
+    return check(
+        f'stage_{kind}',
+        done == total,
+        label,
+        f'已完成 {done} / {total}',
+        target={'tab': 'tasks', 'phase': kind},
+        message=f'请先完成所有{label}任务（还有 {total - done} 项未完成）。',
+    )
+
+
+def follow_up_check(project):
+    """采购跟进、客户预验收和整改等发货前跟进任务；由实际业务同步的汇总节点不计。"""
+    pending = list(
+        project.tasks.filter(kind__in=['purchase', 'shipping'], status='open')
+        .exclude(milestone__in=AUTOMATIC)
+        .order_by('pk')
+        .values_list('kind', 'title')
+    )
+    names = '、'.join(title for _, title in pending[:4]) + ('等' if len(pending) > 4 else '')
+    return check(
+        'follow_up',
+        not pending,
+        '采购跟进、客户预验收与整改',
+        f'还有 {len(pending)} 项未完成：{names}' if pending else '没有未完成的跟进任务',
+        target={'tab': 'tasks', 'phase': 'shipping' if any(kind == 'shipping' for kind, _ in pending) else 'purchase'},
+        message='请先完成已安排的采购跟进、客户预验收和整改任务，再登记发货。',
+    )
+
+
+def shipped_quantity(project):
+    return project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
+
+
+def bom_totals(project):
+    return list(project.bom_lines.values('item_id').annotate(total=Sum('quantity')))
+
+
+def proportional_plan(project, bom, shipped, qty, previous):
+    """同配置项目不填配套清单时，本批按设备数量比例配套（向上取整到 0.001）。"""
+    plan = {}
+    for line in bom:
+        target = (line['total'] * Decimal(shipped + qty) / project.equipment_quantity).quantize(
+            Decimal('0.001'), rounding=ROUND_CEILING
+        )
+        plan[line['item_id']] = max(ZERO, target - previous.get(line['item_id'], ZERO))
+    return plan
+
+
+def material_problem(project, line, previous, planned, final):
+    """一条 BOM 物料的累计配套是否成立；返回拒绝原因，None 表示成立。发货与推进检查共用。"""
+    required = previous.get(line['item_id'], ZERO) + planned.get(line['item_id'], ZERO)
+    if required > line['total']:
+        return '累计交付配套数量超过BOM，请先核对清单或完成设计变更。'
+    if final and required < line['total']:
+        return '最后一批交付必须覆盖剩余BOM配套物料，请补齐清单。'
+    if issued(project, line['item_id']) < required:
+        return '累计领料不足以支持本批交付，请到库存完成领料。'
+    return None
+
+
+def completed_stage(project, kind):
+    item = stage_check(project, kind)
+    if not item['ok']:
+        raise Conflict(item['message'])
+
+
+def ship_checks(project):
+    """登记发货前与本次填写无关的条件，顺序与发货时的校验一致。
+
+    领料只能按「最少发 1 台」核算：同配置项目按比例、最后一台须覆盖剩余 BOM；多单元项目的本批清单
+    在发货时才填写，此时只作提示。发货时服务端仍按实际填写内容逐项复核。
+    """
+    items = [stage_check(project, stage) for stage in STAGES]
+    items.append(follow_up_check(project))
+    shipped = shipped_quantity(project)
+    remaining = project.equipment_quantity - shipped
+    items.append(
+        check(
+            'quantity',
+            remaining >= 1,
+            '剩余待发设备',
+            f'已发货 {shipped} / {project.equipment_quantity} 台'
+            + (f'，还可发 {remaining} 台' if remaining > 0 else ''),
+            target={'tab': 'deliveries'},
+            message='本次交付数量超过项目设备剩余数量。',
+        )
+    )
+    bom = bom_totals(project)
+    items.append(
+        check(
+            'bom',
+            bool(bom),
+            '设备 BOM',
+            f'已登记 {len(bom)} 种物料' if bom else '尚未登记 BOM',
+            target={'tab': 'bom'},
+            message='请先登记设备 BOM 并完成领料。',
+        )
+    )
+    if bom and remaining >= 1:
+        previous = delivered_materials(project)
+        final = remaining == 1
+        multi_unit = len({line.assembly_unit for line in project.bom_lines.all() if line.assembly_unit}) > 1
+        if multi_unit and not final:
+            items.append(
+                check(
+                    'materials',
+                    True,
+                    '本批配套领料',
+                    '多单元项目在发货时填写本批配套清单，系统按清单核对累计领料',
+                    blocking=False,
+                    target={'tab': 'bom'},
+                )
+            )
+        else:
+            planned = (
+                {line['item_id']: line['total'] - previous.get(line['item_id'], ZERO) for line in bom}
+                if multi_unit
+                else proportional_plan(project, bom, shipped, 1, previous)
+            )
+            short = [line for line in bom if material_problem(project, line, previous, planned, final)]
+            items.append(
+                check(
+                    'materials',
+                    not short,
+                    '本批配套领料',
+                    (f'按发 1 台核算，还有 {len(short)} 种物料领料不足' if short else '按发 1 台核算，领料已满足')
+                    + ('（最后一台须覆盖剩余 BOM）' if final else ''),
+                    target={'tab': 'bom'},
+                    message='累计领料不足以支持本批交付，请到库存完成领料。',
+                )
+            )
+    return items
+
+
+def receivable_check(project):
+    """发货时提示应收状态：只读取款项余额，不阻断发货。"""
+    today = timezone.localdate()
+    overdue, outstanding, count, overdue_count, earliest = ZERO, ZERO, 0, 0, None
+    for entry in project.entries.filter(kind='receivable').order_by('due_date', 'pk'):
+        part = split_balance(entry, today)
+        if part.get('receivable'):
+            count += 1
+            outstanding += part['receivable']
+        if part.get('overdue_receivable'):
+            overdue_count += 1
+            overdue += part['overdue_receivable']
+            earliest = earliest or entry
+    if not count:
+        detail = '应收款项已结清或尚无应收'
+    else:
+        detail = f'未收 {count} 笔，共 ¥{outstanding:,.2f}'
+        if overdue_count:
+            detail += f'；其中已逾期 {overdue_count} 笔 ¥{overdue:,.2f}（最早：{earliest.title or "收款节点"}，到期 {earliest.due_date}）'
+    return check('receivable', not overdue_count, '应收状态', detail, blocking=False, target={'tab': 'finance'})
+
+
+def install_ready(delivery):
+    """本批安装任务全部完成后才能登记验收。"""
+    installs = delivery.tasks.filter(kind='install')
+    return installs.exists() and not installs.exclude(status='done').exists()
+
+
+def acceptance_checks(project):
+    """交付中项目的批次进度：安装完成后才能登记验收（与验收动作同一规则）。"""
+    pending = list(project.deliveries.filter(accepted_date__isnull=True).order_by('shipped_date', 'pk'))
+    installing = [delivery for delivery in pending if not install_ready(delivery)]
+    total = project.deliveries.count()
+    return [
+        check(
+            'install',
+            not installing,
+            '批次安装',
+            f'{len(installing)} 批安装任务未完成' if installing else '已发货批次的安装任务均已完成',
+            target={'tab': 'tasks', 'phase': 'site'},
+        ),
+        check(
+            'acceptance',
+            not pending,
+            '客户验收',
+            f'已验收 {total - len(pending)} / {total} 批',
+            target={'tab': 'deliveries'},
+        ),
+    ]
+
+
+def close_checks(project, *, lock=False):
+    """结项条件，顺序与结项校验一致；lock 只在实际结项时锁款项行。"""
+    open_tasks = project.tasks.filter(status='open').count()
+    shipped = shipped_quantity(project)
+    unaccepted = project.deliveries.filter(accepted_date__isnull=True).count()
+    purchases = project.purchases.exclude(status__in=['received', 'cancelled']).count()
+    entries = project.entries.select_for_update() if lock else project.entries.all()
+    unsettled = sum(balance(entry) != 0 for entry in entries)
+    return [
+        check(
+            'tasks',
+            not open_tasks,
+            '任务全部完成或取消',
+            f'还有 {open_tasks} 项未完成' if open_tasks else '全部任务已结束',
+            target={'tab': 'tasks', 'attention': 'open-tasks'},
+            message='项目还有未完成任务。',
+        ),
+        check(
+            'deliveries',
+            shipped == project.equipment_quantity and not unaccepted,
+            '全部设备交付验收',
+            f'已发货 {shipped} / {project.equipment_quantity} 台' + (f'，{unaccepted} 批待验收' if unaccepted else ''),
+            target={'tab': 'deliveries'},
+            message='项目尚未全部交付验收。',
+        ),
+        check(
+            'purchases',
+            not purchases,
+            '采购全部收货或取消',
+            f'还有 {purchases} 单未处理完成' if purchases else '采购均已收货或取消',
+            target={'tab': 'purchases'},
+            message='项目还有未处理完成的采购。',
+        ),
+        check(
+            'entries',
+            not unsettled,
+            '款项全部结清',
+            f'还有 {unsettled} 笔未结清或待退款' if unsettled else '款项均已结清',
+            target={'tab': 'finance'},
+            message='项目还有未结清款项或待退款。',
+        ),
+    ]
+
+
+def readiness(user, project):
+    """项目推进检查（只读）：发货、验收、结项前还差什么。规则与 ship/accept/close 共用同一组检查函数。"""
+    require_project(user, project, MANAGERS)
+    result = {'status': project.status, 'ship': [], 'accept': [], 'close': []}
+    if project.status in {'active', 'delivering'} and shipped_quantity(project) < project.equipment_quantity:
+        result['ship'] = ship_checks(project)
+        if project_allowed(user, project, MONEY_READERS):
+            result['ship'].append(receivable_check(project))
+    if project.status == 'delivering':
+        result['accept'] = acceptance_checks(project)
+    if project.status == 'warranty':
+        result['close'] = close_checks(project)
+        from .banking import check_close
+
+        # 对账与银行款项沿用结项时的同一函数；它会短暂锁定相关银行流水，放在只读事务里立即释放。
+        try:
+            with transaction.atomic():
+                check_close(project)
+            result['close'].append(
+                check(
+                    'banking', True, '对账单与银行款项', '没有待确认对账单或未匹配的银行款项', target={'tab': 'finance'}
+                )
+            )
+        except Conflict as error:
+            result['close'].append(
+                check('banking', False, '对账单与银行款项', str(error.detail), target={'tab': 'finance'})
+            )
+    for key in ('ship', 'accept', 'close'):
+        for item in result[key]:
+            item.pop('message', None)
+    return result
 
 
 def task_values(project, data):
@@ -233,7 +521,8 @@ def start_task(actor, key, task_id, data, *, amend=False):
                 raise Conflict('实际开始日期已被修改，请刷新后重新核对。')
         elif task.started_date:
             raise Conflict('任务已经开始；日期有误请由有权限的任务管理者更正。')
-        reason = text(data, 'reason')
+        # 开始是正向日常登记，说明选填并缺省为动作名；更正开始日期属于纠错，仍须写明原因。
+        reason = text(data, 'reason') if amend else text(data, 'reason', default='') or '开始任务'
         previous = task.started_date
         task.started_date = task_start_date(task, data)
         task.started_at = task.started_at or timezone.now()
@@ -279,7 +568,8 @@ def complete_task(actor, key, task_id, data):
         state(task, {'open'})
         if task.kind == 'acceptance' or task.milestone in AUTOMATIC:
             raise Conflict('此节点由实际发货、安装或验收记录同步，请从对应业务办理，不能直接完成。')
-        reason = text(data, 'reason')
+        # 正常完成不需要「原因」：说明选填，缺省记为动作名，审计里仍有说明。
+        reason = text(data, 'reason', default='') or '完成任务'
         if 'started_date' in data:
             if task.started_date:
                 raise Conflict('任务已记录开始日期，请刷新；更正日期需由有权限的任务管理者处理。')
@@ -350,6 +640,34 @@ def amend_task_completion(actor, key, task_id, data):
     return task_action(actor, key, 'task.completion-date', task_id, data, ALL_ROLES, execute, authorize_task=authorize)
 
 
+def edit_task(actor, key, task_id, data):
+    """只改任务名称和完成要求；执行人、日期和状态仍走各自的动作。权限与重新分配相同。"""
+    source = lookup(Task, task_id)
+
+    def execute(user, project, task):
+        fields(data, {'title', 'description', 'reason'})
+        state(task, {'open', 'done'})
+        if task.milestone in AUTOMATIC:
+            raise Conflict('此节点按实际发货、安装或验收记录同步，名称和要求不在这里修改。')
+        title = text(data, 'title', default=task.title, maximum=150)
+        if not title:
+            raise ValidationError({'title': '请填写任务名称。'})
+        description = text(data, 'description', default=task.description or '', maximum=20000)
+        if title == task.title and description == (task.description or ''):
+            raise ValidationError({'title': '任务名称和完成要求都没有修改。'})
+        # 改动的是执行人据以交付的标准，属于纠错，必须写明原因并保留原文。
+        reason = text(data, 'reason')
+        before = {'title': task.title, 'description': task.description or ''}
+        task.title, task.description = title, description
+        save(task, user)
+        notify_task(user, task, '任务名称或完成要求已调整')
+        return audit(
+            user, 'task.edit', task, reason=reason, before=before, after={'title': title, 'description': description}
+        )
+
+    return task_action(actor, key, 'task.edit', task_id, data, task_management_roles(source.kind), execute)
+
+
 def log_time(actor, key, task_id, data):
     def authorize(user, task):
         require_confirmation(user, task)
@@ -382,7 +700,8 @@ def log_time(actor, key, task_id, data):
                 hours=hours,
                 hourly_cost=person.hourly_cost,
                 cost=rounded(hours * person.hourly_cost),
-                reason=text(data, 'reason'),
+                # 工作内容选填，缺省记为动作名；更正、冲销工时仍须写明原因。
+                reason=text(data, 'reason', default='') or '登记工时',
             ),
             user,
         )
@@ -509,17 +828,14 @@ def ship(actor, key, project_id, data):
         state(project, {'active', 'delivering'})
         for stage in STAGES:
             completed_stage(project, stage)
-        if (
-            project.tasks.filter(kind__in=['purchase', 'shipping'], status='open')
-            .exclude(milestone__in=AUTOMATIC)
-            .exists()
-        ):
-            raise Conflict('请先完成已安排的采购跟进、客户预验收和整改任务，再登记发货。')
+        follow_up = follow_up_check(project)
+        if not follow_up['ok']:
+            raise Conflict(follow_up['message'])
         qty = integer(data, 'quantity', None, minimum=1)
-        shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
+        shipped = shipped_quantity(project)
         if shipped + qty > project.equipment_quantity:
             raise Conflict('本次交付数量超过项目设备剩余数量。')
-        bom = list(project.bom_lines.values('item_id').annotate(total=Sum('quantity')))
+        bom = bom_totals(project)
         if not bom:
             raise Conflict('请先登记设备 BOM 并完成领料。')
         previous = delivered_materials(project)
@@ -539,19 +855,11 @@ def ship(actor, key, project_id, data):
         else:
             if len({line.assembly_unit for line in project.bom_lines.all() if line.assembly_unit}) > 1:
                 raise Conflict('多单元项目请填写本批配套物料清单，明确本批实际用量。')
-            for line in bom:
-                target = (line['total'] * Decimal(shipped + qty) / project.equipment_quantity).quantize(
-                    Decimal('0.001'), rounding=ROUND_CEILING
-                )
-                planned[line['item_id']] = max(ZERO, target - previous.get(line['item_id'], ZERO))
+            planned = proportional_plan(project, bom, shipped, qty, previous)
         for line in bom:
-            required = previous.get(line['item_id'], ZERO) + planned.get(line['item_id'], ZERO)
-            if required > line['total']:
-                raise Conflict('累计交付配套数量超过BOM，请先核对清单或完成设计变更。')
-            if shipped + qty == project.equipment_quantity and required < line['total']:
-                raise Conflict('最后一批交付必须覆盖剩余BOM配套物料，请补齐清单。')
-            if issued(project, line['item_id']) < required:
-                raise Conflict('累计领料不足以支持本批交付，请到库存完成领料。')
+            problem = material_problem(project, line, previous, planned, shipped + qty == project.equipment_quantity)
+            if problem:
+                raise Conflict(problem)
         date = event_date(data)
         if project.contract_date and date < project.contract_date:
             raise ValidationError({'date': '交付日期不能早于签约日期。'})
@@ -613,15 +921,15 @@ def accept(actor, key, delivery_id, data):
         delivery = get_object_or_404(Delivery.objects.select_for_update(), pk=source.pk, project=project)
         if delivery.accepted_date:
             raise Conflict('此交付批次已经验收。')
-        installs = delivery.tasks.filter(kind='install')
-        if not installs.exists() or installs.exclude(status='done').exists():
+        if not install_ready(delivery):
             raise Conflict('请先完成本批次的安装任务。')
         date = event_date(data)
         if date < delivery.shipped_date:
             raise ValidationError({'date': '验收日期不能早于交付日期。'})
-        if installs.filter(completed_date__gt=date).exists():
+        if delivery.tasks.filter(kind='install', completed_date__gt=date).exists():
             raise ValidationError({'date': '验收日期不能早于本批安装的实际完成日期。'})
-        reason = text(data, 'reason')
+        # 正向的日常登记说明选填，缺省记为动作名，审计里仍有说明。
+        reason = text(data, 'reason', default='') or '交付验收'
         delivery.accepted_date = date
         delivery.warranty_until = date + relativedelta(months=project.warranty_months)
         save(delivery, user)
@@ -746,17 +1054,9 @@ def close(actor, key, project_id, data):
     def execute(user, project):
         fields(data, {'reason'})
         state(project, {'warranty'})
-        if project.tasks.filter(status='open').exists():
-            raise Conflict('项目还有未完成任务。')
-        if (
-            project.deliveries.aggregate(total=Sum('quantity'))['total'] != project.equipment_quantity
-            or project.deliveries.filter(accepted_date__isnull=True).exists()
-        ):
-            raise Conflict('项目尚未全部交付验收。')
-        if project.purchases.exclude(status__in=['received', 'cancelled']).exists():
-            raise Conflict('项目还有未处理完成的采购。')
-        if any(balance(entry) != 0 for entry in project.entries.select_for_update()):
-            raise Conflict('项目还有未结清款项或待退款。')
+        for item in close_checks(project, lock=True):
+            if not item['ok']:
+                raise Conflict(item['message'])
         from .banking import check_close
 
         check_close(project)

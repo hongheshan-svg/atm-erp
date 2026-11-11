@@ -120,30 +120,42 @@ def apply_template(actor, key, data):
     return project_action(actor, key, 'project.milestones', data.get('project'), data, MANAGERS, execute)
 
 
+# 阶段卡与任务列表的阶段筛选同一口径：客户终验收阶段包含各交付批次的安装、验收任务。
+STAGE_KINDS = {kind: (kind, 'install', 'acceptance') if kind == 'site' else (kind,) for kind, _ in PHASES}
+
+
 def summary(actor, project_id):
     project = lookup(Project, project_id)
     require_project(actor, project, ALL_ROLES)
     tasks = list(
-        project.tasks.filter(kind__in=dict(PHASES), delivery__isnull=True).select_related('assignee').order_by('pk')
+        project.tasks.filter(kind__in=[*dict(PHASES), 'install', 'acceptance'])
+        .select_related('assignee')
+        .order_by('pk')
     )
     today = timezone.localdate()
+    shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
     stages = []
     for kind, label in PHASES:
-        rows = [task for task in tasks if task.kind == kind and task.status != 'cancelled']
-        stages.append(
-            {
-                'key': kind,
-                'label': label,
-                'total': len(rows),
-                'done': sum(task.status == 'done' for task in rows),
-                'overdue': sum(
-                    task.status == 'open' and task.due_date is not None and task.due_date < today for task in rows
-                ),
-            }
-        )
+        rows = [task for task in tasks if task.kind in STAGE_KINDS[kind] and task.status != 'cancelled']
+        stage = {
+            'key': kind,
+            'label': label,
+            'total': len(rows),
+            'done': sum(task.status == 'done' for task in rows),
+            'overdue': sum(
+                task.status == 'open' and task.due_date is not None and task.due_date < today for task in rows
+            ),
+        }
+        if kind == 'shipping' and shipped:
+            # 未生成发货节点的项目也按实际交付记录说明发货进度，不显示「尚未安排」。
+            stage.update(shipped=shipped, equipment=project.equipment_quantity)
+        stages.append(stage)
+    existing = set(project.tasks.exclude(milestone='').values_list('milestone', flat=True))
     return {
         'stages': stages,
         # 已落地的模板节点数：前端据此区分「首次生成」和「补充节点」，手工建的普通任务不算。
         'milestones': sum(bool(task.milestone) for task in tasks),
+        # 尚未生成的模板节点数，口径与生成时的跳过规则一致（已取消的节点也算已存在）。
+        'missing': sum(code not in existing for code, *_ in NODES),
         'can_generate': project.status in {'active', 'delivering'} and project_allowed(actor, project, MANAGERS),
     }

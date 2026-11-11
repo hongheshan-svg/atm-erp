@@ -1,4 +1,5 @@
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
+from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
@@ -35,6 +36,37 @@ from ..services import (
 from .common import ImportableMixin, ReadView, key
 
 
+def finance_summary(project):
+    """项目内款项汇总：应收、应付、费用各自的应结、已结、未结与其中逾期。
+
+    余额与逾期沿用收付款页的 split_balance，取消冲减的部分不计入应结金额；只读取，不改收付款规则。
+    """
+    from decimal import Decimal
+
+    from ..services.finance import paid, split_balance
+
+    today = timezone.localdate()
+    zero = Decimal('0')
+    totals = {
+        kind: {'total': zero, 'settled': zero, 'outstanding': zero, 'overdue': zero, 'refund': zero, 'count': 0}
+        for kind in ('receivable', 'payable', 'expense')
+    }
+    for entry in project.entries.all():
+        row = totals[entry.kind]
+        row['count'] += 1
+        row['total'] += entry.amount - entry.credit_amount
+        row['settled'] += paid(entry)
+        part = split_balance(entry, today)
+        key = 'receivable' if entry.kind == 'receivable' else 'payable'
+        row['outstanding'] += part.get(key, zero)
+        row['overdue'] += part.get('overdue_' + key, zero)
+        row['refund'] += part.get('refund_out' if entry.kind == 'receivable' else 'refund_in', zero)
+    return {
+        kind: {name: value if name == 'count' else f'{value:.2f}' for name, value in row.items()}
+        for kind, row in totals.items()
+    }
+
+
 class ProjectView(ImportableMixin, ReadView):
     queryset = Project.objects.select_related('customer', 'manager', 'sale').prefetch_related('members')
     serializer_class = ProjectSerializer
@@ -51,20 +83,52 @@ class ProjectView(ImportableMixin, ReadView):
             self.write_roles = PRODUCTION_MANAGERS
         return super().get_permissions()
 
+    # 列表排序只开放这几种；默认仍按创建倒序。交期为空的项目排在最后。
+    ORDERINGS = {
+        '-id': ('-id',),
+        'due_date': (F('due_date').asc(nulls_last=True), '-id'),
+        '-due_date': (F('due_date').desc(nulls_last=True), '-id'),
+        '-task_overdue': ('-task_overdue', F('due_date').asc(nulls_last=True), '-id'),
+    }
+
     def get_queryset(self):
         if self.action == 'progress':
             return progress.readable_projects(self.request.user, super().get_queryset())
-        # 列表直接给出任务完成进度，不必逐个打开项目；已取消和已删除的任务不计入。
+        # 列表直接给出任务完成进度和逾期任务数，不必逐个打开项目；已取消和已删除的任务不计入。
+        today = timezone.localdate()
         counted = Q(tasks__is_deleted=False) & ~Q(tasks__status='cancelled')
-        # 聚合会丢掉模型默认排序，分页前显式恢复。
-        return (
-            projects_for(self.request.user, super().get_queryset())
-            .annotate(
-                task_total=Count('tasks', filter=counted, distinct=True),
-                task_done=Count('tasks', filter=counted & Q(tasks__status='done'), distinct=True),
-            )
-            .order_by('-id')
+        queryset = projects_for(self.request.user, super().get_queryset()).annotate(
+            task_total=Count('tasks', filter=counted, distinct=True),
+            task_done=Count('tasks', filter=counted & Q(tasks__status='done'), distinct=True),
+            task_overdue=Count(
+                'tasks', filter=counted & Q(tasks__status='open', tasks__due_date__lt=today), distinct=True
+            ),
         )
+        params = self.request.query_params
+        overdue = params.get('overdue', '')
+        if overdue not in {'', 'true', 'false'}:
+            raise ValidationError({'overdue': '请选择是否只看有逾期的项目。'})
+        if overdue == 'true':
+            # 与列表上的风险提示同一口径：有逾期任务，或执行中、交付中且计划交期已过。
+            queryset = queryset.filter(
+                Q(task_overdue__gt=0) | Q(status__in=['active', 'delivering'], due_date__lt=today)
+            )
+        ordering = params.get('ordering') or '-id'
+        if ordering not in self.ORDERINGS:
+            raise ValidationError({'ordering': '请选择有效的排序方式。'})
+        # 聚合会丢掉模型默认排序，分页前显式恢复。
+        return queryset.order_by(*self.ORDERINGS[ordering])
+
+    @action(detail=True, methods=['get'])
+    def readiness(self, request, pk=None):
+        """发货、验收、结项前还差什么；只读，规则与对应动作共用。"""
+        return Response(execution.readiness(request.user, self.get_object()))
+
+    @action(detail=True, methods=['get'], url_path='finance-summary')
+    def finance_summary(self, request, pk=None):
+        project = self.get_object()
+        require_project(request.user, project, MONEY_READERS)
+        return Response(finance_summary(project))
 
     @action(detail=True, methods=['get'])
     def progress(self, request, pk=None):

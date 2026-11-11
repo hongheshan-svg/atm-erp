@@ -17,6 +17,8 @@ let generation = 0
 const cards = computed(() => [
   { key: 'tasks', label: '未完成任务', unit: '项', tab: 'tasks', section: 'tasks', attention: 'open-tasks' },
   { key: 'shortage', label: '缺料明细', unit: '行', tab: 'bom', section: 'demand', attention: '' },
+  // 从 BOM 生成的采购草稿还没提交，缺口看起来已被覆盖，其实还没下单。
+  ...(purchaseReader() ? [{ key: 'drafts', label: '采购草稿', unit: '单', tab: 'purchases', section: '', attention: 'draft' }] : []),
   ...(can(['admin', 'purchase_manager']) || (can(['manager']) && props.project.can_manage !== false)
     ? [{ key: 'approvals', label: '待批准采购', unit: '单', tab: 'purchases', section: '', attention: 'submitted' }] : []),
   ...(purchaseReader() ? [
@@ -25,6 +27,7 @@ const cards = computed(() => [
   ] : []),
   { key: 'acceptance', label: '待验收任务', unit: '项', tab: 'tasks', section: 'tasks', attention: 'acceptance' },
 ])
+const note = '缺料按 BOM 明细行统计，共享库存不代表项目预留；采购草稿尚未提交审批；待验收任务由项目经理登记验收。'
 async function load() {
   const current = ++generation
   summary.value = {}; error.value = ''; loading.value = true
@@ -33,6 +36,7 @@ async function load() {
   const requests: Record<string, () => Promise<number>> = {
     tasks: () => count('tasks', { status: 'open' }),
     shortage: async () => (await read(`/business/projects/${project}/demand/`)).lines.filter((line: Row) => Number(line.shortage) > 0).length,
+    drafts: () => count('purchases', { status: 'draft' }),
     approvals: () => count('purchases', { status: 'submitted' }),
     receipts: () => count('purchases', { status: 'approved' }),
     partial: () => count('purchases', { status: 'partial' }),
@@ -53,7 +57,7 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 
 <template>
   <section class="panel project-attention" aria-label="项目待办摘要" :aria-busy="loading">
-    <header><h2>项目待办</h2><button v-if="compact" type="button" class="attention-toggle" :aria-expanded="expanded" :aria-controls="detailsId" @click="mobileExpanded = !mobileExpanded">{{ expanded ? '收起项目待办' : '展开项目待办' }}</button><span v-else class="muted">点击查看当前项目的对应事项</span></header>
+    <header><h2>项目待办</h2><el-tooltip :content="note" placement="bottom"><button type="button" class="attention-help" :aria-label="`项目待办说明：${note}`">?</button></el-tooltip><button v-if="compact" type="button" class="attention-toggle" :aria-expanded="expanded" :aria-controls="detailsId" @click="mobileExpanded = !mobileExpanded">{{ expanded ? '收起项目待办' : '展开项目待办' }}</button><span v-else class="muted">点击查看当前项目的对应事项</span></header>
     <template v-if="!expanded">
       <p class="compact-summary">任务 {{ summary.tasks ?? '—' }} 项 · 缺料 {{ summary.shortage ?? '—' }} 行 · 验收 {{ summary.acceptance ?? '—' }} 项</p>
       <small class="compact-hint muted">点击“展开项目待办”查看 {{ cards.length }} 类事项及入口</small>
@@ -66,7 +70,6 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
         <span>{{ card.label }}</span><strong>{{ summary[card.key] ?? '—' }} <small>{{ card.unit }}</small></strong>
       </router-link>
     </div>
-    <p class="muted">缺料按 BOM 明细行统计，共享库存不代表项目预留；待验收任务由项目经理登记验收。</p>
     </div>
   </section>
 </template>
@@ -84,6 +87,8 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 .attention-grid strong { font-size: 15px; font-variant-numeric: tabular-nums; }
 .attention-grid small { font-size: 12px; font-weight: normal; }
 .project-attention p { margin: 6px 0 0; font-size: 12px; line-height: 1.5; }
+.attention-help { width: 18px; height: 18px; padding: 0; border: 1px solid var(--field-line); border-radius: 50%; background: #fff; color: var(--mute); font-size: 12px; line-height: 16px; cursor: help; flex-shrink: 0; }
+.attention-help:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .attention-toggle { border: 0; background: transparent; color: var(--brand); cursor: pointer; font: inherit; font-size: 13px; padding: 5px 0; flex-shrink: 0; }
 .attention-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px; }
 .compact-hint { display: block; margin-top: 2px; font-size: 11px; line-height: 1.5; }

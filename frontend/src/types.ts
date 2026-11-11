@@ -17,6 +17,8 @@ export type Field = {
   compact?: boolean
   // 明细行按表格排布：宽屏一行一条，仅首行显示列名；窄屏退回 compact 栅格。
   dense?: boolean
+  // dense 明细行的列宽（数字为 px）；FormFields 支持前不生效。
+  width?: number | string
   warehouse?: 'receipt' | 'issue'
   hidden?: boolean
   // 条件不满足时不展示、不校验、不提交；保留表单内输入以便切换回来。
@@ -56,7 +58,14 @@ export type Command = {
   flow?: Flow | null
   progressProject?: number
 }
-export type Column = { key: string; label: string; format?: (row: Row) => string; tip?: (row: Row) => string | undefined }
+export type Column = {
+  key: string
+  label: string
+  format?: (row: Row) => string
+  tip?: (row: Row) => string | undefined
+  // 值下方的一行小字（如「3 项逾期」「剩 20 天」）；risk 时用风险色。
+  flag?: (row: Row) => { text: string; risk?: boolean } | undefined
+}
 export type FlowNode = { key: string; label: string; hint?: string }
 export type Flow = {
   label: string

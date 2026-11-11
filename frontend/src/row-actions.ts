@@ -2,7 +2,7 @@
 // instead of restating where an action lives.
 
 // Business rows highlight their next action; attachment rows highlight opening the file.
-export const primaryActions = ['处理修改申请', '批准采购', '收货', '提交采购', '登记收付款', '开始任务', '完成任务', '领料', '退料', '预览附件']
+export const primaryActions = ['处理修改申请', '批准采购', '收货', '提交采购', '登记收付款', '开始任务', '完成任务', '领料', '退料', '验收', '预览附件']
 
 // Long menus (purchases has nine entries) are grouped by what an entry does. Classifying by shape
 // rather than by a name registry lets a newly added action land somewhere sensible on its own.

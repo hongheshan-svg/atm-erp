@@ -33,6 +33,18 @@ describe('流程节点展示', () => {
     expect(wrapper.text()).toContain('质保期内响应售后')
   })
 
+  it('行内形态是一行步骤标签，节点说明收进悬浮提示', () => {
+    const wrapper = mount(ProcessSteps, { props: { flow: flowFor('projects', { status: 'delivering' })!, inline: true } })
+    expect(wrapper.find('.process-inline').exists()).toBe(true)
+    expect(wrapper.find('.process-marker').exists()).toBe(false)
+    const items = wrapper.findAll('li')
+    const current = items.findIndex(item => item.attributes('aria-current') === 'step')
+    expect(current).toBeGreaterThan(0)
+    expect(items[current]!.classes()).toContain('process-current')
+    expect(items[0]!.text()).toContain('✓')
+    expect(items.every(item => !item.find('small').exists())).toBe(true)
+  })
+
   it('紧凑形态用圆点加当前节点名，适配表格单元格', () => {
     const wrapper = render('warranty', { status: '维修中' }, true)
     expect(wrapper.find('.process-compact').exists()).toBe(true)

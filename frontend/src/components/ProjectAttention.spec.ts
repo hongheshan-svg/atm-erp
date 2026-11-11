@@ -33,7 +33,7 @@ it('工程师摘要仅查询当前项目技术事项，缺料按稳定明细行�
   expect(wrapper.find('.attention-toggle').exists()).toBe(false)
   expect(wrapper.findAll('a')[0]!.attributes('href')).toBe('/projects/7?tab=tasks&section=tasks&attention=open-tasks')
 })
-it('手机默认紧凑摘要，明确展开收起入口保留六类事项和项目链接，不重复查询', async () => {
+it('手机默认紧凑摘要，明确展开收起入口保留七类事项和项目链接，不重复查询', async () => {
   vi.stubGlobal('innerWidth', 390)
   user.value = { roles: ['admin'] }
   const wrapper = await render()
@@ -43,12 +43,12 @@ it('手机默认紧凑摘要，明确展开收起入口保留六类事项和项�
   expect(button.attributes('aria-controls')).toBe(wrapper.get('.attention-details').attributes('id'))
   expect(wrapper.get('.attention-details').isVisible()).toBe(false)
   expect(wrapper.get('.compact-summary').text()).toBe('任务 3 项 · 缺料 2 行 · 验收 1 项')
-  expect(wrapper.get('.compact-hint').text()).toContain('展开项目待办”查看 6 类事项及入口')
+  expect(wrapper.get('.compact-hint').text()).toContain('展开项目待办”查看 7 类事项及入口')
   const calls = vi.mocked(read).mock.calls.length
   await button.trigger('click')
   expect(button.text()).toBe('收起项目待办')
   expect(button.attributes('aria-expanded')).toBe('true')
-  expect(wrapper.findAll('a')).toHaveLength(6)
+  expect(wrapper.findAll('a')).toHaveLength(7)
   expect(wrapper.findAll('a').every(link => link.isVisible() && link.attributes('href')?.startsWith('/projects/7?'))).toBe(true)
   await button.trigger('click')
   expect(wrapper.get('.attention-details').isVisible()).toBe(false)
@@ -82,6 +82,9 @@ it('兼采购增加收货进度；兼采购经理才增加待批准，链接继�
   await flushPromises()
   expect(read).toHaveBeenCalledWith('/business/purchases/', { project: 7, status: 'submitted', page_size: 1 })
   expect(wrapper.findAll('a').find(link => link.text().includes('待批准采购'))!.attributes('href')).toBe('/projects/7?tab=purchases&attention=submitted')
+  // 采购读者额外看到未提交的采购草稿，点击进入项目采购页签的草稿筛选。
+  expect(read).toHaveBeenCalledWith('/business/purchases/', { project: 7, status: 'draft', page_size: 1 })
+  expect(wrapper.findAll('a').find(link => link.text().includes('采购草稿'))!.attributes('href')).toBe('/projects/7?tab=purchases&attention=draft')
   expect(wrapper.text()).not.toContain('金额')
 })
 it('失败显示未加载和错误，不把失败伪装成零，其他摘要继续显示', async () => {

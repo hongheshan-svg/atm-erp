@@ -348,11 +348,11 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await manager.reload()
   for (const title of ['设计', '装配', '调试']) {
     await action(manager, row(manager, title + suffix), '完成任务')
-    await reason(manager)
+    await fill(manager, '完成说明（选填）', '验收测试')
     await save(manager)
     await action(manager, row(manager, title + suffix), '登记工时')
     await fill(manager, '工时', title === '设计' ? '3' : '1')
-    await reason(manager)
+    await fill(manager, '工作内容（选填）', '验收测试')
     await save(manager)
   }
   await manager.getByRole('tab', { name: '工时记录', exact: true }).click()
@@ -366,12 +366,9 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await expect(reversedTime.getByRole('button', { name: '操作 ▾', exact: true })).toHaveCount(0)
   await manager.reload()
   await projectAction(manager, '发货')
-  await fill(manager, '日期', day(-1))
-  const fail = manager.waitForResponse((r) => r.url().endsWith('/ship/') && r.request().method() === 'POST')
-  expectHttpError(manager, `/api/business/projects/${id}/ship/`, 409)
-  await dialog(manager).locator('button[type="submit"]').click()
-  expect((await fail).status()).toBe(409)
-  await expect(dialog(manager).getByRole('alert')).toContainText('领料')
+  // 推进检查在打开发货时就列出全部缺项（这里是领料不足），不再等填完表单提交后逐条报错。
+  await expect(dialog(manager).locator('.action-blocker')).toContainText('领料')
+  await expect(dialog(manager).locator('button[type="submit"]')).toHaveCount(0)
   await cancelEditing(dialog(manager))
   await warehouse.goto('/erp/inventory')
   await action(warehouse, row(warehouse, names.item, '现有库存'), '领料')
@@ -391,17 +388,17 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     const installRow = row(manager, delivery.code + ' 安装')
     await action(manager, installRow, '登记工时')
     await fill(manager, '工时', '1')
-    await reason(manager)
+    await fill(manager, '工作内容（选填）', '验收测试')
     await save(manager)
     await action(manager, installRow, '完成任务')
     // 验收日期不能早于安装完成日期：安装与发货、验收同为昨天。
     await fill(manager, '实际完成日期', day(-1))
-    await reason(manager)
+    await fill(manager, '完成说明（选填）', '验收测试')
     await save(manager)
     await manager.getByRole('tab', { name: '交付与售后', exact: true }).click()
     await action(manager, row(manager, delivery.code), '验收')
     await fill(manager, '日期', day(-1))
-    await reason(manager)
+    await fill(manager, '验收说明（选填）', '验收测试')
     await save(manager)
   }
   const delivery = (await read(manager, `business/deliveries/?project=${id}`)).results[0]
@@ -430,10 +427,10 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await openProjectTasks(manager)
     await action(manager, row(manager, title + suffix), '登记工时')
     await fill(manager, '工时', '1')
-    await reason(manager)
+    await fill(manager, '工作内容（选填）', '验收测试')
     await save(manager)
     await action(manager, row(manager, title + suffix), '完成任务')
-    await reason(manager)
+    // 完成说明选填：留空时服务端记为「完成任务」。
     await save(manager)
   }
   await finance.reload()
@@ -445,14 +442,14 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await save(finance)
   await manager.reload()
   await projectAction(manager, '结项')
-  await reason(manager)
-  const closeFail = manager.waitForResponse(
-    (r) => r.url().endsWith('/close/') && r.request().method() === 'POST',
-  )
-  expectHttpError(manager, `/api/business/projects/${id}/close/`, 409)
-  await dialog(manager).locator('button[type="submit"]').click()
-  expect((await closeFail).status()).toBe(409)
+  // 未结清款项在打开结项时就列出，提交按钮不出现；服务端结项仍按同一组检查拒绝。
+  await expect(dialog(manager).locator('.action-blocker')).toContainText('款项全部结清')
+  await expect(dialog(manager).locator('button[type="submit"]')).toHaveCount(0)
   await cancelEditing(dialog(manager))
+  expect((await manager.request.post(`/api/business/projects/${id}/close/`, {
+    headers: { Authorization: `Bearer ${await manager.evaluate(() => localStorage.getItem('access_token'))}`, 'Idempotency-Key': crypto.randomUUID() },
+    data: { reason: '绕过界面直接结项' },
+  })).status()).toBe(409)
   const entries = (await read(finance, `business/entries/?project=${id}`)).results
   for (const entry of entries.filter((e: { balance: string }) => Number(e.balance) > 0)) {
     await finance.reload()

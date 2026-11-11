@@ -36,6 +36,17 @@ describe('流程相关人员进度展示', () => {
     expect(wrapper.get('.process-current').text()).toContain('待批准')
     wrapper.unmount()
   })
+  it('分类按钮直接显示其中逾期数，没有提示的条目不留空行', async () => {
+    vi.mocked(read).mockResolvedValue(result({
+      groups: [{ key: 'tasks', label: '任务执行', open: 13, overdue: 2 }, { key: 'purchases', label: '采购到货', open: 1, overdue: 0 }],
+      results: [{ ...record, hint: '' }],
+    }))
+    const wrapper = render(); await flushPromises()
+    expect(button(wrapper, '任务执行').get('.group-overdue').text()).toBe('其中 2 项逾期')
+    expect(button(wrapper, '采购到货').find('.group-overdue').exists()).toBe(false)
+    expect(wrapper.find('.progress-hint').exists()).toBe(false)
+    wrapper.unmount()
+  })
   it('流程分类与全部记录分别请求，并提供有权限的原单入口', async () => {
     const wrapper = render(); await flushPromises()
     vi.mocked(read).mockResolvedValue(result({ results: [{ ...record, path: '/projects/7?tab=purchases' }] }))

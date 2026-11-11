@@ -12,6 +12,14 @@ const command = ref<Command | null>(null)
 const error = ref(''), busy = ref(false)
 // 已有里程碑节点后（普通任务不算），生成不再是这里的主要动作：降为次要按钮并改叫「补充」。
 const planned = computed(() => Number(summary.value.milestones) > 0)
+// 旧接口没有 missing 时按「仍可补充」处理，由对话框自己说明。
+const missing = computed(() => summary.value.missing == null ? null : Number(summary.value.missing))
+const complete = computed(() => planned.value && missing.value === 0)
+const note = '六阶段可交叉推进，点击阶段筛选下方任务。客户终验收阶段包含各批次的安装、验收任务；“发货”“现场安装接线”“现场验收”按实际交付记录同步。'
+function progress(stage: Row) {
+  if (stage.shipped != null && !stage.total) return `已发货 ${stage.shipped} / ${stage.equipment} 台`
+  return stage.total ? `${stage.done} / ${stage.total}` : '未安排'
+}
 watch(() => [props.projectId, props.revision], async (_, __, onCleanup) => {
   let current = true
   onCleanup(() => { current = false })
@@ -29,36 +37,50 @@ async function generate() {
 </script>
 <template>
   <section class="panel milestones" aria-label="项目六阶段里程碑">
-    <header class="milestone-heading">
-      <div><h2>项目里程碑</h2><p class="muted">六阶段可交叉推进，点击阶段筛选下方任务。“发货”“现场安装接线”“现场验收”按实际交付记录同步；每批安装任务仍在下方列表执行。</p></div>
-      <el-button v-if="summary.can_generate" :type="planned ? undefined : 'primary'" :loading="busy" @click="generate">{{ planned ? '补充里程碑节点' : '一键生成里程碑' }}</el-button>
-    </header>
-    <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <div class="phase-grid">
-      <button v-for="stage in summary.stages" :key="stage.key" class="phase-card" :class="{ selected: phase === stage.key }" :aria-pressed="phase === stage.key" @click="emit('phase', phase === stage.key ? '' : stage.key)">
-        <strong>{{ stage.label }}</strong>
-        <span>{{ stage.total ? '已完成 ' + stage.done + ' / ' + stage.total : '尚未安排' }}</span>
-        <small v-if="stage.overdue" class="overdue">{{ stage.overdue }} 项逾期</small>
-      </button>
+    <div class="milestone-strip">
+      <h2>里程碑<el-tooltip :content="note" placement="bottom-start"><button type="button" class="milestone-help" :aria-label="`里程碑说明：${note}`">?</button></el-tooltip></h2>
+      <div class="phase-grid">
+        <!-- 「全部」常驻在阶段前面，选中阶段后布局不跳动；读屏名称沿用「查看全部阶段」。 -->
+        <button type="button" class="phase-all" :class="{ selected: !phase }" :aria-pressed="!phase" aria-label="查看全部阶段" @click="emit('phase', '')">全部</button>
+        <button v-for="stage in summary.stages" :key="stage.key" type="button" class="phase-card" :class="{ selected: phase === stage.key, late: stage.overdue }" :aria-pressed="phase === stage.key" @click="emit('phase', phase === stage.key ? '' : stage.key)">
+          <strong>{{ stage.label }}</strong>
+          <span>{{ progress(stage) }}</span>
+          <small v-if="stage.overdue" class="overdue">{{ stage.overdue }} 项逾期</small>
+          <small v-if="stage.shipped != null && stage.total" class="shipped">已发货 {{ stage.shipped }} / {{ stage.equipment }} 台</small>
+        </button>
+      </div>
+      <div class="milestone-actions">
+        <template v-if="summary.can_generate">
+          <span v-if="complete" class="milestone-complete muted" title="六阶段节点已全部生成，新增其他任务请用「新建任务」">节点已全部生成</span>
+          <el-button v-else :type="planned ? undefined : 'primary'" size="small" :loading="busy" @click="generate">{{ planned ? (missing ? `补充里程碑节点（缺 ${missing} 个）` : '补充里程碑节点') : '一键生成里程碑' }}</el-button>
+        </template>
+      </div>
     </div>
-    <el-button v-if="phase" link type="primary" @click="emit('phase', '')">查看全部阶段</el-button>
-    <ActionDialog :command="command" @close="command = null" @saved="emit('changed')" />
+    <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <ActionDialog :command="command" @close="command = null" @replace="command = $event" @saved="emit('changed')" />
   </section>
 </template>
 <style scoped>
-.milestones { margin-bottom: 12px; padding-top: 12px; padding-bottom: 12px; }
-.milestone-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 10px; }
-.milestone-heading h2 { margin: 0 0 2px; font-size: 16px; }
-.milestone-heading p { margin: 0; line-height: 1.5; font-size: 12px; }
-.phase-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
-.phase-card { padding: 8px 10px; border: 1px solid var(--surface-border); border-radius: 8px; background: #fff; color: inherit; text-align: left; cursor: pointer; }
-.phase-card strong, .phase-card span, .phase-card small { display: block; }
-.phase-card strong { margin-bottom: 2px; }
-.phase-card span, .phase-card small { font-size: 12px; }
+/* 一行筛选条：阶段卡紧凑排在标题右侧，任务表尽量留在首屏。 */
+.milestones { margin-bottom: 8px; padding: 6px 12px; }
+.milestone-strip { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+.milestone-strip h2 { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; white-space: nowrap; }
+.milestone-help { width: 18px; height: 18px; padding: 0; border: 1px solid var(--field-line); border-radius: 50%; background: #fff; color: var(--mute); font-size: 12px; line-height: 16px; cursor: help; }
+.milestone-help:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.phase-grid { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 640px; min-width: 0; }
+.phase-card { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; padding: 4px 9px; border: 1px solid var(--surface-border); border-radius: 6px; background: #fff; color: inherit; text-align: left; cursor: pointer; font: inherit; min-width: 0; }
+.phase-card strong { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.phase-card span, .phase-card small { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .phase-card span { color: var(--text-secondary, #546583); }
 .phase-card.selected { border-color: #2563eb; background: #eff6ff; }
-.phase-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.overdue { color: #b45309; margin-top: 2px; }
-@media (max-width: 1100px) { .phase-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .phase-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .milestone-heading { align-items: stretch; flex-direction: column; } }
+.phase-card.late { border-left: 3px solid var(--risk); }
+.phase-all { flex: none; padding: 4px 10px; border: 1px solid var(--surface-border); border-radius: 6px; background: #fff; color: var(--mute); font: inherit; font-size: 12px; cursor: pointer; }
+.phase-all.selected { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+.phase-all:focus-visible, .phase-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.overdue { color: var(--risk); font-weight: 600; }
+.shipped { color: var(--mute); }
+.milestone-actions { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+.milestone-complete { font-size: 12px; white-space: nowrap; }
+@media (max-width: 1100px) { .phase-grid { flex-basis: 100%; } }
+@media (max-width: 600px) { .phase-card { flex-basis: calc(50% - 3px); } }
 </style>

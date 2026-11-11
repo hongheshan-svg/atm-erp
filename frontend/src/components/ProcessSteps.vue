@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Flow } from '../types'
-// compact renders inside a table cell, where a full node chain would not fit.
-const props = defineProps<{ flow: Flow; compact?: boolean }>()
+// compact renders inside a table cell, where a full node chain would not fit; inline is a one-line
+// chain of step labels for page headers, with each node's explanation kept as a hover tip.
+const props = defineProps<{ flow: Flow; compact?: boolean; inline?: boolean }>()
 const stopped = computed(() => Boolean(props.flow.aborted))
 function state(index: number) {
   if (stopped.value) return 'skipped'
@@ -22,6 +23,14 @@ const summary = computed(() =>
         v-if="flow.aborted" class="process-aborted"
     /></span>
     <small>{{ flow.aborted ? flow.aborted.label : flow.nodes[flow.current]?.label }}</small>
+  </nav>
+  <nav v-else-if="inline" class="process-inline" :aria-label="summary">
+    <ol>
+      <li v-for="(item, index) in flow.nodes" :key="item.key" :class="`process-${state(index)}`" :aria-current="state(index) === 'current' ? 'step' : undefined" :title="item.hint">
+        <span class="process-pill"><span v-if="state(index) === 'done'" class="process-check" aria-hidden="true">✓</span>{{ item.label }}</span>
+      </li>
+      <li v-if="flow.aborted" class="process-aborted" aria-current="step" :title="flow.aborted.hint"><span class="process-pill">{{ flow.aborted.label }}</span></li>
+    </ol>
   </nav>
   <nav v-else class="process-steps" :aria-label="summary">
     <ol>
@@ -44,6 +53,17 @@ const summary = computed(() =>
 .process-dots > i.process-current { background: var(--el-color-primary); box-shadow: 0 0 0 2px var(--brand-ring); }
 .process-dots > i.process-aborted { background: var(--risk); }
 .process-compact small { font-size: 12px; color: var(--mute); white-space: nowrap; }
+
+/* Inline chain: 执行中 › 交付中 › 已验收 › 已结项, current step filled. */
+.process-inline ol { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; list-style: none; margin: 0; padding: 0; }
+.process-inline li { display: inline-flex; align-items: center; font-size: 13px; line-height: 20px; color: var(--ink-6); white-space: nowrap; cursor: default; }
+.process-inline li + li::before { content: '›'; margin: 0 5px; color: var(--ink-6); }
+.process-pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 9px; border-radius: 999px; }
+.process-inline li.process-done { color: var(--ink-3); }
+.process-check { color: var(--el-color-primary); font-size: 12px; }
+.process-inline li.process-current .process-pill { background: var(--el-color-primary); color: #fff; font-weight: 600; }
+.process-inline li.process-skipped { opacity: 0.55; }
+.process-inline li.process-aborted .process-pill { background: var(--risk); color: #fff; font-weight: 600; }
 
 /* The node row measures itself: a narrow host (detail pane, phone) switches to the vertical rail
    below, so a wrapped row never leaves a connector pointing into empty space. */

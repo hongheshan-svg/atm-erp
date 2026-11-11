@@ -17,6 +17,7 @@ MODULE_FILES = {
         'task_supervision',
         'task_notices',
         'ProjectMilestones',
+        'ProjectReadiness',
         'ProjectTaskSupervisors',
         'TaskNotices',
         'TaskTimeRecords',

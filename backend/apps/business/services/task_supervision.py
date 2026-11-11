@@ -111,7 +111,8 @@ def configure(actor, key, project_id, data):
             raise ValidationError(
                 {'supervisors': '主管必须是本项目启用的负责人或成员，并具备业务岗位；请先在项目成员中添加。'}
             )
-        reason = text(data, 'reason')
+        # 设置专业主管是日常安排，说明选填，缺省记为动作名。
+        reason = text(data, 'reason', default='') or '设置专业主管'
         previous = project.task_supervisors
         project.task_supervisors = values
         project.supervisor_revision += 1
