@@ -146,6 +146,10 @@ class TaskView(ImportableMixin, ReadView):
         return Response(execution.edit_task(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['post'])
+    def reschedule(self, request, pk=None):
+        return Response(execution.reschedule_task(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
         return Response(
             corrections.change_task(request.user, key(request), self.get_object().pk, request.data, 'assign')

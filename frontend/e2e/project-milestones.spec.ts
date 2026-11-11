@@ -1,4 +1,4 @@
-import { businessDate, selectExecutors } from './fixtures'
+import { businessDate, choosePeople, selectExecutors } from './fixtures'
 import { test, expect, login, detailAction, openRowAction } from './fixtures'
 
 test('项目六阶段模板支持一键生成、并行任务、日期调整和增删节点', async ({ page }, info) => {
@@ -281,7 +281,7 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   await expect(dialog).toHaveCount(0)
   await expect(row).toContainText('已完成')
   await openRowAction(page, row, '登记工时')
-  await dialog.getByLabel('人员', { exact: true }).selectOption(String(worker.id))
+  await choosePeople(page, dialog.getByLabel('人员', { exact: true }), [worker.display_name])
   await dialog.getByLabel('日期', { exact: true }).fill(today)
   await dialog.getByLabel('工时', { exact: true }).fill('2.5')
   await dialog.getByLabel('工作内容（选填）', { exact: true }).fill('主管按当日设计记录核对')

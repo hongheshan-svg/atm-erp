@@ -1,6 +1,6 @@
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction, selectExecutors } from './fixtures'
+import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction, selectExecutors, choosePeople } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
 import { selectRoles } from './role-helpers'
 const password = 'Lean-QA-2026-password'
@@ -15,7 +15,11 @@ async function fill(p: Page, label: string, value: string) {
 }
 async function choose(p: Page, label: string, value: string) {
   const field = dialog(p).getByLabel(label, { exact: true })
-  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: value })
+  if (await field.getAttribute('role') === 'combobox') {
+    // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
+    const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
+    return remote ? selectRemoteOption(field, { text: value }) : choosePeople(p, field, [value])
+  }
   const option = await field.locator('option').filter({ hasText: value }).last().getAttribute('value')
   await field.selectOption(option!)
 }

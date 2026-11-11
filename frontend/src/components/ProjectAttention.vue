@@ -27,6 +27,8 @@ const cards = computed(() => [
   ] : []),
   { key: 'acceptance', label: '待验收任务', unit: '项', tab: 'tasks', section: 'tasks', attention: 'acceptance' },
 ])
+// 各类都已加载且全为 0 时只留一行「无待办事项」，不再常驻一排 0 项胶囊（已验收、质保期项目常见）。
+const empty = computed(() => !loading.value && !error.value && cards.value.every(card => summary.value[card.key] === 0))
 const note = '缺料按 BOM 明细行统计，共享库存不代表项目预留；采购草稿尚未提交审批；待验收任务由项目经理登记验收。'
 async function load() {
   const current = ++generation
@@ -57,6 +59,8 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 
 <template>
   <section class="panel project-attention" aria-label="项目待办摘要" :aria-busy="loading">
+    <header v-if="empty"><h2>项目待办</h2><span class="attention-empty">无待办事项</span></header>
+    <template v-else>
     <!-- 手机收起时压成一行：标题、三项计数、展开按钮；按钮显示短字，读屏名称保留「展开项目待办」。 -->
     <header><h2>项目待办</h2><el-tooltip v-if="expanded" :content="note" placement="bottom"><button type="button" class="attention-help" :aria-label="`项目待办说明：${note}`">?</button></el-tooltip
       ><span v-if="!expanded" class="compact-summary">任务 {{ summary.tasks ?? '—' }} 项 · 缺料 {{ summary.shortage ?? '—' }} 行 · 验收 {{ summary.acceptance ?? '—' }} 项</span
@@ -70,6 +74,7 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
       </router-link>
     </div>
     </div>
+    </template>
   </section>
 </template>
 
@@ -91,6 +96,7 @@ onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resiz
 .attention-toggle { border: 0; background: transparent; color: var(--brand); cursor: pointer; font: inherit; font-size: 13px; padding: 5px 0; flex-shrink: 0; }
 .attention-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px; }
 .compact-error { color: var(--risk); }
+.attention-empty { color: var(--mute); font-size: 13px; }
 @media (max-width: 600px) {
   .project-attention { display: block; padding: 10px 12px; }
   .project-attention header { flex-wrap: nowrap; gap: 8px; margin-bottom: 0; }

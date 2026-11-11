@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch } from 'vue'
 import type { TabsInstance } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { read } from '../api'
@@ -24,6 +24,7 @@ import FinanceTotals from '../components/FinanceTotals.vue'
 import { revealActiveTab } from '../utils/tabs'
 import { localStore, sessionStore } from '../utils/storage'
 import { flowFor } from '../flows'
+import { projectDueFlag } from '../modules/projects'
 import { confirmFormNavigation } from '../form-experience'
 const taskTabs = [{ key: 'tasks', label: '项目任务', resources: ['tasks'] }, { key: 'time', label: '工时记录', resources: ['time'] }]
 const deliveryTabs = [{ key: 'deliveries', label: '交付批次', resources: ['deliveries'] }, { key: 'service', label: '售后任务' }]
@@ -50,16 +51,38 @@ watch(tab, revealTab, { flush: 'post' })
 const error = ref('')
 const projectFlow = computed(() => flowFor('projects', project.value))
 const amount = (value: unknown) => formatMoney(value, { currency: true, placeholder: '未设置' })
-// 收起时的一行摘要；合同金额与四宫格一样只在 money() 通过时才拼进来。
-const brief = computed(() => {
+// 合同：有金额照常显示；没有销售单写「无销售合同」，有销售单尚未签约写「未签约」，不再显示 ¥ 0.00。
+const contractText = computed(() => {
   const record = project.value
   if (!record) return ''
-  return [
-    `${record.equipment_quantity} 台`,
-    `交期 ${record.due_date || '未设置'}`,
-    ...(money() ? [`合同 ${amount(record.contract_amount)}`] : []),
-  ].join(' · ')
+  if (Number(record.contract_amount) > 0) return amount(record.contract_amount)
+  return record.has_sale === false ? '无销售合同' : '未签约'
 })
+// 执行中、交付中的项目交期已过或今天到期时，页头和概览用风险色写明。
+const dueFlag = computed(() => {
+  const flag = project.value ? projectDueFlag(project.value) : undefined
+  return flag?.risk ? flag.text : ''
+})
+// 收起时的一行摘要，交期单独成段以便标红；合同金额与四宫格一样只在 money() 通过时才拼进来。
+const briefHead = computed(() => project.value ? `${project.value.equipment_quantity} 台 · ` : '')
+const briefDue = computed(() => project.value ? `交期 ${project.value.due_date || '未设置'}${dueFlag.value ? ` ${dueFlag.value}` : ''}` : '')
+const briefTail = computed(() => project.value && money() ? ` · ${project.value.has_sale === false ? contractText.value : `合同 ${contractText.value}`}` : '')
+const memberNames = computed((): string[] | null => Array.isArray(project.value?.member_names) ? project.value!.member_names : null)
+const canEditProject = computed(() => Boolean(project.value && actionNames('projects', project.value).includes('编辑项目')))
+// 已结项、已取消的项目不再显示待办条，改为一行结项或取消说明。
+const finished = computed(() => ['closed', 'cancelled'].includes(String(project.value?.status)))
+// 需求说明只有一行且放得下时不显示「展开全文」；收起态是单行省略，按是否溢出或含换行判断。
+const requirementRef = ref<HTMLElement>()
+const requirementLong = ref(false)
+function measureRequirement() {
+  const text = String(project.value?.requirements || '').trim()
+  const element = requirementRef.value
+  if (requirementsOpen.value) return
+  requirementLong.value = /\n/.test(text) || Boolean(element && element.scrollWidth > element.clientWidth + 1)
+}
+watch([overview, () => project.value?.requirements], () => { void nextTick(measureRequirement) }, { flush: 'post' })
+onMounted(() => window.addEventListener('resize', measureRequirement))
+onBeforeUnmount(() => window.removeEventListener('resize', measureRequirement))
 // 推进检查只给能发货、结项的项目经理看；其他角色不请求，避免无权限报错。
 const readinessVisible = computed(() => Boolean(project.value && manager() && project.value.can_manage !== false && ['active', 'delivering', 'warranty'].includes(project.value.status)))
 // 交付页签里的「登记发货」与页头「项目操作」同一条件。
@@ -113,7 +136,7 @@ onMounted(load)
       <div>
         <p class="project-crumb">
           <span class="project-back"><router-link to="/projects" class="muted">← 项目列表</router-link><span class="eyebrow">{{ project.code }}</span></span
-          ><span class="project-meta">{{ project.customer_name }} · {{ project.manager_name }}<template v-if="!overview"> · <span class="project-brief">{{ brief }}</span></template></span>
+          ><span class="project-meta">{{ project.customer_name }} · {{ project.manager_name }}<template v-if="!overview"> · <span class="project-brief">{{ briefHead }}<span :class="{ 'project-late': dueFlag }">{{ briefDue }}</span>{{ briefTail }}</span></template></span>
         </p>
         <div class="project-name"><h1>{{ project.name }}</h1><StatusBadge :value="project.status" :text="display(project.status)" /></div>
       </div>
@@ -143,7 +166,8 @@ onMounted(load)
     <section class="panel project-status" aria-label="项目推进">
       <ProcessSteps v-if="projectFlow" class="project-flow" :flow="projectFlow" inline />
       <ProjectReadiness v-if="readinessVisible" :project="project" :revision="revision" @act="act" />
-      <ProjectAttention v-if="tab !== 'progress'" :project="project" :revision="revision" />
+      <p v-if="finished" class="project-finished"><strong>{{ display(project.status) }}</strong>{{ project.close_reason ? `：${project.close_reason}` : '' }}</p>
+      <ProjectAttention v-else-if="tab !== 'progress'" :project="project" :revision="revision" />
     </section>
     <div v-show="overview">
     <section class="project-summary">
@@ -151,18 +175,23 @@ onMounted(load)
         <small>设备数量</small><strong>{{ project.equipment_quantity }} 台</strong>
       </div>
       <div>
-        <small>计划交期</small><strong>{{ project.due_date || '未设置' }}</strong>
+        <small>计划交期</small><strong :class="{ 'project-late': dueFlag }">{{ project.due_date || '未设置' }}</strong><span v-if="dueFlag" class="project-late">{{ dueFlag }}</span>
       </div>
       <div>
         <small>质保约定</small><strong>{{ project.warranty_months }} 个月</strong>
       </div>
       <div v-if="money()">
-        <small>合同金额</small><strong>{{ amount(project.contract_amount) }}</strong>
+        <small>合同金额</small><strong>{{ contractText }}</strong>
       </div>
     </section>
+    <p v-if="memberNames" class="project-members">
+      <span class="muted">项目成员（{{ memberNames.length }}）</span><span>{{ memberNames.length ? memberNames.join(' · ') : '尚未添加成员' }}</span>
+      <el-button v-if="canEditProject" link type="primary" class="inline-link" @click="act('编辑项目')">管理成员</el-button>
+    </p>
     <div v-if="project.requirements" class="requirements">
-      <p class="requirement-text" :class="{ 'requirement-clamped': !requirementsOpen }">{{ project.requirements }}</p>
+      <p ref="requirementRef" class="requirement-text" :class="{ 'requirement-clamped': !requirementsOpen }">{{ project.requirements }}</p>
       <el-button
+        v-if="requirementLong || requirementsOpen"
         link
         type="primary"
         class="requirement-toggle"
@@ -259,7 +288,8 @@ onMounted(load)
 /* 页头两行：返回、编号、客户·负责人·摘要一行，名称与状态一行。 */
 .project-heading { margin-bottom: 10px; }
 .project-crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-size: 13px; }
-.project-crumb .muted { margin: 0; }
+/* 全局手机规则会隐藏页头 .muted 说明文字；返回项目列表是导航，不能跟着隐藏。 */
+.project-crumb .muted { margin: 0; display: inline; }
 .project-meta { color: var(--mute); min-width: 0; }
 .project-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .project-name h1 { margin: 2px 0 0; font-size: 22px; min-width: 0; overflow-wrap: anywhere; }
@@ -281,6 +311,14 @@ onMounted(load)
 /* 默认只留一行：nowrap 让换行折成空格，省略号提示还有下文。 */
 .requirement-clamped { max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .requirement-toggle { flex: none; align-self: flex-start; }
+/* 文字链接按钮：不要白底和投影，看起来像正文里的链接。 */
+.requirement-toggle, .project-members .inline-link { height: auto; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.project-members { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 10px 0; font-size: 13px; line-height: 1.6; }
+.project-members .muted { margin: 0; }
+.project-late { color: var(--risk); font-weight: 600; }
+.project-summary .project-late { display: block; margin-top: 2px; font-size: 12px; }
+.project-finished { margin: 0; font-size: 13px; color: var(--ink-4, #475569); flex-basis: 100%; }
+.project-finished strong { color: var(--ink-2, #1e293b); }
 @media (max-width: 760px) { .project-summary { row-gap: 20px; } .project-summary > div { padding: 0 16px; } }
 .project-back { display: contents; }
 .label-short { display: none; }

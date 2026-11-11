@@ -164,6 +164,20 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     def get_task_overdue(self, obj):
         return getattr(obj, 'task_overdue', None)
 
+    # 概览直接列出成员姓名；同名规则与负责人一致。成员已随项目查询预取，不逐行查库。
+    member_names = serializers.SerializerMethodField()
+    # 区分「没有销售合同」与「有销售单但尚未签约」，页头不再把两者都显示成合同 ¥ 0.00。
+    has_sale = serializers.SerializerMethodField()
+
+    def get_member_names(self, obj):
+        root = self.root
+        if not hasattr(root, '_ambiguous_people'):
+            root._ambiguous_people = ambiguous_people()
+        return [person_name(user, root._ambiguous_people) for user in sorted(obj.members.all(), key=lambda u: u.pk)]
+
+    def get_has_sale(self, obj):
+        return hasattr(obj, 'sale')
+
     class Meta:
         model = Project
         fields = [
@@ -179,6 +193,8 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
             'manager',
             'manager_name',
             'members',
+            'member_names',
+            'has_sale',
             'task_supervisors',
             'supervisor_revision',
             'status',

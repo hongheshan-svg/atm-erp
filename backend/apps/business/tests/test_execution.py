@@ -907,6 +907,42 @@ class TaskEditAndDailyNoteTests(ExecutionFixtures, TestCase):
             status=400,
         )
 
+    def test_reschedule_changes_only_due_date_with_reason_and_audit(self):
+        task = self.task(self.project)
+        self.project.members.add(self.users['production_manager'])
+        later = (date.fromisoformat(TODAY) + timedelta(days=10)).isoformat()
+        path = f'tasks/{task.pk}/reschedule/'
+        self.post('manager', path, {'due_date': later}, status=400)
+        self.post('manager', path, {'due_date': '', 'reason': '清空'}, status=400)
+        self.post('manager', path, {'due_date': later, 'reason': '多字段', 'assignees': [1]}, status=400)
+        self.post('member', path, {'due_date': later, 'reason': '越权'}, status=403)
+        key = str(uuid.uuid4())
+        first = self.post('manager', path, {'due_date': later, 'reason': '客户推迟评审'}, key=key)
+        self.assertEqual(self.post('manager', path, {'due_date': later, 'reason': '客户推迟评审'}, key=key), first)
+        task.refresh_from_db()
+        self.assertEqual((task.due_date.isoformat(), task.assignee), (later, self.users['member']))
+        record = AuditLog.objects.filter(operation='task.reschedule').latest('pk')
+        self.assertEqual(
+            (record.detail['previous_due_date'], record.detail['due_date'], record.detail['reason']),
+            (None, later, '客户推迟评审'),
+        )
+        self.assertEqual(AuditLog.objects.filter(operation='task.reschedule').count(), 1)
+        self.post('manager', path, {'due_date': later, 'reason': '同一天'}, status=400)
+        self.complete(task)
+        self.post('manager', path, {'due_date': TODAY, 'reason': '已完成'}, status=409)
+
+    def test_project_detail_lists_member_names_and_whether_a_sale_exists(self):
+        self.project.members.add(self.users['member'], self.users['production_manager'])
+        detail = self.clients['manager'].get(f'/api/business/projects/{self.project.pk}/').data
+        self.assertTrue(detail['has_sale'])
+        people = sorted((self.users['member'], self.users['production_manager']), key=lambda user: user.pk)
+        self.assertEqual(detail['member_names'], [user.display_name or user.username for user in people])
+        standalone = Project.objects.create(
+            code='SOLO', name='独立项目', customer=self.customer, manager=self.users['manager'], status='active'
+        )
+        row = self.clients['manager'].get(f'/api/business/projects/{standalone.pk}/').data
+        self.assertEqual((row['has_sale'], row['member_names'], row['contract_date']), (False, [], None))
+
     def test_acceptance_forecast_and_supervisors_notes_are_optional(self):
         project = self.ready_project()
         self.stock_and_issue(project)

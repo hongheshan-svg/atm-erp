@@ -20,7 +20,7 @@ vi.mock('../session', async importOriginal => ({
 }))
 const project = {
   id: 7, code: 'PRJ-7', name: '自动装配线', customer_name: '客户甲', manager_name: '张经理', status: 'active',
-  equipment_quantity: 12, due_date: '2026-12-20', warranty_months: 12, contract_amount: '2860000.00',
+  equipment_quantity: 12, due_date: '2099-12-20', warranty_months: 12, contract_amount: '2860000.00',
   requirements: '第一行需求说明\n第二行需求说明',
 }
 // 子页签桩把每个具名插槽都渲染出来，便于检查页签内的入口。
@@ -53,7 +53,7 @@ it('collapses the overview by default and keeps the flow bar plus a one-line sum
   expect(wrapper.find('.project-summary').isVisible()).toBe(false)
   // The flow bar is the status backbone and never collapses with the overview.
   expect(wrapper.find('.project-flow').isVisible()).toBe(true)
-  expect(wrapper.find('.project-brief').text()).toBe('12 台 · 交期 2026-12-20 · 合同 ¥ 2,860,000.00')
+  expect(wrapper.find('.project-brief').text()).toBe('12 台 · 交期 2099-12-20 · 合同 ¥ 2,860,000.00')
   wrapper.unmount()
 })
 it('remembers an expanded overview for the next visit', async () => {
@@ -73,7 +73,7 @@ it('keeps the contract amount out of the summary without the money permission', 
   vi.mocked(money).mockReturnValue(false)
   const wrapper = await render()
   const brief = wrapper.find('.project-brief').text()
-  expect(brief).toBe('12 台 · 交期 2026-12-20')
+  expect(brief).toBe('12 台 · 交期 2099-12-20')
   expect(brief).not.toContain('2,860,000')
   await button(wrapper, '展开项目概览').trigger('click')
   expect(wrapper.text()).not.toContain('合同金额')
@@ -143,5 +143,55 @@ it('收付款页签顶部显示项目款项汇总', async () => {
   const totals = wrapper.findComponent({ name: 'FinanceTotals' })
   expect(totals.exists()).toBe(true)
   expect(totals.attributes('project')).toBeDefined()
+  wrapper.unmount()
+})
+it('交期已过在页头和概览标红，无销售合同、未签约不再显示 ¥ 0.00', async () => {
+  vi.mocked(read).mockResolvedValue({ ...project, due_date: '2020-01-01', contract_amount: '0.00', has_sale: false })
+  const wrapper = await render()
+  const brief = wrapper.get('.project-brief')
+  expect(brief.text()).toMatch(/^12 台 · 交期 2020-01-01 已逾期 \d+ 天 · 无销售合同$/)
+  expect(brief.get('.project-late').text()).toContain('已逾期')
+  await button(wrapper, '展开项目概览').trigger('click')
+  expect(wrapper.get('.project-summary').text()).toContain('无销售合同')
+  expect(wrapper.get('.project-summary span.project-late').text()).toMatch(/已逾期 \d+ 天/)
+  wrapper.unmount()
+  localStorage.clear()
+  vi.mocked(read).mockResolvedValue({ ...project, status: 'warranty', due_date: '2020-01-01', contract_amount: '0.00', has_sale: true })
+  const unsigned = await render()
+  expect(unsigned.get('.project-brief').text()).toBe('12 台 · 交期 2020-01-01 · 合同 未签约')
+  expect(unsigned.find('.project-brief .project-late').exists()).toBe(false)
+  unsigned.unmount()
+})
+it('概览列出项目成员，能编辑项目的人可直接管理成员', async () => {
+  user.value = { id: 1, roles: ['manager'] }
+  vi.mocked(read).mockResolvedValue({ ...project, can_manage: true, member_names: ['李工', '王工'] })
+  const wrapper = await render()
+  await button(wrapper, '展开项目概览').trigger('click')
+  const members = wrapper.get('.project-members')
+  expect(members.text()).toContain('项目成员（2）')
+  expect(members.text()).toContain('李工 · 王工')
+  expect(members.findAll('button').map(item => item.text())).toEqual(['管理成员'])
+  wrapper.unmount()
+  user.value = { id: 2, roles: ['mechanical_engineer'] }
+  vi.mocked(read).mockResolvedValue({ ...project, member_names: [] })
+  const engineer = await render()
+  expect(engineer.get('.project-members').text()).toContain('尚未添加成员')
+  expect(engineer.get('.project-members').findAll('button')).toHaveLength(0)
+  engineer.unmount()
+})
+it('需求说明只有一行时不显示「展开全文」', async () => {
+  vi.mocked(read).mockResolvedValue({ ...project, requirements: '节拍 ≤ 45s/模组' })
+  const wrapper = await render()
+  await button(wrapper, '展开项目概览').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('.requirement-text').text()).toBe('节拍 ≤ 45s/模组')
+  expect(wrapper.find('.requirement-toggle').exists()).toBe(false)
+  wrapper.unmount()
+})
+it('已结项、已取消的项目不再显示待办条，改为一行结项说明', async () => {
+  vi.mocked(read).mockResolvedValue({ ...project, status: 'closed', close_reason: '全部履约并结清' })
+  const wrapper = await render()
+  expect(wrapper.findComponent({ name: 'ProjectAttention' }).exists()).toBe(false)
+  expect(wrapper.get('.project-finished').text()).toBe('已结项：全部履约并结清')
   wrapper.unmount()
 })

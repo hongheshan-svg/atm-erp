@@ -129,6 +129,28 @@ export async function detailAction(page: Page, name: string) {
   await page.getByRole('menuitem', { name, exact: true }).click()
 }
 
+// 可搜索的人员下拉（Element Plus 单选或多选，如安装人、项目成员）：先清掉已选标签，按名称逐个输入过滤后点选；
+// 多选最后点「完成选择」收起。名称须在候选里唯一，账号名会出现在选项标签里。
+export async function choosePeople(page: Page, field: Locator, names: string[]) {
+  const select = field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " el-select ")][1]')
+  // 编辑表单的已选人员在人员名单加载后才回填，先等请求结束再清空，避免把原有成员反选掉。
+  await expect(field).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  while (await select.locator('.el-tag__close').count()) await select.locator('.el-tag__close').first().click()
+  await select.locator('.el-select__wrapper').click()
+  const popper = page.locator('.el-select__popper.executor-options:visible')
+  for (const name of names) {
+    await field.fill(name)
+    await expect(popper).not.toHaveClass(/-enter-active/)
+    const option = popper.getByRole('option').filter({ hasText: name })
+    await expect(option, `人员选项需唯一：${name}`).toHaveCount(1)
+    await option.click()
+  }
+  const done = popper.getByRole('button', { name: '完成选择', exact: true })
+  if (await done.count()) await done.click()
+  await expect(page.locator('.el-select__popper.executor-options:visible')).toHaveCount(0)
+}
+
 // Select every executor by its visible label; replace the existing selection using tag close buttons.
 export async function selectExecutors(page: Page, form: Locator, names: string[]) {
   const field = form.locator('.field').filter({ has: page.getByRole('combobox', { name: '执行人', exact: true }) }).first()

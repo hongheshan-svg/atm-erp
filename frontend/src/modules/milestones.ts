@@ -1,9 +1,9 @@
 import { read } from '../api'
-import { catalog } from '../catalog'
+import { catalog, options } from '../catalog'
 import { today } from '../forms'
-import { date, person, select, t } from './shared'
+import { date, participants, select, t } from './shared'
 import type { Catalog } from '../catalog'
-import type { Command, Field, Row } from '../types'
+import type { Command, Field, Option, Row } from '../types'
 
 export const disciplines = [{ value: 'mechanical', label: '机械' }, { value: 'electrical', label: '电气' }, { value: 'purchasing', label: '采购' }, { value: 'production', label: '生产' }, { value: 'delivery', label: '交付与验收' }]
 export const disciplineField = (): Field => ({ key: 'discipline', label: '负责专业', type: 'select', optional: true, options: disciplines, hint: '选择后通知该专业主管；留空按阶段及里程碑自动归属，未设置主管时由项目经理负责。' })
@@ -38,8 +38,22 @@ export function taskVarianceLabel(row: Row): string {
   }
   return days > 0 ? `延期 ${days} 天` : days < 0 ? `提前 ${-days} 天` : '按期完成'
 }
+// 人员候选与服务端同口径（项目内可参与者 + 全局采购、仓管、财务等岗位），本项目负责人和成员排在最前；
+// marked 时在名字后注明「项目经理 / 本项目成员」，单选下拉一眼可辨，多选标签保持简短不加。
+export function projectPeople(c: Catalog, scope?: Row | null, marked = false): Option[] {
+  const people = participants(c.users, scope)
+  if (!scope) return options(people)
+  const inside = new Set([scope.manager, ...(scope.members ?? [])])
+  const ordered = [...people.filter(u => inside.has(u.id)), ...people.filter(u => !inside.has(u.id))]
+  return options(ordered).map(option => marked && inside.has(option.value)
+    ? { ...option, label: `${option.label} · ${option.value === scope.manager ? '项目经理' : '本项目成员'}` }
+    : option)
+}
+export function personField(c: Catalog, key: string, label: string, scope?: Row | null): Field {
+  return { ...select(key, label, projectPeople(c, scope, true)), searchable: true }
+}
 export function executorField(c: Catalog, scope?: Row | null): Field {
-  return { ...person(c, 'assignees', '执行人', scope), type: 'multi', searchableMulti: true,
+  return { ...select('assignees', '执行人', projectPeople(c, scope)), type: 'multi', searchableMulti: true,
     hint: '可选择多人共同执行。由对应专业主管确认完成并按人员、工作日期登记工时；执行人可查看进度。' }
 }
 export function taskSyncHint(row: Row): string {
