@@ -932,3 +932,10 @@ textarea:focus { border-color: var(--brand); }
   .page-heading > div:first-child { flex: 1 1 0; min-width: 0; }
   .module-toolbar-target { flex: none; max-width: 100%; }
 }
+
+/* 手机端导航外壳：抽屉可滚动、菜单与账号按钮达到 40px 触控区；只约束顶栏和侧栏，不涉及列表与对话框。 */
+@media (max-width: 760px) {
+  .shell .sidebar.mobile-open { overflow-y: auto; overscroll-behavior: contain; }
+  .mobile-menu-toggle { height: 40px; min-height: 40px; min-width: 56px; }
+  .topbar > .el-button { height: 40px; min-height: 40px; }
+}
