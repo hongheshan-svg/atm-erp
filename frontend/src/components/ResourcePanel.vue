@@ -281,7 +281,8 @@ function soleAction(row: Row) {
 }
 function primaryAction(row: Row) {
   const actions = actionNames(props.resource, row)
-  return primaryActions.find(name => actions.includes(name))
+  // 「退料」是纠错动作：只在从「项目退料」进入的原领料流水（params.kind=issue）里作主按钮，普通库存流水里降为次要按钮。
+  return primaryActions.find(name => actions.includes(name) && (name !== '退料' || props.params?.kind === 'issue'))
 }
 // The menu never repeats the headline button, and only labels its groups when there is more than one.
 function menuGroups(row: Row) {
@@ -552,7 +553,8 @@ async function inspect(row: Row) {
       </div>
       <Teleport :to="toolbarTarget || 'body'" :disabled="!toolbarTarget || !active"><div class="toolbar">
         <!-- Leading with the entries that create work; BOM selection is the intended purchase path. -->
-        <el-button v-if="resource === 'purchases' && buyer()" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="openBom">从 BOM 多选下单</el-button>
+        <!-- 嵌在库存页收货等不允许新建的面板里时不显示采购下单入口。 -->
+        <el-button v-if="resource === 'purchases' && buyer() && allowCreate !== false" ref="bomTrigger" type="primary" :disabled="actionBusy" @click="openBom">从 BOM 多选下单</el-button>
         <el-button v-if="createLabel(resource) && allowCreate !== false" :type="resource === 'purchases' ? undefined : 'primary'" @click="create">{{
           createLabel(resource)
         }}</el-button>

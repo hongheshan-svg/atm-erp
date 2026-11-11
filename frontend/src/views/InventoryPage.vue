@@ -73,7 +73,7 @@ function closeBomIssue() {
     /></template><template #receipts>
       <p class="muted tab-hint"><span class="full-hint">选择采购单后点“收货”，核对待收数量与本次数量；支持部分到货，不合格物料仍走隔离处理。</span><span class="short-hint">点“收货”核对本次数量，支持部分到货。</span></p>
       <nav class="receipt-states" aria-label="收货进度"><router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }" :aria-current="receiptStatus === 'approved' ? 'page' : undefined">待收货采购</router-link><router-link :to="{ path: '/inventory', query: { section: 'receipts', receipt: 'partial', project: projectId || 'all' } }" :aria-current="receiptStatus === 'partial' ? 'page' : undefined">部分收货采购</router-link></nav>
-      <ResourcePanel v-if="can(['admin', 'warehouse'])" :key="receiptStatus" class="daily-filtered-list" resource="purchases" :title="receiptStatus === 'partial' ? '部分收货采购' : '待收货采购'" :params="{ project: projectId, status: receiptStatus }" :project-id="projectId" :allow-create="false" :revision="revision" @changed="refresh" />
+      <ResourcePanel v-if="can(['admin', 'warehouse'])" :key="receiptStatus" class="daily-filtered-list" resource="purchases" :title="receiptStatus === 'partial' ? '部分收货采购' : '待收货采购'" :params="{ project: projectId, status: receiptStatus }" :project-id="projectId" :allow-create="false" :empty-hint="receiptStatus === 'partial' ? '没有部分收货的采购单。' : '没有待收货的采购单；采购批准后会出现在这里。'" :revision="revision" @changed="refresh" />
     </template></ModuleTabs></ModulePage>
 </template>
 <style scoped>

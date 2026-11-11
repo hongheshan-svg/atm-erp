@@ -49,6 +49,27 @@ describe('列表创建入口', () => {
     expect(wrapper.text()).not.toContain('工时已提交')
     wrapper.unmount()
   })
+  it('库存页上下文：收货面板不显示 BOM 下单入口；退料只在原领料流水里作主按钮', async () => {
+    user.value = { id: 1, roles: ['admin'] }
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+    const mountIt = (props: { resource: string; title: string } & Record<string, unknown>) => shallowMount(ResourcePanel, { props, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { template: '<div />' }, TransferTools: true } } })
+    const purchases = mountIt({ resource: 'purchases', title: '采购订单' })
+    await flushPromises()
+    expect(purchases.text()).toContain('从 BOM 多选下单')
+    const receipts = mountIt({ resource: 'purchases', title: '待收货采购', allowCreate: false, params: { status: 'approved' }, emptyHint: '没有待收货的采购单。' })
+    await flushPromises()
+    expect(receipts.text()).not.toContain('从 BOM 多选下单')
+    expect(receipts.text()).toContain('没有待收货的采购单。')
+    const issue = { id: 3, kind: 'issue' }
+    const moves = mountIt({ resource: 'moves', title: '库存流水' })
+    await flushPromises()
+    expect((moves.vm as any).primaryAction(issue)).toBeUndefined()
+    expect((moves.vm as any).soleAction(issue)).toBe('退料')
+    const returns = mountIt({ resource: 'moves', title: '原领料流水', params: { kind: 'issue' } })
+    await flushPromises()
+    expect((returns.vm as any).primaryAction(issue)).toBe('退料')
+    for (const w of [purchases, receipts, moves, returns]) w.unmount()
+  })
   it('空状态：页面给了 emptyHint 就用它，并且不再提示联系同事', async () => {
     user.value = { id: 1, role: 'admin' }
     vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
