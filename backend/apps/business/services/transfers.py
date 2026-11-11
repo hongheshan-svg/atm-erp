@@ -261,6 +261,10 @@ PREVIOUS_CODE_COLUMNS = {resource: SCHEMAS[resource][1][:] for resource in MANUA
 for resource, label in MANUAL_CODE_LABELS.items():
     SCHEMAS[resource][1].append((label, 'code'))
 
+# 超 BOM 原因列加在最后；不含此列的上一版采购模板仍可导入，未超出缺口时无需填写。
+PREVIOUS_PURCHASE_COLUMNS = SCHEMAS['purchases'][1][:]
+SCHEMAS['purchases'][1].append(('超 BOM 采购原因', 'over_bom_reason'))
+
 TABLE_KEYS = {
     'item': ['item_code', 'item_name'],
     'project': ['project_name'],
@@ -487,6 +491,7 @@ def accepted_schemas(resource):
         PREVIOUS_SCHEMAS[resource],
         *([PREVIOUS_CODE_COLUMNS[resource]] if resource in PREVIOUS_CODE_COLUMNS else []),
         *([PREVIOUS_TASK_COLUMNS] if resource == 'tasks' else []),
+        *([PREVIOUS_PURCHASE_COLUMNS] if resource == 'purchases' else []),
         old,
         *[old[:size] for size in sizes.get(resource, [])],
         *([PREVIOUS_ITEM_COLUMNS] if resource == 'items' else []),
@@ -546,7 +551,7 @@ def executable_records(resource, records):
         if 'kind' in data:
             data['kind'] = kinds.get(data['kind'], data['kind'])
     if resource == 'purchases':
-        grouped = {}
+        grouped, reasons = {}, {}
         for record in records:
             data = record['data']
             group = data['group']
@@ -554,12 +559,19 @@ def executable_records(resource, records):
                 raise ValidationError(f'第{record["row"]}行必须填写分组号。')
             line = {key: data.pop(key) for key in ['item', 'quantity', 'unit_price']}
             line['due_date'] = data.pop('line_due_date', '') or data['due_date']
+            # 超 BOM 原因通常只写在超出的那一行：同组任一行填写即作为整单原因，不同原因去重后合并，留空行不算不一致。
+            reason = data.pop('over_bom_reason', '').strip()
             if group not in grouped:
                 grouped[group] = {'row': record['row'], 'data': {**data, 'lines': []}}
+                reasons[group] = []
             target = grouped[group]['data']
             if any(target[key] != value for key, value in data.items()):
                 raise ValidationError(f'分组号{group}的单据信息不一致。')
             target['lines'].append(line)
+            if reason and reason not in reasons[group]:
+                reasons[group].append(reason)
+        for group, record in grouped.items():
+            record['data']['over_bom_reason'] = '；'.join(reasons[group])
         records = list(grouped.values())
     return records
 

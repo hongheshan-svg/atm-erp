@@ -303,26 +303,43 @@ def ship_checks(project):
     return items
 
 
-def receivable_check(project):
-    """发货时提示应收状态：只读取款项余额，不阻断发货。"""
+def receivable_rows(project):
+    """本项目未收的应收节点（按到期日），含是否已逾期；只读。调用方负责先判断金额可见性。"""
     today = timezone.localdate()
-    overdue, outstanding, count, overdue_count, earliest = ZERO, ZERO, 0, 0, None
-    for entry in project.entries.filter(kind='receivable').order_by('due_date', 'pk'):
+    rows = []
+    for entry in project.entries.filter(kind='receivable', cancelled=False).order_by('due_date', 'pk'):
         part = split_balance(entry, today)
         if part.get('receivable'):
-            count += 1
-            outstanding += part['receivable']
-        if part.get('overdue_receivable'):
-            overdue_count += 1
-            overdue += part['overdue_receivable']
-            earliest = earliest or entry
-    if not count:
+            rows.append(
+                {
+                    'entry': entry.pk,
+                    'title': entry.title or '收款节点',
+                    'outstanding': str(part['receivable']),
+                    'due_date': entry.due_date.isoformat(),
+                    'overdue': bool(part.get('overdue_receivable')),
+                }
+            )
+    return rows
+
+
+def receivable_line(row):
+    return f'{row["title"]} ¥{Decimal(row["outstanding"]):,.2f}（{"已逾期，" if row["overdue"] else ""}到期 {row["due_date"]}）'
+
+
+def receivable_check(project):
+    """发货时提示应收状态：只读取款项余额，不阻断发货。逐个列出未收节点，逾期的标明。"""
+    rows = receivable_rows(project)
+    overdue = [row for row in rows if row['overdue']]
+    if not rows:
         detail = '应收款项已结清或尚无应收'
     else:
-        detail = f'未收 {count} 笔，共 ¥{outstanding:,.2f}'
-        if overdue_count:
-            detail += f'；其中已逾期 {overdue_count} 笔 ¥{overdue:,.2f}（最早：{earliest.title or "收款节点"}，到期 {earliest.due_date}）'
-    return check('receivable', not overdue_count, '应收状态', detail, blocking=False, target={'tab': 'finance'})
+        total = sum((Decimal(row['outstanding']) for row in rows), ZERO)
+        detail = f'未收 {len(rows)} 笔，共 ¥{total:,.2f}'
+        if overdue:
+            amount = sum((Decimal(row['outstanding']) for row in overdue), ZERO)
+            detail += f'；其中已逾期 {len(overdue)} 笔 ¥{amount:,.2f}'
+        detail += '：' + '；'.join(receivable_line(row) for row in rows)
+    return check('receivable', not overdue, '应收状态', detail, blocking=False, target={'tab': 'finance'})
 
 
 def install_ready(delivery):
@@ -939,6 +956,9 @@ def ship(actor, key, project_id, data):
         from .milestones import sync_milestones
 
         sync_milestones(user, project)
+        # 只提示不拦截；金额只给能看项目金额的角色（与 readiness、项目序列化同一规则）。
+        if project_allowed(user, project, MONEY_READERS):
+            result['receivables'] = receivable_rows(project)
         return result
 
     return project_action(actor, key, 'delivery.ship', project_id, data, MANAGERS, execute)

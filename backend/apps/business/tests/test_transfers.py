@@ -687,3 +687,83 @@ class TransferTests(BusinessFixtures, TestCase):
         purchase = PurchaseOrder.objects.get()
         self.assertEqual(purchase.status, 'draft')
         self.assertEqual(list(purchase.lines.order_by('id').values_list('quantity', 'unit_price')), [(2, 10), (3, 20)])
+
+    def test_purchase_import_over_bom_reason_from_any_group_row_and_keeps_previous_template(self):
+        project = self.active_project()
+        BOMLine.objects.create(project=project, item=self.item, quantity=1, assembly_unit='上料')
+
+        def upload(rows, columns=None):
+            columns = columns or transfers.SCHEMAS['purchases'][1]
+            stream = io.StringIO()
+            writer = csv.writer(stream)
+            writer.writerow([label for label, _ in columns])
+            writer.writerows([[row.get(key, '') for _, key in columns] for row in rows])
+            return self.clients['admin'].post(
+                '/api/business/purchases/import-file/',
+                {'file': SimpleUploadedFile('rows.csv', stream.getvalue().encode())},
+                format='multipart',
+            )
+
+        row = {
+            'group': 'G1',
+            'project': project.code,
+            'supplier': 'S1',
+            'due_date': TODAY,
+            'item': 'I1',
+            'quantity': '3',
+            'unit_price': '10',
+        }
+        self.assertEqual(transfers.SCHEMAS['purchases'][1][-1], ('超 BOM 采购原因', 'over_bom_reason'))
+        # 不填原因：超出缺口的行被拒绝，错误落在原因列并写明超出数量。
+        rejected = upload([row])
+        self.assertEqual(rejected.status_code, 200, rejected.data)
+        self.assertFalse(rejected.data['can_import'])
+        error = rejected.data['errors'][0]
+        self.assertEqual((error['row'], error['fields']), (2, ['over_bom_reason']))
+        self.assertIn('超 BOM 采购原因', error['message'])
+        self.assertIn('超出 2', error['message'])
+        # 上一版模板（没有原因列）仍可识别，超出缺口时同样提示填写原因。
+        previous = upload([row], transfers.PREVIOUS_PURCHASE_COLUMNS)
+        self.assertEqual(previous.status_code, 200, previous.data)
+        self.assertFalse(previous.data['can_import'])
+        # 原因只写在超出的那一行：同组其他行留空不算单据信息不一致，整单沿用这条原因。
+        other = Item.objects.create(code='SPARE', name='备件')
+        third = Item.objects.create(code='SPARE2', name='备件二')
+        accepted = upload(
+            [
+                {**row, 'item': other.code, 'quantity': '1'},
+                {**row, 'over_bom_reason': '备件随设备发运'},
+            ]
+        )
+        self.assertTrue(accepted.data['can_import'], accepted.data)
+        self.commit('purchases', accepted)
+        purchase = PurchaseOrder.objects.get()
+        log = AuditLog.objects.get(resource=f'purchaseorder:{purchase.pk}', operation='purchase.create')
+        self.assertEqual(log.detail['over_bom_reason'], '备件随设备发运')
+        self.assertEqual(log.detail['over_bom'][0]['excess'], '2.000')
+        # 同组各行写了不同原因：去重后按顺序合并，整单一起保存。
+        merged = upload(
+            [
+                {**row, 'group': 'G2', 'over_bom_reason': '备件随设备发运'},
+                {**row, 'group': 'G2', 'item': other.code, 'quantity': '1', 'over_bom_reason': '损耗补买'},
+                {**row, 'group': 'G2', 'item': third.code, 'quantity': '1', 'over_bom_reason': '备件随设备发运'},
+            ]
+        )
+        self.assertTrue(merged.data['can_import'], merged.data)
+        self.commit('purchases', merged)
+        latest = PurchaseOrder.objects.latest('pk')
+        log = AuditLog.objects.get(resource=f'purchaseorder:{latest.pk}', operation='purchase.create')
+        self.assertEqual(log.detail['over_bom_reason'], '备件随设备发运；损耗补买')
+        # 合并后超过长度上限时错误落在原因列。
+        too_long = upload(
+            [
+                {**row, 'group': 'G3', 'over_bom_reason': '甲' * 300},
+                {**row, 'group': 'G3', 'item': other.code, 'quantity': '1', 'over_bom_reason': '乙' * 300},
+            ]
+        )
+        self.assertFalse(too_long.data['can_import'])
+        self.assertEqual({error['fields'][0] for error in too_long.data['errors']}, {'over_bom_reason'})
+        # 单头其他信息不一致仍整组拒绝。
+        mismatch = upload([{**row, 'group': 'G4'}, {**row, 'group': 'G4', 'item': other.code, 'note': '另写说明'}])
+        self.assertEqual(mismatch.status_code, 400, mismatch.data)
+        self.assertIn('分组号G4的单据信息不一致', str(mismatch.data))

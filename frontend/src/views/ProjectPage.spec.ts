@@ -195,3 +195,13 @@ it('已结项、已取消的项目不再显示待办条，改为一行结项说�
   expect(wrapper.get('.project-finished').text()).toBe('已结项：全部履约并结清')
   wrapper.unmount()
 })
+it('只在 BOM 页签放开 el-tabs 内容区的 overflow，采购选择条才能吸底；其他页签不带这个类', async () => {
+  const bom = await render('/projects/7?tab=bom')
+  expect(bom.get('.project-tabs').classes()).toContain('project-tabs-sticky')
+  bom.unmount()
+  for (const tab of ['tasks', 'deliveries', 'finance']) {
+    const other = await render(`/projects/7?tab=${tab}`)
+    expect(other.get('.project-tabs').classes()).not.toContain('project-tabs-sticky')
+    other.unmount()
+  }
+})

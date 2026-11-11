@@ -7,7 +7,9 @@ from django.test import TestCase
 
 from apps.accounts.models import User
 from apps.business.models import BOMLine, Delivery, Entry, Project, Stock, StockMove, Task, TimeEntry
+from apps.business.services import execution
 from apps.core.models import ActionReceipt, AuditLog
+from apps.core.permissions import MONEY_READERS
 
 from .test_commercial_chain import TODAY, BusinessFixtures
 
@@ -811,7 +813,68 @@ class ProjectReadinessTests(ExecutionFixtures, TestCase):
         self.assertEqual((receivable['ok'], receivable['blocking']), (False, False))
         self.assertIn('已逾期 1 笔 ¥10,000.00', receivable['detail'])
         self.assertTrue(all(item['ok'] for item in items.values() if item['blocking']))
+        self.assertIn('已逾期，到期', receivable['detail'])
+        self.assertIn(
+            f'¥10,000.00（已逾期，到期 {(date.fromisoformat(TODAY) - timedelta(days=5)).isoformat()}）',
+            receivable['detail'],
+        )
         self.deliver(project)
+
+    def test_ship_result_lists_open_receivables_for_money_roles_only(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        entry = project.entries.get(kind='receivable')
+        late = date.fromisoformat(TODAY) - timedelta(days=5)
+        Entry.objects.filter(pk=entry.pk).update(due_date=late)
+        result = self.post(
+            'manager',
+            f'projects/{project.pk}/ship/',
+            {'date': TODAY, 'quantity': 1, 'installer': self.users['member'].pk, 'acceptor': self.users['manager'].pk},
+        )
+        rows = result['receivables']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(
+            (rows[0]['outstanding'], rows[0]['due_date'], rows[0]['overdue']), ('10000.00', late.isoformat(), True)
+        )
+
+    def test_ship_result_hides_receivables_without_money_visibility(self):
+        from unittest import mock
+
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        real = execution.project_allowed
+        with mock.patch.object(
+            execution,
+            'project_allowed',
+            side_effect=lambda user, p, *roles: False if roles == (MONEY_READERS,) else real(user, p, *roles),
+        ):
+            result = self.post(
+                'manager',
+                f'projects/{project.pk}/ship/',
+                {
+                    'date': TODAY,
+                    'quantity': 1,
+                    'installer': self.users['member'].pk,
+                    'acceptor': self.users['manager'].pk,
+                },
+            )
+        self.assertNotIn('receivables', result)
+        self.assertNotIn('10000', str(result))
+
+    def test_ship_result_has_no_receivables_when_all_collected(self):
+        project = self.ready_project()
+        self.stock_and_issue(project)
+        entry = project.entries.get(kind='receivable')
+        self.post('finance', f'entries/{entry.pk}/pay/', {'amount': str(entry.amount), 'date': TODAY, 'reason': '到账'})
+        items = self.items(self.readiness(project))
+        self.assertTrue(items['receivable']['ok'])
+        self.assertEqual(items['receivable']['detail'], '应收款项已结清或尚无应收')
+        result = self.post(
+            'manager',
+            f'projects/{project.pk}/ship/',
+            {'date': TODAY, 'quantity': 1, 'installer': self.users['member'].pk, 'acceptor': self.users['manager'].pk},
+        )
+        self.assertEqual(result['receivables'], [])
 
 
 class TaskEditAndDailyNoteTests(ExecutionFixtures, TestCase):

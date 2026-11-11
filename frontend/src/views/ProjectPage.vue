@@ -202,7 +202,7 @@ onMounted(load)
     </div>
     </div>
     <p v-if="taskAttention || purchaseAttention" class="attention-filter" role="status">当前项目 · {{ attentionLabel }}<el-button text @click="clearAttention">查看全部</el-button><router-link v-if="taskAttention && attention === 'acceptance' && manager() && project.can_manage !== false" :to="{ path: `/projects/${id}`, query: { tab: 'deliveries', section: 'deliveries' } }">前往交付批次登记验收</router-link></p>
-    <el-tabs ref="tabsRef" class="scrollable-tabs project-tabs" v-model="tab" :before-leave="confirmFormNavigation"
+    <el-tabs ref="tabsRef" class="scrollable-tabs project-tabs" :class="{ 'project-tabs-sticky': tab === 'bom' }" v-model="tab" :before-leave="confirmFormNavigation"
       ><el-tab-pane label="流程进度" name="progress" lazy><ProjectProgress v-if="tab === 'progress'" :project-id="id" :revision="revision" /></el-tab-pane><el-tab-pane label="任务与工时" name="tasks"
         ><ModuleTabs :parent-tab="tab" v-if="tab === 'tasks'" :tabs="taskTabs" :storage-key="`project-${id}-tasks`"><template #tasks><ProjectMilestones :project-id="id" :revision="revision" :phase="phase" @phase="selectPhase" @changed="load" /><ResourcePanel
           resource="tasks"
@@ -300,6 +300,9 @@ onMounted(load)
 .project-status :deep(.project-attention) { flex: 1 1 auto; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 /* 主页签和「项目任务 / 工时记录」子页签压窄，任务表尽量进首屏。 */
 .project-tabs > :deep(.el-tabs__header) { margin-bottom: 8px; }
+/* el-tabs 内容区默认 overflow: hidden，会让页签里的 position: sticky 失效。只在 BOM 页签放开，
+   采购员的「已选 N 项」选择条才能像 BOM 页一样贴住视口底部；其他页签保持原样。 */
+.project-tabs-sticky > :deep(.el-tabs__content) { overflow: visible; }
 .project-tabs :deep(.module-tabs > .el-tabs__header) { margin-bottom: 8px; }
 .project-tabs :deep(.module-tabs > .el-tabs__header .el-tabs__item) { height: 32px; line-height: 32px; font-size: 13px; }
 .tab-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }

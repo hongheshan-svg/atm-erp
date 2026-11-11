@@ -1,3 +1,4 @@
+import { money } from '../utils/money'
 import { disciplineField } from './milestones'
 import { codeField } from './shared'
 import { today } from '../forms'
@@ -232,6 +233,13 @@ export function readinessPath(projectId: unknown, target: Row = {}): string {
   const search = query.toString()
   return `/projects/${projectId}${search ? `?${search}` : ''}`
 }
+// 发货成功后的应收提示：服务端只对能看金额的角色返回 receivables，其余角色不带金额也不提示。
+export function shipReceivableNote(result: Row): string {
+  const rows: Row[] = Array.isArray(result?.receivables) ? result.receivables : []
+  if (!rows.length) return ''
+  const list = rows.map(row => `${row.title} ${money(row.outstanding, { currency: true })}（${row.overdue ? '已逾期，' : ''}到期 ${row.due_date}）`).join('；')
+  return `本项目有未结应收：${list}。如合同约定发货后付款，请通知财务调整到期日。`
+}
 // 发货、结项前先读同一组推进检查：未满足项一次列全并给出跳转，不必提交后逐条试错；读取失败时仍以服务端校验为准。
 async function readinessGate(r: Row, key: 'ship' | 'close', title: string): Promise<Partial<Command>> {
   let checks: Check[]
@@ -310,6 +318,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   let gate: Partial<Command> = {}
   if (name === '发货' || name === '结项') gate = await readinessGate(r, name === '发货' ? 'ship' : 'close', name === '发货' ? '发货' : '结项')
   if (name === '发货') {
+    gate = { ...gate, successNote: shipReceivableNote }
     fields = [
       codeField('交付单号'),
       qty,
