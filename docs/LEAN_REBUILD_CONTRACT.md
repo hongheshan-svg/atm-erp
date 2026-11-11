@@ -176,12 +176,14 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 ## 库存与纠错
 
-- `stocks/` GET；`stocks/opening/` 管理员 POST item/location/quantity/unit_cost/reason?（选填，缺省“期初库存”），只允许无历史库位。
-- `stocks/issue/`：project/stock/task?/quantity/reason/remark?；生产领料受 BOM 上限约束，已验收项目必须关联未完成的售后任务。`reason` 选填（缺省“项目领料”，售后任务为“售后领料”）。
-- `stocks/bom-issue/` 按项目 BOM 批量领料（仓库岗位，项目范围）：GET `?project=` 列出本项目 BOM 仍有未领需求且有库存的物料，按库位逐行返回 stock/物料信息/required_quantity/issued_quantity/bom_remaining/available 及预填 quantity（同物料多库位按库位顺序依次填满还可领量），并返回 pending_items、missing_items（缺库存物料数）。POST project/lines[{stock,quantity,remark?}]/reason?/confirm_shared?（操作名 `stock.issue_batch`，需 Idempotency-Key）：项目须执行中或交付中，同一库存行不得重复，逐行沿用单行领料的 BOM 剩余、库存与共享到货校验，任一行不通过整单不出库；返回 moves 与 count。
+- `stocks/` GET（另支持 `id__in=1,2,3` 一次读取指定库存行，供勾选批量领料重读当前数量）；`stocks/opening/` 管理员 POST item/location/quantity/unit_cost/reason?（选填，缺省“期初库存”），只允许无历史库位。
+- 领料单 `IssueSlip`（表 `lean_issue_slip`，迁移 `business.0027_issue_slip`）：每次领料提交生成一张，单号走编号规则 `issue_slip`（缺省前缀 `LL`，`init_system` 与首次领料按需建立），单头为 project/task?/reason，经办人与时间取 created_by/created_at；明细即其下的领料流水（`StockMove.slip`，历史领料与其他流水为空）。领料单与流水同为不可覆盖、不可删除的记录；退料仍按原领料流水登记，不改领料单。表格导入领料（`moves` 导入）逐行沿用单行领料，每行各生成一张领料单。
+- `stocks/issue/`：project/stock/task?/quantity/reason/remark?；生产领料受 BOM 上限约束，已验收项目必须关联未完成的售后任务。`reason` 选填（缺省“项目领料”，售后任务为“售后领料”）。生成一张单行领料单，返回 id（流水）/slip/slip_code/moves/count。
+- `stocks/bom-issue/` 批量领料（仓库岗位，项目范围），按 BOM 领料与库存页勾选批量领料共用：GET `?project=` 列出本项目 BOM 仍有未领需求且有库存的物料，按库位逐行返回 stock/物料信息/required_quantity/issued_quantity/bom_remaining/available 及预填 quantity（同物料多库位按库位顺序依次填满还可领量），并返回 pending_items、missing_items（缺库存物料数）。POST project/lines[{stock,quantity,remark?}]/task?/reason?/confirm_shared?（操作名 `stock.issue_batch`，需 Idempotency-Key）：同一库存行不得重复，逐行沿用单行领料的 BOM 剩余、库存与共享到货校验，错误提示带物料名（库存不足另带库位与当前可用量），任一行不通过整单不出库、不生成领料单也不占用单号。不带 task 时项目须执行中或交付中（已验收项目返回 409 并提示改用勾选领料选售后任务）；带 task 时与单行领料相同：须为本项目未完成任务，已验收项目只能是售后任务（否则 400），售后任务领料不占 BOM 剩余，`reason` 缺省“售后领料”。整批生成一张领料单，返回 slip/slip_code/moves/count。
+- `issue-slips/` 只读（读取岗位与项目范围同 `moves/`）：列表返回 code/project/project_code/project_name/task/task_title/reason/line_count/items_summary/created_at/created_by/created_by_name，支持 `project`、`task`、`date_from`/`date_to`（领料本地日期）筛选和单号、项目编号名称、物料编码名称搜索，可导出；详情另返回 company_name（打印抬头）与 lines[{id,stock,item,item_code,item_name,specification,brand,drawing_number,drawing_revision,unit,location,quantity(正数),remark}]，不含成本金额。
 - `stocks/{id}/count/`：quantity/expected_quantity/expected_updated_at/reason，拒绝过时盘点快照；只有零库存盘盈可由管理员额外给 unit_cost。
 - `moves/` GET；`moves/{id}/return-material/`：quantity/reason，不能超原领料或退回已交付部分的必要材料。
-- `moves/` 与 `payments/` 列表可追到来源单据：库存流水另返回 item_code/unit/project_code/project_name/purchase/purchase_code/created_by_name；收付款流水另返回 kind/project_code/project_name/partner_name/purchase/reconciliation_code，对账单显示编号而不是内部 ID。`entries/` 另返回 purchase_code，列表按“未结在前、到期日先后、编号”排序。
+- `moves/` 与 `payments/` 列表可追到来源单据：库存流水另返回 item_code/unit/project_code/project_name/purchase/purchase_code/slip/slip_code/created_by_name，可按 `slip` 筛选；收付款流水另返回 kind/project_code/project_name/partner_name/purchase/reconciliation_code，对账单显示编号而不是内部 ID。`entries/` 另返回 purchase_code，列表按“未结在前、到期日先后、编号”排序。
 - `return-purchase/`：quantity/reason，供应商冲减按原采购成本，库存按移动平均价值退出，价差单列。采购退货与领料一样，会占用其他项目已到货未领用物料时须勾选 `confirm_shared` 确认并留审计。
 
 ### 收货与项目出库操作明细
