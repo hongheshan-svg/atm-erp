@@ -112,7 +112,8 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       title: row ? '编辑销售' : '新建销售',
       path: row ? `${path}${row.id}/edit/` : path,
       initial: row,
-      prepare: row ? data => ({ ...data, expected_updated_at: row.updated_at }) : undefined,
+      // 需求说明、计划交期清空后也提交空值，否则服务端沿用原值。
+      prepare: row ? data => ({ ...data, requirements: data.requirements ?? '', due_date: data.due_date || null, expected_updated_at: row.updated_at }) : undefined,
       fields: [
         ...(!row ? [codeField('销售单号')] : []),
         { key: 'name', label: '销售名称' },

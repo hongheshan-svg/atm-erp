@@ -98,6 +98,15 @@ describe('模块边界', () => {
     expect(command.fields.find(field => field.key === 'category')?.options?.map(option => option.value)).toEqual(['drawing', 'delivery', 'other'])
   })
 
+  it('上传分类名称与附件列表一致，按岗位开放合同和结算凭证', async () => {
+    user.value = { id: 1, roles: ['manager', 'finance'] }
+    const command = await createCommand('documents', 1)
+    expect(command.fields.find(field => field.key === 'category')?.options).toEqual([
+      { value: 'drawing', label: '图纸' }, { value: 'contract', label: '合同' }, { value: 'receipt', label: '结算凭证' },
+      { value: 'delivery', label: '交付验收' }, { value: 'other', label: '其他' },
+    ])
+  })
+
   it('冲销后保留流水，但不再提供重复冲销和工时更正', () => {
     user.value = { role: 'finance' }
     expect(actionNames('payments', { reversal_of: null, reversed_by: null })).toContain('冲销付款')
@@ -178,8 +187,27 @@ describe('模块边界', () => {
     const row = { id: 7, name: '原销售', updated_at: '2026-09-09T00:00:00Z' }
     const command = await actionCommand('sales', row, '编辑销售')
     expect(command.initial).toEqual(row)
-    expect(command.prepare?.({ name: '更正' })).toEqual({ name: '更正', expected_updated_at: row.updated_at })
+    // 需求说明、计划交期清空后提交空值，服务端才会清除原值。
+    expect(command.prepare?.({ name: '更正' })).toEqual({ name: '更正', requirements: '', due_date: null, expected_updated_at: row.updated_at })
+    expect(command.prepare?.({ name: '更正', requirements: '新需求', due_date: '2026-12-01' })).toEqual({ name: '更正', requirements: '新需求', due_date: '2026-12-01', expected_updated_at: row.updated_at })
     expect(command.fields.find(f => f.key === 'reason')?.hint).toContain('重新报价')
+  })
+
+  it('编辑表单清空选填项时提交空值，已编码物料的只读字段不提交', async () => {
+    user.value = { id: 1, roles: ['admin'] }
+    vi.mocked(all).mockResolvedValue([])
+    vi.mocked(read).mockResolvedValue({ id: 3, project: 1, status: 'active', manager: 1, members: [] })
+    const project = await actionCommand('projects', { id: 1, status: 'active', manager: 1, requirements: '旧需求', due_date: '2026-12-01' }, '编辑项目')
+    expect(project.prepare?.({ name: '项目', reason: '交期未定' })).toEqual({ name: '项目', reason: '交期未定', requirements: '', due_date: null })
+    const task = await actionCommand('tasks', { id: 3, project: 1, status: 'open', title: '装配', description: '旧要求' }, '编辑任务')
+    expect(task.prepare?.({ title: '装配', reason: '要求作废' })).toEqual({ title: '装配', reason: '要求作废', description: '' })
+    const company = await actionCommand('company', { id: 1, name: '公司', address: '旧地址', phone: '123' }, '编辑')
+    expect(company.prepare?.({ name: '公司' })).toEqual({ name: '公司', address: '', phone: '' })
+    expect((await actionCommand('users', { id: 2 }, '编辑')).prepare).toBeUndefined()
+    const item = await actionCommand('items', { id: 1, specification: '旧规格' }, '编辑')
+    expect(item.prepare?.({ name: '电机', unit: '台' })).toEqual({ name: '电机', unit: '台', brand: '', part_type: '', specification: '', drawing_number: '', drawing_revision: '' })
+    const coded = await actionCommand('items', { id: 1, product_category: '11' }, '编辑')
+    expect(coded.prepare?.({ name: '电机', unit: '台' })).toEqual({ name: '电机', unit: '台', brand: '', part_type: '' })
   })
 
   it('签约后仅经理可签补充协议，财务仍只读', () => {

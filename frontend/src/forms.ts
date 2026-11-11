@@ -76,11 +76,15 @@ export const today = () => {
   const parts = Object.fromEntries(businessDateFormatter.formatToParts(new Date()).map(({ type, value }) => [type, value]))
   return `${parts.year}-${parts.month}-${parts.day}`
 }
+// 符号单独处理：BigInt 除法向零截断、余数带符号，直接拼接会得到「0.-500」。
 export function decimalDifference(...values: string[]): string {
   const scaled = (v: string) => {
-    const [a, b = ''] = v.split('.')
-    return BigInt(a || '0') * 1000n + BigInt((b + '000').slice(0, 3))
+    const text = v.trim(), negative = text.startsWith('-')
+    const [a, b = ''] = text.replace(/^-/, '').split('.')
+    const n = BigInt(a || '0') * 1000n + BigInt((b + '000').slice(0, 3))
+    return negative ? -n : n
   }
   const n = values.slice(1).reduce((n, v) => n - scaled(v), scaled(values[0] || '0'))
-  return `${n / 1000n}.${String(n % 1000n).padStart(3, '0')}`
+  const abs = n < 0n ? -n : n
+  return `${n < 0n ? '-' : ''}${abs / 1000n}.${String(abs % 1000n).padStart(3, '0')}`
 }

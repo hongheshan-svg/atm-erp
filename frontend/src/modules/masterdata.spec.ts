@@ -77,8 +77,9 @@ it('已有供应商改为客户时重置供应商默认账期，编辑客户也�
   expect(wrapper.find(term).exists()).toBe(false)
   await wrapper.get('form').trigger('submit')
   await flushPromises()
+  // 选填的联系人、电话、地址也提交空串，清空后服务端才会真正清除。
   expect(write).toHaveBeenCalledWith('/business/partners/7/', {
-    name: '测试单位', kind: 'customer', is_active: true, payment_term: 'manual', payment_days: 0,
+    name: '测试单位', kind: 'customer', is_active: true, payment_term: 'manual', payment_days: 0, contact: '', phone: '', address: '',
   }, expect.any(String), 'patch')
   await wrapper.setProps({ command: await actionCommand('partners', {
     id: 7, name: '测试单位', kind: 'customer', payment_term: 'manual', payment_days: 0, is_active: true,

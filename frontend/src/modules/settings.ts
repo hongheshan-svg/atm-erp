@@ -135,5 +135,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   const fields = resource === 'company'
     ? [t('name', '公司名称'), t('address', '地址', true), t('phone', '电话', true)]
     : userFields.map(f => f.key === 'password' ? { ...f, optional: true } : f)
-  return { title: name, path: endpoint(resource) + r.id + '/', fields, initial: r, method: 'patch' }
+  return { title: name, path: endpoint(resource) + r.id + '/', fields, initial: r, method: 'patch',
+    // 公司地址、电话清空后也提交空串，否则 PATCH 不带该字段会保留原值。
+    ...(resource === 'company' ? { prepare: (data: Row) => ({ ...data, address: data.address ?? '', phone: data.phone ?? '' }) } : {}) }
 }

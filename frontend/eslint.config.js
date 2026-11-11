@@ -6,17 +6,7 @@
 //   - `no-unreachable` catches dead code after malformed control flow.
 //   - The rest are kept as warnings so the error count stays meaningful.
 //
-// How to run:
-//   1) If `frontend/node_modules` is writable to your user:
-//        npm install --save-dev eslint eslint-plugin-vue globals typescript-eslint
-//        npx eslint src
-//   2) Otherwise install into a side directory:
-//        mkdir -p /tmp/erp-lint && cd /tmp/erp-lint
-//        npm init -y && npm pkg set type=module
-//        npm install eslint eslint-plugin-vue globals typescript-eslint
-//        ln -sfn /home/administrator/erp/frontend/src src
-//        cp /home/administrator/erp/frontend/eslint.config.js .
-//        ./node_modules/.bin/eslint src
+// How to run: `npm run lint` in frontend/ (see package.json; warnings fail via --max-warnings=0).
 import js from '@eslint/js'
 import vue from 'eslint-plugin-vue'
 import globals from 'globals'
@@ -96,6 +86,6 @@ export default [
     },
   },
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/*.bak', '**/*.bak2'],
+    ignores: ['**/node_modules/**', '**/dist/**'],
   },
 ]

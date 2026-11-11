@@ -114,6 +114,7 @@ it('附件大小按 B/KB/MB 显示', () => {
   expect(fileSize(5 * 1024 * 1024)).toBe('5.0 MB')
   expect(fileSize(null)).toBe('—')
   expect(columns.documents!.find(c => c.key === 'size')!.format!({ size: 1536 })).toBe('1.5 KB')
+  expect(columns.documents!.find(c => c.key === 'created_at')!.format!({ created_at: '2026-11-11T10:20:30.123456+08:00' })).toBe('2026-11-11 10:20')
 })
 
 it('发货配套物料按物料合并并列出全部单元', () => {

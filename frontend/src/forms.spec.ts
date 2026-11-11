@@ -74,4 +74,12 @@ describe('安全表单载荷', () => {
     expect(decimalDifference('99999999999999.999', '99999999999999.998', '0.000')).toBe('0.001')
     expect(decimalDifference('4.000', '3.000', '0.000')).toBe('1.000')
   })
+  it('差额为负时符号只出现在最前面，不足 1 的超出也带负号', () => {
+    expect(decimalDifference('2.000', '2.5')).toBe('-0.500')
+    expect(decimalDifference('2.000', '3.5')).toBe('-1.500')
+    expect(decimalDifference('0', '0.001')).toBe('-0.001')
+    expect(decimalDifference('-0.5', '0')).toBe('-0.500')
+    expect(decimalDifference('1', '-0.5')).toBe('1.500')
+    expect(decimalDifference('2.000', '2.000')).toBe('0.000')
+  })
 })

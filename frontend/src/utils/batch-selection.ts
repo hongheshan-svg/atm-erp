@@ -27,13 +27,14 @@ export function useBatchSelection(rows: Ref<Row[]>, key: string, limit: () => nu
   ) {
     const result: Row[] = []
     const maximum = limit()
+    // 每页固定 200 条（服务端上限）：中途改小页大小会让 page 编号错位，重复或漏掉记录；超出部分在最后截掉。
     for (let page = 1; result.length < maximum; page++) {
-      const data = await fetchPage(page, Math.min(200, maximum - result.length))
+      const data = await fetchPage(page, 200)
       if (!isCurrent()) return
       result.push(...data.results)
       if (!data.next || !data.results.length) break
     }
-    if (isCurrent()) replace(result)
+    if (isCurrent()) replace(result.slice(0, maximum))
   }
   return { has, all, some, selectable, replace, toggle, togglePage, replacePages }
 }

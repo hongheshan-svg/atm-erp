@@ -518,7 +518,7 @@ function saved(result?: Row) {
     savedRecord.value = { title: `${command.value.title}成功 · 领料单 ${result.slip_code}`, resource: 'issue-slips', id: Number(result.slip), slip: true }
     if (command.value.title === '批量领料') issueSelection.value = []
   } else if (result && command.value) {
-    const target = savedTarget(command.value, result, selectedId.value)
+    const target = savedTarget(command.value, result)
     savedRecord.value = target ? { title: `${command.value.title}成功${result.code ? ` · ${result.code}` : ''}`, ...target, project: Number(selectedRow.value?.project || command.value.initial?.project || props.projectId) || undefined } : null
     if (savedRecord.value && command.value.title === '登记工时') {
       savedRecord.value.timeTask = Number(result.task || selectedId.value)

@@ -60,7 +60,8 @@ it('单项任务支持六阶段和联动节点，自动节点不显示手动完�
 it('调整负责人保留原日期，也可明确清空日期', async () => {
   const command = await actionCommand('tasks', { id: 4, project: 7, assignee: 1, due_date: '2026-12-20' }, '重新分配')
   expect(command.initial).toEqual({ assignees: [1], due_date: '2026-12-20' })
-  expect(command.prepare?.({ assignees: [1], reason: '日期待定' })).toEqual({ assignees: [1], reason: '日期待定', due_date: null })
+  expect(command.prepare?.({ assignees: [1], reason: '日期待定' })).toEqual({ assignees: [1], reason: '日期待定', due_date: null, discipline: '' })
+  expect(command.prepare?.({ assignees: [1], discipline: 'electrical', due_date: '2026-12-20', reason: '改派' })).toEqual({ assignees: [1], discipline: 'electrical', due_date: '2026-12-20', reason: '改派' })
 })
 
 it('共同执行人只查看，指定主管有完成和工时入口，自动汇总仍指向实际交付', async () => {

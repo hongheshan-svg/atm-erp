@@ -10,6 +10,7 @@ import { optionalReason } from './shared'
 import { projectLink } from './shared'
 import { purchaseLink } from './shared'
 import { money as formatMoney } from '../utils/money'
+import { dateTimeText } from '../utils/datetime'
 import { finance } from './shared'
 import { C } from './shared'
 import { project } from './shared'
@@ -126,7 +127,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '查看凭证') {
     const detail = await read(`/business/payments/${r.id}/`)
-    return { title: name, path: '', readonly: true, initial: { lines: detail.evidence }, fields: [{ key: 'lines', label: '凭证记录', type: 'rows', fields: [t('name', '文件'), t('reason', '说明'), t('actor', '补录人'), t('date', '补录时间')] }], actions: detail.evidence.flatMap((d: Row) => [previewAction(d.document, d.name), { label: `下载 ${d.name}`, run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } }]) }
+    return { title: name, path: '', readonly: true, initial: { lines: detail.evidence.map((d: Row) => ({ ...d, date: dateTimeText(d.date, '') })) }, fields: [{ key: 'lines', label: '凭证记录', type: 'rows', fields: [t('name', '文件'), t('reason', '说明'), t('actor', '补录人'), t('date', '补录时间')] }], actions: detail.evidence.flatMap((d: Row) => [previewAction(d.document, d.name), { label: `下载 ${d.name}`, run: async () => { const doc = await read(`/business/documents/${d.document}/`); await download(doc.download_url, doc.original_name) } }]) }
   }
   if (name === '查看收付流水') return { title: name, path: '', readonly: true, initial: { amount: r.amount, credit_amount: r.credit_amount, lines: await all('/business/payments/', { entry: r.id }) }, fields: [
     // 余额的三个来源都在这里：原金额减冲减、再减下面的流水合计。列表只留待结算。

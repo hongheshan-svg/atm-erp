@@ -173,6 +173,21 @@ it('待结算优先显示到期金额并同时给出余额，本人申请的审�
   wrapper.unmount()
 })
 
+it('管理员本人申请的预付款核准同样提示需填写例外原因，他人申请不提示', async () => {
+  user.value = { id: 7, roles: ['admin'], display_name: '测试用户' }
+  vi.mocked(read).mockResolvedValue({
+    prepayments: bucket([
+      { id: 5, code: 'REC-5', project_name: '自申项目', self_requested: true },
+      { id: 6, code: 'REC-6', project_name: '他人项目', self_requested: false },
+    ]),
+  })
+  const wrapper = await render()
+  const cells = rows(wrapper).map((row: any) => row.text())
+  expect(cells.find((text: string) => text.includes('REC-5'))).toContain('本人申请，需填写例外原因')
+  expect(cells.find((text: string) => text.includes('REC-6'))).not.toContain('本人申请')
+  wrapper.unmount()
+})
+
 it('无待办时保持中性配色、空态文案与错误提示', async () => {
   vi.mocked(read).mockResolvedValue({ tasks: { ...bucket([]), overdue_count: 0, today_count: 0 } })
   const wrapper = await render()
