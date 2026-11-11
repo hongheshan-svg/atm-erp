@@ -24,6 +24,7 @@ const owners: Record<string, keyof typeof modules> = {
   purchases: 'purchases',
   stocks: 'inventory',
   moves: 'inventory',
+  'issue-slips': 'inventory',
   entries: 'finance',
   payments: 'finance',
   reconciliations: 'settlement',

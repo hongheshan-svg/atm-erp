@@ -6,13 +6,13 @@ import ActionDialog from '../components/ActionDialog.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { can } from '../session'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { bomIssueCommand } from '../modules/inventory'
+import { bomIssueCommand, slipRoute } from '../modules/inventory'
 import { message } from '../utils/request'
-import type { Command } from '../types'
+import type { Command, Row } from '../types'
 const route = useRoute()
 const router = useRouter()
 const tabs = computed(() => [
-  { key: 'stocks', label: '现有库存' }, { key: 'moves', label: '库存流水' },
+  { key: 'stocks', label: '现有库存' }, { key: 'moves', label: '库存流水' }, { key: 'slips', label: '领料单' },
   ...(can(['admin', 'warehouse']) ? [{ key: 'receipts', label: '采购收货' }] : []),
 ])
 const returning = computed(() => route.query.intent === 'return')
@@ -38,6 +38,12 @@ async function openBomIssue() {
 }
 watch([bomIssue, issueProject], openBomIssue, { immediate: true })
 onBeforeUnmount(() => { issueGeneration++ })
+// 按 BOM 领料成功后提示本次领料单号，直达查看 / 打印。
+const issuedSlip = ref<{ id: number; code: string } | null>(null)
+function bomIssued(result: Row, refresh: () => void) {
+  issuedSlip.value = result?.slip ? { id: Number(result.slip), code: String(result.slip_code || '') } : null
+  refresh()
+}
 function closeBomIssue() {
   issueGeneration++
   issueCommand.value = null
@@ -46,7 +52,7 @@ function closeBomIssue() {
 }
 </script>
 <template>
-  <ModulePage :key="String(projectQuery)" title="库存" :project-filter="['moves', 'receipts'].includes(String(route.query.section)) || bomIssue" v-slot="{ revision, projectId, refresh }">
+  <ModulePage :key="String(projectQuery)" title="库存" :project-filter="['moves', 'receipts', 'slips'].includes(String(route.query.section)) || bomIssue" v-slot="{ revision, projectId, refresh }">
     <nav v-if="can(['admin', 'warehouse'])" class="panel daily-actions" aria-label="日常库存操作">
       <router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }">采购收货</router-link>
       <router-link :to="{ path: '/inventory', query: { section: 'stocks', intent: 'issue', project: projectId || 'all' } }">项目领料</router-link>
@@ -54,8 +60,9 @@ function closeBomIssue() {
       <router-link :to="{ path: '/inventory', query: { section: 'stocks', issue: 'bom', project: projectId || 'all' } }">按 BOM 领料</router-link>
     </nav>
     <el-alert v-if="issueError" :title="`按 BOM 领料读取失败：${issueError}`" type="error" :closable="false" show-icon role="alert" />
-    <ActionDialog :command="issueCommand" @close="closeBomIssue" @saved="refresh" />
-    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted tab-hint"><span class="full-hint">先查找物料与库位，再点该行“领料”选择项目并核对本次数量。整个项目按 BOM 一次领多行请用上方“按 BOM 领料”。现有库存为全公司共享库存。</span><span class="short-hint">点该行“领料”；整项目一次领多行用“按 BOM 领料”。</span></p><ResourcePanel
+    <section v-if="issuedSlip" class="saved-result" role="status"><strong>按 BOM 领料成功 · 领料单 {{ issuedSlip.code }}</strong><span>可查看并打印领料单，交领料人签字。</span><router-link class="el-button el-button--primary" :to="slipRoute(issuedSlip.id)">查看 / 打印领料单</router-link><el-button text aria-label="关闭结果提示" @click="issuedSlip = null">关闭提示</el-button></section>
+    <ActionDialog :command="issueCommand" @close="closeBomIssue" @saved="bomIssued($event, refresh)" />
+    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted tab-hint"><span class="full-hint">先查找物料与库位，再点该行“领料”选择项目并核对本次数量；要领多种物料时勾选各行（可翻页、换搜索继续勾选），点“批量领料”一次出库，生成一张领料单。整个项目按 BOM 一次领多行请用上方“按 BOM 领料”。现有库存为全公司共享库存。</span><span class="short-hint">点该行“领料”；多种物料勾选后点“批量领料”。</span></p><ResourcePanel
       resource="stocks"
       title="现有库存"
       :allow-create="false"
@@ -70,7 +77,10 @@ function closeBomIssue() {
       :params="{ project: projectId, ...(returning ? { kind: 'issue' } : {}) }"
       :revision="revision"
       @changed="refresh"
-    /></template><template #receipts>
+    /></template><template #slips>
+      <p class="muted tab-hint"><span class="full-hint">每次领料（单行领料、勾选批量领料、按 BOM 领料）生成一张领料单。可按项目、日期、单号或物料查找，点单号查看并打印，交领料人签字。</span><span class="short-hint">按单号或物料查找，点单号查看并打印。</span></p>
+      <ResourcePanel resource="issue-slips" title="领料单" :params="{ project: projectId }" :project-id="projectId" :allow-create="false" :revision="revision" @changed="refresh" />
+    </template><template #receipts>
       <p class="muted tab-hint"><span class="full-hint">选择采购单后点“收货”，核对待收数量与本次数量；支持部分到货，不合格物料仍走隔离处理。</span><span class="short-hint">点“收货”核对本次数量，支持部分到货。</span></p>
       <nav class="receipt-states" aria-label="收货进度"><router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }" :aria-current="receiptStatus === 'approved' ? 'page' : undefined">待收货采购</router-link><router-link :to="{ path: '/inventory', query: { section: 'receipts', receipt: 'partial', project: projectId || 'all' } }" :aria-current="receiptStatus === 'partial' ? 'page' : undefined">部分收货采购</router-link></nav>
       <ResourcePanel v-if="can(['admin', 'warehouse'])" :key="receiptStatus" class="daily-filtered-list" resource="purchases" :title="receiptStatus === 'partial' ? '部分收货采购' : '待收货采购'" :params="{ project: projectId, status: receiptStatus }" :project-id="projectId" :allow-create="false" :empty-hint="receiptStatus === 'partial' ? '没有部分收货的采购单。' : '没有待收货的采购单；采购批准后会出现在这里。'" :revision="revision" @changed="refresh" />

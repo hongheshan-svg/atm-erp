@@ -59,7 +59,7 @@ MODULE_FILES = {
         'PurchaseContractPage',
         'business-date',
     ),
-    'inventory': ('inventory', 'corrections', 'InventoryPage', 'warehouse-lines', 'WarehouseLines'),
+    'inventory': ('inventory', 'corrections', 'InventoryPage', 'IssueSlipPage', 'warehouse-lines', 'WarehouseLines'),
     'finance': (
         'progress',
         'ProjectProgress',

@@ -30,7 +30,7 @@ const team = ref<Row[]>([])
 const rules = ref<Row[]>([])
 let originalRules: Row[] = []
 const roleNames = roleLabels
-const codeNames: Record<string, string> = { project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单' }
+const codeNames: Record<string, string> = { project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单', issue_slip: '领料单' }
 const changedRules = computed(() => rules.value.filter((r, i) => ['prefix', 'date_format', 'padding', 'reset_cycle'].some(k => r[k] !== originalRules[i]?.[k])))
 async function load() {
   error.value = ''

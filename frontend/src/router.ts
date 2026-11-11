@@ -17,6 +17,7 @@ export const router = createRouter({
     { path: '/purchases', component: () => import('./views/PurchasesPage.vue') },
     { path: '/purchases/:id/contract', component: () => import('./views/PurchaseContractPage.vue') },
     { path: '/inventory', component: () => import('./views/InventoryPage.vue') },
+    { path: '/inventory/issue-slips/:id', component: () => import('./views/IssueSlipPage.vue') },
     { path: '/finance', component: () => import('./views/FinancePage.vue') },
     { path: '/masterdata', component: () => import('./views/MasterdataPage.vue') },
     { path: '/settings', component: () => import('./views/SettingsPage.vue') },
