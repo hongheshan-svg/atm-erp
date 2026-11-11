@@ -68,3 +68,17 @@ watch(projectId, loadProjects, { immediate: true })
   >
   <slot :project-id="projectId" :projects="projects" :revision="revision" :refresh="refresh" />
 </template>
+
+<style scoped>
+/* 手机端（≤600px）压缩页头与项目筛选：列表表头尽量靠上，首屏能看到几行数据。 */
+@media (max-width: 600px) {
+  .page-heading { margin-bottom: 10px; gap: 8px; }
+  .page-heading h1 { font-size: 22px; line-height: 1.25; }
+  .module-toolbar-target :deep(.el-button),
+  .module-toolbar-target :deep(.el-dropdown) .el-button { height: 36px; padding: 0 10px; font-size: 13px; }
+  .module-toolbar-target { display: flex; flex-wrap: nowrap; gap: 6px; }
+  .project-filter { font-size: 0; padding: 6px 10px; margin-bottom: 10px; gap: 0; }
+  .project-filter > small { display: none; }
+  .project-filter :deep(.remote-select) { font-size: 14px; }
+}
+</style>
