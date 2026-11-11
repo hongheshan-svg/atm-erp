@@ -42,7 +42,8 @@ watch([() => props.resource, scopedProject, () => user.value?.id], async (_, __,
   canImportTime.value = false
   if (props.resource !== 'time' || manager() || !user.value?.id) return
   try {
-    const result = await read('/business/tasks/', { supervisor: user.value.id, ...(scopedProject.value ? { project: scopedProject.value } : {}), page_size: 1 })
+    // 只取项目在执行中、交付中或已验收的任务（与 can_confirm 的项目状态口径一致），不被排在前面的草稿、报价项目任务误判。
+    const result = await read('/business/tasks/', { supervisor: user.value.id, project_open: 'true', ...(scopedProject.value ? { project: scopedProject.value } : {}), page_size: 1 })
     if (current) canImportTime.value = result.results?.some((task: Row) => task.can_confirm) === true
   } catch { /* 查询失败不显示代录入口；服务端确认时仍逐项重新鉴权。 */ }
 }, { immediate: true })

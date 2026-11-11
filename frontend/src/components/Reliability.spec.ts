@@ -12,7 +12,7 @@ import ProjectPage from '../views/ProjectPage.vue'
 import { actionCommand as purchaseAction, createCommand } from '../modules/purchases'
 import { actionCommand } from '../business'
 import { defaults, payload } from '../forms'
-import { read } from '../api'
+import { all, read } from '../api'
 import { user } from '../session'
 vi.mock('vue-router', async (importOriginal) => ({ ...await importOriginal<typeof import('vue-router')>(), useRoute: () => ({ query: {}, params: { id: '1' } }), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }))
 vi.mock('../api', () => ({ read: vi.fn(), all: vi.fn().mockResolvedValue([{ id: 1, name: '甲', kind: 'supplier' }, { id: 2, name: '乙', kind: 'supplier' }]), write: vi.fn(), download: vi.fn() }))
@@ -100,15 +100,26 @@ describe('审查问题回归', () => {
   })
 
   it('月度选择变更清除旧报告及确认入口', async () => {
-    vi.mocked(read).mockResolvedValue({ supplier: 1, month: '2026-09', through: '2026-09-10', rows: [{ entry: 1 }], totals: { opening: '0', received: '10', returned: '0', paid: '0', closing: '10' } })
+    const report = { supplier: 1, month: '2026-09', through: '2026-09-10', rows: [{ entry: 1 }], totals: { opening: '0', received: '10', returned: '0', paid: '0', closing: '10' } }
+    vi.mocked(read).mockImplementation(async (path: string) => path === '/business/partners/1/' ? { id: 1, name: '甲', kind: 'supplier' } : report)
     const wrapper = shallowMount(SupplierMonthly, { global })
     await flushPromises()
-    await wrapper.get('select').setValue('1')
+    // 供应商按输入远程搜索非客户单位（含已停用，仍可能待月结），不再整表下载往来单位。
+    expect(all).not.toHaveBeenCalled()
+    const picker = wrapper.findComponent(RemoteSelect)
+    expect(picker.props()).toMatchObject({ path: '/business/partners/', label: '对账供应商', required: true, commitOnSelect: true })
+    expect([{ kind: 'supplier' }, { kind: 'both' }, { kind: 'customer' }].map(picker.props('accept')!)).toEqual([true, true, false])
+    await wrapper.get('form').trigger('submit')
+    expect(read).not.toHaveBeenCalled()
+    expect(wrapper.findComponent({ name: 'ElAlert' }).props('title')).toBe('请选择供应商。')
+    picker.vm.$emit('update:modelValue', 1)
     await wrapper.get('input[type=month]').setValue('2026-09')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
+    expect(read).toHaveBeenCalledWith('/business/reconciliations/supplier-monthly/', { supplier: 1, month: '2026-09' })
     expect(wrapper.text()).toContain('当前报告：甲')
-    await wrapper.get('select').setValue('2')
+    picker.vm.$emit('update:modelValue', 2)
+    await flushPromises()
     expect(wrapper.text()).not.toContain('当前报告')
     expect(wrapper.findComponent(ActionDialog).props('command')).toBeNull()
     wrapper.unmount()

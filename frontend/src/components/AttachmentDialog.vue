@@ -36,7 +36,8 @@ const batch = useBatchSelection(selection, 'id', limit)
 const removing = ref<Row[] | null>(null)
 const pickable = (row: Row) => deletionAllowed.value || Boolean(row.can_remove)
 const pickableRows = computed(() => records.value.filter(pickable))
-const removalMode = computed(() => !deletionAllowed.value && records.value.some(row => row.can_remove))
+// 撤回勾选跨页保留：翻到没有可删附件的一页时，已选的仍要能看到并提交，勾选列和「删除所选」不能跟着消失。
+const removalMode = computed(() => !deletionAllowed.value && (selection.value.length > 0 || records.value.some(row => row.can_remove)))
 const selectingAll = ref(false)
 let selectionGeneration = 0
 let generation = 0
@@ -59,6 +60,7 @@ async function selectFilteredRows() {
 function saved() { page.value = 1; void load() }
 async function load(preserveSelection: unknown = false) {
   selectionGeneration++; selectingAll.value = false
+  // 删除勾选是破坏性的（与 ResourcePanel、BOMDemand 一致）：翻页保留，刷新或删除后重新读取即清空。
   if (preserveSelection !== true) selection.value = []
   const current = ++generation
   loading.value = true

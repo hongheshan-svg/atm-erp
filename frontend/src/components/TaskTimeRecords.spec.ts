@@ -2,26 +2,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import TaskTimeRecords from './TaskTimeRecords.vue'
+import ListPagination from './ListPagination.vue'
 import { read } from '../api'
+import { pageSize } from '../pagination'
 
 vi.mock('../api', () => ({ read: vi.fn() }))
 function open() {
   return shallowMount(TaskTimeRecords, { props: { taskId: 7 }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'BusinessTable', template: '<div />' } } } })
 }
 describe('任务工时核对', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.resetAllMocks(); pageSize.value = 10 })
   it('整项和本人合计独立于当前页，并按本人筛选重置分页', async () => {
     vi.mocked(read).mockResolvedValue({ count: 12, results: [{ id: 12, hours: '1' }], summary: { task_title: '3D画图', logged_hours: '25.50', my_hours: '9.00' } })
     const wrapper = open()
     await flushPromises()
     expect(wrapper.text()).toContain('任务累计：25.50 小时')
     expect(wrapper.text()).toContain('我的累计：9.00 小时')
-    wrapper.findComponent({ name: 'ElPagination' }).vm.$emit('current-change', 2)
+    // 与其他列表同一个分页组件，每页条数沿用全局设置。
+    wrapper.findComponent(ListPagination).vm.$emit('change', 2)
     await flushPromises()
     expect(read).toHaveBeenLastCalledWith('/business/tasks/7/time-records/', { page: 2, page_size: 10, mine: 'false' })
     await wrapper.get('input[type="checkbox"]').setValue(true)
     await flushPromises()
     expect(read).toHaveBeenLastCalledWith('/business/tasks/7/time-records/', { page: 1, page_size: 10, mine: 'true' })
+    wrapper.findComponent(ListPagination).vm.$emit('change', 2)
+    pageSize.value = 20
+    await flushPromises()
+    expect(read).toHaveBeenLastCalledWith('/business/tasks/7/time-records/', { page: 1, page_size: 20, mine: 'true' })
+    expect(wrapper.findComponent(ListPagination).props()).toMatchObject({ page: 1, total: 12 })
     wrapper.unmount()
   })
   it('加载失败显示重试，不把查询失败说成未登记', async () => {

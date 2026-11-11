@@ -105,7 +105,8 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await page.screenshot({ path: info.outputPath('monthly-payment-schedule.png'), animations: 'disabled' })
 
   await page.goto('/erp/finance?section=monthly')
-  await page.getByLabel('对账供应商', { exact: true }).selectOption(String(supplier.id))
+  // 供应商改为远程搜索选择（非客户单位），按资料 ID 选中。
+  await selectRemoteOption(page.getByLabel('对账供应商', { exact: true }), { id: supplier.id, text: supplier.name })
   const month = page.getByLabel('对账月份', { exact: true })
   if (info.project.name === 'mobile') {
     // 手机端是中文月份选择器（显示「2026年08月」），不接受键入；点开后翻到 2026 年再点「八月」。

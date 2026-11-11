@@ -89,6 +89,11 @@ const activeFilters = computed(() => [brand.value, unit.value, partType.value, s
 // 已停用物料：不能采购、不能改数量，只能替换或移除；整页提示并在行内标出。
 const inactive = (line: Row) => line.is_active === false
 const UNASSIGNED = '\u0000'
+// 勾选口径（与 ResourcePanel 一致）：
+// - 采购下单的勾选（selected）是收集型：跨页、换搜索和筛选都保留，可以边搜边勾再一起下单；
+//   需求重新读取后只剔除已不存在或不再缺料的行（load），只有下单成功或切换项目才清空。
+// - 管理员批量删除（deletionSelection）和工程师批量修订（maintainSelection）是破坏性的：只针对当前看得到的范围，
+//   切换搜索、筛选、视图或项目即清空（filterContext），重新读取需求后也清空（load）。
 const selected = ref<number[]>([])
 const deletionAllowed = computed(() => canDeleteRecords('bom'))
 const batchVisible = computed(() => deletionAllowed.value && batchMode.value)
@@ -98,7 +103,9 @@ const deletionMax = deletionLimit('bom')
 const batch = useBatchSelection(deletionSelection, 'bom_line', () => deletionMax)
 watch(batchVisible, allowed => { if (!allowed) { deletionSelection.value = []; deleting.value = null } })
 function openDeletion(rows: Row[]) { deleting.value = rows.map(row => ({ ...row, id: row.bom_line })) }
-watch([() => props.projectId, search, brand, unit, partType, shortageOnly, inactiveOnly, view], () => { deletionSelection.value = []; deleting.value = null; deletionHistory.value = false })
+// 决定当前看得到哪些行的条件；破坏性勾选随其中任一变化清空。
+const filterContext = [() => props.projectId, search, brand, unit, partType, shortageOnly, includeUnapproved, overdueOnly, inactiveOnly, view]
+watch(filterContext, () => { deletionSelection.value = []; deleting.value = null; deletionHistory.value = false })
 // 工程师的批量修订选择：与管理员的批量删除互斥，按稳定 BOM 行号跨页保留。
 const maintainSelection = ref<Row[]>([])
 const maintainMax = 500
@@ -113,7 +120,8 @@ async function closePurchase() {
   await nextTick()
   selectionTrigger.value?.$el.focus()
 }
-function savedPurchase() { void closePurchase(); saved() }
+// 已勾选的缺料行刚下单：收集已提交，清空勾选（同 ResourcePanel 批量领料成功后清空），避免对同一批行重复下单。
+function savedPurchase() { selected.value = []; void closePurchase(); saved() }
 const canPurchase = computed(() => permission.buyer() && ['active', 'delivering', 'warranty'].includes(props.status || ''))
 const canEdit = computed(() => bomEditor({ can_edit_bom: props.canEditBom }))
 const canMaintain = computed(() => canEdit.value && ['draft', 'quoted', 'active', 'delivering'].includes(props.status || ''))
@@ -168,7 +176,8 @@ const unitSummary = computed(() => {
   }
   return [...groups.values()].sort((a, b) => (a.unit === UNASSIGNED ? 1 : 0) - (b.unit === UNASSIGNED ? 1 : 0) || collator.compare(a.unit, b.unit))
 })
-watch([() => props.projectId, search, brand, unit, partType, shortageOnly, overdueOnly, inactiveOnly, view, maintainVisible], () => { maintainSelection.value = [] })
+// 批量修订同为破坏性勾选：与批量删除同一组清空条件，另在批量修订入口隐藏时清空。
+watch([...filterContext, maintainVisible], () => { maintainSelection.value = [] })
 const inactiveCount = computed(() => demand.value.lines.filter(inactive).length)
 watch(inactiveCount, count => { if (!count) inactiveOnly.value = false })
 // 采购视图里「其他项目待领」整页都为 0 时不占列宽。
@@ -239,11 +248,15 @@ watch(() => props.projectId, () => { changesOpen.value = false; changeGeneration
 const changeTime = (value: string) => String(value || '').replace('T', ' ').slice(0, 16)
 const page = ref(1)
 const visibleLines = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value))
-watch([pageSize, () => demand.value.lines], () => { page.value = 1 })
-watch([search, brand, unit, partType, shortageOnly, includeUnapproved, overdueOnly, inactiveOnly, sortKey, sortAsc], () => { page.value = 1 })
+// 改了一行、删了几行后重新读取需求，留在原来那一页（超出末页时退到最后一页），不跳回第 1 页；
+// 换每页条数、搜索、筛选、排序、视图或项目才回到第 1 页（换项目时需求先清空，页码随之归 1）。
+watch(pageSize, () => { page.value = 1 })
+watch(() => demand.value.lines, () => { page.value = Math.min(page.value, Math.max(1, Math.ceil(filtered.value.length / pageSize.value))) })
+watch([search, brand, unit, partType, shortageOnly, includeUnapproved, overdueOnly, inactiveOnly, sortKey, sortAsc, view], () => { page.value = 1 })
 watch(() => props.projectId, () => { selected.value = []; demand.value = { lines: [] }; search.value = ''; brand.value = ''; unit.value = ''; partType.value = ''; shortageOnly.value = view.value === 'purchase'; overdueOnly.value = false; inactiveOnly.value = false; projectContext.value = null })
 let generation = 0
 async function load() {
+  // 破坏性勾选不跨数据刷新；采购勾选在读到新需求后按行剔除（见下）。
   deletionSelection.value = []
   maintainSelection.value = []
   const id = ++generation
@@ -254,6 +267,7 @@ async function load() {
     const result = await read(`/business/projects/${props.projectId}/demand/`)
     if (id === generation) {
       demand.value = result
+      // 收集型勾选只剔除已不存在、已停用或不再缺料的行，其余保留。
       selected.value = selected.value.filter(key => result.lines.some((line: Row) => line.bom_line === key && eligible(line)))
     }
   } catch (e) {
@@ -395,7 +409,7 @@ function confirmImport() {
   }
 }
 function saved() {
-  selected.value = []
+  // 不整体清空采购勾选：随后的重新读取按行剔除已不可选的行（load）。
   closeImport()
   // 父页面收到 changed 会递增 revision 并触发重新读取；这里再读一次就是同一份需求重复请求。
   if (props.revision === undefined) void load()

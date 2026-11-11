@@ -313,7 +313,9 @@ test('专业主管接收未读提醒并代填完成和人员工时，员工只�
   await notices.getByRole('button', { name: '查看并处理' }).click()
   await expect(page).toHaveURL(new RegExp(`projects/${signed.project}.*focus=${task.id}`))
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: '主管核对3D画图' })
-  await expect(dialog).toContainText('待办详情')
+  // 提醒深链与点行打开同一份详情（项目任务详情），并高亮该行。
+  await expect(dialog).toContainText('项目任务详情')
+  await expect(row).toHaveClass(/selected-record/)
   await detailAction(page, '完成任务')
   await dialog.getByLabel('实际开始日期', { exact: true }).fill(today)
   await dialog.getByLabel('实际完成日期', { exact: true }).fill(today)

@@ -562,3 +562,72 @@ it('管理员在采购视图开批量删除：改用删除勾选，采购勾选�
   wrapper.unmount()
   batchMode.value = true
 })
+
+const shortLines = (count: number, shortage = (_index: number) => '1') => Array.from({ length: count }, (_, i) => ({ bom_line: i + 1, item: i + 1, item_code: `P${String(i + 1).padStart(2, '0')}`, item_name: `缺料件${i + 1}`, assembly_unit: '01', quantity: '1', issued: '0', incoming: '0', unapproved: '0', available: '0', shortage: shortage(i), required_date: '2999-01-01' }))
+
+it('保存后重新读取需求留在当前页（超出末页退到最后一页），换搜索或筛选回到第 1 页', async () => {
+  user.value = { roles: ['purchaser'] }
+  batchMode.value = false
+  pageSize.value = 10
+  const wrapper = mountFull(shortLines(25))
+  await flushPromises()
+  const pager = () => wrapper.getComponent(ListPagination)
+  pager().vm.$emit('change', 3)
+  await flushPromises()
+  expect(names(wrapper)[0]).toBe('缺料件21')
+  vi.mocked(read).mockResolvedValueOnce({ revision: 'r2', lines: shortLines(25) })
+  wrapper.getComponent({ name: 'ActionDialog' }).vm.$emit('saved', {})
+  await flushPromises()
+  expect(pager().props('page')).toBe(3)
+  vi.mocked(read).mockResolvedValueOnce({ revision: 'r3', lines: shortLines(15) })
+  wrapper.getComponent({ name: 'ActionDialog' }).vm.$emit('saved', {})
+  await flushPromises()
+  expect(pager().props('page')).toBe(2)
+  expect(names(wrapper)[0]).toBe('缺料件11')
+  await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('缺料件1')
+  expect(pager().props('page')).toBe(1)
+  wrapper.unmount()
+  batchMode.value = true
+})
+
+it('采购勾选跨搜索筛选保留，保存后只剔除不再缺料的行，下单成功后清空', async () => {
+  user.value = { roles: ['purchaser'] }
+  batchMode.value = false
+  const wrapper = mountFull(shortLines(3))
+  await flushPromises()
+  const count = () => wrapper.get('.bom-selection-bar strong').text()
+  await wrapper.get('[aria-label="选择 P01 01"]').setValue(true)
+  await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('P02')
+  await wrapper.get('[aria-label="选择 P02 01"]').setValue(true)
+  await wrapper.get('[aria-label="筛选类别"]').setValue('custom')
+  await wrapper.get('[aria-label="搜索 BOM 物料"]').setValue('')
+  await wrapper.get('[aria-label="筛选类别"]').setValue('')
+  expect(count()).toBe('2')
+  // 改了别的 BOM 行后重新读取：P02 已不缺料被剔除，P01 仍保留。
+  vi.mocked(read).mockResolvedValueOnce({ revision: 'r2', lines: shortLines(3, index => index === 1 ? '0' : '1') })
+  wrapper.getComponent({ name: 'ActionDialog' }).vm.$emit('saved', {})
+  await flushPromises()
+  expect(count()).toBe('1')
+  expect((wrapper.get('[aria-label="选择 P01 01"]').element as HTMLInputElement).checked).toBe(true)
+  await wrapper.findAll('button').find(button => button.text() === '从 BOM 多选下单')!.trigger('click')
+  expect(wrapper.getComponent({ name: 'BOMPurchasePicker' }).props('initialSelection')).toEqual([1])
+  wrapper.getComponent({ name: 'BOMPurchasePicker' }).vm.$emit('saved')
+  await flushPromises()
+  expect(count()).toBe('0')
+  wrapper.unmount()
+  batchMode.value = true
+})
+
+it.each([
+  ['仅看逾期', (wrapper: ReturnType<typeof mountFull>) => wrapper.findAll('label.shortage-toggle').find(label => label.text() === '仅看逾期')!.get('input').setValue(true)],
+  ['含待批采购', (wrapper: ReturnType<typeof mountFull>) => wrapper.findAll('label.shortage-toggle').find(label => label.text() === '含待批采购')!.get('input').setValue(false)],
+])('管理员批量删除勾选随「%s」等任一筛选变化清空', async (_label, toggle) => {
+  user.value = { roles: ['admin'] }
+  const wrapper = mountFull(shortLines(2), { initialView: 'purchase' })
+  await flushPromises()
+  await wrapper.get('[aria-label="选择BOM明细 P02 01"]').setValue(true)
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('已选 1')
+  await toggle(wrapper)
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('已选 0')
+  wrapper.unmount()
+})

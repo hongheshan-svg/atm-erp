@@ -5,7 +5,7 @@ import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-p
 import { ElSkeleton } from 'element-plus'
 import { read } from '../api'
 import { today } from '../forms'
-import { can, operations, user } from '../session'
+import { can, operations, productionTaskKinds, user } from '../session'
 import TaskNotices from '../components/TaskNotices.vue'
 import RoleTaskGuide from '../components/RoleTaskGuide.vue'
 import { message } from '../utils/request'
@@ -65,7 +65,9 @@ function collection(key: string) {
   if (key === 'handover_projects') return { path: '/projects' }
   // 任务有自己的完整清单：以前这里只能落到项目列表，看自己的活还要逐个项目点进去。
   if (key === 'supervised_tasks') return { path: '/projects', query: { section: 'tasks', supervisor: String(user.value?.id) } }
-  if (['tasks', 'production_tasks'].includes(key)) return { path: '/projects', query: { section: 'tasks' } }
+  // 生产与售后派工按参与项目的装配、调试、安装、售后任务计数（不只本人的），清单要同一口径：不勾「只看我的」并按这几类筛选。
+  if (key === 'production_tasks') return { path: '/projects', query: { section: 'tasks', mine: '0', kinds: productionTaskKinds.join(',') } }
+  if (key === 'tasks') return { path: '/projects', query: { section: 'tasks' } }
   return { path: '/purchases' }
 }
 function target(key: string, row: Row) {

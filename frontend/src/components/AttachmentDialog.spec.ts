@@ -87,6 +87,30 @@ it('非管理员只能勾选自己可删除的附件，并批量提交整批共�
   wrapper.unmount()
 })
 
+it('撤回勾选跨页保留：翻到没有可删附件的一页时仍显示勾选列和「删除所选」', async () => {
+  user.value = { roles: ['purchaser'] }
+  pageSize.value = 10
+  const others = [{ id: 11, original_name: '别人的图纸.pdf', size: 1, created_at: '2026-11-07T00:00:00Z', can_remove: false }]
+  vi.mocked(read).mockImplementation(async (_path, params = {}) => Number(params.page) === 2 ? { count: 4, results: others, next: null } : { count: 4, results: mixed, next: 'next' })
+  const wrapper = make()
+  await flushPromises()
+  const removeButton = () => wrapper.findAll('button').find(button => button.text().startsWith('删除所选'))
+  await wrapper.get('[aria-label="选择附件 #1 · 比价表.png"]').setValue(true)
+  wrapper.getComponent(ListPagination).vm.$emit('change', 2)
+  await flushPromises()
+  expect(removeButton()?.text()).toBe('删除所选（1）')
+  expect(wrapper.find('[aria-label="选择本页附件"]').exists()).toBe(true)
+  await removeButton()!.trigger('click')
+  expect(wrapper.getComponent(AttachmentRemovalDialog).props('rows').map(row => row.id)).toEqual([1])
+  // 没有勾选、本页也没有可删附件时不占勾选列。
+  wrapper.getComponent(AttachmentRemovalDialog).vm.$emit('close')
+  await wrapper.findAll('button').find(button => button.text() === '刷新')!.trigger('click')
+  await flushPromises()
+  expect(removeButton()).toBeUndefined()
+  expect(wrapper.find('[aria-label="选择本页附件"]').exists()).toBe(false)
+  wrapper.unmount()
+})
+
 it('附件撤回弹窗列出文件名、要求原因并提交 remove-batch', async () => {
   vi.mocked(write).mockResolvedValue({ removed: 2 })
   const wrapper = mount(AttachmentRemovalDialog, {
@@ -95,14 +119,42 @@ it('附件撤回弹窗列出文件名、要求原因并提交 remove-batch', asy
   })
   expect(wrapper.get('[aria-label="将删除的附件"]').text()).toContain('比价表.png')
   expect(wrapper.get('[aria-label="将删除的附件"]').text()).toContain('报价.xlsx')
-  const confirm = wrapper.findAll('button').find(button => button.text().includes('确认删除'))!
-  expect(confirm.attributes('disabled')).toBeDefined()
+  const confirm = () => wrapper.findAll('button').find(button => button.text().includes('确认删除'))!
+  expect(confirm().attributes('disabled')).toBeDefined()
   await wrapper.get('textarea').setValue(' 比价表传错了 ')
-  await confirm.trigger('click')
+  // 与记录删除一致：只填原因还不能删，须勾选核对。
+  expect(confirm().attributes('disabled')).toBeDefined()
+  await confirm().trigger('click')
+  expect(write).not.toHaveBeenCalled()
+  await wrapper.get('input[type="checkbox"]').setValue(true)
+  expect(wrapper.get('label.removal-confirm').text()).toContain('我已核对所选附件')
+  expect(confirm().attributes('disabled')).toBeUndefined()
+  await confirm().trigger('click')
   await flushPromises()
   expect(write).toHaveBeenCalledWith('/business/documents/remove-batch/', { documents: [1, 3], reason: '比价表传错了' }, expect.any(String))
   expect(wrapper.emitted('saved')).toHaveLength(1)
   expect(wrapper.emitted('close')).toHaveLength(1)
+})
+
+it('附件撤回提交中不能关闭，失败后保留原因与勾选并显示错误', async () => {
+  let fail!: (reason: unknown) => void
+  vi.mocked(write).mockImplementation(() => new Promise((_, reject) => { fail = reject }))
+  const wrapper = mount(AttachmentRemovalDialog, {
+    props: { rows: [mixed[0]] },
+    global: { plugins: [ElementPlus], stubs: { ElDialog: { props: ['showClose', 'closeOnPressEscape'], template: '<section :data-closable="String(showClose)"><slot /><slot name="footer" /></section>' } } },
+  })
+  await wrapper.get('textarea').setValue('传错项目')
+  await wrapper.get('input[type="checkbox"]').setValue(true)
+  await wrapper.findAll('button').find(button => button.text().includes('确认删除'))!.trigger('click')
+  expect(wrapper.get('section').attributes('data-closable')).toBe('false')
+  await wrapper.findAll('button').find(button => button.text() === '取消')!.trigger('click')
+  expect(wrapper.emitted('close')).toBeUndefined()
+  fail({ response: { data: { detail: '已作为对账依据，不能删除' } } })
+  await flushPromises()
+  expect(wrapper.text()).toContain('已作为对账依据')
+  expect((wrapper.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true)
+  expect(wrapper.get('section').attributes('data-closable')).toBe('true')
+  wrapper.unmount()
 })
 
 it('管理员仍使用原有批量删除，不出现撤回按钮', async () => {

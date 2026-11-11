@@ -272,7 +272,8 @@ it('工时导入仅对有负责任务的专业主管提供，员工不显示入�
   const mountTime = () => shallowMount(TransferTools, { props: { resource: 'time', path: '/business/time/', projectId: 4 }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { ElDropdown: { name: 'ElDropdown', template: '<div><slot /><slot name="dropdown" /></div>' }, ElTableColumn: true, RouterLink: RouterLinkStub } } })
   const worker = mountTime()
   await flushPromises()
-  expect(read).toHaveBeenCalledWith('/business/tasks/', { supervisor: 3, project: 4, page_size: 1 })
+  // 只查项目可确认（执行中、交付中、已验收）的任务：首条不会是草稿、报价项目里不能确认的任务。
+  expect(read).toHaveBeenCalledWith('/business/tasks/', { supervisor: 3, project_open: 'true', project: 4, page_size: 1 })
   expect(worker.findAllComponents({ name: 'ElDropdownItem' }).some(item => item.props('command') === 'import')).toBe(false)
   worker.unmount()
   vi.mocked(read).mockResolvedValue({ results: [{ can_confirm: true }] })

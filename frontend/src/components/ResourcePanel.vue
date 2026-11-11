@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
-import { taskSyncHint, taskElapsedLabel, taskVarianceLabel } from '../modules/milestones'
+import { taskSyncHint } from '../modules/milestones'
 import { computed, inject, nextTick, onBeforeUnmount, ref, useId, watch, type Ref } from 'vue'
 import type { Row, Command } from '../types'
 import { all, read, download } from '../api'
@@ -142,6 +142,8 @@ const sidePanel = computed(() => sidePanelResources.includes(props.resource))
 const selectedId = ref<number | null>(null)
 const selectedRow = ref<Row | null>(null)
 const deletionAllowed = computed(() => canDeleteRecords(props.resource))
+// 勾选口径（与 BOMDemand 一致）：批量删除是破坏性勾选，只针对当前看得到的范围——翻页保留，
+// 换搜索、筛选、项目或重新读取（保存后）即清空（load）。领料勾选是收集型，见下方 issueSelection。
 const deletionSelection = ref<Row[]>([])
 const batchVisible = computed(() => deletionAllowed.value && batchMode.value)
 watch(batchVisible, visible => { if (!visible) { selectionGeneration++; selectingAll.value = false; deletionSelection.value = [] } })
@@ -152,7 +154,8 @@ onBeforeUnmount(() => { selectionGeneration++ })
 watch(deletionAllowed, allowed => {
   if (!allowed) { selectionGeneration++; selectingAll.value = false; deletionSelection.value = [] }
 })
-// 库存勾选批量领料（仓管、管理员）：勾选跨页、跨搜索保留，一次领出并生成一张领料单。
+// 库存勾选批量领料（仓管、管理员）：收集型勾选，跨页、跨搜索保留（边搜边勾），一次领出并生成一张领料单；
+// 重新读取后只按最新数量更新或剔除领完的行（load），批量领料成功才清空（saved）。
 // 与管理员「批量管理」互斥：开批量管理时让出勾选列和领料条，退出后恢复原勾选，不会两列勾选并排。
 const issueSelection = ref<Row[]>([])
 const issuePicking = computed(() => props.resource === 'stocks' && warehouse() && !batchVisible.value)
@@ -377,6 +380,7 @@ const mobileNote = (row: Row) => props.resource === 'moves' && mobileTasks.value
 const summaryOverdue = (row: Row) => (props.resource === 'tasks' && isOverdueCell('tasks', 'due_date', row, day)) || (props.resource === 'purchases' && isOverdueCell('purchases', 'next_delivery_date', row, day)) || (props.resource === 'projects' && isOverdueCell('projects', 'due_date', row, day))
 async function load(preserveSelection: unknown = false) {
   selectionGeneration++; selectingAll.value = false
+  // 破坏性勾选不跨搜索、筛选和数据刷新；只有翻页、改每页条数（preserveSelection）保留。
   if (preserveSelection !== true) deletionSelection.value = []
   if (!active.value) { dirty = true; return }
   dirty = false
@@ -413,7 +417,7 @@ async function load(preserveSelection: unknown = false) {
       else if (props.resource === 'entries') await action(row, '查看收付流水')
       else if (props.resource === 'reconciliations') await action(row, '查看对账明细')
       else if (props.resource === 'bank-records') await action(row, '查看银行明细')
-      else if (props.resource === 'tasks') { command.value = { title: '待办详情', path: '', readonly: true, initial: { ...row, description: row.description || '未填写', elapsed_label: taskElapsedLabel(row), variance_label: taskVarianceLabel(row) }, flow: flowFor(props.resource, row), fields: [{ key: 'title', label: '任务' }, { key: 'discipline_label', label: '负责专业' }, { key: 'supervisor_name', label: '负责主管' }, { key: 'description', label: '完成要求', type: 'textarea', wide: true }, { key: 'logged_hours', label: '已登记工时（小时）' }, { key: 'due_date', label: '计划完成日期' }, { key: 'completed_date', label: '实际完成日期' }, { key: 'started_date', label: '实际开始日期' }, { key: 'elapsed_label', label: '任务历时（自然日，含首尾日）' }, { key: 'variance_label', label: '提前／延期' }], actions: actionNames(props.resource, row).map(label => ({ label, run: () => action(row, label) })) } }
+      // 其余（含任务）与点行打开同一份详情：同样的字段、行高亮，并先确认是否放弃未保存的表单。
       else await inspect(row)
     }
   } catch (e) {

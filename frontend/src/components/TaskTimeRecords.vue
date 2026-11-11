@@ -5,24 +5,26 @@ import { message } from '../utils/request'
 import { ledgerStatus } from '../modules/shared'
 import type { Row } from '../types'
 import BusinessTable from './BusinessTable.vue'
+import ListPagination from './ListPagination.vue'
+import { pageSize } from '../pagination'
 
 const props = defineProps<{ taskId: number }>()
 const emit = defineEmits<{ close: [] }>()
 const rows = ref<Row[]>([]), summary = ref<Row | null>(null)
 const page = ref(1), count = ref(0), mine = ref(false), loading = ref(false), error = ref('')
-const size = 10
 let generation = 0
 async function load() {
   const current = ++generation
   loading.value = true; error.value = ''; rows.value = []; summary.value = null; count.value = 0
   try {
-    const result = await read(`/business/tasks/${props.taskId}/time-records/`, { page: page.value, page_size: size, mine: String(mine.value) })
+    const result = await read(`/business/tasks/${props.taskId}/time-records/`, { page: page.value, page_size: pageSize.value, mine: String(mine.value) })
     if (generation !== current) return
     rows.value = result.results; count.value = result.count; summary.value = result.summary
   } catch (e) { if (generation === current) error.value = message(e) }
   finally { if (generation === current) loading.value = false }
 }
-watch(() => [props.taskId, mine.value], () => { page.value = 1; void load() }, { immediate: true })
+// 每页条数沿用全局设置（与其他列表同一个 ListPagination）；换条数、换任务或切换「只看我的」回到第 1 页。
+watch(() => [props.taskId, mine.value, pageSize.value], () => { page.value = 1; void load() }, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 <template>
@@ -35,7 +37,7 @@ onBeforeUnmount(() => { generation++ })
     <p class="muted">按实际工作日期登记，单位为小时。合计已扣除冲销，不按任务历时计算；多人分别登记。“我的累计”按工作所属人员统计，代填记录归被代填人。</p>
     <div class="time-tools"><label><input v-model="mine" type="checkbox" />只看我的工时</label><el-button :loading="loading" @click="load">刷新</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" /><el-button v-if="error" @click="load">重试</el-button>
-    <BusinessTable v-if="!error" label="任务工时明细" :data="rows" :row-offset="(page - 1) * size" v-loading="loading" :empty-text="loading ? '正在加载工时…' : '暂无已提交的工时记录'" max-height="400">
+    <BusinessTable v-if="!error" label="任务工时明细" :data="rows" :row-offset="(page - 1) * pageSize" v-loading="loading" :empty-text="loading ? '正在加载工时…' : '暂无已提交的工时记录'" max-height="400">
       <el-table-column prop="id" label="记录号" width="90" />
       <el-table-column prop="user_name" label="人员" min-width="110" />
       <el-table-column prop="date" label="工作日期" min-width="120" />
@@ -45,7 +47,7 @@ onBeforeUnmount(() => { generation++ })
       <el-table-column label="提交时间" min-width="180"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template></el-table-column>
     </BusinessTable>
     <p class="muted">已移至“已删除记录”的原始流水仍计入合计，并在这里保留用于核对；工时填错请到“工时记录”更正。</p>
-    <el-pagination v-if="!error" :current-page="page" :page-size="size" :total="count" :pager-count="5" layout="prev,pager,next,total" @current-change="page = $event; load()" />
+    <ListPagination v-if="!error" :page="page" :total="count" @change="page = $event; load()" />
     <template #footer><el-button @click="emit('close')">关闭</el-button></template>
   </el-dialog>
 </template>
@@ -61,6 +63,5 @@ h3 { overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .time-tools label { min-height: 40px; }
   .time-tools .el-button, :global(.task-time-records .el-dialog__footer .el-button) { min-height: 40px; }
-  :global(.task-time-records .el-pagination) { flex-wrap: wrap; row-gap: 8px; justify-content: flex-end; }
 }
 </style>

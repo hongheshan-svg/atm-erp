@@ -17,7 +17,9 @@ export const manager = () => can(['admin', 'manager'])
 export const engineer = () => can(['mechanical_engineer', 'electrical_engineer'])
 export const production = () => can(['production_manager'])
 export const productionProject = (record?: Row) => manager() ? record?.can_manage_production !== false : production() && record?.can_manage_production === true
-export const taskManager = (record: Row) => manager() ? record.can_manage !== false : production() && ['assembly', 'test', 'install', 'service'].includes(record.kind) && record.can_manage === true
+// 生产经理管理的任务类型（装配、调试、安装、售后），与后端 PRODUCTION_TASK_KINDS 同一份。
+export const productionTaskKinds = ['assembly', 'test', 'install', 'service']
+export const taskManager = (record: Row) => manager() ? record.can_manage !== false : production() && productionTaskKinds.includes(record.kind) && record.can_manage === true
 export const timeAmender = (record: Row) => record.can_amend === true
 export const taskConfirmer = (record: Row) => record.can_confirm === true
 export const serviceRegistrar = (record: Row) => manager() ? (record.can_register_service ?? record.can_manage !== false) : production() && record.can_register_service === true
@@ -28,6 +30,8 @@ export const partnerEditor = () => purchasing() || can(['sales_manager'])
 export const bomEditor = (record?: Row) => manager() ? record?.can_edit_bom !== false : engineer() && record?.can_edit_bom === true
 export const purchaseApprover = (record: Row) => can(['admin', 'manager', 'purchase_manager']) && (record.can_approve ?? (manager() && record.can_manage !== false))
 export const money = () => can(['admin', 'manager', 'finance'])
+// 采购合同预览：与后端 purchase_contract.preview 的 MONEY_READERS | PURCHASERS 一致；仓管可读采购单但不能预览合同。
+export const contractReader = () => purchasing() || money()
 export const reports = () => can(['admin']) || (can(['manager']) && user.value?.management_reports === true)
 export const salesOnly = () => can(['sales_manager']) && !manager()
 export const customerOnly = () => can(['sales_manager']) && !purchasing()
