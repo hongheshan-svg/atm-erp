@@ -6,6 +6,7 @@ import type { Column, Command, Row } from '../types'
 import { C, date, finance, optionalReason, reason, remote, t } from './shared'
 import { termLabel } from './payment-terms'
 import { money } from '../utils/money'
+import { dateTimeText } from '../utils/datetime'
 
 const kinds: Record<string, string> = { settlement: '业务对账', prepayment: '预付款核准', refund: '退款对账' }
 const states: Record<string, string> = { draft: '待确认', confirmed: '已确认', void: '已作废' }
@@ -73,7 +74,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       ['项目', s.project.name], ['款项', s.entry.title], ['原金额', s.entry.amount], ['冲减', s.entry.credit_amount],
       ['原已结算', s.paid], ['系统余额', s.balance], ['对方余额', d.counterparty_balance], ['差异', d.difference],
       ['当时可结算额度', s.eligible], ['申请额度', d.approved_amount], ['剩余额度', d.remaining_amount], ['合同依据', d.basis],
-      ['确认人', d.confirmed_name], ['确认时间', d.confirmed_at || ''], ['作废原因', d.void_reason],
+      ['确认人', d.confirmed_name], ['确认时间', dateTimeText(d.confirmed_at, '')], ['作废原因', d.void_reason],
       ...(s.monthly ? [['对账月份', s.monthly.month], ['月期初', s.monthly.opening], ['月收货', s.monthly.received], ['月退货', s.monthly.returned], ['月净付款', s.monthly.paid], ['月期末', s.monthly.closing]] : []),
       ...(s.purchase ? [['采购单', s.purchase.code], ['供应商', s.purchase.supplier], ['采购账期', termLabel(s.purchase)], ['收货净额', s.received_net]] : []),
       ...(s.contract ? [['合同编号', s.contract.contract_number || ''], ['现行合同金额', s.contract.amount]] : []),

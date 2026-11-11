@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, detailAction, openRowAction, type Page } from './fixtures'
 
@@ -40,7 +41,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await save(page, '/items/')
   const sale = await post('sales/', { name, customer: customer.id, manager: user.id })
   await post(`sales/${sale.id}/quote/`, { amount: '1000', reason: '验收报价' })
-  const signed = await post(`sales/${sale.id}/sign/`, { date: '2026-07-01', manager: user.id, milestones: [{ title: '合同款', amount: '1000', due_date: '2026-12-31' }] })
+  const signed = await post(`sales/${sale.id}/sign/`, { date: '2026-07-01', manager: user.id, milestones: [{ title: '合同款', amount: '1000', due_date: businessDate(60) }] })
 
   await page.goto('/erp/masterdata?section=partners')
   await page.getByRole('button', { name: '新增往来单位', exact: true }).click()
@@ -50,7 +51,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   const supplier = await save(page, '/partners/')
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '新建采购', exact: true }).click()
-  await dialog(page).getByLabel('交期', { exact: true }).fill('2026-12-31')
+  await dialog(page).getByLabel('交期', { exact: true }).fill(businessDate(60))
   await select(page, '项目', name)
   await select(page, '供应商', name + '供应商')
   await select(page, '物料', name + '物料')
@@ -139,7 +140,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
     const material = await post('items/', { name: `${name}多页物料${i}`, code: `PRINT-${Date.now()}-${i}`, specification: '长规格文本用于验证多页合同自动换行及明细完整性', unit: '件' })
     lines.push({ item: material.id, quantity: '1', unit_price: '10' })
   }
-  const longOrder = await post('purchases/', { project: signed.project, supplier: supplier.id, due_date: '2026-12-31', note: '补充要求须完整保留。'.repeat(40), lines })
+  const longOrder = await post('purchases/', { project: signed.project, supplier: supplier.id, due_date: businessDate(60), note: '补充要求须完整保留。'.repeat(40), lines })
   await page.goto(`/erp/purchases/${longOrder.id}/contract`)
   await expect(page.getByRole('article')).toContainText('草稿 · 未批准')
   await expect(page.getByRole('article')).toContainText('共 30 项物料')

@@ -52,6 +52,8 @@ it('处理申请展示原原因，提交申请编号防止旧弹窗处理新申�
   vi.mocked(read).mockResolvedValue({ ...submitted, can_review_change: true, change_request: pending })
   const command = await actionCommand('purchases', submitted, '处理修改申请')
   expect(command.initial?.request_reason).toBe(pending.reason)
+  // 申请时间是 UTC，按业务时区显示。
+  expect(command.initial?.requested_at).toBe('2026-10-27 16:00')
   expect(command.fields.find(f => f.key === 'decision')?.options).toHaveLength(2)
   expect(command.prepare?.({ decision: 'reject', reason: '原数量正确', requested_by: '伪造' })).toEqual({ request_id: 25, decision: 'reject', reason: '原数量正确' })
   vi.mocked(read).mockResolvedValue({ ...submitted, change_request: null })
@@ -67,10 +69,11 @@ it('查看申请只读，不提供处理结果选项', async () => {
 
 it('处理记录将申请、同意和驳回全部显示为中文', async () => {
   vi.mocked(all).mockResolvedValue([
-    { operation: 'purchase.request_change', lines: [] },
+    { operation: 'purchase.request_change', date: '2026-10-27T17:30:00Z', lines: [] },
     { operation: 'purchase.review_change', decision: 'approve', lines: [] },
     { operation: 'purchase.review_change', decision: 'reject', lines: [] },
   ])
   const command = await actionCommand('purchases', submitted, '处理记录')
   expect(command.initial?.lines.map((l: { operation: string }) => l.operation)).toEqual(['申请修改', '同意修改申请', '驳回修改申请'])
+  expect(command.initial?.lines[0].date).toBe('2026-10-28 01:30')
 })

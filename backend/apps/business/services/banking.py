@@ -339,6 +339,12 @@ def check_close(project):
     banks = BankRecord.objects.filter(
         Q(project=project) | Q(matches__payment__entry__project=project), void_reason=''
     ).distinct()
-    locked = BankRecord.objects.filter(pk__in=banks.values('pk')).select_for_update().order_by('pk')
-    if any(remaining(bank) != 0 for bank in locked):
+    locked = list(
+        BankRecord.objects.filter(pk__in=banks.values('pk'))
+        .select_for_update()
+        .order_by('pk')
+        .values_list('pk', flat=True)
+    )
+    # 先加锁、再另起一条语句一次算出余额：锁等待期间别人提交的认领也能看到，又不用逐条查三次。
+    if with_remaining(BankRecord.objects.filter(pk__in=locked)).exclude(net_remaining=0).exists():
         raise Conflict('项目还有未认领或未匹配的银行款项，请处理后结项。')

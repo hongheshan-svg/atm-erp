@@ -14,6 +14,7 @@ import AttachmentRemovalDialog from './AttachmentRemovalDialog.vue'
 import { useBatchSelection } from '../utils/batch-selection'
 import { canDeleteRecords, deletionLimit, deletionLabel } from '../modules/deletions'
 import { openDocumentPreview } from '../document-preview'
+import { dateTimeText } from '../utils/datetime'
 
 const props = defineProps<{ owner: 'sale' | 'purchase'; record: Row }>()
 const emit = defineEmits<{ close: [] }>()
@@ -102,7 +103,7 @@ watch(pageSize, () => { page.value = 1; void load(true) })
       <el-table-column prop="original_name" label="文件" min-width="220"><template #default="{ row }"><button class="attachment-name" @click="openDocumentPreview(row.id, row.original_name)">{{ row.original_name }}</button></template></el-table-column>
       <el-table-column label="分类" min-width="80"><template #default="{ row }">{{ display(row.category, 'category') }}</template></el-table-column>
       <el-table-column label="大小" width="100"><template #default="{ row }">{{ Math.max(1, Math.ceil(row.size / 1024)) }} KB</template></el-table-column>
-      <el-table-column label="上传时间" min-width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}</template></el-table-column>
+      <el-table-column label="上传时间" min-width="170"><template #default="{ row }">{{ dateTimeText(row.created_at) }}</template></el-table-column>
       <el-table-column label="操作" :width="deletionAllowed || removalMode ? 200 : 140" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" @click="openDocumentPreview(row.id, row.original_name)">预览</el-button><el-button size="small" @click="downloadFile(row)">下载</el-button><el-button v-if="deletionAllowed" type="danger" text size="small" :disabled="loading || selectingAll" @click="deleting = [row]">删除</el-button><el-button v-if="removalMode && row.can_remove" type="danger" text size="small" :disabled="loading" @click="removing = [row]">删除</el-button></template></el-table-column>
     </BusinessTable>
     <ListPagination :page="page" :total="total" @change="page = $event; load(true)" />

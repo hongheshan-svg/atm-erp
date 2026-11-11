@@ -7,8 +7,10 @@ import { salesCommand } from './sales'
 vi.mock('../api', () => ({ read: vi.fn(), all: vi.fn(), download: vi.fn() }))
 afterEach(() => { vi.resetAllMocks(); closeDocumentPreview() })
 it('凭证列表按各条原始附件打开预览，保留下载', async () => {
-  vi.mocked(read).mockResolvedValue({ evidence: [{ document: 17, name: '银行回单.pdf' }, { document: 22, name: '补充凭证.png' }] })
+  vi.mocked(read).mockResolvedValue({ evidence: [{ document: 17, name: '银行回单.pdf' }, { document: 22, name: '补充凭证.png', date: '2026-11-11T02:20:30.5Z' }] })
   const command = await financeCommand('payments', { id: 1 }, '查看凭证')
+  // 补录时间是 UTC，按业务时区显示；登记时关联的凭证没有补录时间。
+  expect(command.initial?.lines.map((line: { date: string }) => line.date)).toEqual(['', '2026-11-11 10:20'])
   command.actions!.find(action => action.label === '预览 补充凭证.png')!.run()
   expect(documentPreview.value).toEqual({ id: 22, name: '补充凭证.png' })
   expect(command.actions!.map(action => action.label)).toContain('下载 银行回单.pdf')
@@ -21,8 +23,9 @@ it('补充协议只为服务端允许返回的附件提供预览', async () => {
   expect(documentPreview.value?.id).toBe(31)
 })
 it('已确认的对账单打开所关联附件，不从其他单据推测文件', async () => {
-  vi.mocked(read).mockResolvedValue({ document: 41, snapshot: { project: {}, entry: {}, payments: [] } })
+  vi.mocked(read).mockResolvedValue({ document: 41, confirmed_at: '2026-11-11T09:05:00.123456+08:00', snapshot: { project: {}, entry: {}, payments: [] } })
   const command = await settlementCommand('reconciliations', { id: 5 }, '查看对账明细')
+  expect(command.initial?.facts.find((fact: { label: string }) => fact.label === '确认时间')?.value).toBe('2026-11-11 09:05')
   command.actions!.find(action => action.label === '预览 对账附件')!.run()
   expect(documentPreview.value?.id).toBe(41)
 })

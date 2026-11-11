@@ -216,7 +216,6 @@ h3 {
 .system-upgrade-entry { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: -14px 0 18px; padding: 8px 10px; color: var(--side-chip); background: #ffffff0c; border: 1px solid #ffffff20; border-radius: var(--r-ctl); cursor: pointer; font: inherit; font-size: 12px; }
 .system-upgrade-entry:hover, .system-upgrade-entry:focus-visible { background: #ffffff20; outline: 2px solid var(--side-indicator); }
 .system-upgrade-entry small { color: var(--side-muted); }
-.upgrade-summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .upgrade-job { padding: 12px; margin: 16px 0; background: var(--canvas); border-radius: var(--r-field); overflow-wrap: anywhere; }
 .upgrade-notes { margin: 16px 0; }
 .upgrade-notes-text { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
@@ -542,8 +541,7 @@ button:focus-visible {
   padding-top: 20px;
   border-top: 1px solid var(--line-2);
 }
-.project-summary,
-.cost-grid {
+.project-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
@@ -556,27 +554,13 @@ button:focus-visible {
   padding: 20px;
   box-shadow: var(--surface-shadow);
 }
-.project-summary strong,
-.cost-grid strong {
+.project-summary strong {
   display: block;
   font-size: 20px;
   margin-top: 9px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.cost-grid {
-  grid-template-columns: repeat(5, 1fr);
-  margin-bottom: 0;
-}
-.cost-panel h2 .muted {
-  font-weight: 400;
-  margin-left: 10px;
-}
-.cost-grid > div:last-child {
-  border-left: 1px solid var(--line);
-  padding-left: 20px;
-}
-.cost-grid > div:last-child strong { color: var(--brand-ink); }
 .requirements {
   white-space: pre-wrap;
   font-size: 14px;
@@ -618,42 +602,6 @@ button:focus-visible {
   opacity: 0;
   inset: 0;
   cursor: pointer;
-}
-.workbench-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-.work-card { margin-bottom: 0; padding: 0; overflow: hidden; }
-.work-card-heading { display: flex; align-items: center; gap: 14px; padding: 24px; }
-.work-card-heading h2 { margin: 0 0 7px; font-size: 15px; }
-.work-card-heading p { margin: 0; font-size: 12px; color: var(--ink-6); }
-.work-card-icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--r-card); background: var(--brand-wash); color: var(--brand); font-size: 22px; }
-.work-card-approvals .work-card-icon { color: var(--violet); background: var(--violet-wash); }
-.work-card-drafts .work-card-icon { color: var(--warn); background: var(--warn-wash); }
-.work-card-settlements .work-card-icon { color: var(--ok); background: var(--ok-wash); }
-.work-card-count { margin-left: auto; font-size: 30px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.work-empty { min-height: 155px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; padding: 16px 20px 26px; }
-.work-empty > .el-icon { font-size: 30px; color: var(--ink-8); }
-.work-empty strong { color: var(--ink-4); font-size: 13px; font-weight: 500; }
-.work-empty span { font-size: 12px; color: var(--ink-6); }
-.work-card-footer { display: flex; justify-content: space-between; gap: 12px; padding: 15px 24px; border-top: 1px solid var(--line-2); background: var(--subtle-2); font-size: 12px; }
-.work-card-footer > span { color: var(--ink-6); }
-.work-card-footer a { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; white-space: nowrap; }
-.work-card > a:not(.work-item) { display: inline-block; margin: 14px 24px; font-size: 13px; }
-.work-item {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  border-bottom: 1px solid var(--line-3);
-  padding: 15px 24px;
-  font-size: 14px;
-}
-.work-item:hover { background: var(--brand-wash-2); }
-.work-item strong { font-weight: 500; line-height: 1.5; }
-.work-item span {
-  font-size: 12px;
-  color: var(--ink-6);
 }
 .empty {
   padding: 30px;
@@ -753,21 +701,9 @@ button:focus-visible {
   .panel {
     padding: 14px;
   }
-  .work-card { padding: 0; margin-bottom: 16px; }
-  .work-card-heading { padding: 18px; gap: 10px; }
-  .work-card-footer { padding: 14px 18px; }
-  .work-empty { min-height: 130px; }
-  .cost-grid > div:last-child { border: 0; padding-left: 0; }
   .el-dialog { padding: 18px; }
   .project-summary {
     grid-template-columns: repeat(2, 1fr);
-  }
-  .cost-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .workbench-grid {
-    grid-template-columns: 1fr;
-    gap: 0;
   }
   .fields {
     grid-template-columns: 1fr;
@@ -781,8 +717,7 @@ button:focus-visible {
   .toolbar .el-button + .el-button {
     margin-left: 0;
   }
-  .project-summary strong,
-  .cost-grid strong {
+  .project-summary strong {
     font-size: 18px;
   }
 }

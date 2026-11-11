@@ -10,13 +10,15 @@ import { reason } from './shared'
 import { finance } from './shared'
 import { C } from './shared'
 import { endpoint } from './shared'
+import { categoryLabels } from './shared'
+import { dateTimeText } from '../utils/datetime'
 export const columns: Record<string, Column[]> = {
   documents: [
     C('original_name', '文件'),
     C('source', '来源'),
     C('category', '分类'),
     { key: 'size', label: '大小', format: row => fileSize(row.size) },
-    C('created_at', '上传时间'),
+    { key: 'created_at', label: '上传时间', format: row => dateTimeText(row.created_at) },
   ],
 }
 export function fileSize(bytes: unknown) {
@@ -35,16 +37,11 @@ export async function createCommand(resource: string, projectId?: number): Promi
   if (resource === 'documents')
     fields = [
       remote('project', '项目', '/business/projects/', { remoteFilter: row => row.status !== 'closed' }),
+      // 分类名称与列表、服务端取值同一份 categoryLabels；合同仅项目经理、结算凭证仅财务可上传。
       select(
         'category',
         '分类',
-        choices({
-          drawing: '图纸',
-          ...(manager() ? { contract: '合同' } : {}),
-          ...(finance() ? { receipt: '收付款凭据' } : {}),
-          delivery: '交付',
-          other: '其他',
-        }),
+        choices(Object.fromEntries(Object.entries(categoryLabels).filter(([key]) => (key !== 'contract' || manager()) && (key !== 'receipt' || finance())))),
       ),
       { key: 'file', label: '文件', type: 'file' },
     ]

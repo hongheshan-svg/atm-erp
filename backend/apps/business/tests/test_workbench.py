@@ -188,3 +188,7 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         self.assertEqual(self.get('manager')['prepayments']['count'], 1)
         Reconciliation.objects.filter(pk=statement).update(created_by=self.users['manager'])
         self.assertNotIn('prepayments', self.get('manager'))
+        # 管理员本人申请的预付款仍留在核准桶里，标注需填写例外原因。
+        self.assertEqual([row['self_requested'] for row in self.get('admin')['prepayments']['results']], [False])
+        Reconciliation.objects.filter(pk=statement).update(created_by=self.users['admin'])
+        self.assertEqual([row['self_requested'] for row in self.get('admin')['prepayments']['results']], [True])

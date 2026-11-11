@@ -74,6 +74,29 @@ class CodeView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
         return Response(configure(request.user, request.headers.get('Idempotency-Key'), pk, request.data))
 
 
+def resource_key(resource):
+    name, _, pk = resource.partition(':')
+    return (name, int(pk)) if pk.isdigit() else None
+
+
+def resource_codes(rows):
+    models = {
+        model._meta.model_name: model
+        for model in apps.get_app_config('business').get_models()
+        if any(field.name == 'code' for field in model._meta.fields)
+    }
+    wanted = {}
+    for row in rows:
+        key = resource_key(row.resource)
+        if key and key[0] in models:
+            wanted.setdefault(key[0], set()).add(key[1])
+    return {
+        (name, pk): code or ''
+        for name, pks in wanted.items()
+        for pk, code in models[name].all_objects.filter(pk__in=pks).values_list('pk', 'code')
+    }
+
+
 class AuditSerializer(serializers.ModelSerializer):
     actor_name = serializers.SerializerMethodField()
     resource_label = serializers.SerializerMethodField()
@@ -82,20 +105,13 @@ class AuditSerializer(serializers.ModelSerializer):
         return obj.actor.display_name or obj.actor.username
 
     def get_resource_label(self, obj):
-        # 有业务编号的对象显示编号（如 PO000049），找不到或已彻底删除时回退为 resource 原文。
-        name, _, pk = obj.resource.partition(':')
-        model = next(
-            (
-                m
-                for m in apps.get_app_config('business').get_models()
-                if m._meta.model_name == name and any(f.name == 'code' for f in m._meta.fields)
-            ),
-            None,
-        )
-        if model is None or not pk.isdigit():
-            return ''
-        code = model.all_objects.filter(pk=int(pk)).values_list('code', flat=True).first()
-        return code or ''
+        # 有业务编号的对象显示编号（如 PO000049），找不到或已彻底删除时留空，前端回退为 resource 原文。
+        # 整页按模型各查一次编号，不再每行一条查询。
+        root = self.root
+        if not hasattr(root, '_resource_codes'):
+            rows = root.instance if isinstance(root, serializers.ListSerializer) else [obj]
+            root._resource_codes = resource_codes(rows)
+        return root._resource_codes.get(resource_key(obj.resource), '')
 
     class Meta:
         model = AuditLog

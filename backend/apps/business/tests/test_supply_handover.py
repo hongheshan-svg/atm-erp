@@ -539,6 +539,8 @@ class HandoverWorkbenchTests(SupplyFixtures, TestCase):
         self.assertEqual(result['shortage_projects']['results'][0]['shortage_lines'], 1)
         self.assertEqual(result['approved_purchases']['count'], 0)
         created = self.manual_purchase('5')
+        # 未关联 BOM 行的草稿采购与 BOM 选料下单同一口径计入在途，不再误报缺料。
+        self.assertEqual(self.workbench('purchaser')['shortage_projects']['count'], 0)
         self.approve(created['id'])
         result = self.workbench('purchaser')
         self.assertEqual(result['shortage_projects']['count'], 0)

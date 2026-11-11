@@ -69,7 +69,7 @@ export async function confirmFormNavigation() {
   for (const guard of navigationGuards) if (!(await guard())) return false
   return true
 }
-export function savedTarget(command: Command, result: Row, _selectedId?: number | null) {
+export function savedTarget(command: Command, result: Row) {
   const parts = command.path.split('/').filter(Boolean)
   let resource = parts[1] || '', id = Number(parts[2]) || Number(result.id)
   if (!['business', 'auth', 'core'].includes(parts[0] || '')) return null

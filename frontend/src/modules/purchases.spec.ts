@@ -4,7 +4,8 @@ import { defaults, fieldIssues, payload } from '../forms'
 import { industryCommand } from '../industry-forms'
 import { user } from '../session'
 import type { Field, Row } from '../types'
-import { actionCommand, purchaseDetailLine } from './purchases'
+import { all } from '../api'
+import { actionCommand, purchaseDetailLine, purchaseTotal, receiptLines } from './purchases'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn() }))
 
@@ -84,6 +85,34 @@ it('查看明细：首列合并名称、编码、规格，项目号与单元同�
   user.value = { id: 3, roles: ['purchaser'] }
   const buyerView = await actionCommand('purchases', { id: 9, status: 'partial' }, '查看明细')
   expect(buyerView.fields.find(f => f.key === 'lines')!.fields!.map(f => f.key)).toContain('unit_price')
+})
+
+it('含税合计与服务端同口径：逐行四舍五入到分后再相加', () => {
+  expect(purchaseTotal([{ quantity: '1.500', unit_price: '0.33' }, { quantity: '1.500', unit_price: '0.33' }])).toBe('1.00')
+  expect(purchaseTotal([{ quantity: '1000.000', unit_price: '2095.50' }])).toBe('2,095,500.00')
+  expect(purchaseTotal([{ quantity: '1', unit_price: null }])).toBe('—')
+  expect(purchaseTotal([])).toBe('—')
+})
+
+it('收货多送不足 1 个单位也在前端拦下', () => {
+  const data = { lines: [{ line: 1, quantity: '2.5', pending_quantity: '0' }] }
+  expect(() => receiptLines(data, { '1': '2.000' })).toThrow('第 1 行超过待收 2')
+  expect(receiptLines({ lines: [{ line: 1, quantity: '1.5', pending_quantity: '0.5' }] }, { '1': '2.000' }).lines).toHaveLength(1)
+  expect(purchaseDetailLine({ quantity: '2.000', received_quantity: '2.500' }, {}).remaining).toBe('0')
+})
+
+it('处理采购质保只按类型读取收货和采购退货流水', async () => {
+  user.value = { id: 1, roles: ['warehouse'] }
+  vi.mocked(read).mockResolvedValue({ cases: [], receipts: [], warranty_months: 12 })
+  vi.mocked(all).mockImplementation(async (_path: string, params?: Row) => params?.kind === 'receipt'
+    ? [{ id: 31, kind: 'receipt', item_name: '电机', quantity: '1.000' }]
+    : [{ id: 32, kind: 'purchase_return', item_name: '电机', quantity: '1.000' }])
+  const command = await actionCommand('purchases', { id: 9, project: 4, status: 'approved' }, '处理采购质保')
+  expect(all).toHaveBeenCalledWith('/business/moves/', { project: 4, kind: 'receipt' })
+  expect(all).toHaveBeenCalledWith('/business/moves/', { project: 4, kind: 'purchase_return' })
+  expect(all).not.toHaveBeenCalledWith('/business/moves/', { project: 4 })
+  expect(command.fields.find(f => f.key === 'replacement')?.options?.map(o => o.value)).toEqual([31])
+  expect(command.fields.find(f => f.key === 'returned')?.options?.map(o => o.value)).toEqual([32])
 })
 
 it('明细待收不出现负数；批次多时入库日期只列最近 3 批', () => {

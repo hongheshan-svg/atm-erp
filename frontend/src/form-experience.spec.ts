@@ -42,9 +42,9 @@ describe('未保存内容与操作结果', () => {
     expect(await confirmFormNavigation()).toBe(true)
   })
   it('保存后打开实际生成记录：付款流水、签约项目以及对账单', () => {
-    expect(savedTarget({ ...command, path: '/business/entries/7/pay/' }, { id: 20 }, 7)).toEqual({ resource: 'payments', id: 20 })
-    expect(savedTarget({ ...command, path: '/business/sales/9/sign/' }, { id: 9, project: 18 }, 9)).toEqual({ resource: 'projects', id: 18 })
-    expect(savedTarget({ ...command, path: '/business/reconciliations/' }, { id: 25 }, 7)).toEqual({ resource: 'reconciliations', id: 25 })
+    expect(savedTarget({ ...command, path: '/business/entries/7/pay/' }, { id: 20 })).toEqual({ resource: 'payments', id: 20 })
+    expect(savedTarget({ ...command, path: '/business/sales/9/sign/' }, { id: 9, project: 18 })).toEqual({ resource: 'projects', id: 18 })
+    expect(savedTarget({ ...command, path: '/business/reconciliations/' }, { id: 25 })).toEqual({ resource: 'reconciliations', id: 25 })
   })
   it('一次列出各行填写问题，错误定位保留真实行号', () => {
     const issues = fieldIssues([{ key: 'lines', label: '收货', type: 'rows', fields: [{ key: 'quantity', label: '数量', numeric: { scale: 3, min: 0 } }] }], { lines: [{ quantity: '2' }, { quantity: '-1' }, { quantity: '2个' }] })

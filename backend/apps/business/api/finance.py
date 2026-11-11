@@ -51,7 +51,9 @@ class EntryView(ImportableMixin, ReadView):
     @action(detail=False, methods=['get'])
     def summary(self, request):
         # 与列表同一套筛选和项目边界，页头卡片显示的就是当前这批款项的余额。
-        return Response(finance.balances(self.filter_queryset(self.get_queryset())))
+        # 已结清的款项不计入任何余额，先在数据库里筛掉，免得把全部历史款项连同到货明细拉进内存。
+        queryset = self.filter_queryset(self.get_queryset())
+        return Response(finance.balances(queryset.exclude(amount=F('credit_amount') + F('net_paid'))))
 
     @action(detail=False, methods=['post'])
     def expense(self, request):

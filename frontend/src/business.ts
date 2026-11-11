@@ -10,10 +10,10 @@ import * as settlement from './modules/settlement'
 import { salesColumns, salesActions, salesCommand } from './modules/sales'
 import { manager, can } from './session'
 import type { Command, Row, Column } from './types'
-export { endpoint, display, labels } from './modules/shared'
+export { endpoint, display } from './modules/shared'
 export { bomCommand } from './modules/bom'
-import { buyer, warehouse, finance as financeRole } from './modules/shared'
-export const permission = { buyer, warehouse, finance: financeRole }
+import { buyer } from './modules/shared'
+export const permission = { buyer }
 const modules = { projects, bom, purchases, inventory, finance, masterdata, settings, documents, settlement }
 const owners: Record<string, keyof typeof modules> = {
   projects: 'projects',

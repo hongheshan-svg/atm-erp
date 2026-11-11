@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { test, expect, login } from './fixtures'
 
@@ -22,7 +23,7 @@ test('完整合同同页显示32行明细和行业条款，PDF自动分页且无
     lines.push({ item: item.id, quantity: '1', unit_price: '10' })
   }
   const note = '补充要求：验收按双方确认图纸执行，资料须随货交付。\n'.repeat(12)
-  const purchase = await post('purchases/', { project: project.id, supplier: partner.id, due_date: '2026-12-31', payment_term: 'month30', note, lines })
+  const purchase = await post('purchases/', { project: project.id, supplier: partner.id, due_date: businessDate(60), payment_term: 'month30', note, lines })
   await page.goto(`/erp/purchases/${purchase.id}/contract`)
   const contract = page.getByRole('article', { name: '采购合同预览', exact: true })
   await expect(contract).toHaveCount(1)

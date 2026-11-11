@@ -3,6 +3,28 @@ import { cancelEditing } from './fixtures'
 import { selectRemoteOption, clearRemote } from './remote-select-helpers'
 import { readFile } from 'node:fs/promises'
 import { test, expect, login, expectHttpError, openImport } from './fixtures'
+import type { Page } from '@playwright/test'
+
+// 分片在全新安装上运行：用例自建所需的客户和项目，不依赖其他用例留下的数据，也不随手取列表第一项。
+async function ownProject(page: Page, label: string) {
+  const token = await page.evaluate(() => localStorage.getItem('access_token'))
+  const headers = { Authorization: `Bearer ${token}` }
+  const me = await page.request.get('/api/auth/me/', { headers })
+  expect(me.status()).toBe(200)
+  const actor = await me.json()
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`
+  async function create(resource: string, data: Record<string, unknown>) {
+    const response = await page.request.post(`/api/business/${resource}/`, {
+      headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data,
+    })
+    expect(response.status(), await response.text()).toBe(201)
+    return response.json()
+  }
+  const partner = await create('partners', { name: `${label}客户${suffix}`, kind: 'customer' })
+  const name = `${label}项目${suffix}`
+  const project = await create('projects', { name, customer: partner.id, manager: actor.id })
+  return { id: project.id as number, name }
+}
 
 test('人员可按姓名选择并导入，重名明确账号', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
@@ -246,8 +268,9 @@ test('BOM选择文件后直接显示预览、错误和确认入口，修正后�
 
 test('BOM模板提供可转发的逐列填写说明', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const project = await ownProject(page, 'BOM说明')
   await page.goto('/erp/bom')
-  await selectRemoteOption(page.getByRole('combobox', { name: '项目筛选', exact: true }))
+  await selectRemoteOption(page.getByRole('combobox', { name: '项目筛选', exact: true }), { id: project.id, text: project.name })
   await page.getByRole('button', { name: '导入 BOM', exact: true }).click()
   await page.getByText('导入模板填写说明', { exact: true }).click()
   await expect(page.getByText('Excel 模板自带“填写说明”页和表头提示', { exact: false })).toBeVisible()
@@ -264,12 +287,7 @@ test('BOM模板提供可转发的逐列填写说明', async ({ page }, info) => 
 test('十二种批量导入入口的模板字段、页面映射和错误文件处理', async ({ page }, info) => {
   test.setTimeout(180000)
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
-  const token = await page.evaluate(() => localStorage.getItem('access_token'))
-  const headers = { Authorization: `Bearer ${token}` }
-  const projects = await page.request.get('/api/business/projects/', { headers })
-  expect(projects.status()).toBe(200)
-  const projectId = (await projects.json()).results[0]?.id
-  expect(projectId, '隔离业务链应已创建项目').toBeTruthy()
+  const projectId = (await ownProject(page, '导入入口')).id
   const cases = [
     ['items', 'masterdata?section=items', '物料'], ['partners', 'masterdata?section=partners', '往来单位'],
     ['sales', 'sales', '销售'], ['projects', 'projects', '项目'], ['purchases', 'purchases', '采购'],
@@ -349,13 +367,14 @@ test('关闭未确认的导入后重新打开，不应继续提交上次文件',
 
 test('项目筛选提示随选中和清空同步变化', async ({ page }) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const project = await ownProject(page, '筛选提示')
   for (const route of ['bom', 'finance']) {
     await page.goto(`/erp/${route}`)
     const select = page.getByRole('combobox', { name: '项目筛选', exact: true })
     const hint = page.locator('.project-filter > small')
     await clearRemote(select)
     await expect(hint).toHaveText(route === 'bom' ? '请选择项目' : '未选择时显示全部项目')
-    await selectRemoteOption(select)
+    await selectRemoteOption(select, { id: project.id, text: project.name })
     await expect(hint).toHaveText('仅显示所选项目')
     await clearRemote(select)
     await expect(hint).toHaveText(route === 'bom' ? '请选择项目' : '未选择时显示全部项目')

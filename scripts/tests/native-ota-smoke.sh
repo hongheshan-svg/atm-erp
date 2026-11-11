@@ -8,9 +8,12 @@ cleanup() {
 }
 trap cleanup EXIT
 docker build -q -t lean-native-ota-tests -f "$ROOT/scripts/ci/Dockerfile.native-ota-tests" "$ROOT" >/dev/null
-NETWORK_ARGS=()
-if [[ -n "${LEAN_OTA_TEST_SUBNET:-}" ]]; then NETWORK_ARGS+=(--subnet "$LEAN_OTA_TEST_SUBNET"); fi
-docker network create "${NETWORK_ARGS[@]}" "$RUN_ID" >/dev/null
+# 不展开空数组：macOS 自带 bash 3.2 在 set -u 下会把 "${empty[@]}" 视为未绑定变量。
+if [[ -n "${LEAN_OTA_TEST_SUBNET:-}" ]]; then
+  docker network create --subnet "$LEAN_OTA_TEST_SUBNET" "$RUN_ID" >/dev/null
+else
+  docker network create "$RUN_ID" >/dev/null
+fi
 docker run -d --name "$RUN_ID-pg" --network "$RUN_ID" --network-alias native-ota-pg --tmpfs /var/lib/postgresql/data -e POSTGRES_DB=atm_erp_lean -e POSTGRES_USER=atm_erp_lean -e POSTGRES_PASSWORD=native-ota-isolated-only postgres:15-alpine >/dev/null
 docker run -d --name "$RUN_ID-redis" --network "$RUN_ID" --network-alias native-ota-redis redis:7-alpine >/dev/null
 for ((i=0; i<60; i++)); do

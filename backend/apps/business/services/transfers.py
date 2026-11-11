@@ -475,6 +475,9 @@ def execute_row(actor, resource, raw, key, people=None):
         data.pop('group', None)
         data['lines'] = [payload(line) for line in raw['lines']]
         return supply.create_purchase(actor, key, data)
+    if resource == 'payments':
+        # 填写说明约定结算方式留空按银行转账；否则导入的流水之后无法与银行流水匹配或认领。
+        data.setdefault('method', 'bank')
     target, service = {
         'payments': ('entry', finance.pay),
         'time': ('task', execution.log_time),
@@ -510,8 +513,6 @@ def parse(actor, resource, upload, *, with_source=False):
     for index, row in enumerate(rows, 2):
         if not any(value not in (None, '') for value in row):
             continue
-        if any(value not in (None, '') for value in row[len(columns) :]):
-            raise ValidationError(f'第{index}行包含多余列。')
         values = []
         for value in row[: len(columns)]:
             if isinstance(value, datetime):

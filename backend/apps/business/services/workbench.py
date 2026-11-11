@@ -83,7 +83,7 @@ def shortage_projects(user):
         short = []
         for line in lines:
             entry = plan[line.pk]
-            ordered = entry['assigned'] + entry['shared']
+            ordered = entry['assigned'] + entry['shared'] + entry['shared_unapproved']
             if max(ZERO, line.quantity - entry['used']) - ordered - entry['available'] > ZERO:
                 short.append(line)
         if not short:
@@ -277,7 +277,9 @@ def summary(request):
             .filter(
                 Q(lines__due_date__lt=timezone.localdate())
                 | Q(lines__due_date__isnull=True, due_date__lt=timezone.localdate()),
-                lines__quantity__gt=F('lines__received_quantity') + F('lines__cancelled_quantity'),
+                lines__quantity__gt=F('lines__received_quantity')
+                + F('lines__cancelled_quantity')
+                + F('lines__pending_quantity'),
             )
             .distinct()
         )
@@ -308,9 +310,17 @@ def summary(request):
         if has_role(user, MANAGERS):
             prepayments = pending.filter(
                 kind='prepayment', entry__project__in=projects_for(user, Project.objects.all(), MANAGERS)
-            ).exclude(created_by=user)
+            )
+            # 与采购审批同一口径：不能核准本人申请；管理员可按例外核准，保留并标注。
+            admin = has_role(user, ADMIN)
+            if not admin:
+                prepayments = prepayments.exclude(created_by=user)
             if prepayments.exists():
                 result['prepayments'] = bucket(prepayments, ReconciliationSerializer, 'prepayments')
+                if admin and result['prepayments'] is not None:
+                    mine = set(prepayments.filter(created_by=user).values_list('pk', flat=True))
+                    for row in result['prepayments']['results']:
+                        row['self_requested'] = row['id'] in mine
         if has_role(user, FINANCE):
             statements = pending.exclude(kind='prepayment')
             if statements.exists():

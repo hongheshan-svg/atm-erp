@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parent
 
 def commands(stage):
     if stage == 'checks':
+        # 测试登记一致性由 main() 在执行任何阶段前调用 validate_coverage() 校验。
         return [
-            (ROOT, [sys.executable, 'scripts/ci/backend_test_matrix.py']),
             (
                 ROOT,
                 [

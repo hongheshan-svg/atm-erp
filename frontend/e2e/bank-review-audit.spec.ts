@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { createHash } from 'node:crypto'
 import { crc32 } from 'node:zlib'
 import { test, expect, login, expectHttpError, type Page, openRowAction, openImport } from './fixtures'
@@ -47,7 +48,7 @@ test('财务原生银行导入缺失户名先核实，保留原凭据且重复�
   test.setTimeout(180000)
   const suffix = String(Date.now()), account = `9900${suffix}`
   const filename = `synthetic-bank-${suffix}.xlsx`, reviewedName = `合成核实客户${suffix}`
-  const today = new Date().toISOString().slice(0, 10)
+  const today = businessDate()
   const sourceRow = ['000000001', '009999000001', `${today} 12:00:00`, '贷', '', '', '合成测试货款', '', '', `业务发生账号:${account}`, '100.00', '', '', '1000.00']
   const buffer = xlsx([
     ['[HISTORYDETAIL]'],

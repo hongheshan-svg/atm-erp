@@ -1,7 +1,5 @@
-import { options } from '../catalog'
 import { can, hasRoles, operations, purchaseReader, purchasing, roleLabels } from '../session'
 import { today } from '../forms'
-import type { Catalog } from '../catalog'
 import type { Field } from '../types'
 import type { Column } from '../types'
 import type { Option } from '../types'
@@ -91,8 +89,6 @@ export function participants(users: Row[], scope?: Row | null): Row[] {
     (u) => hasRoles(u, EXECUTION_ROLES) && (inside.has(u.id) || hasRoles(u, GLOBAL_PROJECT_ROLES)),
   )
 }
-export const person = (c: Catalog, key = 'assignee', label = '执行人', scope?: Row | null) =>
-  select(key, label, options(participants(c.users, scope)))
 
 export function endpoint(resource: string) {
   return `${['users'].includes(resource) ? '/auth/' : ['company', 'codes', 'audit'].includes(resource) ? '/core/' : '/business/'}${resource}/`
@@ -135,7 +131,7 @@ export const labels: Record<string, string> = {
   reconciliation: '对账单',
   drawing: '图纸',
   contract: '合同',
-  delivery: '交付',
+  delivery: '交付验收',
   other: '其他',
 }
 // 附件分类与库存流水共用 receipt 等取值，按列区分，避免「结算凭证」被显示成「采购收货」。

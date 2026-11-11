@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import type { TestInfo } from '@playwright/test'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
@@ -150,7 +151,7 @@ for (const owner of ['purchase', 'sale'] as const) {
       const item = await f.admin.post(business + 'items/', { name: `预览物料-${f.suffix}`, unit: '件' })
       record = await f.actor.post(business + 'purchases/', {
         project: project.id, supplier: f.partner.id, payment_term: 'month30',
-        due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
+        due_date: businessDate(30),
         lines: [{ item: item.id, quantity: '1', unit_price: '12.50' }],
       })
     } else {

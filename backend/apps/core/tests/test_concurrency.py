@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from threading import Barrier
+from unittest.mock import patch
 
 from django.db import close_old_connections, connection
 from django.test import TransactionTestCase
@@ -50,13 +52,13 @@ class ConcurrencyTests(TransactionTestCase):
         self.assertEqual(CodeRule.objects.get(key='project').counter, 4)
 
     def test_concurrent_period_rollover_resets_only_once(self):
-        from django.utils import timezone
-
         CodeRule.objects.filter(key='project').update(
             date_format='YYYYMMDD', reset_cycle='day', period='20000101', counter=900, padding=3
         )
-        results = self.concurrent_codes(['a', 'b', 'c', 'd'])
-        prefix = 'PRJ' + timezone.localdate().strftime('%Y%m%d')
+        # 固定业务日期：真实时钟在线程取号与断言之间跨过零点（UTC 16:00）时，前缀会对不上。
+        with patch('django.utils.timezone.localdate', return_value=date(2026, 9, 9)):
+            results = self.concurrent_codes(['a', 'b', 'c', 'd'])
+        prefix = 'PRJ20260909'
         self.assertEqual({r['code'] for r in results}, {f'{prefix}{i:03d}' for i in range(1, 5)})
 
     def test_product_category_counter_is_locked(self):

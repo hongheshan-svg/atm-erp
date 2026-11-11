@@ -36,6 +36,16 @@ it('按ID去重并限制1000项，达到上限后仍能取消和补选', () => {
   expect(batch.has(rows[1000]!)).toBe(true)
 })
 
+it('分页全选每页都按 200 条读取，上限不是 200 的倍数时截取，不重复也不漏行', async () => {
+  const selected = ref<Row[]>([])
+  const batch = useBatchSelection(selected, 'id', () => 250)
+  const rows = Array.from({ length: 450 }, (_, i) => ({ id: i + 1 }))
+  const fetch = vi.fn(async (page: number, size: number) => ({ results: rows.slice((page - 1) * size, page * size), next: page * size < rows.length ? 'more' : null }))
+  await batch.replacePages(fetch, () => true)
+  expect(fetch.mock.calls).toEqual([[1, 200], [2, 200]])
+  expect(selected.value.map(row => row.id)).toEqual(rows.slice(0, 250).map(row => row.id))
+})
+
 it('分页全选读取失败或上下文变化时，不应用部分或迟到结果', async () => {
   const selected = ref<Row[]>([{ id: 99 }])
   const batch = useBatchSelection(selected, 'id', () => 1000)

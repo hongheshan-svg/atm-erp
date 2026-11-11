@@ -102,7 +102,10 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   return {
     title: name, path: endpoint(resource) + r.id + '/', method: 'patch', initial: r,
     fields: [...(await createCommand(resource)).fields.filter(f => f.key !== 'code').map(f => resource === 'items' && r.product_category && ['product_category', 'specification', 'drawing_number', 'drawing_revision'].includes(f.key) ? { ...f, readonly: true, displayOnly: true } : f), { key: 'is_active', label: '启用', type: 'boolean' }],
-    prepare: data => resource === 'items' ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '' } : partnerPayload(data),
+    // 选填文本清空后也提交空串，否则服务端按「未提交」保留原值；已编码物料的规格、图号、图档版本只读，不提交。
+    prepare: data => resource === 'items'
+      ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '', ...(r.product_category ? {} : { specification: data.specification ?? '', drawing_number: data.drawing_number ?? '', drawing_revision: data.drawing_revision ?? '' }) }
+      : partnerPayload({ ...data, contact: data.contact ?? '', phone: data.phone ?? '', address: data.address ?? '' }),
     // 前后端口径一致：已按产品编码类别编码的物料，类别、规格、图号、图档版本不可覆盖；另外被 BOM、采购、库存引用后，已有的单位、规格、图档也不能改写（由服务端校验）。
     ...(resource === 'items' && r.product_category ? { notice: { type: 'info' as const, text: '该物料已按产品编码类别编码：产品编码类别、规格、图号、图档版本不能在此修改；版本升级请新增物料编码并修订 BOM。物料一旦被 BOM、采购或库存引用，已有的单位、规格、图档也不能改写。' } } : {}),
   }

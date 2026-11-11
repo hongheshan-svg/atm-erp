@@ -115,6 +115,30 @@ class SetupTests(TestCase):
         self.rule.refresh_from_db()
         self.assertEqual(self.rule.prefix, 'MAT')
 
+    def test_setup_can_configure_every_code_rule(self):
+        from apps.core.models import CODE_MODELS
+
+        for key in CODE_MODELS:
+            CodeRule.objects.get_or_create(key=key, defaults={'prefix': key[:3].upper()})
+        self.data['codes'] = [
+            {
+                'id': rule.pk,
+                'prefix': f'X{index}',
+                'date_format': '',
+                'padding': 4,
+                'reset_cycle': 'never',
+                'expected_revision': rule.revision,
+                'reason': '首次安装配置',
+            }
+            for index, rule in enumerate(CodeRule.objects.order_by('id'))
+        ]
+        self.assertEqual(len(self.data['codes']), len(CODE_MODELS))
+        response = self.submit()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            set(CodeRule.objects.values_list('prefix', flat=True)), {f'X{i}' for i in range(len(CODE_MODELS))}
+        )
+
     def test_setup_team_accepts_admin_assigned_short_password(self):
         self.data['team'][0]['password'] = '1'
         self.assertEqual(self.submit().status_code, 200)

@@ -129,7 +129,7 @@ function amount(key: string, row: Row) {
     if (row.due_amount != null && Number(row.due_amount) > 0) return `${row.kind === 'receivable' ? '到期待收' : '到期待付'} ${abs(row.due_amount)} · 余额 ${abs(row.balance)}`
     return `${row.kind === 'receivable' ? '待收' : '待付'}余额 ${abs(row.balance)}`
   }
-  if (key === 'approvals' && row.self_requested) return '本人申请，需填写例外原因'
+  if (['approvals', 'prepayments'].includes(key) && row.self_requested) return '本人申请，需填写例外原因'
   if (key === 'handover_projects' && row.missing?.length) return `缺${row.missing.join('、')}`
   if (key === 'shortage_projects') return `缺料 ${row.shortage_lines} 行`
   return ''

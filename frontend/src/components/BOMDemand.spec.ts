@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import { flushPromises, shallowMount, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import BOMDemand from './BOMDemand.vue'
@@ -349,6 +349,10 @@ it('工作台缺料直达：带 initialView=purchase 时兼任工程师的管理
 })
 
 it('编制视图按单元自然排序，单元概览可点筛选，表头可按需求日期排序', async () => {
+  // 只测排序与筛选：把“今天”固定在需求日期之前，用例不会因日历走过这些日期而出现逾期计数。
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-11T10:00:00+08:00'))
+  onTestFinished(() => { vi.useRealTimers() })
   user.value = { roles: ['mechanical_engineer'] }
   const wrapper = mountFull([
     { bom_line: 1, item: 1, item_code: 'B', item_name: '十单元件', assembly_unit: '10 下料', quantity: '1', shortage: '1', required_date: '2026-12-03' },

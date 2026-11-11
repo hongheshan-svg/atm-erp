@@ -13,11 +13,8 @@ const errors: string[] = []
 type Account = { id: number; username: string; display_name: string }
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text })
-const day = (offset = 0) => {
-  const date = new Date()
-  date.setDate(date.getDate() + offset)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
+// 业务日期按 Asia/Shanghai 计算，与服务端“今天”一致，不随运行机器时区变化。
+const day = (offset = 0) => businessDate(offset)
 
 async function api(page: Page, path: string, data?: Record<string, unknown>, status = 200) {
   const token = await page.evaluate(() => localStorage.getItem('access_token'))

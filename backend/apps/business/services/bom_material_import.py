@@ -36,12 +36,39 @@ SALT = 'lean-bom-material-import-v1'
 BRAND_BACKFILLED = '沿用已有物料，补填品牌'
 
 
-def material(actor, row):
+def row_data(row):
     from .transfers import ENUMS
 
     data = {field: str(value or '').strip() for field, value in zip(MATERIAL_FIELDS, row[7:], strict=True)}
     for field in ('product_category', 'part_type'):
         data[field] = ENUMS[field].get(data[field], data[field])
+    return data
+
+
+def lock_existing(records):
+    """按主键顺序先锁住这批文件可能沿用或补填品牌的现有物料。
+
+    逐行补填品牌会按文件行序加锁，随后保存 BOM 又按主键顺序锁物料；
+    与其他按主键加锁的单据交错时会形成死锁，所以在逐行处理前一次锁齐。
+    """
+    codes, ids = set(), set()
+    for row in records:
+        if not any(row):
+            continue
+        code = row[0].strip()
+        if code:
+            codes.add(code)
+            continue
+        data = row_data(row)
+        ids.update(item.pk for item in masterdata.duplicates(data))
+        if data['brand']:
+            ids.update(item.pk for item in masterdata.duplicates({**data, 'brand': ''}))
+    ids.update(Item.objects.filter(code__in=codes).values_list('pk', flat=True))
+    list(Item.objects.select_for_update().filter(pk__in=ids).order_by('pk').only('pk'))
+
+
+def material(actor, row):
+    data = row_data(row)
     code = row[0].strip()
     if code:
         item = Item.objects.filter(code=code, is_active=True).first()
@@ -104,6 +131,7 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     if bom.revision(project) != expected:
         raise Conflict('BOM 已变化，请重新上传预览。')
     CodeRule.objects.select_for_update().get(key='item')
+    lock_existing(records)
     output, actions, errors = [], [], []
     new_ids = set()
     for index, row in enumerate(records, 2):

@@ -55,10 +55,9 @@ const props = withDefaults(defineProps<{
   emptyHint?: string
   // 不显示「可联系负责此业务的同事处理」（页面已提供其他入口，或联系同事没有意义）。
   hideContactHint?: boolean
-  // 每页条数下限（全局设置更小时按它显示）；项目内任务表默认 50，免得六阶段任务翻页。
-  defaultPageSize?: number
 }>(), { allowCreate: true })
-const pageFloor = computed(() => props.defaultPageSize ?? (props.resource === 'tasks' && props.projectId ? 50 : 0))
+// 每页条数下限（全局设置更小时按它显示）：项目内任务表至少 50 条，免得六阶段任务翻页。
+const pageFloor = computed(() => props.resource === 'tasks' && props.projectId ? 50 : 0)
 const pageSize = computed(() => Math.max(globalPageSize.value, pageFloor.value))
 // 手机宽度下任务表改成「名称格内带主操作」，不依赖横向滑动。
 const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
@@ -109,6 +108,8 @@ const filterValue = ref('')
 const enabledFilter = ref(''), locationFilter = ref(''), brandFilter = ref('')
 const dateFrom = ref(''), dateTo = ref('')
 const supplierFilter = ref<string | number>()
+// 供应商选择框点 × 清空后是空字符串，不能算作生效的筛选。
+const supplierActive = computed(() => supplierFilter.value != null && supplierFilter.value !== '')
 const notCustomer = (partner: Row) => partner.kind !== 'customer'
 watch(supplierFilter, (value, before) => { if (value !== before) searchRecords() })
 const appliedExtra = ref<Row>({})
@@ -121,7 +122,7 @@ const datedResource = computed(() => ['audit', 'issue-slips'].includes(props.res
 const filterControls = computed(() => (props.resource === 'users' && filterConfig.value ? 1 : 0) + (['users', 'items', 'partners'].includes(props.resource) ? 1 : 0) + (props.resource === 'stocks' ? 1 : 0) + (['stocks', 'items'].includes(props.resource) ? 1 : 0) + (['purchases', 'entries'].includes(props.resource) ? 1 : 0) + (datedResource.value ? 2 : 0) + extraConfig.value.length)
 const collapsible = computed(() => mobile.value && filterControls.value > 2)
 const activeFilters = computed(() => [
-  props.resource === 'users' && filterValue.value, enabledFilter.value, locationFilter.value, brandFilter.value, unsettled.value, dateFrom.value, dateTo.value, supplierFilter.value != null && props.resource === 'purchases',
+  props.resource === 'users' && filterValue.value, enabledFilter.value, locationFilter.value, brandFilter.value, unsettled.value, dateFrom.value, dateTo.value, supplierActive.value && props.resource === 'purchases',
   ...Object.values(extraValues.value),
 ].filter(Boolean).length)
 const blankExtra = () => Object.fromEntries(extraConfig.value.map(item => [item.key, '']))
@@ -194,7 +195,8 @@ async function openDeletionHistory() {
 }
 function deleted() {
   deletionSelection.value = []; command.value = null; selectedRow.value = null; selectedId.value = null; savedRecord.value = null
-  page.value = 1; void load(); emit('changed')
+  // 与 saved() 一致：由父级 revision 驱动刷新时不再自己多读一遍。
+  page.value = 1; if (props.revision === undefined) void load(); emit('changed')
 }
 async function openRemoved(id: number) {
   try { const row = await read(`${endpoint(props.resource)}${id}/`); deletionHistory.value = false; await inspect(row) }
@@ -381,6 +383,7 @@ async function load(preserveSelection: unknown = false) {
   const current = ++generation
   loading.value = true
   error.value = ''
+  let listed = false
   try {
     const result = await read(endpoint(props.resource), {
       ...props.params,
@@ -390,6 +393,7 @@ async function load(preserveSelection: unknown = false) {
       search: appliedSearch.value,
     })
     if (current !== generation) return
+    listed = true
     records.value = result.results
     count.value = result.count
     // 已勾选的库存行按最新数量更新；被领完的行自动移出勾选。
@@ -413,6 +417,12 @@ async function load(preserveSelection: unknown = false) {
       else await inspect(row)
     }
   } catch (e) {
+    // 最后一页的记录处理后离开了当前筛选（如批准后不再“待批准”），原页码已不存在：退回前一页重新读取，
+    // 不提示“数据不存在”，也不留着已处理的旧行。
+    if (current === generation && !listed && page.value > 1 && (e as { response?: { status?: number } }).response?.status === 404) {
+      page.value -= 1
+      return load(preserveSelection)
+    }
     if (current === generation) error.value = message(e)
   } finally {
     if (current === generation) loading.value = false
@@ -508,7 +518,7 @@ function saved(result?: Row) {
     savedRecord.value = { title: `${command.value.title}成功 · 领料单 ${result.slip_code}`, resource: 'issue-slips', id: Number(result.slip), slip: true }
     if (command.value.title === '批量领料') issueSelection.value = []
   } else if (result && command.value) {
-    const target = savedTarget(command.value, result, selectedId.value)
+    const target = savedTarget(command.value, result)
     savedRecord.value = target ? { title: `${command.value.title}成功${result.code ? ` · ${result.code}` : ''}`, ...target, project: Number(selectedRow.value?.project || command.value.initial?.project || props.projectId) || undefined } : null
     if (savedRecord.value && command.value.title === '登记工时') {
       savedRecord.value.timeTask = Number(result.task || selectedId.value)
@@ -542,7 +552,7 @@ function searchRecords() {
     // 精确匹配要求输对完整品牌名，输「施耐德」而库里存的是「Schneider」就只会得到空列表。
     ...(brandFilter.value && ['stocks', 'items'].includes(props.resource) ? { [props.resource === 'stocks' ? 'item__brand__icontains' : 'brand__icontains']: brandFilter.value } : {}),
     ...(unsettled.value && props.resource === 'entries' ? { unsettled: 'true' } : {}),
-    ...(supplierFilter.value != null && props.resource === 'purchases' ? { supplier: supplierFilter.value } : {}),
+    ...(supplierActive.value && props.resource === 'purchases' ? { supplier: supplierFilter.value } : {}),
     ...(datedResource.value && dateFrom.value ? { date_from: dateFrom.value } : {}),
     ...(datedResource.value && dateTo.value ? { date_to: dateTo.value } : {}),
     ...Object.fromEntries(Object.entries(extraValues.value).filter(([, value]) => value)),
@@ -633,7 +643,7 @@ async function inspect(row: Row) {
       </template>
       </div>
       <el-button native-type="submit" :loading="loading">搜索</el-button>
-      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierFilter != null || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
+      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierActive || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
     </form>
     <p v-if="resource === 'tasks' && records.some(row => !row.can_confirm && !row.system_managed)" class="task-confirm-note">本项目任务由对应专业主管确认完成并登记工时。</p>
     <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : savedRecord.slip ? '可查看并打印领料单，交领料人签字。' : '下一步：查看结果并继续处理。' }}</span><el-button :type="savedRecord.slip ? 'primary' : undefined" @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : savedRecord.slip ? '查看 / 打印领料单' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>

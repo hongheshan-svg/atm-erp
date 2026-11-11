@@ -1,3 +1,4 @@
+import { businessDate } from './fixtures'
 import { test, expect, login, openRowAction, observePage, type Page } from './fixtures'
 
 async function api(page: Page, path: string, data?: object, status = 200) {
@@ -29,7 +30,7 @@ test('采购主动申请修改：独立审批人驳回或退回，修改后重�
   const project = await api(page, 'business/projects/', { name: `采购修改验收${suffix}`, customer: partner.id, manager: me.id }, 201)
   const material = await api(page, 'business/items/', { name: `修改验收电机${suffix}`, unit: '件' }, 201)
   await login(page, buyer.username, password)
-  const day = new Date().toISOString().slice(0, 10)
+  const day = businessDate()
   const purchase = await api(page, 'business/purchases/', { project: project.id, supplier: partner.id, due_date: day, lines: [{ item: material.id, quantity: '5', unit_price: '80' }] }, 201)
   await api(page, `business/purchases/${purchase.id}/submit/`, {})
   const detail = await api(page, `business/purchases/${purchase.id}/`)

@@ -3,24 +3,10 @@ import { computed, watch } from 'vue'
 import { user } from './session'
 import type { Row, Option } from './types'
 export type Catalog = { projects: Row[]; items: Row[]; partners: Row[]; users: Row[] }
-export async function catalog(
-  keys: (keyof Catalog)[] = ['projects', 'items', 'partners', 'users'],
-): Promise<Catalog> {
+// 只预取人员名单（很短）；项目、物料、往来单位会长到上万条，一律走 RemoteSelect 分页搜索。
+export async function catalog(keys: 'users'[]): Promise<Catalog> {
   const result: Catalog = { projects: [], items: [], partners: [], users: [] }
-  const paths = {
-    projects: '/business/projects/',
-    items: '/business/items/',
-    partners: '/business/partners/',
-    users: '/auth/directory/',
-  }
-  await Promise.all(
-    keys.map(async (key) => {
-      result[key] = await all(
-        paths[key],
-        ['items', 'partners'].includes(key) ? { is_active: true } : {},
-      )
-    }),
-  )
+  if (keys.includes('users')) result.users = await all('/auth/directory/', {})
   return result
 }
 export function referenceLabel(row: Row): { name: string; detail: string } {

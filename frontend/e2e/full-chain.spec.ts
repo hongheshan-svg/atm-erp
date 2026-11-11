@@ -1,14 +1,12 @@
+import { businessDate } from './fixtures'
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction, selectExecutors, choosePeople } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
 import { selectRoles } from './role-helpers'
 const password = 'Lean-QA-2026-password'
-const day = (offset = 0) => {
-  const d = new Date()
-  d.setDate(d.getDate() + offset)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+// 业务日期按 Asia/Shanghai 计算，与服务端“今天”一致，不随运行机器时区变化。
+const day = (offset = 0) => businessDate(offset)
 const dialog = (p: Page) => p.getByRole('dialog')
 async function fill(p: Page, label: string, value: string) {
   await dialog(p).getByLabel(label, { exact: true }).fill(value)

@@ -5,10 +5,16 @@
 ## 使用与部署
 
 - [安装、首次启用、升级与备份](../README.md)
+- [三平台安装要点](INSTALL_PLATFORMS.md)
 - [日常使用](LEAN_USER_GUIDE.md)
+- [岗位职责与权限](ROLE_RESPONSIBILITIES.md)
+- [导入模板填写说明](IMPORT_TEMPLATES.md)
+- [业务管控说明](OPERATIONAL_HARDENING.md)
 - [自动化设备行业表单填写](AUTOMATION_FORM_GUIDE.md)
 - [BOM 与产品编码](BOM_PRODUCT_CODING.md)
 - [银行流水导入](BANK_IMPORT.md)
+- [附件在线预览](ATTACHMENT_PREVIEW.md)
+- [采购合同查看与打印](PURCHASE_CONTRACT_PREVIEW.md)
 - [升级执行器运维](LEAN_OTA_OPERATIONS.md)
 - [试运行与运维](OPERATIONS_AND_PILOT.md)
 

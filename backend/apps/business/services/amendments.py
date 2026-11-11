@@ -90,7 +90,7 @@ def amend(actor, key, sale_id, data):
             if credits:
                 raise ValidationError('增额协议不能抵减原应收。')
             prepared = []
-            for row in rows({'lines': milestones}):
+            for row in rows(data, 'milestones'):
                 fields(row, {'title', 'amount', 'due_date'})
                 prepared.append(
                     {
@@ -106,7 +106,7 @@ def amend(actor, key, sale_id, data):
             if milestones:
                 raise ValidationError('减额协议不能新增应收。')
             seen, total = set(), ZERO
-            for row in rows({'lines': credits}):
+            for row in rows(data, 'credits'):
                 fields(row, {'entry', 'amount'})
                 pk = identity(row.get('entry'), 'entry')
                 if pk in seen:

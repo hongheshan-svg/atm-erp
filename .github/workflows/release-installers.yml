@@ -53,7 +53,8 @@ jobs:
           ./scripts/tests/install.ps1
       - if: runner.os != 'Windows'
         run: |
-          bash -n install.sh install-native.sh
+          # bash -n 只检查第一个文件，后面的会被当作它的参数，必须逐个检查。
+          for script in install.sh install-native.sh scripts/*.sh scripts/tests/*.sh; do bash -n "$script"; done
           PYTHON=python bash install-native.sh configure --config "$RUNNER_TEMP/native-config.json"
   native-smoke:
     runs-on: ubuntu-latest
@@ -88,6 +89,8 @@ jobs:
       - name: Current revision installation and repeat installation
         env:
           NATIVE_SMOKE_DB_PASSWORD: native-ci-only
+        # 显式 bash 才带 pipefail：git archive 失败时 tar 可能解出不完整的源码树却不报错。
+        shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/native"
           git archive HEAD | tar -x -C "$RUNNER_TEMP/native"

@@ -425,7 +425,10 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ...(['开始任务', '完成任务', '补录开始日期', '更正开始日期', '补录完成日期', '更正完成日期'].includes(name) ? { notice: { type: 'info' as const, text: '历时按自然日计算，包含开始和完成当天；同日完成为1天，未完成算至今天。仅统计任务进度，不自动生成工时或人工成本。' } } : {}),
     ...(['补录开始日期', '更正开始日期'].includes(name) ? { prepare: (data: Row) => ({ ...data, expected_started_date: r.started_date || null }) } : {}),
     ...(['补录完成日期', '更正完成日期'].includes(name) ? { prepare: (data: Row) => ({ ...data, expected_completed_date: r.completed_date || null }) } : {}),
-    ...(name === '重新分配' ? { prepare: (data: Row) => ({ ...data, due_date: data.due_date || null }) } : {}),
+    // 选填项清空后也要提交空值，否则服务端按「未提交」保留原值：日期传 null，文本传空串，专业留空按阶段自动归属。
+    ...(name === '重新分配' ? { prepare: (data: Row) => ({ ...data, discipline: data.discipline || '', due_date: data.due_date || null }) } : {}),
+    ...(name === '编辑项目' ? { prepare: (data: Row) => ({ ...data, requirements: data.requirements ?? '', due_date: data.due_date || null }) } : {}),
+    ...(name === '编辑任务' ? { prepare: (data: Row) => ({ ...data, description: data.description ?? '' }) } : {}),
     ...(name === '编辑项目' && ['draft', 'quoted'].includes(r.status) ? { notice: { type: 'warning' as const, text: '历史未签约项目修改需求后将清除原报价，请到关联销售单重新报价并签约。' } } : {}),
   }
 }
