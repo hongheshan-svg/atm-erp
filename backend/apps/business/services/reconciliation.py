@@ -245,7 +245,7 @@ def create(actor, key, data):
             approved_amount=number(data.get('approved_amount'), 'approved_amount', positive=True),
             basis=basis,
             document=doc,
-            reason=text(data, 'reason'),
+            reason=text(data, 'reason', default='') or '发起对账',
         )
         save(statement, user)
         statement.snapshot = snapshot(statement)
@@ -270,7 +270,8 @@ def action(actor, key, statement_id, data, *, void=False):
             .select_related('entry__project', 'entry__purchase')
             .get(pk=initial.pk)
         )
-        reason = text(data, 'reason')
+        # 作废是纠错动作，原因必填；确认对账说明选填，但管理员确认本人发起的预付款核准仍须写明例外原因。
+        reason = text(data, 'reason') if void else text(data, 'reason', default='')
         self_approval = False
         if statement.status == 'void' or (not void and statement.status != 'draft'):
             raise Conflict('此对账单已处理，请刷新。')
@@ -289,6 +290,7 @@ def action(actor, key, statement_id, data, *, void=False):
             if project.status == 'closed':
                 raise Conflict('项目已结项，请先重新打开。')
             statement.status, statement.confirmed_at, statement.confirmed_by = 'confirmed', timezone.now(), user
+            reason = reason or '确认对账'
         save(statement, user)
         return audit(
             user,

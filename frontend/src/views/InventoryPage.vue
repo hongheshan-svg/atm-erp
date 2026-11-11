@@ -2,10 +2,15 @@
 import ModulePage from '../components/ModulePage.vue'
 import ResourcePanel from '../components/ResourcePanel.vue'
 import ModuleTabs from '../components/ModuleTabs.vue'
-import { useRoute } from 'vue-router'
+import ActionDialog from '../components/ActionDialog.vue'
+import { useRoute, useRouter } from 'vue-router'
 import { can } from '../session'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { bomIssueCommand } from '../modules/inventory'
+import { message } from '../utils/request'
+import type { Command } from '../types'
 const route = useRoute()
+const router = useRouter()
 const tabs = computed(() => [
   { key: 'stocks', label: '现有库存' }, { key: 'moves', label: '库存流水' },
   ...(can(['admin', 'warehouse']) ? [{ key: 'receipts', label: '采购收货' }] : []),
@@ -13,15 +18,44 @@ const tabs = computed(() => [
 const returning = computed(() => route.query.intent === 'return')
 const receiptStatus = computed(() => route.query.receipt === 'partial' ? 'partial' : 'approved')
 const projectQuery = computed(() => route.query.project || 'all')
+// BOM 页「按 BOM 领料」跳到 /inventory?project=<id>&issue=bom：直接打开该项目的批量领料。
+const bomIssue = computed(() => route.query.issue === 'bom' && can(['admin', 'warehouse']))
+const issueProject = computed(() => {
+  const id = Number(route.query.project)
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined
+})
+const issueCommand = ref<Command | null>(null)
+const issueError = ref('')
+let issueGeneration = 0
+async function openBomIssue() {
+  const current = ++issueGeneration
+  issueCommand.value = null; issueError.value = ''
+  if (!bomIssue.value) return
+  try {
+    const next = await bomIssueCommand(issueProject.value)
+    if (current === issueGeneration) issueCommand.value = next
+  } catch (e) { if (current === issueGeneration) issueError.value = message(e) }
+}
+watch([bomIssue, issueProject], openBomIssue, { immediate: true })
+onBeforeUnmount(() => { issueGeneration++ })
+function closeBomIssue() {
+  issueGeneration++
+  issueCommand.value = null
+  const { issue: _issue, ...query } = route.query
+  void router.replace({ query })
+}
 </script>
 <template>
-  <ModulePage :key="String(projectQuery)" title="库存" :project-filter="['moves', 'receipts'].includes(String(route.query.section))" v-slot="{ revision, projectId, refresh }">
+  <ModulePage :key="String(projectQuery)" title="库存" :project-filter="['moves', 'receipts'].includes(String(route.query.section)) || bomIssue" v-slot="{ revision, projectId, refresh }">
     <nav v-if="can(['admin', 'warehouse'])" class="panel daily-actions" aria-label="日常库存操作">
       <router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }">采购收货</router-link>
       <router-link :to="{ path: '/inventory', query: { section: 'stocks', intent: 'issue', project: projectId || 'all' } }">项目领料</router-link>
       <router-link :to="{ path: '/inventory', query: { section: 'moves', intent: 'return', project: projectId || 'all' } }">项目退料</router-link>
+      <router-link :to="{ path: '/inventory', query: { section: 'stocks', issue: 'bom', project: projectId || 'all' } }">按 BOM 领料</router-link>
     </nav>
-    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted">先查找物料与库位，再点该行“领料”选择项目并核对本次数量。现有库存为全公司共享库存。</p><ResourcePanel
+    <el-alert v-if="issueError" :title="`按 BOM 领料读取失败：${issueError}`" type="error" :closable="false" show-icon role="alert" />
+    <ActionDialog :command="issueCommand" @close="closeBomIssue" @saved="refresh" />
+    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted">先查找物料与库位，再点该行“领料”选择项目并核对本次数量。整个项目按 BOM 一次领多行请用上方“按 BOM 领料”。现有库存为全公司共享库存。</p><ResourcePanel
       resource="stocks"
       title="现有库存"
       :allow-create="false"

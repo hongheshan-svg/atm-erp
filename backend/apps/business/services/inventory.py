@@ -13,12 +13,15 @@ from .common import (
     ZERO,
     audit,
     fields,
+    identity,
     location_value,
+    lock_items,
     lock_stocks,
     lookup,
     number,
     project_action,
     rounded,
+    rows,
     save,
     state,
     text,
@@ -45,7 +48,7 @@ def opening(actor, key, data):
         qty = number(data.get('quantity'), 'quantity', 3, positive=True)
         unit_cost = number(data.get('unit_cost'), 'unit_cost')
         value = number(rounded(qty * unit_cost), 'value')
-        reason = text(data, 'reason')
+        reason = text(data, 'reason', default='') or '期初库存'
         stock.quantity, stock.value = qty, value
         save(stock, user)
         move = save(StockMove(stock=stock, kind='opening', quantity=qty, value=value, reason=reason), user)
@@ -122,12 +125,53 @@ def shared_arrival(project, item_id, qty, confirm_shared, action):
     return shared
 
 
+def bom_remaining(project, item_id):
+    """本项目该物料按 BOM 还能领多少：各单元需求合计减已领（售后领料不计）。领料与按 BOM 批量领料共用。"""
+    required = (
+        BOMLine.objects.filter(project=project, item_id=item_id).aggregate(total=Sum('quantity'))['total'] or ZERO
+    )
+    return required - issued(project, item_id)
+
+
+def take_issue(user, project, source, qty, *, task, reason, remark, confirm_shared):
+    """在已加锁的项目内出库一条领料：校验 BOM 剩余（售后任务除外）、库存与共享到货，写库存流水和审计。"""
+    service = task is not None and task.kind == 'service'
+    if not service and qty > bom_remaining(project, source.item_id):
+        raise Conflict(f'{source.item.name}：领料超过 BOM 剩余需求，请先修订 BOM。')
+    stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
+    value = take_value(stock, qty)
+    shared = shared_arrival(project, source.item_id, qty, confirm_shared, '领料')
+    stock.quantity -= qty
+    stock.value -= value
+    save(stock, user)
+    move = save(
+        StockMove(
+            stock=stock,
+            project=project,
+            task=task,
+            kind='issue',
+            quantity=-qty,
+            value=-value,
+            reason=reason,
+            remark=remark,
+        ),
+        user,
+    )
+    audit(user, 'stock.issue', move, shared_from=shared)
+    return move
+
+
+def confirmation(data):
+    confirm_shared = data.get('confirm_shared', False)
+    if not isinstance(confirm_shared, bool):
+        raise ValidationError({'confirm_shared': '必须为布尔值。'})
+    return confirm_shared
+
+
 def issue(actor, key, data):
     def execute(user, project):
         fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared', 'remark'})
-        confirm_shared = data.get('confirm_shared', False)
-        if not isinstance(confirm_shared, bool):
-            raise ValidationError({'confirm_shared': '必须为布尔值。'})
+        confirm_shared = confirmation(data)
         state(project, {'active', 'delivering', 'warranty'})
         source = lookup(Stock, data.get('stock'), 'stock')
         task = (
@@ -137,39 +181,113 @@ def issue(actor, key, data):
         if project.status == 'warranty' and not service:
             raise ValidationError({'task': '已验收项目领料必须关联未完成的售后任务。'})
         qty = number(data.get('quantity'), 'quantity', 3, positive=True)
-        if not service:
-            required = (
-                BOMLine.objects.filter(project=project, item_id=source.item_id).aggregate(total=Sum('quantity'))[
-                    'total'
-                ]
-                or ZERO
-            )
-            if qty > required - issued(project, source.item_id):
-                raise Conflict('领料超过 BOM 剩余需求，请先修订 BOM。')
-        reason = text(data, 'reason')
+        # 正常领料的说明选填，缺省记为动作名；退料、采购退货等纠错动作仍须写明原因。
+        reason = text(data, 'reason', default='') or ('售后领料' if service else '项目领料')
         remark = text(data, 'remark', default='')
-        stock = lock_stocks([source.item_id], source.location, user)[source.item_id]
-        value = take_value(stock, qty)
-        shared = shared_arrival(project, source.item_id, qty, confirm_shared, '领料')
-        stock.quantity -= qty
-        stock.value -= value
-        save(stock, user)
-        move = save(
-            StockMove(
-                stock=stock,
-                project=project,
-                task=task,
-                kind='issue',
-                quantity=-qty,
-                value=-value,
-                reason=reason,
-                remark=remark,
-            ),
-            user,
+        move = take_issue(
+            user, project, source, qty, task=task, reason=reason, remark=remark, confirm_shared=confirm_shared
         )
-        return audit(user, 'stock.issue', move, shared_from=shared)
+        return {'id': move.pk}
 
     return project_action(actor, key, 'stock.issue', data.get('project'), data, WAREHOUSE, execute)
+
+
+def bom_issue_lines(project):
+    """按 BOM 批量领料的候选：本项目还有未领 BOM 需求、且有库存的物料，按库位逐行列出并预填本次领用量。
+
+    BOM 领料按物料合计校验（多单元同物料不拆分），同一物料多个库位时按库位顺序依次填满还可领数量。
+    """
+    totals = {}
+    units = {}
+    for line in BOMLine.objects.filter(project=project).order_by('item_id', 'pk'):
+        totals[line.item_id] = totals.get(line.item_id, ZERO) + line.quantity
+        if line.assembly_unit and line.assembly_unit not in units.setdefault(line.item_id, []):
+            units[line.item_id].append(line.assembly_unit)
+    used = {
+        row['stock__item_id']: -row['total']
+        for row in StockMove.objects.filter(
+            project=project, stock__item_id__in=list(totals), kind__in=['issue', 'return']
+        )
+        .exclude(task__kind='service')
+        .values('stock__item_id')
+        .annotate(total=Sum('quantity'))
+    }
+    remaining = {pk: total - used.get(pk, ZERO) for pk, total in totals.items()}
+    stocks = (
+        Stock.objects.filter(item_id__in=[pk for pk, value in remaining.items() if value > ZERO], quantity__gt=0)
+        .select_related('item')
+        .order_by('item__code', 'item_id', 'location', 'pk')
+    )
+    result, left, missing = [], dict(remaining), {pk for pk, value in remaining.items() if value > ZERO}
+    for stock in stocks:
+        missing.discard(stock.item_id)
+        take = min(stock.quantity, max(ZERO, left[stock.item_id]))
+        left[stock.item_id] -= take
+        item = stock.item
+        result.append(
+            {
+                'stock': stock.pk,
+                'item': item.pk,
+                'item_code': item.code,
+                'item_name': item.name,
+                'specification': item.specification,
+                'drawing_number': item.drawing_number,
+                'drawing_revision': item.drawing_revision,
+                'brand': item.brand,
+                'product_category': item.product_category,
+                'part_type': item.part_type,
+                'unit': item.unit,
+                'location': stock.location,
+                'assembly_units': '、'.join(units.get(item.pk, [])),
+                'required_quantity': str(totals[item.pk]),
+                'issued_quantity': str(used.get(item.pk, ZERO)),
+                'bom_remaining': str(remaining[item.pk]),
+                'available': str(stock.quantity),
+                'quantity': str(take),
+            }
+        )
+    return {
+        'project': project.pk,
+        'project_code': project.code,
+        'project_name': project.name,
+        'lines': result,
+        'pending_items': len([pk for pk, value in remaining.items() if value > ZERO]),
+        'missing_items': len(missing),
+    }
+
+
+def issue_batch(actor, key, data):
+    """按项目 BOM 一次领多行：同一事务内逐行沿用单行领料的全部校验，任一行不通过整单不出库。"""
+
+    def execute(user, project):
+        fields(data, {'project', 'lines', 'reason', 'confirm_shared'})
+        confirm_shared = confirmation(data)
+        state(project, {'active', 'delivering'})
+        reason = text(data, 'reason', default='') or '项目领料'
+        prepared, seen = [], set()
+        for index, row in enumerate(rows(data)):
+            try:
+                fields(row, {'stock', 'quantity', 'remark'})
+                stock_id = identity(row.get('stock'), 'stock')
+                qty = number(row.get('quantity'), 'quantity', 3, positive=True)
+                remark = text(row, 'remark', default='')
+            except ValidationError as exc:
+                raise ValidationError({'lines': {index: exc.detail}}) from exc
+            if stock_id in seen:
+                raise ValidationError({'lines': {index: {'stock': '同一库存行不能重复领料。'}}})
+            seen.add(stock_id)
+            prepared.append((lookup(Stock, stock_id, 'stock'), qty, remark))
+        # 先按物料顺序统一加锁，再逐库位扣减，与单行领料、收货的加锁顺序一致，避免互相等待。
+        lock_items({source.item_id for source, _, _ in prepared})
+        moves = []
+        for source, qty, remark in sorted(prepared, key=lambda row: (row[0].item_id, row[0].location, row[0].pk)):
+            move = take_issue(
+                user, project, source, qty, task=None, reason=reason, remark=remark, confirm_shared=confirm_shared
+            )
+            moves.append(move.pk)
+        return {'moves': moves, 'count': len(moves)}
+
+    return project_action(actor, key, 'stock.issue_batch', data.get('project'), data, WAREHOUSE, execute)
 
 
 def return_material(actor, key, source_id, data):

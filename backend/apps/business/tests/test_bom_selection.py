@@ -286,6 +286,7 @@ class BOMRevisionScopeTests(BusinessFixtures, TestCase):
                 'supplier': self.supplier.pk,
                 'due_date': TODAY,
                 'lines': [{'item': self.other.pk, 'quantity': '6', 'unit_price': '3'}],
+                'over_bom_reason': '备件随设备发运',
             },
             status=201,
         )

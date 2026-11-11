@@ -1,5 +1,7 @@
+from datetime import date
+
 from django.core.paginator import Paginator
-from django.db.models import Count, DecimalField, F, Q, Sum, Value
+from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -20,13 +22,86 @@ from apps.core.permissions import (
     sales_for,
 )
 
-from ..models import Entry, Project, PurchaseOrder, Task
+from ..models import BOMLine, Entry, Project, PurchaseOrder, Task
 from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
+from .bom import allocation
 from .common import ZERO
 from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
 from .supply import applicants_by_purchase
 from .task_supervision import supervised_tasks
+
+
+class Plain:
+    """已经整理好的字典行，按序列化器的调用方式交给 bucket 分页。"""
+
+    def __init__(self, rows, many=True, context=None):
+        self.data = list(rows)
+
+
+def handover_projects(user):
+    """本人负责、已签约执行但还没排任务或没建 BOM 的项目：签约交接后项目经理第一件要做的事。"""
+    tasks = Task.objects.filter(project=OuterRef('pk')).exclude(status='cancelled')
+    projects = (
+        Project.objects.filter(manager=user, status='active')
+        .annotate(has_tasks=Exists(tasks), has_bom=Exists(BOMLine.objects.filter(project=OuterRef('pk'))))
+        .filter(Q(has_tasks=False) | Q(has_bom=False))
+        .order_by(F('due_date').asc(nulls_last=True), 'pk')
+    )
+    for project in projects:
+        missing = [
+            label
+            for label, absent in (
+                ('任务计划', not project.has_tasks),
+                ('BOM', not project.has_bom),
+                ('预算', project.budget_materials is None),
+            )
+            if absent
+        ]
+        yield {
+            'id': project.pk,
+            'project': project.pk,
+            'code': project.code,
+            'title': f'{project.code} {project.name}',
+            'project_name': project.name,
+            'due_date': project.due_date,
+            'missing': missing,
+        }
+
+
+def shortage_projects(user):
+    """采购员可见的执行中项目里仍有缺料的 BOM 行（与 BOM 选料下单同一缺料口径），按最早需求日期排序。"""
+    projects = (
+        projects_for(user, Project.objects.all(), PURCHASERS)
+        .filter(status__in=['active', 'delivering'])
+        .filter(Exists(BOMLine.objects.filter(project=OuterRef('pk'))))
+        .order_by('pk')
+    )
+    rows = []
+    for project in projects:
+        lines, plan = allocation(project)
+        short = []
+        for line in lines:
+            entry = plan[line.pk]
+            ordered = entry['assigned'] + entry['shared']
+            if max(ZERO, line.quantity - entry['used']) - ordered - entry['available'] > ZERO:
+                short.append(line)
+        if not short:
+            continue
+        dates = [line.required_date for line in short if line.required_date]
+        rows.append(
+            {
+                'id': project.pk,
+                'project': project.pk,
+                'code': project.code,
+                'title': f'{project.code} {project.name}',
+                'project_name': project.name,
+                'shortage_lines': len(short),
+                'due_date': min(dates) if dates else None,
+            }
+        )
+    rows.sort(key=lambda row: (row['due_date'] or date.max, row['code']))
+    return rows
 
 
 def summary(request):
@@ -45,6 +120,11 @@ def summary(request):
         'prepayments',
         'reconciliations',
         'bank_records',
+        'quoted_sales',
+        'sale_receivables',
+        'handover_projects',
+        'approved_purchases',
+        'shortage_projects',
     }
     if selected_bucket and selected_bucket not in allowed:
         raise ValidationError('未知待办分类。')
@@ -93,6 +173,30 @@ def summary(request):
         # 已结项/已取消项目的销售单与管理员移入“已删除记录”的销售单不再是待跟进事项。
         sales = visible_rows(sales.exclude(status='cancelled').exclude(project__status__in=['closed', 'cancelled']))
         result['sales'] = bucket(sales, SalesSerializer, 'sales')
+        # 已报价待签约单独列出，免得淹没在全部销售单里。
+        result['quoted_sales'] = bucket(sales.filter(status='quoted'), SalesSerializer, 'quoted_sales')
+        # 本人销售单关联项目的逾期应收：销售负责催款，与「交付与回款」同一读取范围（本人负责的销售单）。
+        amount = DecimalField(max_digits=18, decimal_places=2)
+        receivables = (
+            Entry.objects.filter(
+                kind='receivable',
+                cancelled=False,
+                project__sale__manager=user,
+                project__sale__is_deleted=False,
+                due_date__lt=timezone.localdate(),
+            )
+            .exclude(project__status__in=['closed', 'cancelled'])
+            .select_related('project__customer', 'project__sale')
+            .annotate(net_paid=Coalesce(Sum('payments__amount'), Value(ZERO), output_field=amount))
+            .annotate(remaining=F('amount') - F('credit_amount') - F('net_paid'))
+            .filter(remaining__gt=0)
+            .order_by('due_date', 'pk')
+        )
+        result['sale_receivables'] = bucket(receivables, EntrySerializer, 'sale_receivables')
+        if result['sale_receivables'] is not None:
+            codes = dict(receivables.values_list('pk', 'project__sale__code'))
+            for row in result['sale_receivables']['results']:
+                row['sale_code'] = codes.get(row['id'])
     if not has_role(user, OPERATION_ROLES):
         return {key: value for key, value in result.items() if value is not None}
     projects = projects_for(user, Project.objects.all())
@@ -115,6 +219,15 @@ def summary(request):
         ),
     ).order_by(F('due_date').asc(nulls_last=True), 'pk')
     result['supervised_tasks'] = bucket(supervised, TaskSerializer, 'supervised_tasks')
+    if result['tasks'] is not None and result['supervised_tasks'] is not None:
+        # 「任务逾期」卡片要包含我负责确认的逾期任务；与本人任务重叠的只算一次。
+        overdue = Q(due_date__lt=timezone.localdate())
+        result['tasks']['overdue_total'] = len(
+            set(tasks.filter(overdue).values_list('pk', flat=True))
+            | set(supervised.filter(overdue).values_list('pk', flat=True))
+        )
+    if has_role(user, MANAGERS) and (not selected_bucket or selected_bucket == 'handover_projects'):
+        result['handover_projects'] = bucket(list(handover_projects(user)), Plain, 'handover_projects')
     if has_role(user, {'production_manager'}):
         production_tasks = with_task_flags(
             Task.objects.filter(
@@ -153,6 +266,11 @@ def summary(request):
         )
     if has_role(user, PURCHASERS):
         result['drafts'] = bucket(purchases.filter(status='draft', created_by=user), PurchaseSerializer, 'drafts')
+        # 批准后还没发合同、也没到货的本人采购：提醒采购员归档合同、向供应商下单。
+        approved = purchases.filter(status='approved', created_by=user, contract_versions__isnull=True).distinct()
+        result['approved_purchases'] = bucket(approved, PurchaseSerializer, 'approved_purchases')
+        if not selected_bucket or selected_bucket == 'shortage_projects':
+            result['shortage_projects'] = bucket(shortage_projects(user), Plain, 'shortage_projects')
     if has_role(user, PURCHASERS | WAREHOUSE):
         overdue = (
             purchases.filter(status__in=['approved', 'partial'])

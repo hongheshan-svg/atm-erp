@@ -28,7 +28,7 @@ function confirm() {
   if (!report || String(report.supplier) !== String(supplier.value) || report.month !== month.value) return
   command.value = { title: '确认供应商月度对账', draftScope: `supplier:${report.supplier}:${report.month}`, path: '/business/reconciliations/supplier-monthly/',
     subject: `${suppliers.value.find(s => s.id === report.supplier)?.name || report.supplier} · ${report.month}`,
-    fields: [{ key: 'counterparty_balance', label: '供应商确认的期末余额' }, { key: 'reason', label: '核对依据与说明', type: 'textarea' }],
+    fields: [{ key: 'counterparty_balance', label: '供应商确认的期末余额' }, { key: 'reason', label: '核对依据与说明', type: 'textarea', optional: true, placeholder: '选填；不填按「月结确认」记录' }],
     prepare: values => ({ ...values, supplier: report.supplier, month: report.month, expected_snapshot: report.snapshot_hash }),
     notice: { type: 'info', text: '按原收退货与付款核对。差异为零时，按各原应付当前可结算金额生成已确认对账单；不新增款项或付款。负余额和未收货预付继续从原应付处理。' },
   }

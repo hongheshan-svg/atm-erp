@@ -108,7 +108,7 @@ def confirm(actor, key, data):
 
     def execute(user):
         fields(data, {'supplier', 'month', 'expected_snapshot', 'counterparty_balance', 'reason'})
-        reason = text(data, 'reason')
+        reason = text(data, 'reason', default='') or '月结确认'
         supplier = identity(data.get('supplier'), 'supplier')
         # Match the normal project-before-entry locking order across every affected order.
         project_ids = PurchaseOrder.objects.filter(supplier_id=supplier).values('project_id')

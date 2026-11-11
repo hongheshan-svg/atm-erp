@@ -69,7 +69,8 @@ async function fixture(page: Page) {
 async function openPayment(page: Page, entryId: number) {
   await page.goto(`/erp/finance?section=entries&resource=entries&focus=${entryId}`)
   await detailAction(page, '登记收付款')
-  const form = page.getByRole('dialog', { name: '登记收付款', exact: true })
+  // 采购应付的对话框标题与行按钮一致，显示「登记付款」。
+  const form = page.getByRole('dialog', { name: '登记付款', exact: true })
   await expect(form).toBeVisible()
   return form
 }
@@ -169,7 +170,7 @@ test('U14 有效核准后在付款表单上传并选中凭证，实际付款及�
   await expect(form.getByLabel('结算凭证', { exact: true })).toHaveValue(String(document.id))
   await noPayments(f) // Upload alone must never create a Payment or consume the approval.
   expect(Number((await f.finance.get(business + `reconciliations/${statement.id}/`)).remaining_amount)).toBe(125)
-  const submit = form.getByRole('button', { name: '登记收付款记录', exact: true })
+  const submit = form.getByRole('button', { name: '登记付款记录', exact: true })
   await form.getByLabel('结算凭证', { exact: true }).scrollIntoViewIfNeeded()
   await expect(form.getByLabel('结算凭证', { exact: true })).toBeInViewport()
   await expect(submit).toBeEnabled()

@@ -1,5 +1,5 @@
 import { options } from '../catalog'
-import { can, hasRoles, purchasing, roleLabels } from '../session'
+import { can, hasRoles, operations, purchaseReader, purchasing, roleLabels } from '../session'
 import { today } from '../forms'
 import type { Catalog } from '../catalog'
 import type { Field } from '../types'
@@ -31,6 +31,15 @@ export const rows = (key: string, label: string, fields: Field[]): Field => ({
   fields,
 })
 export const reason = t('reason', '原因 / 说明')
+// 收货、领料、登记收付款等正向日常动作的说明选填，不填时服务端按动作名记录（如「采购收货」）；
+// 退料、退货、冲销、取消等纠错动作仍用上面必填的 reason。
+// 标签默认沿用「原因 / 说明」，只是不再必填。
+export const optionalReason = (label = '原因 / 说明', placeholder = '选填；不填按本次操作名称记录'): Field => ({ key: 'reason', label, optional: true, placeholder, type: 'text', wide: false })
+// 列表单元格跳到关联单据：项目页、采购单明细（采购页按 focus 打开）。无权查看时只显示文字。
+export const projectLink = (row: Row) => row.project && operations() ? `/projects/${row.project}` : undefined
+export const purchaseLink = (row: Row) => row.purchase && purchaseReader()
+  ? { path: '/purchases', query: { resource: 'purchases', focus: String(row.purchase), project: String(row.project || 'all') } }
+  : undefined
 export const qty = t('quantity', '数量')
 export const price = t('unit_price', '含税单价（元）')
 export const buyer = purchasing

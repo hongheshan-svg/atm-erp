@@ -6,6 +6,10 @@ import type { Column } from '../types'
 import { t } from './shared'
 import { date } from './shared'
 import { reason } from './shared'
+import { optionalReason } from './shared'
+import { projectLink } from './shared'
+import { purchaseLink } from './shared'
+import { money as formatMoney } from '../utils/money'
 import { finance } from './shared'
 import { C } from './shared'
 import { project } from './shared'
@@ -46,6 +50,7 @@ export const columns: Record<string, Column[]> = {
     C('partner_name', '往来单位'), C('project_name', '项目'),
     C('agreed_payment_date', '约定付款日'), C('due_date', '到期日'), C('due_amount', '当前到期金额'),
     C('balance', '待结算'), C('paid_amount', '已结算'),
+    { key: 'purchase_code', label: '来源采购单', format: row => row.purchase_code || '—', link: purchaseLink },
     {
       key: 'status',
       label: '状态',
@@ -58,14 +63,17 @@ export const columns: Record<string, Column[]> = {
         : undefined,
     },
   ],
+  // 流水按资金方向显示「收 / 付」，并列出项目与往来单位；对账单显示编号可跳转。
   payments: [
     C('entry_title', '款项'),
-    C('amount', '金额'),
+    { key: 'amount', label: '收 / 付金额', format: row => row.cash_amount == null ? formatMoney(row.amount) : `${String(row.cash_amount).startsWith('-') ? '付' : '收'} ${formatMoney(String(row.cash_amount).replace(/^-/, ''))}` },
     C('date', '日期'),
+    { key: 'project_name', label: '项目', format: row => [row.project_code, row.project_name].filter(Boolean).join(' · ') || '—', link: projectLink },
+    { key: 'partner_name', label: '往来单位', format: row => row.partner_name || '—' },
     C('reason', '说明'),
     C('method', '结算方式'), C('account', '账户标识'), C('reference', '银行流水号'),
     C('reversal_of', '冲销原记录'),
-    C('reconciliation', '对账单ID'),
+    { key: 'reconciliation_code', label: '对账单', format: row => row.reconciliation_code || '—', link: row => row.reconciliation ? { path: '/finance', query: { section: 'reconciliations', resource: 'reconciliations', focus: String(row.reconciliation) } } : undefined },
     { key: 'bank_matched', label: '银行核对', format: r => r.bank_matched ? '已匹配' : '未匹配' },
     { key: 'reversed_by', label: '记录状态', format: ledgerStatus },
   ],
@@ -103,6 +111,7 @@ export function actionNames(resource: string, r: Row): string[] {
     if (r.purchase && Number(r.balance) > 0) a.push('申请预付款核准')
     if (Number(r.balance) > 0) a.push('登记收付款')
     if (Number(r.balance) < 0) a.push('退款')
+    if (r.kind === 'receivable' && !r.cancelled && Number(r.balance) > 0) a.push('调整到期日')
     if (r.kind === 'expense' && !r.cancelled) a.push('取消费用')
   }
   if (resource === 'payments' && finance() && !r.reversal_of && !r.reversed_by) a.push('冲销付款')
@@ -113,7 +122,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '生成对账单' || name === '申请预付款核准') return entryReconciliationCommand(r, name === '申请预付款核准')
   if (name === '补录凭证') {
     const docs = await all('/business/documents/', { project: r.project, category: 'receipt' })
-    return { title: name, path: `/business/payments/${r.id}/attach-evidence/`, fields: [{ key: 'document', label: '凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, reason], notice: { type: 'info', text: '追加凭证并留痕，不覆盖原付款金额和历史凭证。' } }
+    return { title: name, path: `/business/payments/${r.id}/attach-evidence/`, fields: [{ key: 'document', label: '凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, optionalReason(undefined, '选填；不填按「补充收付凭证」记录')], notice: { type: 'info', text: '追加凭证并留痕，不覆盖原付款金额和历史凭证。' } }
   }
   if (name === '查看凭证') {
     const detail = await read(`/business/payments/${r.id}/`)
@@ -126,6 +135,17 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ...(Number(r.credit_amount) ? [t('credit_amount', '冲减（取消费用或合同抵减，不产生流水）')] : []),
     { key: 'lines', label: '收付流水', type: 'rows', fields: [t('id', '流水ID'), t('date', '日期'), t('amount', '金额'), t('method', '方式'), t('account', '账户'), t('reference', '银行流水号'), t('reason', '说明'), t('reversal_of', '冲销原记录'), t('document', '凭证ID')] },
   ] }
+  if (name === '调整到期日') return {
+    title: name, subject: r.title, path: `/business/entries/${r.id}/adjust-due-date/`, submitLabel: '确认调整到期日',
+    fields: [
+      { key: 'current_due_date', label: '当前到期日', readonly: true, displayOnly: true },
+      date('due_date', '新到期日'),
+      { ...reason, label: '调整原因', hint: '写明合同约定与实际依据，如「合同约定发货后 30 天付款，实际 2026-11-11 发货」。' },
+    ],
+    initial: { current_due_date: r.due_date || '—', due_date: r.due_date || '' },
+    prepare: data => ({ due_date: data.due_date, reason: data.reason, expected_due_date: r.due_date }),
+    notice: { type: 'info', text: '只调整本应收节点的到期日，金额和已收流水不变；调整前后日期与原因写入操作审计。合同约定发货 / 验收后若干天付款时，按实际发生日调整。' },
+  }
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]
   let initial: Row = {}
@@ -139,14 +159,25 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     冲销付款: 'reverse',
   }
   if (routes[name]) path += routes[name] + '/'
+  // 行按钮写的是「登记收款 / 登记付款」，对话框标题与提交按钮保持一致，并在顶部显示往来单位、项目、原金额与余额。
+  const refund = name === '退款'
+  const title = refund ? name : r.kind === 'receivable' ? '登记收款' : '登记付款'
+  let notice: Command['notice']
   if (['登记收付款', '退款'].includes(name)) {
+    const overdue = r.status === 'overdue'
+    const balanceText = formatMoney(String(r.balance ?? '').replace(/^-/, ''))
+    notice = { type: overdue ? 'warning' : 'info', text: [
+      r.partner_name, r.project_name, r.amount != null ? `原金额 ${formatMoney(r.amount)}` : '',
+      `${refund ? '待退款' : r.kind === 'receivable' ? '待收' : '待付'} ${balanceText}`,
+      r.due_date ? `到期 ${r.due_date}${overdue ? '（已逾期）' : ''}` : '',
+    ].filter(Boolean).join(' · ') }
     const docs = await all('/business/documents/', { project: r.project, category: 'receipt' })
-    fields = [t('amount', '金额（元）'), date(), reason, { key: 'method', label: '结算方式', type: 'select', optional: true, options: [{ value: 'bank', label: '银行转账' }, { value: 'cash', label: '现金' }, { value: 'other', label: '其他' }] }, t('account', '账户标识', true), t('reference', '银行流水号', true), { key: 'document', label: '结算凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }]
+    fields = [t('amount', '金额（元）'), date(), refund ? reason : optionalReason(undefined, `选填；不填按「${title}」记录`), { key: 'method', label: '结算方式', type: 'select', optional: true, options: [{ value: 'bank', label: '银行转账' }, { value: 'cash', label: '现金' }, { value: 'other', label: '其他' }] }, t('account', '账户标识', true), t('reference', '银行流水号', true), { key: 'document', label: '结算凭证', type: 'select', upload: { context: { project: r.project }, category: 'receipt' }, optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }]
     initial = { amount: String(r.balance).replace(/^-/, '') }
     const statements = await all('/business/reconciliations/', { entry: r.id, status: 'confirmed' })
     const eligible = statements.filter(s => s.valid && Number(s.remaining_amount) > 0 && (s.kind === 'refund') === (name === '退款'))
     if ((r.purchase || name === '退款') && !eligible.length) return {
-      title: name, path, fields: [], subject: r.title,
+      title, path, fields: [], subject: r.title,
       blocked: name === '退款' ? '尚无可用的已确认退款对账单。请先生成退款对账并确认，再登记退款。' : '尚无可用的已确认对账或预付款核准。已收货款先对账；未收货预付款按合同申请核准。',
       alternatives: [{ label: '生成对账单', open: () => entryReconciliationCommand(r) }, ...(r.purchase && name !== '退款' ? [{ label: '申请预付款核准', open: () => entryReconciliationCommand(r, true) }] : [])],
       links: [{ label: '查看已有对账与核准', path: `/projects/${r.project}?tab=finance&section=reconciliations` }],
@@ -168,5 +199,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     }
   }
   if (name === '冲销付款') fields = [date(), reason]
+  if (refund) return { title, path, fields, initial, method, readonly, prepare, notice }
+  if (name === '登记收付款') return { title, submitLabel: `${title}记录`, path, fields, initial, method, readonly, prepare, notice }
   return { title: name, path, fields, initial, method, readonly, prepare }
 }

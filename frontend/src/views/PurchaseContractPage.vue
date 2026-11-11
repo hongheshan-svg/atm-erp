@@ -69,7 +69,7 @@ async function archive() {
     fields: [
       { key: 'document', label: '已签署合同附件', type: 'select', upload: { context: { purchase: Number(purchaseId) }, category: 'contract' }, options: docs.map(d => ({ value: d.id, label: d.original_name })) },
       { key: 'delivery_address', label: '双方确认的收货地址' },
-      { key: 'reason', label: '归档或修订原因', type: 'textarea' },
+      { key: 'reason', label: '归档或修订原因', type: 'textarea', optional: true, placeholder: '选填；修订版本请写明修订内容。不填按「归档采购合同」记录' },
       { key: 'confirmed', label: '已核对签署文件与本版完整合同、明细、条款及收货地址一致', type: 'boolean', initial: false },
     ],
     prepare: values => ({ ...values, expected_snapshot: snapshot }),

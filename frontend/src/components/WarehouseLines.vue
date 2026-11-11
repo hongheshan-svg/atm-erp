@@ -12,6 +12,9 @@ const uid = useId(), root = ref<HTMLElement>(), page = ref(0)
 const projectInfo = ref<Row>(), demand = ref<Row[]>([]), error = ref(''), loading = ref(false)
 let generation = 0
 const columns = computed(() => props.field.fields!.filter(field => !field.hidden))
+// 按 BOM 批量领料：行数据（需求、BOM 未领、可用）由服务端按项目算好，不再逐行读取项目需求。
+const batch = computed(() => props.field.fields!.some(field => field.key === 'bom_remaining'))
+const receipt = computed(() => props.field.warehouse === 'receipt')
 const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(model.value.length / 20) - 1)) * 20)
 const indices = computed(() => Array.from({ length: Math.min(20, model.value.length - start.value) }, (_, i) => start.value + i))
 const path = (i: number, key: string) => `${props.prefix}.${i}.${key}`
@@ -20,9 +23,34 @@ function source(row: Row) {
   const identity = props.field.warehouse === 'receipt' ? 'line' : 'stock'
   return (props.field.initial as Row[]).find(item => item[identity] === row[identity]) || row
 }
+// 同一张单据的明细必然同项目：项目号放在表头，不在每行重复。
+const projectLabel = computed(() => {
+  if (receipt.value || batch.value) {
+    const first = (props.field.initial as Row[])[0] || {}
+    return [first.project_code, first.project_name].filter(Boolean).join(' · ')
+  }
+  return projectInfo.value ? [projectInfo.value.code, projectInfo.value.name].filter(Boolean).join(' · ') : loading.value ? '读取中…' : '请先选择项目'
+})
+const decimal = /^\d+(\.\d{1,3})?$/
+const total = (key: string) => sumQuantities(model.value.map(row => String(row[key] ?? '').trim()).filter(value => decimal.test(value)))
+const summary = computed(() => receipt.value
+  ? `本次合格 ${total('quantity')} / 待收 ${total('remaining')}，共 ${model.value.length} 行`
+  : `本次出库 ${total('quantity')}${batch.value ? ` / BOM 未领 ${total('bom_remaining')}` : ''}，共 ${model.value.length} 行`)
+// 部分到货时提醒逐行核对：合格＋隔离与待收不一致的行高亮。
+function partial(row: Row) {
+  if (!receipt.value) return false
+  const arrived = Number(row.quantity || 0) + Number(row.pending_quantity || 0)
+  return arrived !== Number(source(row).remaining || 0)
+}
+function fill(mode: 'pending' | 'suggested' | 'zero') {
+  for (const row of model.value) {
+    if (mode === 'zero') row.quantity = '0'
+    else row.quantity = mode === 'pending' ? source(row).remaining : source(row).quantity
+    if (receipt.value) row.pending_quantity = '0'
+  }
+}
 function shown(row: Row, key: string) {
-  if (props.field.warehouse === 'issue') {
-    if (key === 'project_code') return projectInfo.value?.code || (loading.value ? '读取中…' : '请先选择项目')
+  if (props.field.warehouse === 'issue' && !batch.value) {
     if (key === 'required_quantity') {
       if (props.context.task) return '按售后任务领用'
       if (!projectInfo.value || error.value) return '—'
@@ -35,7 +63,7 @@ function shown(row: Row, key: string) {
 async function loadProject() {
   const current = ++generation
   projectInfo.value = undefined; demand.value = []; error.value = ''; loading.value = false
-  if (props.field.warehouse !== 'issue' || !props.context.project) return
+  if (props.field.warehouse !== 'issue' || batch.value || !props.context.project) return
   loading.value = true
   try {
     const id = props.context.project
@@ -58,16 +86,21 @@ defineExpose({ focusPath })
 </script>
 <template>
   <fieldset ref="root" class="warehouse-lines">
-    <legend>{{ field.label }} · {{ model.length }} 行</legend>
+    <legend>{{ field.label }} · {{ model.length }} 行<template v-if="projectLabel"> · 项目 {{ projectLabel }}</template></legend>
     <p class="form-hint">{{ field.hint }}</p>
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="loadProject">重试</button></p>
-    <p class="table-guide">电脑上左右滚动可查看全部列；手机上按每款物料逐项填写。</p>
+    <div class="warehouse-summary" role="status"><strong>{{ summary }}</strong><span v-if="receipt || model.length > 1" class="warehouse-fill"
+      ><button v-if="receipt" type="button" :disabled="disabled" @click="fill('pending')">全部按待收填入</button
+      ><button v-else type="button" :disabled="disabled" @click="fill('suggested')">恢复建议数量</button
+      ><button type="button" :disabled="disabled" @click="fill('zero')">全部清零</button></span
+    ><small v-if="receipt" class="muted">合格与隔离合计不等于待收的行已高亮，部分到货请逐行核对。</small></div>
+    <p class="table-guide">手机上按每款物料逐项填写。</p>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
       <table :aria-label="`${field.label}明细`">
         <thead><tr><th scope="col">序号</th><th v-for="column in columns" :key="column.key" scope="col">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
-        <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock">
+        <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock" :class="{ 'partial-line': partial(model[i]!) }">
           <td data-label="序号" class="line-index">{{ i + 1 }}</td>
-          <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="{ 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark' }" :data-field-path="path(i, column.key)">
+          <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="{ 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark', 'material-cell': column.key === 'material_label' }" :data-field-path="path(i, column.key)">
             <span v-if="column.displayOnly" class="material-value">{{ shown(model[i]!, column.key) }}</span>
             <template v-else>
               <label class="input-label" :for="inputId(i, column.key)">{{ column.label }}</label>
@@ -92,9 +125,14 @@ th, td { padding: 10px; min-width: 92px; border-bottom: 1px solid var(--field-li
 th { position: sticky; top: 0; background: var(--subtle-2); z-index: 1; white-space: nowrap; }
 th:first-child, td:first-child { min-width: 44px; }
 .material-value { display: block; white-space: pre-line; overflow-wrap: anywhere; min-width: 90px; max-width: 260px; }
-td:nth-child(3) .material-value, td:nth-child(4) .material-value { min-width: 120px; }
-.editable-cell { min-width: 145px; }
-.remark-cell { min-width: 240px; }
+.material-cell .material-value { min-width: 130px; }
+.editable-cell { min-width: 130px; }
+.remark-cell { min-width: 180px; }
+.warehouse-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 8px 0; }
+.warehouse-fill { display: inline-flex; gap: 6px; }
+.warehouse-fill button { min-height: 30px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--brand-ink); background: var(--paper, #fff); border: 1px solid var(--field-line); border-radius: 5px; cursor: pointer; }
+.warehouse-fill button:disabled { cursor: not-allowed; opacity: .6; }
+.partial-line td { background: var(--warn-wash); }
 input, textarea { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px; font: inherit; border: 1px solid var(--field-line); border-radius: 5px; background: var(--paper, #fff); }
 textarea { resize: vertical; }
 small { display: block; color: var(--mute); font-size: 11px; line-height: 1.4; margin-top: 4px; }

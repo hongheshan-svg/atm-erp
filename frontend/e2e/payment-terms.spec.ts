@@ -90,7 +90,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
     await dialog(page).getByLabel('实际到货 / 合格收货日期', { exact: true }).fill(date!)
     await dialog(page).getByLabel('补录原因', { exact: true }).fill('依据原始送货单补录历史收货，日期与数量已核对')
     await dialog(page).getByLabel('数量', { exact: true }).fill(quantity!)
-    await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill('按原收货记录核对')
+    await dialog(page).getByLabel('送货单号 / 备注', { exact: true }).fill('按原收货记录核对')
     await save(page, `/purchases/${purchase.id}/receive/`)
   }
   await page.goto(`/erp/projects/${signed.project}?tab=finance&section=entries`)

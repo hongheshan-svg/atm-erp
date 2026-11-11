@@ -120,6 +120,12 @@ def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
             else None
         )
         date = event_date(data)
+        # 正常收付款说明选填，缺省记为动作名；退款属于纠错，仍须写明原因。
+        reason = (
+            text(data, 'reason')
+            if refund
+            else text(data, 'reason', default='') or ('登记收款' if entry.kind == 'receivable' else '登记付款')
+        )
         # Project/entry locks alone do not serialize the same bank transfer split across projects.
         # Allocation already holds this account lock; transaction advisory locks are reentrant.
         if reference or method == 'bank':
@@ -134,7 +140,7 @@ def pay(actor, key, entry_id, data, *, refund=False, bank_allocation=False):
                 reconciliation=statement,
                 amount=amount,
                 date=date,
-                reason=text(data, 'reason'),
+                reason=reason,
                 method=method,
                 account=account,
                 reference=reference,
@@ -157,7 +163,8 @@ def attach_evidence(actor, key, payment_id, data):
         document = lookup(Document, data.get('document'), 'document', project=entry.project, category='receipt')
         if source.document_id == document.pk or source.evidence.filter(document=document).exists():
             raise Conflict('此凭证已关联到该流水，请刷新查看。')
-        evidence = save(PaymentEvidence(payment=source, document=document, reason=text(data, 'reason')), user)
+        reason = text(data, 'reason', default='') or '补充收付凭证'
+        evidence = save(PaymentEvidence(payment=source, document=document, reason=reason), user)
         audit(user, 'payment.evidence', source, document=document.pk, reason=evidence.reason)
         return {'id': evidence.pk}
 
@@ -233,6 +240,32 @@ def cancel_expense(actor, key, entry_id, data):
         return audit(user, 'expense.cancel', entry, reason=reason)
 
     return entry_action(actor, key, 'expense.cancel', entry_id, data, execute)
+
+
+def adjust_due_date(actor, key, entry_id, data):
+    """调整应收节点到期日（如合同约定发货后/验收后 N 天付款）：只改到期日，金额与已收流水不变，前后值留审计。"""
+
+    def execute(user, entry):
+        fields(data, {'due_date', 'reason', 'expected_due_date'})
+        if entry.kind != 'receivable' or entry.cancelled:
+            raise Conflict('只有未取消的应收款项可以调整到期日；采购应付按采购账期和实际收货计算。')
+        if entry.project.status in {'closed', 'cancelled'}:
+            raise Conflict('项目已结项或取消，不能调整到期日。')
+        if balance(entry) <= ZERO:
+            raise Conflict('该应收已结清或待退款，无需调整到期日。')
+        expected = day(data, 'expected_due_date')
+        if expected != entry.due_date:
+            raise Conflict('到期日已被他人调整，请刷新后重试。')
+        target = day(data, 'due_date')
+        if target == entry.due_date:
+            raise ValidationError({'due_date': '新到期日与当前到期日相同。'})
+        reason = text(data, 'reason')
+        before = entry.due_date
+        entry.due_date = target
+        save(entry, user)
+        return audit(user, 'entry.due_date', entry, before=before.isoformat(), after=target.isoformat(), reason=reason)
+
+    return entry_action(actor, key, 'entry.due_date', entry_id, data, execute)
 
 
 def cost(project):
