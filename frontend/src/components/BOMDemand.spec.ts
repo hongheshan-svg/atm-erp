@@ -209,6 +209,8 @@ it('BOM导入错误逐行显示中文，保留行号且不输出原始数据字�
 
 it('编制与采购视图使用相同BOM行，关键列优先且选择保留稳定行号', async () => {
   user.value = { roles: ['admin'] }
+  // 采购勾选与批量删除互斥，这里验证的是平时的采购下单。
+  batchMode.value = false
   vi.mocked(read).mockResolvedValueOnce({ lines: [
     { bom_line: 41, item_code: 'I1', item_name: '电机', assembly_unit: '单元A', quantity: '5', shortage: '2' },
     { bom_line: 42, item_code: 'I1', item_name: '电机', assembly_unit: '单元B', quantity: '3', shortage: '1' },
@@ -228,6 +230,7 @@ it('编制与采购视图使用相同BOM行，关键列优先且选择保留稳�
   await wrapper.findAll('el-button-stub').find(button => button.text() === '从 BOM 多选下单')!.trigger('click')
   expect(wrapper.getComponent({ name: 'BOMPurchasePicker' }).props('initialSelection')).toEqual([41, 42])
   wrapper.unmount()
+  batchMode.value = true
 })
 
 it('管理员跨页选择427项BOM，切换筛选或项目清空旧选择', async () => {
@@ -528,4 +531,29 @@ it('停用物料整页提示并行内标出，采购复选框说明原因，修�
   expect(box.attributes('title')).toContain('物料已停用')
   expect(wrapper.get('input[aria-label="选择 A2 01"]').attributes('title')).toBeUndefined()
   wrapper.unmount()
+})
+
+it('管理员在采购视图开批量删除：改用删除勾选，采购勾选和下单栏让出，退出后恢复', async () => {
+  user.value = { roles: ['admin'] }
+  const lines = [
+    { bom_line: 1, item: 1, item_code: 'A', item_name: '缺料件', assembly_unit: '01', quantity: '2', issued: '0', incoming: '0', unapproved: '0', available: '0', shortage: '2', required_date: '2999-01-01' },
+    { bom_line: 2, item: 2, item_code: 'B', item_name: '另一缺料件', assembly_unit: '02', quantity: '1', issued: '0', incoming: '0', unapproved: '0', available: '0', shortage: '1', required_date: '2999-01-01' },
+  ]
+  const wrapper = mountFull(lines, { initialView: 'purchase' })
+  await flushPromises()
+  // 两套勾选不并排：采购勾选列、底部下单栏和行尾「操作」列都让出，1280 宽不再横向滚动。
+  expect(wrapper.find('[aria-label="选择 A 01"]').exists()).toBe(false)
+  expect(wrapper.find('.bom-selection-bar').exists()).toBe(false)
+  expect(wrapper.findAll('.bom-details-table th').map(th => th.text())).not.toContain('操作')
+  await wrapper.get('[aria-label="选择BOM明细 B 02"]').setValue(true)
+  expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('已选 1')
+  await wrapper.findAll('button').find(b => b.text() === '批量删除（1）')!.trigger('click')
+  expect(wrapper.getComponent(RecordDeletionDialog).props('rows')!.map(row => row.id)).toEqual([2])
+  batchMode.value = false
+  await flushPromises()
+  expect(wrapper.find('[aria-label="选择 A 01"]').exists()).toBe(true)
+  expect(wrapper.find('.bom-selection-bar').exists()).toBe(true)
+  expect(wrapper.find('[aria-label="BOM批量选择"]').exists()).toBe(false)
+  wrapper.unmount()
+  batchMode.value = true
 })
