@@ -25,6 +25,15 @@ class SalesTests(BusinessFixtures, TestCase):
         self.post('manager', f'projects/{project.pk}/edit/', {'members': [], 'reason': '移除兼岗成员'}, status=409)
         self.assertTrue(project.members.filter(pk=actor.pk).exists())
 
+    def test_quote_reason_is_optional_and_defaults_in_audit(self):
+        own = self.sales_manager_order()
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '100'})
+        self.assertEqual(AuditLog.objects.get(operation='sale.quote').detail['reason'], '报价')
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '120', 'reason': '  '})
+        self.assertEqual(AuditLog.objects.filter(operation='sale.quote', detail__reason='报价').count(), 2)
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '130', 'reason': '客户议价'})
+        self.assertEqual(SalesOrder.objects.get(pk=own).quote_amount, 130)
+
     def test_sales_purchaser_roles_union_without_sales_scope_leak(self):
         actor = self.users['sales_manager']
         actor.additional_roles = ['purchaser']

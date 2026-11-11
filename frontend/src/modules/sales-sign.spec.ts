@@ -36,4 +36,11 @@ describe('销售列表与签约对话框', () => {
     const ok = { milestones: [{ amount: '300000' }, { amount: '200000' }] }
     expect(command.prepare!(ok)).toBe(ok)
   })
+
+  it('报价说明选填，编辑与取消销售的原因仍必填', async () => {
+    const quote = await salesCommand({ id: 3, status: 'draft', manager: 1 }, '报价')
+    expect(quote.fields.find(field => field.key === 'reason')).toMatchObject({ label: '报价说明（选填）', optional: true })
+    const cancel = await salesCommand({ id: 3, status: 'draft', manager: 1 }, '取消销售')
+    expect(cancel.fields.find(field => field.key === 'reason')?.optional).toBeUndefined()
+  })
 })

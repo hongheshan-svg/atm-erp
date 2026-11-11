@@ -130,7 +130,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     return {
       title: action,
       path: `${path}${row.id}/quote/`,
-      fields: [{ key: 'amount', label: '报价金额（元）' }, reason],
+      fields: [{ key: 'amount', label: '报价金额（元）' }, { key: 'reason', label: '报价说明（选填）', optional: true }],
       initial: { amount: row.quote_amount },
     }
   if (action === '取消销售')
