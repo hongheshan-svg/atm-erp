@@ -79,6 +79,23 @@ class NativeInstallTests(unittest.TestCase):
                 self.assertRegex(config, r'access_log \S+ erp_request;')
                 self.assertNotRegex(config, r'\$(http_authorization|http_cookie|request_body)')
 
+    def test_api_proxy_waits_as_long_as_frontend_transfers(self):
+        # 前端上传、导入和导出最多等 5 分钟；Nginx 若先在 60 秒断开，服务端已写入的大导入会被误报失败。
+        import re
+
+        root = Path(__file__).parents[2]
+        request = (root / 'frontend/src/utils/request.ts').read_text(encoding='utf-8')
+        transfer = re.search(r'export const TRANSFER_TIMEOUT = (\d+) \* 60_000', request)
+        self.assertIsNotNone(transfer)
+        seconds = int(transfer.group(1)) * 60
+        docker_config = (root / 'docker/app/nginx.conf').read_text(encoding='utf-8')
+        native_config = native.nginx_config(self.config, self.root)
+        for name, config in (('docker', docker_config), ('native', native_config)):
+            with self.subTest(config=name):
+                api = re.search(r'location /api/ \{(.*?)\n    \}', config, re.S)
+                self.assertIsNotNone(api)
+                self.assertEqual(re.findall(r'proxy_read_timeout (\d+);', api.group(1)), [str(seconds)])
+
     def test_every_html_location_keeps_security_headers(self):
         import re
 

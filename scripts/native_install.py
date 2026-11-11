@@ -114,6 +114,8 @@ def security_headers(indent):
     ))
 
 
+# /api/ 的 proxy_read_timeout 与 docker/app/nginx.conf、前端 TRANSFER_TIMEOUT（5 分钟）一致：
+# 大文件导入确认、导出在服务端逐行处理，60 秒会在已写入后误报失败；普通请求由前端 25 秒放弃并断开。
 def nginx_config(config, data):
     public = quote_path(data / "www")
     return f'''worker_processes 1;
@@ -160,7 +162,7 @@ http {{
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Request-ID $erp_request_id;
-      proxy_read_timeout 60;
+      proxy_read_timeout 300;
     }}
     location / {{ return 404; }}
   }}
