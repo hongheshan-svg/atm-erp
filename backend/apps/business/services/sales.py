@@ -108,7 +108,8 @@ def quote(actor, key, sale_id, data):
     def execute(user, sale):
         fields(data, {'amount', 'reason'})
         state(sale, {'draft', 'quoted'})
-        reason = text(data, 'reason')
+        # 报价说明选填，缺省记为「报价」；编辑、取消、转交仍须填写原因。
+        reason = text(data, 'reason', default='报价') or '报价'
         before = str(sale.quote_amount)
         sale.quote_amount = number(data.get('amount'), 'amount', positive=True)
         sale.status = 'quoted'
