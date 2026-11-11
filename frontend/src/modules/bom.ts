@@ -117,7 +117,18 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       prepare: data => ({ ...data, required_date: data.required_date || null, application_date: data.application_date || null, applicant: data.applicant || '' }),
     }
   }
-  return { title: name, path: `${endpoint(resource)}${r.id}/${name === '移除' ? 'remove/' : ''}`, fields: [reason] }
+  // 移除前写明是哪一行：同一物料常分布在多个单元，标题和提示里给出编码、名称、单元和数量。
+  if (name === '移除') {
+    const unitName = r.assembly_unit || '未分单元'
+    return {
+      title: `移除 ${r.item_code} ${r.item_name}（${unitName}）`,
+      submitLabel: '确认移除',
+      path: `${endpoint(resource)}${r.id}/remove/`,
+      notice: { type: 'warning', text: `将从本项目 BOM 移除「${unitName}」的这一行：${r.item_code} ${r.item_name}，需求 ${r.quantity}${r.unit ? ` ${r.unit}` : ''}。该行有在途采购，或移除后其余单元不够覆盖已领时会被拦截。` },
+      fields: [reason],
+    }
+  }
+  return { title: name, path: `${endpoint(resource)}${r.id}/`, fields: [reason] }
 }
 export async function bomCommand(projectId: number): Promise<Command> {
   const demand = await read(`/business/projects/${projectId}/demand/`)

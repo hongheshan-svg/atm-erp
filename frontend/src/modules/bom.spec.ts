@@ -34,3 +34,11 @@ it('替换物料一次提交新物料并移除原行，保留原单元与日期'
   expect(command.prepare!({ item: 9, quantity: '3', change_note: 'B版', required_date: '2026-12-01' })).toEqual({ item: 9, quantity: '3', change_note: 'B版', required_date: '2026-12-01', application_date: null, applicant: '' })
   expect(read).not.toHaveBeenCalled()
 })
+
+it('移除确认写明物料编码、名称、单元和数量', async () => {
+  const command = await actionCommand('bom', { id: 9, project: 7, item_code: 'PK110001', item_name: '电芯连接法兰', assembly_unit: '01 电芯上料工位', quantity: '2.000', unit: '件' }, '移除')
+  expect(command.title).toBe('移除 PK110001 电芯连接法兰（01 电芯上料工位）')
+  expect(command.submitLabel).toBe('确认移除')
+  expect(command.path).toBe('/business/bom/9/remove/')
+  expect(command.notice?.text).toContain('需求 2.000 件')
+})

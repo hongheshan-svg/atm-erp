@@ -529,6 +529,35 @@ class BOMAuditRemediationTests(BusinessFixtures, TestCase):
         self.assertIn(purchase.code, str(conflict))
         self.assertFalse(BOMLine.objects.filter(item=replacement, assembly_unit='03 检测').exists())
 
+    def test_inactive_material_is_flagged_and_can_only_be_replaced(self):
+        Item.objects.filter(pk=self.other.pk).update(is_active=False)
+        rows = [row for row in self.demand().values() if row['item'] == self.other.pk]
+        self.assertEqual({row['is_active'] for row in rows}, {False})
+        # 修改停用物料行被拒，提示里写明物料和「替换物料」入口。
+        error = self.revise(
+            [
+                {
+                    'id': self.feed.pk,
+                    'item': self.other.pk,
+                    'quantity': '5',
+                    'assembly_unit': '01 上料',
+                    'change_note': '加量',
+                }
+            ],
+            status=400,
+        )
+        self.assertIn('I2', str(error))
+        self.assertIn('替换物料', str(error))
+        replacement = Item.objects.create(code='I2-C', name='直线导轨在用版')
+        self.post(
+            'mechanical_engineer',
+            f'bom/{self.feed.pk}/replace/',
+            {'item': replacement.pk, 'quantity': '2', 'change_note': '原型号停用'},
+        )
+        self.assertTrue(
+            BOMLine.objects.filter(project=self.project, item=replacement, assembly_unit='01 上料').exists()
+        )
+
     def test_batch_remove_is_all_or_nothing(self):
         bearing = BOMLine.objects.get(project=self.project, item=self.third)
         self.buy(self.check, '1', approve=True)

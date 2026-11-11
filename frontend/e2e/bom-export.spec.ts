@@ -30,6 +30,9 @@ test('BOM筛选81项标准件跨页导出保持准确，勾选与筛选范围分
   const panel = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
   await panel.getByRole('radio', { name: '采购缺料', exact: true }).check()
   await panel.getByLabel('每页显示条目', { exact: true }).selectOption('10')
+  // 手机上次级筛选收在「筛选 ▾」里，展开后保持展开。
+  const filterToggle = panel.getByRole('button', { name: /^筛选( · \d+)? [▾▴]$/ })
+  if (await filterToggle.isVisible()) await filterToggle.click()
   await panel.getByLabel('筛选类别', { exact: true }).selectOption('standard')
   await expect(panel.getByRole('status', { name: 'BOM导出范围' })).toContainText('当前筛选 81 项')
   await panel.getByRole('button', { name: '全选筛选结果', exact: true }).click()

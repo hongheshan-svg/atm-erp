@@ -225,7 +225,7 @@ it('编制与采购视图使用相同BOM行，关键列优先且选择保留稳�
   expect(labels.indexOf('需求数量')).toBeLessThan(labels.indexOf('在途'))
   expect(labels).not.toContain('图号')
   await wrapper.findAll('el-button-stub').find(button => button.text() === '全选筛选结果')!.trigger('click')
-  await wrapper.findAll('el-button-stub').find(button => button.text() === '按缺料采购')!.trigger('click')
+  await wrapper.findAll('el-button-stub').find(button => button.text() === '从 BOM 多选下单')!.trigger('click')
   expect(wrapper.getComponent({ name: 'BOMPurchasePicker' }).props('initialSelection')).toEqual([41, 42])
   wrapper.unmount()
 })
@@ -281,10 +281,10 @@ it('搜索覆盖图号和品牌，编制视图说明行内可改单行', async (
 })
 
 afterEach(() => { vi.mocked(read).mockReset(); vi.mocked(read).mockResolvedValue({ lines: [] }) })
-function mountFull(lines: object[], props: object = {}) {
+function mountFull(lines: object[], props: object = {}, stubs: object = {}) {
   vi.mocked(read).mockResolvedValue({ revision: 'r1', lines })
   return mount(BOMDemand, { props: { projectId: 81, status: 'active', canEditBom: true, ...props }, global: {
-    plugins: [ElementPlus], stubs: { RecordDeletionDialog: true, ActionDialog: true, BOMPurchasePicker: true, ImportFeedback: true, RouterLink: { props: ['to'], template: '<a class="router-link" :data-to="JSON.stringify(to)"><slot /></a>' } },
+    plugins: [ElementPlus], stubs: { RecordDeletionDialog: true, ActionDialog: true, BOMPurchasePicker: true, ImportFeedback: true, RouterLink: { props: ['to'], template: '<a class="router-link" :data-to="JSON.stringify(to)"><slot /></a>' }, ...stubs },
   } })
 }
 const names = (wrapper: ReturnType<typeof mountFull>) => wrapper.findAll('.bom-details-table tbody tr').map(row => row.find('strong').text())
@@ -347,6 +347,9 @@ it('工程师勾选筛选结果后批量改需求日期或移除，一次提交�
   await flushPromises()
   expect(wrapper.text()).not.toContain('批量删除（管理员）')
   await wrapper.get('[aria-label="筛选单元"]').setValue('03 检测')
+  // 没勾选时不占一行；勾选本页后才出现批量栏和「选择筛选结果」。
+  expect(wrapper.find('[aria-label="BOM批量修订"]').exists()).toBe(false)
+  await wrapper.get('input[aria-label="选择本页BOM行"]').setValue(true)
   await wrapper.findAll('button').find(button => button.text() === '选择筛选结果（2 行）')!.trigger('click')
   expect(wrapper.get('[aria-label="BOM批量修订"]').text()).toContain('已选 2 行')
   await wrapper.findAll('button').find(button => button.text() === '批量改需求日期')!.trigger('click')
@@ -415,5 +418,86 @@ it('导入预览区分新增、修改、不变，列出文件外现有行，确�
   const command = wrapper.getComponent({ name: 'ActionDialog' }).props('command')
   expect(command.submitLabel).toBe('确认导入')
   expect(command.notice.text).toContain('将新增 1 行、修改 1 行，与现有一致的 1 行跳过，新建物料 1 个。')
+  wrapper.unmount()
+})
+
+it('手机窄屏只留勾选、物料摘要和操作，筛选收起显示生效数，采购选择栏压成一行', async () => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  user.value = { roles: ['mechanical_engineer'] }
+  const lines = [
+    { bom_line: 1, item: 1, item_code: 'A1', item_name: '支架', specification: 'SUS304', assembly_unit: '01 上料', quantity: '2', unit: '件', issued: '0', incoming: '1', unapproved: '1', available: '0', shortage: '1', required_date: '2026-01-06' },
+    { bom_line: 2, item: 2, item_code: 'B2', item_name: '气缸', specification: 'CDQ2B', assembly_unit: '02 检测', quantity: '1', unit: '个', issued: '0', incoming: '0', unapproved: '0', available: '1', shortage: '0', required_date: '2099-01-01' },
+  ]
+  let wrapper = mountFull(lines)
+  await flushPromises()
+  const headers = wrapper.findAll('.bom-details-table thead th').map(th => th.text()).filter(Boolean)
+  expect(headers).toEqual(['物料', '操作'])
+  const first = wrapper.findAll('.bom-details-table tbody tr')[0]!
+  expect(first.get('.bom-mobile-summary').text()).toContain('SUS304 · 01 上料')
+  expect(first.get('.bom-mobile-summary').text()).toContain('需求 2 件 · 缺 1 · 2026-01-06')
+  expect(first.text()).toContain('已逾期·缺料')
+  expect(wrapper.text()).not.toContain('展开完整列')
+  // 次级筛选收起，只留搜索框和「筛选 ▾」；点单元概览后显示生效数。
+  const toggle = wrapper.get('.bom-filter-toggle')
+  expect(toggle.text()).toBe('筛选 ▾')
+  expect(wrapper.get('.bom-filter-group').classes()).toContain('is-collapsed')
+  await wrapper.findAll('.bom-unit-chip')[0]!.trigger('click')
+  expect(toggle.text()).toBe('筛选 · 1 ▾')
+  await toggle.trigger('click')
+  expect(wrapper.get('.bom-filter-group').classes()).not.toContain('is-collapsed')
+  expect(wrapper.find('[aria-label="排序方式"]').exists()).toBe(true)
+  // 说明默认收起。
+  expect(wrapper.text()).not.toContain('按单元核对规格')
+  await wrapper.get('.bom-help-toggle').trigger('click')
+  expect(wrapper.text()).toContain('按单元核对规格')
+  wrapper.unmount()
+
+  user.value = { roles: ['purchaser'] }
+  wrapper = mountFull(lines, { canEditBom: false })
+  await flushPromises()
+  const summary = wrapper.findAll('.bom-details-table tbody tr')[0]!.get('.bom-mobile-summary').text()
+  expect(summary).toContain('缺 1 · 在途 0.000（待批 1） · 可用 0')
+  expect(summary).toContain('01 上料 · 需 2026-01-06')
+  const bar = wrapper.get('.bom-selection-bar')
+  expect(bar.findAll('button').map(button => button.attributes('aria-label') || button.text())).toEqual(['全选筛选结果', '清空选择', '从 BOM 多选下单'])
+  expect(bar.text()).toContain('全选')
+  wrapper.unmount()
+  vi.unstubAllGlobals()
+})
+
+it('停用物料整页提示并行内标出，采购复选框说明原因，修改此行置灰只留替换或移除', async () => {
+  user.value = { roles: ['mechanical_engineer'] }
+  const lines = [
+    { bom_line: 1, item: 1, item_code: 'S1', item_name: '光电传感器', assembly_unit: '01', quantity: '6', shortage: '6', is_active: false },
+    { bom_line: 2, item: 2, item_code: 'A2', item_name: '支架', assembly_unit: '01', quantity: '2', shortage: '2', is_active: true },
+  ]
+  let wrapper = mountFull(lines, {}, {
+    ElDropdown: { template: '<div><slot /><slot name="dropdown" /></div>' },
+    ElDropdownMenu: { template: '<div><slot /></div>' },
+    ElDropdownItem: { props: ['command', 'disabled'], template: '<div class="menu-item" :data-command="command" :data-disabled="String(!!disabled)"><slot /></div>' },
+  })
+  await flushPromises()
+  expect(wrapper.get('.bom-inactive-note').text()).toContain('1 行物料已停用')
+  expect(wrapper.get('.bom-inactive-note').text()).toContain('替换物料')
+  const rows = wrapper.findAll('.bom-details-table tbody tr')
+  expect(rows.find(row => row.text().includes('光电传感器'))!.text()).toContain('已停用')
+  expect(rows.find(row => row.text().includes('支架'))!.text()).not.toContain('已停用')
+  await wrapper.get('.bom-inactive-note button').trigger('click')
+  expect(names(wrapper)).toEqual(['光电传感器'])
+  const edits = wrapper.findAll('.bom-details-table tbody tr .menu-item[data-command="修改此行"]')
+  expect(edits.map(item => [item.attributes('data-disabled'), item.text()])).toEqual([['true', '修改此行（物料已停用，请替换）']])
+  await wrapper.findAll('.bom-inactive-note button').at(-1)!.trigger('click')
+  const active = wrapper.findAll('.bom-details-table tbody tr').find(row => row.text().includes('支架'))!
+  expect(active.get('.menu-item[data-command="修改此行"]').attributes('data-disabled')).toBe('false')
+  wrapper.unmount()
+
+  user.value = { roles: ['purchaser'] }
+  wrapper = mountFull(lines, { canEditBom: false })
+  await flushPromises()
+  expect(wrapper.get('.bom-inactive-note').text()).toContain('不能采购')
+  const box = wrapper.get('input[aria-label="选择 S1 01"]')
+  expect(box.attributes('disabled')).toBeDefined()
+  expect(box.attributes('title')).toContain('物料已停用')
+  expect(wrapper.get('input[aria-label="选择 A2 01"]').attributes('title')).toBeUndefined()
   wrapper.unmount()
 })
