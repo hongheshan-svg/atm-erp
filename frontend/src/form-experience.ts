@@ -2,7 +2,10 @@ import type { Command, Field, Row } from './types'
 import { sessionStore } from './utils/storage'
 
 export function wideCommand(command: Command | null) {
-  return !!command && !command.readonly && (command.fields.filter(f => !f.hidden).length > 4 || command.fields.some(f => f.type === 'rows'))
+  if (!command) return false
+  // 只读详情里带明细表（采购明细、交付与回款等）时也占满工作区：390px 侧栏只能露出两列。
+  if (command.readonly) return command.fields.some(f => f.type === 'rows' && !f.hidden)
+  return command.fields.filter(f => !f.hidden).length > 4 || command.fields.some(f => f.type === 'rows')
 }
 export function submitLabel(command: Command) {
   if (command.submitLabel) return command.submitLabel

@@ -49,6 +49,22 @@ describe('列表创建入口', () => {
     expect(wrapper.text()).not.toContain('工时已提交')
     wrapper.unmount()
   })
+  it('空状态：页面给了 emptyHint 就用它，并且不再提示联系同事', async () => {
+    user.value = { id: 1, role: 'admin' }
+    vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+    const mountIt = (extra: Record<string, unknown>) => shallowMount(ResourcePanel, { props: { resource: 'deliveries', title: '交付批次', ...extra }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+    const plain = mountIt({})
+    await flushPromises()
+    expect(plain.text()).toContain('可联系负责此业务的同事处理')
+    const hinted = mountIt({ emptyHint: '尚未发货。' })
+    await flushPromises()
+    expect(hinted.text()).toContain('尚未发货。')
+    expect(hinted.text()).not.toContain('联系负责此业务')
+    const hidden = mountIt({ hideContactHint: true })
+    await flushPromises()
+    expect(hidden.text()).not.toContain('联系负责此业务')
+    for (const w of [plain, hinted, hidden]) w.unmount()
+  })
   it('管理员勾选后可批量删除，切换项目清除选择和弹窗，普通岗位无删除入口', async () => {
     user.value = { roles: ['finance', 'admin'] }
     vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 21, title: '费用' }], next: null })

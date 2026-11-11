@@ -521,6 +521,7 @@ button:focus-visible {
   .action-dialog .line-fields-dense > .line-number { flex: 0 0 50px; margin: 0 0 10px; white-space: nowrap; }
   .action-dialog .line-fields-dense > .fields-inline > .field { flex: 1 1 0; min-width: 0; gap: 4px; position: relative; }
   .action-dialog .line-fields-dense > .fields-inline > .field:first-child { flex-grow: 1.8; }
+  .action-dialog .line-fields-dense > .fields-inline > .field.field-sized { flex: 0 0 var(--field-width); }
   .action-dialog .line-fields-dense > .el-button { flex: none; margin: 0; }
   .action-dialog .line-fields-dense .field > label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .action-dialog .line-fields-dense .field > label small { display: none; }
