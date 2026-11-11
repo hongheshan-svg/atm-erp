@@ -409,7 +409,10 @@ async function save() {
   .purchase-columns { grid-template-columns: minmax(0, 1fr); }
   .purchase-draft { position: static; border-left: 0; border-top: 1px solid var(--surface-border); padding: 20px 0 0; }
   .purchase-draft form { max-height: none; }
-  .draft-items { max-height: 420px; }
+  /* 窄屏上下排布时整页本身在滚动，明细区不再套一层固定高度的内滚动（手指易被困住、组标题被切）；
+     合计与保存吸附在视口底部，滚到哪条明细都能直接保存。 */
+  .draft-items { max-height: none; overflow: visible; }
+  .draft-footer { position: sticky; bottom: 0; z-index: 2; padding-bottom: calc(12px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 16px -14px rgb(15 23 42 / 35%); }
   .draft-item { grid-template-columns: minmax(0, 1fr); }
   .draft-price-row { margin-top: 8px; }
   .mobile-jump { display: inline-flex; }
