@@ -127,6 +127,37 @@ class BusinessFixtures:
 
 
 class CommercialChainTests(BusinessFixtures, TestCase):
+    def test_project_finance_summary_totals_without_per_entry_queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        project = self.active_project()
+        receivable = Entry.objects.get(project=project, kind='receivable')
+        self.post('finance', f'entries/{receivable.pk}/pay/', {'amount': '4000', 'date': TODAY, 'reason': '首款'})
+        self.purchase(project, over_bom_reason='备件')
+        url = f'/api/business/projects/{project.pk}/finance-summary/'
+
+        def summary():
+            with CaptureQueriesContext(connection) as queries:
+                response = self.clients['manager'].get(url)
+            self.assertEqual(response.status_code, 200, response.data)
+            return response.data, len(queries.captured_queries)
+
+        data, before = summary()
+        self.assertEqual(
+            {key: data['receivable'][key] for key in ('total', 'settled', 'outstanding', 'refund', 'count')},
+            {'total': '10000.00', 'settled': '4000.00', 'outstanding': '6000.00', 'refund': '0.00', 'count': 1},
+        )
+        self.assertEqual(
+            (data['payable']['total'], data['payable']['outstanding'], data['payable']['count']),
+            ('500.00', '500.00', 1),
+        )
+        # 多一张采购应付不多查：已收付和到货来源随款项一次带出。
+        self.purchase(project, over_bom_reason='备件')
+        data, after = summary()
+        self.assertEqual((data['payable']['total'], data['payable']['count']), ('1000.00', 2))
+        self.assertEqual(after, before)
+
     def test_unsettled_filter_keeps_refunds_and_uses_actual_net_payments(self):
         project = self.active_project()
         entry = Entry.objects.create(

@@ -44,7 +44,11 @@ def finance_summary(project):
     """
     from decimal import Decimal
 
+    from django.db.models import DecimalField, Sum, Value
+    from django.db.models.functions import Coalesce
+
     from ..services.finance import paid, split_balance
+    from ..services.payment_terms import with_sources
 
     today = timezone.localdate()
     zero = Decimal('0')
@@ -52,7 +56,13 @@ def finance_summary(project):
         kind: {'total': zero, 'settled': zero, 'outstanding': zero, 'overdue': zero, 'refund': zero, 'count': 0}
         for kind in ('receivable', 'payable', 'expense')
     }
-    for entry in project.entries.all():
+    # 一次带上净收付和到货来源，不再每笔款项各查已收付、采购明细和到货流水。
+    entries = with_sources(project.entries.all()).annotate(
+        net_paid=Coalesce(
+            Sum('payments__amount'), Value(zero), output_field=DecimalField(max_digits=18, decimal_places=2)
+        )
+    )
+    for entry in entries:
         row = totals[entry.kind]
         row['count'] += 1
         row['total'] += entry.amount - entry.credit_amount
