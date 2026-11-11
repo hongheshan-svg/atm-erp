@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearFormDrafts, confirmFormNavigation, draftKey, loadDraft, registerFormGuard, saveDraft, savedTarget } from './form-experience'
+import { clearFormDrafts, confirmFormNavigation, draftKey, loadDraft, registerFormGuard, saveDraft, savedTarget, submitLabel } from './form-experience'
 import { fieldIssues } from './forms'
 import type { Command } from './types'
 
@@ -50,5 +50,9 @@ describe('未保存内容与操作结果', () => {
     const issues = fieldIssues([{ key: 'lines', label: '收货', type: 'rows', fields: [{ key: 'quantity', label: '数量', numeric: { scale: 3, min: 0 } }] }], { lines: [{ quantity: '2' }, { quantity: '-1' }, { quantity: '2个' }] })
     expect(issues.map(i => i.path)).toEqual(['lines.1.quantity', 'lines.2.quantity'])
     expect(issues[1]?.message).toContain('第 3 行')
+  })
+  it('确认对账的提交按钮不重复写「确认确认」', () => {
+    expect(submitLabel({ title: '确认对账', path: '', fields: [], initial: {} })).toBe('确认该对账单')
+    expect(submitLabel({ title: '作废对账', path: '', fields: [], initial: {} })).toBe('确认作废对账')
   })
 })
