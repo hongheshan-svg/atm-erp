@@ -16,8 +16,12 @@ it('收货表包含截图资料，末列备注；输入按行保留且资料不�
   const field = warehouseLines('receipt', initial)
   const data = defaults([field])
   const wrapper = mount(FormFields, { props: { fields: [field], modelValue: data } })
-  expect(wrapper.findAll('th').map(th => th.text()).slice(1, 10)).toEqual(['项目号', '产品编号', '零件名称', '单元', '图号 / 型号', '版本 / 品牌', '单位', '需求数量', '零件类型'])
-  expect(wrapper.findAll('th').at(-1)!.text()).toBe('备注')
+  // 1366 宽度下不横向滚动：项目号移到表头，编号与名称、图号型号版本品牌与类型各并成一列，数量输入紧随待收。
+  expect(wrapper.findAll('th').map(th => th.text()).slice(1)).toEqual(['产品编号 / 零件名称', '单元', '图号 / 型号 / 版本 / 类型', '单位', '需求数量', '待收数量', '本次合格数量', '不合格隔离数量', '备注'])
+  expect(wrapper.get('legend').text()).toContain('项目 A2608')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 2.000 / 待收 4.000，共 2 行')
+  // 待收 2、本次只填 1：两行都高亮提醒部分到货。
+  expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(2)
   expect(wrapper.text()).toContain('001226000006')
   expect(wrapper.text()).toContain('A2608-01-00017')
   expect(wrapper.text()).toContain('有图·钣金')
@@ -27,6 +31,33 @@ it('收货表包含截图资料，末列备注；输入按行保留且资料不�
     { line: 1, quantity: '1', pending_quantity: '0', remark: '第一件备注' },
     { line: 2, quantity: '1', pending_quantity: '0', remark: '第二件备注' },
   ] })
+  const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+  await button('全部按待收填入').trigger('click')
+  expect(data.lines.map((line: Row) => line.quantity)).toEqual(['2', '2'])
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 4.000 / 待收 4.000')
+  expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(0)
+  await button('全部清零').trigger('click')
+  expect(data.lines.map((line: Row) => line.quantity)).toEqual(['0', '0'])
+  wrapper.unmount()
+})
+
+it('按 BOM 批量领料：服务端给出需求和未领量，不逐行读取项目需求，可清零后恢复建议数量', async () => {
+  const initial = [{ ...material, stock: 4, project_code: 'A2608', project_name: '上料线', location: '主仓', required_quantity: '5.000', bom_remaining: '3.000', remaining: '2.000', quantity: '2.000', remark: '' },
+    { ...material, stock: 5, project_code: 'A2608', project_name: '上料线', location: '二号仓', required_quantity: '5.000', bom_remaining: '3.000', remaining: '9.000', quantity: '1.000', remark: '' }]
+  const field = warehouseLines('issue', initial, { batch: true })
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: initial.map(row => ({ stock: row.stock, quantity: row.quantity, remark: '' })), context: { project: 1 } } })
+  await flushPromises()
+  expect(read).not.toHaveBeenCalled()
+  expect(wrapper.findAll('th').map(th => th.text())).toContain('BOM 未领')
+  expect(wrapper.get('legend').text()).toContain('项目 A2608 · 上料线')
+  expect(wrapper.text()).toContain('5.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3.000')
+  const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+  await button('全部清零').trigger('click')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 0.000')
+  await button('恢复建议数量').trigger('click')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3.000')
+  expect(field.fields!.find(f => f.key === 'quantity')!.numeric!.min).toBe(0)
   wrapper.unmount()
 })
 

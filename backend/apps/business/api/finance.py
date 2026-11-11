@@ -1,4 +1,4 @@
-from django.db.models import DecimalField, Exists, F, OuterRef, Sum, Value
+from django.db.models import Case, DecimalField, Exists, F, OuterRef, Sum, Value, When
 from django.db.models.functions import Coalesce
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -32,7 +32,11 @@ class EntryView(ImportableMixin, ReadView):
                 Sum('payments__amount'), Value(0), output_field=DecimalField(max_digits=18, decimal_places=2)
             )
         )
-        .order_by('-id')
+        # 未结在前、按到期日先后：同一合同的预付款、发货款、验收款按节点顺序排列，逾期项排在最上面；已结清的排后。
+        .annotate(
+            settled=Case(When(amount=F('credit_amount') + F('net_paid'), then=Value(1)), default=Value(0)),
+        )
+        .order_by('settled', 'due_date', 'id')
     )
     serializer_class = EntrySerializer
     filterset_fields = ['project', 'kind', 'cancelled']
@@ -61,6 +65,10 @@ class EntryView(ImportableMixin, ReadView):
     def refund(self, request, pk=None):
         return Response(finance.pay(request.user, key(request), self.get_object().pk, request.data, refund=True))
 
+    @action(detail=True, methods=['post'], url_path='adjust-due-date')
+    def adjust_due_date(self, request, pk=None):
+        return Response(finance.adjust_due_date(request.user, key(request), self.get_object().pk, request.data))
+
     @action(detail=True, methods=['post'], url_path='cancel-expense')
     def cancel_expense(self, request, pk=None):
         return Response(finance.cancel_expense(request.user, key(request), self.get_object().pk, request.data))
@@ -70,7 +78,9 @@ class PaymentView(ImportableMixin, ReadView):
     read_roles = MONEY_READERS
     write_roles = FINANCE
     queryset = (
-        Payment.objects.select_related('entry', 'reversal', 'document')
+        Payment.objects.select_related(
+            'entry__project__customer', 'entry__purchase__supplier', 'reversal', 'document', 'reconciliation'
+        )
         .annotate(
             bank_matched=Exists(
                 BankMatch.objects.filter(payment=OuterRef('pk'), reversal_of__isnull=True, reversal__isnull=True)

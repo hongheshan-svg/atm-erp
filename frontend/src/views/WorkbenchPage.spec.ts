@@ -205,3 +205,47 @@ it('刷新期间禁止重复请求，过期响应不会覆盖最新数据', asyn
   expect(wrapper.text()).not.toContain('过期结果')
   wrapper.unmount()
 })
+
+it('交接待办：待启动项目、已批准待下单、缺料项目与逾期任务合计', async () => {
+  vi.mocked(read).mockResolvedValue({
+    tasks: { ...bucket([]), overdue_count: 0, overdue_total: 1, today_count: 0 },
+    supervised_tasks: bucket([{ id: 21, project: 5, title: '电气图纸确认', due_date: '2020-01-01' }]),
+    handover_projects: bucket([{ id: 82, project: 82, code: 'ATM2682', title: 'ATM2682 新上料线', project_name: '新上料线', due_date: '2999-01-01', missing: ['任务计划', 'BOM', '预算'] }]),
+    approved_purchases: bucket([{ id: 49, code: 'PO000049', project: 82, project_name: '新上料线', status: 'approved' }]),
+    shortage_projects: bucket([{ id: 81, project: 81, code: 'ATM2681', title: 'ATM2681 旧线', project_name: '旧线', shortage_lines: 3, due_date: '2999-02-01' }]),
+  })
+  const wrapper = await render()
+  // 我负责确认的逾期任务计入「任务逾期」，与「今天要处理的」一致。
+  expect(wrapper.findAll('.work-metric strong')[0]!.text()).toBe('1')
+  expect(wrapper.findAll('.work-metric small')[0]!.text()).toContain('我负责确认的任务')
+  const items = rows(wrapper).map((row: any) => [row.findAll('a')[0].text(), row.get('.work-status').text(), row.findAll('a')[0].attributes('href')])
+  expect(items).toEqual([
+    ['电气图纸确认', '已逾期', '/projects/5?tab=tasks&resource=tasks&focus=21'],
+    ['ATM2682 新上料线', '待启动', '/projects/82'],
+    ['PO000049', '待下单', '/projects/82?tab=purchases&resource=purchases&focus=49'],
+    ['ATM2681 旧线', '缺料', '/purchases?project=81'],
+  ])
+  expect(wrapper.text()).toContain('缺任务计划、BOM、预算')
+  expect(wrapper.text()).toContain('缺料 3 行')
+  for (const label of ['待启动项目', '已批准待下单', '缺料待采购项目']) expect(wrapper.find(`[aria-label="查看全部${label}"]`).exists()).toBe(true)
+  wrapper.unmount()
+})
+
+it('销售经理看到本人合同的逾期应收和已报价待签约，同一销售单只列一次', async () => {
+  user.value = { id: 7, roles: ['sales_manager'], display_name: '销售' }
+  const quoted = { id: 51, code: 'SO-51', name: '报价单', customer_name: '丙客户', status: 'quoted', due_date: '2999-01-01' }
+  vi.mocked(read).mockResolvedValue({
+    sales: bucket([quoted]),
+    quoted_sales: bucket([quoted]),
+    sale_receivables: bucket([{ id: 9, kind: 'receivable', title: '预付款', sale_code: 'SO-50', partner_name: '宁德客户', project_name: '上料线', balance: '150000.00', due_date: '2020-01-01' }]),
+  })
+  const wrapper = await render()
+  const items = rows(wrapper).map((row: any) => [row.findAll('a')[0].text(), row.get('.work-status').text(), row.findAll('a')[0].attributes('href')])
+  expect(items).toEqual([
+    ['预付款', '已逾期', '/sales?search=SO-50'],
+    ['SO-51', '待签约', '/sales?search=SO-51'],
+  ])
+  expect(wrapper.text()).toContain('宁德客户 · 上料线 · 待收余额 ¥ 150,000.00')
+  expect(wrapper.get('[aria-label="查看全部我的合同逾期应收"]').attributes('href')).toBe('/sales?search=')
+  wrapper.unmount()
+})

@@ -194,7 +194,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await expect(dialog(warehouse).getByLabel('补录原因', { exact: true })).toHaveCount(0)
   await fill(warehouse, '数量', '1')
   await fill(warehouse, '不合格隔离数量', '2')
-  await fill(warehouse, '原因 / 说明', '两件尺寸待复检')
+  await fill(warehouse, '送货单号 / 备注', '两件尺寸待复检')
   await warehouse.screenshot({ path: info.outputPath('receipt-default-date.png'), animations: 'disabled' })
   await save(warehouse)
   const beforeRelease = businessDate()

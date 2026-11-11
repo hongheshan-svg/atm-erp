@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from 'vue-router'
 export type Row = Record<string, any>
 export type Option = { value: string | number; label: string }
 export type Field = {
@@ -56,7 +57,14 @@ export type Command = {
   flow?: Flow | null
   progressProject?: number
 }
-export type Column = { key: string; label: string; format?: (row: Row) => string; tip?: (row: Row) => string | undefined }
+export type Column = {
+  key: string
+  label: string
+  format?: (row: Row) => string
+  tip?: (row: Row) => string | undefined
+  // 单元格链接到关联单据（项目、采购单等）；返回 undefined 时按普通文本显示。
+  link?: (row: Row) => RouteLocationRaw | undefined
+}
 export type FlowNode = { key: string; label: string; hint?: string }
 export type Flow = {
   label: string

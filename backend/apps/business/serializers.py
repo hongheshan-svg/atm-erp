@@ -393,8 +393,16 @@ class StockSerializer(MoneyFilter, serializers.ModelSerializer):
 class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
     sensitive_fields = ('value', 'supplier_credit')
     item_name = serializers.CharField(source='stock.item.name', read_only=True)
+    item_code = serializers.CharField(source='stock.item.code', read_only=True)
+    unit = serializers.CharField(source='stock.item.unit', read_only=True)
     item = serializers.IntegerField(source='stock.item_id', read_only=True)
     location = serializers.CharField(source='stock.location', read_only=True)
+    # 流水能追到领给哪个项目、来自哪张采购单、谁办理的，便于从流水跳回原单据。
+    project_code = serializers.CharField(source='project.code', read_only=True, default='')
+    project_name = serializers.CharField(source='project.name', read_only=True, default='')
+    purchase = serializers.IntegerField(source='purchase_line.purchase_id', read_only=True, default=None)
+    purchase_code = serializers.CharField(source='purchase_line.purchase.code', read_only=True, default='')
+    created_by_name = PersonNameField(source='created_by')
 
     class Meta:
         model = StockMove
@@ -402,10 +410,16 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'id',
             'stock',
             'item',
+            'item_code',
             'item_name',
+            'unit',
             'location',
             'project',
+            'project_code',
+            'project_name',
             'task',
+            'purchase',
+            'purchase_code',
             'purchase_line',
             'source',
             'kind',
@@ -417,6 +431,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'remark',
             'created_at',
             'created_by',
+            'created_by_name',
         ]
 
 
@@ -424,6 +439,7 @@ class EntrySerializer(serializers.ModelSerializer):
     paid_amount = serializers.SerializerMethodField()
     balance = serializers.SerializerMethodField()
     project_name = serializers.CharField(source='project.name', read_only=True)
+    purchase_code = serializers.CharField(source='purchase.code', read_only=True, default=None)
     due_date = serializers.SerializerMethodField()
     agreed_payment_date = serializers.SerializerMethodField()
     payment_schedule = serializers.SerializerMethodField()
@@ -493,6 +509,7 @@ class EntrySerializer(serializers.ModelSerializer):
             'project_name',
             'partner_name',
             'purchase',
+            'purchase_code',
             'task',
             'kind',
             'title',
@@ -760,6 +777,18 @@ class PaymentSerializer(serializers.ModelSerializer):
     reversed_by = serializers.IntegerField(source='reversal.pk', read_only=True, default=None)
     entry_title = serializers.CharField(source='entry.title', read_only=True)
     project = serializers.IntegerField(source='entry.project_id', read_only=True)
+    # 流水列表看得出是哪个项目、哪家往来单位、收还是付，对账单显示编号而不是内部 ID。
+    project_code = serializers.CharField(source='entry.project.code', read_only=True)
+    project_name = serializers.CharField(source='entry.project.name', read_only=True)
+    kind = serializers.CharField(source='entry.kind', read_only=True)
+    purchase = serializers.IntegerField(source='entry.purchase_id', read_only=True, default=None)
+    partner_name = serializers.SerializerMethodField()
+    reconciliation_code = serializers.CharField(source='reconciliation.code', read_only=True, default='')
+
+    def get_partner_name(self, obj):
+        if obj.entry.purchase_id:
+            return obj.entry.purchase.supplier.name
+        return obj.entry.project.customer.name if obj.entry.kind == 'receivable' else ''
 
     class Meta:
         model = Payment
@@ -767,6 +796,12 @@ class PaymentSerializer(serializers.ModelSerializer):
             'id',
             'entry',
             'entry_title',
+            'kind',
+            'project_code',
+            'project_name',
+            'partner_name',
+            'purchase',
+            'reconciliation_code',
             'evidence',
             'method',
             'account',

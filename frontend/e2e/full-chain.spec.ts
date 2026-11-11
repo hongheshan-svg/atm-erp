@@ -283,7 +283,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await dialog(warehouse).getByRole('button', { name: '关闭', exact: true }).click()
   await action(warehouse, row(warehouse, po.code), '收货')
   await fill(warehouse, '数量', '3')
-  await reason(warehouse)
+  await fill(warehouse, '送货单号 / 备注', '验收测试')
   await save(warehouse)
   await purchaser.reload()
   await action(purchaser, row(purchaser, po.code), '取消未收余量')
@@ -314,8 +314,8 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await action(secondApprover, row(secondApprover, po2.code), '批准采购')
   await save(secondApprover)
   await warehouse.reload()
+  // 正常到货的说明选填：不填直接收货，服务端按「采购收货」记录。
   await action(warehouse, row(warehouse, po2.code), '收货')
-  await reason(warehouse)
   await save(warehouse)
   await manager.goto(`/erp/projects/${id}?tab=tasks`)
   for (const [kind, title] of [

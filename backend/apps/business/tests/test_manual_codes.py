@@ -37,6 +37,8 @@ class ManualCodeTests(BusinessFixtures, TestCase):
                 project=self.project, title=stage, kind=stage, status='done', assignee=self.users['manager']
             )
         BOMLine.objects.create(project=self.project, item=self.item, quantity=3)
+        # BOM 已全部领齐：导入采购用不在 BOM 内的备件，避免触发超 BOM 缺口校验（导入没有超 BOM 原因列）。
+        Item.objects.create(code='I2', name='备用气缸')
         self.post(
             'admin',
             'stocks/opening/',
@@ -100,7 +102,7 @@ class ManualCodeTests(BusinessFixtures, TestCase):
                     'project': self.project.code,
                     'supplier': 'S1',
                     'due_date': TODAY,
-                    'item': 'I1',
+                    'item': 'I2',
                     'quantity': '1',
                     'unit_price': '2',
                 },

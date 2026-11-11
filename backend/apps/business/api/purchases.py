@@ -159,7 +159,9 @@ class PurchaseView(ImportableMixin, ReadView):
     def budget_check(self, request, pk=None):
         purchase = self.get_object()
         require_project(request.user, purchase.project, MONEY_READERS | PURCHASE_APPROVERS)
-        return Response(budgets.purchase_visibility(request.user, budgets.purchase_check(purchase), purchase.project))
+        report = budgets.purchase_visibility(request.user, budgets.purchase_check(purchase), purchase.project)
+        # BOM 复核与预算快照分开返回：不进入 snapshot，超 BOM 只提示审批人，不改变预算拦截口径。
+        return Response({**report, **supply.bom_review(purchase)})
 
     @action(detail=True, methods=['post'], url_path='approve-over-budget')
     def approve_over_budget(self, request, pk=None):

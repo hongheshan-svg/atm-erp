@@ -50,7 +50,10 @@ it('登记收付款选择不同对账时，界面明示默认值且实际请求�
   expect(wrapper.text()).toContain('本次默认 120.25')
   await wrapper.get('select[aria-label="已确认对账 / 预付款核准"]').setValue('1')
   await wrapper.get('select[aria-label="已确认对账 / 预付款核准"]').setValue('2')
-  await wrapper.get('textarea[aria-label="原因 / 说明"]').setValue('按核准支付')
+  // 登记收付款的说明选填（单行），不填时服务端按「登记付款」记录；对话框标题随方向显示。
+  expect(command.title).toBe('登记付款')
+  expect(command.submitLabel).toBe('登记付款记录')
+  await wrapper.get('input[aria-label="原因 / 说明"]').setValue('按核准支付')
   await wrapper.get('form').trigger('submit')
   await flushPromises()
   expect(write).toHaveBeenCalledWith('/business/entries/7/pay/', expect.objectContaining({ amount: '120.25', reconciliation: 2 }), expect.any(String), 'post')

@@ -472,6 +472,7 @@ async function inspect(row: Row) {
             row.name
           }}</router-link
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
+          ><router-link v-else-if="col.link?.(row)" :to="col.link!(row)!">{{ col.format ? col.format(row) : cell(row, col.key) }}</router-link
           ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" :title="col.format?.(row)" :class="{ 'status-wrap': col.format }" />
           <el-button v-else-if="resource === 'tasks' && col.key === 'logged_hours'" link type="primary" @click="action(row, '查看工时')">{{ row.time_entry_count ? `${row.logged_hours} 小时` : '未登记 · 查看' }}</el-button>
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
