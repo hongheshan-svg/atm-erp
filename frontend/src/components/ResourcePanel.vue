@@ -68,7 +68,7 @@ if (typeof window !== 'undefined' && window.matchMedia) {
   onBeforeUnmount(() => query.removeEventListener?.('change', sync))
 }
 // 手机宽度的窄屏列表：只留名称、状态和操作，其余信息并入名称格的副行（完整信息在详情里）。
-const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || props.resource === 'projects'))
+const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || ['projects', 'moves'].includes(props.resource)))
 const emit = defineEmits<{ changed: [] }>()
 const records = ref<Row[]>([])
 const count = ref(0)
@@ -249,7 +249,7 @@ const shownColumns = computed(() => {
   const first = leading[props.resource] || []
   const rank = (key: string) => first.includes(key) ? first.indexOf(key) : first.length
   const sorted = columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
-  return mobileTasks.value && sorted ? sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key)) : sorted
+  return mobileTasks.value && sorted ? sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key) || (props.resource === 'moves' && col.key === 'kind')) : sorted
 })
 // 窄屏下被收进名称格副行的列（不含首列自己的合并副行，那些本来就显示在名称下面）。
 const hiddenColumns = computed(() => (columns[props.resource] || []).filter(col => {
@@ -305,6 +305,8 @@ function mobileSummary(row: Row): string[] {
   if (props.resource === 'purchases' && row.change_request) return ['修改申请待处理']
   if (props.resource === 'entries') return lines(`待结算 ${cell(row, 'balance')} · ${display(row.kind)}`, mobileTasks.value ? joined(row.partner_name, props.projectId ? '' : row.project_name, row.due_date ? `到期 ${row.due_date}` : '') : '')
   if (props.resource === 'payments') return [`${cell(row, 'amount')} 元 · ${row.date}`]
+  // 库存流水：首行「数量 · 日期」；项目与来源采购单在下一行以链接显示（mobileLinks）。
+  if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), columnText(row, 'created_at'))]
   // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
   if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
   if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
@@ -320,6 +322,16 @@ function mobileSummary(row: Row): string[] {
   }
   return [joined(row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : '')]
 }
+const columnText = (row: Row, key: string) => { const col = columns[props.resource]?.find(c => c.key === key); return col?.format ? col.format(row) : cell(row, key) }
+// 窄屏摘要中可点击的关联单据（目前只有库存流水的项目与来源采购单）；无权跳转时只显示文字。
+function mobileLinks(row: Row) {
+  if (props.resource !== 'moves' || !mobileTasks.value) return []
+  return (columns.moves || []).filter(col => ['project_name', 'purchase_code'].includes(col.key) && (!props.projectId || col.key !== 'project_name'))
+    .map(col => ({ text: col.format ? col.format(row) : cell(row, col.key), to: col.link?.(row) }))
+    .filter(link => link.text && link.text !== '—')
+}
+// 库存流水逐条备注（如领用工位）在窄屏摘要末行原样显示。
+const mobileNote = (row: Row) => props.resource === 'moves' && mobileTasks.value && row.remark ? String(row.remark) : ''
 // 窄屏下摘要里逾期的计划日期标红。
 const summaryOverdue = (row: Row) => (props.resource === 'tasks' && isOverdueCell('tasks', 'due_date', row, day)) || (props.resource === 'purchases' && isOverdueCell('purchases', 'next_delivery_date', row, day)) || (props.resource === 'projects' && isOverdueCell('projects', 'due_date', row, day))
 async function load(preserveSelection: unknown = false) {
@@ -614,7 +626,7 @@ async function inspect(row: Row) {
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
           <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">已逾期</strong></span>
-          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary" :class="{ 'is-overdue': mobileTasks && summaryOverdue(row) }"><span v-for="(line, index) in mobileSummary(row)" :key="index">{{ line }}</span></small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button></template
+          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary" :class="{ 'is-overdue': mobileTasks && summaryOverdue(row) }"><span v-for="(line, index) in mobileSummary(row)" :key="index">{{ line }}</span></small><small v-if="col.key === shownColumns?.[0]?.key && (mobileLinks(row).length || mobileNote(row))" class="mobile-row-summary mobile-row-links"><template v-for="(link, index) in mobileLinks(row)" :key="index"><template v-if="index"> · </template><router-link v-if="link.to" :to="link.to" @click.stop>{{ link.text }}</router-link><template v-else>{{ link.text }}</template></template><span v-if="mobileNote(row)">{{ mobileNote(row) }}</span></small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" :width="actionWidth"

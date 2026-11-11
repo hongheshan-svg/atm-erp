@@ -83,6 +83,23 @@ describe('列表创建入口', () => {
       expect((items.vm as any).mobileSummary({ name: '导轨', specification: 'HSR15', brand: 'THK', unit: '根', part_type: 'standard' })[0]).toBe('导轨 · HSR15 · THK')
       expect(items.find('.filter-toggle').exists()).toBe(false)
       items.unmount()
+      // 库存流水：保留物料与类型列；摘要首行「数量 · 时间」，次行项目与来源采购单可点击。
+      user.value = { id: 1, roles: ['warehouse'] }
+      const moves = shallowMount(ResourcePanel, { props: { resource: 'moves', title: '库存流水' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      const mv = moves.vm as any
+      expect(mv.shownColumns.map((c: { key: string }) => c.key)).toEqual(['item_name', 'kind'])
+      const move = { id: 1, project: 4, project_code: 'ATM2680', project_name: '上料线', purchase: 8, purchase_code: 'PO-8', item_code: 'M-1', item_name: '伺服电机', quantity: '2.000', unit: '台', created_at: '2026-11-11T09:30:00+08:00' }
+      expect(mv.mobileSummary(move)).toEqual(['2.000 台 · 2026-11-11 09:30'])
+      expect(mv.mobileLinks(move)).toEqual([
+        { text: 'ATM2680 · 上料线', to: '/projects/4' },
+        { text: 'PO-8', to: { path: '/purchases', query: { resource: 'purchases', focus: '8', project: '4' } } },
+      ])
+      expect(mv.mobileLinks({ ...move, project: null, project_code: '', project_name: '', purchase: null, purchase_code: '' })).toEqual([])
+      expect(mv.mobileNote({ ...move, remark: '一号工位' })).toBe('一号工位')
+      expect(mv.mobileNote(move)).toBe('')
+      moves.unmount()
+      user.value = { id: 1, role: 'admin' }
       const projects = shallowMount(ResourcePanel, { props: { resource: 'projects', title: '项目' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { RouterLink: true, BusinessTable: { template: '<div />' } } } })
       await flushPromises()
       const toggle = projects.find('.filter-toggle')

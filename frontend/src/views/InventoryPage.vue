@@ -55,7 +55,7 @@ function closeBomIssue() {
     </nav>
     <el-alert v-if="issueError" :title="`按 BOM 领料读取失败：${issueError}`" type="error" :closable="false" show-icon role="alert" />
     <ActionDialog :command="issueCommand" @close="closeBomIssue" @saved="refresh" />
-    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted">先查找物料与库位，再点该行“领料”选择项目并核对本次数量。整个项目按 BOM 一次领多行请用上方“按 BOM 领料”。现有库存为全公司共享库存。</p><ResourcePanel
+    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted tab-hint"><span class="full-hint">先查找物料与库位，再点该行“领料”选择项目并核对本次数量。整个项目按 BOM 一次领多行请用上方“按 BOM 领料”。现有库存为全公司共享库存。</span><span class="short-hint">点该行“领料”；整项目一次领多行用“按 BOM 领料”。</span></p><ResourcePanel
       resource="stocks"
       title="现有库存"
       :allow-create="false"
@@ -71,7 +71,7 @@ function closeBomIssue() {
       :revision="revision"
       @changed="refresh"
     /></template><template #receipts>
-      <p class="muted">选择采购单后点“收货”，核对待收数量与本次数量；支持部分到货，不合格物料仍走隔离处理。</p>
+      <p class="muted tab-hint"><span class="full-hint">选择采购单后点“收货”，核对待收数量与本次数量；支持部分到货，不合格物料仍走隔离处理。</span><span class="short-hint">点“收货”核对本次数量，支持部分到货。</span></p>
       <nav class="receipt-states" aria-label="收货进度"><router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }" :aria-current="receiptStatus === 'approved' ? 'page' : undefined">待收货采购</router-link><router-link :to="{ path: '/inventory', query: { section: 'receipts', receipt: 'partial', project: projectId || 'all' } }" :aria-current="receiptStatus === 'partial' ? 'page' : undefined">部分收货采购</router-link></nav>
       <ResourcePanel v-if="can(['admin', 'warehouse'])" :key="receiptStatus" class="daily-filtered-list" resource="purchases" :title="receiptStatus === 'partial' ? '部分收货采购' : '待收货采购'" :params="{ project: projectId, status: receiptStatus }" :project-id="projectId" :allow-create="false" :revision="revision" @changed="refresh" />
     </template></ModuleTabs></ModulePage>
@@ -81,5 +81,16 @@ function closeBomIssue() {
 .daily-actions a { padding: 8px 0; font-weight: 600; }
 .receipt-states { margin-bottom: 16px; }
 .receipt-states [aria-current="page"] { font-weight: 600; text-decoration: underline; }
+.short-hint { display: none; }
+/* 手机：快捷入口与工作台一致改 2×2 网格（触控 ≥40px）；页签说明缩成一行短句，收货进度链接压缩间距。 */
+@media (max-width: 600px) {
+  .daily-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 8px 16px; }
+  .daily-actions a { display: flex; align-items: center; min-height: 40px; padding: 0; }
+  .tab-hint { margin: 0 0 6px; font-size: 13px; }
+  .tab-hint .full-hint { display: none; }
+  .tab-hint .short-hint { display: inline; }
+  .receipt-states { gap: 0 20px; margin-bottom: 8px; }
+  .receipt-states a { display: inline-flex; align-items: center; min-height: 40px; }
+}
 .daily-filtered-list :deep(.resource-status-tabs) { display: none; }
 </style>
