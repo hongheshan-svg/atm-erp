@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from scripts.ci.backend_test_matrix import MODULE_TESTS, TARGETS, module_targets
@@ -337,11 +338,61 @@ CHECK_ONLY = (
 )
 # 本地 Git 钩子与仓库元数据：不进入镜像、安装包或 CI 运行路径，只运行运维脚本测试（含本计划自检）。
 OPS_ONLY = ('.githooks/', '.pre-commit-config.yaml', '.gitattributes', '.codex')
-# 真实升级演练直接执行这些文件：ota_smoke 运行 install.sh，宿主机升级先调用 backup.py 备份，
-# 直接 Compose 启动演练读取 .env.example；.dockerignore 决定镜像内容。
-OTA_PATHS = ('install.sh', 'scripts/backup.py', '.env.example', '.dockerignore')
+# 真实升级演练（ci-ota）直接执行或导入这些文件：ota_smoke 运行 install.sh（其中调用 network_check.py），
+# 宿主机升级先调用 backup.py 备份，直接 Compose 启动演练读取 .env.example；.dockerignore 决定镜像内容，
+# restore_uploads.py 由 Dockerfile 复制进镜像。两个容器演练导入 package_release 生成 Compose；原生升级演练先用
+# native_install（及其 native_service）安装，并用 build_native_wheels 准备离线依赖。
+# 文件名含 ota、container_runtime、release_install 的脚本及 docker/、Compose 另按名称选择，见 plan()。
+OTA_PATHS = (
+    'install.sh',
+    'scripts/backup.py',
+    '.env.example',
+    '.dockerignore',
+    'scripts/network_check.py',
+    'scripts/restore_uploads.py',
+    'scripts/package_release.py',
+    'scripts/native_install.py',
+    'scripts/native_service.py',
+    'scripts/ci/build_native_wheels.py',
+    'scripts/tests/direct_compose_smoke.py',
+)
+# 安装器流程（release-installers.yml）在三平台运行的运维单测；其余单测只在 fast/ops 运行。两处名单由测试核对一致。
+INSTALLER_TESTS = (
+    'scripts/tests/test_native_install.py',
+    'scripts/tests/test_native_service.py',
+    'scripts/tests/test_direct_compose.py',
+    'scripts/tests/test_container_ota.py',
+    'scripts/tests/test_ota_service.py',
+    'scripts/tests/test_release_install.py',
+    'scripts/tests/test_network_check.py',
+)
+# 不进入安装器流程的运维文件：独立的备份巡检工具，以及只由 ci-ota 运行的升级演练脚本。安装器流程既不执行
+# 也不导入它们（由测试按引用关系核对）。scripts/ 下其他文件，包括新增文件，仍默认运行安装器，不静默漏测。
+NOT_INSTALLER_PATHS = (
+    'scripts/backup_cycle.py',
+    'scripts/ops_check.py',
+    'scripts/tests/ota_smoke.py',
+    'scripts/tests/ota_native_smoke.py',
+    'scripts/tests/direct_compose_smoke.py',
+)
 # docs 下不可执行的图片和 Office/PDF 文档只作说明，与 Markdown 一样不选择测试；其他类型仍须登记。
 DOC_SUFFIXES = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.docx', '.pptx', '.xlsx')
+
+
+def words(name):
+    """把文件名拆成小写单词：按非字母数字字符和驼峰边界切分，如 FinanceTotals.audit → finance/totals/audit。"""
+    return [
+        word.lower()
+        for part in re.split(r'[^A-Za-z0-9]+', name)
+        for word in re.findall(r'[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+', part)
+    ]
+
+
+def contains(haystack, needle):
+    """按整词连续匹配：模块名 ota 不再因子串命中 FinanceTotals，upgrade 仍命中 SystemUpgrade。"""
+    return bool(needle) and any(
+        haystack[index : index + len(needle)] == needle for index in range(len(haystack) - len(needle) + 1)
+    )
 
 
 def version_only_paths(base, head, paths, read_blob):
@@ -370,7 +421,7 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
         raise ValueError('未知模块：' + ','.join(sorted(selected - MODULE_TESTS.keys())))
     backend, frontend, browser = set(), set(), set()
     unknown = []
-    ops = installers = checks_backend = checks_frontend = False
+    ops = installers = checks_backend = checks_frontend = ota_suite = False
     reasons = []
     for path in sorted(set(paths)):
         if path.endswith('.md') or Path(path).name in ('.gitignore', '.editorconfig', 'LICENSE'):
@@ -388,7 +439,11 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
             '.dockerignore',
         ):
             ops = True
-            if not path.startswith(('scripts/ci/', 'scripts/tests/test_ci_')):
+            if path.startswith('scripts/tests/test_') and path.endswith('.py'):
+                # 运维单测本身只在 fast/ops 运行（安装器另跑登记的几项）；升级演练不运行单测，改单测不启动它。
+                installers = installers or path in INSTALLER_TESTS
+                continue
+            if not path.startswith('scripts/ci/') and path not in NOT_INSTALLER_PATHS:
                 installers = True
             if stem in ('build_native_wheels', 'verify_native_wheels', 'assemble_images', 'publish_release'):
                 installers = True
@@ -396,11 +451,13 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
                 word in path for word in ('ota', 'container_runtime', 'docker/', 'docker-compose', 'release_install')
             ):
                 selected.add('ota')
+                ota_suite = True
             continue
         if path.startswith('.github/') or path == 'run_all_tests.py':
             ops = True
             if path.endswith('ci-ota.yml'):
                 selected.add('ota')
+                ota_suite = True
             if path.endswith(('release.yml', 'release-installers.yml')):
                 installers = True
             if path.endswith('ci-browser.yml'):
@@ -445,17 +502,25 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
         # 文件名词干可能与模块同名（如 config/settings.py 命中 accounts），若共享组已覆盖该模块，则以共享组为准，避免被截走。
         if shared is not None and (not matched or set(matched) <= set(shared)):
             selected.update(shared)
+            # 升级接口模块（ota）与真实升级演练（OTA 套件）分开：后端的升级代码、迁移命令与架构保护会在演练中
+            # 执行，同时启动演练；升级页面和前端接口文件只跑升级相关的单测与页面用例，演练不经过界面。
+            if 'ota' in shared and not path.startswith('frontend/'):
+                ota_suite = True
             if '/migrations/' in path:
                 # 升级流程先备份再执行前向迁移；迁移变化须经 OTA 升级演练验证。
                 selected.add('ota')
+                ota_suite = True
             if path.startswith('frontend/') and set(shared) == set(BUSINESS):
                 browser.update(f'e2e/{name}.spec.ts' for name in SHARED_UI_BROWSERS)
             if path == 'backend/requirements.txt':
                 # 运行时依赖随离线 wheelhouse 和镜像交付，安装器与升级链路同样受影响。
                 installers = True
                 selected.add('ota')
+                ota_suite = True
         elif matched:
             selected.update(matched)
+            if 'ota' in matched and not path.startswith('frontend/'):
+                ota_suite = True
         else:
             unknown.append(path)
     if unknown and not modules and not full and not release:
@@ -469,11 +534,11 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
     backend.update(module_targets(selected))
     for module in selected:
         browser.update(f'e2e/{name}.spec.ts' for name in BROWSERS[module])
-        names = MODULE_FILES[module]
+        names = [words(name) for name in MODULE_FILES[module]]
         frontend.update(
             str(p.relative_to(ROOT / 'frontend'))
             for p in (ROOT / 'frontend/src').rglob('*.spec.ts')
-            if any(name.casefold() in p.name.casefold() for name in names)
+            if any(contains(words(p.name.removesuffix('.spec.ts')), name) for name in names)
         )
         if module not in ('ota', 'accounts', 'reports'):
             frontend.update(('src/modules/modules.spec.ts', 'src/flows.spec.ts'))
@@ -503,7 +568,7 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
         'frontend': checks_frontend,
         'ops': ops,
         'installers': installers,
-        'ota': 'ota' in selected or full,
+        'ota': ota_suite or 'ota' in modules or full,
         'mode': 'full' if full else 'release' if release else 'impact',
         'modules': sorted(selected),
         'reasons': reasons,

@@ -90,8 +90,9 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/hongheshan-svg/atm-erp
             org.opencontainers.image.revision=${{ needs.preflight.outputs.commit }}
-          cache-from: type=gha,scope=release-${{ matrix.arch }}
-          cache-to: type=gha,scope=release-${{ matrix.arch }},mode=max
+          # 只读 main 上 ci-cache.yml 预热的 app-image（amd64，合并后通常已构建同一 tree，各层全部命中）。
+          # tag 触发的运行写入的缓存只对同一 tag 可见，下一个版本读不到，导出反而多花 amd64 约 25 秒、arm64 约 1 分钟。
+          cache-from: type=gha,scope=app-image
       - env:
           TAG: ${{ needs.preflight.outputs.tag }}
           ARCH: ${{ matrix.arch }}
