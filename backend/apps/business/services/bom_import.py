@@ -20,7 +20,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.error_messages import chinese_error
 
 from ..models import BOMLine, Item, PurchaseLine
-from .bom import revision, total_shortfalls
+from .bom import blank_unit_message, revision, total_shortfalls, unit_conflict
 from .common import day, number, state
 from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
@@ -179,8 +179,9 @@ def preview(project, upload):
         raw = [[row[0], row[2], row[3], row[1], *row[4:]] for row in raw]
     codes = {str(row[0]).strip() for row in raw if row and row[0] is not None}
     items = {item.code: item for item in Item.objects.filter(code__in=codes, is_active=True)}
-    existing = list(BOMLine.objects.filter(project=project))
+    existing = list(BOMLine.objects.filter(project=project).select_related('item'))
     current = {(line.item_id, line.assembly_unit): line for line in existing}
+    known = {line.assembly_unit for line in existing}
     lines, errors, seen = [], [], set()
     for row_number, row in enumerate(raw, 2):
         if all(value in (None, '') for value in row):
@@ -197,8 +198,16 @@ def preview(project, upload):
                 if len(row) > 3
                 else next((line.assembly_unit for line in existing if line.item_id == item.pk), '')
             )
-            if len(row) < 4 and sum(line.item_id == item.pk for line in existing) > 1:
+            matching = [line for line in existing if line.item_id == item.pk]
+            if len(row) < 4 and len(matching) > 1:
                 raise ValidationError('此物料分属多个单元，请使用含单元列的新模板。')
+            if not assembly_unit and matching and all(line.assembly_unit for line in matching):
+                # 留空单元会新增一条「未分单元」行，需求量虚增；已有用料的物料必须写明改哪个单元。
+                raise ValidationError(blank_unit_message(matching))
+            problem = unit_conflict(assembly_unit, known)
+            if problem:
+                raise ValidationError(problem)
+            known.add(assembly_unit)
             row_key = (item.pk, assembly_unit)
             if row_key in seen:
                 raise ValidationError('同一文件中的物料编码和单元不能重复。')
@@ -219,9 +228,17 @@ def preview(project, upload):
                     raise ValidationError('申请人不能超过80字符。')
             if len(assembly_unit) > 100:
                 raise ValidationError('单元不能超过100字符。')
-            if len(note) > 500 or (row_key in current and not note):
+            existing_line = current.get(row_key)
+            action = 'create'
+            if existing_line is not None:
+                same = qty == existing_line.quantity and all(
+                    str(getattr(existing_line, field) or '') == str(details.get(field) or '') for field in details
+                )
+                # 从系统导出再回导时，没改的行原样跳过，不要求变更说明，也不写修订记录。
+                action = 'unchanged' if same and note in ('', existing_line.change_note) else 'update'
+            if len(note) > 500 or (action == 'update' and not note):
                 raise ValidationError('修改已有 BOM 必须填写变更说明，且不超过 500 字符。')
-            if row_key in current:
+            if action == 'update':
                 pending = (
                     PurchaseLine.objects.filter(bom_line=current[row_key])
                     .exclude(purchase__status='cancelled')
@@ -247,15 +264,20 @@ def preview(project, upload):
                     'quantity': str(qty),
                     'change_note': note,
                     'assembly_unit': assembly_unit,
+                    'bom_action': action,
+                    'before_quantity': str(existing_line.quantity) if existing_line is not None else None,
                 }
             )
         except ValidationError as exc:
             errors.append({'row': row_number, 'message': message(exc.detail)})
     if not lines and not errors:
         errors.append({'row': 2, 'message': '文件没有可导入的明细。'})
+    elif lines and not errors and all(line['bom_action'] == 'unchanged' for line in lines):
+        errors.append({'message': '文件中的明细与当前 BOM 完全一致，没有需要导入的变化。', 'unchanged': True})
     updates = [
         (current.get((line['item'], line['assembly_unit'])), line['item'], number(line['quantity'], 'quantity', 3))
         for line in lines
+        if line['bom_action'] != 'unchanged'
     ]
     for problem in total_shortfalls(project, existing, updates):
         errors.append(
@@ -264,9 +286,26 @@ def preview(project, upload):
                 'message': problem['message'],
             }
         )
+    listed = {(line['item'], line['assembly_unit']) for line in lines}
+    # 导入只新增和修改，不会移除文件里没有的行；列出来，免得人以为上传整表就等于整批替换。
+    untouched = [
+        {
+            'item_code': line.item.code,
+            'item_name': line.item.name,
+            'assembly_unit': line.assembly_unit,
+            'quantity': str(line.quantity),
+        }
+        for line in sorted(existing, key=lambda line: (line.assembly_unit, line.item.code))
+        if (line.item_id, line.assembly_unit) not in listed
+    ]
     return {
         'expected_revision': expected_revision,
         'lines': lines,
         'errors': errors,
         'can_import': bool(lines) and not errors,
+        'summary': {
+            **{key: sum(line['bom_action'] == key for line in lines) for key in ('create', 'update', 'unchanged')},
+            'untouched': len(untouched),
+        },
+        'untouched': untouched,
     }

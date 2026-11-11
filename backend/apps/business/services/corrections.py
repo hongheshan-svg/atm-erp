@@ -1,4 +1,4 @@
-from django.db.models import F, Sum
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
@@ -15,8 +15,22 @@ from apps.core.permissions import (
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
 from ..task_milestones import AUTOMATIC, PRE_SHIPMENT
-from .bom import incoming, issued
-from .common import ZERO, audit, day, fields, identity, integer, lookup, project_action, save, state, text
+from .bom import incoming, issued, linked_incoming, open_purchases
+from .common import (
+    ZERO,
+    audit,
+    day,
+    fields,
+    identity,
+    integer,
+    lock_items,
+    lookup,
+    number,
+    project_action,
+    save,
+    state,
+    text,
+)
 from .execution import assigned_people, stage_cancel_block, task_action
 from .finance import balance
 
@@ -355,33 +369,169 @@ def change_task(actor, key, task_id, data, operation):
     )
 
 
+BOM_STATES = {'draft', 'quoted', 'active', 'delivering'}
+
+
+def removal_problems(project, lines):
+    """移除这些 BOM 行前的拦截原因：关联本行的未收采购须先处理，各物料其余单元合计仍须覆盖已领与在途。
+
+    提示带上数量和采购单号，工程师拿着它就能去找采购或仓管，不必再翻单据。
+    """
+    problems = []
+    for line in lines:
+        pending = linked_incoming(line)
+        if pending > ZERO:
+            orders = open_purchases(PurchaseLine.objects.filter(bom_line=line))
+            problems.append(
+                f'{line.item.code} {line.item.name}（{line.assembly_unit or "未分单元"}）关联在途采购 {pending}'
+                f'{f"（{orders}）" if orders else ""}，请联系采购员取消未收余量后再移除。'
+            )
+    removing = {line.pk for line in lines}
+    for item_id in sorted({line.item_id for line in lines}):
+        other = (
+            BOMLine.objects.filter(project=project, item_id=item_id)
+            .exclude(pk__in=removing)
+            .aggregate(total=Sum('quantity'))['total']
+            or ZERO
+        )
+        used, pending = issued(project, item_id), incoming(project, item_id)
+        if other < used + pending:
+            item = next(line.item for line in lines if line.item_id == item_id)
+            orders = open_purchases(PurchaseLine.objects.filter(purchase__project=project, item_id=item_id))
+            problems.append(
+                f'移除后 {item.code} {item.name} 其余单元合计 {other}，小于已领用 {used} 与在途采购 {pending}'
+                f'{f"（{orders}）" if orders else ""} 之和；请联系采购员取消未收余量或联系仓管退回未用材料，'
+                '也可用「修改此行」改为减少数量。'
+            )
+    return problems
+
+
 def remove_bom(actor, key, line_id, data):
     source = get_object_or_404(BOMLine.all_objects, pk=identity(line_id))
 
     def execute(user, project):
         fields(data, {'reason'})
-        state(project, {'draft', 'quoted', 'active', 'delivering'})
+        state(project, BOM_STATES)
         line = get_object_or_404(BOMLine.all_objects.select_for_update(), pk=source.pk, project=project)
         if line.is_deleted:
             raise Conflict('此 BOM 行已移除。')
-        other_quantity = (
-            BOMLine.objects.filter(project=project, item_id=line.item_id)
-            .exclude(pk=line.pk)
-            .aggregate(total=Sum('quantity'))['total']
-            or ZERO
-        )
-        linked_pending = (
-            PurchaseLine.objects.filter(bom_line=line)
-            .exclude(purchase__status='cancelled')
-            .filter(quantity__gt=F('received_quantity') + F('cancelled_quantity'))
-            .exists()
-        )
-        if linked_pending or other_quantity < issued(project, line.item_id) + incoming(project, line.item_id):
-            raise Conflict('此物料已有领用或在途采购，请先处理相关单据。')
+        problems = removal_problems(project, [line])
+        if problems:
+            raise Conflict('；'.join(problems))
         reason = text(data, 'reason')
         line.soft_delete(user)
-        return audit(user, 'bom.remove', line, reason=reason)
+        return audit(
+            user, 'bom.remove', line, reason=reason, quantity=str(line.quantity), assembly_unit=line.assembly_unit
+        )
 
     return project_action(
         actor, key, 'bom.remove', source.project_id, {'line': source.pk, 'data': data}, BOM_WRITERS, execute
+    )
+
+
+def remove_bom_lines(actor, key, data):
+    """一次事务移除多行 BOM：任一行被拦截则整批不动，说明逐行列出。"""
+    project_id = data.get('project') if isinstance(data, dict) else None
+
+    def execute(user, project):
+        fields(data, {'project', 'ids', 'reason'})
+        state(project, BOM_STATES)
+        ids = data.get('ids')
+        if not isinstance(ids, list) or not 1 <= len(ids) <= 500:
+            raise ValidationError({'ids': '请选择 1 至 500 行 BOM 明细。'})
+        ids = [identity(value, 'ids') for value in ids]
+        if len(set(ids)) != len(ids):
+            raise ValidationError({'ids': '所选 BOM 明细不能重复，请刷新后重新选择。'})
+        reason = text(data, 'reason')
+        lines = list(
+            BOMLine.objects.select_for_update(of=('self',))
+            .select_related('item')
+            .filter(project=project, pk__in=ids)
+            .order_by('pk')
+        )
+        if len(lines) != len(ids):
+            raise Conflict('所选 BOM 明细已变化或已移除，请刷新后重新选择。')
+        problems = removal_problems(project, lines)
+        if problems:
+            raise Conflict('；'.join(problems))
+        for line in lines:
+            line.soft_delete(user)
+            audit(
+                user, 'bom.remove', line, reason=reason, quantity=str(line.quantity), assembly_unit=line.assembly_unit
+            )
+        return {'id': project.pk, 'removed': len(lines)}
+
+    return project_action(actor, key, 'bom.remove_batch', project_id, data, BOM_WRITERS, execute)
+
+
+def replace_bom(actor, key, line_id, data):
+    """替换物料（升版或换型）：同一事务里在原单元新增新物料行并移除原行，不出现新旧两行同时算缺料的中间状态。"""
+    source = get_object_or_404(BOMLine.all_objects, pk=identity(line_id))
+
+    def execute(user, project):
+        fields(data, {'item', 'quantity', 'change_note', 'required_date', 'application_date', 'applicant'})
+        state(project, BOM_STATES)
+        line = get_object_or_404(
+            BOMLine.all_objects.select_for_update(of=('self',)).select_related('item'), pk=source.pk, project=project
+        )
+        if line.is_deleted:
+            raise Conflict('此 BOM 行已移除。')
+        item_id = identity(data.get('item'), 'item')
+        if item_id == line.item_id:
+            raise ValidationError({'item': '请选择与原物料不同的新物料；只改数量请用「修改此行」。'})
+        item = lock_items({item_id, line.item_id})[item_id]
+        if not item.is_active:
+            raise ValidationError({'item': 'BOM 不能添加或修改为已停用物料。'})
+        qty = number(data.get('quantity'), 'quantity', 3, positive=True)
+        note = text(data, 'change_note')
+        if BOMLine.objects.filter(project=project, item=item, assembly_unit=line.assembly_unit).exists():
+            raise Conflict(
+                f'单元「{line.assembly_unit or "未分单元"}」已有物料 {item.code}，请用「修改此行」调整该行数量后移除原行。'
+            )
+        problems = removal_problems(project, [line])
+        if problems:
+            raise Conflict('；'.join(problems))
+        replacement = BOMLine(
+            project=project,
+            item=item,
+            quantity=qty,
+            assembly_unit=line.assembly_unit,
+            change_note=note,
+            required_date=line.required_date,
+            application_date=line.application_date,
+            applicant=line.applicant,
+        )
+        for field in ('required_date', 'application_date'):
+            if field in data:
+                setattr(replacement, field, day(data, field, optional=True))
+        if 'applicant' in data:
+            replacement.applicant = text(data, 'applicant', default='', maximum=80)
+        line.soft_delete(user)
+        save(replacement, user)
+        detail = {'replaced_line': line.pk, 'replaced_item': line.item.code, 'replacement_item': item.code}
+        audit(
+            user,
+            'bom.remove',
+            line,
+            reason=note,
+            quantity=str(line.quantity),
+            assembly_unit=line.assembly_unit,
+            replacement=replacement.pk,
+            **detail,
+        )
+        audit(
+            user,
+            'bom.revise',
+            replacement,
+            before=None,
+            after=str(qty),
+            reason=note,
+            before_unit='',
+            after_unit=replacement.assembly_unit,
+            **detail,
+        )
+        return {'id': replacement.pk, 'removed': line.pk}
+
+    return project_action(
+        actor, key, 'bom.replace', source.project_id, {'line': source.pk, 'data': data}, BOM_WRITERS, execute
     )
