@@ -1,8 +1,9 @@
 // How a list row presents its actions. No imports, so the e2e helpers can share this one registry
 // instead of restating where an action lives.
 
+// 销售按流程阶段突出下一步：已报价签约、草稿报价、已签约看交付与回款（签约排在报价前）。
 // Business rows highlight their next action; attachment rows highlight opening the file.
-export const primaryActions = ['处理修改申请', '批准采购', '收货', '提交采购', '登记收付款', '开始任务', '完成任务', '领料', '退料', '预览附件']
+export const primaryActions = ['处理修改申请', '批准采购', '收货', '提交采购', '登记收付款', '开始任务', '完成任务', '领料', '退料', '预览附件', '签约', '报价', '交付与回款']
 
 // Long menus (purchases has nine entries) are grouped by what an entry does. Classifying by shape
 // rather than by a name registry lets a newly added action land somewhere sensible on its own.

@@ -86,11 +86,11 @@ onBeforeUnmount(() => { generation++ })
 <template>
   <span v-if="resource" class="quick-reference">
     <template v-if="allowed">
-      <button ref="trigger" type="button" :disabled="disabled" :aria-disabled="busy || disabled" @click="start">{{ busy ? '正在核对相似资料…' : `新增${noun}` }}</button>
+      <button ref="trigger" type="button" :disabled="disabled" :aria-disabled="busy || disabled" @mousedown.prevent @click="start">{{ busy ? '正在核对相似资料…' : `新增${noun}` }}</button>
       <span v-if="checked && similar.length" class="quick-similar" role="region" aria-label="相似资料核对">
         <span>已有相似资料，请先核对名称和编号：</span>
-        <button v-for="row in similar" :key="row.id" type="button" :disabled="disabled || busy" @click="useExisting(row)">{{ referenceLabel(row).name }} · {{ referenceLabel(row).detail }} · 使用此项</button>
-        <button type="button" :disabled="disabled || busy" @click="showForm">仍需新增{{ noun }}</button>
+        <button v-for="row in similar" :key="row.id" type="button" :disabled="disabled || busy" @mousedown.prevent @click="useExisting(row)">{{ referenceLabel(row).name }} · {{ referenceLabel(row).detail }} · 使用此项</button>
+        <button type="button" :disabled="disabled || busy" @mousedown.prevent @click="showForm">仍需新增{{ noun }}</button>
       </span>
     </template>
     <span v-else class="quick-help">需要新增{{ noun }}，请联系{{ maintainer }}维护。</span>

@@ -268,7 +268,7 @@ describe('BOM 并排选料与采购草稿', () => {
     checkbox().element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
     expect(wrapper.findAll('.draft-item')).toHaveLength(1)
-    const expandCell = wrapper.findAll('tbody tr')[0]!.findAll('td')[1]!
+    const expandCell = wrapper.findAll('tbody tr')[0]!.findAll('td')[1]!  // 选择列后的展开列
     await expandCell.trigger('click')
     expect(wrapper.findAll('.draft-item')).toHaveLength(1)
   })
@@ -299,5 +299,64 @@ describe('BOM 并排选料与采购草稿', () => {
     await flushPromises()
     expect(write).not.toHaveBeenCalled()
     expect(wrapper.find('section[aria-label="BOM 勾选采购"]').exists()).toBe(false)
+  })
+
+  it('同物料多单元：出现组标题与合计数量，组价写入各行，单独定价不被组价覆盖，提交仍逐 bom_line', async () => {
+    const wrapper = await picker()
+    await selectMotor(wrapper)
+    expect(wrapper.find('.draft-group-head').exists()).toBe(false)
+    await wrapper.findAll('input[aria-label="选择 2199000001"]')[1]!.setValue(true)
+    const head = wrapper.get('[aria-label="物料组 2199000001"] .draft-group-head')
+    expect(head.text()).toContain('伺服电机')
+    expect(head.text()).toContain('2 个单元')
+    expect(head.text()).toContain('合计 16.000 件')
+    const rowPrice = (unit: string) => draft(wrapper, unit).get<HTMLInputElement>('input[aria-label="含税单价（元）"]')
+    expect(rowPrice('检测单元').element.value).toBe('10.20')
+    const group = wrapper.get<HTMLInputElement>('input[aria-label="2199000001 组含税单价（元）"]')
+    await group.setValue('11.00')
+    expect(rowPrice('输送单元').element.value).toBe('11.00')
+    expect(rowPrice('检测单元').element.value).toBe('11.00')
+    await rowPrice('检测单元').setValue('12.00')
+    expect(draft(wrapper, '检测单元').text()).toContain('单独定价')
+    await group.setValue('13.00')
+    expect(rowPrice('输送单元').element.value).toBe('13.00')
+    expect(rowPrice('检测单元').element.value).toBe('12.00')
+    await draft(wrapper, '检测单元').get('input[aria-label="采购数量"]').setValue('9.000')
+    expect(draft(wrapper, '检测单元').text()).toContain('超过当前缺料')
+    expect(draft(wrapper).text()).not.toContain('超过当前缺料')
+    await draft(wrapper, '检测单元').get('input[aria-label="采购数量"]').setValue('2.000')
+    await supplier(wrapper)
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(vi.mocked(write).mock.calls[0]![1]).toEqual(expect.objectContaining({
+      lines: [
+        { item: 1, bom_line: 101, quantity: '8.000', unit_price: '13.00' },
+        { item: 1, bom_line: 102, quantity: '2.000', unit_price: '12.00' },
+      ],
+    }))
+  })
+
+  it('移除组内最后一个单元时组标题消失，剩一个单元退回单行样式', async () => {
+    const wrapper = await picker()
+    await selectMotor(wrapper)
+    await wrapper.findAll('input[aria-label="选择 2199000001"]')[1]!.setValue(true)
+    expect(wrapper.find('.draft-group-head').exists()).toBe(true)
+    await wrapper.get('button[aria-label="移除 2199000001 检测单元"]').trigger('click')
+    expect(wrapper.find('.draft-group-head').exists()).toBe(false)
+    await wrapper.get('button[aria-label="移除 2199000001 输送单元"]').trigger('click')
+    expect(wrapper.findAll('.draft-item')).toHaveLength(0)
+  })
+
+  it('选料表默认按需求日期升序（无日期靠后），可切换为单元排序，并在物料列显示规格', async () => {
+    demand = demand.map(row => ({ ...row, specification: `规格-${row.bom_line}`,
+      required_date: row.bom_line === 103 ? '2020-01-02' : row.bom_line === 102 ? '2099-01-01' : '' }))
+    const wrapper = await picker()
+    const codes = () => wrapper.findAll('.material-name').map(value => value.text())
+    expect(codes().slice(0, 3)).toEqual(['直线导轨', '伺服电机', '伺服电机'])
+    expect(wrapper.findAll('.overdue-date').length).toBeGreaterThan(0)
+    expect(wrapper.text()).toContain('2199000002 · 规格-103')
+    await wrapper.get('select[aria-label="选料排序"]').setValue('unit')
+    const rows = wrapper.findAll('tbody tr').map(value => value.text())
+    expect(rows.findIndex(text => text.includes('夹紧单元'))).toBeLessThan(rows.findIndex(text => text.includes('输送单元')))
   })
 })

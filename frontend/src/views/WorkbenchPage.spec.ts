@@ -249,3 +249,19 @@ it('销售经理看到本人合同的逾期应收和已报价待签约，同一�
   expect(wrapper.get('[aria-label="查看全部我的合同逾期应收"]').attributes('href')).toBe('/sales?search=')
   wrapper.unmount()
 })
+
+it('手机宽度：待办表不渲染序号和类型列，类型并入事项副行，且不设最大高度', async () => {
+  const original = window.matchMedia
+  window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia
+  try {
+    user.value = { id: 7, roles: ['admin'], display_name: '测试用户' }
+    const wrapper = await render()
+    const table = wrapper.get('.priority-table')
+    const headers = table.findAll('.el-table__header th').map((th: any) => th.text())
+    expect(headers).not.toContain('类型')
+    expect(headers).not.toContain('序号')
+    expect(headers).not.toContain('截止 / 到期日期')
+    expect(table.find('.el-table__body-wrapper').text()).toContain('采购明细逾期')
+    wrapper.unmount()
+  } finally { window.matchMedia = original }
+})

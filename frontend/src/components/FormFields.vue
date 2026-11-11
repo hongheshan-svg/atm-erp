@@ -69,7 +69,7 @@ function readonlyValue(field: Field) {
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>
         <BusinessTable v-if="readonly" :label="field.label" :data="model[field.key]" max-height="430" stripe>
-          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : 140" :show-overflow-tooltip="!column.flow"
+          <el-table-column v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key" :label="column.label" :prop="column.key" :min-width="column.flow ? 150 : column.width ?? 140" :show-overflow-tooltip="!column.flow"
             ><template v-if="column.flow" #default="{ row }"
               ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
             ></el-table-column
@@ -90,7 +90,7 @@ function readonlyValue(field: Field) {
         </label>
         <span :id="`${fieldId(field.key)}-help`"><small v-if="field.hint">{{ field.hint }}</small><small v-if="issue(field.key)" class="field-error">{{ issue(field.key) }}</small></span>
       </fieldset>
-      <div v-else-if="!field.hidden" class="field" :data-field-path="fieldPath(field.key)" @focusout="emit('touched', fieldPath(field.key))" :class="{ 'field-wide': field.wide || field.type === 'textarea' }">
+      <div v-else-if="!field.hidden" class="field" :data-field-path="fieldPath(field.key)" @focusout="emit('touched', fieldPath(field.key))" :class="{ 'field-wide': field.wide || field.type === 'textarea', 'field-sized': field.width != null }" :style="field.width != null ? { '--field-width': typeof field.width === 'number' ? `${field.width}px` : field.width } : undefined">
         <label :for="fieldId(field.key)">{{ field.label }}<small v-if="field.optional && !readonly">（选填）</small></label>
         <textarea v-if="readonly" :value="readonlyValue(field)" :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label" readonly rows="1" class="readonly-text" />
         <InlineDocumentField v-else-if="field.upload" v-model="model[field.key]" :field="field" :disabled="disabled || field.readonly" :id="fieldId(field.key)" :invalid="Boolean(issue(field.key))" :described-by="`${fieldId(field.key)}-help`" @busy="emit('uploading', $event)" />
@@ -99,6 +99,9 @@ function readonlyValue(field: Field) {
         <ElSelect v-else-if="field.type === 'multi' && field.searchableMulti" v-model="model[field.key]" :ref="(el: any) => { if (el) multiSelects.set(field.key, el); else multiSelects.delete(field.key) }" multiple filterable fit-input-width popper-class="executor-options" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" :id="fieldId(field.key)" :aria-label="field.label" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly" placeholder="可搜索姓名并选择多人" no-match-text="没有匹配的人员" no-data-text="暂无可选人员">
           <ElOption v-for="option in optionsOf(field)" :key="option.value" :label="option.label" :value="option.value" />
           <template #footer><div class="executor-options-footer"><span>已选 {{ model[field.key]?.length || 0 }} 人</span><el-button size="small" type="primary" @click="multiSelects.get(field.key)?.blur()">完成选择</el-button></div></template>
+        </ElSelect>
+        <ElSelect v-else-if="field.type === 'select' && field.searchable" v-model="model[field.key]" filterable fit-input-width :clearable="Boolean(field.optional)" popper-class="executor-options" :popper-style="{ maxWidth: 'calc(100vw - 24px)' }" :id="fieldId(field.key)" :aria-label="field.label" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :disabled="disabled || field.readonly" placeholder="可搜索姓名并选择" no-match-text="没有匹配的人员" no-data-text="暂无可选人员">
+          <ElOption v-for="option in optionsOf(field)" :key="option.value" :label="option.label" :value="option.value" />
         </ElSelect>
         <select
           :id="fieldId(field.key)" :aria-invalid="Boolean(issue(field.key))" :aria-describedby="`${fieldId(field.key)}-help`" :aria-label="field.label"

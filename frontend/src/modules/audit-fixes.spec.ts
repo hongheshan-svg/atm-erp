@@ -38,7 +38,7 @@ it('维护 BOM 只提交本次变更，不再把整张 BOM 灌进表单', async 
 it('BOM 单行修改只提交这一行并带上当前版本', async () => {
   vi.mocked(read).mockResolvedValue({ revision: 'rev-9', lines: [] })
   const row = { id: 5, project: 7, item: 3, item_code: 'M1', item_name: '导轨', quantity: '4.000', assembly_unit: '主机' }
-  expect(actionNames('bom', { ...row, can_edit_bom: true })).toEqual(['修改此行', '移除'])
+  expect(actionNames('bom', { ...row, can_edit_bom: true })).toEqual(['修改此行', '替换物料', '移除'])
   const command = await actionCommand('bom', row, '修改此行')
   expect(command.path).toBe('/business/projects/7/revise-bom/')
   expect(command.initial?.quantity).toBe('4.000')

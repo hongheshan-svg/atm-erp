@@ -16,6 +16,14 @@ const work = ref<Record<string, Bucket>>({})
 const loading = ref(false), initialized = ref(false), error = ref(''), updated = ref('')
 const day = ref(today())
 let generation = 0
+// 手机宽度（与列表组件同一判定）：待办表改为「事项 / 状态 / 处理」三列，类型和截止日期并入事项下方的副行。
+const narrow = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  const query = window.matchMedia('(max-width: 600px)')
+  const sync = () => { narrow.value = query.matches }
+  query.addEventListener?.('change', sync)
+  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
+}
 const icons = { handover_projects: List, supervised_tasks: List, sales: Document, quoted_sales: Document, sale_receivables: Wallet, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, approved_purchases: Document, shortage_projects: Box, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
 // 交接待办：签约后待启动的项目、批准后待下单的采购、有缺料的项目、本人合同的逾期应收，各自成类，不再只能逐个项目翻找。
 const labels: Record<string, string> = {
@@ -155,11 +163,11 @@ onBeforeUnmount(() => { generation++ })
       <div class="work-main" :class="{ 'no-priority': !priority.length }">
       <section class="panel work-priority" aria-labelledby="priority-heading">
         <header><h2 id="priority-heading">今天要处理的</h2><span class="muted">按逾期、今日到期、待审批排序，最多 7 项</span></header>
-        <BusinessTable label="待办事项" v-if="priority.length" :data="priority" :max-height="420" class="priority-table">
-          <el-table-column label="事项 / 关联项目" min-width="220"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)">{{ title(item.key, item.row) }}</router-link><small class="record-secondary">{{ context(item.key, item.row) }}</small></template></el-table-column>
-          <el-table-column label="类型" min-width="110"><template #default="{ row: item }">{{ labels[item.key] }}</template></el-table-column>
-          <el-table-column label="截止 / 到期日期" width="135"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
-          <el-table-column label="状态" width="95"><template #default="{ row: item }"><span class="work-status" :class="`tone-${item.tone}`">{{ item.text }}</span></template></el-table-column>
+        <BusinessTable label="待办事项" v-if="priority.length" :data="priority" :numbered="!narrow" :max-height="narrow ? undefined : 420" class="priority-table">
+          <el-table-column label="事项 / 关联项目" :min-width="narrow ? 150 : 220"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)">{{ title(item.key, item.row) }}</router-link><small class="record-secondary">{{ narrow ? [labels[item.key], context(item.key, item.row)].filter(Boolean).join(' · ') : context(item.key, item.row) }}</small><small v-if="narrow && due(item.key, item.row)" class="record-secondary">{{ due(item.key, item.row) }}</small></template></el-table-column>
+          <el-table-column v-if="!narrow" label="类型" min-width="110"><template #default="{ row: item }">{{ labels[item.key] }}</template></el-table-column>
+          <el-table-column v-if="!narrow" label="截止 / 到期日期" width="135"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
+          <el-table-column label="状态" :width="narrow ? 92 : 95"><template #default="{ row: item }"><span class="work-status" :class="`tone-${item.tone}`">{{ item.text }}</span></template></el-table-column>
           <el-table-column label="操作" width="60" fixed="right"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)" :aria-label="`处理${title(item.key, item.row)}`">处理</router-link></template></el-table-column>
         </BusinessTable>
         <p v-else class="priority-empty muted">今天没有需要优先处理的事项</p>
@@ -228,5 +236,17 @@ onBeforeUnmount(() => { generation++ })
   .work-priority > header, .work-categories > header { align-items: flex-start; flex-direction: column; gap: 8px; padding: 16px; }
   .work-category { padding: 14px 16px; }
   .work-refresh { flex-wrap: wrap; gap: 8px; }
+}
+/* 手机端：列由模板按窄屏判定渲染（事项 / 状态 / 处理），这里只收紧单元格内边距。 */
+@media (max-width: 600px) {
+  .work-metric { padding: 12px; gap: 4px; }
+  .work-metric > span { font-size: 13px; line-height: 1.35; }
+  .work-metric strong { font-size: 24px; }
+  .warehouse-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 8px 16px; }
+  .warehouse-shortcuts a { display: flex; align-items: center; min-height: 40px; }
+  .work-priority :deep(.el-table__cell) { padding: 8px 4px; }
+  .work-priority .work-status { padding: 3px 6px; font-size: 11px; white-space: nowrap; }
+  .work-priority :deep(td a) { white-space: nowrap; }
+  .work-priority :deep(.record-secondary) { white-space: normal; margin-top: 3px; }
 }
 </style>

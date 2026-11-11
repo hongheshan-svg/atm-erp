@@ -635,7 +635,7 @@ class TransferTests(BusinessFixtures, TestCase):
                 '月结120天',
                 '自定义月结',
             ],
-            ('tasks', 'kind'): ['设计阶段', '采购阶段', '组装阶段', '调试阶段', '发货阶段', '客户终验收阶段'],
+            ('tasks', 'kind'): ['设计阶段', '采购阶段', '装配阶段', '调试阶段', '发货阶段', '客户终验收阶段'],
             ('payments', 'method'): ['银行转账', '现金', '其他'],
         }
         for (resource, key), options in expected.items():

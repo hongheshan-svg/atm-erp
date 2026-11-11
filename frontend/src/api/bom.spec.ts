@@ -28,3 +28,14 @@ it('权限或过期明细错误显示原中文原因，不生成空白下载', a
   await expect(downloadBOM(7, [1], 'csv', 'BOM.csv')).rejects.toMatchObject({ response: { data: { detail: '所选明细已变化，请刷新。' } } })
   expect(create).not.toHaveBeenCalled()
 })
+
+it('缺料清单和可回导模板通过 layout 区分导出格式', async () => {
+  vi.mocked(request.post).mockResolvedValue({ data: new Blob(['表格']) })
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:bom')
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  await downloadBOM(7, [1, 2], 'xlsx', '缺料清单.xlsx', 'purchase')
+  expect(request.post).toHaveBeenLastCalledWith('/business/bom/export/', { project: 7, ids: [1, 2], file_format: 'xlsx', layout: 'purchase' }, { responseType: 'blob' })
+  await downloadBOM(7, [1], 'xlsx', 'BOM回导模板.xlsx', 'import')
+  expect(request.post).toHaveBeenLastCalledWith('/business/bom/export/', { project: 7, ids: [1], file_format: 'xlsx', layout: 'import' }, { responseType: 'blob' })
+})

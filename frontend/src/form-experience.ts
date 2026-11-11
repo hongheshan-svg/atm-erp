@@ -2,7 +2,10 @@ import type { Command, Field, Row } from './types'
 import { sessionStore } from './utils/storage'
 
 export function wideCommand(command: Command | null) {
-  return !!command && !command.readonly && (command.fields.filter(f => !f.hidden).length > 4 || command.fields.some(f => f.type === 'rows'))
+  if (!command) return false
+  // 只读详情里带明细表（采购明细、交付与回款等）时也占满工作区：390px 侧栏只能露出两列。
+  if (command.readonly) return command.fields.some(f => f.type === 'rows' && !f.hidden)
+  return command.fields.filter(f => !f.hidden).length > 4 || command.fields.some(f => f.type === 'rows')
 }
 export function submitLabel(command: Command) {
   if (command.submitLabel) return command.submitLabel
@@ -11,6 +14,7 @@ export function submitLabel(command: Command) {
     签约: '确认签约并生成项目', 报价: '保存报价', 新建销售: '保存销售草稿', 新建采购: '保存采购草稿',
     登记收付款: '登记收付款记录', 登记收款: '登记收款记录', 退款: '登记退款记录', 冲销付款: '确认冲销记录',
     提交采购: '提交采购审批', 批准采购: '确认批准采购', 完成任务: '确认完成任务',
+    确认对账: '确认该对账单',
   }
   return labels[command.title] || (/^(新增|新建|登记|上传|维护|编辑)/.test(command.title) ? `保存${command.title.replace(/^(新增|新建|登记|上传|维护|编辑)/, '')}` : `确认${command.title}`)
 }

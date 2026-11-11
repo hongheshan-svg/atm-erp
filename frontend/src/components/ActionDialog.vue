@@ -2,7 +2,7 @@
 import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { matchedRouteKey, onBeforeRouteLeave, onBeforeRouteUpdate, routerKey } from 'vue-router'
-import { user } from '../session'
+import { purchaseReader, user } from '../session'
 import { clearDraft, draftKey, formSignature, loadDraft, saveDraft, registerFormGuard, submitLabel, wideCommand } from '../form-experience'
 import { ElDialog, ElMessage, ElMessageBox } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
@@ -138,7 +138,34 @@ watch(() => props.command, async (value, old) => {
 })
 const error = ref('')
 const recovery = ref<{ label: string; path: string }[]>([])
+// 「打开原单据」指向当前页面，或 BOM 修订这类没有具体原单的冲突时，点了也没反应，不再显示孤零零的一行。
+function usefulRecovery(e: unknown) {
+  const c = command.value
+  if (c && /\/(revise-bom|bom-import-confirm)\/$|^\/business\/bom\//.test(c.path)) return []
+  const route = router?.currentRoute.value
+  return recoveryActions(e).filter(action => !route || (action.path !== route.path && action.path !== route.fullPath))
+}
 const preview = ref<Row | null>(null)
+const previewedSignature = ref('')
+// 预览后又改了填写内容：结果可能已过期，提示重新预览，保存按钮也不再沿用预览里的「新增 N 行」。
+const previewStale = computed(() => Boolean(preview.value) && previewedSignature.value !== formSignature(data.value))
+const purchaseStatus: Record<string, string> = { draft: '草稿', submitted: '待批准', approved: '待收货', partial: '部分收货' }
+const purchaseList = computed(() => (preview.value?.purchases || []).map((purchase: Row) => `${purchase.code}（${purchaseStatus[purchase.status] || purchase.status}）`).join('、'))
+// 只有被拦截或确有已领/在途要处理时才叫人去找采购；只改日期或单元时采购单仅作参考。
+const purchaseAction = computed(() => {
+  const result = preview.value
+  if (!result) return false
+  return !result.can_apply || (result.items || []).some((row: Row) => Number(row.unresolved_quantity) > 0)
+})
+const submitText = computed(() => {
+  const c = command.value
+  if (!c) return ''
+  const changes: Row[] = preview.value && !previewStale.value ? preview.value.changes || [] : []
+  const created = changes.filter(change => change.action === 'create').length
+  if (!created || c.submitLabel) return submitLabel(c)
+  const updated = changes.length - created
+  return `确认新增 ${created} 行${updated ? `、修改 ${updated} 行` : ''}`
+})
 const primary = computed(() => ['签约', '收货', '批准采购', '登记收付款', '领料', '开始任务', '完成任务', '提交采购'].find(label => command.value?.actions?.some(action => action.label === label)))
 // 详情底部只留下一步，其余动作收进菜单：十个按钮平铺会把明细挤出面板。
 const shownActions = computed(() => {
@@ -183,7 +210,9 @@ async function previewChange() {
     serverIssues.value = []
     validateFields(c.fields, data.value)
     const body = payload(c.fields, data.value)
+    const signature = formSignature(data.value)
     preview.value = await write(c.previewPath, c.prepare ? c.prepare(body) : body, requestKey())
+    previewedSignature.value = signature
   } catch (e) { error.value = message(e); mapServerIssues(e) } finally { busy.value = false }
 }
 const fieldsContainer = ref<HTMLElement>()
@@ -251,7 +280,7 @@ async function submit() {
   } catch (e) {
     error.value = message(e)
     mapServerIssues(e)
-    recovery.value = recoveryActions(e)
+    recovery.value = usefulRecovery(e)
     await nextTick()
     if (fieldsContainer.value) fieldsContainer.value.scrollTop = 0
   } finally {
@@ -283,7 +312,7 @@ async function submit() {
       <details v-if="command.flow" class="compact-flow"><summary>{{ command.flow.label }} · {{ command.flow.nodes[command.flow.current]?.label || command.flow.aborted?.label }} · 查看完整流程</summary><ProcessSteps class="record-flow" :flow="command.flow" /></details>
       <el-alert v-if="command.notice" :title="command.notice.text" :type="command.notice.type" :closable="false" show-icon />
       <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
-      <p v-for="action in recovery" :key="action.path"><el-button link @click="follow(action.path)">{{ action.label }}</el-button></p>
+      <p v-for="action in recovery" :key="action.path" class="recovery-action"><el-button link type="primary" @click="follow(action.path)">{{ action.label }} →</el-button></p>
       <section v-if="restored" class="draft-notice" aria-label="未提交的填写内容"><span>发现之前暂存的填写内容（附件需重新选择）。</span><el-button @click="restore">恢复填写</el-button><el-button text @click="discardDraft">删除暂存</el-button></section>
       <section v-if="command.blocked" class="action-blocker" role="status"><strong>先完成以下事项</strong><p>{{ command.blocked }}</p></section>
       <p v-for="link in command.links" :key="link.path"><el-button @click="follow(link.path)">{{ link.label }}</el-button></p>
@@ -296,10 +325,30 @@ async function submit() {
         <p v-for="item in similarItems" :key="item.id"><router-link :to="{ path: '/masterdata', query: { section: 'items', resource: 'items', focus: item.id } }">{{ item.code }} · {{ item.name }} · {{ item.specification }} · {{ item.brand }} · {{ item.unit }}</router-link></p>
       </section>
       <el-alert v-if="roleChange" :title="roleChange" type="warning" :closable="false" role="status" />
-      <section v-if="preview" aria-label="变更影响预览">
+      <section v-if="preview" class="change-preview" aria-label="变更影响预览">
         <el-alert :title="preview.can_apply ? '本次预览可通过；保存时仍会重新校验。' : preview.blockers.join('；')" :type="preview.can_apply ? 'info' : 'warning'" :closable="false" />
-        <BusinessTable label="变更影响" :data="preview.items" max-height="300"><el-table-column prop="item_name" label="物料" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" /></BusinessTable>
-        <router-link v-for="purchase in preview.purchases" :key="purchase.id" :to="{ path: `/projects/${preview.project}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }">{{ purchase.code }} · 处理关联采购 </router-link>
+        <el-alert v-if="previewStale" title="预览后又改过填写内容，下方结果可能已过期，请重新预览。" type="warning" :closable="false" />
+        <el-alert v-for="warning in preview.warnings || []" :key="warning" :title="warning" type="warning" :closable="false" show-icon role="status" />
+        <template v-if="preview.changes?.length">
+          <h3 class="preview-heading">本次提交 {{ preview.changes.length }} 行</h3>
+          <BusinessTable label="本次提交的行" :data="preview.changes" :numbered="false" max-height="220">
+            <el-table-column label="动作" width="72"><template #default="{ row }"><el-tag :type="row.action === 'create' ? 'warning' : 'info'" size="small">{{ row.action === 'create' ? '新增' : '修改' }}</el-tag></template></el-table-column>
+            <el-table-column label="物料" min-width="180"><template #default="{ row }">{{ row.item_code }} {{ row.item_name }}</template></el-table-column>
+            <el-table-column label="单元" min-width="140"><template #default="{ row }">{{ row.before_unit != null && row.before_unit !== row.assembly_unit ? `${row.before_unit || '未分单元'} → ` : '' }}{{ row.assembly_unit || '未分单元' }}</template></el-table-column>
+            <el-table-column label="数量" min-width="130"><template #default="{ row }">{{ row.before ?? '0' }} → {{ row.after }}</template></el-table-column>
+          </BusinessTable>
+        </template>
+        <template v-if="preview.items?.length">
+          <h3 class="preview-heading">数量变化（按物料汇总）</h3>
+          <BusinessTable label="变更影响" :data="preview.items" max-height="260"><el-table-column prop="item_name" label="物料" min-width="140" /><el-table-column prop="quantity" label="变更前" /><el-table-column prop="after" label="变更后" /><el-table-column prop="difference" label="差异" /><el-table-column prop="unresolved_quantity" label="需处理已领/采购数量" min-width="120" /><el-table-column v-if="preview.items.some((row: Row) => Number(row.received_in_stock) > 0)" prop="received_in_stock" label="已到货未领" /></BusinessTable>
+          <p v-if="preview.unchanged_items" class="muted">其余 {{ preview.unchanged_items }} 种物料数量不变，未列出。</p>
+        </template>
+        <p v-else-if="preview.changes && preview.can_apply" class="muted">本次没有数量变化（仅改了日期、单元或申请信息）。</p>
+        <template v-if="preview.purchases?.length">
+          <p v-if="purchaseReader()" class="preview-purchases"><router-link v-for="purchase in preview.purchases" :key="purchase.id" :to="{ path: `/projects/${preview.project}`, query: { tab: 'purchases', resource: 'purchases', focus: purchase.id } }">{{ purchase.code }}（{{ purchaseStatus[purchase.status] || purchase.status }}）· {{ purchaseAction ? '处理关联采购' : '查看采购' }}</router-link></p>
+          <p v-else-if="purchaseAction" class="muted">涉及采购单 {{ purchaseList }}，请联系采购员处理未收余量后再提交。</p>
+          <p v-else class="muted">相关采购单 {{ purchaseList }}，本次变更不需要处理。</p>
+        </template>
       </section>
       <p v-if="!command.fields.length && !command.blocked && !command.readonly">确认执行“{{ command.title }}”。</p>
       </div>
@@ -311,7 +360,7 @@ async function submit() {
         <el-button v-if="dirty && currentDraftKey" :disabled="locked" @click="keepAndClose">暂存并关闭</el-button>
         <el-button :disabled="locked" @click="requestClose">{{ command.readonly ? '关闭' : '取消' }}</el-button
         ><el-button v-if="!command.readonly && !command.blocked" type="primary" native-type="submit" :loading="locked"
-          >{{ submitLabel(command) }}</el-button
+          >{{ submitText }}</el-button
         >
       </div>
     </form>
@@ -327,4 +376,19 @@ async function submit() {
 .field-issues ul { padding-left: 18px; margin: 6px 0; }
 .draft-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .draft-notice span { flex: 1 1 240px; }
+.change-preview { display: grid; gap: 10px; margin-top: 12px; }
+.change-preview .preview-heading { margin: 4px 0 0; font-size: 14px; }
+.change-preview .muted { margin: 0; }
+.preview-purchases { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.recovery-action { margin: 8px 0; }
+</style>
+<style>
+/* 窄屏（手机）：对话框、详情面板与确认框的按钮触控区不小于 40px；详情面板底部取消/确认并排，主次靠颜色区分，避免把破坏性确认放在最顶部整行。 */
+@media (max-width: 600px) {
+  :is(.action-dialog, .detail-pane, .el-message-box) .el-button:not(.el-button--small):not(.is-text) { min-height: 40px; }
+  .detail-pane .detail-pane-heading .el-button.is-text { min-width: 40px; min-height: 40px; }
+  .detail-pane .dialog-footer > .el-button--primary { order: initial; flex: 1 1 auto; }
+  /* 多选人员标签的删除叉：默认 14px 太小，放大触控区。 */
+  :is(.action-dialog, .detail-pane) .el-select__tags .el-tag__close { width: 24px; height: 24px; font-size: 14px; }
+}
 </style>
