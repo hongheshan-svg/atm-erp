@@ -107,7 +107,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await detailAction(manager, '关闭')
   await purchaser.goto(`/erp/projects/${id}?tab=bom`)
   await purchaser.getByRole('region', { name: 'BOM 缺料需求', exact: true }).locator('.el-table__body tr').filter({ hasText: '下料' }).getByRole('checkbox').check()
-  await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
+  await purchaser.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
   const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
   const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
   await selectRemoteOption(purchaseDraft.getByLabel('供应商', { exact: true }), { text: `supplier${suffix}` })

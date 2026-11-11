@@ -620,7 +620,11 @@ def revise_bom(actor, key, project_id, data):
         seen_ids = set()
         for index, ((item_id, unit), row) in enumerate(planned.items()):
             if not items[item_id].is_active:
-                raise ValidationError('BOM 不能添加或修改为已停用物料。')
+                stopped = items[item_id]
+                raise ValidationError(
+                    f'物料 {stopped.code} {stopped.name} 已停用，BOM 不能新增或修改该物料；'
+                    '请在行尾「操作」用「替换物料」换成在用物料，或移除该行。'
+                )
             try:
                 qty = number(row.get('quantity'), 'quantity', 3, positive=True)
             except ValidationError as exc:

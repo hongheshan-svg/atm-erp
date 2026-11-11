@@ -213,13 +213,13 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await save(manager)
   await purchaser.goto(`/erp/projects/${id}`)
   await purchaser.getByRole('tab', { name: 'BOM', exact: true }).click()
-  // Selecting before the demand rows land silently selects nothing, leaving 按缺料采购 disabled.
+  // Selecting before the demand rows land silently selects nothing, leaving the purchase picker empty.
   await expect(purchaser.locator('.el-table__body tr:visible').filter({ hasText: item.code })).toBeVisible()
   // 兼任项目经理的采购员默认落在「编制用料」，缺料下单在「采购缺料」视图。
   const shortageView = purchaser.getByRole('radio', { name: '采购缺料', exact: true })
   if (await shortageView.isVisible()) await shortageView.check()
   await purchaser.getByRole('button', { name: '全选筛选结果', exact: true }).click()
-  await purchaser.getByRole('button', { name: '按缺料采购', exact: true }).click()
+  await purchaser.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
   const purchaseWorkspace = purchaser.getByRole('region', { name: 'BOM 勾选采购', exact: true })
   const purchaseDraft = purchaseWorkspace.getByRole('region', { name: '采购草稿', exact: true })
   await selectRemoteOption(purchaseDraft.getByLabel('供应商', { exact: true }), { text: names.supplier })
