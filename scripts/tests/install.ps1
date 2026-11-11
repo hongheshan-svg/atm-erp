@@ -62,6 +62,9 @@ try {
   if ($released -notmatch '(?m)^LEAN_IMAGE=$' -or $released -match 'atm-erp-lean:local') { throw '发布包新配置不得写入本地构建镜像' }
   if (-not $global:PythonCalls.Exists([Predicate[string]]{ param($value) $value -like '*release_install.py --root*' })) { throw '发布包未调用 release_install.py' }
   if ($global:DockerCalls.Exists([Predicate[string]]{ param($value) $value -match ' up -d | build app$' })) { throw 'release_install 失败后仍构建或启动了容器' }
+  # 上面的用例故意模拟 Python/release_install 以非零退出码失败；全部断言通过后清零，
+  # 否则 CI 的 pwsh 步骤会以残留的 $LASTEXITCODE 判为失败。断言失败仍由 throw 终止。
+  $global:LASTEXITCODE = 0
   Write-Host 'PowerShell 安装器命令下发、配置路径、发布包镜像与配置保留校验通过。'
 } finally {
   $env:PYTHON = $originalPython
