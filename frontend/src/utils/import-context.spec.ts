@@ -30,12 +30,15 @@ it('项目上下文支持关系筛选并拒绝无效编号', () => {
   expect(scopedImportProject({ project: -7 })).toBeUndefined()
 })
 
-it('导出文件使用中文业务名称和本地日期', () => {
-  const date = new Date(2026, 9, 22)
+it('导出文件使用中文业务名称和业务时区（上海）日期', () => {
+  const date = new Date('2026-10-22T04:00:00Z')
   expect(exportFilename('entries', 'xlsx', date)).toBe('应收应付与费用导出_2026-10-22.xlsx')
   expect(exportFilename('moves', 'csv', date)).toBe('库存流水导出_2026-10-22.csv')
   expect(exportFilename('time', 'xlsx', date)).toBe('工时记录导出_2026-10-22.xlsx')
   expect(exportFilename('reports', 'xlsx', date)).toBe('经营报表导出_2026-10-22.xlsx')
+  // 上海已过零点、UTC 及西半球浏览器仍是前一天时，文件名按上海日期。
+  expect(exportFilename('moves', 'csv', new Date('2026-10-21T16:30:00Z'))).toBe('库存流水导出_2026-10-22.csv')
+  expect(exportFilename('moves', 'csv', new Date('2026-10-22T15:59:59Z'))).toBe('库存流水导出_2026-10-22.csv')
 })
 
 it('成功入口仅聚焦服务端明确资源的真实记录，不把期初流水ID当库存ID', () => {

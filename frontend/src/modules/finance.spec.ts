@@ -33,7 +33,8 @@ it('缺少收货批次时读取款项详情，未收货不给出整单申请额�
   expect(command.initial?.approved_amount).toBe('')
   expect(command.fields.find(field => field.key === 'approved_amount')?.hint).toContain('0.00')
   const prepayment = await actionCommand('entries', entry, '申请预付款核准')
-  expect(prepayment.initial?.approved_amount).toBe('500')
+  // 与对方余额同为两位小数原样，不经 Number 改写成「500」。
+  expect(prepayment.initial?.approved_amount).toBe('500.00')
 })
 
 it.each([

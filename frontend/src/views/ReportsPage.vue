@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from '../components/BusinessTable.vue'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import { read } from '../api'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
@@ -22,13 +23,7 @@ let applied = { search: '', status: '', risk: '' }
 const exportFilters = ref(applied)
 let generation = 0
 // 窄屏（≤600px）：明细只留「项目、状态」两列，关键金额并入项目名下方摘要；口径说明收起。
-const narrow = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { narrow.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const narrow = useNarrow()
 const basisText = '人民币含税经营口径；全部指标按当前筛选项目累计，不是期间收入或会计利润。合同额不等于已收款，未完成项目的实际成本不代表完工成本。已承诺采购仅含未收货采购，人工和费用使用实际记录，采购净额超材料预算同样计入超预算项目。取消项目不计合同额，但其待退款仍保留，退款与正向待收待付分别展示。'
 function attention(row: Row) { return row.over_budget ? '超预算' : row.overdue ? '逾期' : row.unbudgeted ? '未设预算' : '' }
 const metrics: { key: string; label: string; note: string; overdue?: string }[] = [
@@ -98,7 +93,7 @@ watch(pageSize, () => load())
         <el-table-column v-if="!narrow" label="合同额" min-width="115" align="right"><template #default="{ row }">{{ money(row.contract_amount) }}</template></el-table-column>
         <el-table-column v-if="!narrow" label="实际成本 / 预算" min-width="190" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'cost', section: 'actual' } }">{{ money(row.actual_cost) }}</component><small class="report-cost-note">{{ row.budget === null ? '未设置预算' : `材料预算 ${money(row.budget)}` }} · 在途 <component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'purchases' } }">{{ money(row.committed_cost) }}</component></small></template></el-table-column>
         <el-table-column v-if="!narrow" label="待收 / 待付" min-width="165" align="right"><template #default="{ row }"><component :is="row.can_open === false ? 'span' : 'router-link'" :to="{ path: `/projects/${row.id}`, query: { tab: 'finance', section: 'entries' } }">{{ money(row.receivable) }} / {{ money(row.payable) }}</component></template></el-table-column>
-        <el-table-column v-if="!narrow" label="关注" width="85"><template #default="{ row }">{{ row.over_budget ? '超预算' : row.overdue ? '逾期' : row.unbudgeted ? '未设预算' : '—' }}</template></el-table-column>
+        <el-table-column v-if="!narrow" label="关注" width="85"><template #default="{ row }">{{ attention(row) || '—' }}</template></el-table-column>
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
       </BusinessTable>
       <ListPagination :page="data.page" :total="data.count" @change="load" />

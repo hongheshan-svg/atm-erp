@@ -12,7 +12,8 @@ import { formatPurchaseAmount, purchaseLineCents, quantityValue } from '../bom-p
 import { quantityText as qty } from '../utils/quantity'
 import { message, recoveryActions, requestKey } from '../utils/request'
 import { pageSize } from '../pagination'
-import { productCategories } from '../product-categories'
+import { partTypeLabel, productCategories } from '../product-categories'
+import { fromScaled, QUANTITY_SCALE } from '../utils/decimal'
 import type { Row } from '../types'
 import RemoteSelect from './RemoteSelect.vue'
 import ListPagination from './ListPagination.vue'
@@ -51,7 +52,6 @@ function fitDraft() {
   draftHeight.value = `${Math.max(440, needed, window.innerHeight - Math.max(18, pane.getBoundingClientRect().top) - 20)}px`
 }
 const disabled = computed(() => loading.value || saving.value)
-const typeName = (value: string) => ({ standard: '标准件', custom: '非标件' }[value] || '未分类')
 const eligible = (row: Row) => Number(row.shortage) > 0 && row.is_active !== false
 const options = (key: string) => [...new Set(lines.value.map(row => String(row[key] || '')))].sort()
 const filtered = computed(() => lines.value.filter(row =>
@@ -129,7 +129,7 @@ const groups = computed(() => {
     const sums = rows.map(row => quantityValue(row.quantity))
     const sum = sums.some(value => value == null) ? null : sums.reduce<bigint>((acc, value) => acc + value!, 0n)
     return { item, first: rows[0]!, rows: rows.length > 1 ? [...rows].sort((x, y) => byText(x.assembly_unit, y.assembly_unit)) : rows, multi: rows.length > 1,
-      quantity: sum == null ? '—' : qty(`${sum / 1000n}.${String(sum % 1000n).padStart(3, '0')}`) }
+      quantity: sum == null ? '—' : qty(fromScaled(sum, QUANTITY_SCALE)) }
   })
 })
 function remove(id: number) { selected.value = selected.value.filter(value => value !== id); delete edits.value[id] }
@@ -248,13 +248,13 @@ async function save() {
         <div v-show="moreFilters" id="purchase-more-filters" class="purchase-more-filters">
           <label>品牌<ElSelect v-model="brands" multiple collapse-tags collapse-tags-tooltip clearable filterable aria-label="筛选品牌" placeholder="全部品牌" :disabled="disabled"><ElOption v-for="value in options('brand')" :key="value" :value="value" :label="value || '未填写'" /></ElSelect></label>
           <label>单元<ElSelect v-model="units" multiple collapse-tags collapse-tags-tooltip clearable filterable aria-label="筛选单元" placeholder="全部单元" :disabled="disabled"><ElOption v-for="value in options('assembly_unit')" :key="value" :value="value" :label="value || '未填写'" /></ElSelect></label>
-          <label>类别<ElSelect v-model="types" multiple collapse-tags collapse-tags-tooltip clearable aria-label="筛选类别" placeholder="全部类别" :disabled="disabled"><ElOption v-for="value in options('part_type')" :key="value" :value="value" :label="typeName(value)" /></ElSelect></label>
+          <label>类别<ElSelect v-model="types" multiple collapse-tags collapse-tags-tooltip clearable aria-label="筛选类别" placeholder="全部类别" :disabled="disabled"><ElOption v-for="value in options('part_type')" :key="value" :value="value" :label="partTypeLabel(value)" /></ElSelect></label>
           <label>产品编码类别<ElSelect v-model="categories" multiple collapse-tags clearable aria-label="筛选产品编码类别" placeholder="全部编码类别" :disabled="disabled"><ElOption v-for="value in options('product_category')" :key="value" :value="value" :label="productCategories[value] || '未分类'" /></ElSelect></label>
         </div>
         <div class="purchase-selection"><span role="status" aria-label="BOM 选择状态">已选 <strong>{{ selected.length }}</strong> 项 · 筛选结果 {{ filtered.length }} 项</span><el-button text :disabled="disabled || !filtered.some(eligible)" @click="selectFiltered">全选筛选结果</el-button><el-button text :disabled="disabled || !selected.length" @click="clearSelection">清空选择</el-button><el-button text class="mobile-jump" :disabled="!chosen.length" @click="jumpToDraft">采购草稿 ↓</el-button></div>
         <BusinessTable label="采购选料" :numbered="false" v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'" @row-click="handleRowClick">
           <el-table-column label="选择" width="44"><template #default="{ row }"><input class="material-checkbox" type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="disabled || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
-          <el-table-column type="expand" width="28"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { drawing_number: '图号', drawing_revision: '图档版本', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ field === 'issued' ? qty(row[field]) : row[field] || '—' }}</dd></div><div><dt>类别</dt><dd>{{ typeName(row.part_type) }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div><div><dt>其他项目待领</dt><dd>{{ Number(row.other_demand) > 0 ? `${qty(row.other_demand)} · ${row.other_projects} 个在执行项目` : '—' }}</dd></div></dl></template></el-table-column>
+          <el-table-column type="expand" width="28"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { drawing_number: '图号', drawing_revision: '图档版本', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ field === 'issued' ? qty(row[field]) : row[field] || '—' }}</dd></div><div><dt>类别</dt><dd>{{ partTypeLabel(row.part_type) }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div><div><dt>其他项目待领</dt><dd>{{ Number(row.other_demand) > 0 ? `${qty(row.other_demand)} · ${row.other_projects} 个在执行项目` : '—' }}</dd></div></dl></template></el-table-column>
           <el-table-column label="物料" min-width="150"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small v-if="row.is_active === false"> 已停用</small><small class="material-code material-spec" :title="[row.item_code, row.specification].filter(Boolean).join(' · ')">{{ [row.item_code, row.specification].filter(Boolean).join(' · ') }}</small><small class="material-narrow" :class="{ 'overdue-date': overdue(row) }">缺 {{ qty(row.shortage) }}{{ row.required_date ? ` · 需 ${String(row.required_date).slice(5)}` : '' }}</small></template></el-table-column>
           <el-table-column label="单元 / 品牌" min-width="92"><template #default="{ row }"><span>{{ row.assembly_unit || '未分单元' }}</span><small class="material-code">{{ row.brand || '—' }}</small></template></el-table-column>
           <el-table-column label="缺料" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ qty(row.shortage) }}</strong></template></el-table-column>
@@ -277,16 +277,16 @@ async function save() {
             <small>{{ termHint }}</small>
             <label v-if="effectiveTerm === 'custom'">自定义月结天数<input v-model="form.payment_days" aria-label="自定义月结天数" inputmode="numeric" placeholder="0～365，留空沿用供应商" :disabled="saving" /></label>
             <label v-if="effectiveTerm === 'manual'">付款到期日<input v-model="form.payment_due_date" aria-label="付款到期日" type="date" :disabled="saving" /></label>
-            <details class="draft-extra"><summary>采购单号、备注、质保与明细交期</summary><label>采购单号<input v-model="form.code" aria-label="采购单号" maxlength="30" placeholder="可自编，留空自动生成" :disabled="saving || !project" /></label><label>采购备注<textarea v-model="form.note" aria-label="采购备注" rows="2" :disabled="saving" placeholder="交付、包装等补充要求" /></label><label>供应商质保月数<input v-model="form.warranty_months" aria-label="供应商质保月数" inputmode="numeric" :disabled="saving" /><small>按每批合格收货日起算，写入采购合同；默认 12 个月。</small></label><label v-for="row in chosen" :key="row.bom_line">{{ row.item_name }} · {{ row.assembly_unit || '未分单元' }}<input v-model="row.due_date" type="date" aria-label="明细交期" :disabled="saving" /></label><small>明细交期留空时沿用订单交期。</small></details>
+            <details class="draft-extra"><summary>采购单号、备注、质保与明细交期</summary><label>采购单号<input v-model="form.code" aria-label="采购单号" maxlength="30" placeholder="可自编，留空自动生成" :disabled="saving || !project" /></label><label>采购备注<textarea v-model="form.note" aria-label="采购备注" rows="2" :disabled="saving" placeholder="交付、包装等补充要求" /></label><label>供应商质保月数<input v-model="form.warranty_months" aria-label="供应商质保月数" inputmode="numeric" :disabled="saving" /><small>按每批合格收货日起算，写入采购合同；默认 12 个月。</small></label><label v-for="row in chosen" :key="row.bom_line">{{ row.item_name }} · {{ row.assembly_unit || '未分单元' }}<input v-model="row.due_date" type="date" :aria-label="`明细交期：${row.item_name} · ${row.assembly_unit || '未分单元'}`" :disabled="saving" /></label><small>明细交期留空时沿用订单交期。</small></details>
           </div>
           <div class="draft-items">
             <p v-if="!chosen.length" class="draft-empty">在 BOM 选料区勾选有缺料的物料，采购明细会显示在这里。</p>
-            <div v-for="group in groups" :key="group.item" class="draft-group" :class="{ 'draft-group-multi': group.multi }" :aria-label="group.multi ? `物料组 ${group.first.item_code}` : undefined">
+            <div v-for="group in groups" :key="group.item" class="draft-group" :class="{ 'draft-group-multi': group.multi }" :role="group.multi ? 'group' : undefined" :aria-label="group.multi ? `物料组 ${group.first.item_code}` : undefined">
               <div v-if="group.multi" class="draft-group-head">
                 <div class="draft-group-title"><strong>{{ group.first.item_name }}</strong><small>{{ group.first.item_code }} · {{ group.rows.length }} 个单元 · 合计 {{ group.quantity }} {{ group.first.unit }}</small><small v-if="group.first.specification" class="draft-spec" :title="group.first.specification">{{ group.first.specification }}</small></div>
                 <label>组含税单价（元）<input :value="groupPrice[group.item] ?? ''" inputmode="decimal" :aria-label="`${group.first.item_code} 组含税单价（元）`" placeholder="填一次，各单元同价" :disabled="saving" @input="setGroupPrice(group.item, ($event.target as HTMLInputElement).value)" /></label>
               </div>
-              <div v-for="row in group.rows" :key="row.bom_line" class="draft-item" :aria-label="`采购明细 ${row.item_code} ${row.assembly_unit || ''}`">
+              <div v-for="row in group.rows" :key="row.bom_line" class="draft-item" role="group" :aria-label="`采购明细 ${row.item_code} ${row.assembly_unit || ''}`">
                 <div class="draft-item-title"><div>
                   <strong v-if="group.multi">{{ row.assembly_unit || '未分单元' }}<small v-if="row.required_date" class="draft-due" :class="{ 'overdue-date': overdue(row) }">需求 {{ row.required_date }}</small></strong>
                   <template v-else><strong>{{ row.item_name }}</strong><small>{{ row.item_code }} · {{ row.assembly_unit || '未分单元' }}</small><small v-if="row.specification || row.required_date"><span v-if="row.specification" class="draft-spec" :title="row.specification">{{ row.specification }}</span><span v-if="row.required_date" :class="{ 'overdue-date': overdue(row) }">{{ row.specification ? ' · ' : '' }}需求 {{ row.required_date }}</span></small></template>

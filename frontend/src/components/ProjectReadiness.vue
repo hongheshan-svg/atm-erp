@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import { read } from '../api'
 import { readinessPath } from '../modules/projects'
 import { message } from '../utils/request'
@@ -13,11 +14,8 @@ const result = ref<Row | null>(null)
 const error = ref(''), open = ref(false)
 const listId = useId()
 // 手机默认只留一行「发货前还差 N 项」，缺项芯片和全部检查展开后再看。
-const compact = ref(window.innerWidth <= 600), mobileOpen = ref(false)
+const compact = useNarrow(), mobileOpen = ref(false)
 const collapsed = computed(() => compact.value && !mobileOpen.value)
-function resize() { compact.value = window.innerWidth <= 600 }
-onMounted(() => window.addEventListener('resize', resize))
-onBeforeUnmount(() => window.removeEventListener('resize', resize))
 watch(() => [props.project.id, props.project.status, props.revision], async (_, __, onCleanup) => {
   let current = true
   onCleanup(() => { current = false })
@@ -42,7 +40,7 @@ const path = (item: Check) => readinessPath(props.project.id, item.target)
 </script>
 
 <template>
-  <div v-if="groups.length || error" class="project-readiness" aria-label="项目推进检查">
+  <div v-if="groups.length || error" class="project-readiness" role="group" aria-label="项目推进检查">
     <span class="readiness-title">下一步</span>
     <span v-if="error" class="readiness-error" role="alert">推进检查未加载：{{ error }}</span>
     <span v-for="group in groups" :key="group.key" class="readiness-group" :data-group="group.key">
@@ -87,7 +85,6 @@ const path = (item: Check) => readinessPath(props.project.id, item.target)
 .readiness-ok .readiness-mark { color: var(--ok); }
 .readiness-missing .readiness-mark { color: var(--risk); font-weight: 700; }
 .readiness-note .readiness-mark { color: var(--warn); font-weight: 700; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .readiness-warning-count { color: var(--risk); font-size: 12px; }
 .readiness-expand { margin-left: auto; border: 0; background: transparent; color: var(--brand); cursor: pointer; font: inherit; font-size: 12px; padding: 2px 0; white-space: nowrap; }
 .readiness-expand:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 3px; }

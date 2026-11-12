@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import { ElDatePicker } from 'element-plus'
 import { read } from '../api'
 import { message } from '../utils/request'
@@ -19,13 +20,7 @@ const data = ref<Row | null>(null), error = ref(''), busy = ref(false), command 
 const feedback = ref('')
 let generation = 0
 // 手机宽度：月份用中文月份选择器并让标签在输入框上方，明细改为逐行卡片，免得表格横滚。
-const narrow = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { narrow.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const narrow = useNarrow()
 watch([supplier, month], () => { generation++; data.value = null; command.value = null; busy.value = false; feedback.value = '' }, { flush: 'sync' })
 onBeforeUnmount(() => { generation++ })
 async function load() {

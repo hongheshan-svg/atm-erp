@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import type { Row } from '../types'
 import { pageSize } from '../pagination'
 import { message } from '../utils/request'
@@ -11,11 +12,7 @@ const props = defineProps<{
   errorFile?: { name: string; content: string }; busy?: boolean
 }>()
 // 手机宽度下预览改成逐行卡片，免去横向滚动。
-const cardQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 600px)') : null
-const cardMode = ref(Boolean(cardQuery?.matches))
-const syncCards = () => { cardMode.value = Boolean(cardQuery?.matches) }
-onMounted(() => cardQuery?.addEventListener?.('change', syncCards))
-onBeforeUnmount(() => cardQuery?.removeEventListener?.('change', syncCards))
+const cardMode = useNarrow()
 const onlyErrors = ref(false)
 const page = ref(1)
 const table = ref<{ $el: HTMLElement }>()

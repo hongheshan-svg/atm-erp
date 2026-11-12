@@ -58,5 +58,6 @@ dl { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; flex: 1 1 400px; 
 dl div { display: flex; gap: 6px; align-items: baseline; }
 dt { color: var(--ink-4); }
 dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 640px) { header { align-items: stretch; flex-direction: column; } }
+/* 竖排后 flex-basis 作用在高度上，400px 会撑出整块空白，改回按内容高度。 */
+@media (max-width: 640px) { header { align-items: stretch; flex-direction: column; } dl { flex-basis: auto; } }
 </style>

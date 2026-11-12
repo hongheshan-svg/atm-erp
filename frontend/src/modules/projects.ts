@@ -1,4 +1,5 @@
 import { money } from '../utils/money'
+import { fromScaled, QUANTITY_SCALE, toScaled } from '../utils/decimal'
 import { disciplineField } from './milestones'
 import { codeField } from './shared'
 import { today } from '../forms'
@@ -201,10 +202,7 @@ export function actionNames(resource: string, r: Row): string[] {
   return a
 }
 // 发货配套按物料合计校验，同一物料在多个单元出现时合并成一项，并列出全部单元和 BOM 合计，免得只看到其中一个单元。
-const thousandths = (value: unknown) => {
-  const [whole = '0', fraction = ''] = String(value ?? '0').split('.')
-  return BigInt(whole || '0') * 1000n + BigInt((fraction + '000').slice(0, 3))
-}
+const thousandths = (value: unknown) => toScaled(value, QUANTITY_SCALE, { excess: 'truncate' }) ?? 0n
 export function shipMaterialOptions(lines: Row[]) {
   type Material = { code: string; name: string; units: string[]; total: bigint }
   const grouped = new Map<number, Material>()
@@ -217,7 +215,7 @@ export function shipMaterialOptions(lines: Row[]) {
   }
   return [...grouped].map(([value, row]) => ({
     value,
-    label: `${row.code} · ${row.name} · ${row.units.join('、')} · BOM 合计 ${row.total / 1000n}.${String(row.total % 1000n).padStart(3, '0')}`,
+    label: `${row.code} · ${row.name} · ${row.units.join('、')} · BOM 合计 ${fromScaled(row.total, QUANTITY_SCALE)}`,
   }))
 }
 // 例行动作的说明选填，留空时服务端记为动作名；更正、取消、重开等纠错动作仍必须写原因。

@@ -15,7 +15,7 @@ export const columns: Record<string, Column[]> = {
     { key: 'kind', label: '类型', format: r => kinds[String(r.kind)] || String(r.kind) },
     { key: 'status', label: '状态', format: r => r.status !== 'void' && !r.valid ? '原业务已变化' : states[String(r.status)] || String(r.status) },
     { key: 'difference', label: '对账差异', format: r => money(r.difference) }, { key: 'approved_amount', label: '核准金额', format: r => money(r.approved_amount) }, { key: 'remaining_amount', label: '剩余额度', format: r => money(r.remaining_amount) }, C('confirmed_name', '确认人')],
-  'bank-records': [C('date', '银行日期'), C('account', '账户'), C('reference', '流水号 / 导入标识'), C('counterparty', '对方户名'), C('project_name', '项目'), C('amount', '收入 / 支出'), C('remaining_amount', '未匹配金额'),
+  'bank-records': [C('date', '银行日期'), C('account', '账户'), C('reference', '流水号 / 导入标识'), C('counterparty', '对方户名'), C('project_name', '项目'), C('amount', '收入 / 支出'), { key: 'remaining_amount', label: '未匹配金额', format: r => money(r.remaining_amount) },
     { key: 'void_reason', label: '状态', format: r => r.void_reason ? '已作废' : r.needs_review ? '待核实户名' : Number(r.remaining_amount) === 0 ? '已核对' : '待认领 / 匹配' }],
 }
 export const createLabel = (resource: string) => resource === 'bank-records' && finance() ? '登记银行到账 / 出账' : ''
@@ -40,7 +40,7 @@ export async function reconciliationCommand(entry: Row, prepayment = false): Pro
     fields: [codeField('对账单号'), t('counterparty_balance', '对方确认余额（待退款填负数）'), t('approved_amount', '本次申请额度（元）'),
       { key: 'basis', label: '合同编号及付款条款依据', optional: !prepayment },
       { key: 'document', label: '对账或合同附件', type: 'select', upload: { context: { project: entry.project }, category: 'receipt' }, optional: true, options: docs.map(d => ({ value: d.id, label: d.original_name })) }, optionalReason(undefined, '选填；不填按「发起对账」记录')],
-    initial: { counterparty_balance: String(entry.balance), approved_amount: String(Math.abs(Number(entry.balance))) },
+    initial: { counterparty_balance: String(entry.balance), approved_amount: String(entry.balance).replace(/^-/, '') },
     prepare: data => ({ ...data, entry: entry.id, kind }), notice: { type: 'info', text: prepayment ? '预付款必须填写合同依据，由项目经理或管理员核准。未收货部分不能通过普通对账付款。' : '保存原业务快照供核对。普通采购付款额度受已收货净额约束；差异须回到原业务纠正。生成后仍需财务确认。' } }
 }
 export function actionNames(resource: string, r: Row): string[] {
@@ -102,16 +102,16 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (name === '关联未认领款退回') {
     // 退回必须同账户、同户名，直接按这两个条件查；方向和未匹配余额是计算值，留在前端判断。
     const banks = await all('/business/bank-records/', { account: r.account, counterparty: r.counterparty })
-    return { title: name, path: path + 'return-unclaimed/', fields: [{ key: 'returned', label: '实际退回的银行支出', type: 'select', options: banks.filter(b => !b.void_reason && Number(b.amount) < 0 && Number(b.remaining_amount) > 0).map(b => ({ value: b.id, label: `${b.reference} · ${b.date} · 可匹配 ${b.remaining_amount}` })) }, t('amount', '退回金额（元）'), reason], initial: { amount: r.remaining_amount }, notice: { type: 'info', text: '用于错汇、多汇的未认领部分。先登记真实银行支出，再关联原收入；不会虚增合同、费用或项目收付款。' } }
+    return { title: name, path: path + 'return-unclaimed/', fields: [{ key: 'returned', label: '实际退回的银行支出', type: 'select', options: banks.filter(b => !b.void_reason && Number(b.amount) < 0 && Number(b.remaining_amount) > 0).map(b => ({ value: b.id, label: `${b.reference} · ${b.date} · 可匹配 ${money(b.remaining_amount)}` })) }, t('amount', '退回金额（元）'), reason], initial: { amount: r.remaining_amount }, notice: { type: 'info', text: '用于错汇、多汇的未认领部分。先登记真实银行支出，再关联原收入；不会虚增合同、费用或项目收付款。' } }
   }
-  if (name === '撤销退回关联') return { title: name, path: path + 'reverse-return/', fields: [{ key: 'offset', label: '原退回关联', type: 'select', options: r.returns.filter((m: Row) => !m.reversal_of && !m.reversal__id).map((m: Row) => ({ value: m.id, label: `${m.id} · 银行支出 ${m.returned_id} · ${m.amount}` })) }, reason] }
+  if (name === '撤销退回关联') return { title: name, path: path + 'reverse-return/', fields: [{ key: 'offset', label: '原退回关联', type: 'select', options: r.returns.filter((m: Row) => !m.reversal_of && !m.reversal__id).map((m: Row) => ({ value: m.id, label: `${m.id} · 银行支出 ${m.returned_id} · ${money(m.amount)}` })) }, reason] }
   if (name === '查看银行明细') return { title: name, path: '', readonly: true, initial: { ...r, lines: r.matches }, fields: [t('reference', '银行流水号'), t('counterparty', '对方户名'), t('amount', '银行金额'), t('remaining_amount', '未匹配金额'), t('reason', '说明'), t('void_reason', '作废原因'), { key: 'lines', label: '匹配与撤销历史', type: 'rows', fields: [t('id', '记录ID'), t('payment_id', '收付流水ID'), t('payment__entry__title', '款项'), t('amount', '匹配金额'), t('reason', '原因'), t('reversal_of', '撤销原匹配')] }, { key: 'returns', label: '未认领款退回历史', type: 'rows', fields: [t('id', '记录ID'), t('source_id', '原收入ID'), t('returned_id', '退回支出ID'), t('amount', '退回金额'), t('reason', '原因'), t('reversal_of', '撤销原关联')] }] }
   if (name === '作废误录银行记录') return { title: name, path: path + 'void/', fields: [reason] }
-  if (name === '撤销银行匹配') return { title: name, path: path + 'unmatch/', fields: [{ key: 'match', label: '原匹配', type: 'select', options: r.matches.filter((m: Row) => !m.reversal_of && !m.reversal__id).map((m: Row) => ({ value: m.id, label: `流水 ${m.payment_id} · ${m.amount}` })) }, reason], notice: { type: 'info', text: '仅撤销银行匹配并保留历史，不冲销原收付款。纠正认领错误时，撤销后还需在收付流水冲销原记录，再重新认领。' } }
+  if (name === '撤销银行匹配') return { title: name, path: path + 'unmatch/', fields: [{ key: 'match', label: '原匹配', type: 'select', options: r.matches.filter((m: Row) => !m.reversal_of && !m.reversal__id).map((m: Row) => ({ value: m.id, label: `流水 ${m.payment_id} · ${money(m.amount)}` })) }, reason], notice: { type: 'info', text: '仅撤销银行匹配并保留历史，不冲销原收付款。纠正认领错误时，撤销后还需在收付流水冲销原记录，再重新认领。' } }
   if (name === '匹配已有收付款') {
     // 能匹配的一定是同账户的银行结算流水；未指定项目时若不下推就要拉全量收付流水。
     const payments = await all('/business/payments/', { method: 'bank', account: r.account, ...(r.project ? { entry__project: r.project } : {}) })
-    return { title: name, path: path + 'match/', fields: [{ key: 'payment', label: '已有收付款流水', type: 'select', options: payments.filter(p => !p.reversal_of && !p.reversed_by && !p.bank_matched && Number(p.cash_amount) * Number(r.amount) > 0 && Math.abs(Number(p.amount)) <= Number(r.remaining_amount)).map(p => ({ value: p.id, label: `${p.id} · ${p.entry_title} · ${p.amount} · ${p.date}` })) }, optionalReason(undefined, '选填；不填按「匹配银行流水」记录')], notice: { type: 'info', text: '按账户、方向和金额核对已有记录，匹配不会新增收付款。若列表为空，请检查原记录的银行方式和账户。' } }
+    return { title: name, path: path + 'match/', fields: [{ key: 'payment', label: '已有收付款流水', type: 'select', options: payments.filter(p => !p.reversal_of && !p.reversed_by && !p.bank_matched && Number(p.cash_amount) * Number(r.amount) > 0 && Math.abs(Number(p.amount)) <= Number(r.remaining_amount)).map(p => ({ value: p.id, label: `${p.id} · ${p.entry_title} · ${money(p.amount)} · ${p.date}` })) }, optionalReason(undefined, '选填；不填按「匹配银行流水」记录')], notice: { type: 'info', text: '按账户、方向和金额核对已有记录，匹配不会新增收付款。若列表为空，请检查原记录的银行方式和账户。' } }
   }
   // 只有未结清的款项能被认领；不带 unsettled 时未指定项目就会拉出历史上全部款项。
   const entries = await all('/business/entries/', { unsettled: 'true', ...(r.project ? { project: r.project } : {}) })
@@ -121,7 +121,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ...(r.project ? { entry__project: r.project } : {}),
   })
   return { title: name, path: path + 'allocate/', fields: [
-    { key: 'entry', label: '认领款项', type: 'select', options: entries.filter(e => e.kind === 'receivable' ? Number(e.balance) > 0 : Number(e.balance) < 0).map(e => ({ value: e.id, label: `${e.project_name} · ${e.title} · 待结 ${e.balance}` })) },
-    t('amount', '认领金额（元）'), { key: 'reconciliation', label: '供应商退款对账（客户收款可不选）', type: 'select', optional: true, options: statements.filter(s => s.valid && Number(s.remaining_amount) > 0).map(s => ({ value: s.id, label: `${s.code} · ${s.entry_title} · ${s.remaining_amount}` })) }, optionalReason(undefined, '选填；不填按「认领银行流水」记录'),
+    { key: 'entry', label: '认领款项', type: 'select', options: entries.filter(e => e.kind === 'receivable' ? Number(e.balance) > 0 : Number(e.balance) < 0).map(e => ({ value: e.id, label: `${e.project_name} · ${e.title} · 待结 ${money(e.balance)}` })) },
+    t('amount', '认领金额（元）'), { key: 'reconciliation', label: '供应商退款对账（客户收款可不选）', type: 'select', optional: true, options: statements.filter(s => s.valid && Number(s.remaining_amount) > 0).map(s => ({ value: s.id, label: `${s.code} · ${s.entry_title} · ${money(s.remaining_amount)}` })) }, optionalReason(undefined, '选填；不填按「认领银行流水」记录'),
   ], initial: { amount: r.remaining_amount }, notice: { type: 'info', text: '认领会登记收款并匹配本条银行记录。已经登记的款项请使用“匹配已有收付款”，避免重复入账。供应商退款仍需有效退款对账。' } }
 }

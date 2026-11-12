@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { ref } from 'vue'
+import { useNarrow } from '../utils/media'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '../session'
 import { message } from '../utils/request'
@@ -7,13 +8,7 @@ import { View, Hide } from '@element-plus/icons-vue'
 import automation from '../assets/login-automation.jpg'
 import { version } from '../../package.json'
 // 与下方 760px 断点一致：上下堆叠（手机）时插图本就隐藏，不渲染 <img> 才不会白白下载；窗口变宽后再加载。
-const stacked = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 760px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 760px)')
-  const sync = () => { stacked.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const stacked = useNarrow('(max-width: 760px)')
 const router = useRouter()
 const route = useRoute()
 const username = ref('')

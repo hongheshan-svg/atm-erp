@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import { read } from '../api'
 import { message } from '../utils/request'
 import type { Row } from '../types'
@@ -9,13 +10,7 @@ import { pageSize } from '../pagination'
 const opened = ref(false), view = ref('cash30'), data = ref<Row | null>(null), error = ref(''), busy = ref(false)
 let generation = 0
 // 窄屏（≤600px）只留「来源单据 / 物料」一列，项目、日期、金额或数量、跟进事项并入下方摘要，不再横滚。
-const narrow = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { narrow.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const narrow = useNarrow()
 const money = computed(() => ['cash30', 'aging'].includes(view.value))
 function summary(row: Row) {
   return [[row.project, row.date, row.amount != null && row.amount !== '' ? (money.value ? `${row.amount} 元` : `数量 ${row.amount}`) : ''], [row.status, view.value === 'aging' ? row.age_band : '']]

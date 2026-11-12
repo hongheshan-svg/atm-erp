@@ -5,6 +5,7 @@ import { read } from '../api'
 import { sumQuantities } from '../modules/warehouse-lines'
 import { message } from '../utils/request'
 import { quantityText } from '../utils/quantity'
+import { fromScaled, QUANTITY_SCALE, toScaled } from '../utils/decimal'
 import type { Field, Row } from '../types'
 const props = defineProps<{ field: Field; context: Row; disabled?: boolean; issues?: Record<string, string>; prefix: string }>()
 const model = defineModel<Row[]>({ required: true })
@@ -26,6 +27,9 @@ const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(model.va
 const indices = computed(() => Array.from({ length: Math.min(20, model.value.length - start.value) }, (_, i) => start.value + i))
 const path = (i: number, key: string) => `${props.prefix}.${i}.${key}`
 const inputId = (i: number, key: string) => `${uid}-${i}-${key}`
+// 每行输入框的名称＝列名＋行号与物料，读屏逐格切换时能分清是哪一行；列名仍是可见表头的简称。
+const rowId = (i: number) => `${uid}-${i}-row`
+const nameOf = (i: number, key: string) => `${inputId(i, key)}-label ${rowId(i)}`
 const identity = computed(() => props.field.warehouse === 'receipt' ? 'line' : 'stock')
 // 原始行按明细标识建一次索引（同标识取第一行）：摘要、逐行提示和校验在每次输入时都要取原始行，不能逐行线性查找。
 const sources = computed(() => {
@@ -53,19 +57,14 @@ const summary = computed(() => receipt.value
   ? `${props.context.received_date ? `入库日期 ${props.context.received_date} · ` : ''}已勾选 ${pickedRows.value.length}/${model.value.length} 行，本次合格 ${sum(pickedRows.value.map(row => row.quantity))} / 待收 ${sum(pickedRows.value.map(row => source(row).remaining))}`
   : `本次出库 ${total('quantity')}${batch.value ? ` / BOM 未领 ${total('bom_remaining')}` : ''}，共 ${model.value.length} 行`)
 // 数量按千分之一取整数比较，避免浮点误差；格式不对时交给通用校验提示。
-function milli(value: unknown) {
-  const text = String(value ?? '').trim() || '0'
-  if (!decimal.test(text)) return null
-  const [whole = '0', fraction = ''] = text.split('.')
-  return BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'))
-}
+const milli = (value: unknown) => toScaled(String(value ?? '').trim() || '0', QUANTITY_SCALE, { signed: false })
 // 待收 − 本次合格 − 本次隔离：正数是余量，负数是多送。
 function rest(row: Row) {
   const limit = source(row).remaining
   const quantity = milli(row.quantity), pending = milli(row.pending_quantity), remaining = limit == null || limit === '' ? null : milli(limit)
   return quantity == null || pending == null || remaining == null ? null : remaining - quantity - pending
 }
-const restText = (row: Row) => { const left = rest(row); return left == null ? '' : quantityText(`${left / 1000n}.${String(left % 1000n).padStart(3, '0')}`) }
+const restText = (row: Row) => { const left = rest(row); return left == null ? '' : quantityText(fromScaled(left, QUANTITY_SCALE)) }
 // 多送不能直接入本单（已批准采购不能改数量）：在数量下方直接说明，提交前即拦下。
 function excess(row: Row) {
   if (!receipt.value || !picked(row)) return ''
@@ -167,13 +166,13 @@ defineExpose({ focusPath })
       <table :aria-label="`${field.label}明细`">
         <thead><tr><th scope="col" class="col-index"><label v-if="selectable" class="line-pick"><input type="checkbox" :checked="allPicked" :indeterminate="pickedRows.length > 0 && !allPicked" :disabled="disabled || !model.length" aria-label="全选本次到货明细" @change="pickAll(($event.target as HTMLInputElement).checked)" /><span>到货</span></label><template v-else>序号</template></th><th v-for="column in columns" :key="column.key" scope="col" :class="`col-${column.key}`">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
         <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock" :class="{ 'partial-line': partial(model[i]!), 'unpicked-line': !picked(model[i]!), 'excess-line': Boolean(excess(model[i]!)) }">
-          <td :data-label="selectable ? '到货' : '序号'" class="line-index"><label v-if="selectable" class="line-pick" :for="inputId(i, 'selected')"><input :id="inputId(i, 'selected')" type="checkbox" :checked="picked(model[i]!)" :disabled="disabled" :aria-label="`本次到货：第 ${i + 1} 行 ${itemName(model[i]!)}`" @change="pick(model[i]!, ($event.target as HTMLInputElement).checked)" /><span>{{ i + 1 }}</span></label><template v-else>{{ i + 1 }}</template></td>
+          <td :data-label="selectable ? '到货' : '序号'" class="line-index"><label v-if="selectable" class="line-pick" :for="inputId(i, 'selected')"><input :id="inputId(i, 'selected')" type="checkbox" :checked="picked(model[i]!)" :disabled="disabled" :aria-label="`本次到货：第 ${i + 1} 行 ${itemName(model[i]!)}`" @change="pick(model[i]!, ($event.target as HTMLInputElement).checked)" /><span>{{ i + 1 }}</span></label><template v-else>{{ i + 1 }}</template><span :id="rowId(i)" hidden>第 {{ i + 1 }} 行 {{ itemName(model[i]!) }}</span></td>
           <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="[`col-${column.key}`, { 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark', 'material-cell': column.key === 'material_label' }]" :data-field-path="path(i, column.key)">
             <span v-if="column.displayOnly" class="material-value">{{ shown(model[i]!, column.key) }}</span>
             <template v-else>
-              <label class="input-label" :for="inputId(i, column.key)">{{ column.label }}</label>
-              <textarea v-if="column.key === 'remark'" :id="inputId(i, column.key)" v-model="model[i]![column.key]" :aria-label="column.label" :disabled="disabled || !picked(model[i]!)" :placeholder="column.placeholder" maxlength="500" rows="2" :aria-invalid="Boolean(issues?.[path(i, column.key)])" :aria-describedby="`${inputId(i, column.key)}-help`" @blur="emit('touched', path(i, column.key))" />
-              <input v-else :id="inputId(i, column.key)" v-model="model[i]![column.key]" v-validity="column.key === 'quantity' ? excess(model[i]!) : ''" :aria-label="column.label" :disabled="disabled || !picked(model[i]!)" inputmode="decimal" autocomplete="off" :aria-invalid="Boolean(errorOf(i, column.key))" :aria-describedby="`${inputId(i, column.key)}-help`" @blur="emit('touched', path(i, column.key))" />
+              <label :id="`${inputId(i, column.key)}-label`" class="visually-hidden" :for="inputId(i, column.key)">{{ column.label }}</label>
+              <textarea v-if="column.key === 'remark'" :id="inputId(i, column.key)" v-model="model[i]![column.key]" :aria-labelledby="nameOf(i, column.key)" :disabled="disabled || !picked(model[i]!)" :placeholder="column.placeholder" maxlength="500" rows="2" :aria-invalid="Boolean(issues?.[path(i, column.key)])" :aria-describedby="`${inputId(i, column.key)}-help`" @blur="emit('touched', path(i, column.key))" />
+              <input v-else :id="inputId(i, column.key)" v-model="model[i]![column.key]" v-validity="column.key === 'quantity' ? excess(model[i]!) : ''" :aria-labelledby="nameOf(i, column.key)" :disabled="disabled || !picked(model[i]!)" inputmode="decimal" autocomplete="off" :aria-invalid="Boolean(errorOf(i, column.key))" :aria-describedby="`${inputId(i, column.key)}-help`" @blur="emit('touched', path(i, column.key))" />
               <small :id="`${inputId(i, column.key)}-help`" :class="{ 'field-error': errorOf(i, column.key) }">{{ errorOf(i, column.key) || column.hint }}</small>
               <template v-if="column.key === 'quantity' && cancelShown(model[i]!)">
                 <label class="remainder-cancel" :class="{ 'is-on': model[i]!.cancel_remainder }"><input v-model="model[i]!.cancel_remainder" type="checkbox" :disabled="disabled || Boolean(cancelBlocked(model[i]!))" :aria-label="`第 ${i + 1} 行余量不再到货`" />余量 {{ restText(model[i]!) }} 不再到货</label>
@@ -224,13 +223,14 @@ textarea { resize: vertical; }
 small { display: block; color: var(--mute); font-size: 11px; line-height: 1.4; margin-top: 4px; }
 .field-error { color: var(--risk); }
 [aria-invalid='true'] { border-color: var(--risk); }
-.input-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .warehouse-pages { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
 @media (max-width: 800px) {
   .warehouse-lines { padding: 10px; }
   .warehouse-scroll { max-height: none; border: none; overflow: visible; }
   table, tbody, tr, td { display: block; width: 100%; box-sizing: border-box; }
   thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  /* 窄屏用汇总栏里的「全选」；表头只对读屏保留列名，表头里的同名复选框不再可聚焦，免得出现两个「全选本次到货明细」。 */
+  thead .line-pick { visibility: hidden; }
   tr { border: 1px solid var(--field-line); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
   td { min-width: 0 !important; border-right: 0; padding: 8px 10px; display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 6px; }
   td::before { content: attr(data-label); color: var(--mute); font-size: 12px; }

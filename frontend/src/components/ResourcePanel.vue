@@ -2,6 +2,7 @@
 import BusinessTable from './BusinessTable.vue'
 import { taskSyncHint } from '../modules/milestones'
 import { computed, inject, nextTick, onBeforeUnmount, ref, toRaw, useId, watch, type Ref } from 'vue'
+import { useNarrow } from '../utils/media'
 import type { Row, Command } from '../types'
 import { all, read, download } from '../api'
 import {
@@ -15,6 +16,7 @@ import {
 } from '../business'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
+import { quantityText } from '../utils/quantity'
 import { sessionStore } from '../utils/storage'
 import { savedTarget, wideCommand } from '../form-experience'
 import ActionDialog from './ActionDialog.vue'
@@ -60,13 +62,7 @@ const props = withDefaults(defineProps<{
 const pageFloor = computed(() => props.resource === 'tasks' && props.projectId ? 50 : 0)
 const pageSize = computed(() => Math.max(globalPageSize.value, pageFloor.value))
 // 手机宽度下任务表改成「名称格内带主操作」，不依赖横向滑动。
-const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { mobile.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const mobile = useNarrow()
 // 手机宽度的窄屏列表：只留名称、状态和操作，其余信息并入名称格的副行（完整信息在详情里）。
 const mobileTasks = computed(() => mobile.value && (sidePanelResources.includes(props.resource) || ['projects', 'moves', 'issue-slips'].includes(props.resource)))
 const emit = defineEmits<{ changed: [] }>()
@@ -367,7 +363,7 @@ function mobileSummary(row: Row): string[] {
     const rest = hiddenColumns.value.filter(col => !['roles', 'management_reports'].includes(col.key)).map(col => col.format ? col.format(row) : cell(row, col.key))
     return lines(joined(...rest))
   }
-  return [joined(row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${row.quantity}` : '')]
+  return [joined(row.status && !shownColumns.value?.some(col => col.key === 'status') ? display(row.status) : '', row.quantity ? `数量 ${quantityText(row.quantity)}` : '')]
 }
 const columnText = (row: Row, key: string) => { const col = columns[props.resource]?.find(c => c.key === key); return col?.format ? col.format(row) : cell(row, key) }
 // 窄屏摘要中可点击的关联单据（目前只有库存流水的项目与来源采购单）；无权跳转时只显示文字。
@@ -616,7 +612,7 @@ async function inspect(row: Row) {
       <h2>
         {{ title }} <span class="record-count">{{ count }}</span>
       </h2>
-      <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" :aria-label="filterConfig.label">
+      <div v-if="filterConfig && resource !== 'users'" class="resource-status-tabs" role="group" :aria-label="filterConfig.label">
         <button :aria-pressed="!filterValue" :disabled="actionBusy" @click="changeFilter('')">全部</button>
         <button v-for="(label, value) in filterConfig.options" :key="value" :aria-pressed="filterValue === value" :disabled="actionBusy" @click="changeFilter(value)">{{ label }}</button>
       </div>
@@ -649,7 +645,8 @@ async function inspect(row: Row) {
         <label v-else class="inline-check"><input type="checkbox" :checked="extraValues[item.key] === item.value" @change="extraValues[item.key] = ($event.target as HTMLInputElement).checked ? item.value! : ''; searchRecords()" />{{ item.label }}</label>
       </template>
       </div>
-      <el-button native-type="submit" :loading="loading">搜索</el-button>
+      <!-- 加载中仍可提交：禁用的提交按钮会让回车搜索被浏览器静默忽略；load 按代次丢弃过期结果。 -->
+      <el-button native-type="submit">搜索</el-button>
       <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierActive || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
     </form>
     <p v-if="resource === 'tasks' && records.some(row => !row.can_confirm && !row.system_managed)" class="task-confirm-note">本项目任务由对应专业主管确认完成并登记工时。</p>
@@ -657,12 +654,12 @@ async function inspect(row: Row) {
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
     <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint || fallbackHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!emptyHint && !hideContactHint && (!createLabel(resource) || !allowCreate)">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
-    <div v-if="issuePicking && issueSelection.length" class="record-batch-selection issue-selection" aria-label="批量领料选择">
+    <div v-if="issuePicking && issueSelection.length" class="record-batch-selection issue-selection" role="group" aria-label="批量领料选择">
       <span>已选 <strong>{{ issueSelection.length }}</strong> 项物料（跨页、换搜索都保留），一次最多 {{ issueSelectionLimit }} 项</span>
       <el-button type="primary" :disabled="actionBusy || loading || preparing" @click="openIssueBatch">批量领料（{{ issueSelection.length }}）</el-button>
       <el-button text :disabled="actionBusy || preparing" @click="issueSelection = []">清空选择</el-button>
     </div>
-    <div v-if="batchVisible" class="record-batch-selection" :aria-label="title + '批量选择'">
+    <div v-if="batchVisible" class="record-batch-selection" role="group" :aria-label="title + '批量选择'">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit(resource) }} 项</span>
       <el-button :loading="selectingAll" :disabled="loading || actionBusy || !count" @click="selectFilteredRows">{{ count > deletionLimit(resource) ? '选择筛选结果前' + deletionLimit(resource) + '项（跨页）' : '全选筛选结果（' + count + '项，跨页）' }}</el-button>
       <el-button text :disabled="selectingAll || loading || actionBusy || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>

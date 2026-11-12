@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import { read } from '../api'
 import { can, purchaseReader } from '../session'
 import { message } from '../utils/request'
@@ -8,11 +9,9 @@ import type { Row } from '../types'
 const props = defineProps<{ project: Row; revision: number }>()
 const summary = ref<Record<string, number>>({})
 const error = ref(''), loading = ref(false)
-const compact = ref(window.innerWidth <= 600), mobileExpanded = ref(false)
+const compact = useNarrow(), mobileExpanded = ref(false)
 const expanded = computed(() => !compact.value || mobileExpanded.value)
 const detailsId = useId()
-function resize() { compact.value = window.innerWidth <= 600 }
-onMounted(() => window.addEventListener('resize', resize))
 let generation = 0
 const cards = computed(() => [
   { key: 'tasks', label: '未完成任务', unit: '项', tab: 'tasks', section: 'tasks', attention: 'open-tasks' },
@@ -54,7 +53,7 @@ async function load() {
   loading.value = false
 }
 watch(() => [props.project.id, props.revision, cards.value.map(card => card.key).join(',')], load, { immediate: true })
-onBeforeUnmount(() => { generation++; window.removeEventListener('resize', resize) })
+onBeforeUnmount(() => { generation++ })
 </script>
 
 <template>

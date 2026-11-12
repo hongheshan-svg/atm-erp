@@ -2,12 +2,13 @@
 import { batchMode, setBatchMode } from '../batch-mode'
 import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, ref, useId, watch, type Ref } from 'vue'
+import { useNarrow } from '../utils/media'
 import { read, write, download } from '../api'
 import { downloadBOM, type BOMExportLayout } from '../api/bom'
 import { actionCommand, bomCommand, permission } from '../business'
 import { batchRemoveCommand, batchReviseCommand, unitNames } from '../modules/bom'
 import { warehouse } from '../modules/shared'
-import { today } from '../forms'
+import { decimalDifference, today } from '../forms'
 import { bomEditor, engineer, purchaseReader } from '../session'
 import type { Row, Command } from '../types'
 import { message, requestKey } from '../utils/request'
@@ -15,7 +16,7 @@ import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
 import { pageSize } from '../pagination'
-import { productCategories } from '../product-categories'
+import { partTypes, partTypeLabel, productCategories } from '../product-categories'
 import ImportFeedback from './ImportFeedback.vue'
 import { importDestination, templateMismatch } from '../utils/import-context'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
@@ -40,13 +41,7 @@ const destination = computed(() => mismatch.value ? importDestination(mismatch.v
 const view = ref<'prepare' | 'purchase'>(props.initialView || (bomEditor({ can_edit_bom: props.canEditBom }) || engineer() ? 'prepare' : 'purchase'))
 const fullColumns = ref(false)
 // 手机宽度（≤600px）走窄屏模式：明细只留勾选、物料（名称、编码与摘要）和操作，不再左右翻；筛选和说明默认收起。
-const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { mobile.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const mobile = useNarrow()
 const filterId = useId()
 const filtersOpen = ref(false), helpOpen = ref(false)
 // 视图说明：桌面放在切换按钮旁的「?」悬停提示里，手机点「说明 ▾」展开。
@@ -134,7 +129,7 @@ watch(view, value => { shortageOnly.value = value === 'purchase'; sortKey.value 
 const options = (key: string) => [...new Set<string>(demand.value.lines.map((line: Row) => String(line[key] || '')).filter(Boolean))].sort()
 const unapproved = (line: Row) => Number(line.unapproved || 0)
 // 「在途」主数字只算已批准的采购，草稿和待批准的单独以「待批」标出。
-const approvedIncoming = (line: Row) => (Number(line.incoming || 0) - unapproved(line)).toFixed(3)
+const approvedIncoming = (line: Row) => decimalDifference(String(line.incoming || '0'), String(line.unapproved || '0'))
 const day = today()
 // 需求日期已过、料还没到手（需求 − 已领 − 可用库存 > 0）就提示；已下单未到货的也要看得出来。
 function overdue(line: Row) {
@@ -464,20 +459,20 @@ function saved() {
     </div>
     <p v-if="inactiveCount" class="bom-inactive-note" role="status"><el-tag size="small" type="info">已停用</el-tag><span>{{ view === 'purchase' ? `${inactiveCount} 行物料已停用，不能采购；请联系工程师在 BOM 里替换为在用物料。` : `${inactiveCount} 行物料已停用，不能修改数量或采购；请在行尾「操作」用「替换物料」换成在用物料，或移除。` }}</span><button type="button" class="bom-link-button" :aria-pressed="inactiveOnly" @click="inactiveOnly = !inactiveOnly">{{ inactiveOnly ? '显示全部' : '只看这些行' }}</button></p>
     <div class="bom-demand-filters">
-      <label class="bom-search"><span class="bom-search-label">搜索物料</span><input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号、品牌" /></label>
+      <label class="bom-search"><span class="visually-hidden">搜索物料</span><input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号、品牌" /></label>
       <el-button v-if="mobile" class="bom-filter-toggle" :aria-expanded="filtersOpen" :aria-controls="filterId" @click="filtersOpen = !filtersOpen">筛选{{ activeFilters ? ` · ${activeFilters}` : '' }} {{ filtersOpen ? '▴' : '▾' }}</el-button>
       <div :id="filterId" class="bom-filter-group" :class="{ 'is-collapsed': mobile && !filtersOpen }">
-        <label><span class="bom-filter-caption">品牌</span><select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label><span class="bom-filter-caption">单元</span><select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option><option v-if="demand.lines.some((line: Row) => !line.assembly_unit)" :value="UNASSIGNED">未分单元</option></select></label><label><span class="bom-filter-caption">类别</span><select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option value="standard">标准件</option><option value="custom">非标件</option></select></label>
-        <label v-if="mobile"><span class="bom-filter-caption">排序</span><select v-model="sortKey" aria-label="排序方式" @change="sortAsc = true"><option value="unit">按单元</option><option value="required_date">按需求日期</option><option value="shortage">按缺料（多的在前）</option></select></label>
+        <label><span class="visually-hidden">品牌</span><select v-model="brand" aria-label="筛选品牌"><option value="">全部品牌</option><option v-for="value in options('brand')" :key="value">{{ value }}</option></select></label><label><span class="visually-hidden">单元</span><select v-model="unit" aria-label="筛选单元"><option value="">全部单元</option><option v-for="value in options('assembly_unit')" :key="value">{{ value }}</option><option v-if="demand.lines.some((line: Row) => !line.assembly_unit)" :value="UNASSIGNED">未分单元</option></select></label><label><span class="visually-hidden">类别</span><select v-model="partType" aria-label="筛选类别"><option value="">全部类别</option><option v-for="(label, value) in partTypes" :key="value" :value="value">{{ label }}</option></select></label>
+        <label v-if="mobile"><span class="visually-hidden">排序</span><select v-model="sortKey" aria-label="排序方式" @change="sortAsc = true"><option value="unit">按单元</option><option value="required_date">按需求日期</option><option value="shortage">按缺料（多的在前）</option></select></label>
         <label class="shortage-toggle"><input v-model="shortageOnly" type="checkbox" />仅看缺料</label><label v-if="shortageOnly" class="shortage-toggle" title="草稿或待批准的采购已扣减缺料，勾选后这些行仍留在列表里"><input v-model="includeUnapproved" type="checkbox" />含待批采购</label><label class="shortage-toggle"><input v-model="overdueOnly" type="checkbox" />仅看逾期</label>
       </div>
     </div>
-    <div v-if="batchVisible" class="bom-batch-selection" aria-label="BOM批量选择">
+    <div v-if="batchVisible" class="bom-batch-selection" role="group" aria-label="BOM批量选择">
       <span>已选 <strong>{{ deletionSelection.length }}</strong> 项（跨页保留），每批最多 {{ deletionMax }} 项</span>
       <el-button :disabled="busy || deletionLoading || !filtered.length" @click="batch.replace(filtered)">{{ filtered.length > deletionMax ? '选择筛选结果前' + deletionMax + '项（跨页）' : '全选筛选结果（' + filtered.length + '项，跨页）' }}</el-button>
       <el-button text :disabled="busy || deletionLoading || !deletionSelection.length" @click="deletionSelection = []">清空选择</el-button>
     </div>
-    <div v-if="maintainVisible && filtered.length && maintainSelection.length" class="bom-batch-selection" aria-label="BOM批量修订">
+    <div v-if="maintainVisible && filtered.length && maintainSelection.length" class="bom-batch-selection" role="group" aria-label="BOM批量修订">
       <span>已选 <strong>{{ maintainSelection.length }}</strong> 行（跨页保留）</span>
       <el-button v-if="!mobile" :disabled="busy || deletionLoading" @click="maintain.replace(filtered)">选择筛选结果（{{ Math.min(filtered.length, maintainMax) }} 行）</el-button>
       <el-dropdown v-if="mobile && maintainSelection.length" trigger="click" :persistent="false" @command="batchCommand">
@@ -530,7 +525,7 @@ function saved() {
         <el-table-column prop="drawing_number" label="图号" min-width="150" /><el-table-column prop="drawing_revision" label="图档版本" min-width="90" />
         <el-table-column label="产品编码类别" min-width="125"><template #default="{ row }">{{ productCategories[row.product_category] || '未分类' }}</template></el-table-column>
         <el-table-column prop="application_date" label="申请日期" min-width="110" /><el-table-column prop="applicant" label="申请人" min-width="100" />
-        <el-table-column prop="brand" label="品牌" min-width="95" /><el-table-column label="物料类别" min-width="100"><template #default="{ row }">{{ ({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类' }}</template></el-table-column>
+        <el-table-column prop="brand" label="品牌" min-width="95" /><el-table-column label="物料类别" min-width="100"><template #default="{ row }">{{ partTypeLabel(row.part_type) }}</template></el-table-column>
         <el-table-column prop="change_note" label="变更说明" min-width="150" />
         <template v-if="view === 'prepare'"><el-table-column prop="issued" label="已领" :formatter="qtyCell" /><el-table-column prop="incoming" label="在途（含待批）" min-width="110" :formatter="qtyCell" /><el-table-column prop="available" label="可用库存" :formatter="qtyCell" /><el-table-column prop="shortage" label="缺料" :formatter="qtyCell" /></template>
       </template>
@@ -619,7 +614,6 @@ function saved() {
 .bom-demand-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; padding: 8px 0 10px; }
 .bom-demand-filters label { display: grid; gap: 6px; font-size: 13px; min-width: 130px; }
 /* 筛选下拉的首项已写明「全部品牌 / 全部单元 / 全部类别」，标题只留给读屏，筛选行压成一行。 */
-.bom-filter-caption, .bom-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .bom-item-code.is-inline { display: inline; margin-left: 6px; }
 .bom-inactive-tag { margin-left: 6px; vertical-align: 1px; }
 .bom-inactive-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; font-size: 13px; color: var(--ink-3); }

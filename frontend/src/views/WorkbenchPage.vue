@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from '../components/BusinessTable.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useNarrow } from '../utils/media'
 import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-plus/icons-vue'
 import { ElSkeleton } from 'element-plus'
 import { read } from '../api'
@@ -17,13 +18,7 @@ const loading = ref(false), initialized = ref(false), error = ref(''), updated =
 const day = ref(today())
 let generation = 0
 // 手机宽度（与列表组件同一判定）：待办表改为「事项 / 状态 / 处理」三列，类型和截止日期并入事项下方的副行。
-const narrow = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { narrow.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const narrow = useNarrow()
 const icons = { handover_projects: List, supervised_tasks: List, sales: Document, quoted_sales: Document, sale_receivables: Wallet, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, approved_purchases: Document, shortage_projects: Box, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
 // 交接待办：签约后待启动的项目、批准后待下单的采购、有缺料的项目、本人合同的逾期应收，各自成类，不再只能逐个项目翻找。
 const labels: Record<string, string> = {

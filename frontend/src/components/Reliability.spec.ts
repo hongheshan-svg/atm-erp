@@ -135,7 +135,7 @@ describe('审查问题回归', () => {
     expect(wrapper.findAll('select option')).toHaveLength(0)
     // 库位只给已用过的候选，不是逐行物料下拉。
     expect(wrapper.findAll('datalist option').map(o => o.attributes('value'))).toEqual(['主仓', 'A区'])
-    await wrapper.findAll('.warehouse-lines tbody tr')[0]!.get('input[aria-label="数量"]').setValue('0.5')
+    await wrapper.findAll('.warehouse-lines tbody tr')[0]!.get('input[id$="-quantity"]').setValue('0.5')
     const next = wrapper.findAll('button').find(b => b.text() === '下一页明细')!
     await next.trigger('click')
     expect(wrapper.findAll('.warehouse-lines tbody tr')).toHaveLength(20)
