@@ -30,7 +30,7 @@
 | 方式 | 适合场景 | 需要提前准备 |
 | --- | --- | --- |
 | **Docker（推荐）** | 三平台快速部署，由 Compose 管理应用和数据服务 | Docker Engine / Docker Desktop、Compose v2、Linux 容器模式 |
-| 原生 | 已有数据库及 Redis，由运维管理运行环境 | Python 3.11、Nginx、PostgreSQL 15、Redis 7 |
+| 原生 | 已有数据库及 Redis，由运维管理运行环境 | Python 3.11（3.11.3 及以上）、Nginx、PostgreSQL 15、Redis 7 |
 
 在[发布页面](https://github.com/hongheshan-svg/atm-erp/releases/latest)的 **Assets** 下载 `atm-erp-v版本号-平台-方式.zip`。平台为 `macos` / `linux` / `windows`，方式为 `docker` / `native`，每版共 6 个安装包。请选择对应附件，GitHub 自动生成的 **Source code** 压缩包不等同于安装包。
 
@@ -100,9 +100,9 @@ Docker 编排、原生配置字段和 Linux 升级服务诊断见 [部署配置�
 
 | 平台 | 应用运行依赖 | 数据服务 |
 | --- | --- | --- |
-| macOS | Python 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
-| Linux | Python 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
-| Windows | Python 3.11 x64（含 py 启动器）、Windows Nginx，PowerShell | PostgreSQL 15；Redis 7 使用已有可连接服务（例如独立 Linux 服务器） |
+| macOS | Python 3.11.3 及以上的 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
+| Linux | Python 3.11.3 及以上的 3.11（含 venv/pip）、Nginx，原生 CPU 架构 | PostgreSQL 15、Redis 7，可本机或独立服务器 |
+| Windows | Python 3.11.3 及以上的 3.11 x64（含 py 启动器）、Windows Nginx，PowerShell | PostgreSQL 15；Redis 7 使用已有可连接服务（例如独立 Linux 服务器） |
 
 Windows 包不包含官方 Windows Redis 7 服务。需要全套本机数据服务时使用 Docker 包。原生安装器不会安装操作系统软件、创建数据库用户或开启防火墙；Linux 推荐通过下方 systemd 入口托管应用，网页升级服务单独选择启用。发布包已有前端产物，无需 Node.js；从 Git 源码运行则先用 Node.js 22 执行 `cd frontend && npm ci && npm run build`。
 
@@ -151,7 +151,7 @@ bash install-native.sh start
 .\install-native.ps1 start
 ```
 
-安装会创建独立 Python 虚拟环境，从发布包的 wheelhouse 校验并离线安装全部锁定依赖，检查 PostgreSQL/Redis 连接、执行 schema guard/迁移及初始化、配置 Nginx，不下载源码依赖或现场编译。包内预编译依赖支持 Linux x86_64/aarch64（glibc 2.28+）、macOS Intel 12+ / Apple Silicon 14+、Windows x64；其他宿主机优先使用 Docker。仍需事先准备 Python 3.11、Nginx、PostgreSQL 15 与 Redis 7。任何失败立即退出，不清库、不绕过保护。全新安装的初始管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；完成安装向导修改密码后该值即失效，已有账户保持不变。
+安装会创建独立 Python 虚拟环境，从发布包的 wheelhouse 校验并离线安装全部锁定依赖，检查 PostgreSQL/Redis 连接、执行 schema guard/迁移及初始化、配置 Nginx，不下载源码依赖或现场编译。包内预编译依赖支持 Linux x86_64/aarch64（glibc 2.28+）、macOS Intel 12+ / Apple Silicon 14+、Windows x64；其他宿主机优先使用 Docker。仍需事先准备 Python 3.11（3.11.3 及以上）、Nginx、PostgreSQL 15 与 Redis 7。任何失败立即退出，不清库、不绕过保护。全新安装的初始管理员密码见 `native-config.json` 的 `ADMIN_PASSWORD`，用户名为 `admin`；完成安装向导修改密码后该值即失效，已有账户保持不变。
 
 Linux `service-install` 注册并启动 systemd 应用服务：普通用户使用用户服务及 linger，root 使用系统服务。先保证该账户拥有安装目录、DATA_DIR、Nginx 及数据库访问权限；推荐专用非管理员账户。之后 `start` / `stop` 管理已注册服务，`service-status` 查看状态，终端关闭不停止服务。应用升级成功安装后更新持久启动入口，系统重启不会回到旧版本目录。切换现有前台实例前先 `stop`，不要同时启动两套进程。
 

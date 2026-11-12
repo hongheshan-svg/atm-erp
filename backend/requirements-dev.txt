@@ -1,4 +1,6 @@
 -r requirements.txt
+# 运行时依赖连同传递依赖按 constraints.txt 固定；下列开发工具没有传递依赖，直接写死版本。
+-c constraints.txt
 ruff==0.16.0
 # 多进程测试（manage.py test --parallel）把失败回溯传回主进程；缺少时 scripts/ci/run_selected 退回串行。
 tblib==3.2.2

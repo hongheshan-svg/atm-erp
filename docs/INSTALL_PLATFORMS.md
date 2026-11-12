@@ -6,7 +6,7 @@
 
 - [ ] 下载发布页 Assets 中对应平台与方式的安装包（不是 Source code），并按 `SHA256SUMS` 清单核对哈希。
 - [ ] Docker：Docker Engine / Desktop 使用 Linux 容器，Compose v2；无需宿主机 Python 或 Node。
-- [ ] 原生：Python 3.11、Nginx、独立的 PostgreSQL 15 与 Redis 7 已由管理员准备；Windows 的 Redis 使用独立服务器。
+- [ ] 原生：Python 3.11（3.11.3 及以上）、Nginx、独立的 PostgreSQL 15 与 Redis 7 已由管理员准备；Windows 的 Redis 使用独立服务器。
 - [ ] 使用全新独立数据库，不连接旧 ERP 库，不清库、不绕过 schema guard。
 
 ## 配置与启动

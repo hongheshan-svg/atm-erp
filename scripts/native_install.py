@@ -203,7 +203,9 @@ def install(config, data):
         from release_install import native_dependencies
         dependencies = native_dependencies(ROOT)
     else:
-        dependencies = ['--only-binary=:all:', '-r', ROOT / 'backend/requirements.txt']
+        # 源码目录安装同样按 constraints.txt 固定全部传递依赖，与镜像和发布 wheelhouse 一致。
+        backend = ROOT / 'backend'
+        dependencies = ['--only-binary=:all:', '-r', backend / 'requirements.txt', '-c', backend / 'constraints.txt']
     run([python, '-m', 'pip', 'install', *dependencies])
     env = environment(config, data)
     check_services(python, env)
@@ -330,8 +332,9 @@ def main():
     parser.add_argument('--no-ota', action='store_true', help='不注册可选宿主机升级服务')
     parser.add_argument('--foreground', action='store_true', help='由服务管理器调用的前台运行模式')
     args = parser.parse_args()
-    if sys.version_info[:2] != (3, 11):
-        parser.error("请使用 Python 3.11")
+    # 3.11.0–3.11.2 另需 async-timeout（redis 的条件依赖），发布包的离线 wheel 不含它，安装会中途失败。
+    if sys.version_info[:2] != (3, 11) or sys.version_info < (3, 11, 3):
+        parser.error("请使用 Python 3.11（3.11.3 或更高的 3.11 版本）")
     try:
         if args.action == "configure":
             create_config(args.config)

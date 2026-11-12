@@ -7,6 +7,7 @@ on:
     paths:
       - docker/app/Dockerfile
       - backend/requirements.txt
+      - backend/constraints.txt
       # npm ci 层按 COPY frontend/package*.json 计算，package.json 单独变化同样会让该层失效。
       - frontend/package.json
       - frontend/package-lock.json
