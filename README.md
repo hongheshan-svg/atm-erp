@@ -19,7 +19,7 @@
 | 收付款 | 应收应付、对账、收付款、退款与冲销 |
 | 基础资料、设置 | 物料、客户供应商、用户岗位、编号与启用配置 |
 
-十一种固定岗位：管理员、项目经理、销售经理、采购员、仓管、财务、普通成员、采购经理、机械工程师、电气工程师、生产经理。**一个账号可兼任多个岗位**，菜单按权限显示，销售负责人和项目成员的数据范围继续生效。采购经理负责采购审核，工程师维护参与项目的 BOM 与技术资料，生产经理负责参与项目装配、调试、安装及设备售后任务和团队工时，详见[岗位职责与权限](docs/ROLE_RESPONSIBILITIES.md)。经营报表向管理员开放；总经理使用项目经理角色，并由管理员单独开启“总经理报表权限”。
+十一种固定岗位：管理员、项目经理、销售经理、采购员、仓管、财务、普通成员、采购经理、机械工程师、电气工程师、生产经理。**一个账号可兼任多个岗位**，菜单按权限显示；各岗位职责、数据范围及总经理报表授权见[岗位职责与权限](docs/ROLE_RESPONSIBILITIES.md)。
 
 金额采用 **CNY 含税经营口径**，不替代法定会计账。不包含 OA、复杂 MES/APS、可配置审批流或报表构建器。完整边界见 [系统范围](docs/CORE_ERP_SCOPE.md)。
 
@@ -252,11 +252,9 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 
 ### 在线升级（OTA）
 
-管理员通过页面左上角“版本与升级”检查正式版本。**新版 Docker 配置后直接 up，网页升级默认可用**；必须看到“容器内升级已就绪”的真实心跳。参考 sub2api 在容器内更新程序，不替换宿主机镜像，不挂 Docker socket；内部令牌由启动器派生，无需手填。“立即更新”下载固定仓库且 SHA256 校验通过、声明 container_runtime=1 的 Linux 原生程序包，用预编译 wheelhouse 离线创建独立虚拟环境，此时业务继续运行。准备完成后显示“重启服务”；管理员确认停机后才完整备份数据库、附件、私有配置，再迁移、切换程序及前端。页面自动重连，仅在任务成功且目标运行版本确认后倒计时刷新，不以超时当作成功。
+管理员在页面左上角“版本与升级”检查并安装正式版本。**新版 Docker 配置后直接 up，网页升级默认可用**，须看到“容器内升级已就绪”的真实心跳；“立即更新”只下载并准备，业务继续运行，管理员确认“重启服务”后才完整备份、前向迁移并切换程序。程序、依赖、日志和升级备份保存在 `lean_runtime` 卷，**禁止删除该卷或执行 `down -v`**。
 
-程序、依赖、任务日志和备份持久化到 `lean_runtime` 卷。容器重建继续使用已升级程序；更高版本基础镜像允许前向更新，旧镜像不会覆盖较新的持久化版本。禁止删除 runtime 卷或执行 down -v。网页升级不更新 Python、Nginx、操作系统或稳定启动器，这些变化须手动更换基础镜像；不兼容程序包在停机前拒绝。迁移阶段失败/中断会阻止旧程序启动，不能删除维护标记或降级绕过保护。
-
-旧版必须先沿用原配置/项目名/数据卷更新到包含容器 OTA 的镜像；旧宿主机执行器应停止，避免日志反复报模式冲突。仅保留旧方案时显式 `LEAN_OTA_MODE=host`，兼容安装器 `--with-ota` / `-WithOta` 会设置该模式并注册宿主机服务（需 Python 3.11）。原生部署仍在私有 JSON 设置 OTA_AGENT_TOKEN 后接入宿主机服务。恢复格式及排查见 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。
+升级步骤、空间要求、恢复格式、旧宿主机/原生执行器接入及故障排查只维护在 [OTA 操作指南](docs/LEAN_OTA_OPERATIONS.md)。
 
 首次上线和升级后，应检查登录、角色权限、附件下载及备份恢复，不能仅以健康页作为业务验收结果。
 
@@ -284,31 +282,11 @@ Docker 可继续使用版本源码中的 `scripts/backup.py`；原生 PostgreSQL
 
 ## 开发与验证
 
-### 本地检查
+### 本地开发与检查
 
-后端：Django REST Framework，三个本地 app `core/accounts/business`。前端：Vue 3、TypeScript、Element Plus，网络统一经过 `src/utils/request.ts`。
+开发环境、本地端口、独立测试库（`PG_TEST_*`）与分阶段检查命令只维护在 [AGENTS.md](AGENTS.md#开发与测试)；后端测试目标唯一登记在 `scripts/ci/backend_test_matrix.py`。浏览器用例必须指向独立测试安装（显式设置 `E2E_BASE_URL`、`E2E_ADMIN_PASSWORD`），会创建模拟业务数据。
 
-```bash
-# Docker 中的临时 PostgreSQL 测试，自动清理测试容器
-bash scripts/precheck-tests.sh --all
-
-cd frontend
-npm ci
-npm run lint
-npm run typecheck
-npm run test
-npm run build
-# 必须指向独立测试安装，会创建完整模拟业务数据
-E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm run test:e2e
-```
-
-本地前端 `npm run dev`，默认端口 18310，API 代理默认 `127.0.0.1:18301`，可用 `VITE_API_BASE_URL` 修改。后端显式设置 `SECRET_KEY`、`DB_*`、`REDIS_URL`、`ADMIN_PASSWORD` 后运行 `migrate`、`init_system`、`runserver`；它不读取旧 `.env`。
-
-测试分组唯一维护在 `scripts/ci/backend_test_matrix.py`。`python run_all_tests.py --stage checks|backend|platform|business|concurrency|frontend|browser` 提供分阶段入口。后端测试需独立 `PG_TEST_HOST/USER/PASSWORD`，不使用业务库凭据。
-
-当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。员工填写表格前请阅读 [导入模板填写说明](docs/IMPORT_TEMPLATES.md)，各模板下载旁也可取得独立说明文档。其他历史文档不作为本版安装或模块清单。
-
-开发环境可设置 `LEAN_ENVIRONMENT=development` 关闭登录限流；直接运行后端时对应 `APP_ENVIRONMENT=development`。开发标记不会开启 DEBUG。发布安装保持 `production`，登录限制为 10 次/分钟；原生发布安装器强制检查该配置。
+当前范围见 [CORE_ERP_SCOPE](docs/CORE_ERP_SCOPE.md)，接口见 [LEAN_REBUILD_CONTRACT](docs/LEAN_REBUILD_CONTRACT.md)，本轮验证进度见 [SIMPLIFICATION_EVIDENCE](docs/SIMPLIFICATION_EVIDENCE.md)。员工填写表格前请阅读 [导入模板填写说明](docs/IMPORT_TEMPLATES.md)，各模板下载旁也可取得独立说明文档。已完成的验收与审计记录在 [docs/archive](docs/archive/README.md)，不作为本版安装或模块清单。
 
 ### GitHub CI 与发布
 
@@ -323,4 +301,4 @@ E2E_BASE_URL=http://127.0.0.1:18320 E2E_ADMIN_PASSWORD=测试管理员密码 npm
 | Installer validation | 三平台安装器验证 |
 | Release | 已存在 tag 的验证、打包及草稿/正式发布 |
 
-PR 按变动选择任务，合并不重复启动全套验证。发版本必须通过发版验证：后端与前端单测全部运行，浏览器按改动模块及关联页面、不含完整业务链，OTA 与安装器只在相关改动时运行；Release 仅复用代码内容完全一致的通过记录，否则先补跑。参数、命令和发布流程见 [CI 与发布操作指南](docs/CI_OPERATIONS.md)。
+PR 按变动选择任务，合并不重复启动全套验证；发版本必须通过发版验证。参数、运行范围、凭据复用和发布流程见 [CI 与发布操作指南](docs/CI_OPERATIONS.md)。
