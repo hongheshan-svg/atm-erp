@@ -1,5 +1,5 @@
 import { cancelEditing } from './fixtures'
-import { test, expect, login, type Page } from './fixtures'
+import { test, expect, login, accountTokens, type Page } from './fixtures'
 
 // Fixtures use the public API; successful business mutations are covered by full-chain.spec.ts.
 // Expected navigation is deliberately independent of the production navigation helper.
@@ -18,13 +18,39 @@ const identities = [
   { key: 'production_manager', roles: ['production_manager'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'settings'] },
 ]
 const accounts: Record<string, { id: number; username: string }> = {}
+const everyone = (...except: string[]) => identities.map(identity => identity.key).filter(key => !except.includes(key))
+// 各页按岗位应看到的页签。roles 省略表示所有能进入该页的岗位都有；新增不分岗位的页签不必改这里，
+// 逐页巡检仍会点开页面上实际出现的每个页签。
+const pageTabs: Record<string, { label: string; roles?: string[] }[]> = {
+  settings: [
+    ...['用户管理', '公司资料', '编号规则', '操作审计', '管理员初始化', '历史数据核查'].map(label => ({ label, roles: ['admin'] })),
+    { label: '我的账户' },
+  ],
+  masterdata: [
+    { label: '物料', roles: everyone('sales_manager') },
+    { label: '客户与供应商', roles: everyone('sales_manager') },
+    { label: '客户资料', roles: ['sales_manager'] },
+  ],
+  inventory: [{ label: '现有库存' }, { label: '库存流水' }, { label: '领料单' }, { label: '采购收货', roles: ['admin', 'warehouse'] }],
+  projects: [{ label: '项目列表' }, { label: '任务' }, { label: '工时记录' }],
+  finance: [
+    { label: '应收应付与费用' }, { label: '业务对账' }, { label: '供应商月度对账' }, { label: '收付款流水' },
+    { label: '银行到账与认领', roles: ['admin', 'finance'] },
+  ],
+}
+// 项目详情各页签下的子页签；BOM 只有一张表、成本与预算合为一个面板，均不再分子页签。
+const projectChildTabs: Record<string, string[]> = {
+  tasks: ['项目任务', '工时记录'],
+  deliveries: ['交付批次', '售后任务'],
+  finance: ['项目款项', '项目对账', '项目收付流水'],
+  bom: [],
+  cost: [],
+}
 const password = 'Eleven-role-audit-only-2026'
 let projectId: number, otherProjectId: number
 
 test.beforeAll(async ({ request }) => {
-  const auth = await request.post('/api/auth/login/', { data: { username: 'admin', password: process.env.E2E_ADMIN_PASSWORD } })
-  expect(auth.status()).toBe(200)
-  const headers = { Authorization: `Bearer ${(await auth.json()).access}` }
+  const headers = { Authorization: `Bearer ${(await accountTokens(request, 'admin', process.env.E2E_ADMIN_PASSWORD!)).access}` }
   const suffix = Date.now()
   // 每个岗位使用独立账号；管理员也不继承前序用例累计的每分钟请求额度。
   // 保留正式限流和所有错误断言，避免快速巡检因共享测试身份产生顺序依赖。
@@ -51,9 +77,9 @@ async function inspect(page: Page, visited: Record<string, unknown>[]) {
   if (new URL(page.url()).pathname.endsWith('/reports')) {
     await expect(page.getByRole('region', { name: '项目经营明细', exact: true })).toBeVisible()
     // 七项口径未减：四项作主指标卡，两项逾期收进对应主卡的说明，已承诺采购降到「经营关注」汇总行
-    const metrics = page.locator('.report-metric')
-    await expect(metrics).toHaveCount(4)
-    for (const index of [2, 3]) await expect(metrics.nth(index)).toContainText('其中逾期')
+    const metric = (label: string) => page.locator('.report-metric').filter({ has: page.getByText(label, { exact: true }) })
+    for (const label of ['已签约合同额', '实际成本']) await expect(metric(label)).toHaveCount(1)
+    for (const label of ['待收款', '待付款']) await expect(metric(label)).toContainText('其中逾期')
     const watch = page.getByRole('region', { name: '经营关注', exact: true })
     for (const label of ['已承诺采购', '待退客户款', '待收退款']) await expect(watch).toContainText(label)
   }
@@ -111,15 +137,11 @@ for (const identity of identities) {
       await page.goto(`/erp/${route}`)
       await expect(page).toHaveURL(new RegExp(`/erp/${route}(?:\\?|$)`))
       await expect(page.locator('h1')).toBeVisible()
-      const tabCount: Record<string, number> = {
-        settings: identity.key === 'admin' ? 7 : 1,
-        masterdata: identity.key === 'sales_manager' ? 1 : 2,
-        inventory: ['admin', 'warehouse'].includes(identity.key) ? 4 : 3,
-        projects: 3,
-        finance: ['admin', 'finance'].includes(identity.key) ? 5 : 4,
-      }
       // Assert expected tabs before enumerating: lazy rendering must not silently skip pages.
-      await expect(page.getByRole('tab')).toHaveCount(tabCount[route] ?? 0)
+      for (const tab of pageTabs[route] ?? []) {
+        const shown = !tab.roles || tab.roles.includes(identity.key)
+        await expect(page.getByRole('tab', { name: tab.label, exact: true }), `${route} 页签「${tab.label}」`).toHaveCount(shown ? 1 : 0)
+      }
       await inspect(page, visited)
       const labels = await page.getByRole('tab').allTextContents()
       for (const label of labels) {
@@ -148,8 +170,12 @@ for (const identity of identities) {
         await expect(page.locator('h1')).toContainText('岗位页面巡检')
         // BOM 页签只有一张表（行内可改单行），不再分子页签；成本与预算合为一个面板，
         // 实际成本与毛利在指标卡里，成本来源从「追溯成本明细」打开。
-        const childTabs: Record<string, number> = { tasks: 2, deliveries: 2, finance: 3 }
-        await expect(page.locator('.module-tabs').getByRole('tab')).toHaveCount(childTabs[tab] ?? 0)
+        const childTabs = projectChildTabs[tab]
+        if (childTabs) {
+          const tabs = page.locator('.module-tabs').getByRole('tab')
+          if (childTabs.length) for (const label of childTabs) await expect(tabs.filter({ hasText: label }), `${tab} 子页签「${label}」`).toHaveCount(1)
+          else await expect(tabs).toHaveCount(0)
+        }
         if (tab === 'cost') {
           const costPanel = page.getByRole('region', { name: '项目预算与成本管控', exact: true })
           for (const label of ['预算合计', '实际成本', '毛利（按实际）']) await expect(costPanel.getByRole('term').filter({ hasText: label })).toHaveCount(1)

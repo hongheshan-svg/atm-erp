@@ -1,38 +1,15 @@
 import { businessDate } from './fixtures'
 import { randomUUID } from 'node:crypto'
-import { test, expect, login, detailAction, type Page } from './fixtures'
+import { test, expect, login, authenticate, detailAction, type Page } from './fixtures'
 
 // Real API fixtures: prepare one approved, unreceived purchase; no sales/receiving UI chain.
 const fixturePassword = 'Finance-usability-isolated-2026-only'
 const paymentAmount = '125.00'
 const business = '/api/business/'
 
-function api(page: Page, token: string) {
-  const headers = { Authorization: `Bearer ${token}` }
-  return {
-    headers,
-    async get(path: string) {
-      const response = await page.request.get(path, { headers })
-      expect(response.status(), `${path}: ${await response.text()}`).toBe(200)
-      return response.json()
-    },
-    async post(path: string, data: object, status: number, key: string = randomUUID()) {
-      const response = await page.request.post(path, { headers: { ...headers, 'Idempotency-Key': key }, data })
-      expect(response.status(), `${path}: ${await response.text()}`).toBe(status)
-      return response.json()
-    },
-  }
-}
-
-async function authenticate(page: Page, username: string, password: string) {
-  const response = await page.request.post('/api/auth/login/', { data: { username, password } })
-  expect(response.status(), await response.text()).toBe(200)
-  return api(page, (await response.json()).access)
-}
-
 async function fixture(page: Page) {
   const suffix = randomUUID().slice(0, 8)
-  const admin = await authenticate(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const admin = await authenticate(page.request, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const me = await admin.get('/api/auth/me/')
   const financeName = `uxfinance_${suffix}`
   const purchaserName = `uxbuyer_${suffix}`
@@ -42,8 +19,8 @@ async function fixture(page: Page) {
     }, 201)
     expect(user.roles).toEqual([role])
   }
-  const finance = await authenticate(page, financeName, fixturePassword)
-  const purchaser = await authenticate(page, purchaserName, fixturePassword)
+  const finance = await authenticate(page.request, financeName, fixturePassword)
+  const purchaser = await authenticate(page.request, purchaserName, fixturePassword)
   const partner = await admin.post(business + 'partners/', { name: `付款验收单位-${suffix}`, kind: 'both' }, 201)
   const item = await admin.post(business + 'items/', { name: `付款验收物料-${suffix}`, unit: '件' }, 201)
   const project = await admin.post(business + 'projects/', {

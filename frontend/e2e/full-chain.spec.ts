@@ -1,7 +1,7 @@
 import { businessDate } from './fixtures'
 import { cancelEditing } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction, selectExecutors, choosePeople } from './fixtures'
+import { test, expect, observePage, expectHttpError, login as loginWithRetry, type Page, type Locator, openRowAction, selectExecutors, choose, submitDialog } from './fixtures'
 import { confirmSettlement } from './settlement-helpers'
 import { selectRoles } from './role-helpers'
 const password = 'Lean-QA-2026-password'
@@ -10,25 +10,6 @@ const day = (offset = 0) => businessDate(offset)
 const dialog = (p: Page) => p.getByRole('dialog')
 async function fill(p: Page, label: string, value: string) {
   await dialog(p).getByLabel(label, { exact: true }).fill(value)
-}
-async function choose(p: Page, label: string, value: string) {
-  const field = dialog(p).getByLabel(label, { exact: true })
-  if (await field.getAttribute('role') === 'combobox') {
-    // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
-    const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
-    return remote ? selectRemoteOption(field, { text: value }) : choosePeople(p, field, [value])
-  }
-  const option = await field.locator('option').filter({ hasText: value }).last().getAttribute('value')
-  await field.selectOption(option!)
-}
-async function save(p: Page) {
-  const response = p.waitForResponse(
-    (r) => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'),
-  )
-  await dialog(p).locator('button[type="submit"]').click()
-  const r = await response
-  expect(r.status(), await r.text()).toBeLessThan(300)
-  await expect(p.locator('[role="dialog"]:visible')).toHaveCount(0)
 }
 async function action(p: Page, row: Locator, name: string) {
   await openRowAction(p, row, name)
@@ -97,7 +78,8 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   const errors: string[] = []
   page.setDefaultTimeout(15000)
   await login(page, 'admin', adminPassword)
-  await expect(page.getByRole('navigation', { name: '主导航', includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(10)
+  // 各岗位的完整导航由 role-page-audit 逐项核对；这里只确认管理员进入后台后能到达设置页。
+  await expect(page.getByRole('navigation', { name: '主导航', includeHidden: true }).getByRole('link', { name: '设置', exact: true, includeHidden: true })).toHaveCount(1)
   await page.goto('/erp/settings')
   for (const role of roles) {
     const samePerson = combinedRoles && role === 'purchaser'
@@ -108,7 +90,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await selectRoles(dialog(page), combinedRoles && role === 'manager' ? ['manager', 'purchaser'] : [role])
     await fill(page, '小时成本（元）', role === 'member' ? '50' : '0')
     await fill(page, '密码', password)
-    await save(page)
+    await submitDialog(page)
     }
     const context = await browser.newContext({
       baseURL: info.project.use.baseURL,
@@ -136,7 +118,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await purchaser.getByRole('button', { name: '新增物料', exact: true }).click()
   await fill(purchaser, '物料名称', names.item)
   await fill(purchaser, '物料编码（留空自动生成）', 'CUSTOM-' + suffix)
-  await save(purchaser)
+  await submitDialog(purchaser)
   await purchaser.getByRole('tab', { name: '客户与供应商', exact: true }).click()
   for (const [kind, name] of [
     ['customer', names.customer],
@@ -145,7 +127,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await purchaser.getByRole('button', { name: '新增往来单位', exact: true }).click()
     await fill(purchaser, '单位名称', name)
     await dialog(purchaser).getByLabel('类型', { exact: true }).selectOption(kind)
-    await save(purchaser)
+    await submitDialog(purchaser)
   }
   await salesperson.goto('/erp/sales')
   await salesperson.getByRole('button', { name: '新建销售', exact: true }).click()
@@ -153,16 +135,16 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await choose(salesperson, '客户', names.customer)
   await fill(salesperson, '设备数量', '2')
   await fill(salesperson, '质保月数', '0')
-  await save(salesperson)
+  await submitDialog(salesperson)
   const saleRow = row(salesperson, names.project)
   await action(salesperson, saleRow, '报价')
   await fill(salesperson, '报价金额（元）', '10000')
   await fill(salesperson, '报价说明', '验收测试')
-  await save(salesperson)
+  await submitDialog(salesperson)
   await action(salesperson, saleRow, '编辑销售')
   await fill(salesperson, '需求说明', '确认两台设备及交付范围')
   await reason(salesperson, '补充需求后重新确认报价')
-  await save(salesperson)
+  await submitDialog(salesperson)
   const revisedSale = (await read(salesperson, 'business/sales/?search=' + encodeURIComponent(names.project))).results[0]
   expect(revisedSale.status).toBe('draft')
   expect(Number(revisedSale.quote_amount)).toBe(0)
@@ -172,7 +154,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await action(salesperson, saleRow, '报价')
   await fill(salesperson, '报价金额（元）', '10000')
   await fill(salesperson, '报价说明', '重新确认')
-  await save(salesperson)
+  await submitDialog(salesperson)
   // 列表在对话框关闭后才刷新：等「签约」成为该行主按钮，避免打开旧草稿行的菜单去找签约。
   await expect(saleRow.getByRole('button', { name: '签约', exact: true })).toBeVisible()
   await action(salesperson, saleRow, '签约')
@@ -181,7 +163,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await choose(salesperson, '项目成员', 'member' + suffix)
   await fill(salesperson, '签约日期', day(-2))
   await fill(salesperson, '收款到期日', day())
-  await save(salesperson)
+  await submitDialog(salesperson)
   await expect(salesperson.locator('.el-message')).toHaveCount(0)
   await action(salesperson, saleRow, '查看明细')
   await expect(dialog(salesperson).getByLabel('合同金额（元）', { exact: true })).toHaveValue('10,000.00')
@@ -201,7 +183,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await fill(manager, '人工预算（元）', '400')
   await fill(manager, '费用预算（元）', '50')
   await reason(manager, '确定初始项目预算')
-  await save(manager)
+  await submitDialog(manager)
   const initialBudget = await read(manager, `business/projects/${id}/cost-analysis/`)
   expect(initialBudget.budget_total).toBe('750.00')
   await manager.getByRole('tab', { name: 'BOM', exact: true }).click()
@@ -216,7 +198,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
       buffer: Buffer.from(`物料编码,数量,变更说明\n${item.code},4,初版\n`),
     })
   await manager.getByRole('button', { name: '确认导入', exact: true }).click()
-  await save(manager)
+  await submitDialog(manager)
   await purchaser.goto(`/erp/projects/${id}`)
   await purchaser.getByRole('tab', { name: 'BOM', exact: true }).click()
   // Selecting before the demand rows land silently selects nothing, leaving the purchase picker empty.
@@ -240,7 +222,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   const po = purchases[0]
   await purchaser.goto('/erp/purchases')
   await action(purchaser, row(purchaser, po.code), '提交采购')
-  await save(purchaser)
+  await submitDialog(purchaser)
   if (combinedRoles) await rejectSelfApproval(purchaser, po, true, info.outputPath('self-approval-over-budget-denied.png'))
   await page.goto('/erp/purchases')
   await action(page, row(page, po.code), '批准采购')
@@ -248,23 +230,23 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await page.screenshot({ path: info.outputPath('over-budget-approval.png'), animations: 'disabled' })
   await fill(page, '超预算批准原因', '管理员复核预算调整人的申请，批准本次超额')
   await dialog(page).getByLabel('确认承担本次超预算采购', { exact: true }).check()
-  await save(page)
+  await submitDialog(page)
   await manager.goto(`/erp/projects/${id}?tab=cost&section=budget`)
   await expect(manager.getByRole('region', { name: '项目预算与成本管控' }).getByRole('alert')).toContainText('超预算')
   await manager.getByRole('button', { name: '设置预算', exact: true }).click()
   await fill(manager, '材料预算（元）', '500')
   await reason(manager, '确认追加材料预算并保留修改依据')
-  await save(manager)
+  await submitDialog(manager)
   await manager.goto('/erp/purchases')
   await finance.goto('/erp/finance')
   await confirmSettlement(finance, manager, row(finance, po.code, '应收应付与费用'), true)
   await action(finance, row(finance, po.code, '应收应付与费用'), '登记收付款')
   await reason(finance)
-  await save(finance)
+  await submitDialog(finance)
   await finance.getByRole('tab', { name: '收付款流水', exact: true }).click()
   await action(finance, row(finance, po.code, '收付款流水'), '冲销付款')
   await reason(finance, '更正付款登记')
-  await save(finance)
+  await submitDialog(finance)
   const paymentRows = finance.getByRole('region', { name: '收付款流水', exact: true }).locator('.el-table__body tr:visible').filter({ hasText: po.code })
   await expect(paymentRows.filter({ hasText: '已冲销' })).toHaveCount(1)
   await expect(paymentRows.filter({ hasText: '冲销记录' })).toHaveCount(1)
@@ -279,7 +261,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await confirmSettlement(finance, manager, row(finance, po.code, '应收应付与费用'), true)
   await action(finance, row(finance, po.code, '应收应付与费用'), '登记收付款')
   await reason(finance, '重新登记付款')
-  await save(finance)
+  await submitDialog(finance)
   await warehouse.goto('/erp/purchases')
   await action(warehouse, row(warehouse, po.code), '查看明细')
   await expect(dialog(warehouse).getByRole('columnheader', { name: '含税单价（元）', exact: true })).toHaveCount(0)
@@ -290,17 +272,17 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await action(warehouse, row(warehouse, po.code), '收货')
   await fill(warehouse, '数量', '3')
   await fill(warehouse, '送货单号 / 备注', '验收测试')
-  await save(warehouse)
+  await submitDialog(warehouse)
   await purchaser.reload()
   await action(purchaser, row(purchaser, po.code), '取消未收余量')
   await fill(purchaser, '本次取消数量', '1')
   await reason(purchaser)
-  await save(purchaser)
+  await submitDialog(purchaser)
   await finance.reload()
   await confirmSettlement(finance, finance, row(finance, po.code, '应收应付与费用'))
   await action(finance, row(finance, po.code, '应收应付与费用'), '退款')
   await reason(finance)
-  await save(finance)
+  await submitDialog(finance)
   await purchaser.getByRole('button', { name: '新建采购', exact: true }).click()
   await fill(purchaser, '交期', day())
   await choose(purchaser, '项目', names.project)
@@ -310,21 +292,21 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await fill(purchaser, '含税单价（元）', '100')
   // BOM 需求 4、首单已到货 3，本单 2 件超出缺口 1 件（后面保内售后领用的备件），手工采购须写明超 BOM 原因。
   await fill(purchaser, '超 BOM 采购原因', '保内售后备件，超出 BOM 1 件')
-  await save(purchaser)
+  await submitDialog(purchaser)
   purchases = (await read(purchaser, `business/purchases/?project=${id}`)).results
   const po2 = purchases.find((p: { id: number }) => p.id !== po.id)
   await action(purchaser, row(purchaser, po2.code), '提交采购')
-  await save(purchaser)
+  await submitDialog(purchaser)
   await manager.reload()
   if (combinedRoles) await rejectSelfApproval(manager, po2, false, info.outputPath('self-approval-within-budget-denied.png'))
   const secondApprover = combinedRoles ? page : manager
   await secondApprover.goto('/erp/purchases')
   await action(secondApprover, row(secondApprover, po2.code), '批准采购')
-  await save(secondApprover)
+  await submitDialog(secondApprover)
   await warehouse.reload()
   // 正常到货的说明选填：不填直接收货，服务端按「采购收货」记录。
   await action(warehouse, row(warehouse, po2.code), '收货')
-  await save(warehouse)
+  await submitDialog(warehouse)
   await manager.goto(`/erp/projects/${id}?tab=tasks`)
   for (const [kind, title] of [
     ['design', '设计'],
@@ -335,10 +317,12 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await dialog(manager).getByLabel('阶段', { exact: true }).selectOption(kind)
     await fill(manager, '任务名称', title + suffix)
     await selectExecutors(manager, dialog(manager), ['member' + suffix])
-    await save(manager)
+    await submitDialog(manager)
   }
   await member.goto(`/erp/projects/${id}`)
-  await expect(member.getByRole('navigation', { includeHidden: true }).getByRole('link', { includeHidden: true })).toHaveCount(5)
+  const memberNav = member.getByRole('navigation', { name: '主导航', includeHidden: true })
+  await expect(memberNav.getByRole('link', { name: '项目', exact: true, includeHidden: true })).toHaveCount(1)
+  for (const hidden of ['采购', '收付款', '销售']) await expect(memberNav.getByRole('link', { name: hidden, exact: true, includeHidden: true })).toHaveCount(0)
   await expect(member.getByLabel('项目成本', { exact: true })).toHaveCount(0)
   expect((await read(member, 'business/projects/')).results.map((p: { id: number }) => p.id)).toEqual([id])
   const memberToken = await member.evaluate(() => localStorage.getItem('access_token'))
@@ -359,18 +343,18 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   for (const title of ['设计', '装配', '调试']) {
     await action(manager, row(manager, title + suffix), '完成任务')
     await fill(manager, '完成说明', '验收测试')
-    await save(manager)
+    await submitDialog(manager)
     await action(manager, row(manager, title + suffix), '登记工时')
     await fill(manager, '工时', title === '设计' ? '3' : '1')
     await fill(manager, '工作内容', '验收测试')
-    await save(manager)
+    await submitDialog(manager)
   }
   await manager.getByRole('tab', { name: '工时记录', exact: true }).click()
   const timeRows = manager.getByRole('region', { name: '工时记录' })
   await action(manager, timeRows.locator('.el-table__body tr:visible').last(), '更正工时')
   await fill(manager, '更正后工时', '2')
   await reason(manager, '更正设计工时')
-  await save(manager)
+  await submitDialog(manager)
   const reversedTime = timeRows.locator('.el-table__body tr:visible').filter({ hasText: '已冲销' })
   await expect(reversedTime).toHaveCount(1)
   await expect(reversedTime.getByRole('button', { name: '操作 ▾', exact: true })).toHaveCount(0)
@@ -386,13 +370,13 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await choose(warehouse, '项目', names.project)
   await fill(warehouse, '数量', '4')
   await reason(warehouse)
-  await save(warehouse)
+  await submitDialog(warehouse)
   for (let i = 0; i < 2; i++) {
     await manager.reload()
     await projectAction(manager, '发货')
     await fill(manager, '日期', day(-1))
     await choose(manager, '安装人', 'member' + suffix)
-    await save(manager)
+    await submitDialog(manager)
     const deliveries = (await read(manager, `business/deliveries/?project=${id}`)).results
     const delivery = deliveries[0]
     await openProjectTasks(manager)
@@ -400,17 +384,17 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await action(manager, installRow, '登记工时')
     await fill(manager, '工时', '1')
     await fill(manager, '工作内容', '验收测试')
-    await save(manager)
+    await submitDialog(manager)
     await action(manager, installRow, '完成任务')
     // 验收日期不能早于安装完成日期：安装与发货、验收同为昨天。
     await fill(manager, '实际完成日期', day(-1))
     await fill(manager, '完成说明', '验收测试')
-    await save(manager)
+    await submitDialog(manager)
     await manager.getByRole('tab', { name: '交付与售后', exact: true }).click()
     await action(manager, row(manager, delivery.code), '验收')
     await fill(manager, '日期', day(-1))
     await fill(manager, '验收说明', '验收测试')
-    await save(manager)
+    await submitDialog(manager)
   }
   const delivery = (await read(manager, `business/deliveries/?project=${id}`)).results[0]
   for (const [title, date, fee] of [
@@ -425,7 +409,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     await choose(manager, '执行人', 'member' + suffix)
     await fill(manager, '收费金额（元）', fee)
     if (Number(fee) > 0) await fill(manager, '客户付款到期日', day())
-    await save(manager)
+    await submitDialog(manager)
     if (fee === '0') {
       await warehouse.reload()
       await action(warehouse, row(warehouse, names.item, '现有库存'), '领料')
@@ -433,16 +417,16 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
       await choose(warehouse, '售后任务（生产领料留空）', title + suffix)
       await fill(warehouse, '数量', '1')
       await reason(warehouse)
-      await save(warehouse)
+      await submitDialog(warehouse)
     }
     await openProjectTasks(manager)
     await action(manager, row(manager, title + suffix), '登记工时')
     await fill(manager, '工时', '1')
     await fill(manager, '工作内容', '验收测试')
-    await save(manager)
+    await submitDialog(manager)
     await action(manager, row(manager, title + suffix), '完成任务')
     // 完成说明选填：留空时服务端记为「完成任务」。
-    await save(manager)
+    await submitDialog(manager)
   }
   await finance.reload()
   await finance.getByRole('button', { name: '登记费用', exact: true }).click()
@@ -450,7 +434,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await fill(finance, '费用名称', '差旅' + suffix)
   await fill(finance, '金额（元）', '50')
   await fill(finance, '付款到期日', day())
-  await save(finance)
+  await submitDialog(finance)
   await manager.reload()
   await projectAction(manager, '结项')
   // 未结清款项在打开结项时就列出，提交按钮不出现；服务端结项仍按同一组检查拒绝。
@@ -473,7 +457,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
     if (entry.purchase) await confirmSettlement(finance, finance, target)
     await action(finance, target, '登记收付款')
     await reason(finance)
-    await save(finance)
+    await submitDialog(finance)
   }
   expect(await read(manager, `business/projects/${id}/cost/`)).toEqual({
     materials: '500.00',
@@ -491,7 +475,7 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await manager.reload()
   await projectAction(manager, '结项')
   await reason(manager)
-  await save(manager)
+  await submitDialog(manager)
   await expect(manager.getByText('已结项', { exact: false }).first()).toBeVisible()
   const progress = await read(salesperson, `business/sales/${revisedSale.id}/progress/`)
   expect(progress.project_status).toBe('closed')
@@ -512,11 +496,11 @@ test(combinedRoles ? '项目经理兼采购员同一账号完成销售交接至�
   await dialog(salesperson).getByRole('button', { name: '关闭', exact: true }).click()
   await projectAction(manager, '重新打开')
   await reason(manager)
-  await save(manager)
+  await submitDialog(manager)
   if (combinedRoles) {
     await projectAction(manager, '结项')
     await reason(manager, '双岗完整链复核通过后再次结项')
-    await save(manager)
+    await submitDialog(manager)
     const finalProject = await read(manager, `business/projects/${id}/`)
     const finalEntries = (await read(finance, `business/entries/?project=${id}`)).results
     expect(finalProject.status).toBe('closed')

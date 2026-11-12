@@ -64,12 +64,20 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   const colleague = await created.json()
   await post('projects/' + project + '/edit/', { members: [colleague.id], reason: '加入隔离测试协作人员' })
   await post('tasks/', { project, kind: 'design', title: '原有任务保留', assignee: me.id })
+  // 模板内容（阶段、节点、自动同步节点）以接口为准，本用例只核对界面接线，不复述模板细节。
+  const template = await get('business/tasks/milestone-template/?project=' + project)
+  const nodes: { milestone: string; kind: string; system_managed: boolean }[] = template.nodes
+  // 阶段卡显示「已完成 / 总数」，与任务列表同一口径：取 milestone-summary 的统计。
+  const stageText = async (kind: string) => {
+    const stage = (await get('business/tasks/milestone-summary/?project=' + project)).stages.find((row: any) => row.key === kind)
+    return { ...stage, text: `${stage.done} / ${stage.total}` }
+  }
   await page.goto('/erp/projects/' + project + '?tab=tasks&section=tasks')
   const overview = page.getByRole('region', { name: '项目六阶段里程碑' })
-  await expect(overview.locator('.phase-card')).toHaveCount(6)
+  await expect(overview.locator('.phase-card')).toHaveCount(template.stages.length)
   await overview.getByRole('button', { name: '一键生成里程碑' }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('项目里程碑 · 20 行')
+  await expect(dialog).toContainText(`项目里程碑 · ${nodes.length} 行`)
   await selectExecutors(page, dialog.locator('.line-fields').first(), [me.display_name || me.username, colleague.display_name])
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(info.project.use.viewport!.width)
   await dialog.getByLabel('计划完成日期', { exact: true }).first().fill(nodeDue)
@@ -81,18 +89,21 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   expect((await generated).status()).toBe(201)
   await expect(dialog).toHaveCount(0)
   let tasks = (await get('business/tasks/?project=' + project + '&page_size=100')).results
-  expect(tasks).toHaveLength(21)
+  // 生成全部模板节点，原有的手工任务保留。
+  expect(tasks).toHaveLength(nodes.length + 1)
   expect(tasks.find((row: any) => row.milestone === 'design_3d').due_date).toBe(nodeDue)
   const firstNode = tasks.find((row: any) => row.milestone === 'design_3d')
   const stagePeers = tasks.filter((row: any) => row.kind === firstNode.kind && row.id !== firstNode.id && row.milestone && !row.system_managed)
   expect(stagePeers.length).toBeGreaterThan(0)
   expect(stagePeers.map((row: any) => row.due_date)).toEqual(stagePeers.map(() => stageDue))
-  expect(tasks.filter((row: any) => row.system_managed)).toHaveLength(3)
+  expect(tasks.filter((row: any) => row.system_managed).map((row: any) => row.milestone).sort()).toEqual(nodes.filter(node => node.system_managed).map(node => node.milestone).sort())
   expect(tasks[0].milestone).toBe('design_3d')
   expect(tasks.find((row: any) => row.milestone === 'design_3d').assignees).toEqual([me.id, colleague.id])
   await expect(page.locator('.el-table__body tr:visible').first()).toContainText('3D画图')
   await expect(page.locator('.el-table__body tr:visible').first()).toContainText(colleague.display_name)
-  await expect(overview.getByRole('button', { name: /^设计阶段/ })).toContainText('0 / 7')
+  const designStage = await stageText('design')
+  expect(designStage.done).toBe(0)
+  await expect(overview.getByRole('button', { name: /^设计阶段/ })).toContainText(designStage.text)
   await overview.getByRole('button', { name: /^采购阶段/ }).click()
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: '长交期' })
   await expect(row).toHaveCount(1)
@@ -116,7 +127,9 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await dialog.getByLabel('完成说明', { exact: true }).fill('长交期先行，设计仍在进行')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(overview.getByRole('button', { name: /^采购阶段/ })).toContainText('1 / 3')
+  const purchase = await stageText('purchase')
+  expect(purchase.done).toBe(1)
+  await expect(overview.getByRole('button', { name: /^采购阶段/ })).toContainText(purchase.text)
   tasks = (await get('business/tasks/?project=' + project + '&page_size=100')).results
   expect(tasks.find((row: any) => row.milestone === 'design_3d').status).toBe('open')
   expect(tasks.find((row: any) => row.milestone === 'purchase_long_lead').completed_date).toBe(today)
@@ -182,7 +195,10 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('本项目无需单独培训节点')
   await dialog.locator('button[type="submit"]').click()
   await expect(dialog).toHaveCount(0)
-  await expect(overview.getByRole('button', { name: /^客户终验收阶段/ })).toContainText('0 / 3')
+  // 取消的培训任务不计入阶段总数。
+  const site = await stageText('site')
+  expect(site.total).toBe(nodes.filter(node => node.kind === 'site').length)
+  await expect(overview.getByRole('button', { name: /^客户终验收阶段/ })).toContainText(site.text)
   await overview.getByRole('button', { name: '查看全部阶段' }).click()
   await expect(page.locator('.el-loading-mask:visible')).toHaveCount(0)
   await expect(page.locator('.el-message:visible')).toHaveCount(0)

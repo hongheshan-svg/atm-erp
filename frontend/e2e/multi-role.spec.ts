@@ -1,13 +1,11 @@
-import { test, expect, login, goToListPage, openRowAction } from './fixtures'
+import { test, expect, login, accountTokens, openRowAction, searchList } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 test('管理员分配采购兼仓库，保存回显并即时撤销采购权限', async ({ page }, info) => {
   const username = `dual${Date.now()}`, password = 'Multi-role-QA-only-2026-password'
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   // Keep the administrator session in this API context while the page changes users.
-  const auth = await page.request.post('/api/auth/login/', { data: { username: 'admin', password: process.env.E2E_ADMIN_PASSWORD! } })
-  expect(auth.status()).toBe(200)
-  const headers = { Authorization: `Bearer ${(await auth.json()).access}` }
+  const headers = { Authorization: `Bearer ${(await accountTokens(page.request, 'admin', process.env.E2E_ADMIN_PASSWORD!)).access}` }
   await page.goto('/erp/settings?section=users')
   await page.getByRole('button', { name: '新增用户', exact: true }).click()
   const dialog = page.getByRole('dialog')
@@ -23,11 +21,10 @@ test('管理员分配采购兼仓库，保存回显并即时撤销采购权限',
   const account = await response.json()
   expect(account.roles.sort()).toEqual(['purchaser', 'warehouse'])
   await expect(dialog).toBeHidden()
-  const listing = await page.request.get('/api/auth/users/', { headers })
-  const panel = page.getByRole('region', { name: '用户管理', exact: true })
-  const lastPage = Math.ceil((await listing.json()).count / Number(await panel.getByLabel('每页显示条目', { exact: true }).inputValue()))
-  if (lastPage > 1) await goToListPage(panel, lastPage)
+  // 按账号搜索定位新用户，不假设它排在最后一页。
+  const panel = await searchList(page, '用户管理', username)
   const row = panel.locator('.el-table__body tr').filter({ hasText: username })
+  await expect(row).toHaveCount(1)
   // 手机窄屏不显示角色列，角色并在姓名格的摘要行里。
   const roles = info.project.name === 'mobile' ? row.locator('.mobile-row-summary:not(.mobile-row-links)') : row.locator('.role-tags')
   await expect(roles).toContainText('采购员')

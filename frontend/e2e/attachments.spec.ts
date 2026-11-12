@@ -1,5 +1,5 @@
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, login } from './fixtures'
+import { test, expect, login, submitDialog } from './fixtures'
 import { readFile } from 'node:fs/promises'
 test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, info) => {
   const password = process.env.E2E_ADMIN_PASSWORD
@@ -8,26 +8,17 @@ test('合同附件从真实表单上传且只能鉴权下载', async ({ page }, 
   const suffix = String(Date.now())
   const customer = '附件客户' + suffix
   const project = '附件项目' + suffix
-  async function save() {
-    const pending = page.waitForResponse(
-      (r) => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'),
-    )
-    await page.getByRole('dialog').locator('button[type="submit"]').click()
-    const response = await pending
-    expect(response.status(), await response.text()).toBeLessThan(300)
-    await expect(page.getByRole('dialog')).not.toBeVisible()
-  }
   await page.goto('/erp/masterdata?section=partners')
   await page.getByRole('button', { name: '新增往来单位', exact: true }).click()
   await page.getByRole('dialog').getByLabel('单位名称', { exact: true }).fill(customer)
   await page.getByRole('dialog').getByLabel('类型', { exact: true }).selectOption('customer')
-  await save()
+  await submitDialog(page)
   await page.goto('/erp/projects')
   await page.getByRole('button', { name: '新建项目', exact: true }).click()
   await page.getByRole('dialog').getByLabel('项目名称', { exact: true }).fill(project)
   await selectRemoteOption(page.getByRole('dialog').getByLabel('客户', { exact: true }), { text: customer })
   await page.getByRole('dialog').getByLabel('负责人', { exact: true }).selectOption('1')
-  await save()
+  await submitDialog(page)
   await page.getByRole('link', { name: project, exact: true }).click()
   await expect(page).toHaveURL(/\/projects\/\d+(?:\?|$)/)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))

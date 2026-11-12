@@ -1,48 +1,23 @@
 import { selectExecutors } from './fixtures'
 import { businessDate, cancelEditing } from './fixtures'
-import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
-import { test, expect, login, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
+import { test, expect, login, api, submitDialog, type Page, type Locator, openRowAction } from './fixtures'
 
-// The period-lock case changes an installation-wide setting. Run this file with
-// the configured single worker, without another E2E process sharing the database.
-test.describe.configure({ mode: 'serial' })
+// The period-lock case changes an installation-wide setting (restored in finally). Run this file with
+// the configured single worker, without another E2E process sharing the database. Each case creates its
+// own accounts and records, so a failure does not skip the unrelated cases after it.
 const utcTest = test.extend({ timezoneId: 'UTC' })
 const password = 'State-actions-audit-2026-only'
-const contexts: BrowserContext[] = []
-const errors: string[] = []
 type Account = { id: number; username: string; display_name: string }
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text })
 // 业务日期按 Asia/Shanghai 计算，与服务端“今天”一致，不随运行机器时区变化。
 const day = (offset = 0) => businessDate(offset)
 
-async function api(page: Page, path: string, data?: Record<string, unknown>, status = 200) {
-  const token = await page.evaluate(() => localStorage.getItem('access_token'))
-  const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }
-  const response = data === undefined
-    ? await page.request.get(`/api/${path}`, { headers })
-    : await page.request.post(`/api/${path}`, { headers, data })
-  expect(response.status(), await response.text()).toBe(status)
-  return response.json()
-}
-
 async function account(page: Page, role: string, suffix: string): Promise<Account> {
   return api(page, 'auth/users/', {
     username: `state_${role}_${suffix}`, display_name: `状态验收${role}${suffix}`,
     roles: [role], password, hourly_cost: '20.00',
   }, 201)
-}
-
-async function session(browser: Browser, info: TestInfo, person: Account, timezoneId?: string) {
-  const context = await browser.newContext({
-    baseURL: info.project.use.baseURL, viewport: info.project.use.viewport,
-    isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch, timezoneId,
-  })
-  contexts.push(context)
-  const page = await context.newPage()
-  observePage(page, errors)
-  await login(page, person.username, password)
-  return page
 }
 
 async function project(page: Page, suffix: string, manager: number, members: number[] = []) {
@@ -58,13 +33,8 @@ async function action(page: Page, target: Locator, name: string) {
 }
 
 async function submit(page: Page, path: string, status = 200) {
-  if (status >= 400) expectHttpError(page, `/api/${path}`, status)
-  const pending = page.waitForResponse(response => new URL(response.url()).pathname === `/api/${path}` && response.request().method() === 'POST')
-  await dialog(page).locator('button[type="submit"]').click()
-  const response = await pending
-  expect(response.status(), await response.text()).toBe(status)
-  if (status < 300) await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
-  else await expect(dialog(page).getByRole('alert')).toBeVisible()
+  await submitDialog(page, path, status)
+  if (status >= 400) await expect(dialog(page).getByRole('alert')).toBeVisible()
 }
 
 async function reason(page: Page, text: string) {
@@ -72,23 +42,17 @@ async function reason(page: Page, text: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  errors.length = 0
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
 })
 
-test.afterEach(async () => {
-  for (const context of contexts.splice(0)) await context.close()
-  expect(errors, '额外角色浏览器不应出现异常或未预期的警告').toEqual([])
-})
-
-test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本流水', async ({ page, browser }, info) => {
+test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本流水', async ({ page, session }, info) => {
   const suffix = String(Date.now())
   const person = await account(page, 'warehouse', suffix)
   const itemName = `盘点伺服电机${suffix}`
   const item = await api(page, 'business/items/', { code: `COUNT-${suffix}`, name: itemName }, 201)
   await api(page, 'business/stocks/opening/', { item: item.id, quantity: '5', unit_cost: '20', reason: '盘点验收期初' })
   const stock = (await api(page, `business/stocks/?item=${item.id}`)).results[0]
-  const warehouse = await session(browser, info, person)
+  const warehouse = await session(person.username, password)
   await warehouse.goto('/erp/inventory?section=stocks')
   await action(warehouse, row(warehouse, itemName), '盘点')
   await dialog(warehouse).getByLabel('实盘数量', { exact: true }).fill('4')
@@ -120,7 +84,7 @@ test('仓管盘点拒绝过期快照，刷新后实盘并保留数量与成本�
   await warehouse.screenshot({ path: info.outputPath('stock-count.png'), animations: 'disabled' })
 })
 
-utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重复流水', async ({ page, browser, timezoneId }, info) => {
+utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重复流水', async ({ page, session, timezoneId }, info) => {
   const suffix = String(Date.now())
   const person = await account(page, 'warehouse', suffix)
   const admin = await api(page, 'auth/me/')
@@ -139,7 +103,7 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
     received_date: order.created_at.slice(0, 10), reason: '三件合格入库', lines: [{ line: order.lines[0].id, quantity: '3' }],
   })
   const receipt = (await api(page, `business/moves/?project=${current.id}&kind=receipt`)).results[0]
-  const warehouse = await session(browser, info, person, timezoneId)
+  const warehouse = await session(person.username, password, { timezoneId })
   expect(await warehouse.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe('UTC')
   await warehouse.goto('/erp/inventory?section=moves')
   await action(warehouse, row(warehouse, itemName).filter({ hasText: '采购收货' }), '采购退货')
@@ -210,7 +174,7 @@ utcTest('仓管采购退货同步库存与应付抵减，超退失败不留重�
   await warehouse.screenshot({ path: info.outputPath('purchase-warranty-closed.png'), animations: 'disabled' })
 })
 
-test('项目经理重新分配、取消、重开并确认任务，员工只查看完成状态', async ({ page, browser }, info) => {
+test('项目经理重新分配、取消、重开并确认任务，员工只查看完成状态', async ({ page, session }, info) => {
   const suffix = String(Date.now())
   const owner = await account(page, 'manager', suffix)
   const first = await account(page, 'member', `${suffix}a`)
@@ -218,8 +182,8 @@ test('项目经理重新分配、取消、重开并确认任务，员工只查�
   const current = await project(page, suffix, owner.id, [first.id, second.id])
   const title = `设计状态验收${suffix}`
   const task = await api(page, 'business/tasks/', { project: current.id, kind: 'design', title, assignee: first.id }, 201)
-  const manager = await session(browser, info, owner)
-  const member = await session(browser, info, second)
+  const manager = await session(owner.username, password)
+  const member = await session(second.username, password)
   await manager.goto(`/erp/projects/${current.id}?tab=tasks&section=tasks`)
   await action(manager, row(manager, title), '重新分配')
   await selectExecutors(manager, dialog(manager), [second.display_name])
@@ -258,7 +222,7 @@ test('项目经理重新分配、取消、重开并确认任务，员工只查�
   await manager.screenshot({ path: info.outputPath('task-reopened.png'), animations: 'disabled' })
 })
 
-test('管理员页面锁账阻止专业主管跨期工时，重开后补录并保留审计', async ({ page, browser }, info) => {
+test('管理员页面锁账阻止专业主管跨期工时，重开后补录并保留审计', async ({ page, session }, info) => {
   const suffix = String(Date.now())
   const person = await account(page, 'member', suffix)
   const admin = await api(page, 'auth/me/')
@@ -267,7 +231,7 @@ test('管理员页面锁账阻止专业主管跨期工时，重开后补录并�
   const title = `跨期设计工时${suffix}`
   const task = await api(page, 'business/tasks/', { project: current.id, kind: 'design', title, assignee: person.id }, 201)
   const company = (await api(page, 'core/company/')).results[0]
-  const member = await session(browser, info, person)
+  const member = await session(person.username, password)
   const cutoff = day(-1)
   try {
     await page.goto('/erp/settings?section=company')

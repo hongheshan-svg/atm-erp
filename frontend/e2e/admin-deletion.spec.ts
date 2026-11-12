@@ -294,7 +294,9 @@ test('BOM独立列表及销售附件支持删除和已删除记录', async ({ pa
   await page.screenshot({ path: info.outputPath('attachment-deleted-history.png'), animations: 'disabled' })
 })
 
-test('BOM按筛选跨页全选427项并一次删除，保留筛选外明细', async ({ page }, info) => {
+// 跨页勾选、全选筛选结果按选择组件分别覆盖一次：BOM 明细（本条，前端筛选）、基础物料（列表）、销售附件（弹窗，限当前单据）。
+// 同为列表的采购草稿与物料走同一组件和同一删除接口，不再重复；单次上限与大批量由 test_deletions 覆盖。
+test('BOM按筛选跨页全选标准件并一次删除，保留筛选外明细', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const headers = { Authorization: 'Bearer ' + token }
@@ -312,7 +314,7 @@ test('BOM按筛选跨页全选427项并一次删除，保留筛选外明细', as
   const demandUrl = '/api/business/projects/' + project.id + '/demand/'
   const before = await (await page.request.get(demandUrl, { headers })).json()
   await post('projects/' + project.id + '/revise-bom/', { expected_revision: before.revision, lines: [
-    ...Array.from({ length: 427 }, (_, i) => ({ item: item.id, assembly_unit: '单元' + (i + 1), quantity: '1', change_note: '隔离批量删除验收' })),
+    ...Array.from({ length: 21 }, (_, i) => ({ item: item.id, assembly_unit: '单元' + (i + 1), quantity: '1', change_note: '隔离批量删除验收' })),
     { item: other.id, assembly_unit: '保留单元', quantity: '1', change_note: '筛选外应保留' },
   ] })
   await page.goto('/erp/projects/' + project.id + '?tab=bom')
@@ -328,19 +330,19 @@ test('BOM按筛选跨页全选427项并一次删除，保留筛选外明细', as
   if (await filterToggle.isVisible()) await filterToggle.click()
   await bom.getByLabel('筛选类别').selectOption('standard')
   await expect(bom.getByLabel('BOM批量选择')).toContainText('已选 0 项')
-  await bom.getByRole('button', { name: '全选筛选结果（427项，跨页）', exact: true }).click()
-  await expect(bom.getByRole('button', { name: '批量删除（427）', exact: true })).toBeEnabled()
-  await page.screenshot({ path: info.outputPath('bom-select-427.png'), animations: 'disabled' })
-  await bom.getByRole('button', { name: '批量删除（427）', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: '确认删除 427 条BOM明细', exact: true })
-  await expect(dialog.locator('.deletion-records li')).toHaveCount(427)
+  await bom.getByRole('button', { name: '全选筛选结果（21项，跨页）', exact: true }).click()
+  await expect(bom.getByRole('button', { name: '批量删除（21）', exact: true })).toBeEnabled()
+  await page.screenshot({ path: info.outputPath('bom-select-filtered.png'), animations: 'disabled' })
+  await bom.getByRole('button', { name: '批量删除（21）', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '确认删除 21 条BOM明细', exact: true })
+  await expect(dialog.locator('.deletion-records li')).toHaveCount(21)
   await expect(dialog).not.toContainText('应保留的非标物料')
-  await dialog.getByLabel('删除原因').fill('隔离验收：批量清理所选427条BOM')
+  await dialog.getByLabel('删除原因').fill('隔离验收：批量清理筛选出的标准件BOM')
   await dialog.getByRole('checkbox').check()
-  await page.screenshot({ path: info.outputPath('bom-confirm-427.png'), animations: 'disabled' })
+  await page.screenshot({ path: info.outputPath('bom-confirm-filtered.png'), animations: 'disabled' })
   const started = Date.now()
   const pending = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/record-deletions/'))
-  await dialog.getByRole('button', { name: '确认删除 427 条', exact: true }).click()
+  await dialog.getByRole('button', { name: '确认删除 21 条', exact: true }).click()
   expect((await pending).status()).toBe(200)
   await info.attach('批量删除耗时', { body: Buffer.from((Date.now() - started) + ' ms'), contentType: 'text/plain' })
   await expect(dialog).toBeHidden()
@@ -348,7 +350,7 @@ test('BOM按筛选跨页全选427项并一次删除，保留筛选外明细', as
   expect(after.lines).toHaveLength(1)
   expect(after.lines[0].item_name).toBe('应保留的非标物料')
   const history = await (await page.request.get('/api/business/record-deletions/?resource=bom&project=' + project.id, { headers })).json()
-  expect(history.count).toBe(427)
+  expect(history.count).toBe(21)
 })
 
 test('基础物料跨页勾选与全选筛选结果后批量删除，保留未选物料', async ({ page }, info) => {
@@ -392,45 +394,6 @@ test('基础物料跨页勾选与全选筛选结果后批量删除，保留未�
   const remaining = await page.request.get('/api/business/items/?search=' + encodeURIComponent(name), { headers })
   expect((await remaining.json()).count).toBe(0)
   expect((await page.request.get('/api/business/items/' + kept.id + '/', { headers })).status()).toBe(200)
-})
-
-test('采购订单可跨页全选21张草稿并整批删除', async ({ page }, info) => {
-  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
-  const token = await page.evaluate(() => localStorage.getItem('access_token'))
-  const headers = { Authorization: 'Bearer ' + token }
-  const suffix = Date.now() + '-' + info.project.name
-  const post = async (path: string, data: object) => {
-    const response = await page.request.post('/api/business/' + path, { headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() }, data })
-    expect(response.ok(), await response.text()).toBeTruthy()
-    return response.json()
-  }
-  const me = await (await page.request.get('/api/auth/me/', { headers })).json()
-  const partner = await post('partners/', { name: '批量采购验收' + suffix, kind: 'both' })
-  const project = await post('projects/', { name: '跨页采购' + suffix, customer: partner.id, manager: me.id })
-  const item = await post('items/', { name: '跨页采购用料' + suffix, unit: '件' })
-  for (let i = 0; i < 21; i++) await post('purchases/', { project: project.id, supplier: partner.id, due_date: businessDate(60), lines: [{ item: item.id, quantity: '1', unit_price: '10' }] })
-  await page.goto('/erp/projects/' + project.id + '?tab=purchases')
-  const allPage = page.getByRole('checkbox', { name: /^选择本页/ })
-  await page.getByLabel('每页显示条目').selectOption('10')
-  await allPage.check()
-  await expect(page.getByRole('button', { name: '批量删除（10）', exact: true })).toBeEnabled()
-  await goToListPage(page, 2)
-  await expect(allPage).not.toBeChecked()
-  await allPage.check()
-  await expect(page.getByRole('button', { name: '批量删除（20）', exact: true })).toBeEnabled()
-  await page.getByRole('button', { name: '全选筛选结果（21项，跨页）', exact: true }).click()
-  await page.getByRole('button', { name: '批量删除（21）', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: /^确认删除 21 条/ })
-  await expect(dialog.locator('.deletion-records li')).toHaveCount(21)
-  await dialog.getByLabel('删除原因').fill('隔离验收：清理21张误建采购草稿')
-  await dialog.getByRole('checkbox').check()
-  await page.screenshot({ path: info.outputPath('purchase-delete-21.png'), animations: 'disabled' })
-  const pending = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/record-deletions/'))
-  await dialog.getByRole('button', { name: '确认删除 21 条', exact: true }).click()
-  expect((await pending).status()).toBe(200)
-  await expect(dialog).toBeHidden()
-  const remaining = await page.request.get('/api/business/purchases/?project=' + project.id, { headers })
-  expect((await remaining.json()).count).toBe(0)
 })
 
 test('销售附件弹窗跨页全选21个文件，仅删除当前单据的附件', async ({ page }, info) => {

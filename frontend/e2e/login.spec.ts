@@ -1,4 +1,12 @@
-import { test, expect } from './fixtures'
+import { test, expect, loginThroughForm } from './fixtures'
+
+// 其他用例经 fixtures.login() 直接写入令牌进入工作台；登录表单的成功路径只在这里经过一次。
+test('管理员从登录表单登录后进入工作台，主导航可见', async ({ page }) => {
+  await loginThroughForm(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  await expect(page.getByRole('navigation', { name: '主导航', includeHidden: true }).getByRole('link', { name: '工作台', exact: true, includeHidden: true })).toHaveCount(1)
+  expect(await page.evaluate(() => localStorage.getItem('refresh_token'))).toBeTruthy()
+})
+
 test('登录表单不提交空凭据', async ({ page }) => {
   await page.goto('/erp/login')
   await expect(page.getByRole('heading', { name: '欢迎登录' })).toBeVisible()
