@@ -36,7 +36,8 @@ type Tokens = { access: string; refresh: string }
 // 用例之间不再因为登录次数互相等待。
 const sessions = new Map<string, Tokens>()
 
-// 被限流（429）时按 Retry-After 等待后重发，其余结果原样交给调用方断言。
+// 被限流（429）时按 Retry-After 等待后重发，其余结果原样交给调用方断言。登录、续期与接口造数据都经过这里：
+// 令牌复用后用例跑得很快，同一账号一分钟内的请求可能超过服务端的每分钟上限。
 async function retryThrottled(send: () => Promise<APIResponse>) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const response = await send()
@@ -127,12 +128,12 @@ export function apiClient(request: APIRequestContext, token: string) {
   return {
     headers,
     async get(path: string) {
-      const response = await request.get(path, { headers })
+      const response = await retryThrottled(() => request.get(path, { headers }))
       expect(response.status(), `${path}: ${await response.text()}`).toBe(200)
       return response.json()
     },
     async post(path: string, data: object, status = 201, key: string = randomUUID()) {
-      const response = await request.post(path, { headers: { ...headers, 'Idempotency-Key': key }, data })
+      const response = await retryThrottled(() => request.post(path, { headers: { ...headers, 'Idempotency-Key': key }, data }))
       expect(response.status(), `${path}: ${await response.text()}`).toBe(status)
       return response.json()
     },
@@ -149,9 +150,9 @@ export async function authenticate(request: APIRequestContext, username: string,
 export async function api(page: Page, path: string, data?: object, status = 200) {
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() }
-  const response = data === undefined
-    ? await page.request.get('/api/' + path, { headers })
-    : await page.request.post('/api/' + path, { headers, data })
+  const response = await retryThrottled(() => data === undefined
+    ? page.request.get('/api/' + path, { headers })
+    : page.request.post('/api/' + path, { headers, data }))
   expect(response.status(), await response.text()).toBe(status)
   return response.json()
 }
@@ -164,6 +165,8 @@ export async function submitDialog(page: Page, path?: string, status?: number, d
   if (target && status && status >= 400) expectHttpError(page, target, status)
   const pending = page.waitForResponse(response => {
     if (!['POST', 'PATCH'].includes(response.request().method())) return false
+    // 被限流的这一次没有执行，前端会等几秒后用同一操作标识重发；等重发的结果。
+    if (response.status() === 429 && status !== 429) return false
     const pathname = new URL(response.url()).pathname
     return target ? pathname === target : pathname.startsWith('/api/') && !['/api/auth/login/', '/api/auth/refresh/'].includes(pathname)
   })
@@ -270,6 +273,9 @@ export function observePage(page: Page, errors: string[]) {
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error' && message.text().startsWith('Failed to load resource:')) {
+      // 用例连续造数据会碰到每账号每分钟的接口限流：只需等几秒的 429 由前端自动等待重发（见 request.ts），
+      // 不算页面错误；重发后仍失败时由用例自己的断言报出。
+      if (message.text().includes('status of 429 ')) return
       const expected = expectedHttpErrors.get(page) || []
       const index = expected.findIndex(({ url, status }) =>
         message.location().url === url && message.text().includes(`status of ${status} `),

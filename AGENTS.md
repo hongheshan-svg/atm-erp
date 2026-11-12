@@ -24,7 +24,7 @@
 ## 安装与配置
 
 - 正式 Docker 包配置 `.env` 后直接 `docker compose up -d`，默认同时启用容器内 OTA，无需宿主机 Python、执行器或 docker.sock；旧 `.env.lean` 显式沿用，不新建项目或覆盖密钥。服务仅 postgres/redis/app；程序、离线依赖及备份在 lean_runtime 卷持久化，禁止删除。仅接受 container_runtime 兼容协议的 Linux 原生程序包，不在现场编译；基础运行时变化须更换镜像。旧宿主机模式显式 LEAN_OTA_MODE=host，与容器执行器互斥。Linux 原生仍由 install-native 的 configure/install/service-install 接入 systemd，其他平台前台 start。升级必须确认真实心跳，限管理员、固定仓库、SHA256、先完整备份后前向迁移；迁移失败阻止旧程序启动，不回退或清空数据库。安装步骤只维护在 README，在线升级操作只维护在 docs/LEAN_OTA_OPERATIONS.md。
-- Docker 开发配置 `LEAN_ENVIRONMENT=development`，直接运行后端用 `APP_ENVIRONMENT=development`，关闭登录限流；发布部署必须使用 production（默认值），恢复原10次/分钟限制，不能把开发配置直接沿用到发布环境。DEBUG 不随开发标记开启。密钥和账号配置不提交 Git。
+- Docker 开发配置 `LEAN_ENVIRONMENT=development`，直接运行后端用 `APP_ENVIRONMENT=development`，关闭登录限流并把每账号接口上限放宽到 6000 次/分钟（供联调与浏览器测试）；发布部署必须使用 production（默认值），恢复登录 10 次/分钟、接口 600 次/分钟的限制，不能把开发配置直接沿用到发布环境。DEBUG 不随开发标记开启。密钥和账号配置不提交 Git。
 
 ## 开发与测试
 

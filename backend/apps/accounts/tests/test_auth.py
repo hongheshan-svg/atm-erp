@@ -454,6 +454,29 @@ class AuthenticationTests(TestCase):
             self.client.post('/api/auth/login/', {'username': 'member', 'password': PASSWORD}).status_code, 200
         )
 
+    def test_development_relaxes_only_the_per_account_api_limit(self):
+        """浏览器测试与联调以 development 运行：每账号接口上限放宽十倍，其余限流与生产一致。"""
+        import json
+        import os
+        import subprocess
+        import sys
+
+        from django.conf import settings
+
+        script = "import json; from config import settings as s; print(json.dumps(s.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']))"
+        rates = {}
+        for environment in ('production', 'development'):
+            env = {**os.environ, 'APP_ENVIRONMENT': environment}
+            env.pop('DJANGO_SETTINGS_MODULE', None)
+            output = subprocess.check_output([sys.executable, '-c', script], cwd=settings.BASE_DIR, env=env, text=True)
+            rates[environment] = json.loads(output)
+        self.assertEqual(rates['production']['user'], '600/min')
+        self.assertEqual(rates['development']['user'], '6000/min')
+        self.assertEqual(
+            {k: v for k, v in rates['development'].items() if k != 'user'},
+            {k: v for k, v in rates['production'].items() if k != 'user'},
+        )
+
     @override_settings(APP_ENVIRONMENT='production')
     def test_office_refreshes_have_independent_account_buckets_and_do_not_consume_login(self):
         from rest_framework_simplejwt.tokens import RefreshToken

@@ -429,3 +429,47 @@ describe('错误提示中文化', () => {
     expect(message(failure(400, { detail: '"中文错误选项" is not a valid choice.' }))).toBe('请选择列表中的有效选项。')
   })
 })
+
+describe('接口限流自动重发', () => {
+  function throttled(config: InternalAxiosRequestConfig, seconds?: string): never {
+    const headers = new AxiosHeaders(seconds === undefined ? {} : { 'retry-after': seconds })
+    throw new AxiosError('throttled', '429', config, {}, { ...response(config, 429), headers })
+  }
+
+  it('只需等几秒的 429 等待后用同一操作标识重发，成功后照常返回', async () => {
+    vi.useFakeTimers()
+    onTestFinished(() => { vi.useRealTimers() })
+    const keys: string[] = []
+    request.defaults.adapter = async config => {
+      keys.push(String(config.headers['Idempotency-Key']))
+      return keys.length === 1 ? throttled(config, '2') : response(config)
+    }
+    const pending = request.post('/business/items/', { name: '滑块' }, { headers: { 'Idempotency-Key': 'key-1' } })
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(keys).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(pending).resolves.toMatchObject({ status: 200 })
+    expect(keys).toEqual(['key-1', 'key-1'])
+  })
+
+  it('最多重发两次，仍被限流时把 429 交给调用方', async () => {
+    vi.useFakeTimers()
+    onTestFinished(() => { vi.useRealTimers() })
+    let calls = 0
+    request.defaults.adapter = async config => { calls++; return throttled(config, '1') }
+    const pending = request.get('/business/projects/')
+    const failed = expect(pending).rejects.toMatchObject({ response: { status: 429 } })
+    await vi.advanceTimersByTimeAsync(2000)
+    await failed
+    expect(calls).toBe(3)
+  })
+
+  it('需要长时间等待或未给出等待时间的 429 不重发', async () => {
+    for (const seconds of ['42', undefined]) {
+      let calls = 0
+      request.defaults.adapter = async config => { calls++; return throttled(config, seconds) }
+      await expect(request.post('/auth/login/', {})).rejects.toMatchObject({ response: { status: 429 } })
+      expect(calls).toBe(1)
+    }
+  })
+})

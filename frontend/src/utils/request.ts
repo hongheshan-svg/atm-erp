@@ -77,7 +77,11 @@ window.addEventListener('storage', (event) => {
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) syncSession()
 })
-type Config = InternalAxiosRequestConfig & { epoch?: number; retried?: boolean }
+type Config = InternalAxiosRequestConfig & { epoch?: number; retried?: boolean; throttled?: number }
+// 接口限流（429）只要求等几秒时自动重发：被限流的请求在服务端未执行，写动作沿用同一操作标识，重发不会重复写入。
+// 登录、导出等按分钟计的限流仍直接提示，不让用户干等。
+export const THROTTLE_RETRIES = 2
+export const THROTTLE_WAIT_SECONDS = 5
 // 写动作统一经 api.write 发出，带 Idempotency-Key；请求到达服务端即已提交。
 const isWrite = (config: Config) =>
   !['get', 'head', 'options'].includes((config.method ?? 'get').toLowerCase()) &&
@@ -104,6 +108,14 @@ request.interceptors.response.use(
   },
   async (error: AxiosError) => {
     const config = error.config as Config | undefined
+    const wait = Number(error.response?.headers?.['retry-after'])
+    if (config && error.response?.status === 429 && (config.throttled ?? 0) < THROTTLE_RETRIES && wait >= 0 && wait <= THROTTLE_WAIT_SECONDS && config.epoch === epoch) {
+      config.throttled = (config.throttled ?? 0) + 1
+      await new Promise((resolve) => setTimeout(resolve, Math.max(wait, 1) * 1000))
+      // 等待期间登录变化：不能用新登录的令牌重发原账号的请求。
+      if (config.epoch !== epoch) throw error
+      return request(config)
+    }
     if (!config || error.response?.status !== 401 || config.retried || config.url?.startsWith('/auth/login')) throw error
     // 续期前与共享存储对齐：其他标签页已退出或换了账号时，不能拿别人的刷新令牌续期，也不能清掉别人的登录。
     syncSession()
