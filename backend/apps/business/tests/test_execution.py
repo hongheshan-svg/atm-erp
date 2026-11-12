@@ -3,7 +3,6 @@ import re
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.db import connection
 from django.test import TestCase
@@ -15,17 +14,13 @@ from apps.business.services import execution
 from apps.core.models import ActionReceipt, AuditLog
 from apps.core.permissions import MONEY_READERS
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, freeze_today
 
 
 class ExecutionFixtures(BusinessFixtures):
     def setup_execution(self):
         self.setup_business()
-        self.clock = patch(
-            'apps.business.services.execution.timezone.localdate', return_value=date.fromisoformat(TODAY)
-        )
-        self.clock.start()
-        self.addCleanup(self.clock.stop)
+        self.enterContext(freeze_today(TODAY))
         User.objects.filter(pk=self.users['member'].pk).update(hourly_cost=50)
 
     def task(self, project, kind='design', title=None):
@@ -310,7 +305,7 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.post('manager', f'projects/{project.pk}/close/', {'reason': '尚有售后任务'}, status=409)
         self.complete(free_task)
         tomorrow = date.fromisoformat(TODAY) + timedelta(days=1)
-        with patch('apps.business.services.execution.timezone.localdate', return_value=tomorrow):
+        with freeze_today(tomorrow):
             paid_id = self.post(
                 'manager',
                 f'projects/{project.pk}/service/',
@@ -545,7 +540,7 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         delivery = self.deliver(project)
         self.accept(delivery)
         tomorrow = date.fromisoformat(TODAY) + timedelta(days=1)
-        with patch('apps.business.services.execution.timezone.localdate', return_value=tomorrow):
+        with freeze_today(tomorrow):
             task_id = self.post(
                 'manager',
                 f'projects/{project.pk}/service/',
@@ -575,7 +570,7 @@ class ExecutionTests(ExecutionFixtures, TestCase):
         self.accept(delivery)
         self.post('manager', f'projects/{project.pk}/service/', {**payload, 'fee': '1'}, status=400)
         tomorrow = date.fromisoformat(TODAY) + timedelta(days=1)
-        with patch('apps.business.services.execution.timezone.localdate', return_value=tomorrow):
+        with freeze_today(tomorrow):
             self.post(
                 'manager',
                 f'projects/{project.pk}/service/',

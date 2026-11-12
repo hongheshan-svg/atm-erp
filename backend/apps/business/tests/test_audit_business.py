@@ -1,12 +1,9 @@
 """Focused BP/SP audit regressions; independent from the full commercial chain."""
 
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from decimal import Decimal
-from threading import Barrier
 
-from django.db import close_old_connections
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -27,7 +24,7 @@ from apps.business.models import (
 from apps.business.services.bom import revision
 from apps.core.models import ActionReceipt, AuditLog
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, ConcurrencyHelpers, freeze_today
 
 
 class AuditBusinessFixtures(BusinessFixtures):
@@ -524,6 +521,7 @@ class AuditBusinessTests(AuditBusinessFixtures, TestCase):
     def test_purchase_detail_lists_receipt_batches_with_dates(self):
         order, (first, other) = self.multi_purchase()
         url = f'purchases/{order.pk}/'
+        self.enterContext(freeze_today())
         today = timezone.localdate().isoformat()
         yesterday = (timezone.localdate() - timedelta(days=1)).isoformat()
         self.post('warehouse', url + 'receive/', {'lines': [{'line': first.pk, 'quantity': '2'}]})
@@ -742,27 +740,7 @@ class AuditBusinessTests(AuditBusinessFixtures, TestCase):
         self.post('production_manager', f'projects/{self.project.pk}/service/', data, status=403)
 
 
-class AuditCancellationConcurrencyTests(AuditBusinessFixtures, TransactionTestCase):
-    def together(self, requests):
-        barrier = Barrier(len(requests))
-
-        def run(request):
-            role, path, payload = request
-            close_old_connections()
-            try:
-                client = APIClient()
-                client.force_authenticate(self.users[role])
-                barrier.wait(timeout=10)
-                result = client.post(
-                    '/api/business/' + path, payload, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4())
-                )
-                return result.status_code, result.data
-            finally:
-                close_old_connections()
-
-        with ThreadPoolExecutor(max_workers=len(requests)) as pool:
-            return list(pool.map(run, requests))
-
+class AuditCancellationConcurrencyTests(ConcurrencyHelpers, AuditBusinessFixtures, TransactionTestCase):
     def test_parallel_cancel_and_receive_cannot_consume_same_remainder(self):
         order = self.purchase(self.project, qty='5', price='1')
         line = order.lines.get()

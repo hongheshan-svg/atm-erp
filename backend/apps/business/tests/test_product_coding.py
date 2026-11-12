@@ -1,5 +1,4 @@
 from datetime import date
-from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -8,7 +7,7 @@ from apps.business.models import BOMLine, Item
 from apps.business.services import bom_import
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
-from .test_commercial_chain import BusinessFixtures
+from .test_commercial_chain import BusinessFixtures, freeze_today
 
 
 class ProductCodingTests(BusinessFixtures, TestCase):
@@ -267,11 +266,11 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         self.assertEqual(BOMLine.objects.get(project=project).quantity, 3)
 
     def test_category_sequences_years_and_no_reuse(self):
-        with patch('apps.core.models.timezone.localdate', return_value=date(2026, 9, 11)):
+        with freeze_today(date(2026, 9, 11)):
             self.assertEqual(CodeRule.generate_code('item', product_category='11'), '1126000001')
             self.assertEqual(CodeRule.generate_code('item', product_category='12'), '1226000001')
             self.assertEqual(CodeRule.generate_code('item', product_category='21'), '2199000001')
-        with patch('apps.core.models.timezone.localdate', return_value=date(2027, 1, 1)):
+        with freeze_today(date(2027, 1, 1)):
             self.assertEqual(CodeRule.generate_code('item', product_category='11'), '1127000001')
             self.assertEqual(CodeRule.generate_code('item', product_category='21'), '2199000002')
         Item.all_objects.create(code='2299000001', name='已删编码', is_deleted=True)

@@ -25,10 +25,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.users['member'].hourly_cost = Decimal('50.00')
         self.users['member'].save()
 
-    def get(self, path, status=200):
-        response = self.clients['production_manager'].get('/api/business/' + path)
-        self.assertEqual(response.status_code, status, response.data)
-        return response.data
+    def read(self, path, status=200):
+        return self.get('production_manager', path, status=status)
 
     def task(self, kind='assembly', *, project=None, status='open', delivery=None):
         return Task.objects.create(
@@ -64,7 +62,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         }
 
     def test_production_manager_creates_assembly_and_test_tasks_with_stage_prerequisites(self):
-        project = self.get(f'projects/{self.project.pk}/')
+        project = self.read(f'projects/{self.project.pk}/')
         self.assertTrue(project['can_manage_production'])
         self.assertFalse(project['can_manage'])
         self.assertFalse(project['can_edit_bom'])
@@ -83,7 +81,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
                 },
                 status=201,
             )['id']
-            detail = self.get(f'tasks/{tasks[kind]}/')
+            detail = self.read(f'tasks/{tasks[kind]}/')
             self.assertTrue(detail['can_manage'])
             self.assertTrue(detail['can_cancel'])
             self.assertFalse(detail['can_reopen'])
@@ -108,7 +106,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
                 self.assertEqual(task.assignee_id, self.production.pk)
                 self.post('production_manager', f'tasks/{task.pk}/cancel/', {'reason': '生产计划调整'})
                 self.assertEqual(Task.objects.get(pk=task.pk).status, 'cancelled')
-                self.assertTrue(self.get(f'tasks/{task.pk}/')['can_reopen'])
+                self.assertTrue(self.read(f'tasks/{task.pk}/')['can_reopen'])
                 self.post(
                     'production_manager',
                     f'tasks/{task.pk}/reopen/',
@@ -121,7 +119,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         for kind in ('design', 'acceptance'):
             with self.subTest(denied_kind=kind):
                 task = self.task(kind)
-                detail = self.get(f'tasks/{task.pk}/')
+                detail = self.read(f'tasks/{task.pk}/')
                 self.assertFalse(detail['can_manage'])
                 self.assertFalse(detail['can_cancel'])
                 self.assertFalse(detail['can_reopen'])
@@ -154,8 +152,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         delivery = self.delivery()
         install = self.task('install', delivery=delivery)
         acceptance = self.task('acceptance', delivery=delivery)
-        self.assertTrue(self.get(f'tasks/{install.pk}/')['can_manage'])
-        self.assertFalse(self.get(f'tasks/{install.pk}/')['can_cancel'])
+        self.assertTrue(self.read(f'tasks/{install.pk}/')['can_manage'])
+        self.assertFalse(self.read(f'tasks/{install.pk}/')['can_cancel'])
         self.post('production_manager', f'tasks/{install.pk}/cancel/', {'reason': '安装任务随交付保留'}, status=409)
         self.post(
             'production_manager',
@@ -173,7 +171,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             'manager', f'deliveries/{delivery.pk}/accept/', {'date': str(self.today), 'reason': '项目经理登记客户验收'}
         )
         self.assertEqual(Task.objects.get(pk=acceptance.pk).status, 'done')
-        self.assertFalse(self.get(f'tasks/{install.pk}/')['can_reopen'])
+        self.assertFalse(self.read(f'tasks/{install.pk}/')['can_reopen'])
         self.post('production_manager', f'tasks/{install.pk}/reopen/', {'reason': '不能撤回已验收事实'}, status=409)
         delivery.refresh_from_db()
         self.assertEqual(delivery.accepted_date, self.today)
@@ -182,8 +180,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         before_shipment = self.task('assembly')
         self.delivery()
         mistaken = self.task('assembly')
-        self.assertTrue(self.get(f'tasks/{mistaken.pk}/')['can_manage'])
-        self.assertFalse(self.get(f'tasks/{mistaken.pk}/')['can_cancel'])
+        self.assertTrue(self.read(f'tasks/{mistaken.pk}/')['can_manage'])
+        self.assertFalse(self.read(f'tasks/{mistaken.pk}/')['can_cancel'])
         before = ActionReceipt.objects.count(), AuditLog.objects.count()
         self.post(
             'production_manager', f'tasks/{mistaken.pk}/cancel/', {'reason': '生产不能取消发货后任务'}, status=403
@@ -205,7 +203,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.assertEqual(
             (original.hours, original.hourly_cost, original.cost), (Decimal('2'), Decimal('50'), Decimal('100'))
         )
-        detail = self.get(f'time/{entry_id}/')
+        detail = self.read(f'time/{entry_id}/')
         self.assertTrue(detail['can_amend'])
         self.assertNotIn('hourly_cost', detail)
         self.assertNotIn('cost', detail)
@@ -224,8 +222,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         self.assertEqual(
             (amended.hours, amended.hourly_cost, amended.cost), (Decimal('3'), Decimal('50'), Decimal('150'))
         )
-        self.assertFalse(self.get(f'time/{entry_id}/')['can_amend'])
-        self.assertTrue(self.get(f'time/{amended_id}/')['can_amend'])
+        self.assertFalse(self.read(f'time/{entry_id}/')['can_amend'])
+        self.assertTrue(self.read(f'time/{amended_id}/')['can_amend'])
         self.assertEqual(TimeEntry.objects.filter(task=task).count(), 3)
         design = self.task('design')
         own_design_time = self.post(
@@ -233,7 +231,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             f'tasks/{design.pk}/time/',
             {'user': self.users['member'].pk, 'date': str(self.today), 'hours': '1', 'reason': '设计工时'},
         )['id']
-        self.assertFalse(self.get(f'time/{own_design_time}/')['can_amend'])
+        self.assertFalse(self.read(f'time/{own_design_time}/')['can_amend'])
         self.post(
             'production_manager',
             f'time/{own_design_time}/amend/',
@@ -249,12 +247,12 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
 
     def test_production_manager_can_create_and_cancel_free_in_warranty_service(self):
         delivery = self.delivery(accepted=True)
-        self.assertTrue(self.get(f'projects/{self.project.pk}/')['can_register_service'])
+        self.assertTrue(self.read(f'projects/{self.project.pk}/')['can_register_service'])
         task_id = self.post('production_manager', f'projects/{self.project.pk}/service/', self.service_data(delivery))[
             'id'
         ]
         self.assertFalse(Entry.objects.filter(task_id=task_id).exists())
-        self.assertTrue(self.get(f'tasks/{task_id}/')['can_cancel'])
+        self.assertTrue(self.read(f'tasks/{task_id}/')['can_cancel'])
         self.post('production_manager', f'tasks/{task_id}/cancel/', {'reason': '客户暂缓免费维修'})
         self.post('production_manager', f'tasks/{task_id}/reopen/', {'reason': '恢复免费维修'})
         self.post(
@@ -302,7 +300,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
         task_id = self.post('manager', f'projects/{self.project.pk}/service/', self.service_data(delivery, '100'))['id']
         entry = Entry.objects.get(task_id=task_id)
         self.assertEqual(entry.amount, 100)
-        detail = self.get(f'tasks/{task_id}/')
+        detail = self.read(f'tasks/{task_id}/')
         self.assertTrue(detail['can_manage'])
         self.assertFalse(detail['can_cancel'])
         self.post(
@@ -311,7 +309,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             {'assignee': self.production.pk, 'reason': '协调已收费维修'},
         )
         self.post('production_manager', f'tasks/{task_id}/complete/', {'reason': '现场维修完成'})
-        self.assertFalse(self.get(f'tasks/{task_id}/')['can_reopen'])
+        self.assertFalse(self.read(f'tasks/{task_id}/')['can_reopen'])
         before = ActionReceipt.objects.count(), AuditLog.objects.count()
         self.post('production_manager', f'tasks/{task_id}/cancel/', {'reason': '不得自动抵减售后款'}, status=403)
         self.post('production_manager', f'tasks/{task_id}/reopen/', {'reason': '不得重置收费事实'}, status=403)
@@ -339,7 +337,7 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             f'projects/{self.project.pk}/cost-sources/',
         ):
             with self.subTest(path=path):
-                self.get(path, status=403)
+                self.read(path, status=403)
         before = ActionReceipt.objects.count()
         for path, payload in (
             (f'projects/{self.project.pk}/cancel/', {'reason': '生产不能取消项目'}),
@@ -370,8 +368,8 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
                 self.post('production_manager', path, payload, status=403)
         self.assertEqual(ActionReceipt.objects.count(), before)
         self.assertFalse(Entry.objects.filter(purchase=purchase).exists())
-        self.assertEqual(self.get('projects/')['count'], 1)
-        self.get(f'projects/{self.other_project.pk}/', status=404)
+        self.assertEqual(self.read('projects/')['count'], 1)
+        self.read(f'projects/{self.other_project.pk}/', status=404)
 
     def test_global_read_from_additional_roles_does_not_expand_production_task_or_time_write_scope(self):
         outside = self.task(project=self.other_project)
@@ -388,11 +386,11 @@ class ProductionResponsibilityTests(BusinessFixtures, TestCase):
             with self.subTest(additional=additional):
                 self.production.additional_roles = [additional]
                 self.production.save()
-                project = self.get(f'projects/{self.other_project.pk}/')
+                project = self.read(f'projects/{self.other_project.pk}/')
                 self.assertFalse(project['can_manage_production'])
                 self.assertFalse(project['can_manage'])
-                self.assertFalse(self.get(f'tasks/{outside.pk}/')['can_manage'])
-                self.assertFalse(self.get(f'time/{original_time.pk}/')['can_amend'])
+                self.assertFalse(self.read(f'tasks/{outside.pk}/')['can_manage'])
+                self.assertFalse(self.read(f'time/{original_time.pk}/')['can_amend'])
                 before = ActionReceipt.objects.count()
                 self.post(
                     'production_manager',

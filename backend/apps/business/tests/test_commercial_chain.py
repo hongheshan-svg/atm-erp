@@ -1,7 +1,14 @@
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from decimal import Decimal
+from threading import Barrier
+from unittest.mock import patch
 
+from django.db import close_old_connections, connection
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -22,7 +29,61 @@ from apps.core.models import ActionReceipt, CodeRule
 TODAY = '2026-09-09'
 
 
+def freeze_today(day=None):
+    """固定“今天”：直接替换 django.utils.timezone.localdate，被测服务和用例自己的调用一起固定，带参数的调用也返回 day。
+
+    day 缺省取调用时的真实日期（先取“今天”再发请求的用例跨过零点也不会前后不一致）。可用作 with 块，
+    或在 setUp/用例开头 self.enterContext(freeze_today(...)) 固定到用例结束。
+    """
+    if day is None:
+        day = timezone.localdate()
+    elif isinstance(day, str):
+        day = date.fromisoformat(day)
+    return patch('django.utils.timezone.localdate', return_value=day)
+
+
 class BusinessFixtures:
+    """业务用例的公共数据与请求辅助。
+
+    用户、编号规则、往来单位和物料：TestCase 在 setUpTestData 中每个类建一次（每个用例访问到的是独立的深拷贝，
+    写库随用例事务回滚）；TransactionTestCase 不调用 setUpTestData 且每个用例后清库，由 setup_business() 逐个重建。
+    """
+
+    CODE_RULES = (
+        ('project', 'PRJ'),
+        ('sale', 'SO'),
+        ('purchase', 'PO'),
+        ('delivery', 'DEL'),
+        ('item', 'MAT'),
+        ('partner', 'PTY'),
+        ('issue_slip', 'LL'),
+    )
+
+    @classmethod
+    def business_data(cls):
+        users = {role: User.objects.create_user(username=role, role=role) for role in User.Role.values}
+        for key, prefix in cls.CODE_RULES:
+            CodeRule.objects.create(key=key, prefix=prefix)
+        return {
+            'users': users,
+            'customer': Partner.objects.create(code='C1', name='客户', kind='customer'),
+            'supplier': Partner.objects.create(code='S1', name='供应商', kind='supplier'),
+            'item': Item.objects.create(code='I1', name='伺服电机'),
+        }
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        for name, value in cls.business_data().items():
+            setattr(cls, name, value)
+
+    @classmethod
+    def api_fixture(cls):
+        """在 setUpTestData 中经接口建类级数据：返回一个已备好客户端的本类实例，可调用 post、active_project 等。"""
+        fixture = cls()
+        fixture.setup_business()
+        return fixture
+
     def reconciliation_data(self, entry, *, prepayment=False):
         """Explicitly prepare authorization through the same API used by finance."""
         from apps.business.services.finance import balance
@@ -56,24 +117,21 @@ class BusinessFixtures:
         return response.data['revision']
 
     def setup_business(self):
-        self.users = {role: User.objects.create_user(username=role, role=role) for role in User.Role.values}
+        if not isinstance(self, TestCase):
+            for name, value in self.business_data().items():
+                setattr(self, name, value)
         self.clients = {}
         for role, user in self.users.items():
             client = APIClient()
             client.force_authenticate(user)
             self.clients[role] = client
-        for key, prefix in [
-            ('project', 'PRJ'),
-            ('sale', 'SO'),
-            ('purchase', 'PO'),
-            ('delivery', 'DEL'),
-            ('item', 'MAT'),
-            ('partner', 'PTY'),
-        ]:
-            CodeRule.objects.create(key=key, prefix=prefix)
-        self.customer = Partner.objects.create(code='C1', name='客户', kind='customer')
-        self.supplier = Partner.objects.create(code='S1', name='供应商', kind='supplier')
-        self.item = Item.objects.create(code='I1', name='伺服电机')
+
+    def get(self, role, path, params=None, status=200):
+        """GET 并断言状态码，返回响应数据；path 相对 /api/business/，以 / 开头时为完整路径。"""
+        url = path if path.startswith('/') else '/api/business/' + path
+        response = self.clients[role].get(url, params or {})
+        self.assertEqual(response.status_code, status, getattr(response, 'data', response))
+        return response.data
 
     def post(self, role, url, data=None, *, key=None, status=200):
         response = self.clients[role].post(
@@ -124,6 +182,42 @@ class BusinessFixtures:
             self.post('manager', f'purchases/{purchase.pk}/approve/')
         purchase.refresh_from_db()
         return purchase
+
+
+class ConcurrencyHelpers:
+    """真实 PostgreSQL 多会话用例（TransactionTestCase）的公共辅助，与 BusinessFixtures 一起使用。"""
+
+    def together(self, requests):
+        """[(角色, 路径, 数据)] 每项一个线程和会话，同时起跑 POST，返回 [(状态码, 数据)]；线程内重新读取用户。"""
+        barrier = Barrier(len(requests))
+
+        def perform(spec):
+            role, url, data = spec
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.force_authenticate(User.objects.get(pk=self.users[role].pk))
+                barrier.wait(timeout=10)
+                response = client.post(
+                    '/api/business/' + url, data, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4())
+                )
+                return response.status_code, response.data
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=len(requests)) as pool:
+            return list(pool.map(perform, requests))
+
+    def wait_for_lock(self, pid):
+        """等到数据库会话 pid 进入锁等待，8 秒内未等到即失败。"""
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s', [pid])
+                if cursor.fetchone() == ('Lock',):
+                    return
+            time.sleep(0.02)
+        self.fail('并发会话未进入预期的数据库锁等待。')
 
 
 class CommercialChainTests(BusinessFixtures, TestCase):

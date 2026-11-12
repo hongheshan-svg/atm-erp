@@ -52,13 +52,15 @@ def check_review(bank):
 
 
 def review(actor, key, bank_id, data):
+    from .bank_import import UNKNOWN  # bank_import 依赖本模块，调用时再取，避免循环导入。
+
     def execute(user):
         fields(data, {'counterparty', 'reason'})
         bank = BankRecord.objects.select_for_update().get(pk=bank_id)
         if not bank.needs_review or bank.void_reason:
             raise Conflict('仅可核实待核实且未作废的银行流水。')
         name = text(data, 'counterparty', maximum=150)
-        if name == '原流水未提供户名（待核实）':
+        if name == UNKNOWN:
             raise Conflict('请填写核实后的实际户名。')
         reason = text(data, 'reason', default='') or '核实户名'
         bank.counterparty = name
@@ -332,9 +334,7 @@ def unmatch(actor, key, match_id, data):
         Entry.objects.select_for_update().get(pk=initial.payment.entry_id)
         bank_identity.lock_accounts([initial.bank.account])
         bank = BankRecord.objects.select_for_update().get(pk=initial.bank_id)
-        if (bank.project_id and bank.project.status == 'closed') or bank.matches.filter(
-            payment__entry__project__status='closed'
-        ).exists():
+        if closed_project(bank):
             raise Conflict('此银行记录涉及已结项项目，请先重新打开相关项目后撤销匹配。')
         source = BankMatch.objects.select_for_update().get(pk=initial.pk)
         if source.reversal_of_id or BankMatch.objects.filter(reversal_of=source).exists():

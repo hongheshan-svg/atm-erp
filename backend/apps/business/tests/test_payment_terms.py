@@ -1,6 +1,5 @@
 import uuid
 from datetime import date
-from unittest.mock import patch
 
 from django.db import connection
 from django.test import TestCase
@@ -9,7 +8,7 @@ from django.test.utils import CaptureQueriesContext
 from apps.business.models import Entry, Payment, PurchaseOrder, Reconciliation, StockMove
 from apps.business.services import payment_terms, reports
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, freeze_today
 
 
 class PaymentTermsTests(BusinessFixtures, TestCase):
@@ -44,7 +43,7 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         return response.data
 
     def assert_workbench_maturity(self, entry, expected, today):
-        with patch('django.utils.timezone.localdate', return_value=today):
+        with freeze_today(today):
             response = self.clients['finance'].get('/api/business/workbench/')
         self.assertEqual(response.status_code, 200, response.data)
         ids = {r['id'] for r in response.data['settlements']['results']}
@@ -86,7 +85,7 @@ class PaymentTermsTests(BusinessFixtures, TestCase):
         original = StockMove.objects.get(kind='receipt')
         self.receive(purchase, '3', '2026-08-10')
         entry = purchase.entry
-        with patch('django.utils.timezone.localdate', return_value=date(2026, 9, 1)):
+        with freeze_today(date(2026, 9, 1)):
             detail = self.detail(entry)
             self.assertEqual([str(r['due_date']) for r in detail['payment_schedule']], ['2026-08-30', '2026-09-30'])
             self.assertEqual(detail['due_amount'], '200.00')

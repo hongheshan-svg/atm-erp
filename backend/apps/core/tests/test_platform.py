@@ -303,9 +303,9 @@ class PlatformTests(TestCase):
             CodeRule.objects.filter(pk=rule.pk).update(
                 date_format=fmt, reset_cycle=cycle, period=period, padding=3, counter=8
             )
-            with patch('apps.core.models.timezone.localdate', return_value=same):
+            with patch('django.utils.timezone.localdate', return_value=same):
                 self.assertEqual(CodeRule.generate_code('project'), f'PRJ{same.strftime("%Y%m%d")[: len(fmt)]}009')
-            with patch('apps.core.models.timezone.localdate', return_value=next_day):
+            with patch('django.utils.timezone.localdate', return_value=next_day):
                 self.assertEqual(CodeRule.generate_code('project'), f'PRJ{next_day.strftime("%Y%m%d")[: len(fmt)]}001')
         CodeRule.objects.filter(pk=rule.pk).update(
             date_format='', reset_cycle='never', period='', padding=2, counter=99

@@ -325,11 +325,6 @@ class MilestoneTests(ExecutionFixtures, TestCase):
             **kwargs,
         )
 
-    def get(self, role, suffix, status=200):
-        result = self.clients[role].get('/api/business/tasks/' + suffix)
-        self.assertEqual(result.status_code, status, result.data)
-        return result.data
-
     def test_only_cancel_and_reopen_resync_automatic_nodes(self):
         task = self.task(self.project)
         url = f'tasks/{task.pk}/'
@@ -344,7 +339,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
 
     def test_template_is_optional_idempotent_and_preserves_existing_tasks(self):
         old = self.task(self.project, title='已有设计')
-        metadata = self.get('member', f'milestone-template/?project={self.project.pk}')
+        metadata = self.get('member', f'tasks/milestone-template/?project={self.project.pk}')
         self.assertEqual(len(metadata['nodes']), 20)
         self.assertEqual(len(metadata['stages']), 6)
         self.assertFalse(metadata['can_generate'])
@@ -399,8 +394,8 @@ class MilestoneTests(ExecutionFixtures, TestCase):
                 status=201,
             )
         self.project.members.remove(self.users['member'])
-        self.get('member', f'milestone-summary/?project={self.project.pk}', status=403)
-        self.get('member', f'milestone-template/?project={self.project.pk}', status=403)
+        self.get('member', f'tasks/milestone-summary/?project={self.project.pk}', status=403)
+        self.get('member', f'tasks/milestone-template/?project={self.project.pk}', status=403)
 
     def test_parallel_completion_reopen_and_deadline_assignment(self):
         self.apply(self.rows(['design_3d', 'purchase_long_lead', 'test_auto']))
@@ -428,7 +423,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         task.refresh_from_db()
         self.assertIsNone(task.due_date)
         self.post('member', f'tasks/{task.pk}/complete/', {'reason': '非本人'}, status=403)
-        report = self.get('member', f'milestone-summary/?project={self.project.pk}')
+        report = self.get('member', f'tasks/milestone-summary/?project={self.project.pk}')
         self.assertEqual(sum(stage['total'] for stage in report['stages']), 3)
         self.assertEqual(sum(stage['done'] for stage in report['stages']), 1)
         # 尚未生成的模板节点数供「补充里程碑节点（缺 N 个）」使用。
@@ -442,7 +437,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         created = self.post('manager', 'tasks/', row, status=201)
         self.post('manager', 'tasks/', row, status=409)
         self.post('manager', 'tasks/', {**row, 'kind': 'shipping'}, status=400)
-        detail = self.get('member', str(created['id']) + '/')
+        detail = self.get('member', f'tasks/{created["id"]}/')
         self.assertEqual((detail['stage_label'], detail['milestone_label']), ('设计阶段', '3D画图'))
         self.assertFalse(detail['system_managed'])
         self.assertEqual(self.project.tasks.count(), 1)
@@ -501,18 +496,18 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         node = self.project.tasks.get(milestone='site_acceptance')
         for action in ('cancel', 'reopen'):
             self.post('manager', f'tasks/{node.pk}/{action}/', {'reason': '不能改变实际验收'}, status=409)
-        report = self.get('member', f'milestone-summary/?project={self.project.pk}')
+        report = self.get('member', f'tasks/milestone-summary/?project={self.project.pk}')
         # 阶段卡与阶段筛选同一口径：客户终验收阶段计入两批的安装、验收任务（20 个节点 + 4 个批次任务）。
         self.assertEqual(sum(stage['total'] for stage in report['stages']), 24)
         self.assertEqual(sum(stage['done'] for stage in report['stages']), 24)
         stages = {stage['key']: stage for stage in report['stages']}
         self.assertEqual((stages['shipping']['shipped'], stages['shipping']['equipment']), (2, 2))
         self.assertEqual(report['missing'], 0)
-        final_stage = self.get('member', f'?project={self.project.pk}&phase=site')
+        final_stage = self.get('member', f'tasks/?project={self.project.pk}&phase=site')
         self.assertEqual(final_stage['count'], 7)
         self.assertEqual(stages['site']['total'], final_stage['count'])
         self.assertEqual({row['kind'] for row in final_stage['results']}, {'site', 'install', 'acceptance'})
-        self.get('member', f'?project={self.project.pk}&phase=unknown', status=400)
+        self.get('member', f'tasks/?project={self.project.pk}&phase=unknown', status=400)
 
     def test_import_supports_new_nodes_and_previous_six_column_template(self):
         columns = transfers.SCHEMAS['tasks'][1]
@@ -560,7 +555,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         task = self.shared_task()
         for role in ('member', 'production_manager'):
             person = self.users[role]
-            rows = self.get(role, f'?project={self.project.pk}&assignee={person.pk}')
+            rows = self.get(role, f'tasks/?project={self.project.pk}&assignee={person.pk}')
             self.assertEqual(rows['count'], 1)
             row = rows['results'][0]
             self.assertEqual(set(row['assignees']), {self.users['member'].pk, self.users['production_manager'].pk})
@@ -574,7 +569,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIn('production_manager', str(response.data))
         self.assertIn('member', str(response.data))
-        found = self.get('manager', f'?project={self.project.pk}&search=production_manager')
+        found = self.get('manager', f'tasks/?project={self.project.pk}&search=production_manager')
         self.assertEqual(found['count'], 1)
 
     def test_coexecutor_needs_explicit_supervisor_before_confirmation_and_hours(self):
@@ -625,7 +620,7 @@ class MilestoneTests(ExecutionFixtures, TestCase):
         for role in ('member', 'production_manager'):
             User.objects.filter(pk=self.users[role].pk).update(display_name='张工')
         task = self.shared_task()
-        row = self.get('member', f'{task.pk}/')
+        row = self.get('member', f'tasks/{task.pk}/')
         self.assertEqual(row['assignee_name'], '张工（账号：member）；张工（账号：production_manager）')
         resolved = transfers.payload({'assignee': row['assignee_name']})
         self.assertEqual(set(resolved['assignees']), set(row['assignees']))
@@ -728,8 +723,8 @@ class MilestoneTests(ExecutionFixtures, TestCase):
     def test_stage_and_node_order_precedes_pagination_and_export(self):
         self.apply(list(reversed(self.rows())))
         expected = [code for code, *_ in NODES]
-        first = self.get('member', f'?project={self.project.pk}&page_size=10&page=1')
-        second = self.get('member', f'?project={self.project.pk}&page_size=10&page=2')
+        first = self.get('member', f'tasks/?project={self.project.pk}&page_size=10&page=1')
+        second = self.get('member', f'tasks/?project={self.project.pk}&page_size=10&page=2')
         self.assertEqual([row['milestone'] for row in first['results'] + second['results']], expected)
         response = self.clients['manager'].get(f'/api/business/tasks/export/?project={self.project.pk}&file_format=csv')
         self.assertEqual(response.status_code, 200)

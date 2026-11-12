@@ -647,8 +647,10 @@ def cancel_lines(user, purchase, lines, selected, reason):
     if entry:
         entry.credit_amount += credit
         save(entry, user)
-    if all(line.received_quantity + line.cancelled_quantity == line.quantity for line in lines):
-        purchase.status = 'received' if any(line.received_quantity for line in lines) else 'cancelled'
+    # 取消不改变收货和隔离数量，只有全部收完或取消时状态才变化。
+    status = receiving_status(lines)
+    if status in {'received', 'cancelled'}:
+        purchase.status = status
     save(purchase, user)
     return audit(
         user,

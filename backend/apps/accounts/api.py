@@ -220,7 +220,6 @@ class UserSerializer(serializers.ModelSerializer):
             setattr(instance, key, value)
         if 'role' in validated_data:
             instance.is_superuser = False
-            instance.is_staff = has_role(instance, ADMIN)
         if password is not None:
             instance.set_password(password)
         instance.save()

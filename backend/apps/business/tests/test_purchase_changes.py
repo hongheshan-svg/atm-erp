@@ -1,19 +1,15 @@
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
-from threading import Barrier
 
-from django.db import close_old_connections, connection
+from django.db import connection
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
-from rest_framework.test import APIClient
 
-from apps.accounts.models import User
 from apps.business.models import Entry, PurchaseLine, PurchaseOrder, StockMove
 from apps.business.services.purchase_changes import REQUEST, REVIEW, pending_requests
 from apps.core.models import ActionReceipt, AuditLog
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, ConcurrencyHelpers
 
 
 class PurchaseChangeFixtures(BusinessFixtures):
@@ -301,35 +297,12 @@ class PurchaseChangeTests(PurchaseChangeFixtures, TestCase):
         self.assertEqual(*counts)
 
 
-class PurchaseChangeConcurrencyTests(PurchaseChangeFixtures, TransactionTestCase):
-    def together(self, requests):
-        barrier = Barrier(len(requests))
-
-        def perform(spec):
-            role, action, data = spec
-            close_old_connections()
-            try:
-                client = APIClient()
-                client.force_authenticate(User.objects.get(pk=self.users[role].pk))
-                barrier.wait(timeout=10)
-                response = client.post(
-                    '/api/business/' + self.url + action,
-                    data,
-                    format='json',
-                    HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
-                )
-                return response.status_code, response.data
-            finally:
-                close_old_connections()
-
-        with ThreadPoolExecutor(max_workers=len(requests)) as pool:
-            return list(pool.map(perform, requests))
-
+class PurchaseChangeConcurrencyTests(ConcurrencyHelpers, PurchaseChangeFixtures, TransactionTestCase):
     def test_request_racing_approval_has_only_one_winner(self):
         results = self.together(
             [
-                ('purchaser', 'request-change/', {'reason': '修正数量'}),
-                ('manager', 'approve/', {}),
+                ('purchaser', self.url + 'request-change/', {'reason': '修正数量'}),
+                ('manager', self.url + 'approve/', {}),
             ]
         )
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
@@ -339,11 +312,18 @@ class PurchaseChangeConcurrencyTests(PurchaseChangeFixtures, TransactionTestCase
         self.assertEqual(bool(pending_requests([self.order])), not approved)
 
     def test_duplicate_requests_and_reviews_are_serialized(self):
-        results = self.together([('purchaser', 'request-change/', {'reason': '修改'})] * 2)
+        results = self.together([('purchaser', self.url + 'request-change/', {'reason': '修改'})] * 2)
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         request_id = AuditLog.objects.get(operation=REQUEST).pk
         results = self.together(
-            [('manager', 'review-change/', {'request_id': request_id, 'decision': 'approve', 'reason': '同意'})] * 2
+            [
+                (
+                    'manager',
+                    self.url + 'review-change/',
+                    {'request_id': request_id, 'decision': 'approve', 'reason': '同意'},
+                )
+            ]
+            * 2
         )
         self.assertEqual(sorted(status for status, _ in results), [200, 409], results)
         self.assertEqual(AuditLog.objects.filter(operation=REVIEW).count(), 1)

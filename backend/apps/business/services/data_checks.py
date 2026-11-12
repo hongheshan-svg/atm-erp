@@ -35,7 +35,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.api import Conflict
 
 from ..models import BankMatch, BankRecord, Delivery, Entry, Payment, PurchaseWarranty, Reconciliation
-from . import deletions, finance, tabular
+from . import bank_identity, deletions, finance, tabular
 from .banking import with_remaining
 from .common import ZERO
 
@@ -51,8 +51,8 @@ NOTICE = '只读核查，不会修改任何数据；请用原单上的冲销、�
 HEADERS = ['类别', '记录类型', '记录ID', '编号/标题', '项目编号', '金额', '问题说明', '原单路径']
 FIELDS = ['category_label', 'record_type_label', 'record_id', 'title', 'project_code', 'amount', 'problem', 'path']
 MONEY = DecimalField(max_digits=18, decimal_places=2)
-# Same cash direction rule as bank_identity.incoming_payments: receipt or supplier refund received.
-INCOMING = Q(entry__kind='receivable', amount__gt=0) | (~Q(entry__kind='receivable') & Q(amount__lt=0))
+# Cash direction: receipt or supplier refund received.
+INCOMING = bank_identity.incoming_payments()
 # Same "no import evidence" rule as bank_import.manual_suspect.
 MANUAL_BANK = Q(import_fingerprint__isnull=True) & ~Q(source__has_key='bank') & ~Q(reference__startswith='IMPORT-')
 LABELS = {resource: label for resource, (_, label) in deletions.RESOURCES.items()} | {'warranties': '采购质保'}

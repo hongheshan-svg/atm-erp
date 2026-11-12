@@ -15,10 +15,8 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         self.setup_business()
         self.project = self.active_project()
 
-    def get(self, role):
-        response = self.clients[role].get('/api/business/workbench/')
-        self.assertEqual(response.status_code, 200, response.data)
-        return response.data
+    def workbench(self, role):
+        return self.get(role, 'workbench/')
 
     def test_personal_tasks_respect_scope_and_limit(self):
         for index in range(25):
@@ -29,7 +27,7 @@ class WorkbenchTests(BusinessFixtures, TestCase):
             code='HIDDEN', name='未参与项目', customer=self.customer, manager=self.users['manager']
         )
         Task.objects.create(project=hidden, assignee=self.users['member'], kind='design', title='不能泄露')
-        result = self.get('member')
+        result = self.workbench('member')
         self.assertEqual(set(result), {'tasks', 'supervised_tasks'})
         self.assertEqual(result['tasks']['count'], 25)
         self.assertEqual(len(result['tasks']['results']), 20)
@@ -51,11 +49,11 @@ class WorkbenchTests(BusinessFixtures, TestCase):
             due_date=timezone.localdate(),
             created_by=self.users['manager'],
         )
-        self.assertEqual(self.get('manager')['approvals']['count'], 1)
-        self.assertEqual(self.get('purchaser')['drafts']['count'], 1)
-        self.assertEqual(self.get('warehouse')['receipts']['count'], 0)
+        self.assertEqual(self.workbench('manager')['approvals']['count'], 1)
+        self.assertEqual(self.workbench('purchaser')['drafts']['count'], 1)
+        self.assertEqual(self.workbench('warehouse')['receipts']['count'], 0)
         self.post('manager', f'purchases/{purchase.pk}/approve/')
-        result = self.get('warehouse')
+        result = self.workbench('warehouse')
         self.assertEqual(result['receipts']['count'], 1)
         self.assertNotIn('unit_price', result['receipts']['results'][0]['lines'][0])
         self.assertNotIn('settlements', result)
@@ -75,18 +73,18 @@ class WorkbenchTests(BusinessFixtures, TestCase):
             due_date=timezone.localdate() + timedelta(days=30),
         )
         Payment.objects.create(entry=refund, amount=50, date=timezone.localdate(), reason='原付款')
-        rows = self.get('finance')['settlements']
+        rows = self.workbench('finance')['settlements']
         self.assertEqual(rows['count'], 2)
         self.assertEqual({row['id'] for row in rows['results']}, {entry.pk, refund.pk})
         Payment.objects.create(entry=entry, amount=100, date=timezone.localdate(), reason='完成付款')
         Payment.objects.create(entry=refund, amount=-50, date=timezone.localdate(), reason='退款到账')
-        self.assertEqual(self.get('finance')['settlements']['count'], 0)
+        self.assertEqual(self.workbench('finance')['settlements']['count'], 0)
 
     def test_cancelled_project_refund_remains_actionable(self):
         entry = self.project.entries.get()
         Payment.objects.create(entry=entry, amount=50, date=timezone.localdate(), reason='预收')
         self.post('manager', f'projects/{self.project.pk}/cancel/', {'reason': '客户取消'})
-        result = self.get('finance')['settlements']
+        result = self.workbench('finance')['settlements']
         self.assertEqual(result['count'], 1)
         self.assertEqual(result['results'][0]['balance'], '-50.00')
 
@@ -125,7 +123,7 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         open_quote = SalesOrder.objects.create(
             code='SO-Q', name='报价中', customer=self.customer, manager=self.users['sales_manager']
         )
-        sales = self.get('sales_manager')['sales']
+        sales = self.workbench('sales_manager')['sales']
         ids = {row['id'] for row in sales['results']}
         self.assertIn(live.pk, ids)
         self.assertIn(open_quote.pk, ids)
@@ -155,18 +153,18 @@ class WorkbenchTests(BusinessFixtures, TestCase):
         by_purchaser = self.own_submitted_purchase(self.users['purchaser'])
         # 创建人是别人，但最近一次提交人是经理：经理同样不能审批。
         resubmitted = self.own_submitted_purchase(self.users['finance'], submitter=self.users['manager'])
-        approvals = self.get('manager')['approvals']
+        approvals = self.workbench('manager')['approvals']
         ids = {row['id'] for row in approvals['results']}
         self.assertEqual(ids, {by_purchaser.pk})
         self.assertEqual(approvals['count'], 1)
         self.post('manager', f'purchases/{by_purchaser.pk}/approve/')
-        rows = {row['id']: row for row in self.get('admin')['approvals']['results']}
+        rows = {row['id']: row for row in self.workbench('admin')['approvals']['results']}
         self.assertEqual(set(rows), {mine.pk, resubmitted.pk})
         self.assertTrue(all(row['self_requested'] is False for row in rows.values()))
         AuditLog.objects.create(
             actor=self.users['admin'], operation='purchase.submit', resource=f'purchaseorder:{mine.pk}', detail={}
         )
-        rows = {row['id']: row for row in self.get('admin')['approvals']['results']}
+        rows = {row['id']: row for row in self.workbench('admin')['approvals']['results']}
         self.assertTrue(rows[mine.pk]['self_requested'])
         self.assertFalse(rows[resubmitted.pk]['self_requested'])
 
@@ -187,13 +185,13 @@ class WorkbenchTests(BusinessFixtures, TestCase):
             },
             status=201,
         )['id']
-        self.assertEqual(self.get('manager')['prepayments']['count'], 1)
+        self.assertEqual(self.workbench('manager')['prepayments']['count'], 1)
         Reconciliation.objects.filter(pk=statement).update(created_by=self.users['manager'])
-        self.assertNotIn('prepayments', self.get('manager'))
+        self.assertNotIn('prepayments', self.workbench('manager'))
         # 管理员本人申请的预付款仍留在核准桶里，标注需填写例外原因。
-        self.assertEqual([row['self_requested'] for row in self.get('admin')['prepayments']['results']], [False])
+        self.assertEqual([row['self_requested'] for row in self.workbench('admin')['prepayments']['results']], [False])
         Reconciliation.objects.filter(pk=statement).update(created_by=self.users['admin'])
-        self.assertEqual([row['self_requested'] for row in self.get('admin')['prepayments']['results']], [True])
+        self.assertEqual([row['self_requested'] for row in self.workbench('admin')['prepayments']['results']], [True])
 
     def test_shortage_projects_read_all_projects_at_once(self):
         """缺料项目按全部可见项目一次分组读取（与逐个项目分摊同一口径），只看单个分类时不跑其他分类的查询。"""

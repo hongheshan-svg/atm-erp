@@ -2,7 +2,6 @@
 
 import csv
 import io
-import time
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier, Event
@@ -19,10 +18,10 @@ from apps.business.services import bom_import, bom_material_import, execution, m
 from apps.core.api import Conflict
 from apps.core.models import ActionReceipt, AuditLog
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, ConcurrencyHelpers
 
 
-class ImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
+class ImportConcurrencyTests(ConcurrencyHelpers, BusinessFixtures, TransactionTestCase):
     def setUp(self):
         self.setup_business()
         self.first = self.active_project()
@@ -39,16 +38,6 @@ class ImportConcurrencyTests(BusinessFixtures, TransactionTestCase):
         )
         self.assertTrue(result['can_import'], result)
         return result['token']
-
-    def wait_for_lock(self, pid):
-        deadline = time.monotonic() + 8
-        while time.monotonic() < deadline:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s', [pid])
-                if cursor.fetchone() == ('Lock',):
-                    return
-            time.sleep(0.02)
-        self.fail('并发导入未进入预期的数据库锁等待。')
 
     def race_batches(self):
         reverse = self.token([self.second, self.first], '逆序导入')

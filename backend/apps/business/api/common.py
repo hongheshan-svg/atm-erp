@@ -58,11 +58,14 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             )
         return queryset
 
+    def export_size(self, queryset):
+        """导出的表格行数；按明细展开的资源覆盖此方法，超限在序列化前就拒绝。"""
+        return queryset.count()
+
     @action(detail=False, methods=['get'], url_path='export', throttle_classes=[ExportThrottle])
     def export(self, request):
         queryset = self.filter_queryset(self.get_queryset())
-        if queryset.count() > tabular.MAX_EXPORT:
-            raise ValidationError('导出超过20000条，请缩小筛选范围。')
+        tabular.check_export_size(self.export_size(queryset))
         serializer = self.get_serializer()
         fields = list(serializer.fields)
         if hasattr(serializer, 'exports_money') and not serializer.exports_money(request.user):

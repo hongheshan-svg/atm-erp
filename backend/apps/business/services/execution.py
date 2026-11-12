@@ -59,11 +59,10 @@ def with_task_flags(queryset):
             output_field=DecimalField(max_digits=14, decimal_places=2),
         ),
         time_entry_count=Coalesce(Subquery(times.annotate(total=Count('pk')).values('total')), Value(0)),
-        project_shipped=Exists(Delivery.objects.filter(project=OuterRef('project_id'))),
+        # 为空即项目尚未发货；是否已登记工时看 time_entry_count，不再各开一个子查询。
         project_first_shipped_at=Subquery(
             Delivery.objects.filter(project=OuterRef('project_id')).order_by('created_at').values('created_at')[:1]
         ),
-        task_has_time=Exists(TimeEntry.objects.filter(task=OuterRef('pk'))),
         task_has_moves=Exists(StockMove.objects.filter(task=OuterRef('pk'))),
     )
 
@@ -77,7 +76,7 @@ def stage_cancel_block(task):
     """
     if hasattr(task, 'project_first_shipped_at'):
         first_shipped_at = task.project_first_shipped_at
-        has_work = task.task_has_time or task.task_has_moves
+        has_work = task.time_entry_count > 0 or task.task_has_moves
     else:
         first_shipped_at = task.project.deliveries.aggregate(first=Min('created_at'))['first']
         has_work = task.time_entries.exists() or StockMove.objects.filter(task=task).exists()
@@ -1000,7 +999,7 @@ def accept(actor, key, delivery_id, data):
             task.status, task.completed_at = 'done', timezone.now()
             task.completed_date = date
             save(task, user)
-        shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
+        shipped = shipped_quantity(project)
         if shipped == project.equipment_quantity and not project.deliveries.filter(accepted_date__isnull=True).exists():
             project.status = 'warranty'
             save(project, user)

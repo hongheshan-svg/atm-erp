@@ -1,9 +1,7 @@
-import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
 from decimal import Decimal
-from threading import Barrier, Event
+from threading import Event
 from unittest.mock import patch
 
 from django.db import close_old_connections, connection, connections, transaction
@@ -27,10 +25,10 @@ from apps.business.models import (
 )
 from apps.business.services import amendments, corrections, documents, finance, sales, supply
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, ConcurrencyHelpers, freeze_today
 
 
-class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
+class BusinessConcurrencyTests(ConcurrencyHelpers, BusinessFixtures, TransactionTestCase):
     def test_cross_project_bank_operations_wait_for_manual_payment_and_recheck_funds(self):
         """Hold the first real validation open, and observe the competing PG session waiting for a lock."""
         from apps.business.models import BankOffset, BankRecord
@@ -294,6 +292,8 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
         self.assertEqual(Entry.objects.filter(title='追加').count(), 1)
 
     def test_concurrent_import_confirmation_creates_one_batch(self):
+        # 经 HTTP 视图把 Idempotency-Key 传给导入确认（不锁项目的物料导入）；服务层带项目锁的款项导入
+        # 同类竞争见 test_import_concurrency 的 test_same_token_concurrent_requests_with_different_keys_return_one_batch。
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         from apps.business.models import Item
@@ -313,39 +313,7 @@ class BusinessConcurrencyTests(BusinessFixtures, TransactionTestCase):
         self.assertEqual(connection.vendor, 'postgresql')
         self.setup_business()
         self.project = self.active_project()
-        clock = patch('apps.business.services.execution.timezone.localdate', return_value=date.fromisoformat(TODAY))
-        clock.start()
-        self.addCleanup(clock.stop)
-
-    def together(self, requests):
-        barrier = Barrier(len(requests))
-
-        def perform(spec):
-            role, url, data = spec
-            close_old_connections()
-            try:
-                client = APIClient()
-                client.force_authenticate(User.objects.get(pk=self.users[role].pk))
-                barrier.wait(timeout=10)
-                response = client.post(
-                    '/api/business/' + url, data, format='json', HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4())
-                )
-                return response.status_code, response.data
-            finally:
-                close_old_connections()
-
-        with ThreadPoolExecutor(max_workers=len(requests)) as pool:
-            return list(pool.map(perform, requests))
-
-    def wait_for_lock(self, pid):
-        deadline = time.monotonic() + 8
-        while time.monotonic() < deadline:
-            with connection.cursor() as cursor:
-                cursor.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s', [pid])
-                if cursor.fetchone() == ('Lock',):
-                    return
-            time.sleep(0.02)
-        self.fail('并发会话未进入预期的数据库锁等待。')
+        self.enterContext(freeze_today(TODAY))
 
     def while_project_locked(self, project, waiting, competing):
         """主线程先锁项目（project_action 的第一步），另一会话进入锁等待后，主线程再执行完整的项目内操作。

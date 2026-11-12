@@ -1,4 +1,4 @@
-from django.db.models import Prefetch
+from django.db.models import Exists, OuterRef, Prefetch
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -11,6 +11,7 @@ from apps.core.permissions import (
 )
 
 from ..models import (
+    PurchaseLine,
     PurchaseOrder,
     StockMove,
 )
@@ -43,6 +44,11 @@ class PurchaseView(ImportableMixin, ReadView):
 
     def get_serializer_class(self):
         return PurchaseDetailSerializer if self.action == 'retrieve' else PurchaseSerializer
+
+    def export_size(self, queryset):
+        # 导出按明细展开：每行明细一行，没有明细的采购单占一行。
+        empty = queryset.exclude(Exists(PurchaseLine.objects.filter(purchase=OuterRef('pk'))))
+        return PurchaseLine.objects.filter(purchase__in=queryset).count() + empty.count()
 
     @action(detail=True, methods=['get', 'post'])
     def warranty(self, request, pk=None):

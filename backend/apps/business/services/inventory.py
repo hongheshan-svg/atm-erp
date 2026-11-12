@@ -210,7 +210,6 @@ def issue_task(project, data):
 
 def open_slip(user, project, task, reason):
     """开一张领料单（项目→单据→物料的加锁顺序：在锁物料、扣库存之前取号）；事务回滚时单据和号码一起撤销。"""
-    CodeRule.objects.get_or_create(key='issue_slip', defaults={'prefix': 'LL'})
     return save(IssueSlip(code=CodeRule.generate_code('issue_slip'), project=project, task=task, reason=reason), user)
 
 
@@ -421,8 +420,9 @@ def return_material(actor, key, source_id, data):
         if qty + returned > -original.quantity:
             raise Conflict('退料数量超过原领料可退余量。')
         if original.task_id is None or original.task.kind != 'service':
-            shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
-            if shipped:
+            from .execution import delivered_materials, shipped_quantity
+
+            if shipped_quantity(project):
                 required_total = (
                     BOMLine.objects.filter(project=project, item_id=original.stock.item_id).aggregate(
                         total=Sum('quantity')
@@ -430,8 +430,6 @@ def return_material(actor, key, source_id, data):
                     or ZERO
                 )
                 if required_total:
-                    from .execution import delivered_materials
-
                     required = delivered_materials(project).get(original.stock.item_id, ZERO)
                     if issued(project, original.stock.item_id) - qty < required:
                         raise Conflict('已交付设备对应的领料不能退回，请只退回未使用余料。')
@@ -467,9 +465,7 @@ def return_purchase(actor, key, source_id, data):
 
     def execute(user, project):
         fields(data, {'quantity', 'reason', 'confirm_shared'})
-        confirm_shared = data.get('confirm_shared', False)
-        if not isinstance(confirm_shared, bool):
-            raise ValidationError({'confirm_shared': '必须为布尔值。'})
+        confirm_shared = confirmation(data)
         state(project, {'active', 'delivering', 'warranty'})
         original = get_object_or_404(StockMove.objects, pk=source.pk, project=project, kind='receipt')
         purchase = PurchaseOrder.objects.select_for_update().get(pk=original.purchase_line.purchase_id, project=project)

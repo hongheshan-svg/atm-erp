@@ -161,6 +161,15 @@ class TransferTests(BusinessFixtures, TestCase):
         exported_rows = list(csv.reader(io.StringIO(exported.content.decode('utf-8-sig'))))
         self.assertEqual(len(exported_rows), 3)
         self.assertIn('物料编码', exported_rows[0])
+        # 上限按展开后的明细行计，序列化前就拒绝：1 张采购单 2 行明细超过 1 行上限。
+        with (
+            patch('apps.business.services.tabular.MAX_EXPORT', 1),
+            patch('apps.business.services.tabular.export_rows') as export,
+        ):
+            denied = self.clients['purchaser'].get('/api/business/purchases/export/')
+        self.assertEqual(denied.status_code, 400)
+        self.assertIn('一次最多导出 1 行', str(denied.data))
+        export.assert_not_called()
 
     def test_operational_imports_reuse_finance_inventory_and_execution(self):
         self.users['member'].display_name = '吴兴广'

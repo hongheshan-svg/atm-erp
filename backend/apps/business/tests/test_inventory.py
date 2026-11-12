@@ -380,8 +380,6 @@ class IssueSlipTests(BusinessFixtures, TestCase):
     def test_batch_issue_reads_do_not_grow_with_lines(self):
         """BOM 剩余、全库位在库与其他项目到货在锁物料后一次读取，逐行出库在内存里扣减（同一物料前面的库位照样计入）。"""
         other = self.active_project()
-        # 第一张领料单会顺带建立编号规则：先建好，两次计数只比较领料本身。
-        CodeRule.objects.get_or_create(key='issue_slip', defaults={'prefix': 'LL'})
 
         def scenario(size):
             project = self.active_project()
