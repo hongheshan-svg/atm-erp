@@ -131,6 +131,7 @@ class OtaSuiteSelectionTests(unittest.TestCase):
             'backend/apps/core/migrations/0004_upgradejob.py',
             'backend/apps/business/migrations/0001_initial.py',
             'backend/requirements.txt',
+            'backend/constraints.txt',
             '.github/workflows/ci-ota.yml',
             'docker/app/Dockerfile',
             'docker-compose.yml',
@@ -208,6 +209,7 @@ class InstallerSelectionTests(unittest.TestCase):
             '.env.example',
             '.dockerignore',
             'backend/requirements.txt',
+            'backend/constraints.txt',
             'scripts/native_install.py',
             'scripts/native_service.py',
             'scripts/ota_service.py',
@@ -235,6 +237,15 @@ class InstallerSelectionTests(unittest.TestCase):
             *INSTALLER_TESTS,
         ):
             self.assertTrue(plan([path])['installers'], path)
+
+    def test_constraints_select_exactly_like_the_requirements(self):
+        # constraints.txt 固定 requirements.txt 的全部传递依赖，同随镜像与离线 wheelhouse 交付，选择必须一致。
+        pins = plan(['backend/constraints.txt'])
+        self.assertEqual(pins, plan(['backend/requirements.txt']))
+        self.assertTrue(pins['installers'] and pins['ota'] and pins['ops'])
+        self.assertEqual(select(['backend/constraints.txt']), select(['backend/requirements.txt']))
+        # 清单一致性由运维单测（test_dependency_pins）核对，开发依赖清单同样运行运维单测。
+        self.assertTrue(plan(['backend/requirements-dev.txt'])['ops'])
 
     def test_installer_test_list_matches_the_workflow(self):
         workflow = (WORKFLOWS / 'release-installers.yml').read_text()
@@ -347,12 +358,22 @@ class WorkflowCostTests(unittest.TestCase):
         for path in (
             'docker/app/Dockerfile',
             'backend/requirements.txt',
+            'backend/constraints.txt',
             'frontend/package.json',
             'frontend/package-lock.json',
         ):
             self.assertIn(f'- {path}\n', paths, path)
         dockerfile = (ROOT / 'docker/app/Dockerfile').read_text()
         self.assertIn('COPY frontend/package*.json ./', dockerfile)
+        self.assertIn('COPY backend/requirements.txt backend/constraints.txt ./', dockerfile)
+
+    def test_pip_caches_are_keyed_by_the_constraints(self):
+        # constraints.txt 决定实际下载的版本；缓存键不含它时，固定版本变化仍会命中旧缓存。
+        for workflow in WORKFLOWS.glob('*.yml'):
+            for step in workflow.read_text().split('cache: pip')[1:]:
+                key = step.split('\n      - ', 1)[0]
+                self.assertIn('cache-dependency-path: |', key, workflow.name)
+                self.assertIn('backend/constraints.txt', key, workflow.name)
 
 
 class NestedReleaseEvidenceTests(unittest.TestCase):

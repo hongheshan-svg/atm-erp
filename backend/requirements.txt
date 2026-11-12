@@ -11,3 +11,10 @@ openpyxl==3.1.2
 xlrd==2.0.2
 defusedxml==0.7.1
 python-dateutil==2.8.2
+# 以下两个传递依赖按平台分别固定：macOS 原生包只能用兼容 Intel macOS 12+ / Apple Silicon 14+ 的 wheel
+# （目标见 scripts/ci/build_native_wheels.py），autobahn 25 起、cryptography 49 起不再提供，macOS 停在最后可用版本。
+# 其他平台（Docker、Linux、Windows）保持较新版本；升级时两行一并检查。
+autobahn==24.4.2 ; sys_platform == 'darwin'
+autobahn==26.11.1 ; sys_platform != 'darwin'
+cryptography==48.0.1 ; sys_platform == 'darwin'
+cryptography==50.0.2 ; sys_platform != 'darwin'

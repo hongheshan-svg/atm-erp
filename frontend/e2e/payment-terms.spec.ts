@@ -1,68 +1,43 @@
-import { businessDate } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, login, detailAction, openRowAction, type Page } from './fixtures'
+import { test, expect, api, businessDate, choose, login, detailAction, openRowAction, submitDialog, type Page } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
-async function select(page: Page, label: string, text: string) {
-  const field = dialog(page).getByLabel(label, { exact: true })
-  if (await field.getAttribute('role') === 'combobox') return selectRemoteOption(field, { text: text })
-  const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
-  await field.selectOption(value!)
-}
-async function save(page: Page, suffix: string) {
-  const pending = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith(suffix))
-  await dialog(page).locator('button[type="submit"]').click()
-  const response = await pending
-  expect(response.status(), await response.text()).toBeLessThan(300)
-  await expect(dialog(page)).not.toBeVisible()
-  return response.json()
-}
 
 test('供应商月结默认值带入采购，跨月收货显示各自到期金额', async ({ page }, info) => {
   const name = '月结验收' + Date.now()
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
-  const token = await page.evaluate(() => localStorage.getItem('access_token'))
-  const headers = { Authorization: `Bearer ${token}` }
-  async function post(path: string, data: object) {
-    const result = await page.request.post('/api/business/' + path, { headers: { ...headers, 'Idempotency-Key': `terms-${Date.now()}-${Math.random()}` }, data })
-    expect(result.status(), await result.text()).toBeLessThan(300)
-    return result.json()
-  }
   // Set up a signed project and material through business APIs; exercise all new fields in the UI.
-  const me = await page.request.get('/api/auth/me/', { headers })
-  expect(me.ok()).toBeTruthy()
-  const user = await me.json()
-  const customer = await post('partners/', { name: name + '客户', kind: 'customer' })
+  const user = await api(page, 'auth/me/')
+  const customer = await api(page, 'business/partners/', { name: name + '客户', kind: 'customer' }, 201)
   const materialCode = 'CUSTOM-' + Date.now()
   await page.goto('/erp/masterdata?section=items')
   await page.getByRole('button', { name: '新增物料', exact: true }).click()
   await dialog(page).getByLabel('物料编码（留空自动生成）', { exact: true }).fill(materialCode)
   await dialog(page).getByLabel('物料名称', { exact: true }).fill(name + '物料')
-  await save(page, '/items/')
-  const sale = await post('sales/', { name, customer: customer.id, manager: user.id })
-  await post(`sales/${sale.id}/quote/`, { amount: '1000', reason: '验收报价' })
-  const signed = await post(`sales/${sale.id}/sign/`, { date: '2026-07-01', manager: user.id, milestones: [{ title: '合同款', amount: '1000', due_date: businessDate(60) }] })
+  await submitDialog(page, 'business/items/')
+  const sale = await api(page, 'business/sales/', { name, customer: customer.id, manager: user.id }, 201)
+  await api(page, `business/sales/${sale.id}/quote/`, { amount: '1000', reason: '验收报价' })
+  const signed = await api(page, `business/sales/${sale.id}/sign/`, { date: '2026-07-01', manager: user.id, milestones: [{ title: '合同款', amount: '1000', due_date: businessDate(60) }] })
 
   await page.goto('/erp/masterdata?section=partners')
   await page.getByRole('button', { name: '新增往来单位', exact: true }).click()
   await dialog(page).getByLabel('单位名称', { exact: true }).fill(name + '供应商')
   await dialog(page).getByLabel('类型', { exact: true }).selectOption('supplier')
   await dialog(page).getByLabel('供应商默认采购账期', { exact: true }).selectOption('month30')
-  const supplier = await save(page, '/partners/')
+  const supplier = await submitDialog(page, 'business/partners/')
   await page.goto('/erp/purchases')
   await page.getByRole('button', { name: '新建采购', exact: true }).click()
   await dialog(page).getByLabel('交期', { exact: true }).fill(businessDate(60))
-  await select(page, '项目', name)
-  await select(page, '供应商', name + '供应商')
-  await select(page, '物料', name + '物料')
+  await choose(page, '项目', name)
+  await choose(page, '供应商', name + '供应商')
+  await choose(page, '物料', name + '物料')
   await dialog(page).getByLabel('数量', { exact: true }).fill('5')
   await dialog(page).getByLabel('含税单价（元）', { exact: true }).fill('100')
-  const purchase = await save(page, '/purchases/')
-  const response = await page.request.get(`/api/business/purchases/${purchase.id}/`, { headers })
-  const detail = await response.json()
+  const purchase = await submitDialog(page, 'business/purchases/')
+  const detail = await api(page, `business/purchases/${purchase.id}/`)
   expect(detail.payment_term).toBe('month30')
-  await post(`purchases/${purchase.id}/submit/`, {})
-  await post(`purchases/${purchase.id}/approve/`, { reason: '隔离验收：管理员明确记录本人申请的例外审批依据' })
+  await api(page, `business/purchases/${purchase.id}/submit/`, {})
+  await api(page, `business/purchases/${purchase.id}/approve/`, { reason: '隔离验收：管理员明确记录本人申请的例外审批依据' })
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
   await detailAction(page, '预览采购合同')
   const contract = page.getByRole('article', { name: '采购合同预览' })
@@ -92,7 +67,7 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
     await dialog(page).getByLabel('补录原因', { exact: true }).fill('依据原始送货单补录历史收货，日期与数量已核对')
     await dialog(page).getByLabel('数量', { exact: true }).fill(quantity!)
     await dialog(page).getByLabel('送货单号 / 备注', { exact: true }).fill('按原收货记录核对')
-    await save(page, `/purchases/${purchase.id}/receive/`)
+    await submitDialog(page, `business/purchases/${purchase.id}/receive/`)
   }
   await page.goto(`/erp/projects/${signed.project}?tab=finance&section=entries`)
   const row = page.locator('.el-table__body tr:visible').filter({ hasText: detail.code }).first()
@@ -126,22 +101,22 @@ test('供应商月结默认值带入采购，跨月收货显示各自到期金�
   await page.getByRole('button', { name: '确认月度对账', exact: true }).click()
   await dialog(page).getByLabel('供应商确认的期末余额', { exact: true }).fill('500.00')
   await dialog(page).getByLabel('核对依据与说明', { exact: true }).fill('隔离验收供应商八月账单')
-  await save(page, '/supplier-monthly/')
+  await submitDialog(page, 'business/reconciliations/supplier-monthly/')
   await page.screenshot({ path: info.outputPath('supplier-monthly.png'), animations: 'disabled' })
 
   await page.goto(`/erp/purchases?resource=purchases&focus=${purchase.id}`)
   await detailAction(page, '登记采购质保')
-  await select(page, '原收货批次', '数量2')
+  await choose(page, '原收货批次', '数量2')
   await dialog(page).getByLabel('数量', { exact: true }).fill('1')
   await dialog(page).getByLabel('故障描述', { exact: true }).fill('隔离验收：供应商维修跟进')
-  await save(page, `/purchases/${purchase.id}/warranty/`)
+  await submitDialog(page, `business/purchases/${purchase.id}/warranty/`)
 
   const lines = []
   for (let i = 0; i < 30; i++) {
-    const material = await post('items/', { name: `${name}多页物料${i}`, code: `PRINT-${Date.now()}-${i}`, specification: '长规格文本用于验证多页合同自动换行及明细完整性', unit: '件' })
+    const material = await api(page, 'business/items/', { name: `${name}多页物料${i}`, code: `PRINT-${Date.now()}-${i}`, specification: '长规格文本用于验证多页合同自动换行及明细完整性', unit: '件' }, 201)
     lines.push({ item: material.id, quantity: '1', unit_price: '10' })
   }
-  const longOrder = await post('purchases/', { project: signed.project, supplier: supplier.id, due_date: businessDate(60), note: '补充要求须完整保留。'.repeat(40), lines })
+  const longOrder = await api(page, 'business/purchases/', { project: signed.project, supplier: supplier.id, due_date: businessDate(60), note: '补充要求须完整保留。'.repeat(40), lines }, 201)
   await page.goto(`/erp/purchases/${longOrder.id}/contract`)
   await expect(page.getByRole('article')).toContainText('草稿 · 未批准')
   await expect(page.getByRole('article')).toContainText('共 30 项物料')

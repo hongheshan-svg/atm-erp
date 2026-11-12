@@ -2,7 +2,7 @@
 
 目标：按已选定的 14 类 UI 概念图实现整个 Lean ERP，覆盖各模块、子页签、表单、详情与响应式状态。保留真实数据、七角色兼岗授权、导入导出和业务操作。
 
-视觉源：`/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/ERP-UI概念图索引.md`。
+视觉源：`~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/ERP-UI概念图索引.md`。
 
 ## 实施清单
 

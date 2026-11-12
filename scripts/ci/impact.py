@@ -273,6 +273,7 @@ SHARED_PATHS = (
             'backend/config/',
             'backend/manage.py',
             'backend/requirements',
+            'backend/constraints.txt',
         ),
         BUSINESS,
     ),
@@ -324,10 +325,14 @@ SHARED_PATHS = (
         BUSINESS,
     ),
 )
+# 运行时依赖：顶层清单与固定全部传递依赖的 constraints.txt 同等处理，都随镜像和离线 wheelhouse 交付。
+RUNTIME_DEPENDENCIES = ('backend/requirements.txt', 'backend/constraints.txt')
+# 依赖清单之间的一致性由运维单测（scripts/tests/test_dependency_pins.py）核对，改动任一清单都运行运维单测。
+DEPENDENCY_FILES = (*RUNTIME_DEPENDENCIES, 'backend/requirements-dev.txt')
 # 只影响静态检查或测试运行器的配置：执行对应一侧的 lint/typecheck/build 与单测，不选业务模块。
 CHECK_ONLY = (
     'backend/pyproject.toml',
-    # 开发依赖只在运行时依赖之外固定 Ruff 版本；运行时依赖 requirements.txt 仍走共享映射。
+    # 开发依赖只在运行时依赖之外固定 Ruff 等工具版本；运行时依赖 requirements.txt/constraints.txt 仍走共享映射。
     'backend/requirements-dev.txt',
     'backend/apps/business/tests/__init__.py',
     'backend/apps/core/tests/__init__.py',
@@ -507,6 +512,8 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
                 continue
             if path.startswith('frontend/src/assets/'):
                 continue
+        if path in DEPENDENCY_FILES:
+            ops = True
         if path in CHECK_ONLY:
             continue
         matched = {module for module, names in MODULE_FILES.items() if stem in names}
@@ -524,7 +531,7 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
                 ota_suite = True
             if path.startswith('frontend/') and set(shared) == set(BUSINESS):
                 browser.update(f'e2e/{name}.spec.ts' for name in SHARED_UI_BROWSERS)
-            if path == 'backend/requirements.txt':
+            if path in RUNTIME_DEPENDENCIES:
                 # 运行时依赖随离线 wheelhouse 和镜像交付，安装器与升级链路同样受影响。
                 installers = True
                 selected.add('ota')

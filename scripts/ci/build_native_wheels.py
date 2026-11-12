@@ -1,4 +1,4 @@
-"""Resolve binary-only CPython 3.11 dependencies on CI, never on user machines."""
+"""Download binary-only CPython 3.11 wheels pinned by backend/constraints.txt on CI, never on user machines."""
 
 import argparse
 import hashlib
@@ -50,6 +50,8 @@ def build(platform, output):
             'cp311',
             '-r',
             str(root / 'backend/requirements.txt'),
+            '-c',
+            str(root / 'backend/constraints.txt'),
             '-d',
             str(directory),
         ]

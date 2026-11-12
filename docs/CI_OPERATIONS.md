@@ -15,6 +15,14 @@ PR 自动运行 Lean ERP CI。功能分支 push、合并 main 不重复触发同
 - 前端版本字段单独递增与依赖更新区别处理：纯版本变更只执行前端检查；前端或 Python 依赖变化按共享路径覆盖全部业务模块，运行时 Python 依赖还会运行安装器与 OTA。数据库迁移除全部业务模块外还会运行 OTA 升级演练（升级先备份再前向迁移）。
 - 映射是可维护的影响策略，不保证发现任意新增耦合。接口增加新的调用方时同步更新映射及选择测试。
 
+## Python 依赖固定
+
+`backend/requirements.txt` 是人工维护的顶层清单；`backend/constraints.txt` 由 uv 对 Python 3.11 做跨平台解析生成，固定全部传递依赖。Docker 镜像、测试镜像、五种原生 wheelhouse、源码目录原生安装和 CI（`requirements-dev.txt` 内含 `-c constraints.txt`）都按它安装，PR 验证过的版本与 Release 打包的版本一致。macOS 原生包只能用兼容 Intel macOS 12+ / Apple Silicon 14+ 的 wheel，autobahn、cryptography 因此在 requirements.txt 中按 `sys_platform` 分别固定；约束只能按操作系统区分，不能按 CPU 架构（pip 在构建机上求值环境标记，一台机器构建两种架构的 wheelhouse）。升级依赖：修改 requirements.txt 后在仓库根目录运行下面的命令，两个文件一并提交；只升级某个传递依赖时追加 `--upgrade-package <名称>`。命令沿用已有固定版本，不会顺带升级其他依赖。`scripts/tests/test_dependency_pins.py` 离线核对两份清单一致、约束文件不含镜像源或本机路径，且每条安装路径都应用约束；改动任一依赖清单都会运行运维单测，运行时依赖另运行安装器与 OTA。
+
+```bash
+uv pip compile --no-config --universal --python-version 3.11 backend/requirements.txt -o backend/constraints.txt
+```
+
 ## 并行、缓存与失败门禁
 
 计划通过后，fast、browser、OTA、installers 独立并行，不再让慢任务等待整套 fast。fast 内后端、前端、运维测试也分开，未涉及的类别不启动依赖和数据库。所选检查失败、取消或意外跳过均使 CI gate 失败；并行不是放宽门禁。

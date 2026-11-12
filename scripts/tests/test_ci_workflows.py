@@ -165,9 +165,9 @@ class RoutingTests(unittest.TestCase):
             'scripts/ci/release_gate.py',
         ):
             self.assertEqual(select([path]), {'fast'}, path)
-        for path in ('frontend/package-lock.json', 'backend/requirements.txt'):
+        for path in ('frontend/package-lock.json', 'backend/requirements.txt', 'backend/constraints.txt'):
             scope = plan([path])
-            self.assertEqual(scope['modules'], sorted(BUSINESS + (('ota',) if 'requirements' in path else ())), path)
+            self.assertEqual(scope['modules'], sorted(BUSINESS + (('ota',) if path.startswith('backend/') else ())), path)
             self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
         for path in ('unknown.file', 'backend/apps/business/new_module.py', 'frontend/src/components/NewWidget.vue'):
             with self.assertRaises(ValueError):
@@ -516,6 +516,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         cases = {
             'backend/apps/business/migrations/0001_initial.py': (True, False),
             'backend/requirements.txt': (True, True),
+            'backend/constraints.txt': (True, True),
             'install.sh': (True, True),
             'install-native.sh': (False, True),
             'scripts/backup.py': (True, True),

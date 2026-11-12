@@ -374,6 +374,68 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual(self.confirm(preview['token']), {'count': 1, 'skipped': 0})
         self.assertEqual(BankRecord.objects.count(), 2)
 
+    def remove(self, bank):
+        self.post('admin', 'record-deletions/', {'resource': 'bank-records', 'ids': [bank], 'reason': '整理列表'})
+
+    def listed(self, role='finance'):
+        return {row['id'] for row in self.get(role, 'bank-records/', {'page_size': 100})['results']}
+
+    def test_admin_deleted_record_is_flagged_and_skipped_while_active_duplicate_is_unchanged(self):
+        self.confirm(self.preview()['token'])
+        active, deleted = BankRecord.objects.get(amount='100'), BankRecord.objects.get(amount='-20')
+        # Bank records are ledger rows: an administrator can only delete them once they are ended (voided here).
+        self.post('finance', f'bank-records/{deleted.pk}/void/', {'reason': '误作废后整理'})
+        self.remove(deleted.pk)
+        self.assertEqual(self.listed(), {active.pk})
+        before = (BankRecord.objects.count(), AuditLog.objects.filter(operation='record.delete').count())
+        preview = self.preview(file(name='再次下载.xlsx'))
+        self.assertTrue(preview['can_import'], preview['errors'])
+        self.assertEqual([row['status'] for row in preview['rows']], ['已导入（跳过）', bank_import.DELETED_SKIP])
+        self.assertEqual([notice['row'] for notice in preview['notices']], [4])
+        notice = preview['notices'][0]['message']
+        for fragment in [
+            '第 4 行',
+            f'记录 ID {deleted.pk}',
+            deleted.reference,
+            '管理员删除',
+            '不会重复导入',
+            '已删除记录',
+        ]:
+            self.assertIn(fragment, notice)
+        # Only the record's own identifiers; never another record's amount or counterparty.
+        self.assertNotIn('20.00', notice)
+        self.assertNotIn('员工', notice)
+        result = self.confirm(preview['token'])
+        self.assertEqual(result, {'count': 0, 'skipped': 2})
+        self.assertEqual(self.confirm(preview['token']), result)
+        self.assertEqual(
+            (BankRecord.objects.count(), AuditLog.objects.filter(operation='record.delete').count()), before
+        )
+        self.assertEqual(self.listed(), {active.pk})
+
+    def test_admin_deleted_manual_record_flag_stays_within_finance_scope(self):
+        bank = self.manual('000123')
+        entry = self.active_project().entries.get(kind='receivable')
+        self.post('finance', f'bank-records/{bank}/allocate/', {'entry': entry.pk, 'amount': '100', 'reason': '认领'})
+        self.remove(bank)
+        preview = self.preview(huaxia())
+        self.assertEqual(preview['rows'][0]['status'], bank_import.DELETED_SKIP)
+        self.assertIn(f'记录 ID {bank}，流水号“000123”', preview['notices'][0]['message'])
+        # Import is finance work (admin + finance); the deleted-record list is admin-only, but the named record
+        # stays readable to finance by ID, so the notice discloses nothing outside the importer's scope.
+        self.get('finance', 'record-deletions/', {'resource': 'bank-records'}, status=403)
+        self.assertNotIn(bank, self.listed())
+        self.assertEqual(self.get('finance', f'bank-records/{bank}/')['reference'], '000123')
+        self.assertEqual(self.confirm(preview['token']), {'count': 0, 'skipped': 1})
+        self.assertEqual(BankRecord.objects.get().source['original_reference'], '000123')
+        # A voided manual record is not the same transaction; deleting it does not block or flag the real one.
+        voided = self.manual('000777')
+        self.post('finance', f'bank-records/{voided}/void/', {'reason': '录错'})
+        self.remove(voided)
+        again = self.preview(huaxia('000777'))
+        self.assertEqual((again['rows'][0]['status'], again['notices']), ('可导入', []))
+        self.assertEqual(self.confirm(again['token']), {'count': 1, 'skipped': 0})
+
     def test_permissions_token_binding_and_tamper(self):
         self.preview(role='member', status=403)
         preview = self.preview()

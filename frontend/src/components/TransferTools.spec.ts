@@ -147,6 +147,36 @@ it('银行原始文件先预览汇总，确认时提交凭据并显示去重结�
   expect(wrapper.emitted('changed')).toHaveLength(1)
 })
 
+it('银行预览说明与已删除记录为同一笔的行，照常允许确认并在结果中计为跳过', async () => {
+  vi.clearAllMocks()
+  user.value = { roles: ['finance'] }
+  const wrapper = shallowMount(TransferTools, {
+    props: { resource: 'bank-records', path: '/business/bank-records/' },
+    global: { stubs: {
+      RouterLink: RouterLinkStub,
+      ElDialog: { template: '<section><slot /><slot name="footer" /></section>' },
+      ElButton: { props: ['disabled'], template: '<button :disabled="disabled"><slot /></button>' },
+      ElAlert: { props: ['title'], template: '<p>{{ title }}</p>' },
+    } },
+  })
+  const notice = '第 4 行：与已删除的银行流水（记录 ID 7，流水号“IMPORT-ICBC-abc”）是同一笔交易，此前已登记、后由管理员删除，本次跳过，不会重复导入。'
+  vi.mocked(write).mockResolvedValueOnce({ token: 'signed-preview', count: 2, can_import: true, errors: [], notices: [{ row: 4, message: notice }],
+    rows: [{ row: 3, status: '已导入（跳过）', data: {} }, { row: 4, status: '原记录已删除（跳过）', data: {} }] })
+  const input = wrapper.find('input[type=file]')
+  Object.defineProperty(input.element, 'files', { value: [new File(['sample'], '工行.xlsx')], configurable: true })
+  await input.trigger('change')
+  await flushPromises()
+  expect(wrapper.get('.import-notices').text()).toBe(notice)
+  expect(wrapper.getComponent({ name: 'ImportFeedback' }).props('rows').map((row: { data: { status: string } }) => row.data.status)).toEqual(['已导入（跳过）', '原记录已删除（跳过）'])
+  const confirm = wrapper.findAll('button').find(button => button.text() === '确认导入')!
+  expect(confirm.attributes('disabled')).toBeUndefined()
+  vi.mocked(write).mockResolvedValueOnce({ count: 0, skipped: 2 })
+  await confirm.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('成功导入 0 条记录，跳过已导入 2 条')
+  expect(wrapper.find('.import-notices').exists()).toBe(false)
+})
+
 
 it('allowImport默认开启，库存日常关闭后仅提供导出并阻止打开导入', async () => {
   user.value = { roles: ['admin'] }
