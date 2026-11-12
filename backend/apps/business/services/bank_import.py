@@ -20,7 +20,7 @@ from apps.core.periods import check_record
 from apps.core.permissions import FINANCE, require_role
 
 from ..models import BankRecord
-from . import bank_identity, banking
+from . import bank_identity, banking, deletions
 from .bom_import import MAX_BYTES, message, read_xlsx
 from .common import audit, save
 
@@ -59,6 +59,7 @@ HXB = [
 ]
 UNKNOWN = '原流水未提供户名（待核实）'
 LOCKED_SKIP = '已登记（锁账期内保留原记录，跳过）'
+DELETED_SKIP = '原记录已删除（跳过）'
 
 
 def string(value):
@@ -233,6 +234,37 @@ def kept_locked(found):
     return False
 
 
+def deleted_matches(matched):
+    """Rows whose same transaction is an administrator-deleted record.
+
+    Bank records are ledger rows: deletion only hides them from the list and they stay in every identity check,
+    so these rows are skipped like any recorded transaction. Name the hidden record so the user can find it.
+    """
+    if not matched:
+        return []
+    hidden = set(
+        BankRecord.objects.filter(pk__in={prior.pk for _, prior in matched})
+        .alias(_removed=deletions.removed(BankRecord))
+        .filter(_removed=True)
+        .values_list('pk', flat=True)
+    )
+    notices = []
+    for record, prior in matched:
+        if prior.pk in hidden:
+            record['status'] = DELETED_SKIP
+            notices.append(
+                {
+                    'row': record['row'],
+                    'message': (
+                        f'第 {record["row"]} 行：与已删除的银行流水（记录 ID {prior.pk}，流水号“{prior.reference}”）'
+                        '是同一笔交易，此前已登记、后由管理员删除，本次跳过，不会重复导入。'
+                        '如需核对，请管理员在“银行到账与认领”的“已删除记录”中查看原始记录。'
+                    ),
+                }
+            )
+    return notices
+
+
 def parse(upload):
     content, rows = read(upload)
     sha = hashlib.sha256(content).hexdigest()
@@ -250,7 +282,7 @@ def parse(upload):
             raise ValidationError('华夏账号或币种不支持；仅支持人民币。')
     else:
         raise ValidationError('未识别工行或华夏原始表头，请勿删除标题、汇总或调整列顺序。')
-    records, errors, fingerprints = [], [], set()
+    records, errors, fingerprints, matched = [], [], set(), []
     income = expense = Decimal('0.00')
     income_count = expense_count = 0
     for index, row in enumerate(rows[start:], start + 1):
@@ -325,6 +357,8 @@ def parse(upload):
             else:
                 record['status'] = '待核实户名' if not name else '可导入'
             records.append(record)
+            if prior:
+                matched.append((record, prior))
             income += incoming
             expense += outgoing
             income_count += int(incoming > 0)
@@ -357,12 +391,12 @@ def parse(upload):
             summary['check'] = '收入、支出总额和笔数与银行表头汇总一致。'
         except (ValidationError, ValueError, TypeError):
             errors.append({'row': 6, 'message': '明细与银行表头汇总不一致，整批禁止导入。'})
-    return records, errors, summary
+    return records, errors, summary, deleted_matches(matched)
 
 
 def preview(actor, upload):
     require_role(actor, FINANCE)
-    records, errors, summary = parse(upload)
+    records, errors, summary, notices = parse(upload)
     token = (
         signing.dumps({'actor': actor.pk, 'records': records, 'nonce': str(uuid4())}, salt='bank-import', compress=True)
         if not errors
@@ -385,6 +419,7 @@ def preview(actor, upload):
         row_count=len(records),
         count=len(records),
         errors=errors,
+        notices=notices,
         summary=summary,
         can_import=not errors,
         token=token,

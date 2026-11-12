@@ -201,6 +201,8 @@ async function confirm() {
         </div>
         <p>共 {{ preview.count }} 条，确认时再次校验；任一行失败，整批不保存。预览有效期 30 分钟。<span v-if="resource === 'purchases'">文件 {{ preview.row_count }} 行明细合并为 {{ preview.count }} 张采购草稿，下方按原文件逐行显示。</span></p>
         <p v-if="preview.summary">收入 {{ preview.summary.income_count }} 笔 / {{ preview.summary.income }} 元；支出 {{ preview.summary.expense_count }} 笔 / {{ preview.summary.expense }} 元。{{ preview.summary.check }}</p>
+        <!-- 银行导入：与已删除记录为同一笔的行照常跳过，这里说明原记录去向。 -->
+        <div v-if="preview.notices?.length" class="import-notices"><p v-for="notice in preview.notices" :key="notice.row">{{ notice.message }}</p></div>
         <ImportFeedback :rows="(preview.rows || []).map((row: Row) => ({ ...row, data: { ...row.data, status: row.status } }))" :columns="bankImport ? [{ key: 'status', label: '导入状态' }, ...(preview.columns || [])] : (preview.columns || [])" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
       </template>
       <template #footer><el-button :disabled="busy" @click="opened = false">关闭</el-button><router-link v-if="result && resultDestination" class="el-button el-button--primary" :to="resultDestination" @click="opened = false">{{ hasResultRecord ? (Number(resultData?.count) > 1 ? '查看首条导入记录' : '查看导入记录') : '关闭并查看列表' }}</router-link><el-button v-else-if="result" type="primary" @click="opened = false">关闭并查看列表</el-button><el-button v-else type="primary" :disabled="busy || !preview?.can_import || (!!preview?.duplicate_import && !allowDuplicate)" :loading="busy" @click="confirm">确认导入</el-button></template>
@@ -211,6 +213,8 @@ async function confirm() {
 .import-quick-start { padding: 4px 16px; border: 1px solid #c6dbf5; border-radius: 8px; background: #f2f7ff; }
 .import-duplicate { padding: 12px; margin-bottom: 12px; border: 1px solid #e6a23c; border-radius: 8px; background: #fdf6ec; }
 .import-duplicate input { margin-right: 8px; }
+.import-notices { max-height: 160px; overflow: auto; padding: 4px 12px; margin-bottom: 12px; border: 1px solid #c6dbf5; border-radius: 8px; background: #f2f7ff; }
+.import-notices p { margin: 4px 0; }
 /* 手机端：导入、批量删除等对话框内的操作按钮达到 40px 触控区。 */
 @media (max-width: 600px) {
   .transfer-dialog .el-button { min-height: 40px; }
