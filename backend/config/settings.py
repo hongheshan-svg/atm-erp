@@ -94,6 +94,10 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'apps.core.api.exception_handler',
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
 }
+if APP_ENVIRONMENT == 'development':
+    # 本地联调和浏览器自动化测试以远超人工的速度连续请求，每账号每分钟 600 次的兜底上限会把用例限流成随机失败。
+    # 开发环境放宽十倍（仍拦得住失控循环），与登录限流只在生产生效一致；发布部署默认 production，不受影响。
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['user'] = '6000/min'
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(hours=12),

@@ -41,12 +41,24 @@ jobs:
         with: {ref: '${{ inputs.ref || github.ref }}'}
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('frontend/package-lock.json') }}
-      - run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      # 前端依赖、Chromium 及其字体包（apt）与镜像构建、安装互不依赖：放到后台，与后面三步同时进行，
+      # 每片少等约半分钟。只对这一步网络安装重试（apt 源解析失败曾让整轮浏览器任务失败），用例本身不重试。
+      # 不再缓存 Chromium：缓存键含锁文件哈希，每次版本号递增都会变；PR 与 tag 写入的缓存别的运行读不到，
+      # 实测首轮从未命中，却占去仓库缓存额度的三分之一。
+      - name: Start frontend dependencies and Chromium in the background
         working-directory: frontend
+        run: |
+          (
+            status=1
+            for attempt in 1 2 3; do
+              if npm ci --no-audit --no-fund && npx playwright install --with-deps chromium; then
+                status=0
+                break
+              fi
+              if [[ "$attempt" != 3 ]]; then sleep 20; fi
+            done
+            echo "$status" > "$RUNNER_TEMP/browser-deps.status"
+          ) > "$RUNNER_TEMP/browser-deps.log" 2>&1 &
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
@@ -57,6 +69,13 @@ jobs:
           # 只读：依赖层由 main 上的 ci-cache.yml 写入。分片各自导出缓存既互相争写，每次还要多花近一分钟。
           cache-from: type=gha,scope=app-image
       - run: bash install.sh --skip-build --no-ota
+      # 后台安装的日志在这里完整输出；三次都失败则本片失败，不带着缺依赖的环境去跑用例。
+      - name: Wait for frontend dependencies and Chromium
+        timeout-minutes: 10
+        run: |
+          while [[ ! -f "$RUNNER_TEMP/browser-deps.status" ]]; do sleep 1; done
+          cat "$RUNNER_TEMP/browser-deps.log"
+          test "$(cat "$RUNNER_TEMP/browser-deps.status")" = 0
       - name: First-install wizard
         run: npm run test:e2e -- e2e/setup.spec.ts --project="$PROJECT" --grep '全新安装' --output=test-results-first-install
         working-directory: frontend
