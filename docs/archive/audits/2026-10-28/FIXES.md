@@ -31,4 +31,4 @@
 
 测试数据库为专门创建的`erp_audit_fixes_20261028`及Django独立测试库；浏览器显式使用`http://127.0.0.1:18462`，只连接本机隔离后端18461。浏览器缓存使用匹配版本的已安装测试浏览器；首次默认缓存缺少该版本，未执行页面断言，修正缓存路径后重跑通过。未访问生产环境，未执行完整业务链、OTA或安装器演练。
 
-日志原件：`/private/tmp/erp-audit-fixes-*.log`及`/private/tmp/erp-audit-fixes-preview/`。日志副本、截图和本报告：`/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/erp-audit-fixes-20261028/`。
+日志原件：`/private/tmp/erp-audit-fixes-*.log`及`/private/tmp/erp-audit-fixes-preview/`。日志副本、截图和本报告：`~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/erp-audit-fixes-20261028/`。

@@ -28,7 +28,7 @@
 - 真实页面（隔离预览 18341/18350，新建库 `atm_erp_audit1022`，桌面1440与手机390）：
   - 按影响选取的浏览器用例结果见 MASTER“验证记录”。
   - 已查看修复后截图：流程进度重名与节点名称、工作台到期金额、收付款退款卡片、非参与经理“无权查看”、采购列表逾期标识、手机交付与回款。
-  - 截图与日志在 `/private/tmp/claude-501/-Users-zhengshan-projects-atm-erp/1216d423-b458-482c-8a90-ceeded318807/scratchpad/`，不作为发版凭据。
+  - 截图与日志在 `本机临时目录 scratchpad/`，不作为发版凭据。
 - 追加项（一行多错、账号恢复、历史数据核查）复验：后端594项、前端420项、浏览器28项通过，详见 MASTER。
 - 未执行全业务流程验收、正式发版验证或OTA/安装演练；未发布。
 
@@ -38,7 +38,7 @@
 - 通用导入窗口与独立HTML说明同步展示三步指引；任务日期与天数、采购分组、BOM已有/新增物料、库存/款项/任务ID来源分别说明。表头不匹配与无数据提示明确重新下载、按列粘贴以及在数据页填写的纠正方法。数据页保持原表头及空业务行，说明标记、工作表顺序和旧模板兼容不变；权限、状态、金额及事务规则不放宽。
 - 独立Compose项目`erp-template-guidance`使用PostgreSQL15内存数据库和Redis，后端直接相关52项、按`impact.py`映射选择的关联225项，共277项通过；前端直接相关8项、关联125项，共133项通过。验证全部模板内部链接、资料来源、文本格式、固定下拉、说明页排除、真实填写导入及原权限/回滚。后端checks、前端lint/typecheck/build通过。
 - 显式指定隔离地址和测试口令，桌面/手机共8项浏览器测试通过：13类下载入口与说明、BOM错误预览与有效确认，以及真实物料模板下载、12条物料导入、导出及回读；未拦截业务API。已查看双端首次导入指引截图和13份Excel说明页渲染，确认指引、链接和长说明可读。浏览器原始记录位于`/private/tmp/erp-import-guides.li264o77/template-guidance-browser/`及`template-guidance-transfer/`。
-- 从隔离环境真实接口下载13份Excel及13份HTML，核验默认打开说明、内部跳转、空业务数据页，以及压缩包26个文件与下载文件逐字节一致。文件与渲染保存在`/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/template-guidance/`。最后补齐无固定选项模板的明确说明和人员账号文本格式后，直接相关52项及后端checks复验通过。本次为模板及导入关联范围验证，未执行全业务流程或发版验证，尚未发布；未声称全部Excel/WPS版本实机兼容验收。
+- 从隔离环境真实接口下载13份Excel及13份HTML，核验默认打开说明、内部跳转、空业务数据页，以及压缩包26个文件与下载文件逐字节一致。文件与渲染保存在`~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/template-guidance/`。最后补齐无固定选项模板的明确说明和人员账号文本格式后，直接相关52项及后端checks复验通过。本次为模板及导入关联范围验证，未执行全业务流程或发版验证，尚未发布；未声称全部Excel/WPS版本实机兼容验收。
 
 ## 导入模板固定选项与就地填写提示（2026-10-20）
 
@@ -46,7 +46,7 @@
 - 数据页第2～1001行提供输入提示；红/黄/蓝表头分别表示必填、条件必填及可选，开始填写后按本行可判断的条件标红缺项。已有物料不会被要求重复填写全部资料；空白行不提示。说明补充加工件材质/尺寸示例、图号与规格区别、图档版本不得填PCS、CSV限制及粘贴后仍须上传校验。表头、列序、旧模板兼容、权限与导入事务规则不变，不增加业务数据行、公式单元格或迁移。
 - 独立PostgreSQL下导入、导入文档和产品编码52项，以及按`impact.py`映射选择的关联模块225项，共277项测试通过。验证全部中文分类可实际导入、自定义单位保留、预览无写入、模板无虚假数据行及已有回滚/权限约束。全部模板的原生Excel XML验证下拉范围、合法选项、允许空值及输入提示；避免所用openpyxl版本重载时`allowBlank`别名默认值造成误判。
 - 前端直接相关8项及关联125项，共133项测试通过；后端checks（Ruff、格式、Django及无迁移变化）、前端lint/typecheck/build、页面测试文件lint及diff检查通过。临时Compose项目`erp-template-options`使用独立PostgreSQL15内存数据库及Redis，显式配置测试地址与密码；桌面/手机共6项页面用例通过，覆盖13种模板下载入口及说明、错误文件预览、有效BOM确认并回读结果，未拦截业务API。
-- 从隔离环境真实接口下载13份Excel及13份HTML说明，核验压缩包26个文件与接口下载逐字节一致；已查看模板表头/说明页渲染及双端页面截图。文件与截图保存在`/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/template-options/`，浏览器原始记录位于`/private/tmp/erp-import-guides.li264o77/template-options-browser/`。未修改员工原始文件、访问现场系统或执行全业务流程/发版验证；本次改动尚未发布，未声称各版本Excel/WPS实机兼容验收。
+- 从隔离环境真实接口下载13份Excel及13份HTML说明，核验压缩包26个文件与接口下载逐字节一致；已查看模板表头/说明页渲染及双端页面截图。文件与截图保存在`~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/template-options/`，浏览器原始记录位于`/private/tmp/erp-import-guides.li264o77/template-options-browser/`。未修改员工原始文件、访问现场系统或执行全业务流程/发版验证；本次改动尚未发布，未声称各版本Excel/WPS实机兼容验收。
 
 ## BOM 文件选择后立即显示预览与逐行问题（2026-10-20）
 
@@ -55,7 +55,7 @@
 - 15列模板逐行收集物料错误，保留全部非空原始行及文件行号，标注具体中文字段问题；继续用原BOM规则校验成功解析的物料行。失败不签发确认token，临时物料ID不对外返回；物料、编号、审计及幂等记录整批回滚。确认保留原权限、版本、事务锁及数量下限校验，不猜测缺失规格或放宽类别。
 - 独立PostgreSQL下产品编码、导入文档与BOM关联共36项测试通过；新增覆盖混合有效/无效行、空行行号、Excel日期与空附加列、多处字段错误、无token及无写入。前端6项组件测试通过，包含等待状态、关闭重试、旧响应隔离、读取错误及取消确认返回预览；后端checks（Ruff、格式、Django、无迁移变化）、前端lint/typecheck/build及diff检查通过。
 - 临时Compose项目`erp-bom-preview`使用独立PostgreSQL15内存数据库和Redis，显式配置测试地址与口令。真实浏览器桌面/手机共4项用例通过，验证120行错误立即可见、错误表头提示、确认入口位于视口、取消返回与有效文件实际写入，并回读BOM数量和日期。初轮发现取消确认导致预览状态丢失，修复弹窗卸载逻辑后复验；另对弹窗本体边界专项2项通过。测试不拦截业务API。
-- 原附件在桌面和手机各上传一次，均返回698条预览明细与698条逐行问题，未确认导入。第302–698行规格为空，类别文本及物料类别不匹配，第699行缺类别与单位；原Excel保持不动。已查看原文件错误预览及合成有效文件的双端截图，原文件证据位于`/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/bom-preview/`；合成用例截图位于`/private/tmp/erp-import-guides.li264o77/bom-preview-bounds/`。未访问现场系统，未执行全业务流程或发版验证，本次修复尚未发布。
+- 原附件在桌面和手机各上传一次，均返回698条预览明细与698条逐行问题，未确认导入。第302–698行规格为空，类别文本及物料类别不匹配，第699行缺类别与单位；原Excel保持不动。已查看原文件错误预览及合成有效文件的双端截图，原文件证据位于`~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/bom-preview/`；合成用例截图位于`/private/tmp/erp-import-guides.li264o77/bom-preview-bounds/`。未访问现场系统，未执行全业务流程或发版验证，本次修复尚未发布。
 
 ## 业务人员按姓名选择与导入（2026-10-20）
 
@@ -63,14 +63,14 @@
 - 新预览签名凭据记录已解析人员ID，确认时重新匹配并比对，人员对应关系变化时整批回滚；原有确认幂等不变。模板及填写说明同步标为“姓名或账号”，兼容上一版账号表头和原列序。已登录人员目录增加用户名供重名辨别，继续仅返回启用人员的安全字段；业务下拉框姓名在前、账号在括号内。
 - 独立 PostgreSQL 下导入、导入文档及账号权限共67项测试通过；覆盖CSV/XLSX、历史模板、真实人员关联、重名和姓名账号冲突、预览后人员变更、停用、越权、整批回滚及重复确认。按 `scripts/ci/impact.py` 的共享路径映射，另补关联模块266项后端回归，合计333项通过。前端直接相关40项及映射补充117项，共18个文件157项通过；后端checks（Ruff、格式、Django、无迁移变化）、前端lint/typecheck/build及diff检查通过。
 - 临时Compose项目 `erp-person-names` 使用独立PostgreSQL15内存数据库和Redis，后端18591、前端18592，显式配置隔离测试地址和密码。桌面/手机分别验证姓名选择、姓名导入、重名拦截和明确账号后导入，并回读真实任务的执行人ID；另复验旧任务模板与BOM中文错误，共4项页面用例通过，未拦截业务API。浏览器初轮修正“导入成功仍保留结果弹窗”的测试预期后复验通过。
-- 已查看最终桌面和手机的人员选择及重名提示4张截图，保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/person-names/`。本次未访问现场系统，未执行全业务流程、发版验证或发布；不包含在此前已发布的v1.8.11中。
+- 已查看最终桌面和手机的人员选择及重名提示4张截图，保存在 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/person-names/`。本次未访问现场系统，未执行全业务流程、发版验证或发布；不包含在此前已发布的v1.8.11中。
 
 ## 面向用户的错误提示统一中文（2026-10-19）
 
 - 统一处理框架校验、记录不存在、登录凭据、请求格式及限流提示，保留字段键、错误代码、状态码、等待秒数和恢复链接。模型重复值、无效选项及关联记录错误不再带出英文模型名；未知英文网络/页面错误给出中文处理建议。账号、物料编号和其他实际数据保持原值。
 - 通用导入使用当前模板中文列名，BOM保留已有中文列名，错误始终保留文件行号；任务/BOM页面逐条展示中文错误，不展示原始对象。银行导入的字段长度、日期错误和异常对象改为中文；升级执行器未知失败原因使用中文，完整异常仍记入原日志。未变更岗位、项目范围、校验条件、事务、金额、库存或升级步骤。
 - 共享异常处理按影响覆盖全部后端业务模块243项；平台/登录/导入初轮95项通过，后续银行与行号修正后71项相关用例、模型错误2项及首次配置10项复验通过。前端228项单测、lint、typecheck、最终build，后端checks（Ruff、格式、Django、无迁移变化）、CI路由19项及升级执行器16项单测通过。初轮发现限流中英文混杂和旧BOM中文字段名丢失，均已修复复验；浏览器夹具的同名物料触发重复校验后改为独立测试物料。
-- 临时Compose项目 `erp-chinese-prompts-li264o77` 使用独立PostgreSQL15与Redis，后端18591/前端18592；浏览器电脑与手机各验证任务和BOM错误预览，共2项通过，实际上传并确认任务没有写入，未拦截业务API。已查看4张最终截图，保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/chinese-prompts/`。未访问现场系统，未执行全业务流程或OTA安装演练，尚未发布。
+- 临时Compose项目 `erp-chinese-prompts-li264o77` 使用独立PostgreSQL15与Redis，后端18591/前端18592；浏览器电脑与手机各验证任务和BOM错误预览，共2项通过，实际上传并确认任务没有写入，未拦截业务API。已查看4张最终截图，保存在 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/chinese-prompts/`。未访问现场系统，未执行全业务流程或OTA安装演练，尚未发布。
 
 ## 导入账号与姓名不一致时明确提示（2026-10-19）
 
@@ -83,13 +83,13 @@
 - 覆盖12类通用导入及BOM，共13类。模板、独立HTML说明与通用页面字段说明共用元数据，列明入口、用途、前提、必填条件、允许值和格式示例。Excel含空白“数据”页、表头批注及“填写说明”页；示例不写入数据页。CSV原表头及旧模板字段映射不变，说明另行下载。补充员工手册 [IMPORT_TEMPLATES.md](IMPORT_TEMPLATES.md)。
 - 读取兼容原单工作表，以及名称固定的“数据”加带标题标识的系统“填写说明”页；说明页排到前面仍只读数据页。未知/额外工作表、公式和超出模板的业务列仍拒绝。下载沿用原岗位授权，未改变业务写入、金额、库存、状态或幂等规则。共享新增路径已登记影响映射。
 - 后端21项导入/模板用例与7项产品编码/BOM关联用例通过；最终字段说明调整后另复验3项逐类模板说明与真实预览回归。覆盖12类通用模板CSV/XLSX预览、BOM模板填写、说明页排除、额外表拒绝、旧模板兼容、权限、预览回滚与确认幂等。前端相关组件3项、lint、typecheck、build，后端checks（Ruff、Django、无迁移变化）及CI影响路由19项通过。
-- 临时Compose项目 `erp-import-guides-li264o77` 使用独立PostgreSQL15内存数据库与Redis，后端18591、前端18592；未连接现场环境。真实浏览器桌面/手机各验证BOM及12类通用入口，共4项通过，逐类核对说明下载、CSV表头和错表头拦截。已查看桌面任务导入、手机BOM及独立说明文档截图；证据保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/import-guides/`。不作为正式发布或全业务流程验收，尚未发布。
+- 临时Compose项目 `erp-import-guides-li264o77` 使用独立PostgreSQL15内存数据库与Redis，后端18591、前端18592；未连接现场环境。真实浏览器桌面/手机各验证BOM及12类通用入口，共4项通过，逐类核对说明下载、CSV表头和错表头拦截。已查看桌面任务导入、手机BOM及独立说明文档截图；证据保存在 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/import-guides/`。不作为正式发布或全业务流程验收，尚未发布。
 
 ## 项目进度条去除销售阶段（2026-10-19）
 
 - 项目进度条按当前执行项目边界显示“执行中 → 交付中 → 已验收 → 已结项”，移除“需求中”和“已报价／等待客户确认”。销售进度条继续显示需求、报价和签约；独立创建项目与签约生成项目共用四阶段展示，不推断不存在的报价或签约事实。
 - 此次仅改前端流程定义及原取消流程用例的节点数量，未修改数据库状态或业务动作。历史 draft/quoted 项目保留页头真实状态，不显示执行进度条；取消项目保留终止提示，不标记已完成阶段。
-- 全部225项前端单测、lint、typecheck、build与 diff 检查通过。只读测试夹具在显式隔离地址 http://127.0.0.1:18583 验证桌面/手机各7种项目状态，共14项检查通过，无业务写入或用户服务器访问。已查看桌面和手机截图，位于 /Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/project-flow/；检查结果 /private/tmp/erp-project-flow.TXZxnP/results.json。尚未发布。
+- 全部225项前端单测、lint、typecheck、build与 diff 检查通过。只读测试夹具在显式隔离地址 http://127.0.0.1:18583 验证桌面/手机各7种项目状态，共14项检查通过，无业务写入或用户服务器访问。已查看桌面和手机截图，位于 ~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/project-flow/；检查结果 /private/tmp/erp-project-flow.TXZxnP/results.json。尚未发布。
 
 ## 往来单位账期按客户/供应商类型显示（2026-10-19）
 
@@ -268,7 +268,7 @@
 
 - 根据用户要求，Docker 安装器及原生 start 默认注册独立宿主机升级服务，确认真实心跳后才提示就绪。macOS LaunchAgent、Linux systemd、Windows 计划任务负责自动启动与恢复；服务身份按部署区分，重复安装复用在线服务，未完成升级不被覆盖。
 - 继续使用原 `ota_runner.py`、固定仓库、管理员权限、SHA256、备份和前向迁移。不往 app 挂载 Docker socket，不增加业务表或伪造在线状态。原生升级子进程携带管理标记，兼容旧安装器 CLI，避免停机期间重复注册执行器。
-- 当前隔离 ERP `http://127.0.0.1:18360` 已配置持久服务目录 `/Users/zhengshan/.local/share/atm-erp-ota/current-18360`，使用私有配置副本；没有发起版本升级。实际页面显示“执行器已连接：macos / Docker”。分别终止执行器与整个宿主机服务后，均自动恢复新进程、相同执行器身份和真实心跳。
+- 当前隔离 ERP `http://127.0.0.1:18360` 已配置持久服务目录 `~/.local/share/atm-erp-ota/current-18360`，使用私有配置副本；没有发起版本升级。实际页面显示“执行器已连接：macos / Docker”。分别终止执行器与整个宿主机服务后，均自动恢复新进程、相同执行器身份和真实心跳。
 - 执行器及服务测试 24 项通过，日志 `/private/tmp/erp-auto-ota-unit.log`；原生安装器 7 项、工作流检查 9 项通过。前端 lint、typecheck、升级组件 5 项与 build 通过，构建日志 `/private/tmp/erp-auto-ota-ui-build.log`。
 - Docker 隔离升级演练通过，日志 `/private/tmp/erp-auto-ota-docker.log`；最终原生隔离升级演练通过，日志 `/private/tmp/erp-auto-ota-native-final.log`。检查备份、迁移、数据保留与运行版本；本机默认网段耗尽时为演练显式指定独立临时网段，不删除现有环境。
 - 三平台服务配置测试已加入 Installer validation。Linux/Windows 的服务注册参数与配置生成有自动测试，本轮未在这两个系统真实注册服务或模拟重启；macOS 已实测服务恢复，未模拟整机重启。macOS/Windows 服务随安装用户登录运行，Linux 用户服务启用 linger。源码改动尚未提交或发布，不修改既有 v1.8.0 安装包。
@@ -581,7 +581,7 @@
 - Docker使用既有隔离18350环境并保留数据升级，部署日志：`/private/tmp/lean-operational-deploy-final.log`。镜像比对排除.dockerignore中的测试文件，103个实际运行文件校验；最终源码核对记录：`/private/tmp/lean-operational-parity.json`。
 - 运维检查用例通过，验证缺失、有效、过期/损坏归档及空间阈值；命令`python3 -m unittest discover -s scripts/tests -p test_ops_check.py`，日志`/private/tmp/lean-operational-ops-test.log`。新检查脚本验证归档内数据库/附件SHA256，但不能代替实际恢复演练。
 - 实际归档`/private/tmp/lean-operational-backups/20260909.zip`恢复到独立18355环境：30张表和57个附件校验完全一致；非空目标拒绝恢复且数据不变，重复安装保留数据。日志`/private/tmp/lean-operational-restore.log`，逐表/附件证据`/private/tmp/lean-operational-restore-evidence.json`。运维脚本对该真实归档和18350健康接口返回ok=true，记录`/private/tmp/lean-operational-ops-check.json`。
-- 已查看最终桌面报表、项目收付款和移动收付款截图；当前标签可见、首列金额摘要和紧凑报表主列可读。截图保存于`/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/operational-review/`。
+- 已查看最终桌面报表、项目收付款和移动收付款截图；当前标签可见、首列金额摘要和紧凑报表主列可读。截图保存于`~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/operational-review/`。
 - 尚未提供企业真实脱敏订单，试运行清单已准备；实际主机告警接收渠道未配置，不声称已发送外部告警。未提交、推送或发布版本。
 # 三平台发布补充（2026-09-09）
 
@@ -716,7 +716,7 @@
 - 最终前端55文件432项单元测试、ESLint、vue-tsc和构建通过，CI路由39项通过，新接口、组件、静态PDF资源和浏览器夹具均已登记。初次单测的一条旧“仅下载”动作断言已适配预览入口。日志 `/private/tmp/erp-preview-unit-final2.log`、`erp-preview-lint-csp.log`、`erp-preview-types-verified.log`、`erp-preview-build-verified.log`、`erp-preview-routing-accepted.log`。构建保留既有ActionDialog动态/静态导入提示。
 - 真实文件专项在桌面1440px和手机390px各3项通过，核对采购/销售人员Excel切表分页、编码前导零、文字原样显示，项目图片、TXT、DOCX及两页PDF实际像素/文字、原件逐字节下载和越权拒绝。截图检查促成手机窗口高度、固定关闭按钮和翻页区域调整，补充视口边界断言。最终构建的附件、合同归档、付款表单/凭证记录和资料选择器合计16项通过；真实Nginx环境6项通过，最终PDF组件调整后关联2项再次通过。日志 `/private/tmp/erp-preview-browser-accepted.log`、`erp-preview-nginx-browser.log`、`erp-preview-nginx-final.log`。
 - 共享页面回归选择38个页面文件（不含完整业务链），桌面和手机共152项：首次138项通过，BOM键盘2项、测试服务刷新中断1项和测试项目两位流水耗尽9项失败，另2项串行用例未执行。诊断发现原RemoteSelect在父表单重绘时因同值params对象重新创建而清空选项并重新请求，短暂原生校验阻止提交；改为逐项比较实际上下文并保留首次已有值，新增组件测试先复现后通过，BOM/资料选择器双端4项及最终构建16项通过。通过正常管理员接口仅将隔离测试库项目流水改为6位，保留原计数与记录；稳定构建上关联手机15项全部复验通过，覆盖另外10项失败及2项未执行用例。其余成功证据复用，不将首次失败记录算作通过。日志 `/private/tmp/erp-preview-browser-regression.log`、`erp-preview-select-red.log`、`erp-preview-selection-browser.log`、`erp-preview-regression-rechecked.log`。
-- 已实际查看电脑Excel、手机Excel和手机PDF效果，最终截图位于 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/attachment-preview/`。测试均在新建独立数据库和显式账号上执行；未操作生产、未运行完整业务链、正式发版验证、OTA或安装器。本次功能位于 `codex/attachment-preview`，版本仍为1.8.19，未提交GitHub、合并、打tag或发布。
+- 已实际查看电脑Excel、手机Excel和手机PDF效果，最终截图位于 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/attachment-preview/`。测试均在新建独立数据库和显式账号上执行；未操作生产、未运行完整业务链、正式发版验证、OTA或安装器。本次功能位于 `codex/attachment-preview`，版本仍为1.8.19，未提交GitHub、合并、打tag或发布。
 
 
 ## 2026-10-27 待审批采购申请修改
@@ -726,7 +726,7 @@
 - 采购列表、手机摘要、流程节点、工作台待办及项目只读进度显示“修改申请待处理”；有权人员看到处理入口，申请人可查看原因与时间。处理记录中文展示申请、同意、驳回及双方原因。列表批量获取申请和审批资格，查询数不随记录数量逐行增加；项目协作投影只显示状态和跟进人，不输出申请中的自由文本。
 - 新增11项后端用例（含2项并发）覆盖申请/驳回/同意、草稿修改后重新批准生成应付、重复及过时申请、角色与项目范围、兼岗自批、管理员例外、已结束项目/已批准订单、批量删除回滚、待办与流程投影及批量查询。首轮相关模块95项通过；查询优化后复验采购、工作台、项目进度和既有自批限制51项通过，复用其余成功证据。日志 `/private/tmp/erp-purchase-changes-regression.log`、`erp-purchase-changes-backend-final.log`。
 - 前端3文件24项相关单测、ESLint、vue-tsc与构建通过；后端Ruff、Django和迁移历史一致性检查通过。初次静态检查使用测试设置时默认连接的 lean_test_runner 库不存在；改用已存在的隔离预览库复验，无警告且无待生成迁移。新增源码及浏览器用例登记采购影响计划，CI路由40项通过。日志 `/private/tmp/erp-purchase-changes-unit-final.log`、`erp-purchase-changes-lint-final.log`、`erp-purchase-changes-types-verified.log`、`erp-purchase-changes-build-final.log`、`erp-purchase-changes-checks-final.log`、`erp-purchase-changes-routing-final.log`；构建保留既有ActionDialog动态/静态导入提示。
-- 电脑1440px、手机390px使用独立采购员和采购经理在真实界面完成申请→驳回→再次申请→同意→修改数量→重新提交→批准，核对保存后数量与状态及中文历史。初次浏览器断言错误假设新单必定在工作台首5条中，实际被旧测试数据占据；修正测试定位，不改业务排序或删除历史夹具。开发页面2项通过；最终编译页面在隔离Nginx与最终后端上2项通过（`/private/tmp/erp-purchase-changes-browser-final.log`）。已实际查看电脑和手机截图，保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/purchase-changes/`。
+- 电脑1440px、手机390px使用独立采购员和采购经理在真实界面完成申请→驳回→再次申请→同意→修改数量→重新提交→批准，核对保存后数量与状态及中文历史。初次浏览器断言错误假设新单必定在工作台首5条中，实际被旧测试数据占据；修正测试定位，不改业务排序或删除历史夹具。开发页面2项通过；最终编译页面在隔离Nginx与最终后端上2项通过（`/private/tmp/erp-purchase-changes-browser-final.log`）。已实际查看电脑和手机截图，保存在 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/purchase-changes/`。
 - 本次仅验证采购及直接受影响读取方，未重跑附件预览、完整业务链、正式发版验证、OTA或安装器；未操作生产。沿用功能分支 `codex/attachment-preview`，保留之前附件预览未提交改动；版本仍为1.8.19，未提交GitHub、打tag或发布。
 
 ## 2026-10-27 采购完整合同与非标自动化条款
@@ -735,7 +735,7 @@
 - 模板版本2增加图纸/技术协议适用范围、材质公差及关键工艺、标准件与替代料、首件和不合格处理、接口与性能验收、变更费用和交期、程序参数/技术资料交付、现场服务、保密及知识产权约定。具体技术指标、程序交付范围和服务时限由双方另行明确；条款参考民法典买卖及承揽合同规则，签署前按实际项目复核，员工说明见 [采购合同查看与打印](PURCHASE_CONTRACT_PREVIEW.md)。
 - 复用原采购明细、金额和不可覆盖签署快照，无新台账或数据库迁移；既有质保、采购权限与项目范围不变。历史归档保持原明细和原条款，新模板不注入历史；当前资料及以后确认的新归档使用新条款。切换采购单/版本时忽略旧响应，避免错显合同。
 - 后端新增4项及关联归档、质保共6项通过；前端合同4项通过，涵盖32项明细与长文本、旧版本、当前归档哈希及切换响应。Ruff、格式、Django、迁移检查、ESLint、类型检查、构建通过；构建保留既有ActionDialog动态/静态导入提示。新增用例登记采购测试矩阵及浏览器影响计划，CI路由41项通过。日志 `/private/tmp/erp-contract-unified-{backend,unit,checks,types,routing,lint-final,build-final}.log`。
-- 真实隔离Nginx编译页面：签署归档及历史资料保持的电脑/手机2项通过；完整合同专项电脑1440px、手机390px最终2项通过。核对32条唯一物料、长地址/规格/备注、整份PDF每页非空、所有物料编码和关键条款/签章都存在、工具栏未打印。初次专项失败分别为测试夹具图号重复、PDF解析对象释放方法错误和CJK兼容字符比较未规范化；仅修正测试，不放宽业务检查。最终日志 `/private/tmp/erp-contract-unified-browser-verified.log`，归档成功证据见 `erp-contract-unified-browser.log`。已实际检查电脑/手机截图及PDF首页、条款和末页，示例位于 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/purchase-contract/`。
+- 真实隔离Nginx编译页面：签署归档及历史资料保持的电脑/手机2项通过；完整合同专项电脑1440px、手机390px最终2项通过。核对32条唯一物料、长地址/规格/备注、整份PDF每页非空、所有物料编码和关键条款/签章都存在、工具栏未打印。初次专项失败分别为测试夹具图号重复、PDF解析对象释放方法错误和CJK兼容字符比较未规范化；仅修正测试，不放宽业务检查。最终日志 `/private/tmp/erp-contract-unified-browser-verified.log`，归档成功证据见 `erp-contract-unified-browser.log`。已实际检查电脑/手机截图及PDF首页、条款和末页，示例位于 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/purchase-contract/`。
 - 采购账期、图号版次和物料编码相关浏览器回归电脑/手机另6项通过（`/private/tmp/erp-contract-unified-related-browser.log`），验证现有页面进入完整合同的显示与打印。合同与归档相关浏览器累计10项通过，未运行完整业务链、正式发版验证、OTA或安装器；未操作生产。保留此前附件预览和采购修改申请改动，版本仍为1.8.19，未提交GitHub、打tag或发布。
 
 - 后续按用户要求，默认合同标题与质保条款明确显示“12个月”（原新单默认值已经为12），更新演示合同及PDF为默认12个月，从各批货物验收合格之日起算。另有约定的采购月数仍来自原单，历史归档条款不回写。合同相关后端5项、前端4项、电脑/手机完整合同及PDF 2项通过，ESLint与构建通过；日志 `/private/tmp/erp-contract-12-months-{backend,unit,browser,lint,build}.log`。已更新并查看示例截图；未发布。
@@ -749,7 +749,7 @@
 - 后端导出、原BOM选料及通用导出相关17项通过；补充非法格式形状后导出5项复验通过。前端BOM需求、下载与采购选择器共23项通过；筛选外选择计数优化后相关13项复验通过。初次组件用例用全页status定位，被新增导出范围提示匹配；改为定位导入弹窗内的状态，不改变业务逻辑。日志 `/private/tmp/erp-bom-export-{backend,backend-final,unit-final,unit-verified}.log`。
 - Ruff/格式、Django、迁移一致性、ESLint、类型检查和构建通过；无数据库迁移，构建仅保留既有ActionDialog动态/静态导入提示。新服务、下载API、后端及浏览器用例登记到BOM影响计划；专用API路径不扩大为所有模块，共享通用API映射保持原样。CI路由全文件42项通过；初次路由测试错误要求仅修改e2e文件也选后端模块，改为核对既定直接选择该浏览器文件的行为。日志 `/private/tmp/erp-bom-export-{checks-final,lint-final,types,build-final,routing-final}.log`。
 - 真实隔离Nginx页面电脑1440px、手机390px共6项通过：81项标准件全部跨页选中，实际CSV和XLSX均为81项；手工取消一个单元后为80项且另一单元保留；保留原81项选择再按非标筛选导出只有3项；品牌/单元/类别/搜索组合导出只有1项；空结果禁用。另回归跨页采购选择、键盘及布局、按准确金额保存草稿。初次手机夹具重用桌面物料身份触发原防重复规则，改为唯一名称，不放宽规则。最终代码与编译页面的导出专项2项再次通过。日志 `/private/tmp/erp-bom-export-browser-final.log`、`erp-bom-export-browser-verified.log`。
-- 已实际查看电脑与手机导出页面截图，下载并解析Excel/CSV核对内容；截图及81项测试样例保存在 `/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/bom-export/`。本次仅BOM导出及选料关联验证，未运行完整业务链、正式发版验证、OTA或安装器，未操作生产；保留此前附件、修改申请和合同未提交改动，版本仍为1.8.19，未提交GitHub或发布。
+- 已实际查看电脑与手机导出页面截图，下载并解析Excel/CSV核对内容；截图及81项测试样例保存在 `~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/bom-export/`。本次仅BOM导出及选料关联验证，未运行完整业务链、正式发版验证、OTA或安装器，未操作生产；保留此前附件、修改申请和合同未提交改动，版本仍为1.8.19，未提交GitHub或发布。
 
 ## 2026-11-07 BOM与基础物料跨页批量删除
 
@@ -758,7 +758,7 @@
 - 后端删除、BOM选择与导出3个登记模块53项通过，含1000条物料及1000条同料不同单元BOM删除、越权拒绝、重复提交审计不重复、201条中末项被引用时全部回滚、1001条拒绝、其他资源200上限与原并发回归。日志：/private/tmp/erp-bulk-delete-backend.log。
 - 前端4个相关文件38项通过（选择辅助2、BOM12、列表13、删除确认11），覆盖跨页勾选/取消、427项全选、切换筛选/项目清理、异步全选失效、1000项上限和提交限制。日志：/private/tmp/erp-bulk-delete-frontend.log、/private/tmp/erp-bulk-delete-dialog-test.log。ESLint、vue-tsc、构建、Ruff、Django配置/迁移一致性与diff检查通过；CI路由29项通过。构建仅有既存ActionDialog动态/静态导入提示。
 - 独立新PostgreSQL与Redis、显式测试管理员和http://127.0.0.1:18562，真实浏览器桌面1440px/手机390px共8个目标场景通过：BOM筛选427项一次删除，筛选外非标明细保留且427条删除审计可查；基础物料跨页选20项、全选21项删除且未选资料保留；原客户批量删除、岗位隐藏、BOM与销售附件删除/历史回归通过。初次失败为缺少匹配浏览器、夹具触发原物料防重复及翻页请求尚未完成即检查复选框，补足环境并修正夹具/等待后复验通过，未放宽业务校验。日志：/private/tmp/erp-bulk-delete-browser.log、/private/tmp/erp-bulk-delete-browser-accepted.log。
-- 已实际查看桌面427项选择与手机选择/删除确认截图，保存于/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/material-bulk-delete/。本次为相关模块验证，未执行全业务链或发版验证；未操作生产、未提交GitHub、未打tag或发布。修改位于codex/bulk-material-deletion分支。
+- 已实际查看桌面427项选择与手机选择/删除确认截图，保存于~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/material-bulk-delete/。本次为相关模块验证，未执行全业务链或发版验证；未操作生产、未提交GitHub、未打tag或发布。修改位于codex/bulk-material-deletion分支。
 
 ## 2026-11-07 扩展跨页批量删除到全部现有表单
 
@@ -767,7 +767,7 @@
 - 后端删除模块40项通过，覆盖所有18种接口资源1001项拒绝、1000物料/BOM、1000历史工时归档且成本不变、201采购草稿同步软删除明细、201用户停用且审计不含密码、权限、整批回滚、幂等及关联创建并发。日志：/private/tmp/erp-all-delete-backend.log。
 - 前端5文件58项通过，参数化核对全部16种通用列表的1000项选择、端点、翻页和资源切换；另含BOM、附件当前单据范围、迟到请求、失败保留、删除确认和受保护资源入口。日志：/private/tmp/erp-all-delete-unit.log。ESLint、vue-tsc、生产构建、Ruff、Django/迁移一致性、diff检查及CI路由29项通过；构建仅既有ActionDialog混合导入提示。日志：/private/tmp/erp-all-delete-{lint,types,build,checks,routing}.log。新附件测试及共享选择辅助函数已更新影响映射。
 - 复用独立PostgreSQL/Redis和显式隔离账号、http://127.0.0.1:18562，桌面1440px/手机390px共14个目标场景通过：原删除及资金历史恢复10项，新增21张采购草稿跨页/全选删除2项、21个附件仅当前销售单删除且另一单据附件保留2项。附件测试首次误用创建响应中不存在的code定位弹窗，改为真实标题后2项复验通过，未修改业务规则。日志：/private/tmp/erp-all-delete-browser.log、erp-all-delete-expanded-browser.log、erp-all-delete-attachment-accepted.log。
-- 已实际查看电脑采购批量确认及手机附件确认截图，保存到/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/all-form-bulk-delete/。本次只验证直接受影响的列表/删除分支及关联保护，不是完整业务链或正式发版验证；未操作生产，未提交GitHub、打tag或发布。沿用codex/bulk-material-deletion，保留上一项已完成修改。
+- 已实际查看电脑采购批量确认及手机附件确认截图，保存到~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/all-form-bulk-delete/。本次只验证直接受影响的列表/删除分支及关联保护，不是完整业务链或正式发版验证；未操作生产，未提交GitHub、打tag或发布。沿用codex/bulk-material-deletion，保留上一项已完成修改。
 
 ## 2026-11-07 非标项目六阶段20节点里程碑
 
@@ -777,7 +777,7 @@
 - 任务Excel/CSV追加可选“里程碑节点”，中文阶段/节点下拉复用服务端定义，兼容旧六列及旧姓名/账号表头。任务导出补中文节点、阶段和自动同步列名。操作/字段/权限说明已同步LEAN_REBUILD_CONTRACT、LEAN_USER_GUIDE、ROLE_RESPONSIBILITIES，新增路径与测试登记到CI影响映射及后端矩阵。
 - 独立PostgreSQL/Redis及显式测试账号验证：后端直接与关联回归通过，包含模板重复/并发生成、整批回滚、无权人员/项目、阶段节点不匹配、旧任务保留、日期调整及清空、批次安装期限、分批发货/验收同步及回退、旧模板导入、导入预览/确认权限与并发、人员查询次数、删除/历史业务保护。首轮123项发现5处旧夹具/预期未适配（全局财务本可访问项目、旧表头宽度、六阶段选项、错误工作簿新增空列），更新真实夹具后50项通过；最终115项、补充项目矩阵229项通过，最终阶段筛选/权限15项复验通过。日志：/private/tmp/erp-milestones-backend-retest.log、erp-milestones-final-backend.log、erp-milestones-associated.log、erp-milestones-stage-final.log。
 - 前端8文件64项通过，覆盖节点联动、生成补缺、自动节点动作、清空期限、生产角色及共用表单/项目页；最终阶段筛选修改后项目页与里程碑单测复验通过。30项CI路由检查、ESLint、vue-tsc、生产构建、Ruff、Django检查/迁移一致性与diff检查通过；构建只有既存ActionDialog混合导入提示。日志：/private/tmp/erp-milestones-unit-final.log、erp-milestones-ui-final.log、erp-milestones-routing-final.log、erp-milestones-checks-final.log、erp-milestones-lint-final.log、erp-milestones-types-final.log、erp-milestones-build.log。
-- 隔离预览http://127.0.0.1:18562，真实浏览器桌面1440px/手机390px共4个目标场景通过：六阶段模板生成20项、旧任务保留、日期修改、设计未完成时完成采购节点、新增/取消自定义节点；生产经理参与范围、派工、工时更正及实际安装/售后回归。模板排版和阶段筛选调整后2项复验通过。日志：/private/tmp/erp-milestones-browser.log、erp-milestones-browser-final.log。已实际查看桌面模板及手机概览截图，保存于/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/project-milestones/。
+- 隔离预览http://127.0.0.1:18562，真实浏览器桌面1440px/手机390px共4个目标场景通过：六阶段模板生成20项、旧任务保留、日期修改、设计未完成时完成采购节点、新增/取消自定义节点；生产经理参与范围、派工、工时更正及实际安装/售后回归。模板排版和阶段筛选调整后2项复验通过。日志：/private/tmp/erp-milestones-browser.log、erp-milestones-browser-final.log。已实际查看桌面模板及手机概览截图，保存于~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/project-milestones/。
 - 本次为项目及关联模块验证，不是完整业务链或发版验证。未操作生产、未提交GitHub、未打tag或发布；沿用codex/bulk-material-deletion，保留此前全部表单批量删除修改。独立测试环境迁移成功；正式部署仍须经过发布验证门禁。
 
 
@@ -790,7 +790,7 @@
 - 后端：编号/BOM/模板/错误反馈/岗位81例加新增编号9例共90例通过；关联签约、合同、对账、导入幂等与并发104例通过（其中9例重复）；编号配置/重置/幂等与模板说明5例通过（其中1例重复）。合计189个不同用例通过。
 - 前端：新增/编辑表单、BOM下单、共享操作框、导入导航及岗位等74个单测通过；初次失败的签约字段断言按新增项目编号字段更新后复验通过。lint、typecheck、build通过。后端Ruff/Django/迁移一致性通过，无新增数据库迁移；CI计划43例通过。
 - 真实浏览器：隔离环境18561/18562，电脑和手机共4例通过，验证自编BOM预览不落库、确认后保留前导零与型号原文、采购合同读取，以及往来单位页面手填编号保存；已查看4张截图，表单及导入确认可操作。
-- 证据：本机 /private/tmp/erp-manual-codes-*.log；截图目录 /Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/manual-numbering/ 。仅针对本次影响范围验收，未进行全业务链验收、发布或生产数据修改。
+- 证据：本机 /private/tmp/erp-manual-codes-*.log；截图目录 ~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/manual-numbering/ 。仅针对本次影响范围验收，未进行全业务链验收、发布或生产数据修改。
 
 ## 2026-11-09 BOM删除失败定位与横向查看
 
@@ -807,7 +807,7 @@
 - 溢出时提供常显横向滑条和左右按钮，到边界禁用，无溢出不显示多余按钮。原生表格补同步滑条，解决浏览器自动隐藏原生滚动条；窄屏取消固定列遮挡，仓库手机明细继续按物料卡片填写。打印隐藏辅助控件，合同32行及条款完整输出。
 - 26个受影响前端单测文件共223项通过（迁移后适配表格桩和紧凑模式序号预期；失败项修正后复验）。原生滑条修改后5文件18项再次通过。新增公共控件测试覆盖翻页/重排序号、原记录动作、导入文件行号、左右边界、尺寸变化及观察器清理。日志：/private/tmp/erp-table-unit-final.log、/private/tmp/erp-table-native-unit.log；FormFields和BusinessTable补充6项复验通过。CI路由44项、ESLint、vue-tsc、生产构建及diff检查通过；构建仅既有Vite配置/混合导入提示。
 - 显式隔离环境 http://127.0.0.1:18562，桌面1440px/手机390px共28个不同页面场景通过：列表跨页序号及勾选、页大小保存、BOM删除定位/实际滑条拖动、BOM81项导出、采购与销售XLSX预览、项目文件及PDF预览、导入错误定位、合同打印、收货出库备注保存，以及物料/采购/附件批量删除与权限。补常显滑条后12项关联场景再次通过，收货表额外验证真实拖动与按钮同步；发现局部组件未显式导入的浏览器警告后已修复并复验通过。日志：/private/tmp/erp-table-browser.log、erp-table-selection-browser.log、erp-table-native-accepted.log。
-- 已实际查看电脑/手机列表、BOM、收货及附件截图；保存于 /Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/all-form-tables/。使用说明和接口文档已同步。保留此前BOM删除定位修复；本次不新增后端写入逻辑，复用上一项后端40项及静态检查证据。
+- 已实际查看电脑/手机列表、BOM、收货及附件截图；保存于 ~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/all-form-tables/。使用说明和接口文档已同步。保留此前BOM删除定位修复；本次不新增后端写入逻辑，复用上一项后端40项及静态检查证据。
 - 此次为受影响表格交互及关联操作验证，不是完整业务链或发版验证。未操作生产，未提交GitHub、打tag或发布。隔离服务测试后停止，测试数据保留。
 
 ## 2026-11-09 任务多人执行与里程碑顺序
@@ -817,7 +817,7 @@
 - 列表在数据库分页前按项目、设计→采购→组装→调试→发货→客户终验收、模板节点顺序排列；自定义任务放在所属阶段固定节点后，翻页和导出一致。发货、现场安装接线和现场验收汇总仍从实际业务同步；操作栏说明同步依据并提供交付进度入口，实际批次安装仍可正常确认完成。
 - 后端分批验证覆盖156个不同用例：首轮相关模块154项发现同名标签回归，修复后相关59项（含新增同名多人用例）通过，补充共同执行人工时导入及预览后移交权限重验1项通过。覆盖任务/里程碑、并发、工时、生产角色范围、项目成员保护、工作台、流程进度、查询数、导入导出及幂等。日志：/private/tmp/erp-task-regression.log、erp-task-regression-fixed.log、erp-task-time-import.log。原事务及权限拒绝未放宽。
 - 前端7个相关文件85项通过，ESLint、vue-tsc、生产构建及后端checks通过；数据库迁移一致性检查无待生成变更。手机真实验证发现长人员名称下拉撑宽页面，改为匹配输入框宽度、长名称换行，并增加完成选择按钮，390px视口无横向溢出；修正浏览器测试在选择器尚未显示时清除旧人员的时序问题，实际保存验证完整替换人员集合。
-- 桌面1440px/手机390px共8项真实页面用例全部通过：按姓名选择及重名导入、生产经理派工和团队工时/安装售后范围、六阶段模板及共同执行人登记工时/完成任务、任务重新分配/取消/重开。日志：/private/tmp/erp-task-e2e-accepted.log；前端日志erp-task-frontend-accepted.log、erp-task-lint-accepted.log、erp-task-typecheck-accepted.log、erp-task-build-accepted.log；静态检查erp-task-checks-accepted.log。已实际查看双端截图，保存于 /Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-collaboration/。
+- 桌面1440px/手机390px共8项真实页面用例全部通过：按姓名选择及重名导入、生产经理派工和团队工时/安装售后范围、六阶段模板及共同执行人登记工时/完成任务、任务重新分配/取消/重开。日志：/private/tmp/erp-task-e2e-accepted.log；前端日志erp-task-frontend-accepted.log、erp-task-lint-accepted.log、erp-task-typecheck-accepted.log、erp-task-build-accepted.log；静态检查erp-task-checks-accepted.log。已实际查看双端截图，保存于 ~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-collaboration/。
 - 本次为任务与直接关联模块验证，不是完整业务链或发版验证；未操作生产、未提交GitHub或发布。保留当前分支之前的BOM删除反馈和全表序号/横向查看改动。隔离服务测试后停止，测试数据保留。
 
 ## 2026-11-09 任务计划日期与实际完成日期
@@ -827,7 +827,7 @@
 - 安装实际完成不得早于发货或晚于已登记验收，验收不得早于已知安装完成；售后不得早于售后发生，验收之后正常维修不受安装上限误拦。发货、现场安装接线、现场验收三个汇总日期由真实业务日期派生，修改安装日期同步汇总。0024只增加实际日期并从真实交付/验收记录补齐相关历史节点，未知手动日期保持空白。
 - 该阶段先交付日期记录功能，未更改原工时流水；用户随后已选定按实际开始日计算历时、仅用于进度，后续实现与验证见下节。
 - 后端相关模块102项通过（任务、里程碑、生产权限、流程进度、导入导出），追加历史迁移与导出日期断言后5项日期专项通过，共103个不同用例。前端4文件38项通过；后端checks、Ruff、前端lint/typecheck/build通过。隔离预览库正向迁移0024成功，未访问生产。
-- 真实浏览器桌面1440px、手机390px共2项通过，验证计划日期调整、实际完成、更正日期、列表与API保存结果、无自动工时流水及原里程碑协作操作。已实际查看两端截图，保存于 /Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-completion-dates/。本轮不是发版验证，未提交GitHub或发布。
+- 真实浏览器桌面1440px、手机390px共2项通过，验证计划日期调整、实际完成、更正日期、列表与API保存结果、无自动工时流水及原里程碑协作操作。已实际查看两端截图，保存于 ~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-completion-dates/。本轮不是发版验证，未提交GitHub或发布。
 
 ## 2026-11-09 开始任务与自然日历时
 
@@ -836,7 +836,7 @@
 - 任务历时按自然日含首尾，完成当天减实际开始日加1，同日为1天；进行中算到今天，已完成缺真实日期不计算，取消后不继续计算。按计划完成日显示提前、按期或延期，进行中仅显示已逾期/未逾期，不显示虚构提前。重开保留原开始日期，清空完成日期，历时包含返工。派生数字实时从原日期计算，无重复统计表，无按人数倍增。
 - 开始动作纳入已开工事实保护：发货后已开始的生产任务不能取消绕过发货检查；已开始任务须先结束后归档，不能当作未使用任务直接删除。原TimeEntry、小时成本及实际成本不受日期登记影响。任务列表、详情、导出显示开始日期、任务历时和提前/延期；当前任务主按钮由“开始任务”切换为“完成任务”。
 - 后端相关模块101项通过；补充48项专项及关联验证通过（包含重叠用例），覆盖开始/完成/更正、自然日及延期计算、权限、错误回滚、凭据重放、两执行人并发仅开始一次、进度查询与查询数量、已开工删除保护、原工时成本保留。前端6文件67项通过；lint/typecheck/build、后端checks与迁移一致性通过。
-- 桌面1440px和手机390px里程碑操作通过，验证开始、完成、完成日更正及开始日更正后历时重新计算，并核对没有新增工时。生产经理双端回归发现测试仍定位旧“截止日期”，更新为“计划完成日期”后2项复验通过；共4个相关页面场景通过。已实际查看双端历时截图，保存于 /Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-elapsed-days/。
+- 桌面1440px和手机390px里程碑操作通过，验证开始、完成、完成日更正及开始日更正后历时重新计算，并核对没有新增工时。生产经理双端回归发现测试仍定位旧“截止日期”，更新为“计划完成日期”后2项复验通过；共4个相关页面场景通过。已实际查看双端历时截图，保存于 ~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-elapsed-days/。
 - 本次为任务及直接关联模块验证，未运行发版验证，未提交GitHub或发布；隔离预览进程验证后停止，测试数据保留。
 
 ### 2026-11-09：任务工时保存回执与明细核对
@@ -856,7 +856,7 @@
 - 新增固定用途TaskNotice，不增加独立工作流：任务分配/调整、重开/取消、负责主管变更在原事务中写入站内提醒，失败整批回滚，重复提交不重复通知。工作台显示“我负责确认的任务”和未读/全部提醒，可直接进入任务处理；按当前项目可见范围隔离，员工不能读取别人的提醒。未使用任务删除不受提醒引用阻止。已结项任务仍可查历史，不占用主管待办/代录入口。
 - 后端按任务、里程碑、生产/工程角色、导入、工作台及直接关联工时/并发测试分批回归；旧执行人写入用例改为明确指定主管或经理代录，原权限拒绝和金额/日期校验保留，发现的问题复验通过。最终主管专项7项通过，含角色范围、实际人员成本、重放撤权、每日工时上限、更正、通知隔离/回滚和历史项目筛选；直接关联补充11项通过。日志：`/private/tmp/supervisor-backend-final.log`、`/private/tmp/supervisor-related2.log`；通知存储故障回滚用例的模拟500日志为预期行为。
 - 前端12文件106项通过，最终主管选择/配置快照2项再次通过；ESLint、vue-tsc、构建、后端checks/迁移一致性通过。新增服务、接口、组件及测试登记项目/工作台影响映射；CI路由44项通过，最后新增路径及测试目标断言专项再次通过。日志：`/private/tmp/supervisor-front-final.log`、`supervisor-final-selector.log`、`supervisor-{lint,types,build}-final2.log`、`supervisor-checks2.log`、`supervisor-ci-mapping.log`。构建仅保留既有ActionDialog混合导入提示。
-- 隔离PostgreSQL数据库`erp_release1823_menu_1109`正向迁移0026成功；显式测试账号与独立预览地址下，桌面/手机8个相关场景通过：六阶段及日期、工时保存/更正核对、主管设置→未读提醒→完成任务→按人员登记→员工只读，以及生产经理范围回归。日志：`/private/tmp/supervisor-e2e3.log`、`supervisor-production-e2e.log`。实际查看电脑/手机主管设置、手机提醒与工时弹窗，截图位于`/Users/zhengshan/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-supervisors/`。
+- 隔离PostgreSQL数据库`erp_release1823_menu_1109`正向迁移0026成功；显式测试账号与独立预览地址下，桌面/手机8个相关场景通过：六阶段及日期、工时保存/更正核对、主管设置→未读提醒→完成任务→按人员登记→员工只读，以及生产经理范围回归。日志：`/private/tmp/supervisor-e2e3.log`、`supervisor-production-e2e.log`。实际查看电脑/手机主管设置、手机提醒与工时弹窗，截图位于`~/.codex/visualizations/2026/10/05/01a109e4-a98d-7bb1-8732-8ade8426bffb/task-supervisors/`。
 - 保留同分支前序实际日期、历时、工时回执和核对改动。本次仅相关模块验证，未运行全业务链或正式发版验证；未访问生产、未发送外部消息、未提交GitHub或发布。
 
 ## 2026-11-11 待审批采购可直接作废

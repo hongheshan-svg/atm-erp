@@ -2,14 +2,14 @@
 
 ## 本轮：BOM 选料与采购草稿同屏（2026-09-12）
 
-按用户最新决定取消折叠，移除折叠按钮、状态和布局分支，恢复采购草稿持续显示；桌面左右排列，移动端上下排列。布局、键盘纠错及单次保存双端2项复验通过，记录 `/private/tmp/erp-bom-always-visible-e2e`；已查看[桌面采购](/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/桌面采购.png)，六行BOM、三行草稿及保存按钮同屏，无可见遮挡或溢出。正常桌面和移动截图同步更新；早期折叠截图仅为历史记录。
+按用户最新决定取消折叠，移除折叠按钮、状态和布局分支，恢复采购草稿持续显示；桌面左右排列，移动端上下排列。布局、键盘纠错及单次保存双端2项复验通过，记录 `/private/tmp/erp-bom-always-visible-e2e`；已查看桌面采购（本机 `~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/桌面采购.png`），六行BOM、三行草稿及保存按钮同屏，无可见遮挡或溢出。正常桌面和移动截图同步更新；早期折叠截图仅为历史记录。
 
 final result: passed
 
 - 目标：最近一轮第3张图的左右操作布局；用户要求保持现有系统风格，因此沿用深色导航、蓝色主操作、原字体、P标志和组件，不把示意图的浅色导航替换到全系统。
-- 源图：`/Users/zhengshan/.codex/generated_images/01a0832c-3411-7620-83b4-bdd8ceec3d12/exec-5fbd793a-5a78-4918-8fdd-1bd82b093092.png`。
-- 实现：独立安装 `http://127.0.0.1:18508/erp/purchases`，进入“从 BOM 多选下单”。[最终桌面截图](/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/桌面采购.png)。
-- 尺寸：源图1487×1058像素；r4桌面1488×1056，最终r5按源图调整为1487×1058像素与CSS视口，deviceScaleFactor=1，无密度缩放。另验390×844移动视口；[移动选料](/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/移动选料.png)、[移动草稿](/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/移动草稿.png)。
+- 源图：`~/.codex/generated_images/01a0832c-3411-7620-83b4-bdd8ceec3d12/exec-5fbd793a-5a78-4918-8fdd-1bd82b093092.png`。
+- 实现：独立安装 `http://127.0.0.1:18508/erp/purchases`，进入“从 BOM 多选下单”。最终桌面截图（本机 `~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/桌面采购.png`）。
+- 尺寸：源图1487×1058像素；r4桌面1488×1056，最终r5按源图调整为1487×1058像素与CSS视口，deviceScaleFactor=1，无密度缩放。另验390×844移动视口；移动选料（本机 `~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/移动选料.png`）、移动草稿（本机 `~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/BOM-purchase-20260912/移动草稿.png`）。
 - 对比状态：管理员，六行物料，选择伺服电机/导轨/气缸三行，数量4/8/2，价格1500/260/180，总额8440.00，月结30。实际项目/编码由业务接口生成；实际夹具库存为零并用一条停用物料验证禁选，与概念图的共享库存样例不同，不为像素匹配伪造业务数据。
 - 全图证据：在同一次图像输入中以原始尺寸同时打开源图、最终桌面截图和移动草稿截图，检查布局与细节。原图全尺寸可清楚读取各表头、数量、金额、按钮和选中状态，因此未另裁切或重采样图片；重点逐项检查了左表首末行、右侧三行输入/合计/保存区，以及左下角说明。
 
@@ -86,7 +86,7 @@ final result: passed
 - 全新独立安装：桌面和手机各一个独立数据库，五步向导、改密、公司、兼岗用户与编号启用通过，日志 `/private/tmp/erp-ui-first-verified.log`、`/private/tmp/erp-ui-first-mobile-verified.log`。
 - 完整浏览器回归：40 项通过，2 项新安装专项按设计跳过并由上述独立安装覆盖，日志 `/private/tmp/erp-ui-acceptance.log`。
 - 最后审计详情修复后全部页面专项：桌面、手机 2 项通过，含 768px/1024px 中间宽度，日志 `/private/tmp/erp-ui-final-capture.log`。
-- [108 张最终原始截图索引](/Users/zhengshan/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/UI-implemented-20260910/截图索引.md)：覆盖 14 类页面、各子模块、关键表单与五步安装。
+- 108 张最终原始截图索引（本机 `~/.codex/visualizations/2026/09/08/01a0832c-3411-7620-83b4-bdd8ceec3d12/UI-implemented-20260910/截图索引.md`）：覆盖 14 类页面、各子模块、关键表单与五步安装。
 
 ## 最终设计检查
 
