@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from scripts.ci.impact import plan, version_only_paths
@@ -20,6 +21,7 @@ def git(*args):
 
 # Release 工作流经 workflow_call 调用 ci.yml 时，子流程任务名带调用方任务 id 前缀。
 NESTED_PREFIX = 'validate / '
+LOOKUP_WORKERS = 8
 
 
 def reusable_run(runs, repository, tree, jobs_for, fingerprint=None, nested=False):
@@ -31,14 +33,23 @@ def reusable_run(runs, repository, tree, jobs_for, fingerprint=None, nested=Fals
     expected = {f'{prefix}Full validation ({tree})'}
     if fingerprint:
         expected.add(f'{prefix}Release validation ({tree} {fingerprint})')
+    candidates = []
     for run in runs:
         finished = run.get('status') == 'completed' if nested else run.get('conclusion') == 'success'
         if not finished or run.get('event') not in ('pull_request', 'workflow_dispatch', 'push'):
             continue
         if (run.get('head_repository') or {}).get('full_name') != repository:
             continue
-        if any(job.get('name') in expected and job.get('conclusion') == 'success' for job in jobs_for(run['id'])):
-            return run['id']
+        candidates.append(run['id'])
+    # 每次运行的任务列表要单独请求一次。逐个查询时，没有可复用凭据（最常见）要查满 200 次、约 2～3 分钟，
+    # 全部排在发版验证之前；改为并发请求。结果仍按原顺序判断，返回的是同一个最靠前的匹配，查询出错同样直接失败。
+    pool = ThreadPoolExecutor(max_workers=LOOKUP_WORKERS)
+    try:
+        for run_id, jobs in zip(candidates, pool.map(jobs_for, candidates), strict=True):
+            if any(job.get('name') in expected and job.get('conclusion') == 'success' for job in jobs):
+                return run_id
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
     return None
 
 

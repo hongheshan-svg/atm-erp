@@ -27,7 +27,7 @@ uv pip compile --no-config --universal --python-version 3.11 backend/requirement
 
 计划通过后，fast、browser、OTA、installers 独立并行，不再让慢任务等待整套 fast。fast 内后端、前端、运维测试也分开，未涉及的类别不启动依赖和数据库。所选检查失败、取消或意外跳过均使 CI gate 失败；并行不是放宽门禁。
 
-依赖按锁文件缓存，浏览器按锁文件缓存 Chromium，Docker 使用构建层缓存。应用镜像的依赖层（apt、pip、npm ci）只由 main 上的 `ci-cache.yml` 写入共享 scope `app-image`（Dockerfile、运行时依赖、`frontend/package.json` 或前端锁文件变化时触发，另每周重建一次防止过期清理）；浏览器分片、容器内 OTA 任务和 Release 的镜像构建只读复用，不再各自导出缓存——PR 的缓存其他 PR 读不到，tag 触发的 Release 写入的缓存也只对同一 tag 可见，导出一次还要多花半分钟到一分钟。版本号合并到 main 时锁文件随之变化，预热流程会构建同一 tree，Release 的 amd64 镜像因此通常全部命中；`app-image` 只有 amd64 层，arm64 镜像仍完整构建。预热流程不运行测试、不产生验证凭据。缓存只用于加速，不能代替测试通过凭据。发布的原生依赖增加 pip 缓存；多架构镜像和多平台 wheelhouse 保持并行。
+依赖按锁文件缓存，Docker 使用构建层缓存。Chromium 不缓存：缓存键含锁文件哈希，每次版本号递增都会变，PR 与 tag 写入的缓存别的运行又读不到，实测首轮从未命中，却占用约三分之一的仓库缓存额度；直接下载约 8 秒。浏览器分片把前端依赖、Chromium 及其字体包的安装放到后台，与镜像构建、安装同时进行，装完（失败最多重试两次）才开始向导与用例，每片少等约半分钟；重试只针对这一步网络安装和安装器任务的 apt 下载，任何用例都不重试。计划任务的 actionlint 直接下载固定版本的官方预编译包并核对 SHA256，不再依赖缓存或现场编译；升级版本时同步更新 `ci.yml` 中的校验值。应用镜像的依赖层（apt、pip、npm ci）只由 main 上的 `ci-cache.yml` 写入共享 scope `app-image`（Dockerfile、运行时依赖、`frontend/package.json` 或前端锁文件变化时触发，另每周重建一次防止过期清理）；浏览器分片、容器内 OTA 任务和 Release 的镜像构建只读复用，不再各自导出缓存——PR 的缓存其他 PR 读不到，tag 触发的 Release 写入的缓存也只对同一 tag 可见，导出一次还要多花半分钟到一分钟。版本号合并到 main 时锁文件随之变化，预热流程会构建同一 tree，Release 的 amd64 镜像因此通常全部命中；`app-image` 只有 amd64 层，arm64 镜像仍完整构建。预热流程不运行测试、不产生验证凭据。缓存只用于加速，不能代替测试通过凭据。发布的原生依赖增加 pip 缓存；多架构镜像和多平台 wheelhouse 保持并行。
 
 backend 不再默认执行整个 backend 阶段：先静态检查（Ruff 覆盖 backend、全部 scripts 与 run_all_tests.py；只改 scripts/ 时不启动 backend，ops 任务同样运行这次 Ruff 检查），再运行 JSON 目标列表。所选目标分两次执行：并发阶段（`TARGETS['concurrency']`，多线程抢锁、带超时）串行；其余用例以 `--parallel=auto` 按 CPU 数多进程运行，每个进程使用由 `test_atm_erp_lean` 克隆出的 `test_atm_erp_lean_N` 独立库，仍满足迁移与清库保护的前缀要求。本地 4 进程实测全部 829 个后端用例由 184 秒降到 78 秒；CI 4 核预计由约 4 分钟降到约 2 分钟，以实际运行日志为准。多进程依赖 tblib 把失败回溯传回主进程并逐条报告；它作为固定版本写在 `backend/requirements-dev.txt`，缺少 tblib 的环境自动退回串行。只改变执行方式，不增减用例，`run_all_tests.py` 的本地阶段命令不变。前端保留 lint/typecheck/build，仅执行选定单测。浏览器双视口并行、独立数据库；每端先完成首次安装向导以建立隔离账号，再执行指定 spec。用例较多时，计划把所选 spec 按估算耗时分成最多 4 片，每片在各自的 runner 上用一套独立安装运行，全业务范围的单视口耗时由约 15 分钟降到约 7 分钟；用例少时仍是一片。分片只决定怎么分机器，不改变选中哪些用例：每个 spec 恰好属于一片，任何一片失败、取消或被跳过都使 CI gate 失败。耗时权重登记在 `scripts/ci/select_suites.py` 的 `BROWSER_SECONDS`，只需登记明显偏慢的文件；CI 日志逐条列出用例耗时，某一片明显变慢时据此调整。空目标不会回退到全量，目标必须属于测试矩阵或实际 spec 路径，不经过 shell 拼接。
 
@@ -72,7 +72,7 @@ gh workflow run ci.yml --ref main -f suite=release -f browser_projects=both
 gh workflow run release.yml --ref main -f tag=vX.Y.Z -F publish=false
 ```
 
-tag push 默认正式发布，手动默认草稿；发布按 tag 串行且不取消进行中任务。复用最多查询最近100次成功 CI 和最近100次已结束的 Release，未找到就由 Release 以 suite=release 补跑发版验证，查询错误直接失败。首次发布没有历史正式 tag 时需先明确基线，不能自动认定已验证。
+tag push 默认正式发布，手动默认草稿；发布按 tag 串行且不取消进行中任务。复用最多查询最近100次成功 CI 和最近100次已结束的 Release（各次运行的任务列表并发查询，结果仍按时间顺序取最近的匹配，预检由约 2～3 分钟降到半分钟内），未找到就由 Release 以 suite=release 补跑发版验证，查询错误直接失败。首次发布没有历史正式 tag 时需先明确基线，不能自动认定已验证。
 
 ## OTA 与交付物覆盖边界
 

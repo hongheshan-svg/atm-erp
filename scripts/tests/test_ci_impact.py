@@ -376,6 +376,44 @@ class WorkflowCostTests(unittest.TestCase):
                 self.assertIn('backend/constraints.txt', key, workflow.name)
 
 
+    def test_plan_installs_a_pinned_prebuilt_actionlint(self):
+        # 预编译包须固定版本并核对 SHA256；不再依赖其他 PR 与 Release 读不到的缓存和 Go 现编译。
+        plan_job = (WORKFLOWS / 'ci.yml').read_text().split('\n  plan:\n', 1)[1].split('\n  fast:\n', 1)[0]
+        version = re.search(r'ACTIONLINT_VERSION: (\d+\.\d+\.\d+)\n', plan_job)[1]
+        self.assertGreaterEqual(tuple(map(int, version.split('.'))), (1, 7, 12))
+        self.assertRegex(plan_job, r'ACTIONLINT_SHA256: [0-9a-f]{64}\n')
+        self.assertIn('sha256sum --check --strict', plan_job)
+        self.assertLess(plan_job.index('sha256sum --check'), plan_job.index('tar -xzf'))
+        self.assertIn('- run: \'"$RUNNER_TEMP/actionlint-bin/actionlint"\'', plan_job)
+        self.assertNotIn('go install', plan_job)
+
+    def test_browser_dependencies_install_in_background_and_must_succeed_before_specs(self):
+        browser = (WORKFLOWS / 'ci-browser.yml').read_text()
+        order = [
+            browser.index('- name: Start frontend dependencies and Chromium in the background'),
+            browser.index('- uses: docker/build-push-action@v6'),
+            browser.index('- run: bash install.sh --skip-build --no-ota'),
+            browser.index('- name: Wait for frontend dependencies and Chromium'),
+            browser.index('- name: First-install wizard'),
+            browser.index('run_selected browser'),
+        ]
+        self.assertEqual(order, sorted(order))
+        start = browser[order[0] : order[1]]
+        self.assertIn('npm ci --no-audit --no-fund && npx playwright install --with-deps chromium', start)
+        self.assertIn('echo "$status" > "$RUNNER_TEMP/browser-deps.status"', start)
+        wait = browser[order[3] : order[4]]
+        # 安装失败（含三次重试后）必须让本片失败，等待本身有上限。
+        self.assertIn('test "$(cat "$RUNNER_TEMP/browser-deps.status")" = 0', wait)
+        self.assertIn('timeout-minutes:', wait)
+        # 重试只包住依赖安装；用例步骤和 Playwright 配置都不重试。
+        tests = browser[order[4] :]
+        for word in ('for attempt', 'sleep', 'retry', 'continue-on-error'):
+            self.assertNotIn(word, tests)
+        self.assertIn('retries: 0', (ROOT / 'frontend/playwright.config.ts').read_text())
+        # 首轮从未命中的 Chromium 缓存不再保存。
+        self.assertNotIn('ms-playwright', browser)
+
+
 class NestedReleaseEvidenceTests(unittest.TestCase):
     """OPS-10：重新派发 Release 时复用此前 Release 内已通过的同 tree 同计划发版验证。"""
 
@@ -426,6 +464,34 @@ class NestedReleaseEvidenceTests(unittest.TestCase):
         self.assertEqual(
             reusable_run([dict(failed, conclusion='success')], 'owner/erp', 'abc', lambda _: jobs, 'coverage1'), 7
         )
+
+    def test_concurrent_lookup_keeps_list_order_and_surfaces_query_errors(self):
+        # 并发只改变查询方式：仍返回列表中最靠前的匹配；排在它前面的查询出错时直接失败，不跳过。
+        runs = [dict(self.run, id=number) for number in range(1, 41)]
+        ok = [{'name': self.marker, 'conclusion': 'success'}]
+        seen = []
+
+        def jobs_for(run_id):
+            seen.append(run_id)
+            return ok if run_id in (17, 23, 40) else []
+
+        self.assertEqual(reusable_run(runs, 'owner/erp', 'abc', jobs_for, 'coverage1', nested=True), 17)
+        seen.clear()
+        self.assertIsNone(reusable_run(runs, 'owner/erp', 'different', jobs_for, 'coverage1', nested=True))
+        self.assertEqual(sorted(seen), list(range(1, 41)))
+        # 不合格的运行（进行中、其他仓库）不发请求。
+        seen.clear()
+        skipped = [dict(self.run, id=1, status='in_progress'), dict(self.run, id=2, head_repository=None)]
+        self.assertIsNone(reusable_run(skipped, 'owner/erp', 'abc', jobs_for, 'coverage1', nested=True))
+        self.assertEqual(seen, [])
+
+        def failing(run_id):
+            if run_id == 5:
+                raise subprocess.CalledProcessError(1, 'gh')
+            return jobs_for(run_id)
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            reusable_run(runs, 'owner/erp', 'abc', failing, 'coverage1', nested=True)
 
     def preflight_with(self, ci_runs, release_runs, jobs, force=False):
         def git_result(*args):
