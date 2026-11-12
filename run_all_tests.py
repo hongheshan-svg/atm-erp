@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent
 def commands(stage):
     if stage == 'checks':
         # 测试登记一致性由 main() 在执行任何阶段前调用 validate_coverage() 校验。
+        # Lint 覆盖全部 scripts（含 OTA、安装器与运维单测）；格式检查仍只针对已统一格式的文件。
         return [
             (
                 ROOT,
@@ -25,8 +26,7 @@ def commands(stage):
                     '--config',
                     'backend/pyproject.toml',
                     'backend',
-                    'scripts/ci',
-                    'scripts/backup.py',
+                    'scripts',
                     'run_all_tests.py',
                 ],
             ),

@@ -2,12 +2,12 @@
 import argparse
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
 def main():

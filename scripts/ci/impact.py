@@ -160,7 +160,7 @@ BROWSERS = {
         'login',
         'setup',
         'account-masterdata-audit',
-        'eight-role-audit',
+        'role-page-audit',
         'multi-role',
         'specialist-roles',
         'coding-rules',
@@ -179,7 +179,7 @@ SHARED_UI_BROWSERS = (
     'module-tabs',
     'pagination-layout',
     'ui-concepts',
-    'eight-role-audit',
+    'role-page-audit',
     'usability-forms',
     'role-pages-usability',
     'remote-select',
@@ -337,6 +337,7 @@ CHECK_ONLY = (
     'frontend/vitest.config.ts',
 )
 # 本地 Git 钩子与仓库元数据：不进入镜像、安装包或 CI 运行路径，只运行运维脚本测试（含本计划自检）。
+# .pre-commit-config.yaml 已删除，保留登记使包含删除的 PR 与发版差异仍可归类。
 OPS_ONLY = ('.githooks/', '.pre-commit-config.yaml', '.gitattributes', '.codex')
 # 真实升级演练（ci-ota）直接执行或导入这些文件：ota_smoke 运行 install.sh（其中调用 network_check.py），
 # 宿主机升级先调用 backup.py 备份，直接 Compose 启动演练读取 .env.example；.dockerignore 决定镜像内容，
@@ -375,6 +376,9 @@ NOT_INSTALLER_PATHS = (
     'scripts/tests/ota_native_smoke.py',
     'scripts/tests/direct_compose_smoke.py',
 )
+# CI 运行器：run_selected 生成后端、前端单测与浏览器命令，select_suites 生成计划输出与浏览器分片矩阵。
+# 与 ci-fast.yml、ci-browser.yml 同样处理，本次改动就实际执行一遍各类命令，而不是只跑运维单测。
+RUNNER_PATHS = ('scripts/ci/run_selected.py', 'scripts/ci/select_suites.py')
 # docs 下不可执行的图片和 Office/PDF 文档只作说明，与 Markdown 一样不选择测试；其他类型仍须登记。
 DOC_SUFFIXES = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.docx', '.pptx', '.xlsx')
 
@@ -447,6 +451,10 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
                 installers = True
             if stem in ('build_native_wheels', 'verify_native_wheels', 'assemble_images', 'publish_release'):
                 installers = True
+            if path in RUNNER_PATHS:
+                selected.add('accounts')
+                checks_backend = checks_frontend = True
+                backend.add('apps.core.tests.test_platform')
             if path in OTA_PATHS or any(
                 word in path for word in ('ota', 'container_runtime', 'docker/', 'docker-compose', 'release_install')
             ):
@@ -487,6 +495,10 @@ def plan(paths, modules=(), full=False, version_only=(), release=False):
             companion = Path(path).with_suffix('.spec.ts')
             if path.endswith(('.ts', '.vue')) and (ROOT / companion).is_file():
                 frontend.add(str(companion).removeprefix('frontend/'))
+            if path.endswith('.spec.ts') and not (ROOT / path).exists():
+                # 已删除（或改名前）的用例文件无法再运行；替代用例与被测代码按各自路径照常选择。
+                reasons.append('已删除用例，不再运行：' + path)
+                continue
             if path.endswith('.spec.ts') and (ROOT / path).is_file():
                 if not full and path in {f'frontend/e2e/{name}.spec.ts' for name in FULL_ONLY_BROWSERS}:
                     reasons.append('完整业务链用例已适配，但仅在显式 suite=full 时执行：' + path)

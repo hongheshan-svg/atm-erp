@@ -56,6 +56,35 @@ jobs:
           # bash -n 只检查第一个文件，后面的会被当作它的参数，必须逐个检查。
           for script in install.sh install-native.sh scripts/*.sh scripts/tests/*.sh; do bash -n "$script"; done
           PYTHON=python bash install-native.sh configure --config "$RUNNER_TEMP/native-config.json"
+  # 发布包另含 Linux aarch64 与 macOS Intel 的 wheelhouse；verify_native_wheels 只能检查运行器自身的架构，
+  # 因此在对应架构的运行器上同样离线安装、pip check 并导入。
+  wheel-architectures:
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: linux, arch: aarch64, runner: ubuntu-24.04-arm}
+          - {platform: macos, arch: x86_64, runner: macos-15-intel}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: '${{ inputs.ref || github.ref }}'}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      # 运行器若不是目标架构，这一任务只会重复检查已覆盖的 wheelhouse，直接失败。
+      - run: test "$(python -c 'import platform; print(platform.machine().lower())')" = "$ARCH"
+        shell: bash
+        env: {ARCH: '${{ matrix.arch }}'}
+      - run: python scripts/ci/build_native_wheels.py --platform "$PLATFORM" --output wheels
+        shell: bash
+        env: {PLATFORM: '${{ matrix.platform }}'}
+      - run: python scripts/ci/verify_native_wheels.py --wheels "wheels/$PLATFORM"
+        shell: bash
+        env: {PLATFORM: '${{ matrix.platform }}'}
   native-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 15

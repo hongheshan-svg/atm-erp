@@ -4,7 +4,7 @@
 
 ## Docker
 
-根目录 `docker-compose.yml` 是唯一编排入口。全新正式包复制 `.env.example` 为 `.env`，填好密钥后直接 `docker compose up -d`；无需宿主机 Python。包内默认镜像由 CI 写入真实固定摘要，不使用 latest，不现场构建；源码开发仍需先构建本地镜像。旧 `.env.lean` 用 --env-file 显式沿用，项目名与数据卷保持不变。三个容器日志最多3份、每份10MB，应用 init 处理信号和子进程。数据库和 Redis 不暴露端口，默认回环访问，公网另配反向代理和允许的域名。
+根目录 `docker-compose.yml` 是唯一编排入口，安装与升级步骤见 [README](../README.md#docker-安装)。包内默认镜像由 CI 写入真实固定摘要，不使用 latest，不现场构建；源码开发仍需先构建本地镜像。三个容器日志最多3份、每份10MB，应用 init 处理信号和子进程。数据库和 Redis 不暴露端口，默认回环访问，公网另配反向代理和允许的域名。
 
 ## 原生配置
 

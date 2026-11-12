@@ -69,6 +69,9 @@ jobs:
         with: {ref: '${{ inputs.ref || github.ref }}'}
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
+      # 只改 scripts/ 时不启动 backend 任务，运维脚本的 Ruff 检查在这里同样执行；版本取开发依赖中的固定值。
+      - run: python -m pip install "$(grep -E '^ruff==' backend/requirements-dev.txt)"
+      - run: python -m ruff check --config backend/pyproject.toml scripts run_all_tests.py
       - run: python -m unittest discover -s scripts/tests -p 'test_*.py'
   frontend:
     if: inputs.frontend

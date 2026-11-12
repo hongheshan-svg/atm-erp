@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# 推送前只做静态检查：后端 checks 阶段（隔离 PostgreSQL 容器，需 Docker）与前端 lint/typecheck。
+# 按影响范围的测试由 PR CI 运行；全量 precheck-tests.sh --all 仅在明确要求时手动执行。
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
-bash "$ROOT/scripts/precheck-tests.sh" --all
-(cd "$ROOT/frontend" && npm run lint && npm run typecheck && npm run test && npm run build)
+bash "$ROOT/scripts/precheck-tests.sh" checks
+(cd "$ROOT/frontend" && npm run lint && npm run typecheck)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package immutable tag sources plus explicitly identified installer additions."""
+"""Package the immutable tag source together with CI-built images and offline wheelhouses."""
 import argparse
 import hashlib
 import json
@@ -12,7 +12,6 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OVERLAY = ("scripts/native_install.py", "scripts/native_service.py", "install-native.sh", "install-native.ps1", "docs/INSTALL_PLATFORMS.md")
 
 
 def git(*args):
@@ -34,9 +33,6 @@ def build(tag, output, artifacts):
     if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
         raise ValueError("只能打包正式语义版本号的 tag")
     commit = git("rev-parse", f"{tag}^{{}}")
-    installer_commit = git("rev-parse", "HEAD")
-    if git("status", "--porcelain", "--", *OVERLAY, "scripts/package_release.py"):
-        raise ValueError("打包前请先提交安装器源码，保证发布来源可追溯")
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lean-release-") as temporary:
         temporary = Path(temporary)
@@ -53,10 +49,6 @@ def build(tag, output, artifacts):
         for command in ([npm, "ci"], [npm, "run", "build"]):
             subprocess.run(command, cwd=source / "frontend", check=True)
         shutil.rmtree(source / "frontend/node_modules")
-        for relative in OVERLAY:
-            destination = source / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / relative, destination)
         compose_template = (source / 'docker-compose.yml').read_text()
         for mode in ("native", "docker"):
             for platform in ("macos", "linux", "windows"):
@@ -64,11 +56,10 @@ def build(tag, output, artifacts):
                     shutil.rmtree(source / folder, ignore_errors=True)
                 name = f"atm-erp-{tag}-{platform}-{mode}"
                 manifest = {
-                    "version": tag, "source_commit": commit, "installer_commit": installer_commit,
+                    "version": tag, "source_commit": commit,
                     "platform": platform, "mode": mode,
                     "architecture": "amd64/arm64 Docker; native wheelhouse architectures listed below",
-                    "offline": False, "overlay_files": list(OVERLAY),
-                    "note": "Original tag business code; supplementary installers, no tag rewrite.",
+                    "offline": False,
                 }
                 if mode == 'docker':
                     images = json.loads((artifacts / 'images/manifest.json').read_text())
@@ -89,7 +80,7 @@ def build(tag, output, artifacts):
                     f"Lean ERP {tag} / {platform} / {mode}\n\n"
                     f"先阅读 README.md 的安装说明，安装前置依赖。\n入口：{command}\n"
                     "包含 CI 预构建镜像或原生依赖，无需本地编译。仍需对应宿主机运行环境。\n"
-                    "业务源码保持原 tag；安装器补充版本见 INSTALL-MANIFEST.json。\n",
+                    "程序与安装脚本均来自该 tag 的提交，来源见 INSTALL-MANIFEST.json。\n",
                     encoding="utf-8")
                 with zipfile.ZipFile(output / (name + ".zip"), "w", zipfile.ZIP_DEFLATED) as bundle:
                     for path in sorted(source.rglob("*")):
@@ -102,7 +93,7 @@ def build(tag, output, artifacts):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='打包指定 tag 的源码与显式声明的安装器附加文件')
+    parser = argparse.ArgumentParser(description='打包指定 tag 的源码、CI 预构建镜像与离线依赖')
     parser.add_argument("tag")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument('--artifacts', type=Path, required=True)

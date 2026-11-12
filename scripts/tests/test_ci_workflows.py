@@ -543,7 +543,6 @@ class ReleaseEvidenceTests(unittest.TestCase):
                                 {
                                     'version': 'v2.0.0',
                                     'source_commit': 'commit',
-                                    'installer_commit': 'commit',
                                     'mode': mode,
                                     'docker_image': 'ghcr.io/hongheshan-svg/atm-erp@sha256:' + 'a' * 64,
                                     'docker_archives': {
@@ -572,6 +571,62 @@ class ReleaseEvidenceTests(unittest.TestCase):
             path.write_bytes(b'tampered')
             with self.assertRaises(ValueError):
                 verify(folder, 'v2.0.0', 'commit')
+
+    def test_packages_built_from_a_tag_pass_publish_verification(self):
+        # OPS-30：打包只用 tag 自身的源码（无安装器覆盖），产物须原样通过发布校验；此前只有打 tag 后才会执行。
+        from scripts import package_release
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary = Path(temporary)
+            repo, artifacts, output = temporary / 'repo', temporary / 'artifacts', temporary / 'dist'
+            for relative in ('docker-compose.yml', 'docker/app/runtime-protocol.json'):
+                (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+                (repo / relative).write_bytes((ROOT / relative).read_bytes())
+            (repo / 'frontend').mkdir()
+            (repo / 'frontend/package.json').write_text('{}')
+            identity = ['-c', 'user.name=ci', '-c', 'user.email=ci@example.invalid', '-c', 'commit.gpgsign=false']
+            for args in (['init', '-q'], ['add', '.'], [*identity, 'commit', '-qm', 'release'], ['tag', 'v2.0.0']):
+                subprocess.run(['git', *args], cwd=repo, check=True)
+            commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
+            records = {}
+            (artifacts / 'images').mkdir(parents=True)
+            for arch in ('amd64', 'arm64'):
+                (artifacts / 'images' / f'{arch}.tar.gz').write_bytes(arch.encode())
+                records[arch] = {'sha256': hashlib.sha256(arch.encode()).hexdigest()}
+            (artifacts / 'images/manifest.json').write_text(
+                json.dumps(
+                    {'docker_image': 'ghcr.io/hongheshan-svg/atm-erp@sha256:' + 'a' * 64, 'docker_archives': records}
+                )
+            )
+            for platform, arch in (('linux', 'x86_64'), ('macos', 'arm64'), ('windows', 'amd64')):
+                wheels = artifacts / 'wheels' / platform / arch
+                wheels.mkdir(parents=True)
+                (wheels / 'requirements.lock').write_text('django==5.2\n')
+                digest = hashlib.sha256((wheels / 'requirements.lock').read_bytes()).hexdigest()
+                (wheels / 'SHA256.json').write_text(json.dumps({'requirements.lock': digest}))
+            real_run = subprocess.run
+
+            def run(command, **kwargs):
+                if command[0] != 'npm':
+                    return real_run(command, **kwargs)
+                (Path(kwargs['cwd']) / 'node_modules').mkdir(exist_ok=True)
+                return subprocess.CompletedProcess(command, 0)
+
+            with (
+                patch.object(package_release, 'ROOT', repo),
+                patch.object(package_release.shutil, 'which', return_value='npm'),
+                patch.object(package_release.subprocess, 'run', side_effect=run),
+            ):
+                package_release.build('v2.0.0', output, artifacts)
+            self.assertEqual(len(verify(output, 'v2.0.0', commit)), 7)
+            with zipfile.ZipFile(output / 'atm-erp-v2.0.0-linux-docker.zip') as archive:
+                manifest = json.loads(archive.read('atm-erp-v2.0.0-linux-docker/INSTALL-MANIFEST.json'))
+                compose = archive.read('atm-erp-v2.0.0-linux-docker/docker-compose.yml').decode()
+            self.assertEqual(manifest['source_commit'], commit)
+            self.assertNotIn('installer_commit', manifest)
+            self.assertNotIn('build:', compose)
+            with self.assertRaises(ValueError):
+                verify(output, 'v2.0.0', 'other-commit')
 
     def test_publish_marks_latest_only_for_the_highest_stable_tag(self):
         # 按数值比较版本；预发布与其他 tag 不参与。

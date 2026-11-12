@@ -12,13 +12,14 @@ from scripts.ci.impact import (
     MODULE_FILES,
     NOT_INSTALLER_PATHS,
     ROOT,
+    RUNNER_PATHS,
     contains,
     plan,
     words,
 )
-from scripts.ci.release_gate import preflight, reusable_run
+from scripts.ci.release_gate import preflight, release_scope, reusable_run
 from scripts.ci.run_selected import backend_commands, command
-from scripts.ci.select_suites import select
+from scripts.ci.select_suites import default_base, select
 
 WORKFLOWS = ROOT / '.github/workflows'
 TRACKED = subprocess.check_output(['git', 'ls-files'], cwd=ROOT, text=True).splitlines()
@@ -31,7 +32,7 @@ MODULE = re.compile(
     r'|import_module\(\s*[\'"](\w+)',
     re.M,
 )
-# 经审阅的纯数据引用：package_release 把原生安装脚本列为打包时复制的文件；升级演练只导入其中的 docker_compose，
+# 经审阅的纯数据引用：package_release 只在安装说明中写出原生安装入口；升级演练只导入其中的 docker_compose，
 # 不执行这些安装脚本。其余引用一律视为执行或导入（只会多算，不会少算）。
 DATA_ONLY = {
     ('scripts/package_release.py', 'install-native.sh'),
@@ -325,6 +326,16 @@ class WorkflowCostTests(unittest.TestCase):
         for check in ("'check'", 'import django, daphne, psycopg2, redis'):
             self.assertIn(check, verify)
 
+    def test_every_native_wheel_architecture_is_installed_on_its_own_runner(self):
+        # OPS-4：verify_native_wheels 只检查运行器自身架构；每个打包的 wheelhouse 都要有对应架构的运行器。
+        from scripts.ci.build_native_wheels import TARGETS as WHEELS
+
+        workflow = (WORKFLOWS / 'release-installers.yml').read_text()
+        self.assertIn('os: [ubuntu-latest, macos-latest, windows-latest]', workflow)
+        covered = {('linux', 'x86_64'), ('macos', 'arm64'), ('windows', 'amd64')}
+        covered |= set(re.findall(r'\{platform: (\w+), arch: (\w+), runner: [\w.-]+\}', workflow))
+        self.assertEqual(covered, {(name, arch) for name, arches in WHEELS.items() for arch in arches})
+
     def test_release_images_read_the_warm_main_cache_and_do_not_export(self):
         release = (WORKFLOWS / 'release.yml').read_text()
         images = release.split('\n  images:\n', 1)[1].split('\n  native-wheels:\n', 1)[0]
@@ -440,6 +451,70 @@ class NestedReleaseEvidenceTests(unittest.TestCase):
         result, calls = self.preflight_with([], [self.run], jobs, force=True)
         self.assertEqual(result['validate'], 'true')
         self.assertFalse(any('/runs' in call for call in calls))
+
+
+class RunnerLintAndBaselineTests(unittest.TestCase):
+    """OPS-18/OPS-28/OPS-31：运行器改动实际执行各类命令；Lint 覆盖全部 scripts；手动发版验证与 Release 同一基线。"""
+
+    def test_runner_changes_exercise_backend_frontend_and_browser_commands(self):
+        for path in RUNNER_PATHS:
+            scope = plan([path])
+            self.assertTrue(scope['backend'] and scope['frontend'] and scope['ops'], path)
+            self.assertIn('apps.core.tests.test_platform', scope['backend_targets'], path)
+            self.assertTrue(scope['frontend_tests'] and scope['browser_specs'], path)
+            self.assertFalse(scope['ota'] or scope['installers'], path)
+            self.assertEqual(select([path]), {'fast', 'browser'}, path)
+        # 发布预检与证据核对不生成测试命令，仍只跑运维单测。
+        self.assertEqual(select(['scripts/ci/release_gate.py']), {'fast'})
+
+    def test_deleted_spec_files_are_recorded_but_not_run(self):
+        # 改名或删除的用例文件不能再运行；替代用例按自身路径选择，删除的被测源码仍须显式指定 modules。
+        scope = plan(['frontend/e2e/removed-audit.spec.ts', 'frontend/e2e/login.spec.ts'])
+        self.assertEqual(scope['browser_specs'], ['e2e/login.spec.ts'])
+        self.assertTrue(any('removed-audit.spec.ts' in reason for reason in scope['reasons']))
+        # 删除的单测文件不再运行，前端检查照常执行。
+        self.assertTrue(plan(['frontend/src/components/Removed.spec.ts'])['frontend'])
+        with self.assertRaises(ValueError):
+            plan(['frontend/src/components/Removed.vue'])
+
+    def test_checks_stage_and_ops_job_lint_every_script(self):
+        from run_all_tests import commands
+
+        lint = next(argv for _, argv in commands('checks') if 'ruff' in argv and 'check' in argv)
+        self.assertIn('scripts', lint)
+        # 只改 scripts/ 时不启动 backend 任务，ops 任务同样执行 Ruff。
+        workflow = (WORKFLOWS / 'ci-fast.yml').read_text()
+        ops = workflow.split('\n  ops:\n', 1)[1].split('\n  frontend:\n', 1)[0]
+        self.assertIn('ruff check --config backend/pyproject.toml scripts run_all_tests.py', ops)
+        self.assertIn("grep -E '^ruff==' backend/requirements-dev.txt", ops)
+
+    def test_manual_release_validation_uses_the_release_baseline(self):
+        # 预发布 tag 离 HEAD 更近；git describe 会选中它，Release 则选低于目标版本的最高正式 tag。
+        tags = 'v1.9.0-rc1\nv1.8.36-rc2\nv1.8.35\nv1.8.34'
+
+        def fake_git(*args):
+            if args[0] == 'show':
+                self.assertEqual(args[1], 'HEAD:backend/apps/core/version.py')
+                return "VERSION = '1.8.36'"
+            if args[0] == 'diff':
+                return ''
+            self.assertEqual(args[:2], ('tag', '--merged'))
+            return tags
+
+        with (
+            patch('scripts.ci.release_gate.git', side_effect=fake_git),
+            patch('scripts.ci.select_suites.subprocess.check_output') as describe,
+        ):
+            manual = default_base('release', 'HEAD')
+            describe.assert_not_called()
+            released, _ = release_scope('HEAD', 'v1.8.36')
+        self.assertEqual((manual, released), ('v1.8.35', 'v1.8.35'))
+        with patch('scripts.ci.release_gate.git', return_value="VERSION = '1.8.36-dev'"):
+            with self.assertRaises(ValueError):
+                default_base('release', 'HEAD')
+        with patch('scripts.ci.select_suites.subprocess.check_output', return_value='v1.8.36-rc2\n') as describe:
+            self.assertEqual(default_base('auto', 'HEAD'), 'v1.8.36-rc2')
+        self.assertIn('HEAD^', describe.call_args.args[0])
 
 
 if __name__ == '__main__':
