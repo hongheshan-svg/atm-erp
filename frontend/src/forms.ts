@@ -1,4 +1,5 @@
 import type { Field, Row } from './types'
+import { fromScaled, QUANTITY_SCALE, toScaled } from './utils/decimal'
 export function applicableFields(fields: Field[], data: Row): Field[] {
   return fields.filter(field => !field.visibleWhen || field.visibleWhen(data))
 }
@@ -52,13 +53,9 @@ export function fieldIssues(fields: Field[], data: Row, prefix = '', path = ''):
     const text = String(value).trim()
     const pattern = new RegExp(`^${signed ? '-?' : ''}\\d+${scale ? `(\\.\\d{1,${scale}})?` : ''}$`)
     if (!pattern.test(text)) { add(`${label}请填写${signed ? '' : '非负'}${scale ? `数字，最多 ${scale} 位小数` : '整数'}，不要带单位、千分位或科学计数法。`); continue }
-    const [whole, fraction = ''] = text.replace(/^-/, '').split('.')
-    const factor = 10n ** BigInt(scale)
-    const number = (BigInt(whole!) * factor + BigInt(fraction.padEnd(scale, '0') || '0')) * (text.startsWith('-') ? -1n : 1n)
-    const bound = (limit: number) => {
-      const [whole = '0', fraction = ''] = String(Math.abs(limit)).split('.')
-      return (BigInt(whole) * factor + BigInt(fraction.padEnd(scale, '0') || '0')) * (limit < 0 ? -1n : 1n)
-    }
+    // 已按格式校验，换算不会失败；上下限是代码里的常量，位数不超过 scale。
+    const number = toScaled(text, scale) ?? 0n
+    const bound = (limit: number) => toScaled(limit, scale, { excess: 'truncate' }) ?? 0n
     if (min != null && number < bound(min)) add(`${label}不能小于 ${min}。`)
     if (max != null && number > bound(max)) add(`${label}不能大于 ${max}。`)
   }
@@ -72,19 +69,16 @@ export function validateFields(fields: Field[], data: Row, prefix = ''): void {
 const businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
 })
-export const today = () => {
-  const parts = Object.fromEntries(businessDateFormatter.formatToParts(new Date()).map(({ type, value }) => [type, value]))
+export const today = (now = new Date()) => {
+  const parts = Object.fromEntries(businessDateFormatter.formatToParts(now).map(({ type, value }) => [type, value]))
   return `${parts.year}-${parts.month}-${parts.day}`
 }
-// 符号单独处理：BigInt 除法向零截断、余数带符号，直接拼接会得到「0.-500」。
+// 数量差额（三位小数，多余位数截断）：第一个值依次减去其余各值，空串按 0。
 export function decimalDifference(...values: string[]): string {
   const scaled = (v: string) => {
-    const text = v.trim(), negative = text.startsWith('-')
-    const [a, b = ''] = text.replace(/^-/, '').split('.')
-    const n = BigInt(a || '0') * 1000n + BigInt((b + '000').slice(0, 3))
-    return negative ? -n : n
+    const n = toScaled(v.trim() || '0', QUANTITY_SCALE, { excess: 'truncate' })
+    if (n == null) throw new Error(`无法识别的数量：${v}`)
+    return n
   }
-  const n = values.slice(1).reduce((n, v) => n - scaled(v), scaled(values[0] || '0'))
-  const abs = n < 0n ? -n : n
-  return `${n < 0n ? '-' : ''}${abs / 1000n}.${String(abs % 1000n).padStart(3, '0')}`
+  return fromScaled(values.slice(1).reduce((n, v) => n - scaled(v), scaled(values[0] || '0')), QUANTITY_SCALE)
 }

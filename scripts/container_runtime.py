@@ -8,7 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-DATA = Path(os.environ.get('ERP_RUNTIME_DIR', '/app/runtime'))
+# 固定为 lean_runtime 卷的挂载点；docker/app/watchdog.py 按同一路径识别维护标记，二者不能分开配置。
+DATA = Path('/app/runtime')
 BASE = Path('/app')
 
 

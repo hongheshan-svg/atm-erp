@@ -445,6 +445,8 @@ h3 {
 /* The fixed column floats above the cells it scrolls over, so give it a visible edge. */
 .el-table .el-table-fixed-column--right,
 .el-table th.el-table-fixed-column--right { box-shadow: -6px 0 8px -6px #243b5a1f; }
+/* 只给读屏的文字：视觉上隐藏，仍留在无障碍树里。 */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--brand);

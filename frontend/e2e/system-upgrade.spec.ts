@@ -1,4 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect, expectRequestFailures, test, type Page } from './fixtures'
+
+// 手机端侧栏在路由变化时自动收起；页面刚打开时首个点击可能被随后的路由更新收回，未展开就再点一次。
+async function openMenu(page: Page) {
+  const toggle = page.getByRole('button', { name: '菜单', exact: true })
+  await expect(async () => {
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click()
+    await expect(page.locator('.system-upgrade-entry')).toBeVisible({ timeout: 1000 })
+  }).toPass()
+}
 
 test('容器 OTA 下载、等待重启、确认和重连展示一致', async ({ page }, info) => {
   let status = ''
@@ -30,7 +39,7 @@ test('容器 OTA 下载、等待重启、确认和重连展示一致', async ({ 
       } : { results: [], count: 0 } })
   })
   await page.goto('/erp/settings?section=account')
-  if (info.project.name === 'mobile') await page.getByRole('button', { name: '菜单', exact: true }).click()
+  if (info.project.name === 'mobile') await openMenu(page)
   await page.locator('.system-upgrade-entry').click()
   const dialog = page.getByRole('dialog', { name: 'ERP 版本与升级' })
   await expect(dialog).toContainText('容器内升级已就绪')
@@ -49,6 +58,8 @@ test('容器 OTA 下载、等待重启、确认和重连展示一致', async ({ 
   await expect(restart).toBeEnabled()
   await restart.click()
   await expect(dialog).toContainText('重启生效中')
+  // 模拟重启期间断开：轮询请求失败的次数取决于重连节奏，只在断开期间容忍这一路径的加载失败。
+  const stopExpecting = expectRequestFailures(page, '/api/core/upgrade/')
   disconnected = true
   await expect(dialog).toContainText('正在重新连接', { timeout: 10000 })
   await expect(dialog.getByRole('region', { name: '升级成功' })).toHaveCount(0)
@@ -58,7 +69,8 @@ test('容器 OTA 下载、等待重启、确认和重连展示一致', async ({ 
   await expect(dialog).toContainText('秒后自动刷新页面')
   await page.screenshot({ path: info.outputPath('container-ota-success.png'), animations: 'disabled' })
   await page.waitForEvent('load', { timeout: 15000 })
-  if (info.project.name === 'mobile') await page.getByRole('button', { name: '菜单', exact: true }).click()
+  stopExpecting()
+  if (info.project.name === 'mobile') await openMenu(page)
   await expect(page.locator('.system-upgrade-entry')).toContainText('v1.8.9')
 })
 
@@ -79,7 +91,7 @@ test('升级界面：版本说明、失败重试、历史记录与移动端布�
     await route.fulfill({ json: data })
   })
   await page.goto('/erp/settings?section=account')
-  if (info.project.name === 'mobile') await page.getByRole('button', { name: '菜单', exact: true }).click()
+  if (info.project.name === 'mobile') await openMenu(page)
   await page.locator('.system-upgrade-entry').click()
   const dialog = page.getByRole('dialog', { name: 'ERP 版本与升级' })
   await expect(dialog.getByText('有新版本可升级', { exact: true })).toBeVisible()

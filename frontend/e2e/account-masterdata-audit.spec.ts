@@ -1,6 +1,5 @@
-import { cancelEditing } from './fixtures'
 import { searchRemote } from './remote-select-helpers'
-import { test, expect, login, expectHttpError, openRowAction, type Page, type Locator } from './fixtures'
+import { test, expect, login, loginThroughForm, expectHttpError, openRowAction, submitDialog, searchList, cancelEditing, type Page, type Locator } from './fixtures'
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
@@ -20,30 +19,15 @@ async function api(page: Page) {
     },
   }
 }
-async function save(page: Page, path: string, method: 'POST' | 'PATCH', status: number) {
-  const pending = page.waitForResponse(response => response.request().method() === method && new URL(response.url()).pathname === path)
-  await dialog(page).locator('button[type="submit"]').click()
-  const response = await pending
-  expect(response.status(), await response.text()).toBe(status)
-  await expect(dialog(page)).toBeHidden()
-  return response.json()
-}
 async function edit(page: Page, target: Locator) {
   await openRowAction(page, target, '编辑')
   await expect(dialog(page)).toBeVisible()
 }
+// 经登录表单提交并核对被拒（401）；登录限流时由 loginThroughForm 等待后重新提交。
 async function rejectedLogin(page: Page, username: string, password: string) {
-  await page.goto('/erp/login')
-  await page.getByLabel('用户名', { exact: true }).fill(username)
-  await page.getByLabel('密码', { exact: true }).fill(password)
-  const stopExpected = expectHttpError(page, '/api/auth/login/', 401)
-  const pending = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/login/')
-  await page.getByRole('button', { name: '登录', exact: true }).click()
-  expect((await pending).status()).toBe(401)
-  await expect(page.getByRole('alert')).toBeVisible()
+  await loginThroughForm(page, username, password, 401)
   await expect(page).toHaveURL(/\/erp\/login$/)
   expect(await page.evaluate(() => localStorage.getItem('access_token'))).toBeNull()
-  stopExpected()
 }
 
 test('往来单位账期随客户和供应商类型切换并正确保存', async ({ page }, info) => {
@@ -63,7 +47,7 @@ test('往来单位账期随客户和供应商类型切换并正确保存', async
   await expect(term).toHaveCount(0)
   await expect(days).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('customer-payment-fields.png'), animations: 'disabled' })
-  const customer = await save(page, '/api/business/partners/', 'POST', 201)
+  const customer = await submitDialog(page, '/api/business/partners/', 201)
   expect(await admin.get(`business/partners/${customer.id}/`)).toMatchObject({ kind: 'customer', payment_term: 'manual', payment_days: 0 })
   await edit(page, row(page, `客户账期验收${suffix}`))
   await expect(term).toHaveCount(0)
@@ -81,14 +65,14 @@ test('往来单位账期随客户和供应商类型切换并正确保存', async
   await expect(term).toHaveValue('custom')
   await expect(days).toHaveValue('45')
   await page.screenshot({ path: info.outputPath('supplier-payment-fields.png'), animations: 'disabled' })
-  const supplier = await save(page, '/api/business/partners/', 'POST', 201)
+  const supplier = await submitDialog(page, '/api/business/partners/', 201)
   expect(await admin.get(`business/partners/${supplier.id}/`)).toMatchObject({ kind: 'both', payment_term: 'custom', payment_days: 45 })
   await edit(page, row(page, `供应商账期验收${suffix}`))
   await expect(term).toHaveValue('custom')
   await kind.selectOption('customer')
   await expect(term).toHaveCount(0)
   await expect(days).toHaveCount(0)
-  await save(page, `/api/business/partners/${supplier.id}/`, 'PATCH', 200)
+  await submitDialog(page, `/api/business/partners/${supplier.id}/`, 200)
   expect(await admin.get(`business/partners/${supplier.id}/`)).toMatchObject({ kind: 'customer', payment_term: 'manual', payment_days: 0 })
 })
 
@@ -102,13 +86,12 @@ test('管理员从用户表单新增并停用专用账号，停用账号不能�
   await dialog(page).getByLabel('姓名', { exact: true }).fill('停用账号专项验收')
   await dialog(page).getByLabel('密码', { exact: true }).fill(password)
   await dialog(page).getByLabel('启用', { exact: true }).check()
-  const created = await save(page, '/api/auth/users/', 'POST', 201)
+  const created = await submitDialog(page, '/api/auth/users/', 201)
   expect(await admin.get(`auth/users/${created.id}/`)).toMatchObject({ username, roles: ['member'], is_active: true })
-  await page.getByRole('searchbox', { name: '搜索用户管理', exact: true }).fill(username)
-  await page.getByRole('searchbox', { name: '搜索用户管理', exact: true }).press('Enter')
+  await searchList(page, '用户管理', username)
   await edit(page, row(page, username))
   await dialog(page).getByLabel('启用', { exact: true }).uncheck()
-  await save(page, `/api/auth/users/${created.id}/`, 'PATCH', 200)
+  await submitDialog(page, `/api/auth/users/${created.id}/`, 200)
   expect(await admin.get(`auth/users/${created.id}/`)).toMatchObject({ id: created.id, username, is_active: false })
   await expect(row(page, username)).toContainText('停用')
   await page.screenshot({ path: info.outputPath('disabled-user.png'), fullPage: true, animations: 'disabled' })
@@ -125,7 +108,7 @@ test('专用成员修改本人密码后退出，旧密码失效而新密码正�
   await page.getByRole('button', { name: '修改密码', exact: true }).click()
   await dialog(page).getByLabel('原密码', { exact: true }).fill(oldPassword)
   await dialog(page).getByLabel('新密码', { exact: true }).fill(newPassword)
-  await save(page, '/api/auth/password/', 'POST', 200)
+  await submitDialog(page, '/api/auth/password/', 200)
   await expect(page).toHaveURL(/\/erp\/login$/)
   expect(await page.evaluate(() => localStorage.getItem('access_token'))).toBeNull()
   await rejectedLogin(page, username, oldPassword)
@@ -150,8 +133,7 @@ test('物料和往来单位编辑停用后退出新单选项，原采购关联�
   const oldOrder = await admin.get(`business/purchases/${purchase.id}/`)
 
   await page.goto('/erp/masterdata?section=items')
-  await page.getByRole('searchbox', { name: '搜索物料', exact: true }).fill(`INACTIVE-${suffix}`)
-  await page.getByRole('searchbox', { name: '搜索物料', exact: true }).press('Enter')
+  await searchList(page, '物料', `INACTIVE-${suffix}`)
   await edit(page, row(page, `INACTIVE-${suffix}`))
   await dialog(page).getByLabel('物料名称', { exact: true }).fill(`停用后物料${suffix}`)
   // 物料已被采购使用：改写规格会改变原采购的含义，服务端拒绝并在表单内说明，整次修改都不保存。
@@ -165,18 +147,17 @@ test('物料和往来单位编辑停用后退出新单选项，原采购关联�
   expect(await admin.get(`business/items/${material.id}/`)).toMatchObject({ name: `停用前物料${suffix}`, specification: '旧规格', is_active: true })
   await dialog(page).getByLabel('规格', { exact: true }).fill('旧规格')
   await dialog(page).getByLabel('启用', { exact: true }).uncheck()
-  await save(page, `/api/business/items/${material.id}/`, 'PATCH', 200)
+  await submitDialog(page, `/api/business/items/${material.id}/`, 200)
   expect(await admin.get(`business/items/${material.id}/`)).toMatchObject({ id: material.id, code: `INACTIVE-${suffix}`, name: `停用后物料${suffix}`, specification: '旧规格', is_active: false })
   await expect(row(page, `INACTIVE-${suffix}`)).toContainText('停用')
 
   await page.goto('/erp/masterdata?section=partners')
-  await page.getByRole('searchbox', { name: '搜索客户与供应商', exact: true }).fill(`停用前单位${suffix}`)
-  await page.getByRole('searchbox', { name: '搜索客户与供应商', exact: true }).press('Enter')
+  await searchList(page, '客户与供应商', `停用前单位${suffix}`)
   await edit(page, row(page, `停用前单位${suffix}`))
   await dialog(page).getByLabel('单位名称', { exact: true }).fill(`停用后单位${suffix}`)
   await dialog(page).getByLabel('联系人', { exact: true }).fill('核对后联系人')
   await dialog(page).getByLabel('启用', { exact: true }).uncheck()
-  await save(page, `/api/business/partners/${partner.id}/`, 'PATCH', 200)
+  await submitDialog(page, `/api/business/partners/${partner.id}/`, 200)
   expect(await admin.get(`business/partners/${partner.id}/`)).toMatchObject({ id: partner.id, name: `停用后单位${suffix}`, contact: '核对后联系人', is_active: false })
 
   await page.goto('/erp/purchases')

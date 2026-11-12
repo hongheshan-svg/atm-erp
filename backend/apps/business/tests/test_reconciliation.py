@@ -678,6 +678,8 @@ class ReconciliationTests(BusinessFixtures, TestCase):
 
     def test_bank_direction_account_scope_and_permissions(self):
         bank = self.bank('-500')
+        # JSON 数字的负数与字符串写法同样按支出登记。
+        self.assertEqual(BankRecord.objects.get(pk=self.bank(-120.5)).amount, Decimal('-120.50'))
         entry = self.project.entries.get(kind='receivable')
         self.request(
             'finance',
@@ -718,12 +720,15 @@ class ReconciliationTests(BusinessFixtures, TestCase):
 
     def test_changed_role_cannot_replay_payment_or_confirmation(self):
         entry = self.purchase_entry()
-        statement = self.statement(entry)
+        statement = self.statement(entry, confirm=False)
+        confirm, confirm_key = f'reconciliations/{statement}/confirm/', str(uuid.uuid4())
+        self.request('finance', confirm, {'reason': '逐项核准'}, key=confirm_key)
         key = str(uuid.uuid4())
         self.pay(entry, statement=statement, key=key)
         self.users['finance'].role = 'member'
         self.users['finance'].save()
         self.pay(entry, statement=statement, key=key, status=403)
+        self.request('finance', confirm, {'reason': '逐项核准'}, status=403, key=confirm_key)
 
     def test_customer_receipt_is_not_blocked_by_unconfirmed_statement(self):
         entry = self.project.entries.get()

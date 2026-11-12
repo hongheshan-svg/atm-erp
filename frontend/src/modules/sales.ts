@@ -7,6 +7,7 @@ import { today } from '../forms'
 import type { Command, Field, Row, Column } from '../types'
 import { customer, display } from './shared'
 import { money } from '../utils/money'
+import { fromScaled, MONEY_SCALE, toScaled } from '../utils/decimal'
 // 已签约销售关联未参与的项目时，后端按项目金额范围不返回合同额、回款与协议附件（amounts_visible=false）。
 const HIDDEN = '无权查看'
 const amountsHidden = (row?: Row) => row?.amounts_visible === false
@@ -38,18 +39,10 @@ function salesBusinessActions(row: Row): string[] {
   if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
-// 金额以「分」整数核对，避免浮点；无法解析的输入按 0 计，由逐字段校验另行提示。
-function cents(value: unknown): bigint {
-  const text = String(value ?? '').trim()
-  if (!/^\d+(\.\d{1,2})?$/.test(text)) return 0n
-  const [whole = '0', fraction = ''] = text.split('.')
-  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
-}
+// 金额以「分」整数核对，避免浮点；无法解析的输入（含负数）按 0 计，由逐字段校验另行提示。
+const cents = (value: unknown) => toScaled(value, MONEY_SCALE, { signed: false }) ?? 0n
 const milestoneCents = (rows: Row[] = []) => rows.reduce((sum, item) => sum + cents(item.amount), 0n)
-function centsText(value: bigint) {
-  const abs = value < 0n ? -value : value
-  return money(`${value < 0n ? '-' : ''}${abs / 100n}.${String(abs % 100n).padStart(2, '0')}`)
-}
+const centsText = (value: bigint) => money(fromScaled(value, MONEY_SCALE))
 const earlyMilestoneReminder = (contractDate?: string): Field => ({
   key: 'early_due_notice', label: '付款期限提醒', type: 'textarea', displayOnly: true, readonly: true,
   initial: '存在早于签约日的收款节点。允许按合同约定保存；已过付款期限的未收金额将计入逾期，请核对客户约定。',
@@ -82,7 +75,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       { key: 'document', label: '补充协议附件', type: 'select', upload: { context: { sale: row.id }, category: 'contract' }, options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
       { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '收款到期日', type: 'date', hint: '允许早于签约日，按合同约定填写；已到期未收款会计入逾期。' }] },
       earlyMilestoneReminder(detail.contract_date),
-      { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${e.amount} · 已抵减 ${e.credit_amount}` })) }, { key: 'amount', label: '抵减金额' }] },
+      { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${money(e.amount)} · 已抵减 ${money(e.credit_amount)}` })) }, { key: 'amount', label: '抵减金额' }] },
     ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
   }
   if (row && action === '转交负责人') {

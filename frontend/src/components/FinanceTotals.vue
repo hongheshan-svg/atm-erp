@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { read } from '../api'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
+import { fromScaled, MONEY_SCALE, toScaled } from '../utils/decimal'
 import type { Row } from '../types'
 // project：项目收付款页签的汇总口径（应收合计 / 已收 / 未收，应付含费用），而不是全公司余额卡。
 const props = defineProps<{ projectId?: number; revision?: number; project?: boolean }>()
@@ -12,17 +13,11 @@ let generation = 0
 // 金额是后端返回的两位小数字符串，按「分」用 BigInt 相加，避免 Number 的浮点误差。
 function toCents(value: unknown): bigint {
   if (value == null || value === '') return 0n
-  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(value).trim())
-  if (!match) throw new Error(`无法识别的金额：${String(value)}`)
-  const [, sign, whole, fraction = ''] = match
-  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
-  return sign ? -cents : cents
+  const cents = toScaled(value, MONEY_SCALE)
+  if (cents == null) throw new Error(`无法识别的金额：${String(value)}`)
+  return cents
 }
-function centsToAmount(cents: bigint): string {
-  const abs = cents < 0n ? -cents : cents
-  const text = `${abs / 100n}.${(abs % 100n).toString().padStart(2, '0')}`
-  return cents < 0n ? `-${text}` : text
-}
+const centsToAmount = (cents: bigint) => fromScaled(cents, MONEY_SCALE)
 const overdue = computed(() => {
   const row = data.value
   if (!row) return '0.00'
@@ -79,7 +74,7 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
 </script>
 <template>
   <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-  <div v-else-if="cards.length" class="finance-totals" :aria-label="project ? '项目款项汇总' : '往来款项余额'">
+  <div v-else-if="cards.length" class="finance-totals" role="group" :aria-label="project ? '项目款项汇总' : '往来款项余额'">
     <section v-for="card in cards" :key="card.key" class="panel finance-total" :class="{ 'finance-muted': card.muted }" :aria-label="card.label">
       <span>{{ card.label }}</span>
       <strong :class="{ 'finance-risk': card.risk && Number(card.value) }">{{ money(card.value, { currency: true }) }}</strong>

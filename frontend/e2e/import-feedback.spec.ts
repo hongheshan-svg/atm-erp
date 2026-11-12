@@ -1,9 +1,9 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, expectHttpError } from './fixtures'
 
 // These UI fixtures never reach a database. Real parsing, permissions and rollback
 // are exercised by test_import_feedback.py and the existing import service tests.
 test('导入纠错与BOM双视图在桌面和手机可操作', async ({ page }, info) => {
-  await page.addInitScript(() => { localStorage.setItem('access_token', 'isolated-ui-fixture'); localStorage.setItem('erp.page-size', '10') })
+  await page.addInitScript(() => localStorage.setItem('access_token', 'isolated-ui-fixture'))
   const project = { id: 7, name: '装配线界面验证项目', code: 'ATM26007', status: 'active', can_edit_bom: true, can_manage: true, equipment_quantity: 1 }
   const lines = [
     { bom_line: 41, item_code: 'M001', item_name: '伺服电机', specification: '750W', assembly_unit: '上料单元', quantity: '4', unit: '台', issued: '0', incoming: '1', available: '1', shortage: '2', required_date: '2026-11-01' },
@@ -62,6 +62,8 @@ test('导入纠错与BOM双视图在桌面和手机可操作', async ({ page }, 
   await page.screenshot({ path: info.outputPath('bom-import-errors.png'), animations: 'disabled' })
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await page.goto('/erp/projects?resource=projects')
+  // 夹具对错放的模板返回 400，浏览器记一条加载失败；其余控制台输出仍由 fixtures 核对。
+  expectHttpError(page, '/api/business/projects/import-file/', 400)
   await page.getByRole('button', { name: '导入导出 ▾', exact: true }).click()
   await page.getByRole('menuitem', { name: '导入', exact: true }).click()
   const projectImport = page.getByRole('dialog', { name: '导入项目', exact: true })

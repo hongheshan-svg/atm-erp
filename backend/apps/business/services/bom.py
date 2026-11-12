@@ -10,7 +10,7 @@ from rest_framework.exceptions import ValidationError
 from apps.core.api import Conflict
 from apps.core.permissions import BOM_WRITERS, require_project
 
-from ..models import BOMLine, Item, PurchaseLine, Stock, StockMove
+from ..models import BOMLine, Item, PurchaseLine, PurchaseOrder, Stock, StockMove
 from .common import (
     ZERO,
     audit,
@@ -27,7 +27,9 @@ from .common import (
 )
 
 UNAPPROVED = ('draft', 'submitted')
-PURCHASE_STATUS = {'draft': '草稿', 'submitted': '待批准', 'approved': '待收货', 'partial': '部分收货'}
+PURCHASE_STATUS = dict(PurchaseOrder.Status.choices)
+# 可维护 BOM（修订、导入、移除、替换）的项目状态。
+BOM_STATES = {'draft', 'quoted', 'active', 'delivering'}
 
 
 def incoming(project, item_id):
@@ -551,10 +553,16 @@ def allocate(lines, issues, stock, purchases):
     return plan
 
 
+def line_supply(entry):
+    """BOM 行分摊到的 (已领, 在途（含草稿与待批）, 其中草稿与待批)，缺料表、缺料量与变更影响同一口径。"""
+    ordered = entry['assigned'] + entry['shared'] + entry['shared_unapproved']
+    return entry['used'], ordered, entry['assigned_unapproved'] + entry['shared_unapproved']
+
+
 def shortage(line, entry):
     """BOM 行缺料量：用量扣除已领、在途（含草稿与待批）和可计入的共享库存，缺料表与按缺料采购同一口径。"""
-    ordered = entry['assigned'] + entry['shared'] + entry['shared_unapproved']
-    return max(ZERO, max(ZERO, line.quantity - entry['used']) - ordered - entry['available'])
+    used, ordered, _ = line_supply(entry)
+    return max(ZERO, max(ZERO, line.quantity - used) - ordered - entry['available'])
 
 
 def line_shortage(bom_line, *, exclude_line=None):
@@ -677,9 +685,8 @@ def demand(project):
     competing = competing_demand(project, {line.item_id for line in lines})
     for line in lines:
         entry = plan[line.pk]
-        used, available = entry['used'], entry['available']
-        ordered = entry['assigned'] + entry['shared'] + entry['shared_unapproved']
-        unapproved = entry['assigned_unapproved'] + entry['shared_unapproved']
+        used, ordered, unapproved = line_supply(entry)
+        available = entry['available']
         result.append(
             {
                 'bom_line': line.pk,
@@ -864,23 +871,26 @@ def preview_revision(actor, project, data):
 def impact(project):
     """Read-only source links for resolving an engineering change, never a second ledger."""
     items = {}
-    for line in demand(project):
+    lines, plan = allocation(project)
+    zero = Decimal('0.000')  # 数量按三位小数输出
+    for line in lines:
+        used, ordered, unapproved = line_supply(plan[line.pk])
         item = items.setdefault(
-            line['item'],
+            line.item_id,
             {
-                'item': line['item'],
-                'item_code': line['item_code'],
-                'item_name': line['item_name'],
-                'quantity': ZERO,
-                'issued': ZERO,
-                'incoming': ZERO,
-                'unapproved': ZERO,
+                'item': line.item_id,
+                'item_code': line.item.code,
+                'item_name': line.item.name,
+                'quantity': zero,
+                'issued': zero,
+                'incoming': zero,
+                'unapproved': zero,
             },
         )
-        item['quantity'] += number(line['quantity'], 'quantity', 3)
-        item['issued'] += number(line['issued'], 'issued', 3)
-        item['incoming'] += number(line['incoming'], 'incoming', 3)
-        item['unapproved'] += number(line['unapproved'], 'unapproved', 3)
+        item['quantity'] += line.quantity
+        item['issued'] += used
+        item['incoming'] += ordered
+        item['unapproved'] += unapproved
     return {
         'revision': revision(project),
         'items': [
@@ -904,7 +914,7 @@ def impact(project):
 def revise_bom(actor, key, project_id, data):
     def execute(user, project):
         fields(data, {'lines', 'expected_revision'})
-        state(project, {'draft', 'quoted', 'active', 'delivering'})
+        state(project, BOM_STATES)
         expected = data.get('expected_revision')
         if not isinstance(expected, str) or not re.fullmatch(r'[0-9a-f]{64}', expected):
             raise ValidationError({'expected_revision': '请提供读取 BOM 时的版本，刷新后重试。'})

@@ -3,7 +3,9 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { read, write } from '../api'
 import { user, logout, roleLabels } from '../session'
+import { codeDateFormats, codeResetCycles, codeRuleNames as codeNames } from '../modules/settings'
 import { message, requestKey } from '../utils/request'
+import { today } from '../forms'
 import type { Row } from '../types'
 import { Document } from '@element-plus/icons-vue'
 import { version } from '../../package.json'
@@ -30,7 +32,6 @@ const team = ref<Row[]>([])
 const rules = ref<Row[]>([])
 let originalRules: Row[] = []
 const roleNames = roleLabels
-const codeNames: Record<string, string> = { project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单', issue_slip: '领料单' }
 const changedRules = computed(() => rules.value.filter((r, i) => ['prefix', 'date_format', 'padding', 'reset_cycle'].some(k => r[k] !== originalRules[i]?.[k])))
 async function load() {
   error.value = ''
@@ -57,9 +58,9 @@ function next() {
   if (step.value === 2 && team.value.some(r => !r.roles.length)) { error.value = '每位人员至少选择一个岗位。'; return }
   step.value++
 }
+// 实际编号按服务器日期生成，示例同样取业务时区的今天。
 function example(rule: Row) {
-  const now = new Date()
-  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const date = today().replaceAll('-', '')
   return `${rule.prefix}${rule.date_format === 'YY' ? date.slice(2, 4) : date.slice(0, rule.date_format.length)}${String(Number(rule.counter) + 1).padStart(Math.min(10, Math.max(1, Number(rule.padding))), '0')}`
 }
 async function finish() {
@@ -123,9 +124,9 @@ onBeforeRouteLeave(() => { clearPasswords() })
             <section v-for="rule in rules" :key="rule.id" class="setup-rule"><h3>{{ codeNames[rule.key] }}</h3>
               <div class="setup-grid">
                 <label class="field"><span>{{ codeNames[rule.key] }}前缀</span><input v-model="rule.prefix" required pattern="[A-Za-z0-9_\-]{1,10}" maxlength="10" /></label>
-                <label class="field"><span>日期格式</span><select v-model="rule.date_format"><option value="">无日期</option><option value="YY">两位年</option><option value="YYYY">年</option><option value="YYYYMM">年月</option><option value="YYYYMMDD">年月日</option></select></label>
+                <label class="field"><span>日期格式</span><select v-model="rule.date_format"><option value="">无日期</option><option v-for="(label, value) in codeDateFormats" :key="value" :value="value">{{ label }}</option></select></label>
                 <label class="field"><span>流水位数</span><input v-model.number="rule.padding" type="number" min="1" max="10" required /></label>
-                <label class="field"><span>重置周期</span><select v-model="rule.reset_cycle"><option value="never">不重置</option><option value="year">每年</option><option value="month">每月</option><option value="day">每天</option></select></label>
+                <label class="field"><span>重置周期</span><select v-model="rule.reset_cycle"><option v-for="(label, value) in codeResetCycles" :key="value" :value="value">{{ label }}</option></select></label>
               </div><p class="muted">示例：{{ example(rule) }}（实际编号按服务器日期及已用流水生成）</p>
             </section>
           </template>

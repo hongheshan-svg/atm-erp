@@ -64,6 +64,10 @@ export function auditDetail(detail: unknown) {
     return `${auditFields[key] || key}：${text}`
   }).join('；')
 }
+// 编号规则的用途、日期格式与重置周期名称，设置页与初次安装向导共用。
+export const codeRuleNames: Record<string, string> = { project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单', issue_slip: '领料单' }
+export const codeDateFormats: Record<string, string> = { YY: '两位年', YYYY: '年', YYYYMM: '年月', YYYYMMDD: '年月日' }
+export const codeResetCycles: Record<string, string> = { never: '不重置', year: '每年', month: '每月', day: '每天' }
 export const columns: Record<string, Column[]> = {
   users: [
     C('username', '用户名'),
@@ -75,9 +79,9 @@ export const columns: Record<string, Column[]> = {
   ],
   company: [C('name', '公司名称'), C('address', '地址'), C('phone', '电话'), { key: 'locked_through', label: '业务锁账至', format: r => r.locked_through || '未锁账' }],
   codes: [
-    { key: 'key', label: '用途', format: r => ({ project: '项目', sale: '销售单', purchase: '采购单', delivery: '交付单', item: '物料', partner: '往来单位', reconciliation: '对账单', issue_slip: '领料单' }[String(r.key)] || r.key) },
+    { key: 'key', label: '用途', format: r => codeRuleNames[String(r.key)] || r.key },
     C('prefix', '前缀'), { key: 'date_format', label: '日期格式', format: r => r.date_format || '无日期' }, C('padding', '流水位数'),
-    { key: 'reset_cycle', label: '重置周期', format: r => ({ never: '不重置', year: '每年', month: '每月', day: '每天' }[String(r.reset_cycle)] || r.reset_cycle) }, C('counter', '当前序号'),
+    { key: 'reset_cycle', label: '重置周期', format: r => codeResetCycles[String(r.reset_cycle)] || r.reset_cycle }, C('counter', '当前序号'),
   ],
   audit: [
     { key: 'actor', label: '操作人', format: r => r.actor_name || (r.actor ? `用户 #${r.actor}` : '系统') },
@@ -126,8 +130,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '编辑' && resource === 'codes') return {
     title: '编辑编号规则', path: `${endpoint(resource)}${r.id}/configure/`,
-    fields: [t('prefix', '前缀'), select('date_format', '日期格式', choices({ none: '无日期', YY: '两位年', YYYY: '年', YYYYMM: '年月', YYYYMMDD: '年月日' })),
-      t('padding', '流水位数（1–10）'), select('reset_cycle', '重置周期', choices({ never: '不重置', year: '每年', month: '每月', day: '每天' })), t('reason', '修改原因')],
+    fields: [t('prefix', '前缀'), select('date_format', '日期格式', choices({ none: '无日期', ...codeDateFormats })),
+      t('padding', '流水位数（1–10）'), select('reset_cycle', '重置周期', choices(codeResetCycles)), t('reason', '修改原因')],
     initial: { ...r, date_format: r.date_format || 'none' }, prepare: data => ({ ...data, date_format: data.date_format === 'none' ? '' : data.date_format, expected_revision: r.revision }),
     notice: { type: 'info', text: '项目规范：ATM＋两位年＋两位流水，按年重置。物料选择产品编码类别后按类别＋年份（无图固定99）＋六位流水生成，未分类才使用这里的普通规则。修改不改变历史编码或回退当前流水。' },
   }

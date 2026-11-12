@@ -86,12 +86,13 @@ jobs:
         id: lint-cache
         with:
           path: ${{ runner.temp }}/actionlint-bin
-          key: actionlint-1.7.7-${{ runner.os }}-${{ runner.arch }}
+          key: actionlint-1.7.12-${{ runner.os }}-${{ runner.arch }}
       - uses: actions/setup-go@v5
         if: steps.lint-cache.outputs.cache-hit != 'true'
-        with: {go-version: '1.24', cache: false}
+        with: {go-version: '1.25', cache: false}
       - if: steps.lint-cache.outputs.cache-hit != 'true'
-        run: GOBIN="$RUNNER_TEMP/actionlint-bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+        # 1.7.7 不识别 macos-15-intel 等新运行器标签；1.7.12 需要 Go 1.25。
+        run: GOBIN="$RUNNER_TEMP/actionlint-bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - run: '"$RUNNER_TEMP/actionlint-bin/actionlint"'
       - id: select
         env:

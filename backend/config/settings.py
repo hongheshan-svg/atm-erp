@@ -24,7 +24,6 @@ INSTALLED_APPS = [
     # 认证只走 JWT，没装 SessionMiddleware。这个 app 保留是因为 schema_guard 会把
     # 已有安装里的 django_session 表判为外来表而拒绝启动，移除它等于阻断升级。
     'django.contrib.sessions',
-    'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
     'django_filters',
@@ -107,8 +106,6 @@ LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True
 USE_TZ = True
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'uploads')))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024

@@ -34,12 +34,12 @@ description: 修改或验收当前 Lean ERP 的业务动作、权限、金额、
 
 - 后端测试模块唯一登记在 scripts/ci/backend_test_matrix.py。先从矩阵定位，再查看测试类/方法，用 Django 标签选择相关模块或用例；不要把 platform/business 分组当作局部任务的默认范围，也不要在技能复制测试名单。新增后端测试模块登记矩阵。
 - 前端从受影响组件旁的 *.spec.ts、frontend/e2e/ 查找行为相关用例，指定文件，必要时用测试名过滤。综合用例文件包含目标场景不代表要运行其中所有无关链路；缺少覆盖时补针对性用例，而非用全量测试凑证据。
-- 后端示意（在 backend/ 执行，须显式提供独立 PG_TEST_HOST/USER/PASSWORD，可选 PG_TEST_PORT，不读取 DB_*）：python manage.py test <从矩阵定位的模块或具体用例> --noinput --settings=config.test_settings。前端在 frontend/ 执行 npm run test -- <相关.spec.ts>，页面用 npm run test:e2e -- <相关.spec.ts> --grep <场景>。按影响补 lint、typecheck、build；npm ci 仅在依赖缺失、锁文件变化或干净 CI 等需要时使用。
-- 后端静态检查入口为 python run_all_tests.py --stage checks；--plan-only 可先查看命令。checks 中的 manage.py check 与迁移检查须能加载配置：与 CI 一致设置 DJANGO_SETTINGS_MODULE=config.test_settings 和 PG_TEST_*，或在默认配置下提供至少32字符的 SECRET_KEY。数据库测试显式配置独立 PG_TEST_HOST/USER/PASSWORD；浏览器显式配置隔离 E2E_BASE_URL 和 E2E_ADMIN_PASSWORD，不读取生产配置或绕过 schema guard。
+- 后端示意（在 backend/ 执行）：python manage.py test <从矩阵定位的模块或具体用例> --noinput --settings=config.test_settings。前端在 frontend/ 执行 npm run test -- <相关.spec.ts>，页面用 npm run test:e2e -- <相关.spec.ts> --grep <场景>。静态检查入口为 python run_all_tests.py --stage checks（--plan-only 先查看命令）。按影响补 lint、typecheck、build；npm ci 仅在依赖缺失、锁文件变化或干净 CI 等需要时使用。
+- 独立测试库 PG_TEST_*、checks 阶段加载配置所需的环境变量、浏览器隔离 E2E_BASE_URL/E2E_ADMIN_PASSWORD 等要求只维护在仓库根 AGENTS.md“开发与测试”；不读取生产配置或绕过 schema guard。
 - 已授权且目标明确的隔离验证可连续执行、修复、复验；不扩展到生产、其他部署或外部消息。同一源码、依赖、配置及目标镜像的成功证据可复用；修复失败后重跑失败项及受影响项，不无理由重跑全部。
 
 ## 完成边界
 
 报告改变的业务行为、实际验证范围和结果、未覆盖项。业务变更及正式验收按仓库约定记录到 docs/SIMPLIFICATION_EVIDENCE.md；纯文档/技能维护只检查内容与引用，不制造业务验收记录。某项受阻时继续独立工作，但不把局部通过称为全系统通过。
 
-发版本必须通过发版验证：Release 工作流对 tag 的 Git tree 强制 suite=release（后端、前端单测与运维脚本测试全部运行；浏览器按改动模块及关联页面，不含完整业务链；OTA 与安装器只在升级代码、迁移、Docker/部署、安装打包脚本或运行时依赖变化时运行），不得以 PR 的按影响范围结果代替或绕过。只有用户明确要求“全业务流程测试”“全量验收”才执行全量入口（bash scripts/precheck-tests.sh --all 及完整页面链）；修改、提交、push、合并、打 tag 或修复共享代码本身都不代表该要求。发布先查 docs/CI_OPERATIONS.md；证据复用由 scripts/ci/release_gate.py 核验。
+发版本必须通过发版验证，不得以 PR 的按影响范围结果代替或绕过；运行范围与证据复用见 docs/CI_OPERATIONS.md。只有用户明确要求“全业务流程测试”“全量验收”才执行全量入口（bash scripts/precheck-tests.sh --all 及完整页面链）；修改、提交、push、合并、打 tag 或修复共享代码本身都不代表该要求。

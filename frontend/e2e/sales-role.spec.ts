@@ -1,6 +1,5 @@
 import { businessDate } from './fixtures'
-import { selectRemoteOption } from './remote-select-helpers'
-import { test, expect, login, openRowAction, choosePeople } from './fixtures'
+import { test, expect, login, openRowAction, choose, submitDialog } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 test('管理员新增销售经理，销售建单报价签约并只读交付回款', async ({ page }, info) => {
@@ -10,23 +9,6 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   const customer = `销售客户${suffix}`
   const sale = `销售订单${suffix}`
   const dialog = () => page.locator('[role="dialog"]:visible')
-  async function save() {
-    const response = page.waitForResponse(r => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'))
-    await dialog().locator('button[type="submit"]').click()
-    const result = await response
-    expect(result.status(), await result.text()).toBeLessThan(300)
-    await expect(dialog()).toHaveCount(0)
-  }
-  async function choose(label: string, text: string) {
-    const field = dialog().getByLabel(label, { exact: true })
-    if (await field.getAttribute('role') === 'combobox') {
-      // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
-      const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
-      return remote ? selectRemoteOption(field, { text: text }) : choosePeople(page, field, [text])
-    }
-    const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
-    await field.selectOption(value!)
-  }
   async function action(name: string) {
     await openRowAction(page, page.locator('.el-table__body tr:visible').filter({ hasText: sale }).first(), name)
   }
@@ -37,13 +19,15 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await dialog().getByLabel('姓名', { exact: true }).fill(username)
   await selectRoles(dialog(), ['sales_manager'])
   await dialog().getByLabel('密码', { exact: true }).fill(password)
-  await save()
+  await submitDialog(page)
   await login(page, username, password)
+  // 各岗位的完整导航由 role-page-audit 核对；这里确认销售经理有销售入口、没有项目与采购入口。
   const nav = page.getByRole('navigation', { name: '主导航', includeHidden: true })
-  await expect(nav.getByRole('link', { includeHidden: true })).toHaveCount(4)
+  await expect(nav.getByRole('link', { name: '销售', exact: true, includeHidden: true })).toHaveCount(1)
+  for (const hidden of ['项目', '采购']) await expect(nav.getByRole('link', { name: hidden, exact: true, includeHidden: true })).toHaveCount(0)
   await page.goto('/erp/settings?section=users')
   await expect(page.getByRole('tab', { name: '我的账户', exact: true })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab', { name: '用户管理', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '新增用户', exact: true })).toHaveCount(0)
   await expect(page).toHaveURL(/section=account/)
   await page.goto('/erp/masterdata')
@@ -51,12 +35,12 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await page.getByRole('button', { name: '新增往来单位', exact: true }).click()
   await dialog().getByLabel('单位名称', { exact: true }).fill(customer)
   await dialog().getByLabel('类型', { exact: true }).selectOption('customer')
-  await save()
+  await submitDialog(page)
   await page.goto('/erp/sales')
   await page.getByRole('button', { name: '新建销售', exact: true }).click()
   await dialog().getByLabel('销售名称', { exact: true }).fill(sale)
-  await choose('客户', customer)
-  await save()
+  await choose(page, '客户', customer)
+  await submitDialog(page)
   await action('附件')
   const attachments = page.getByRole('dialog', { name: /^销售附件/ })
   await attachments.getByRole('button', { name: '上传附件', exact: true }).click()
@@ -83,12 +67,12 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await action('报价')
   await dialog().getByLabel('报价金额（元）', { exact: true }).fill('1000')
   await dialog().getByLabel('报价说明', { exact: true }).fill('客户确认')
-  await save()
+  await submitDialog(page)
   await action('签约')
   // 项目负责人是可搜索的人员下拉，只列项目经理和管理员：按销售经理本人的账号搜索没有候选。
   const manager = dialog().getByLabel('项目负责人', { exact: true })
+  // 人员名单随对话框一起给出；「没有匹配的人员」只在名单已载入、过滤后为空时出现（未载入时是「暂无可选人员」）。
   await expect(manager).toBeVisible()
-  await page.waitForLoadState('networkidle')
   await manager.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " el-select ")][1]').locator('.el-select__wrapper').click()
   await manager.fill(username)
   const people = page.locator('.el-select__popper.executor-options:visible')
@@ -97,9 +81,9 @@ test('管理员新增销售经理，销售建单报价签约并只读交付回�
   await manager.fill('')
   await manager.press('Escape')
   await expect(people).toHaveCount(0)
-  await choose('项目负责人', '管理员')
+  await choose(page, '项目负责人', '管理员')
   await dialog().getByLabel('收款到期日', { exact: true }).fill(businessDate(60))
-  await save()
+  await submitDialog(page)
   const token = await page.evaluate(() => localStorage.getItem('access_token'))
   const doc = await page.request.get(`/api/business/documents/${documentId}/`, { headers: { Authorization: `Bearer ${token}` } })
   expect(doc.status()).toBe(200)

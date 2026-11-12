@@ -42,8 +42,8 @@ it('批准采购在对话框内列出供应商、合计和逐行明细，并标�
   expect(command.initial).toMatchObject({ supplier_name: '精工机械', project_label: 'ATM2680 · 上料线', total_label: '2,095.50', over_bom_reason: '损耗补买' })
   expect(command.initial?.schedule_label).toBe('2026-12-01 · 月结30天')
   expect(command.initial?.approval_lines).toBe([
-    '1. M-1 · 伺服电机 · 400W｜2.000 台 × 1,000.00 = 2,000.00｜按 BOM 下单',
-    '2. M-2 · 备用气缸｜1.000 × 95.50 = 95.50｜超出 BOM 缺口 1.000',
+    '1. M-1 · 伺服电机 · 400W｜2 台 × 1,000.00 = 2,000.00｜按 BOM 下单',
+    '2. M-2 · 备用气缸｜1 × 95.50 = 95.50｜超出 BOM 缺口 1.000',
   ].join('\n'))
   expect(command.fields.find(f => f.key === 'approval_lines')).toMatchObject({ label: '采购明细（2 行）', type: 'textarea', readonly: true, displayOnly: true })
   // 摘要只读，不进入审批请求；审批意见选填。

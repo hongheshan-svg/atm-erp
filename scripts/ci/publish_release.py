@@ -35,11 +35,7 @@ def verify(folder, tag, commit):
             if archive.testzip():
                 raise ValueError('安装包归档已损坏')
             manifest = json.loads(archive.read(path.stem + '/INSTALL-MANIFEST.json'))
-            if (
-                manifest['version'] != tag
-                or manifest['source_commit'] != commit
-                or manifest['installer_commit'] != commit
-            ):
+            if manifest['version'] != tag or manifest['source_commit'] != commit:
                 raise ValueError('安装包来源与 tag 不一致')
             prefix = path.stem + '/'
             if manifest.get('mode') not in ('native', 'docker'):

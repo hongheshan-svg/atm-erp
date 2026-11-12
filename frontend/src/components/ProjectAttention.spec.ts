@@ -14,9 +14,21 @@ async function render() {
   await flushPromises()
   return wrapper
 }
+// 组件按 matchMedia 判断窄屏：这里让媒体查询跟随 innerWidth，窗口 resize 时发出 change。
+function followInnerWidth() {
+  vi.stubGlobal('matchMedia', (query: string) => {
+    const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1] ?? Infinity)
+    return {
+      get matches() { return window.innerWidth <= max },
+      addEventListener: (_: string, listener: () => void) => window.addEventListener('resize', listener),
+      removeEventListener: (_: string, listener: () => void) => window.removeEventListener('resize', listener),
+    }
+  })
+}
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('innerWidth', 1440)
+  followInnerWidth()
   user.value = { id: 9, roles: ['mechanical_engineer'] }
   vi.mocked(read).mockImplementation(async (path, params) => path.endsWith('/demand/')
     ? { lines: [{ bom_line: 1, item: 5, shortage: '1' }, { bom_line: 2, item: 5, shortage: '2' }, { bom_line: 3, shortage: '0' }] }

@@ -20,6 +20,9 @@ from .test_execution import ExecutionFixtures
 
 
 class PeriodLockScopeTests(BusinessFixtures, TestCase):
+    """锁账按冲减实际发生的日期判断，不按原单建单日；补录到已锁期间的收货仍被拦住，见 test_hardening 的
+    test_period_rejects_backdated_receipt_then_audited_reopening。"""
+
     def setUp(self):
         self.setup_business()
         Company.objects.create(pk=1)
@@ -61,23 +64,6 @@ class PeriodLockScopeTests(BusinessFixtures, TestCase):
         self.lock(timezone.localdate() - timedelta(days=1))
         self.post('finance', f'entries/{expense["id"]}/cancel-expense/', {'reason': '重复登记'})
         self.assertTrue(Entry.objects.get(pk=expense['id']).cancelled)
-
-    def test_backdated_receipt_is_still_refused_inside_the_locked_period(self):
-        # 补录到已锁期间的实际业务日期仍然要拦住，锁账不能整体失效。
-        project = self.active_project()
-        purchase = self.purchase(project)
-        cutoff = timezone.localdate() - timedelta(days=1)
-        self.lock(cutoff)
-        self.post(
-            'warehouse',
-            f'purchases/{purchase.pk}/receive/',
-            {
-                'received_date': str(cutoff),
-                'reason': '实际到货',
-                'lines': [{'line': purchase.lines.get().pk, 'quantity': '1'}],
-            },
-            status=409,
-        )
 
 
 class AssignmentScopeTests(BusinessFixtures, TestCase):

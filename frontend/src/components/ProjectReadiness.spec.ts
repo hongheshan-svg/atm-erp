@@ -49,7 +49,7 @@ it('接口异常或返回格式不符时不渲染检查，也不报脚本错误'
   expect(failed.get('[role="alert"]').text()).toContain('没有权限')
 })
 it('手机默认一行「发货前还差 N 项」，展开后才列出缺项和全部检查', async () => {
-  vi.stubGlobal('innerWidth', 390)
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(max-width: 600px)', addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   vi.mocked(read).mockResolvedValue({ status: 'active', ship: [
     { key: 'stage_assembly', ok: false, label: '装配阶段', detail: '已完成 0 / 2', blocking: true, target: { tab: 'tasks', phase: 'assembly' } },
     { key: 'bom', ok: false, label: '设备 BOM', detail: '尚未登记 BOM', blocking: true, target: { tab: 'bom' } },

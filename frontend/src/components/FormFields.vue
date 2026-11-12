@@ -3,7 +3,8 @@ import BusinessTable from './BusinessTable.vue'
 import { ElSelect, ElOption } from 'element-plus'
 import type { Field, Row } from '../types'
 import { applicableFields, defaults } from '../forms'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watchEffect } from 'vue'
+import { computed, nextTick, reactive, ref, useId, watchEffect } from 'vue'
+import { useNarrow } from '../utils/media'
 import InlineDocumentField from './InlineDocumentField.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
@@ -35,11 +36,7 @@ async function focusPath(path: string) {
   }
 }
 // 手机宽度下只读明细表改成逐行卡片：横滚会把待收、金额等关键列挤出屏外。
-const cardQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 600px)') : null
-const cardMode = ref(Boolean(cardQuery?.matches))
-const syncCards = () => { cardMode.value = Boolean(cardQuery?.matches) }
-onMounted(() => cardQuery?.addEventListener?.('change', syncCards))
-onBeforeUnmount(() => cardQuery?.removeEventListener?.('change', syncCards))
+const cardMode = useNarrow()
 defineExpose({ focusPath })
 const model = defineModel<Row>({ required: true })
 const visibleFields = computed(() => applicableFields(props.fields, model.value))

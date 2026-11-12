@@ -1,4 +1,4 @@
-from django.db.models import Max, Sum
+from django.db.models import Max
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -7,7 +7,7 @@ from apps.core.permissions import ALL_ROLES, MANAGERS, project_allowed, require_
 from ..models import Project, Task
 from ..task_milestones import AUTOMATIC, DEFINITIONS, NODES, PHASES
 from .common import audit, fields, lookup, project_action, save, state
-from .execution import save_new_task, task_values
+from .execution import save_new_task, shipped_quantity, task_values
 from .task_supervision import default_discipline
 
 
@@ -17,8 +17,7 @@ def sync_milestones(user, project):
     if not nodes:
         return
     deliveries = project.deliveries.all()
-    shipped = deliveries.aggregate(total=Sum('quantity'))['total'] or 0
-    all_shipped = shipped >= project.equipment_quantity
+    all_shipped = shipped_quantity(project) >= project.equipment_quantity
     installs = Task.objects.filter(delivery__in=deliveries, kind='install')
     completed = {
         'shipping_dispatch': all_shipped,
@@ -133,7 +132,7 @@ def summary(actor, project_id):
         .order_by('pk')
     )
     today = timezone.localdate()
-    shipped = project.deliveries.aggregate(total=Sum('quantity'))['total'] or 0
+    shipped = shipped_quantity(project)
     stages = []
     for kind, label in PHASES:
         rows = [task for task in tasks if task.kind in STAGE_KINDS[kind] and task.status != 'cancelled']

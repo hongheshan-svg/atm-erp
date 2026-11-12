@@ -34,6 +34,7 @@ import { money as formatMoney } from '../utils/money'
 import { quantityText } from '../utils/quantity'
 import { dateTimeText } from '../utils/datetime'
 import { decimalDifference } from '../forms'
+import { fromScaled, QUANTITY_SCALE, toScaled } from '../utils/decimal'
 import { formatPurchaseAmount, purchaseLineCents } from '../bom-purchase'
 import type { Command } from '../types'
 import type { Field } from '../types'
@@ -54,13 +55,10 @@ import { endpoint } from './shared'
 import { display } from './shared'
 export function receiptStatus(row: Row): string {
   if (row.change_request) return '修改申请待处理'
-  const pending = (row.lines || []).reduce((sum: bigint, line: Row) => {
-    const [whole = '0', fraction = ''] = String(line.pending_quantity || '0').split('.')
-    return sum + BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'))
-  }, 0n)
+  const pending = (row.lines || []).reduce((sum: bigint, line: Row) => sum + (toScaled(line.pending_quantity || '0', QUANTITY_SCALE) ?? 0n), 0n)
   if (!pending) return display(row.status)
   const arrivedOnly = !(row.lines || []).some((line: Row) => Number(line.received_quantity || 0) > 0)
-  return `${arrivedOnly ? '已到货待检' : display(row.status)} · 隔离 ${pending / 1000n}.${String(pending % 1000n).padStart(3, '0')}`
+  return `${arrivedOnly ? '已到货待检' : display(row.status)} · 隔离 ${fromScaled(pending, QUANTITY_SCALE)}`
 }
 // 明细合计只作展示：与服务端同口径，逐行按分四舍五入后再相加；任一行没有单价（无权查看）时不给合计。
 export function purchaseTotal(lines: Row[]): string {
@@ -192,14 +190,14 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   if (['质保记录', '登记采购质保', '处理采购质保'].includes(name)) {
     const path = `/business/purchases/${r.id}/warranty/`, info = await read(path)
     if (name === '质保记录') return { title: name, path, readonly: true, initial: { cases: info.cases.map((x: Row) => ({ ...x, within_warranty: x.within_warranty == null ? '' : x.within_warranty ? '是' : '否' })) }, fields: [rows('cases', '质保记录', [t('item', '物料'), { ...t('status', '质保进度'), flow: 'warranty' }, t('id', '编号'), t('date', '报修日期'), t('quantity', '数量'), t('description', '故障'), t('response', '供应商响应与处理'), t('warranty_end', '质保截止'), t('within_warranty', '报修时在保'), t('replacement', '换货收货流水'), t('returned', '退货流水'), t('expense', '费用原单')])] }
-    if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${x.quantity} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: `逐批按合格收货日起 ${info.warranty_months ?? 12} 个月提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。` } }
+    if (name === '登记采购质保') return { title: name, path, fields: [select('receipt', '原收货批次', info.receipts.map((x: Row) => ({ value: x.id, label: `批次${x.id} · ${x.item} · 数量${quantityText(x.quantity)} · 质保至${x.warranty_end}` }))), date('date', '报修日期'), qty, { key: 'description', label: '故障描述', type: 'textarea' }], notice: { type: 'info', text: `逐批按合格收货日起 ${info.warranty_months ?? 12} 个月提示质保。登记不改变库存和成本；退换货复用原库存业务，费用由财务登记后关联。` } }
     // 只取收货和采购退货两类流水，由服务端按类型过滤，不再拉取整个项目的全部库存流水。
     const [receipts, returns] = await Promise.all([
       all('/business/moves/', { project: r.project, kind: 'receipt' }),
       all('/business/moves/', { project: r.project, kind: 'purchase_return' }),
     ])
     const expenses = money() ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
-    return { title: name, path, fields: [select('case', '质保事项', info.cases.filter((x: Row) => ['待响应', '维修中'].includes(x.status)).map((x: Row) => ({ value: x.id, label: `${x.id} · ${x.item} · ${x.description}` }))), select('status', '处理结果', [{ value: 'repairing', label: '维修中' }, { value: 'replaced', label: '已更换' }, { value: 'closed', label: '已关闭' }]), { key: 'response', label: '供应商响应、责任与处理说明', type: 'textarea' }, select('replacement', '补换货收货流水', receipts.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${x.quantity}` })), true), select('returned', '原批次退货流水', returns.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${x.quantity}` })), true), ...(money() ? [select('expense', '关联已登记费用', expenses.map(x => ({ value: x.id, label: `${x.title} · ${x.amount}` })), true)] : [])], prepare: values => ({ ...values, expected_updated_at: info.cases.find((x: Row) => x.id === Number(values.case))?.updated_at }) }
+    return { title: name, path, fields: [select('case', '质保事项', info.cases.filter((x: Row) => ['待响应', '维修中'].includes(x.status)).map((x: Row) => ({ value: x.id, label: `${x.id} · ${x.item} · ${x.description}` }))), select('status', '处理结果', [{ value: 'repairing', label: '维修中' }, { value: 'replaced', label: '已更换' }, { value: 'closed', label: '已关闭' }]), { key: 'response', label: '供应商响应、责任与处理说明', type: 'textarea' }, select('replacement', '补换货收货流水', receipts.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${quantityText(x.quantity)}` })), true), select('returned', '原批次退货流水', returns.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${quantityText(x.quantity)}` })), true), ...(money() ? [select('expense', '关联已登记费用', expenses.map(x => ({ value: x.id, label: `${x.title} · ${formatMoney(x.amount)}` })), true)] : [])], prepare: values => ({ ...values, expected_updated_at: info.cases.find((x: Row) => x.id === Number(values.case))?.updated_at }) }
   }
   if (name === '更新到货计划') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
@@ -386,7 +384,7 @@ export function approvalContent(r: Row, check: Row): { fields: Field[]; initial:
   const lines = (r.lines || []).map((line: Row, i: number) => [
     `${i + 1}. ${[line.item_code, line.item_name, line.specification].filter(Boolean).join(' · ')}`,
     ...(line.assembly_unit ? [line.assembly_unit] : []),
-    `${line.quantity}${line.unit ? ` ${line.unit}` : ''} × ${purchaseTotal([{ quantity: '1', unit_price: line.unit_price }])} = ${purchaseTotal([line])}`,
+    `${quantityText(line.quantity)}${line.unit ? ` ${line.unit}` : ''} × ${purchaseTotal([{ quantity: '1', unit_price: line.unit_price }])} = ${purchaseTotal([line])}`,
     line.bom_line ? '按 BOM 下单' : notes[String(line.id)] || '未关联 BOM 行',
   ].join('｜'))
   return {

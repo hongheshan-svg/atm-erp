@@ -89,7 +89,6 @@ class AuthenticationTests(TestCase):
     def test_all_fixed_roles_can_be_assigned_and_unknown_roles_are_rejected(self):
         self.login()
         selected = list(User.Role.values)
-        self.assertEqual(len(selected), 11)
         self.assertEqual(
             dict(User.Role.choices),
             {

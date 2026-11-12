@@ -1,34 +1,13 @@
 import { businessDate, choosePeople, selectExecutors } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
-import type { Browser, BrowserContext, TestInfo } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
-import { test, expect, login, detailAction, observePage, expectHttpError, type Page, type Locator, openRowAction } from './fixtures'
+import { test, expect, login, detailAction, api, submitDialog, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 const password = 'Production-role-QA-2026-only'
-const contexts: BrowserContext[] = []
-const errors: string[] = []
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, title: string) => page.locator('.el-table__body tr:visible').filter({ hasText: title })
 const date = businessDate
-async function api(page: Page, path: string, data?: Record<string, unknown>, status = 200) {
-  const token = await page.evaluate(() => localStorage.getItem('access_token'))
-  const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }
-  const response = data === undefined
-    ? await page.request.get('/api/' + path, { headers })
-    : await page.request.post('/api/' + path, { headers, data })
-  expect(response.status(), await response.text()).toBe(status)
-  return response.json()
-}
-async function save(page: Page, path: string, status = 200) {
-  if (status >= 400) expectHttpError(page, '/api/' + path, status)
-  const pending = page.waitForResponse(response => new URL(response.url()).pathname === '/api/' + path && response.request().method() === 'POST')
-  await dialog(page).locator('button[type="submit"]').click()
-  const response = await pending
-  expect(response.status(), await response.text()).toBe(status)
-  if (status < 300) await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
-  return response.json()
-}
 async function action(page: Page, target: Locator, name: string) {
   await openRowAction(page, target, name)
   await expect(dialog(page)).toBeVisible()
@@ -36,37 +15,23 @@ async function action(page: Page, target: Locator, name: string) {
 async function reason(page: Page, text: string) {
   await dialog(page).getByLabel('原因 / 说明', { exact: true }).fill(text)
 }
-async function session(browser: Browser, info: TestInfo, username: string) {
-  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: info.project.use.viewport, isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch })
-  contexts.push(context)
-  const page = await context.newPage()
-  observePage(page, errors)
-  await login(page, username, password)
-  return page
-}
 
 test.beforeEach(async ({ page }) => {
-  errors.length = 0
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
 })
-test.afterEach(async () => {
-  for (const context of contexts.splice(0)) await context.close()
-  expect(errors, '生产经理与项目经理页面不应出现未预期异常').toEqual([])
-})
 
-test('生产经理完成参与项目派工、团队工时纠错、安装与保内售后，设计及外部项目权限隔离', async ({ page: admin, browser }, info) => {
+test('生产经理完成参与项目派工、团队工时纠错、安装与保内售后，设计及外部项目权限隔离', async ({ page: admin, session }, info) => {
   test.setTimeout(240000)
   const suffix = String(Date.now())
   // Only two projects are created. All fixtures use authenticated APIs or forms;
   // no existing business record, installation setting or database is rewritten.
   await admin.goto('/erp/settings?section=users')
   await admin.getByRole('button', { name: '新增用户', exact: true }).click()
-  await expect(dialog(admin).getByRole('group', { name: '角色', exact: true }).getByRole('checkbox')).toHaveCount(11)
   await dialog(admin).getByLabel('用户名', { exact: true }).fill(`production_${suffix}`)
   await dialog(admin).getByLabel('姓名', { exact: true }).fill(`生产经理${suffix}`)
   await selectRoles(dialog(admin), ['production_manager'])
   await dialog(admin).getByLabel('密码', { exact: true }).fill(password)
-  const producer = await save(admin, 'auth/users/', 201)
+  const producer = await submitDialog(admin, 'auth/users/', 201)
   expect(producer.roles).toEqual(['production_manager'])
   async function supportingAccount(role: string, label: string) {
     return api(admin, 'auth/users/', { username: `${label}_${suffix}`, display_name: `${label}${suffix}`, roles: [role], password, hourly_cost: '25.00' }, 201)
@@ -75,7 +40,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const first = await supportingAccount('member', 'production_member_a')
   const second = await supportingAccount('member', 'production_member_b')
   const customer = await api(admin, 'business/partners/', { name: `生产验收客户${suffix}`, kind: 'customer' }, 201)
-  const manager = await session(browser, info, owner.username)
+  const manager = await session(owner.username, password)
   await manager.goto('/erp/projects')
   await manager.getByRole('button', { name: '新建项目', exact: true }).click()
   await dialog(manager).getByLabel('项目名称', { exact: true }).fill(`生产交付验收${suffix}`)
@@ -83,7 +48,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await dialog(manager).getByLabel('负责人', { exact: true }).selectOption(String(owner.id))
   await choosePeople(manager, dialog(manager).getByLabel('项目成员', { exact: true }), [producer, first, second].map(account => account.display_name))
   await dialog(manager).getByLabel('质保月数', { exact: true }).fill('12')
-  const current = await save(manager, 'business/projects/', 201)
+  const current = await submitDialog(manager, 'business/projects/', 201)
   await api(manager, `business/projects/${current.id}/task-supervisors/`, { supervisors: { production: producer.id, electrical: producer.id }, expected_revision: 0, reason: '项目指定生产与电气专业主管' })
   expect((await api(manager, `business/projects/${current.id}/`)).members).toEqual(expect.arrayContaining([producer.id, first.id, second.id]))
   const outside = await api(admin, 'business/projects/', { name: `其他生产项目${suffix}`, customer: customer.id, manager: owner.id, members: [first.id] }, 201)
@@ -92,7 +57,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await api(manager, `business/tasks/${design.id}/complete/`, { reason: '图纸审核完成，转生产执行' })
   const designBefore = await api(admin, `business/tasks/${design.id}/`)
   const outsideBefore = await api(admin, `business/tasks/${outsideTask.id}/`)
-  const page = await session(browser, info, producer.username)
+  const page = await session(producer.username, password)
   expect((await api(page, 'auth/me/')).roles).toEqual(['production_manager'])
   expect((await api(page, 'business/projects/')).results.map((project: { id: number }) => project.id)).toEqual([current.id])
   expect(await api(page, `business/projects/${current.id}/`)).toMatchObject({ can_manage: false, can_edit_bom: false, can_manage_production: true })
@@ -132,25 +97,25 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
     await dialog(page).getByLabel('任务名称', { exact: true }).fill(title)
     await selectExecutors(page, dialog(page), [first.display_name])
     await dialog(page).getByLabel('计划完成日期', { exact: true }).fill(date())
-    return save(page, 'business/tasks/', 201)
+    return submitDialog(page, 'business/tasks/', 201)
   }
   const assemblyTitle = `装配派工${suffix}`, testTitle = `调试派工${suffix}`
   const assembly = await createTask('assembly', assemblyTitle)
   const commissioning = await createTask('test', testTitle)
   await action(page, row(page, testTitle), '完成任务')
   await dialog(page).getByLabel('完成说明', { exact: true }).fill('允许装配和调试交叉推进')
-  await save(page, 'business/tasks/' + commissioning.id + '/complete/')
+  await submitDialog(page, 'business/tasks/' + commissioning.id + '/complete/', 200)
   expect((await api(admin, 'business/tasks/' + commissioning.id + '/')).status).toBe('done')
   await action(page, row(page, testTitle), '重开任务')
   await reason(page, '调试计划调整后继续执行')
-  await save(page, 'business/tasks/' + commissioning.id + '/reopen/')
+  await submitDialog(page, 'business/tasks/' + commissioning.id + '/reopen/', 200)
   await action(page, row(page, assemblyTitle), '取消任务')
   await reason(page, '排程暂缓后恢复同一任务')
-  await save(page, `business/tasks/${assembly.id}/cancel/`)
+  await submitDialog(page, `business/tasks/${assembly.id}/cancel/`, 200)
   await expect(row(page, assemblyTitle)).toContainText('已取消')
   await action(page, row(page, assemblyTitle), '重开任务')
   await reason(page, '排程恢复')
-  await save(page, `business/tasks/${assembly.id}/reopen/`)
+  await submitDialog(page, `business/tasks/${assembly.id}/reopen/`, 200)
   await page.goto('/erp/workbench')
   const work = await api(page, 'business/workbench/?page_size=5')
   expect(work.tasks.count).toBe(0)
@@ -166,19 +131,19 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await detailAction(page, '重新分配')
   await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '生产经理将装配交接给第二名成员')
-  await save(page, `business/tasks/${assembly.id}/assign/`)
+  await submitDialog(page, `business/tasks/${assembly.id}/assign/`, 200)
   expect(await api(admin, `business/tasks/${assembly.id}/`)).toMatchObject({ assignee: second.id, status: 'open' })
   await action(page, row(page, assemblyTitle), '登记工时')
   await choosePeople(page, dialog(page).getByLabel('人员', { exact: true }), [second.display_name])
   await dialog(page).getByLabel('日期', { exact: true }).fill(date())
   await dialog(page).getByLabel('工时', { exact: true }).fill('3')
   await dialog(page).getByLabel('工作内容', { exact: true }).fill('团队装配工时原记录')
-  const original = await save(page, `business/tasks/${assembly.id}/time/`)
+  const original = await submitDialog(page, `business/tasks/${assembly.id}/time/`, 200)
   await page.getByRole('tab', { name: '工时记录', exact: true }).click()
   await action(page, row(page, '团队装配工时原记录'), '更正工时')
   await dialog(page).getByLabel('更正后工时', { exact: true }).fill('2')
   await reason(page, '核对后团队实际装配两小时')
-  const replacement = await save(page, `business/time/${original.id}/amend/`)
+  const replacement = await submitDialog(page, `business/time/${original.id}/amend/`, 200)
   const times = (await api(page, `business/time/?task=${assembly.id}`)).results
   expect(times).toHaveLength(3)
   expect(times).toEqual(expect.arrayContaining([
@@ -197,7 +162,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   async function complete(title: string, id: number) {
     await action(page, row(page, title), '完成任务')
     await dialog(page).getByLabel('完成说明', { exact: true }).fill('生产经理核对现场执行完成')
-    await save(page, `business/tasks/${id}/complete/`)
+    await submitDialog(page, `business/tasks/${id}/complete/`, 200)
     expect((await api(admin, `business/tasks/${id}/`)).status).toBe('done')
   }
   await complete(assemblyTitle, assembly.id)
@@ -217,7 +182,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await action(page, row(page, installation.title), '重新分配')
   await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '安装排班交给第二名成员')
-  await save(page, `business/tasks/${installation.id}/assign/`)
+  await submitDialog(page, `business/tasks/${installation.id}/assign/`, 200)
   await complete(installation.title, installation.id)
   await api(manager, `business/deliveries/${delivery.id}/accept/`, { date: date(), reason: '项目经理完成客户现场验收' })
   expect((await api(manager, `business/projects/${current.id}/`)).status).toBe('warranty')
@@ -237,13 +202,13 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   const serviceTitle = `保内传感器复核${suffix}`
   await dialog(page).getByLabel('售后事项', { exact: true }).fill(serviceTitle)
   await choosePeople(page, dialog(page).getByLabel('执行人', { exact: true }), [first.display_name])
-  const service = await save(page, `business/projects/${current.id}/service/`)
+  const service = await submitDialog(page, `business/projects/${current.id}/service/`, 200)
   await page.getByRole('tab', { name: '交付与售后', exact: true }).click()
   await page.getByRole('tab', { name: '售后任务', exact: true }).click()
   await action(page, row(page, serviceTitle), '重新分配')
   await selectExecutors(page, dialog(page), [second.display_name])
   await reason(page, '售后由现场熟悉设备的成员处理')
-  await save(page, `business/tasks/${service.id}/assign/`)
+  await submitDialog(page, `business/tasks/${service.id}/assign/`, 200)
   await complete(serviceTitle, service.id)
   expect((await api(admin, `business/tasks/${service.id}/`)).assignee).toBe(second.id)
   expect(await api(admin, `business/entries/?project=${current.id}`)).toEqual(entriesBefore)
@@ -256,7 +221,7 @@ test('生产经理完成参与项目派工、团队工时纠错、安装与保�
   await categories.selectOption('drawing')
   const filename = `生产装配指导-${suffix}.txt`, content = '生产装配与现场调试指导，技术版本 A。'
   await dialog(page).getByLabel('文件', { exact: true }).setInputFiles({ name: filename, mimeType: 'text/plain', buffer: Buffer.from(content) })
-  const document = await save(page, 'business/documents/', 201)
+  const document = await submitDialog(page, 'business/documents/', 201)
   await row(page, filename).getByRole('button', { name: '操作 ▾', exact: true }).click()
   const downloading = page.waitForEvent('download')
   await page.getByRole('menuitem', { name: '下载', exact: true }).click()

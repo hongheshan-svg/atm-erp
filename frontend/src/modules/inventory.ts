@@ -17,6 +17,7 @@ import { warehouse } from './shared'
 import { C } from './shared'
 import { project } from './shared'
 import { quantityText } from '../utils/quantity'
+import { partTypeLabel } from '../product-categories'
 import { dateTimeText } from '../utils/datetime'
 import { item } from './shared'
 import { endpoint } from './shared'
@@ -30,7 +31,7 @@ export const columns: Record<string, Column[]> = {
     C('item_code', '物料编码'),
     C('item_name', '物料名称'),
     C('specification', '规格'), C('brand', '品牌'),
-    { key: 'part_type', label: '类别', format: row => (({ standard: '标准件', custom: '非标件' } as Record<string, string>)[row.part_type] || '未分类') },
+    { key: 'part_type', label: '类别', format: row => partTypeLabel(row.part_type) },
     C('location', '库位'),
     { key: 'quantity', label: '库存数量', format: row => (row.quantity == null ? display(row.quantity) : `${quantityText(row.quantity)}${row.unit ? ` ${row.unit}` : ''}`) },
     // 本库位最近一次采购合格入库的日期，便于追溯到货时间；列表里显示在库存数量下方（带「入库」字样），没有采购入库（如只有期初）不显示。

@@ -1,24 +1,8 @@
 import { businessDate } from './fixtures'
-import { test, expect, login, openRowAction, observePage, type Page } from './fixtures'
+import { test, expect, login, openRowAction, observePage, api, submitDialog, type Page } from './fixtures'
 
-async function api(page: Page, path: string, data?: object, status = 200) {
-  const token = await page.evaluate(() => localStorage.getItem('access_token'))
-  const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': crypto.randomUUID() }
-  const response = data === undefined
-    ? await page.request.get('/api/' + path, { headers })
-    : await page.request.post('/api/' + path, { headers, data })
-  expect(response.status(), await response.text()).toBe(status)
-  return response.json()
-}
 const row = (page: Page, code: string) => page.locator('.el-table__body tr:visible').filter({ hasText: code }).first()
-async function save(page: Page, title: string, path: string) {
-  const dialog = page.getByRole('dialog', { name: title, exact: true })
-  const pending = page.waitForResponse(r => new URL(r.url()).pathname === '/api/business/' + path && r.request().method() === 'POST')
-  await dialog.locator('button[type="submit"]').click()
-  const response = await pending
-  expect(response.status(), await response.text()).toBe(200)
-  await expect(dialog).not.toBeVisible()
-}
+const save = (page: Page, title: string, path: string) => submitDialog(page, 'business/' + path, 200, page.getByRole('dialog', { name: title, exact: true }))
 
 test('采购主动申请修改：独立审批人驳回或退回，修改后重新审批', async ({ page, browser }, info) => {
   const suffix = String(Date.now()), password = 'PurchaseChange-QA-2026-only'

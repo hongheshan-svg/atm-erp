@@ -15,7 +15,7 @@ from apps.core.permissions import (
 
 from ..models import BOMLine, Entry, Partner, PurchaseLine, SalesOrder, Task
 from ..task_milestones import AUTOMATIC, PRE_SHIPMENT
-from .bom import incoming_by_item, issued_by_item, linked_incoming_by_line, open_purchases_by
+from .bom import BOM_STATES, linked_incoming_by_line, open_purchases_by, total_shortfalls
 from .common import (
     ZERO,
     audit,
@@ -371,16 +371,14 @@ def change_task(actor, key, task_id, data, operation):
     )
 
 
-BOM_STATES = {'draft', 'quoted', 'active', 'delivering'}
-
-
 def removal_problems(project, lines):
     """移除这些 BOM 行前的拦截原因：关联本行的未收采购须先处理，各物料其余单元合计仍须覆盖已领与在途。
 
-    提示带上数量和采购单号，工程师拿着它就能去找采购或仓管，不必再翻单据。
+    提示带上数量和采购单号，工程师拿着它就能去找采购或仓管，不必再翻单据。移除等同把该行数量改为 0，
+    合计校验与 BOM 修订、导入共用 total_shortfalls，规则和提示一致。
     """
     problems = []
-    # 关联在途、其余单元合计、已领与在途按 BOM 行或物料各一次分组读取；采购单号只为被拦截的行和物料查一次。
+    # 关联在途按 BOM 行一次分组读取；采购单号只为被拦截的行查一次。
     linked = linked_incoming_by_line([line.pk for line in lines])
     blocked = [line for line in lines if linked[line.pk] > ZERO]
     line_orders = open_purchases_by(PurchaseLine.objects.filter(bom_line__in=blocked), 'bom_line_id') if blocked else {}
@@ -390,35 +388,9 @@ def removal_problems(project, lines):
             f'{line.item.code} {line.item.name}（{line.assembly_unit or "未分单元"}）关联在途采购 {linked[line.pk]}'
             f'{f"（{orders}）" if orders else ""}，请联系采购员取消未收余量后再移除。'
         )
-    removing = {line.pk for line in lines}
-    item_ids = sorted({line.item_id for line in lines})
-    others = dict.fromkeys(item_ids, ZERO)
-    for row in (
-        BOMLine.objects.filter(project=project, item_id__in=item_ids)
-        .exclude(pk__in=removing)
-        .values('item_id')
-        .annotate(total=Sum('quantity'))
-    ):
-        others[row['item_id']] = row['total'] or ZERO
-    used_by, pending_by = issued_by_item(project, item_ids), incoming_by_item(project, item_ids)
-    short = [item_id for item_id in item_ids if others[item_id] < used_by[item_id] + pending_by[item_id]]
-    item_orders = (
-        open_purchases_by(PurchaseLine.objects.filter(purchase__project=project, item_id__in=short), 'item_id')
-        if short
-        else {}
-    )
-    first = {}
-    for line in lines:
-        first.setdefault(line.item_id, line)
-    for item_id in short:
-        other, used, pending = others[item_id], used_by[item_id], pending_by[item_id]
-        item = first[item_id].item
-        orders = item_orders.get(item_id, '')
-        problems.append(
-            f'移除后 {item.code} {item.name} 其余单元合计 {other}，小于已领用 {used} 与在途采购 {pending}'
-            f'{f"（{orders}）" if orders else ""} 之和；请联系采购员取消未收余量或联系仓管退回未用材料，'
-            '也可用「修改此行」改为减少数量。'
-        )
+    existing = BOMLine.objects.filter(project=project, item_id__in={line.item_id for line in lines})
+    shortfalls = total_shortfalls(project, existing, [(line, line.item_id, ZERO) for line in lines])
+    problems.extend(problem['message'] for problem in shortfalls)
     return problems
 
 

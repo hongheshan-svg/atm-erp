@@ -1,12 +1,13 @@
 import type { Field, Row } from '../types'
-import { productCategories } from '../product-categories'
+import { partTypes, productCategories } from '../product-categories'
+import { fromScaled, QUANTITY_SCALE, toScaled } from '../utils/decimal'
 import { rows } from './shared'
 
 const detail = (key: string, label: string): Field => ({ key, label, readonly: true, displayOnly: true })
 export function materialDetails(item: Row): Row {
   const drawing_model = [item.drawing_number && `图号：${item.drawing_number}`, item.specification && `型号：${item.specification}`].filter(Boolean).join('\n')
   const revision_brand = [item.drawing_revision && `版本：${item.drawing_revision}`, item.brand && `品牌：${item.brand}`].filter(Boolean).join('\n')
-  const part_label = [productCategories[item.product_category], ({ standard: '标准件', custom: '非标件' } as Record<string, string>)[item.part_type]].filter(Boolean).join(' / ')
+  const part_label = [productCategories[item.product_category], partTypes[item.part_type]].filter(Boolean).join(' / ')
   return {
     ...item,
     drawing_model,
@@ -48,11 +49,7 @@ export function warehouseLines(kind: 'receipt' | 'issue', initial: Row[], option
   }
 }
 
-// BOM quantities are non-negative decimals with at most three fractional digits.
+// BOM quantities are non-negative decimals with at most three fractional digits; anything else counts as 0.
 export function sumQuantities(values: string[]): string {
-  const total = values.reduce((sum, value) => {
-    const [whole = '0', fraction = ''] = value.split('.')
-    return sum + BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'))
-  }, 0n)
-  return `${total / 1000n}.${String(total % 1000n).padStart(3, '0')}`
+  return fromScaled(values.reduce((sum, value) => sum + (toScaled(value, QUANTITY_SCALE) ?? 0n), 0n), QUANTITY_SCALE)
 }

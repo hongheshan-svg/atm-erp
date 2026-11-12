@@ -1,5 +1,5 @@
 import { businessDate } from './fixtures'
-import { test, expect, login, openRowAction } from './fixtures'
+import { test, expect, login, accountTokens, openRowAction } from './fixtures'
 
 test('项目相关人员和销售可查看流程节点与跟进人员，原单权限继续隔离', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
@@ -57,7 +57,7 @@ test('项目相关人员和销售可查看流程节点与跟进人员，原单�
   const denied = await page.request.get(`/api/business/purchases/${purchase.id}/`, { headers: { Authorization: `Bearer ${participantToken}` } })
   expect(denied.status()).toBe(403)
 
-  const approver = await post('auth/login/', { username: staff.purchase_manager!.username, password }, { Authorization: '', 'Idempotency-Key': '' })
+  const approver = await accountTokens(page.request, staff.purchase_manager!.username, password)
   await post(`business/purchases/${purchase.id}/approve/`, {}, { Authorization: `Bearer ${approver.access}`, 'Idempotency-Key': '' })
   await progress.getByRole('button', { name: '刷新进度', exact: true }).click()
   await expect(progress.locator('.progress-status')).toHaveText('待收货')
@@ -70,7 +70,7 @@ test('项目相关人员和销售可查看流程节点与跟进人员，原单�
   expect(entriesResponse.ok()).toBeTruthy()
   const payable = (await entriesResponse.json()).results.find((entry: { purchase: number }) => entry.purchase === purchase.id)
   expect(payable).toBeTruthy()
-  const finance = await post('auth/login/', { username: staff.finance!.username, password }, { Authorization: '', 'Idempotency-Key': '' })
+  const finance = await accountTokens(page.request, staff.finance!.username, password)
   const financeHeaders = { Authorization: `Bearer ${finance.access}`, 'Idempotency-Key': '' }
   const prepayment = await post('business/reconciliations/', {
     entry: payable.id, kind: 'prepayment', counterparty_balance: '123.45', approved_amount: '100',

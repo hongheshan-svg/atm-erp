@@ -766,8 +766,8 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def shipped(self, obj):
         # 列表由 with_task_flags 注解好；单个实例（如动作返回值）没有注解时再退回查询。
-        if hasattr(obj, 'project_shipped'):
-            return obj.project_shipped
+        if hasattr(obj, 'project_first_shipped_at'):
+            return obj.project_first_shipped_at is not None
         return obj.project.deliveries.exists()
 
     def get_can_cancel(self, obj):

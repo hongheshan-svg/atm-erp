@@ -50,6 +50,9 @@ TARGETS = {
         'apps.business.tests.test_audit_business',
         'apps.business.tests.test_supply_handover',
     ),
+    # 只是调度划分：整个模块都是多会话抢锁用例的放这里，CI（run_selected）不加 --parallel 串行执行。
+    # 其他模块里零散的线程化 TransactionTestCase（对账、银行导入、删除、手工编号、里程碑、采购变更、审计回归）
+    # 用例少、自带超时，随所在模块留在 business 阶段，与其余用例一起多进程执行。
     'concurrency': (
         'apps.core.tests.test_concurrency',
         'apps.business.tests.test_concurrency',

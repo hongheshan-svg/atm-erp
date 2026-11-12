@@ -1,6 +1,5 @@
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.core.permissions import (
@@ -36,8 +35,7 @@ class BOMView(ReadView):
             file_format = request.data.get('file_format', 'xlsx')
             layout = request.data.get('layout', 'standard')
         else:
-            if queryset.count() > tabular.MAX_EXPORT:
-                raise ValidationError('导出超过20000条，请缩小筛选范围。')
+            tabular.check_export_size(queryset.count())
             lines = queryset
             file_format = request.query_params.get('file_format', 'csv')
         return bom_export.document(lines, file_format, layout)

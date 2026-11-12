@@ -11,7 +11,6 @@ from xml.etree.ElementTree import ParseError
 
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
-from django.db.models import F, Sum
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
@@ -19,8 +18,16 @@ from rest_framework.exceptions import ValidationError
 
 from apps.core.error_messages import chinese_error
 
-from ..models import BOMLine, Item, PurchaseLine
-from .bom import blank_unit_message, by_item, revision, total_shortfalls, unit_conflict
+from ..models import BOMLine, Item
+from .bom import (
+    BOM_STATES,
+    blank_unit_message,
+    by_item,
+    linked_incoming_by_line,
+    revision,
+    total_shortfalls,
+    unit_conflict,
+)
 from .common import day, number, state
 from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
@@ -173,7 +180,7 @@ def message(detail, labels=None):
 
 
 def preview(project, upload):
-    state(project, {'draft', 'quoted', 'active', 'delivering'})
+    state(project, BOM_STATES)
     expected_revision = revision(project)
     headers, raw = read_file(upload, return_headers=True)
     if headers in (HEADERS, PREVIOUS_HEADERS):
@@ -241,14 +248,8 @@ def preview(project, upload):
                 raise ValidationError('修改已有 BOM 必须填写变更说明，且不超过 500 字符。')
             if action == 'update':
                 if linked is None:
-                    linked = {
-                        group['bom_line_id']: group['total']
-                        for group in PurchaseLine.objects.filter(bom_line__in=existing)
-                        .exclude(purchase__status='cancelled')
-                        .values('bom_line_id')
-                        .annotate(total=Sum(F('quantity') - F('received_quantity') - F('cancelled_quantity')))
-                    }
-                pending = linked.get(current[row_key].pk) or 0
+                    linked = linked_incoming_by_line([line.pk for line in existing])
+                pending = linked[current[row_key].pk]
                 if qty < pending:
                     raise ValidationError('单元用量不能小于该行在途采购数量。')
             lines.append(

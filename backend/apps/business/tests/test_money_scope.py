@@ -24,18 +24,52 @@ from .test_commercial_chain import TODAY, BusinessFixtures
 GLOBAL_EXTRAS = ('purchaser', 'warehouse', 'purchase_manager')
 COST_PATHS = ('cost/', 'cost-analysis/', 'cost-sources/')
 SALE_MONEY = {'quote_amount', 'contract_amount', 'original_contract_amount'}
+SCOPE_FIXTURES = (
+    'today',
+    'own',
+    'outsider',
+    'other',
+    'sale_id',
+    'approved',
+    'submitted',
+    'own_approved',
+    'own_submitted',
+    'statement',
+    'contract',
+    'technical',
+    'own_contract',
+    'sale_contract',
+    'sale_technical',
+)
 
 
 class MoneyScopeTests(BusinessFixtures, TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
+        # 附件在 setUpTestData 中上传，临时 MEDIA_ROOT 须覆盖整个类。
         media = tempfile.TemporaryDirectory()
-        self.addCleanup(media.cleanup)
-        media_settings = override_settings(MEDIA_ROOT=media.name)
-        media_settings.enable()
-        self.addCleanup(media_settings.disable)
+        cls.addClassCleanup(media.cleanup)
+        cls.enterClassContext(override_settings(MEDIA_ROOT=media.name))
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        # 各用例基本只读，项目、采购、收货、对账、回款、工时和附件每个类经接口建一次；用例拿到的是深拷贝，写入随用例回滚。
+        super().setUpTestData()
+        fixture = cls.api_fixture()
+        fixture.build_scope()
+        for name in SCOPE_FIXTURES:
+            setattr(cls, name, getattr(fixture, name))
+
+    def setUp(self):
         self.setup_business()
+
+    @property
+    def manager(self):
+        return self.users['manager']
+
+    def build_scope(self):
         self.today = str(timezone.localdate())
-        self.manager = self.users['manager']
         self.own = self.active_project()
         self.outsider = User.objects.create_user(username='manager2', role='manager')
         sale = self.post(
@@ -164,7 +198,8 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         return response.data['id']
 
-    def get(self, path, params=None, role='manager'):
+    def fetch(self, path, params=None, role='manager'):
+        """返回原始响应、不断言状态：越界检查要汇总各入口的状态码后一并报告。"""
         return self.clients[role].get('/api/business/' + path, params or {})
 
     def act_as(self, *extras):
@@ -174,7 +209,7 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
     def sales_money_leaks(self, role='manager'):
         """已签约且关联非参与项目的销售单：行可见，合同额、回款、补充协议金额及合同附件按项目金额范围隐藏。"""
         leaks = []
-        listed = {row['id']: row for row in self.get('sales/', {'page_size': 200}, role).data['results']}
+        listed = {row['id']: row for row in self.fetch('sales/', {'page_size': 200}, role).data['results']}
         self.assertIn(self.sale_id, listed, '销售单行可见性不变')
         row = listed[self.sale_id]
         if SALE_MONEY & set(row) or row.get('amounts_visible') is not False:
@@ -182,27 +217,27 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         own = listed[self.own.sale.pk]
         if not SALE_MONEY <= set(own) or own['amounts_visible'] is not True:
             leaks.append('销售列表误隐藏本人负责项目合同额')
-        detail = self.get(f'sales/{self.sale_id}/', role=role).data
+        detail = self.fetch(f'sales/{self.sale_id}/', role=role).data
         self.assertEqual(detail['project'], self.other.pk)
         if SALE_MONEY & set(detail):
             leaks.append(f'销售详情含非参与项目合同额 {detail.get("contract_amount")}')
-        progress = self.get(f'sales/{self.sale_id}/progress/', role=role).data
+        progress = self.fetch(f'sales/{self.sale_id}/progress/', role=role).data
         if progress['receivables'] or progress.get('amounts_visible') is not False:
             leaks.append(f'销售交付与回款含非参与项目回款 {progress["receivables"]}')
-        export = self.get('sales/export/', {'file_format': 'csv'}, role).content.decode('utf-8-sig')
+        export = self.fetch('sales/export/', {'file_format': 'csv'}, role).content.decode('utf-8-sig')
         if '20000' in export or self.other.sale.code not in export:
             leaks.append('销售导出含非参与项目合同额或误删销售行')
-        history = self.get(f'sales/{self.sale_id}/amendments/', role=role).data
+        history = self.fetch(f'sales/{self.sale_id}/amendments/', role=role).data
         if any('amount' in {*record['before'], *record['after']} or record['document'] for record in history):
             leaks.append(f'补充协议记录含非参与项目金额或合同附件 {history}')
-        sale_docs = {row['id'] for row in self.get('documents/', {'sale': self.sale_id}, role).data['results']}
-        project_docs = {row['id'] for row in self.get('documents/', {'project': self.other.pk}, role).data['results']}
+        sale_docs = {row['id'] for row in self.fetch('documents/', {'sale': self.sale_id}, role).data['results']}
+        project_docs = {row['id'] for row in self.fetch('documents/', {'project': self.other.pk}, role).data['results']}
         if self.sale_contract in sale_docs | project_docs:
             leaks.append('附件列表含非参与项目销售合同')
         if self.sale_technical not in sale_docs:
             leaks.append('附件列表误隐藏销售技术附件')
         for path in (f'documents/{self.sale_contract}/', f'documents/{self.sale_contract}/download/'):
-            if self.get(path, role=role).status_code != 404:
+            if self.fetch(path, role=role).status_code != 404:
                 leaks.append(f'非参与项目销售合同附件可读 {path}')
         return leaks
 
@@ -210,65 +245,67 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         """逐个金额读取入口核对非参与项目；返回越界项，便于一次看到全部泄露。"""
         other = self.other.pk
         leaks = []
-        detail = self.get(f'projects/{other}/')
+        detail = self.fetch(f'projects/{other}/')
         self.assertEqual(detail.status_code, 200, '兼任全局岗位后仍可查看项目基本信息')
         self.assertFalse(detail.data['can_manage'])
         if {'quote_amount', 'contract_amount'} & set(detail.data):
             leaks.append(f'项目详情含合同金额 {detail.data.get("contract_amount")}')
-        listed = {row['id']: row for row in self.get('projects/').data['results']}
+        listed = {row['id']: row for row in self.fetch('projects/').data['results']}
         if 'contract_amount' in listed[other]:
             leaks.append('项目列表含非参与项目合同金额')
         if 'contract_amount' not in listed[self.own.pk]:
             leaks.append('项目列表误隐藏本人负责项目合同金额')
         for path in COST_PATHS:
-            response = self.get(f'projects/{other}/{path}')
+            response = self.fetch(f'projects/{other}/{path}')
             if response.status_code not in (403, 404):
                 leaks.append(f'{path} -> {response.status_code}')
-        if self.get('entries/', {'project': other}).data['count']:
+        if self.fetch('entries/', {'project': other}).data['count']:
             leaks.append('entries 列表含非参与项目款项')
-        export = self.get('entries/export/', {'project': other})
+        export = self.fetch('entries/export/', {'project': other})
         if export.status_code != 200 or self.approved.code.encode() in export.content:
             leaks.append(f'entries 导出含非参与项目款项 ({export.status_code})')
-        summary = self.get('entries/summary/', {'project': other}).data
+        summary = self.fetch('entries/summary/', {'project': other}).data
         if any(Decimal(value) for value in summary.values()):
             leaks.append(f'entries/summary 非零 {summary}')
-        if self.get('payments/', {'entry__project': other}).data['count']:
+        if self.fetch('payments/', {'entry__project': other}).data['count']:
             leaks.append('payments 列表含非参与项目收付款')
-        if self.get('reconciliations/', {'entry__project': other}).data['count']:
+        if self.fetch('reconciliations/', {'entry__project': other}).data['count']:
             leaks.append('对账单列表含非参与项目')
-        if self.get(f'reconciliations/{self.statement}/').status_code not in (403, 404):
+        if self.fetch(f'reconciliations/{self.statement}/').status_code not in (403, 404):
             leaks.append('非参与项目对账单详情可读')
-        monthly = self.get('reconciliations/supplier-monthly/', {'supplier': self.supplier.pk, 'month': self.today[:7]})
+        monthly = self.fetch(
+            'reconciliations/supplier-monthly/', {'supplier': self.supplier.pk, 'month': self.today[:7]}
+        )
         self.assertEqual(monthly.status_code, 200, monthly.data)
         if other in {row['project'] for row in monthly.data['rows']}:
             leaks.append('供应商月度对账含非参与项目应付')
-        rows = self.get('time/', {'task__project': other}).data['results']
+        rows = self.fetch('time/', {'task__project': other}).data['results']
         self.assertEqual(len(rows), 1, '兼任全局岗位后工时行仍按原范围可见')
         if {'hourly_cost', 'cost'} & set(rows[0]):
             leaks.append(f'工时含费率/成本 {rows[0].get("hourly_cost")}/{rows[0].get("cost")}')
-        exported = self.get('time/export/', {'task__project': other}).content.decode('utf-8-sig')
+        exported = self.fetch('time/export/', {'task__project': other}).content.decode('utf-8-sig')
         if '160.00' in exported or '80.00' in exported:
             leaks.append('工时导出含费率/成本')
-        documents = {row['id'] for row in self.get('documents/', {'project': other}).data['results']}
+        documents = {row['id'] for row in self.fetch('documents/', {'project': other}).data['results']}
         if self.contract in documents:
             leaks.append('附件列表含非参与项目合同')
         if self.technical not in documents:
             leaks.append('附件列表误隐藏非金额技术附件')
-        if self.get(f'documents/{self.contract}/download/').status_code != 404:
+        if self.fetch(f'documents/{self.contract}/download/').status_code != 404:
             leaks.append('非参与项目合同附件可下载')
         leaks.extend(self.sales_money_leaks())
-        settlements = self.get('workbench/').data.get('settlements', {'results': []})['results']
+        settlements = self.fetch('workbench/').data.get('settlements', {'results': []})['results']
         if other in {row['project'] for row in settlements}:
             leaks.append('工作台 settlements 含非参与项目款项')
-        moves = self.get('moves/', {'project': other}).data['results']
+        moves = self.fetch('moves/', {'project': other}).data['results']
         if any({'value', 'supplier_credit'} & set(row) for row in moves):
             leaks.append('库存流水含非参与项目金额')
-        line = self.get(f'purchases/{self.approved.pk}/').data['lines'][0]
+        line = self.fetch(f'purchases/{self.approved.pk}/').data['lines'][0]
         if extra == 'warehouse' and 'unit_price' in line:
             leaks.append('兼任仓管后可见非参与项目采购单价')
-        if extra == 'warehouse' and self.get(f'purchases/{self.approved.pk}/contract-preview/').status_code != 403:
+        if extra == 'warehouse' and self.fetch(f'purchases/{self.approved.pk}/contract-preview/').status_code != 403:
             leaks.append('兼任仓管后可见非参与项目采购合同金额')
-        check = self.get(f'purchases/{self.submitted.pk}/budget-check/')
+        check = self.fetch(f'purchases/{self.submitted.pk}/budget-check/')
         if extra == 'purchase_manager':
             if check.status_code != 200 or check.data.get('scope') != 'purchasing' or 'rows' in check.data:
                 leaks.append(f'budget-check 未限为材料摘要 {check.status_code} {sorted(check.data)}')
@@ -278,16 +315,16 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
 
     def test_manager_alone_stays_within_participating_projects(self):
         other = self.other.pk
-        self.assertEqual(self.get(f'projects/{other}/').status_code, 404)
+        self.assertEqual(self.fetch(f'projects/{other}/').status_code, 404)
         for path in COST_PATHS:
-            self.assertEqual(self.get(f'projects/{other}/{path}').status_code, 404, path)
-        self.assertEqual(self.get('entries/', {'project': other}).data['count'], 0)
-        self.assertEqual(self.get('payments/', {'entry__project': other}).data['count'], 0)
-        self.assertEqual(self.get('time/', {'task__project': other}).data['count'], 0)
-        self.assertEqual(self.get(f'documents/{self.contract}/download/').status_code, 404)
-        self.assertEqual(self.get(f'purchases/{self.submitted.pk}/budget-check/').status_code, 404)
-        self.assertEqual(self.get(f'documents/{self.own_contract}/download/').status_code, 200)
-        self.assertIn('rows', self.get(f'purchases/{self.own_submitted.pk}/budget-check/').data)
+            self.assertEqual(self.fetch(f'projects/{other}/{path}').status_code, 404, path)
+        self.assertEqual(self.fetch('entries/', {'project': other}).data['count'], 0)
+        self.assertEqual(self.fetch('payments/', {'entry__project': other}).data['count'], 0)
+        self.assertEqual(self.fetch('time/', {'task__project': other}).data['count'], 0)
+        self.assertEqual(self.fetch(f'documents/{self.contract}/download/').status_code, 404)
+        self.assertEqual(self.fetch(f'purchases/{self.submitted.pk}/budget-check/').status_code, 404)
+        self.assertEqual(self.fetch(f'documents/{self.own_contract}/download/').status_code, 200)
+        self.assertIn('rows', self.fetch(f'purchases/{self.own_submitted.pk}/budget-check/').data)
         self.assertEqual(self.sales_money_leaks(), [])
 
     def test_global_operational_roles_do_not_extend_manager_money_scope(self):
@@ -303,55 +340,57 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         for extra in GLOBAL_EXTRAS:
             with self.subTest(extra=extra):
                 self.act_as(extra)
-                self.assertEqual(self.get(f'projects/{other}/').data['contract_amount'], '20000.00')
+                self.assertEqual(self.fetch(f'projects/{other}/').data['contract_amount'], '20000.00')
                 for path in COST_PATHS:
-                    self.assertEqual(self.get(f'projects/{other}/{path}').status_code, 200, path)
-                self.assertEqual(self.get('entries/', {'project': other}).data['count'], 2)
-                self.assertIn(self.approved.code.encode(), self.get('entries/export/', {'project': other}).content)
-                self.assertEqual(self.get('payments/', {'entry__project': other}).data['count'], 1)
-                self.assertEqual(self.get('reconciliations/', {'entry__project': other}).data['count'], 1)
-                row = self.get('time/', {'task__project': other}).data['results'][0]
+                    self.assertEqual(self.fetch(f'projects/{other}/{path}').status_code, 200, path)
+                self.assertEqual(self.fetch('entries/', {'project': other}).data['count'], 2)
+                self.assertIn(self.approved.code.encode(), self.fetch('entries/export/', {'project': other}).content)
+                self.assertEqual(self.fetch('payments/', {'entry__project': other}).data['count'], 1)
+                self.assertEqual(self.fetch('reconciliations/', {'entry__project': other}).data['count'], 1)
+                row = self.fetch('time/', {'task__project': other}).data['results'][0]
                 self.assertEqual((row['hourly_cost'], row['cost']), ('80.00', '160.00'))
-                self.assertEqual(self.get(f'documents/{self.contract}/download/').status_code, 200)
-                settlements = self.get('workbench/').data['settlements']['results']
+                self.assertEqual(self.fetch(f'documents/{self.contract}/download/').status_code, 200)
+                settlements = self.fetch('workbench/').data['settlements']['results']
                 self.assertIn(other, {row['project'] for row in settlements})
-                self.assertIn('value', self.get('moves/', {'project': other}).data['results'][0])
-                self.assertEqual(self.get(f'purchases/{self.approved.pk}/').data['lines'][0]['unit_price'], '100.00')
-                self.assertIn('rows', self.get(f'purchases/{self.submitted.pk}/budget-check/').data)
+                self.assertIn('value', self.fetch('moves/', {'project': other}).data['results'][0])
+                self.assertEqual(self.fetch(f'purchases/{self.approved.pk}/').data['lines'][0]['unit_price'], '100.00')
+                self.assertIn('rows', self.fetch(f'purchases/{self.submitted.pk}/budget-check/').data)
                 self.assert_sale_money_visible()
 
     def assert_sale_money_visible(self, role='manager', sale_id=None, document=None):
         sale_id = sale_id or self.sale_id
-        listed = {row['id']: row for row in self.get('sales/', {'page_size': 200}, role).data['results']}
+        listed = {row['id']: row for row in self.fetch('sales/', {'page_size': 200}, role).data['results']}
         self.assertTrue(listed[sale_id]['amounts_visible'])
         self.assertTrue(SALE_MONEY <= set(listed[sale_id]))
-        detail = self.get(f'sales/{sale_id}/', role=role).data
+        detail = self.fetch(f'sales/{sale_id}/', role=role).data
         self.assertEqual(detail['contract_amount'], detail['quote_amount'])
-        progress = self.get(f'sales/{sale_id}/progress/', role=role).data
+        progress = self.fetch(f'sales/{sale_id}/progress/', role=role).data
         self.assertTrue(progress['amounts_visible'])
         self.assertTrue(progress['receivables'])
         self.assertTrue({'amount', 'credit_amount', 'paid', 'balance'} <= set(progress['receivables'][0]))
-        exported = self.get('sales/export/', {'file_format': 'csv'}, role).content.decode('utf-8-sig')
+        exported = self.fetch('sales/export/', {'file_format': 'csv'}, role).content.decode('utf-8-sig')
         self.assertIn(detail['contract_amount'].split('.')[0], exported)
-        self.assertEqual(self.get(f'documents/{document or self.sale_contract}/download/', role=role).status_code, 200)
+        self.assertEqual(
+            self.fetch(f'documents/{document or self.sale_contract}/download/', role=role).status_code, 200
+        )
         return detail, progress
 
     def test_finance_and_admin_keep_global_money_access(self):
         other = self.other.pk
         for role in ('finance', 'admin'):
             with self.subTest(role=role):
-                self.assertEqual(self.get(f'projects/{other}/', role=role).data['contract_amount'], '20000.00')
+                self.assertEqual(self.fetch(f'projects/{other}/', role=role).data['contract_amount'], '20000.00')
                 for path in COST_PATHS:
-                    self.assertEqual(self.get(f'projects/{other}/{path}', role=role).status_code, 200, path)
-                self.assertEqual(self.get('entries/', {'project': other}, role=role).data['count'], 2)
-                self.assertEqual(self.get('payments/', {'entry__project': other}, role=role).data['count'], 1)
-                self.assertEqual(self.get('reconciliations/', {'entry__project': other}, role=role).data['count'], 1)
-                row = self.get('time/', {'task__project': other}, role=role).data['results'][0]
+                    self.assertEqual(self.fetch(f'projects/{other}/{path}', role=role).status_code, 200, path)
+                self.assertEqual(self.fetch('entries/', {'project': other}, role=role).data['count'], 2)
+                self.assertEqual(self.fetch('payments/', {'entry__project': other}, role=role).data['count'], 1)
+                self.assertEqual(self.fetch('reconciliations/', {'entry__project': other}, role=role).data['count'], 1)
+                row = self.fetch('time/', {'task__project': other}, role=role).data['results'][0]
                 self.assertEqual(row['cost'], '160.00')
-                self.assertEqual(self.get(f'documents/{self.contract}/download/', role=role).status_code, 200)
-                self.assertIn('value', self.get('moves/', {'project': other}, role=role).data['results'][0])
-                self.assertIn('rows', self.get(f'purchases/{self.submitted.pk}/budget-check/', role=role).data)
-                monthly = self.get(
+                self.assertEqual(self.fetch(f'documents/{self.contract}/download/', role=role).status_code, 200)
+                self.assertIn('value', self.fetch('moves/', {'project': other}, role=role).data['results'][0])
+                self.assertIn('rows', self.fetch(f'purchases/{self.submitted.pk}/budget-check/', role=role).data)
+                monthly = self.fetch(
                     'reconciliations/supplier-monthly/', {'supplier': self.supplier.pk, 'month': self.today[:7]}, role
                 ).data
                 self.assertIn(other, {row['project'] for row in monthly['rows']})
@@ -361,12 +400,12 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
     def test_revoked_membership_is_not_reused_by_later_requests(self):
         self.act_as('warehouse')
         self.other.members.add(self.manager)
-        self.assertIn('contract_amount', self.get(f'projects/{self.other.pk}/').data)
+        self.assertIn('contract_amount', self.fetch(f'projects/{self.other.pk}/').data)
         self.other.members.remove(self.manager)
-        self.assertNotIn('contract_amount', self.get(f'projects/{self.other.pk}/').data)
-        self.assertEqual(self.get(f'projects/{self.other.pk}/cost/').status_code, 403)
-        self.assertEqual(self.get('entries/', {'project': self.other.pk}).data['count'], 0)
-        self.assertEqual(self.get(f'documents/{self.contract}/download/').status_code, 404)
+        self.assertNotIn('contract_amount', self.fetch(f'projects/{self.other.pk}/').data)
+        self.assertEqual(self.fetch(f'projects/{self.other.pk}/cost/').status_code, 403)
+        self.assertEqual(self.fetch('entries/', {'project': self.other.pk}).data['count'], 0)
+        self.assertEqual(self.fetch(f'documents/{self.contract}/download/').status_code, 404)
 
     def test_purchase_document_uses_purchase_scope_not_warehouse_scope(self):
         response = self.clients['admin'].post(
@@ -384,47 +423,47 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         for extra, expected in [('warehouse', 404), ('purchaser', 200), ('purchase_manager', 200)]:
             with self.subTest(extra=extra):
                 self.act_as(extra)
-                self.assertEqual(self.get(f'documents/{document}/download/').status_code, expected)
-                visible = self.get('documents/', {'purchase': self.approved.pk}).data['results']
+                self.assertEqual(self.fetch(f'documents/{document}/download/').status_code, expected)
+                visible = self.fetch('documents/', {'purchase': self.approved.pk}).data['results']
                 self.assertEqual(document in {row['id'] for row in visible}, expected == 200)
 
     def test_global_operational_roles_keep_their_own_cross_project_reads(self):
         other = self.other.pk
         self.act_as('purchaser')
-        line = self.get(f'purchases/{self.approved.pk}/').data['lines'][0]
+        line = self.fetch(f'purchases/{self.approved.pk}/').data['lines'][0]
         self.assertEqual(line['unit_price'], '100.00')
-        exported = self.get('purchases/export/', {'project': other}).content.decode('utf-8-sig')
+        exported = self.fetch('purchases/export/', {'project': other}).content.decode('utf-8-sig')
         self.assertIn(self.approved.code, exported)
         self.assertIn('100.00', exported)
-        self.assertEqual(self.get('bom/', {'project': other}).data['count'], 1)
-        self.assertEqual(self.get(f'projects/{other}/demand/').status_code, 200)
-        self.assertEqual(self.get('tasks/', {'project': other}).data['count'], 1)
+        self.assertEqual(self.fetch('bom/', {'project': other}).data['count'], 1)
+        self.assertEqual(self.fetch(f'projects/{other}/demand/').status_code, 200)
+        self.assertEqual(self.fetch('tasks/', {'project': other}).data['count'], 1)
 
         self.act_as('warehouse')
-        purchase = self.get(f'purchases/{self.approved.pk}/').data
+        purchase = self.fetch(f'purchases/{self.approved.pk}/').data
         self.assertEqual(purchase['lines'][0]['received_quantity'], '1.000')
         self.assertNotIn('unit_price', purchase['lines'][0])
-        own_line = self.get(f'purchases/{self.own_approved.pk}/').data['lines'][0]
+        own_line = self.fetch(f'purchases/{self.own_approved.pk}/').data['lines'][0]
         self.assertEqual(own_line['unit_price'], '30.00')
-        moves = self.get('moves/', {'project': other}).data['results']
+        moves = self.fetch('moves/', {'project': other}).data['results']
         self.assertEqual([row['quantity'] for row in moves], ['1.000'])
-        self.assertIn('value', self.get('moves/', {'project': self.own.pk}).data['results'][0])
+        self.assertIn('value', self.fetch('moves/', {'project': self.own.pk}).data['results'][0])
 
         self.act_as('purchase_manager')
-        summary = self.get(f'purchases/{self.submitted.pk}/budget-check/').data
+        summary = self.fetch(f'purchases/{self.submitted.pk}/budget-check/').data
         self.assertEqual(summary['scope'], 'purchasing')
         self.assertEqual(summary['purchase_amount'], '50.00')
-        self.assertIn('rows', self.get(f'purchases/{self.own_submitted.pk}/budget-check/').data)
+        self.assertIn('rows', self.fetch(f'purchases/{self.own_submitted.pk}/budget-check/').data)
 
         self.act_as('purchaser', 'warehouse')
-        self.assertEqual(self.get(f'purchases/{self.approved.pk}/').data['lines'][0]['unit_price'], '100.00')
+        self.assertEqual(self.fetch(f'purchases/{self.approved.pk}/').data['lines'][0]['unit_price'], '100.00')
 
     def test_money_scope_is_resolved_once_per_list(self):
         self.act_as('warehouse')
 
         def queries():
             with CaptureQueriesContext(connection) as captured:
-                response = self.get('moves/')
+                response = self.fetch('moves/')
             self.assertEqual(response.status_code, 200)
             return len(captured), response.data['count']
 
@@ -480,7 +519,7 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         for extras in ([], ['sales_manager'], ['purchaser']):
             with self.subTest(extras=extras):
                 self.act_as(*extras)
-                draft_detail = self.get(f'sales/{draft["id"]}/').data
+                draft_detail = self.fetch(f'sales/{draft["id"]}/').data
                 self.assertEqual(draft_detail['quote_amount'], '3000.00')
                 self.assertTrue(draft_detail['amounts_visible'])
                 sale_id, document = owned['manager']
@@ -488,7 +527,7 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
                 self.assertEqual(detail['contract_amount'], '7000.00')
                 self.assertEqual(self.sales_money_leaks(), [])
                 if extras == ['sales_manager']:
-                    bucket = {row['id']: row for row in self.get('workbench/').data['sales']['results']}
+                    bucket = {row['id']: row for row in self.fetch('workbench/').data['sales']['results']}
                     self.assertFalse(SALE_MONEY & set(bucket[self.sale_id]))
                     self.assertEqual(bucket[sale_id]['contract_amount'], '7000.00')
         sale_id, document = owned['sales_manager']
@@ -496,7 +535,7 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         self.assertEqual(detail['contract_amount'], '7000.00')
 
     def test_amendment_amounts_follow_project_money_scope(self):
-        detail = self.get(f'sales/{self.sale_id}/', role='admin').data
+        detail = self.fetch(f'sales/{self.sale_id}/', role='admin').data
         self.post(
             'admin',
             f'sales/{self.sale_id}/amend/',
@@ -513,7 +552,7 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
             },
         )
         self.act_as('purchaser')
-        history = self.get(f'sales/{self.sale_id}/amendments/').data
+        history = self.fetch(f'sales/{self.sale_id}/amendments/').data
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['before'], {'equipment_quantity': 1, 'warranty_months': 12})
         self.assertEqual(history[0]['after'], {'equipment_quantity': 1, 'warranty_months': 12})
@@ -521,12 +560,12 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         self.assertIsNone(history[0]['document__original_name'])
         self.assertEqual(history[0]['reason'], '增加调试范围')
         self.assertEqual(self.sales_money_leaks(), [])
-        self.assertNotIn('25000', self.get('sales/export/', {'file_format': 'csv'}).content.decode('utf-8-sig'))
+        self.assertNotIn('25000', self.fetch('sales/export/', {'file_format': 'csv'}).content.decode('utf-8-sig'))
 
         self.other.members.add(self.manager)
-        history = self.get(f'sales/{self.sale_id}/amendments/').data
+        history = self.fetch(f'sales/{self.sale_id}/amendments/').data
         self.assertEqual((history[0]['before']['amount'], history[0]['after']['amount']), ('20000.00', '25000.00'))
         self.assertEqual(history[0]['document'], self.sale_contract)
-        detail = self.get(f'sales/{self.sale_id}/').data
+        detail = self.fetch(f'sales/{self.sale_id}/').data
         self.assertEqual((detail['contract_amount'], detail['original_contract_amount']), ('25000.00', '20000.00'))
-        self.assertEqual(len(self.get(f'sales/{self.sale_id}/progress/').data['receivables']), 2)
+        self.assertEqual(len(self.fetch(f'sales/{self.sale_id}/progress/').data['receivables']), 2)

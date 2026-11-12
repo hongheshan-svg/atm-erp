@@ -143,6 +143,10 @@ def bank_reference(record):
 
 def manual_suspect(record, queryset):
     """A manual bank record (no import evidence) that may be this row but cannot be compared by reference."""
+    if bank_reference(record):
+        # Huaxia rows carry a real bank number and manual records always have one: the same number is matched
+        # in existing(), a different number is a different transfer.
+        return
     data = record['data']
     candidates = (
         queryset.filter(
@@ -157,26 +161,15 @@ def manual_suspect(record, queryset):
         .exclude(reference__startswith='IMPORT-')
         .order_by('pk')
     )
-    if bank_reference(record):
-        # Huaxia rows carry a real bank number: a different manual number is a different transfer.
-        candidates = candidates.filter(reference='')
     suspect = candidates.first()
     if not suspect:
         return
-    found = (
+    raise ValidationError(
         f'第 {record["row"]} 行：与手工银行记录 ID {suspect.pk}（{suspect.date}，{suspect.amount}，'
-        f'流水号“{suspect.reference or "未填写"}”）同账户、同日期、同金额，疑似同一笔交易，整批未导入。'
+        f'流水号“{suspect.reference}”）同账户、同日期、同金额，疑似同一笔交易，整批未导入。'
+        '该行银行原始流水没有可比对的流水号，无法自动确认；请核对后作废误录的手工记录'
+        '（已认领的先撤销匹配）再重新预览，以导入记录为准认领。'
     )
-    if bank_reference(record):
-        hint = (
-            '请先给手工记录补填银行流水号（相同即识别为同一笔，不同则不再视为重复），或作废误录的手工记录后重新预览。'
-        )
-    else:
-        hint = (
-            '该行银行原始流水没有可比对的流水号，无法自动确认；请核对后作废误录的手工记录'
-            '（已认领的先撤销匹配）再重新预览，以导入记录为准认领。'
-        )
-    raise ValidationError(found + hint)
 
 
 def existing(record, *, lock=False):

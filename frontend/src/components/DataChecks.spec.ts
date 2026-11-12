@@ -37,7 +37,7 @@ it('管理员按类别查看计数与明细，可打开原单并导出当前类�
   expect(wrapper.text()).toContain('交付批次尚未验收')
   expect(wrapper.find('.data-check-amount').text()).toBe('—')
   expect(wrapper.getComponent(TransferTools).props('params')).toEqual({ category: 'deleted-open' })
-  expect(exportFilename('data-checks', 'xlsx', new Date(2026, 9, 24))).toBe('历史数据核查导出_2026-10-24.xlsx')
+  expect(exportFilename('data-checks', 'xlsx', new Date('2026-10-24T04:00:00Z'))).toBe('历史数据核查导出_2026-10-24.xlsx')
   wrapper.unmount()
 })
 

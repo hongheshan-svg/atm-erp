@@ -30,7 +30,7 @@ onBeforeUnmount(() => { generation++ })
 <template>
   <el-dialog :model-value="true" title="工时明细" width="min(1100px, calc(100vw - 24px))" top="5vh" class="task-time-records" @close="emit('close')">
     <h3 v-if="summary">{{ summary.task_title }}</h3>
-    <div v-if="summary" class="time-totals" aria-label="工时合计">
+    <div v-if="summary" class="time-totals" role="group" aria-label="工时合计">
       <strong>任务累计：{{ summary.logged_hours }} 小时</strong>
       <span>我的累计：{{ summary.my_hours }} 小时</span>
     </div>

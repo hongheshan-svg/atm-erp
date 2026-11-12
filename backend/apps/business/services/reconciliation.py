@@ -17,8 +17,9 @@ from .common import ZERO, audit, fields, lookup, number, project_action, rounded
 
 
 def signed_number(value, key):
-    negative = isinstance(value, str) and value.startswith('-')
-    return number(value[1:] if negative else value, key) * (-1 if negative else 1)
+    # 字符串和 JSON 数字都可带负号；number() 只校验绝对值。
+    negative = isinstance(value, (str, int, float)) and not isinstance(value, bool) and str(value).startswith('-')
+    return number(str(value)[1:] if negative else value, key) * (-1 if negative else 1)
 
 
 def with_snapshot_sources(queryset):

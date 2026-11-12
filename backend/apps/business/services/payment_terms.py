@@ -80,15 +80,9 @@ def prepaid_excess(entry):
     return max(ZERO, paid(entry) - max(ZERO, received))
 
 
-def next_due(entry):
-    rows = schedule(entry)
-    return rows[0]['due_date'] if rows else None
-
-
-def due_amount(entry, today, *, inclusive=False):
-    return sum(
-        (r['amount'] for r in schedule(entry) if r['due_date'] < today or (inclusive and r['due_date'] == today)), ZERO
-    )
+def due_amount(entry, today):
+    """今天之前到期未结的金额（报表逾期口径）。"""
+    return sum((r['amount'] for r in schedule(entry) if r['due_date'] < today), ZERO)
 
 
 def with_sources(queryset):

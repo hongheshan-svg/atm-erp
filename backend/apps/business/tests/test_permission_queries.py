@@ -63,15 +63,16 @@ def counted_queries(run, *writers, sql=None):
 
 
 class PermissionQueryTests(BusinessFixtures, TestCase):
-    def setUp(self):
-        self.setup_business()
-        self.projects = Project.objects.bulk_create(
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.projects = Project.objects.bulk_create(
             [
                 Project(
                     code=f'QUERY{i}',
                     name=f'查询测试{i}',
-                    customer=self.customer,
-                    manager=self.users['admin'],
+                    customer=cls.customer,
+                    manager=cls.users['admin'],
                     status='active',
                 )
                 for i in range(200)
@@ -79,14 +80,17 @@ class PermissionQueryTests(BusinessFixtures, TestCase):
         )
         Project.members.through.objects.bulk_create(
             [
-                Project.members.through(project_id=project.pk, user_id=self.users[role].pk)
-                for project in self.projects
+                Project.members.through(project_id=project.pk, user_id=cls.users[role].pk)
+                for project in cls.projects
                 for role in ('manager', 'mechanical_engineer', 'production_manager')
             ]
         )
-        self.outside = Project.objects.create(
-            code='OUTSIDE', name='未参与项目', customer=self.customer, manager=self.users['admin'], status='active'
+        cls.outside = Project.objects.create(
+            code='OUTSIDE', name='未参与项目', customer=cls.customer, manager=cls.users['admin'], status='active'
         )
+
+    def setUp(self):
+        self.setup_business()
 
     def assert_bounded(self, resource, role='manager', flag=None):
         counts = []

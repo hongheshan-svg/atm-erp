@@ -34,7 +34,7 @@ class Command(BaseCommand):
                 CodeRule.objects.get_or_create(key=key, defaults=defaults)
             if not User.objects.exists():
                 password = os.environ.get('ADMIN_PASSWORD', '')
-                user = User(username='admin', display_name='管理员', role='admin', is_staff=True, is_superuser=True)
+                user = User(username='admin', display_name='管理员', role='admin', is_superuser=True)
                 try:
                     validate_password(password, user)
                 except ValidationError as exc:

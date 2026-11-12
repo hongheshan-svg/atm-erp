@@ -367,20 +367,8 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual(BankRecord.objects.count(), 1)
         self.assertEqual((ActionReceipt.objects.count(), AuditLog.objects.count()), counts)
 
-    def test_huaxia_blank_manual_reference_blocks_until_a_different_reference_is_filled(self):
-        legacy = BankRecord.objects.create(
-            account='123456789012',
-            date='2026-01-01',
-            amount='100.00',
-            counterparty='客户',
-            reference='',
-            reason='旧版无流水号手工记录',
-        )
-        preview = self.preview(huaxia())
-        self.assertFalse(preview['can_import'])
-        self.assertIn(f'手工银行记录 ID {legacy.pk}', str(preview['errors']))
-        self.assertIn('补填银行流水号', str(preview['errors']))
-        BankRecord.objects.filter(pk=legacy.pk).update(reference='000999')
+    def test_huaxia_manual_record_with_different_reference_is_a_different_transfer(self):
+        self.manual('000999')
         preview = self.preview(huaxia())
         self.assertTrue(preview['can_import'], preview['errors'])
         self.assertEqual(self.confirm(preview['token']), {'count': 1, 'skipped': 0})

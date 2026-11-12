@@ -42,19 +42,23 @@ def reusable_run(runs, repository, tree, jobs_for, fingerprint=None, nested=Fals
     return None
 
 
+def release_base(commit, version=None):
+    """发布比较基线：commit 历史中低于目标版本的最高正式 tag（预发布 tag 不算）。Release 与手动 suite=release
+    共用这一选择，同一 tree 的计划指纹才会一致、凭据才可复用。未给版本时取该提交 version.py 中的版本。"""
+    if version is None:
+        match = re.fullmatch(r"VERSION = '(\d+\.\d+\.\d+)'", git('show', f'{commit}:backend/apps/core/version.py'))
+        if not match:
+            raise ValueError('无法从 backend/apps/core/version.py 读取正式版本号')
+        version = match[1]
+    target = tuple(map(int, version.split('.')))
+    for value in git('tag', '--merged', commit, '--sort=-version:refname').splitlines():
+        if re.fullmatch(r'v\d+\.\d+\.\d+', value) and tuple(map(int, value[1:].split('.'))) < target:
+            return value
+    raise ValueError('缺少之前的正式 tag，无法确定发布差异范围；请先明确首次发布验证基线')
+
+
 def release_scope(commit, tag):
-    tags = git('tag', '--merged', commit, '--sort=-version:refname').splitlines()
-    version = tuple(map(int, tag[1:].split('.')))
-    base = next(
-        (
-            value
-            for value in tags
-            if re.fullmatch(r'v\d+\.\d+\.\d+', value) and tuple(map(int, value[1:].split('.'))) < version
-        ),
-        None,
-    )
-    if not base:
-        raise ValueError('缺少之前的正式 tag，无法确定发布差异范围；请先明确首次发布验证基线')
+    base = release_base(commit, tag[1:])
     paths = git('diff', '--name-only', '-z', base, commit).split('\0')
     # 发版计划：浏览器按发布差异选择，未登记路径覆盖全部业务模块，不因此失败。
     return base, plan(

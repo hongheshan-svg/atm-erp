@@ -1,4 +1,4 @@
-import { businessDate, cancelEditing, choosePeople } from './fixtures'
+import { businessDate, cancelEditing, choose, submitDialog } from './fixtures'
 import { selectRemoteOption } from './remote-select-helpers'
 import { test, expect, login, detailAction, observePage, type Page, type Locator, openRowAction } from './fixtures'
 import { selectRoles } from './role-helpers'
@@ -7,24 +7,7 @@ test.use({ timezoneId: 'UTC' })
 
 const dialog = (page: Page) => page.getByRole('dialog')
 const row = (page: Page, text: string) => page.locator('.el-table__body tr:visible').filter({ hasText: text }).first()
-async function choose(page: Page, label: string, text: string) {
-  const field = dialog(page).getByLabel(label, { exact: true })
-  if (await field.getAttribute('role') === 'combobox') {
-    // 远程资料下拉与可搜索的人员下拉都是 combobox，后者没有 remote-select 外壳。
-    const remote = await field.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " remote-select ")]').count()
-    return remote ? selectRemoteOption(field, { text: text }) : choosePeople(page, field, [text])
-  }
-  const value = await field.locator('option').filter({ hasText: text }).last().getAttribute('value')
-  await field.selectOption(value!)
-}
 async function fill(page: Page, label: string, value: string) { await dialog(page).getByLabel(label, { exact: true }).fill(value) }
-async function save(page: Page) {
-  const pending = page.waitForResponse(r => ['POST', 'PATCH'].includes(r.request().method()) && r.url().includes('/api/'))
-  await dialog(page).locator('button[type="submit"]').click()
-  const response = await pending
-  expect(response.status(), await response.text()).toBeLessThan(300)
-  await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0)
-}
 async function action(page: Page, target: Locator, label: string) {
   await openRowAction(page, target, label)
   await expect(dialog(page)).toBeVisible()
@@ -50,7 +33,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
     await fill(page, '姓名', `${role}review${suffix}`)
     await selectRoles(dialog(page), [role])
     await fill(page, '密码', password)
-    await save(page)
+    await submitDialog(page)
     const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: info.project.use.viewport, isMobile: info.project.use.isMobile, hasTouch: info.project.use.hasTouch, timezoneId })
     const p = await context.newPage()
     p.setDefaultTimeout(15000)
@@ -63,13 +46,13 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await purchaser.getByRole('button', { name: '新增物料', exact: true }).click()
   await fill(purchaser, '物料名称', `共用传感器${suffix}`)
   await fill(purchaser, '物料编码（留空自动生成）', `REVIEW${suffix}`)
-  await save(purchaser)
+  await submitDialog(purchaser)
   await purchaser.getByRole('tab', { name: '客户与供应商', exact: true }).click()
   for (const kind of ['customer', 'supplier']) {
     await purchaser.getByRole('button', { name: '新增往来单位', exact: true }).click()
     await fill(purchaser, '单位名称', `${kind}${suffix}`)
     await dialog(purchaser).getByLabel('类型', { exact: true }).selectOption(kind)
-    await save(purchaser)
+    await submitDialog(purchaser)
   }
   const name = `评审整改${suffix}`
   await manager.goto('/erp/sales')
@@ -77,16 +60,16 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(manager, '销售名称', name)
   await choose(manager, '客户', `customer${suffix}`)
   await choose(manager, '负责人', `managerreview${suffix}`)
-  await save(manager)
+  await submitDialog(manager)
   await action(manager, row(manager, name), '报价')
   await fill(manager, '报价金额（元）', '1000')
   await fill(manager, '报价说明', '确认方案')
-  await save(manager)
+  await submitDialog(manager)
   // 报价保存后列表重新加载；等本行显示「已报价」再签约，手机上「签约」按钮随刷新出现在名称格里。
   await expect(row(manager, name)).toContainText('已报价')
   await action(manager, row(manager, name), '签约')
   await fill(manager, '收款到期日', businessDate(60))
-  await save(manager)
+  await submitDialog(manager)
   const sales = (await read(manager, `sales/?search=${name}`)).results[0]
   const id = sales.project
   await manager.goto(`/erp/projects/${id}`)
@@ -94,7 +77,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await manager.getByRole('button', { name: '导入 BOM', exact: true }).click()
   await manager.getByRole('dialog', { name: '导入BOM', exact: true }).locator('input[type=file]').setInputFiles({ name: 'multi-unit.csv', mimeType: 'text/csv', buffer: Buffer.from(`物料编码,数量,变更说明,单元\nREVIEW${suffix},2,初版,上料\nREVIEW${suffix},3,初版,下料\n`) })
   await manager.getByRole('button', { name: '确认导入', exact: true }).click()
-  await save(manager)
+  await submitDialog(manager)
   expect((await read(manager, `projects/${id}/demand/`)).lines).toHaveLength(2)
   // 维护 BOM 打开是一行空白，只填本次变更；不再把整张 BOM 灌进表单。
   await manager.getByRole('button', { name: '维护 BOM', exact: true }).click()
@@ -166,26 +149,26 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await purchaser.screenshot({ path: info.outputPath('purchase-attachments.png'), animations: 'disabled' })
   await attachments.getByRole('button', { name: '关闭', exact: true }).click()
   await action(purchaser, row(purchaser, order.code), '提交采购')
-  await save(purchaser)
+  await submitDialog(purchaser)
   await manager.goto(`/erp/projects/${id}?tab=purchases`)
   await action(manager, row(manager, order.code), '退回修改')
   await fill(manager, '原因 / 说明', '供应商报价复核')
-  await save(manager)
+  await submitDialog(manager)
   await purchaser.reload()
   await action(purchaser, row(purchaser, order.code), '修改采购')
   await fill(purchaser, '含税单价（元）', '80')
   await fill(purchaser, '原因 / 说明', '确认降价')
-  await save(purchaser)
+  await submitDialog(purchaser)
   await action(purchaser, row(purchaser, order.code), '提交采购')
-  await save(purchaser)
+  await submitDialog(purchaser)
   await manager.reload()
   await action(manager, row(manager, order.code), '批准采购')
-  await save(manager)
+  await submitDialog(manager)
   await purchaser.reload()
   await action(purchaser, row(purchaser, order.code), '更新到货计划')
   await fill(purchaser, '承诺到货日期', '2026-09-01')
   await fill(purchaser, '原因 / 说明', '记录供应商原承诺日期并跟进逾期')
-  await save(purchaser)
+  await submitDialog(purchaser)
   await purchaser.goto('/erp/workbench')
   // 概览每类只取前5条；共享测试安装积累更多逾期单时，新单不保证出现在概览中。
   // 从完整列表定位本单，验证入口、明细和真实保存结果，不依赖其他测试留下多少待办。
@@ -207,29 +190,29 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(warehouse, '不合格隔离数量', '2')
   await fill(warehouse, '送货单号 / 备注', '两件尺寸待复检')
   await warehouse.screenshot({ path: info.outputPath('receipt-default-date.png'), animations: 'disabled' })
-  await save(warehouse)
+  await submitDialog(warehouse)
   const beforeRelease = businessDate()
   await action(warehouse, row(warehouse, order.code), '隔离品合格入库')
   expect([beforeRelease, businessDate()]).toContain(await dialog(warehouse).getByLabel('入库日期（检验合格日）', { exact: true }).inputValue())
   await expect(dialog(warehouse).getByLabel('补录原因', { exact: true })).toHaveCount(0)
   await fill(warehouse, '数量', '1')
   await fill(warehouse, '原因 / 说明', '复检一件合格')
-  await save(warehouse)
+  await submitDialog(warehouse)
   await action(warehouse, row(warehouse, order.code), '隔离品退回供应商')
   await fill(warehouse, '原因 / 说明', '剩余一件不合格退回')
-  await save(warehouse)
+  await submitDialog(warehouse)
   await purchaser.reload()
   await action(purchaser, row(purchaser, order.code), '取消未收余量')
   await fill(purchaser, '本次取消数量', '1')
   await fill(purchaser, '原因 / 说明', '设计变更不再补货')
-  await save(purchaser)
+  await submitDialog(purchaser)
   const purchase = await read(purchaser, `purchases/${order.id}/`)
   expect(purchase.lines[0]).toMatchObject({ received_quantity: '2.000', pending_quantity: '0.000', cancelled_quantity: '1.000', unit_price: '80.00' })
   await manager.goto(`/erp/projects/${id}?tab=documents`)
   await manager.getByRole('button', { name: '上传附件', exact: true }).click()
   await dialog(manager).getByLabel('分类', { exact: true }).selectOption('contract')
   await dialog(manager).getByLabel('文件', { exact: true }).setInputFiles({ name: '补充协议.txt', mimeType: 'text/plain', buffer: Buffer.from('双方同意合同减额100元，其他约定不变。') })
-  await save(manager)
+  await submitDialog(manager)
   const entry = (await read(finance, `entries/?project=${id}&kind=receivable`)).results[0]
   await finance.goto(`/erp/projects/${id}?tab=finance`)
   await action(finance, row(finance, '合同款'), '登记收付款')
@@ -237,12 +220,12 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await dialog(finance).getByLabel('结算方式', { exact: true }).selectOption('bank')
   await fill(finance, '账户标识', '基本户尾号1234')
   await fill(finance, '银行流水号', `BANK${suffix}`)
-  await save(finance)
+  await submitDialog(finance)
   await finance.goto(`/erp/projects/${id}?tab=documents`)
   await finance.getByRole('button', { name: '上传附件', exact: true }).click()
   await dialog(finance).getByLabel('分类', { exact: true }).selectOption('receipt')
   await dialog(finance).getByLabel('文件', { exact: true }).setInputFiles({ name: '到账回单.txt', mimeType: 'text/plain', buffer: Buffer.from('银行回单晚于登记到达') })
-  await save(finance)
+  await submitDialog(finance)
   await finance.goto(`/erp/projects/${id}?tab=finance`)
   await finance.getByRole('tab', { name: '项目收付流水', exact: true }).click()
   // 手机窄屏的收付流水行只摘要日期、金额和往来单位，不显示银行流水号；本项目只有这一笔流水，按客户名找行。
@@ -250,7 +233,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await action(finance, row(finance, paymentRow), '补录凭证')
   await choose(finance, '凭证', '到账回单.txt')
   await fill(finance, '原因 / 说明', '补到银行回单')
-  await save(finance)
+  await submitDialog(finance)
   const payment = (await read(finance, `payments/?entry=${entry.id}`)).results[0]
   expect(payment.evidence).toHaveLength(1)
   expect(payment.amount).toBe('1000.00')
@@ -266,7 +249,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await credits.getByRole('button', { name: '添加行', exact: true }).click()
   await choose(manager, '原合同款', '合同款')
   await fill(manager, '抵减金额', '100')
-  await save(manager)
+  await submitDialog(manager)
   expect((await read(finance, `entries/${entry.id}/`)).balance).toBe('-100.00')
   await manager.goto(`/erp/projects/${id}?tab=cost&section=budget`)
   await manager.getByRole('button', { name: '更新完工估算', exact: true }).click()
@@ -274,7 +257,7 @@ test('真实角色处理同料多单元、退回修改、隔离品、补充协�
   await fill(manager, '预计剩余人工成本（元）', '500')
   await fill(manager, '预计剩余费用（元）', '50')
   await fill(manager, '估算依据', '剩余安装与差旅')
-  await save(manager)
+  await submitDialog(manager)
   expect((await read(manager, `projects/${id}/cost-analysis/`)).forecast_total).toBe('670.00')
   await manager.getByRole('button', { name: '追溯成本明细', exact: true }).click()
   await expect(dialog(manager).getByRole('heading', { name: '成本来源与主要贡献', exact: true })).toBeVisible()
@@ -341,7 +324,7 @@ test('整单取消55条采购未收余量，只填一次原因并保留已收货
   await expect(dialog(page).getByRole('alert', { name: '填写问题汇总' })).toContainText('原因')
   await fill(page, '原因 / 说明', '供应商停止其余物料供货，整单取消未收余量')
   await page.screenshot({ path: info.outputPath('whole-po-confirm.png'), fullPage: true, animations: 'disabled' })
-  await save(page)
+  await submitDialog(page)
   order = await read(page, `purchases/${created.id}/`)
   expect(order.status).toBe('received')
   expect(order.lines[0]).toMatchObject({ received_quantity: '1.000', cancelled_quantity: '1.000' })

@@ -7,12 +7,13 @@ import subprocess
 from pathlib import Path
 
 from scripts.ci.impact import plan, version_only_paths
+from scripts.ci.release_gate import release_base
 
 SUITES = ('fast', 'browser', 'ota', 'installers')
 # 浏览器用例分片只决定“怎么分到几台机器上跑”，不决定“跑哪些”。数值为单视口下每个文件的实测合计秒数，
 # 只登记耗时明显的文件，其余按默认值估算；偏差只影响各片是否均衡，不影响覆盖。
 BROWSER_SECONDS = {
-    'eight-role-audit': 190,
+    'role-page-audit': 190,
     'full-chain': 100,
     'import-surface-audit': 60,
     'review-remediation': 45,
@@ -87,6 +88,17 @@ def browser_matrix(specs, projects='both'):
     ]
 
 
+def default_base(suite, head):
+    """未指定基线时：发版验证与 Release 使用同一基线（低于 version.py 版本的最高正式 tag），计划指纹才能一致；
+    其他手动入口比较 head 之前最近的版本 tag。"""
+    if suite == 'release':
+        return release_base(head)
+    return subprocess.check_output(
+        ['git', 'describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*', head + '^'],
+        text=True,
+    ).strip()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--suite', default='auto')
@@ -96,10 +108,7 @@ def main():
     parser.add_argument('--modules', default='')
     args = parser.parse_args()
     if not args.base:
-        args.base = subprocess.check_output(
-            ['git', 'describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*', args.head + '^'],
-            text=True,
-        ).strip()
+        args.base = default_base(args.suite, args.head)
     paths = (
         subprocess.check_output(
             ['git', 'diff', '--name-only', '-z', args.base, args.head],

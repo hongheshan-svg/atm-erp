@@ -27,7 +27,7 @@ def comparison_key(value):
     return ''.join(normalized(str(value)).split()).casefold()
 
 
-def candidates(data):
+def candidates():
     return Item.objects.annotate(
         comparison_name=comparison_expression('name'),
         comparison_specification=comparison_expression('specification'),
@@ -39,14 +39,14 @@ def similar(data):
     query = Q(comparison_name__contains=name) if name else Q(pk__in=[])
     if specification:
         query |= Q(comparison_specification=specification)
-    return candidates(data).filter(query).order_by('code')[:10]
+    return candidates().filter(query).order_by('code')[:10]
 
 
 def duplicates(data, exclude=None):
     name = normalized(str(data.get('name', '')))
     if not name:
         return []
-    items = candidates(data).filter(comparison_name=comparison_key(name)).exclude(pk=exclude)
+    items = candidates().filter(comparison_name=comparison_key(name)).exclude(pk=exclude)
     keys = (
         'name',
         'specification',
@@ -73,7 +73,7 @@ def suspected_duplicates(data, exclude=None):
     specification = comparison_key(data.get('specification', ''))
     if not specification:
         return duplicates(data, exclude)
-    items = candidates(data).filter(comparison_specification=specification).exclude(pk=exclude)
+    items = candidates().filter(comparison_specification=specification).exclude(pk=exclude)
     result = []
     for item in items:
         if comparison_key(item.unit) != comparison_key(data.get('unit', '件')):

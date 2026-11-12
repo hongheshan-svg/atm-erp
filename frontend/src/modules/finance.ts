@@ -10,6 +10,7 @@ import { optionalReason } from './shared'
 import { projectLink } from './shared'
 import { purchaseLink } from './shared'
 import { money as formatMoney } from '../utils/money'
+import { fromScaled, MONEY_SCALE, toScaled } from '../utils/decimal'
 import { dateTimeText } from '../utils/datetime'
 import { finance } from './shared'
 import { C } from './shared'
@@ -19,13 +20,12 @@ import { ledgerStatus } from './shared'
 import { all, download, read } from '../api'
 import { reconciliationCommand } from './settlement'
 
+// 按绝对值取「分」：待退款余额为负，登记和对账额度都填正数；无法解析时按 0。
 function cents(value: unknown): bigint {
-  const [whole, fraction = ''] = String(value).replace(/^-/, '').split('.')
-  return BigInt(whole || '0') * 100n + BigInt(fraction.padEnd(2, '0'))
+  const scaled = toScaled(value, MONEY_SCALE) ?? 0n
+  return scaled < 0n ? -scaled : scaled
 }
-function amount(value: bigint): string {
-  return `${value / 100n}.${String(value % 100n).padStart(2, '0')}`
-}
+const amount = (value: bigint) => fromScaled(value, MONEY_SCALE)
 function cappedAmount(balance: unknown, allowance: unknown): string {
   const remaining = cents(balance), available = cents(allowance)
   return amount(remaining < available ? remaining : available)
@@ -183,14 +183,14 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       alternatives: [{ label: '生成对账单', open: () => entryReconciliationCommand(r) }, ...(r.purchase && name !== '退款' ? [{ label: '申请预付款核准', open: () => entryReconciliationCommand(r, true) }] : [])],
       links: [{ label: '查看已有对账与核准', path: `/projects/${r.project}?tab=finance&section=reconciliations` }],
     }
-    fields.push({ key: 'reconciliation', label: '已确认对账 / 预付款核准', type: 'select', optional: !(r.purchase || name === '退款'), options: eligible.map(s => ({ value: s.id, label: `${s.code} · 可用 ${s.remaining_amount} · 本次默认 ${cappedAmount(r.balance, s.remaining_amount)}` })), hint: r.purchase || name === '退款' ? '先从款项操作生成对账单，再到业务对账页确认。预付款由项目经理或管理员核准。' : '客户到账可直接登记，不强制先对账。' })
+    fields.push({ key: 'reconciliation', label: '已确认对账 / 预付款核准', type: 'select', optional: !(r.purchase || name === '退款'), options: eligible.map(s => ({ value: s.id, label: `${s.code} · 可用 ${formatMoney(s.remaining_amount)} · 本次默认 ${formatMoney(cappedAmount(r.balance, s.remaining_amount))}` })), hint: r.purchase || name === '退款' ? '先从款项操作生成对账单，再到业务对账页确认。预付款由项目经理或管理员核准。' : '客户到账可直接登记，不强制先对账。' })
     if (eligible.length === 1) {
       initial.reconciliation = eligible[0]!.id
       initial.amount = cappedAmount(r.balance, eligible[0]!.remaining_amount)
       fields[0] = { ...fields[0]!, hint: `对账剩余额度 ${formatMoney(eligible[0]!.remaining_amount)} 元；本次最多 ${formatMoney(initial.amount)} 元，可按实际收付填写更小金额。` }
     } else if (eligible.length > 1) {
       initial.amount = ''
-      fields[0] = { ...fields[0]!, optional: true, placeholder: '留空使用所选对账的本次默认金额', hint: `每张对账选项显示本次默认金额。留空时按所选对账默认值登记；手工填写时使用填写金额。${r.purchase || name === '退款' ? '' : `不选对账时默认 ${amount(cents(r.balance))} 元。`}` }
+      fields[0] = { ...fields[0]!, optional: true, placeholder: '留空使用所选对账的本次默认金额', hint: `每张对账选项显示本次默认金额。留空时按所选对账默认值登记；手工填写时使用填写金额。${r.purchase || name === '退款' ? '' : `不选对账时默认 ${formatMoney(amount(cents(r.balance)))} 元。`}` }
       prepare = data => {
         if (data.amount != null && String(data.amount).trim() !== '') return data
         const selected = eligible.find(statement => String(statement.id) === String(data.reconciliation))

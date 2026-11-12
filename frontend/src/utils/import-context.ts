@@ -1,5 +1,6 @@
 import { canImportResource, engineer, manager } from '../session'
 import type { Row } from '../types'
+import { today } from '../forms'
 
 export const importTitles: Record<string, string> = {
   reconciliations: '业务对账', items: '物料', partners: '往来单位', sales: '销售', projects: '项目', tasks: '项目任务',
@@ -18,9 +19,9 @@ const exportTitles: Record<string, string> = {
   'bank-claims': '银行认领', 'bank-matches': '银行匹配', 'bank-offsets': '银行冲抵', 'data-checks': '历史数据核查',
 }
 
+// 文件名日期与表单默认日期一样按业务时区（服务端 TIME_ZONE），不随浏览器时区变化。
 export function exportFilename(resource: string, format: string, now = new Date()) {
-  const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
-  return `${exportTitles[resource] || '业务记录'}导出_${date}.${format}`
+  return `${exportTitles[resource] || '业务记录'}导出_${today(now)}.${format}`
 }
 
 export function importResultDestination(resource: string, result: Row) {

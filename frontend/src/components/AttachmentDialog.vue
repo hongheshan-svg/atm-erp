@@ -92,7 +92,7 @@ watch(pageSize, () => { page.value = 1; void load(true) })
     <p class="muted">附件关联当前单据，项目中自动汇总。仅有权限的人员可查看和下载。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <div class="toolbar"><el-button :loading="loading" @click="load">刷新</el-button><el-button v-if="writable" type="primary" @click="upload">上传附件</el-button><el-button v-if="deletionAllowed" type="danger" plain :disabled="loading || selectingAll || !selection.length" @click="deleting = [...selection]">批量删除{{ selection.length ? `（${selection.length}）` : '' }}</el-button><el-button v-if="removalMode" type="danger" plain :disabled="loading || !selection.length" @click="removing = [...selection]">删除所选{{ selection.length ? `（${selection.length}）` : '' }}</el-button><el-button v-if="deletionAllowed" @click="deletionHistory = true">已删除记录</el-button></div>
-    <div v-if="deletionAllowed" class="attachment-batch-selection" aria-label="附件批量选择">
+    <div v-if="deletionAllowed" class="attachment-batch-selection" role="group" aria-label="附件批量选择">
       <span>已选 <strong>{{ selection.length }}</strong> 项（跨页保留），每批最多 {{ deletionLimit('documents') }} 项</span>
       <el-button :loading="selectingAll" :disabled="loading || !total" @click="selectFilteredRows">{{ total > deletionLimit('documents') ? '选择筛选结果前' + deletionLimit('documents') + '项（跨页）' : '全选筛选结果（' + total + '项，跨页）' }}</el-button>
       <el-button text :disabled="loading || selectingAll || !selection.length" @click="selection = []">清空选择</el-button>

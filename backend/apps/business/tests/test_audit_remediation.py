@@ -5,7 +5,6 @@ import io
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -26,18 +25,13 @@ from apps.business.models import (
 from apps.business.services.tabular import cell, export_rows
 from apps.core.models import AuditLog
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, freeze_today
 from .test_execution import ExecutionFixtures
 
 
 class AuditRemediationTests(BusinessFixtures, TestCase):
     def setUp(self):
         self.setup_business()
-
-    def get(self, role, url, params=None, status=200):
-        response = self.clients[role].get('/api/' + url, params or {})
-        self.assertEqual(response.status_code, status, getattr(response, 'data', response))
-        return response
 
     def two_unit_bom(self, project):
         self.post(
@@ -80,7 +74,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         )
 
     def demand(self, project):
-        rows = self.get('manager', f'business/projects/{project.pk}/demand/').data['lines']
+        rows = self.get('manager', f'projects/{project.pk}/demand/')['lines']
         return {row['bom_line']: row for row in rows}
 
     # 1
@@ -88,15 +82,15 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.active_project('10000.00')
         cancelled = self.active_project('5000.00')
         self.post('manager', f'projects/{cancelled.pk}/cancel/', {'reason': '客户取消'})
-        report = self.get('admin', 'business/reports/').data
+        report = self.get('admin', 'reports/')
         self.assertEqual(report['summary']['contract_amount'], '10000.00')
         row = next(row for row in report['results'] if row['id'] == cancelled.pk)
         self.assertEqual(row['contract_amount'], '0.00')
         # 销售单保留签约事实，列表通过执行项目状态看出已取消。
-        sale = self.get('manager', f'business/sales/{SalesOrder.objects.get(project=cancelled).pk}/').data
+        sale = self.get('manager', f'sales/{SalesOrder.objects.get(project=cancelled).pk}/')
         self.assertEqual((sale['status'], sale['project_status']), ('signed', 'cancelled'))
         self.post('manager', f'projects/{cancelled.pk}/reopen/', {'reason': '客户恢复'})
-        self.assertEqual(self.get('admin', 'business/reports/').data['summary']['contract_amount'], '15000.00')
+        self.assertEqual(self.get('admin', 'reports/')['summary']['contract_amount'], '15000.00')
 
     # 2
     def test_purchase_cannot_borrow_another_units_bom_quantity(self):
@@ -109,7 +103,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(Decimal(demand[unit_b.pk]['shortage']), Decimal('10'))
         # 缺料列表显示的缺口可以直接按 B 行下单，不再出现「看得到缺料却下不了单」。
         self.linked_purchase(project, unit_b, demand[unit_b.pk]['shortage'], from_demand=True)
-        detail = self.get('purchaser', f'business/purchases/{draft.pk}/').data
+        detail = self.get('purchaser', f'purchases/{draft.pk}/')
         line = detail['lines'][0]
         self.post(
             'purchaser',
@@ -139,21 +133,21 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         project = self.active_project()
         purchase = self.purchase(project)  # 指定日期账期，到期日为已过去的 TODAY，尚未收货
         entry = Entry.objects.get(purchase=purchase)
-        row = next(row for row in self.get('admin', 'business/reports/').data['results'] if row['id'] == project.pk)
+        row = next(row for row in self.get('admin', 'reports/')['results'] if row['id'] == project.pk)
         self.assertEqual((row['payable'], row['overdue_payable']), ('500.00', '0.00'))
-        listed = self.get('finance', f'business/entries/{entry.pk}/').data
+        listed = self.get('finance', f'entries/{entry.pk}/')
         self.assertEqual((listed['status'], listed['due_amount'], listed['payment_schedule']), ('open', '0.00', []))
-        settlements = self.get('finance', 'business/workbench/', {'bucket': 'settlements'}).data['settlements']
+        settlements = self.get('finance', 'workbench/', {'bucket': 'settlements'})['settlements']
         self.assertNotIn(entry.pk, [item['id'] for item in settlements['results']])
-        aging = self.get('admin', 'business/reports/', {'view': 'aging'}).data['results']
+        aging = self.get('admin', 'reports/', {'view': 'aging'})['results']
         self.assertNotIn(entry.pk, [item['id'] for item in aging])
 
         self.receive(purchase, '2')
-        row = next(row for row in self.get('admin', 'business/reports/').data['results'] if row['id'] == project.pk)
+        row = next(row for row in self.get('admin', 'reports/')['results'] if row['id'] == project.pk)
         self.assertEqual((row['payable'], row['overdue_payable']), ('500.00', '200.00'))
-        listed = self.get('finance', f'business/entries/{entry.pk}/').data
+        listed = self.get('finance', f'entries/{entry.pk}/')
         self.assertEqual((listed['status'], Decimal(listed['due_amount'])), ('overdue', Decimal('200')))
-        settlements = self.get('finance', 'business/workbench/', {'bucket': 'settlements'}).data['settlements']
+        settlements = self.get('finance', 'workbench/', {'bucket': 'settlements'})['settlements']
         self.assertIn(entry.pk, [item['id'] for item in settlements['results']])
 
     # 4
@@ -211,7 +205,9 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.post(
             'warehouse', 'stocks/issue/', {'project': project.pk, 'stock': stock.pk, 'quantity': '2', 'reason': '领料'}
         )
-        content = self.get('warehouse', 'business/moves/export/', {'file_format': 'csv'}).content.decode('utf-8-sig')
+        response = self.clients['warehouse'].get('/api/business/moves/export/', {'file_format': 'csv'})
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode('utf-8-sig')
         quantities = [row['数量'] for row in csv.DictReader(io.StringIO(content))]
         self.assertIn('-2.000', quantities)
 
@@ -238,6 +234,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
     def test_payment_and_bank_dates_cannot_be_in_future_and_reversal_follows_original(self):
         project = self.active_project()
         entry = Entry.objects.get(project=project, kind='receivable')
+        self.enterContext(freeze_today())
         today = timezone.localdate()
         tomorrow = (today + timedelta(days=1)).isoformat()
         self.post(
@@ -305,18 +302,14 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         )
         default = PurchaseOrder.objects.get(pk=self.post('purchaser', 'purchases/', payload, status=201)['id'])
         self.assertEqual((purchase.warranty_months, default.warranty_months), (24, 12))
-        preview = self.get(
-            'purchaser', f'business/purchases/{purchase.pk}/contract-preview/', {'version': 'current'}
-        ).data
+        preview = self.get('purchaser', f'purchases/{purchase.pk}/contract-preview/', {'version': 'current'})
         self.assertIn('验收合格之日起24个月', ''.join(preview['clauses']['quality']))
-        default_preview = self.get(
-            'purchaser', f'business/purchases/{default.pk}/contract-preview/', {'version': 'current'}
-        ).data
+        default_preview = self.get('purchaser', f'purchases/{default.pk}/contract-preview/', {'version': 'current'})
         self.assertIn('验收合格之日起12个月', ''.join(default_preview['clauses']['quality']))
         self.post('purchaser', f'purchases/{purchase.pk}/submit/')
         self.post('manager', f'purchases/{purchase.pk}/approve/')
         self.receive(purchase, '5', received_date=TODAY, backfill_reason='根据历史签收单补录质保起算日期')
-        listing = self.get('purchaser', f'business/purchases/{purchase.pk}/warranty/').data
+        listing = self.get('purchaser', f'purchases/{purchase.pk}/warranty/')
         self.assertEqual(listing['warranty_months'], 24)
         self.assertEqual(listing['receipts'][0]['warranty_end'], date(2028, 9, 9))
 
@@ -462,7 +455,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.assertTrue(Stock.objects.filter(location='A区').exists())
         self.receive(purchase, '1', location='A区')
         self.assertEqual(Stock.objects.get().quantity, Decimal('2'))
-        self.assertEqual(self.get('warehouse', 'business/stocks/locations/').data, ['A区'])
+        self.assertEqual(self.get('warehouse', 'stocks/locations/'), ['A区'])
         # 期初由管理员在上线时建立库位，不需要逐个确认。
         other = Item.objects.create(code='I2', name='气缸')
         self.post(
@@ -470,7 +463,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
             'stocks/opening/',
             {'item': other.pk, 'location': 'B 区', 'quantity': '1', 'unit_cost': '1', 'reason': '期初'},
         )
-        self.assertEqual(self.get('warehouse', 'business/stocks/locations/').data, ['A区', 'B 区'])
+        self.assertEqual(self.get('warehouse', 'stocks/locations/'), ['A区', 'B 区'])
 
     # 15
     def test_audit_log_shows_actor_name_and_filters(self):
@@ -478,7 +471,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.users['manager'].save()
         project = self.active_project()
         self.post('manager', f'projects/{project.pk}/edit/', {'name': '改名', 'reason': '更正名称'})
-        results = self.get('admin', 'core/audit/', {'search': '王经理', 'operation': 'project.edit'}).data['results']
+        results = self.get('admin', '/api/core/audit/', {'search': '王经理', 'operation': 'project.edit'})['results']
         self.assertEqual([(row['operation'], row['actor_name']) for row in results], [('project.edit', '王经理')])
         self.assertEqual(results[0]['resource_label'], project.code)
         # 整页编号按模型批量查询：多一行同类记录不多一条查询。
@@ -487,7 +480,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
 
         def page_queries():
             with CaptureQueriesContext(connection) as queries:
-                rows = self.get('admin', 'core/audit/', {'operation': 'project.edit'}).data['results']
+                rows = self.get('admin', '/api/core/audit/', {'operation': 'project.edit'})['results']
             return len(queries.captured_queries), rows
 
         before, _ = page_queries()
@@ -497,9 +490,9 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         self.assertEqual(after, before)
         self.assertEqual({row['resource_label'] for row in rows}, {project.code, other.code})
         today = timezone.localdate().isoformat()
-        self.assertTrue(self.get('admin', 'core/audit/', {'date_from': today, 'date_to': today}).data['count'])
-        self.assertEqual(self.get('admin', 'core/audit/', {'date_to': '2000-01-01'}).data['count'], 0)
-        self.get('manager', 'core/audit/', status=403)
+        self.assertTrue(self.get('admin', '/api/core/audit/', {'date_from': today, 'date_to': today})['count'])
+        self.assertEqual(self.get('admin', '/api/core/audit/', {'date_to': '2000-01-01'})['count'], 0)
+        self.get('manager', '/api/core/audit/', status=403)
 
 
 class ServiceWarrantyTests(ExecutionFixtures, TestCase):
@@ -520,7 +513,7 @@ class ServiceWarrantyTests(ExecutionFixtures, TestCase):
             'assignee': self.users['member'].pk,
             'fee': '0',
         }
-        with patch('apps.business.services.execution.timezone.localdate', return_value=tomorrow):
+        with freeze_today(tomorrow):
             error = self.post('manager', f'projects/{project.pk}/service/', payload, status=400)
             self.assertIn('free_reason', error)
             task_id = self.post(

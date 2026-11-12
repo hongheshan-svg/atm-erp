@@ -11,6 +11,14 @@ from openpyxl import Workbook
 from rest_framework.exceptions import ValidationError
 
 MAX_EXPORT = 20000
+
+
+def check_export_size(rows):
+    """导出上限按表格行数计；带明细的单据按展开后的行数，接口在序列化前用同一口径预检。"""
+    if rows > MAX_EXPORT:
+        raise ValidationError(f'一次最多导出 {MAX_EXPORT} 行，请缩小筛选范围。')
+
+
 LABELS = {
     'payment_due_date': '付款到期日',
     'agreed_payment_date': '约定付款日',
@@ -275,8 +283,7 @@ def spreadsheet_number(value):
 def document(name, headers, rows, file_format='csv', numeric=()):
     if file_format not in {'csv', 'xlsx'}:
         raise ValidationError({'file_format': '请选择 csv 或 xlsx。'})
-    if len(rows) > MAX_EXPORT:
-        raise ValidationError(f'一次最多导出 {MAX_EXPORT} 条，请缩小筛选范围。')
+    check_export_size(len(rows))
     if file_format == 'csv':
         output = io.StringIO(newline='')
         writer = csv.writer(output)

@@ -2,7 +2,7 @@ import { businessDate } from './fixtures'
 import type { TestInfo } from '@playwright/test'
 import { createHash, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { test, expect, login, openRowAction, type Locator, type Page } from './fixtures'
+import { test, expect, login, authenticate, openRowAction, type ApiClient, type Locator, type Page } from './fixtures'
 
 // Real uploads and authenticated APIs only; the parent prepares the isolated installation.
 // Run this file with the existing desktop/mobile projects and explicit E2E_* credentials.
@@ -14,34 +14,9 @@ const literalText = '<b>按原文显示 & 不改写</b>'
 type Upload = { name: string; mimeType: string; buffer: Buffer }
 type DocumentRecord = { id: number; original_name: string; sha256: string; size: number }
 
-function api(page: Page, token: string) {
-  const headers = { Authorization: `Bearer ${token}` }
-  return {
-    headers,
-    async get(path: string) {
-      const response = await page.request.get(path, { headers })
-      expect(response.status(), `${path}: ${await response.text()}`).toBe(200)
-      return response.json()
-    },
-    async post(path: string, data: object) {
-      const response = await page.request.post(path, {
-        headers: { ...headers, 'Idempotency-Key': randomUUID() }, data,
-      })
-      expect(response.status(), `${path}: ${await response.text()}`).toBe(201)
-      return response.json()
-    },
-  }
-}
-
-async function authenticate(page: Page, username: string, password: string) {
-  const response = await page.request.post('/api/auth/login/', { data: { username, password } })
-  expect(response.status(), await response.text()).toBe(200)
-  return api(page, (await response.json()).access)
-}
-
 async function actors(page: Page, info: TestInfo, role: string) {
   const suffix = `${info.project.name}-${randomUUID().slice(0, 8)}`
-  const admin = await authenticate(page, process.env.E2E_ADMIN_USERNAME || 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const admin = await authenticate(page.request, process.env.E2E_ADMIN_USERNAME || 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const username = `preview_${role}_${suffix}`
   const person = await admin.post('/api/auth/users/', {
     username, display_name: `附件验收-${role}-${suffix}`, roles: [role], password: fixturePassword,
@@ -52,8 +27,8 @@ async function actors(page: Page, info: TestInfo, role: string) {
     username: outsiderName, display_name: `未参与项目-${suffix}`, roles: ['member'], password: fixturePassword,
   })
   expect(outsiderUser.roles).toEqual(['member'])
-  const actor = await authenticate(page, username, fixturePassword)
-  const outsider = await authenticate(page, outsiderName, fixturePassword)
+  const actor = await authenticate(page.request, username, fixturePassword)
+  const outsider = await authenticate(page.request, outsiderName, fixturePassword)
   const partner = await admin.post(business + 'partners/', { name: `附件预览单位-${suffix}`, kind: 'both' })
   return { admin, actor, outsider, person, username, partner, suffix }
 }
@@ -65,7 +40,7 @@ async function binaryFixture(file: string, mimeType: string, suffix: string): Pr
   }
 }
 
-async function upload(page: Page, client: ReturnType<typeof api>, owner: object, file: Upload): Promise<DocumentRecord> {
+async function upload(page: Page, client: ApiClient, owner: object, file: Upload): Promise<DocumentRecord> {
   const response = await page.request.post(business + 'documents/', {
     headers: { ...client.headers, 'Idempotency-Key': randomUUID() },
     multipart: { ...owner, category: 'other', file },
@@ -127,7 +102,7 @@ async function downloadOriginal(page: Page, dialog: Locator, info: TestInfo, fil
   expect((await readFile(path)).equals(file.buffer), '预览后的下载必须逐字节保留原文件').toBe(true)
 }
 
-async function deniedPreview(page: Page, outsider: ReturnType<typeof api>, id: number, binary = false) {
+async function deniedPreview(page: Page, outsider: ApiClient, id: number, binary = false) {
   for (const action of binary ? ['preview', 'preview-file', 'download'] : ['preview', 'download']) {
     const path = business + `documents/${id}/${action}/`
     // 未参与成员按权限拒绝（403/404）；不带凭据的匿名请求返回 401（需要登录）。

@@ -26,7 +26,7 @@ from apps.business.models import (
 )
 from apps.core.models import ActionReceipt, AuditLog, Company
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, freeze_today
 from .test_permission_queries import counted_queries
 
 
@@ -34,11 +34,6 @@ class SupplyFixtures(BusinessFixtures):
     def setUp(self):
         self.setup_business()
         self.project = self.active_project()
-
-    def get(self, role, url, params=None, status=200):
-        response = self.clients[role].get('/api/business/' + url, params or {})
-        self.assertEqual(response.status_code, status, getattr(response, 'data', None))
-        return response.data
 
     def manual_purchase(self, qty, *, item=None, status=201, **extra):
         return self.post(
@@ -375,6 +370,7 @@ class OptionalForwardReasonTests(SupplyFixtures, TestCase):
         self.assertEqual(PaymentEvidence.objects.get().reason, '补充收付凭证')
 
     def test_reconciliation_confirmations_default_reason_but_void_and_self_approval_require_it(self):
+        self.enterContext(freeze_today())
         purchase = self.purchase(self.project)
         entry = purchase.entry
         data = {
@@ -454,6 +450,10 @@ class TraceabilityTests(SupplyFixtures, TestCase):
 
 
 class ReceivableDueDateTests(SupplyFixtures, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.enterContext(freeze_today())
+
     def test_finance_adjusts_receivable_due_date_with_audit(self):
         entry = Entry.objects.get(project=self.project, kind='receivable')
         url = f'entries/{entry.pk}/adjust-due-date/'

@@ -92,6 +92,9 @@ describe('BOM 并排选料与采购草稿', () => {
   it('筛选外的选择和编辑保留，全选只增加有缺口的有效物料', async () => {
     const wrapper = await picker()
     await selectMotor(wrapper)
+    // 草稿行是有名称的分组，读屏进入时先报出是哪条明细；明细交期带上物料与单元。
+    expect(draft(wrapper).attributes('role')).toBe('group')
+    expect(wrapper.find('input[type="date"][aria-label^="明细交期："]').attributes('aria-label')).toMatch(/^明细交期：.+ · 输送单元$/)
     await draft(wrapper).get('input[aria-label="采购数量"]').setValue('2.500')
     await wrapper.get('input[aria-label="搜索 BOM 物料"]').setValue('导轨')
     expect(wrapper.findAll('.el-table__body input[type="checkbox"]')).toHaveLength(1)

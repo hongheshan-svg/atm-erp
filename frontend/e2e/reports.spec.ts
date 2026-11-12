@@ -1,4 +1,4 @@
-import { test, expect, observePage, login, goToListPage, openRowAction } from './fixtures'
+import { test, expect, observePage, login, openRowAction, searchList } from './fixtures'
 import { selectRoles } from './role-helpers'
 
 test('总经理单独授权后查看筛选报表，撤销后接口和入口均拒绝', async ({ page, browser }, info) => {
@@ -34,14 +34,10 @@ test('总经理单独授权后查看筛选报表，撤销后接口和入口均�
     await gm.getByRole('button', { name: '查询', exact: true }).click()
     expect((await (await filtered).json()).count).toBe(0)
     await expect(gm.getByText('没有符合筛选条件的项目', { exact: true })).toBeVisible()
-    // User list is paginated; navigate to the created account's page through the UI.
-    const token = await page.evaluate(() => localStorage.getItem('access_token'))
-    const users = await page.request.get('/api/auth/users/', { headers: { Authorization: `Bearer ${token}` } })
-    const count = (await users.json()).count
-    const userPanel = page.getByRole('region', { name: '用户管理', exact: true })
-    const lastPage = Math.ceil(count / Number(await userPanel.getByLabel('每页显示条目', { exact: true }).inputValue()))
-    if (lastPage > 1) await goToListPage(userPanel, lastPage)
+    // 用户列表分页：按账号搜索定位新用户，不假设它排在最后一页。
+    const userPanel = await searchList(page, '用户管理', name)
     const row = userPanel.locator('.el-table__body tr').filter({ hasText: name })
+    await expect(row).toHaveCount(1)
     await openRowAction(page, row, '编辑')
     await dialog.getByLabel('总经理报表权限（仅项目经理角色）', { exact: true }).uncheck()
     const revoked = page.waitForResponse(r => r.url().endsWith(`/auth/users/${account.id}/`) && r.request().method() === 'PATCH')

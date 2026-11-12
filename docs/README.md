@@ -5,7 +5,7 @@
 ## 使用与部署
 
 - [安装、首次启用、升级与备份](../README.md)
-- [三平台安装要点](INSTALL_PLATFORMS.md)
+- [三平台安装检查清单](INSTALL_PLATFORMS.md)
 - [日常使用](LEAN_USER_GUIDE.md)
 - [岗位职责与权限](ROLE_RESPONSIBILITIES.md)
 - [导入模板填写说明](IMPORT_TEMPLATES.md)
@@ -15,7 +15,7 @@
 - [银行流水导入](BANK_IMPORT.md)
 - [附件在线预览](ATTACHMENT_PREVIEW.md)
 - [采购合同查看与打印](PURCHASE_CONTRACT_PREVIEW.md)
-- [升级执行器运维](LEAN_OTA_OPERATIONS.md)
+- [在线升级（OTA）操作](LEAN_OTA_OPERATIONS.md)
 - [试运行与运维](OPERATIONS_AND_PILOT.md)
 
 ## 开发与验证
@@ -28,4 +28,4 @@
 - [CI 工作流](CI_OPERATIONS.md)
 - [发布说明模板](releases/TEMPLATE.md)
 
-原始需求、旧架构审计报告、`superpowers/` 设计记录及 `screenshots/`、`output/` 内的旧版资料仅保留作历史参考，不代表当前功能或验收结果。旧版截图和手册生成脚本已移除；当前浏览器验证使用 `frontend/e2e/`，须显式指定隔离环境的 URL 和测试凭据。
+已完成的验收报告、整改记录与审计清单移至 [archive/](archive/README.md)，仅作历史记录，不代表现行要求。浏览器验证使用 `frontend/e2e/`，须显式指定隔离环境的 URL 和测试凭据。

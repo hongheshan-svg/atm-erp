@@ -1,9 +1,8 @@
-import { expect, type Locator, type Page } from './fixtures'
+import { expect, openRowAction, type Locator, type Page } from './fixtures'
 
 export async function confirmSettlement(finance: Page, approver: Page, entry: Locator, prepayment = false) {
   const financeUrl = finance.url(), approverUrl = approver.url()
-  await entry.getByRole('button', { name: '操作 ▾', exact: true }).click()
-  await finance.getByRole('menuitem', { name: prepayment ? '申请预付款核准' : '生成对账单', exact: true }).click()
+  await openRowAction(finance, entry, prepayment ? '申请预付款核准' : '生成对账单')
   let dialog = finance.getByRole('dialog')
   if (prepayment) await dialog.getByLabel('合同编号及付款条款依据', { exact: true }).fill('HT-E2E 合同约定付款额度，经理核准后执行')
   await dialog.getByLabel('原因 / 说明', { exact: true }).fill('核对双方原始业务记录')

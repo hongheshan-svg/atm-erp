@@ -12,11 +12,11 @@
 
 ## Docker 默认：容器内 OTA
 
-新版镜像默认 `LEAN_OTA_MODE=container`，配置 `.env` 后直接 `docker compose up -d`，容器启动器自动派生内部认证并启动升级进程，不需要宿主机 Python、服务注册或 docker.sock。页面收到真实心跳后显示“容器内升级已就绪”。只支持一套应用实例挂载该 runtime 卷，不共享给多副本。旧宿主机执行器与容器模式互斥。
+新版镜像默认 `LEAN_OTA_MODE=container`，配置 `.env` 后直接 `docker compose up -d`，容器启动器自动派生内部认证并启动升级进程，不需要宿主机 Python、服务注册或 docker.sock。页面收到真实心跳后显示“容器内升级已就绪”。只支持一套应用实例挂载该 runtime 卷，不共享给多副本。旧宿主机执行器与容器模式互斥：旧版先沿用原配置、项目名和数据卷更新到包含容器 OTA 的镜像，再停止旧宿主机执行器，避免日志反复报模式冲突。
 
 执行过程：下载固定仓库 Linux/native 发布包并验证 SHA256 → 验证 container_runtime=1 兼容声明及匹配架构 wheelhouse → 离线创建独立 venv → 等待管理员确认重启 → 停止容器内 Daphne → 备份 → 前向迁移 → 原子切换 active.json 与前端目录 → 启动并核对健康版本。下载、依赖预备失败不停止业务；完整备份之前绝不迁移。这里更新的是应用程序，不改变 Docker 镜像标签；系统库、Python、Nginx 或启动器协议改变需手动换基础镜像。
 
-`lean_runtime` 挂载 `/app/runtime`：`job-<id>/upgrade.log` 保存详细日志，`job-<id>/backup/` 包含 PostgreSQL 15 自定义格式 `database.dump`、`uploads.tar`、私有 `config.json` 及 SHA256 清单；`active.json` 指向持久化版本和 venv。配置备份有敏感密钥，不公开分享。重建容器保留新版本；不可删除 runtime 卷或挂到其他部署。原宿主机 `.env` 不在容器内，仍需自行安全保存，以便重建 Compose。
+`lean_runtime` 挂载 `/app/runtime`：`job-<id>/upgrade.log` 保存详细日志，`job-<id>/backup/` 包含 PostgreSQL 15 自定义格式 `database.dump`、`uploads.tar`、私有 `config.json` 及 SHA256 清单；`active.json` 指向持久化版本和 venv。配置备份有敏感密钥，不公开分享。重建容器继续使用已升级程序；更高版本的基础镜像允许前向更新，旧镜像不会覆盖较新的持久化版本。不可删除 runtime 卷、执行 `down -v` 或把卷挂到其他部署。原宿主机 `.env` 不在容器内，仍需自行安全保存，以便重建 Compose。
 
 备份格式不是旧 `scripts/backup.py` 的 ZIP，不能直接交给该脚本 restore。恢复应在独立空数据库、附件卷和匹配版本程序上操作：先校验清单，再用 PostgreSQL 15 `pg_restore --no-owner --no-acl` 恢复数据库，安全解包附件并对照私有配置恢复连接。不要覆盖当前库、密钥或运行时目录。
 

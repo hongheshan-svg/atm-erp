@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BusinessTable from './BusinessTable.vue'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useNarrow } from '../utils/media'
 import { matchedRouteKey, onBeforeRouteLeave, onBeforeRouteUpdate, routerKey } from 'vue-router'
 import { purchaseReader, user } from '../session'
 import { clearDraft, draftKey, formSignature, loadDraft, saveDraft, registerFormGuard, submitLabel, wideCommand } from '../form-experience'
@@ -167,13 +168,7 @@ const previewedSignature = ref('')
 const previewStale = computed(() => Boolean(preview.value) && previewedSignature.value !== formSignature(data.value))
 const purchaseStatus: Record<string, string> = { draft: '草稿', submitted: '待批准', approved: '待收货', partial: '部分收货' }
 // 手机宽度下预览表改成单列摘要，不在对话框里再套一层横向滚动。
-const mobile = ref(typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 600px)').matches)
-if (typeof window !== 'undefined' && window.matchMedia) {
-  const query = window.matchMedia('(max-width: 600px)')
-  const sync = () => { mobile.value = query.matches }
-  query.addEventListener?.('change', sync)
-  onBeforeUnmount(() => query.removeEventListener?.('change', sync))
-}
+const mobile = useNarrow()
 const unitText = (row: Row) => `${row.before_unit != null && row.before_unit !== row.assembly_unit ? `${row.before_unit || '未分单元'} → ` : ''}${row.assembly_unit || '未分单元'}`
 const purchaseList = computed(() => (preview.value?.purchases || []).map((purchase: Row) => `${purchase.code}（${purchaseStatus[purchase.status] || purchase.status}）`).join('、'))
 // 只有被拦截或确有已领/在途要处理时才叫人去找采购；只改日期或单元时采购单仅作参考。

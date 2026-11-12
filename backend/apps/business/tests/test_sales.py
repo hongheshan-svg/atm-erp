@@ -9,7 +9,7 @@ from rest_framework.exceptions import ValidationError
 from apps.business.models import Document, Entry, Project, SalesOrder
 from apps.core.models import ActionReceipt, AuditLog, CodeRule
 
-from .test_commercial_chain import TODAY, BusinessFixtures
+from .test_commercial_chain import TODAY, BusinessFixtures, freeze_today
 
 
 class SalesTests(BusinessFixtures, TestCase):
@@ -499,6 +499,7 @@ class SalesTests(BusinessFixtures, TestCase):
 class SalesDateFactTests(BusinessFixtures, TestCase):
     def setUp(self):
         self.setup_business()
+        self.enterContext(freeze_today())
 
     def quoted_sale(self):
         sale = self.post(
