@@ -331,10 +331,11 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 ## 问题反馈接口（2026-11-13）
 
-- `GET /api/core/feedback/` 所有在职账号可读：`enabled`（是否已配置令牌）、`issues_url`、`results`（最近 100 条：id、category、title、issue_number、issue_url、state=open/completed/not_planned、submitter、mine、created_at）。读取时全安装每 120 秒最多向 GitHub 同步一次状态，失败保留上次状态。
-- `POST /api/core/feedback/` 需 Idempotency-Key，字段 category（bug/feature/question）、title（≤80）、description（≤5000）、可选 steps（≤3000）、page、request_id、client，未知字段拒绝。GitHub 调用在事务外进行，成功后在 perform 内落 Feedback 与审计 `feedback.submit`；同一标识重放不再访问 GitHub，并发同标识在建 issue 前互斥。未配置令牌 409，GitHub 不可用 503 且不留记录或回执。每账号 20 次/小时（scope `feedback`）。
-- issue 正文不含提交人；page 只保留路径与 resource/section 参数；用户文字放入代码围栏。标签 `from-erp` 加类型标签（bug/enhancement/question）。
-- `GET/POST /api/core/feedback/settings/` 仅管理员：GET 返回 `configured`、`repository`；POST `{token}` 需 Idempotency-Key，非空时校验 `github_pat_`/`ghp_` 格式并访问仓库验证，空字符串停用。令牌存 `Company.feedback_token`，任何响应、审计和回执都不含原值。
+- `GET /api/core/feedback/` 所有在职账号可读：`enabled`（已配置令牌）、`limits`（files/file_mb/total_mb）、`issues_url`（私有反馈仓库 `hongheshan-svg/atm-erp-feedback` 的 Issues 页）、`results`（最近 100 条：id、category、title、issue_number、issue_url、state=open/completed/not_planned、attachments[{name,url,image}]、submitter、mine、created_at）。读取时全安装每 120 秒最多向 GitHub 同步一次状态，失败保留上次状态。
+- `POST /api/core/feedback/` 需 Idempotency-Key；JSON 或 multipart。文字字段 category（bug/feature/question）、title（≤80）、description（≤5000），可选 steps（≤3000）、expected（≤2000）、impact（blocked/workaround/minor）、frequency（always/sometimes/once）、page、request_id、client，未知字段拒绝。multipart 的 `files` 最多 6 个、单个 ≤10 MB、合计 ≤20 MB，扩展名白名单并核对文件头。
+- GitHub 调用在事务外：先按内容摘要把附件写入反馈仓库的 `files/<sha256><ext>`（已存在则复用），再在同一仓库建 issue，成功后在 perform 内落 Feedback 与审计 `feedback.submit`（含附件数）。回执指纹包含附件摘要；同一标识重放不再访问 GitHub，并发同标识在上传前互斥。未配置令牌返回 409；GitHub 不可用 503 且不留记录或回执。每账号 20 次/小时（scope `feedback`）。
+- issue 正文不含提交人；page 只保留路径与 resource/section 参数；用户文字放入代码围栏；图片以 `?raw=true` 文件链接内嵌，其他附件为文件页链接。标签 `from-erp` 加类型标签（bug/enhancement/question）。
+- `GET/POST /api/core/feedback/settings/` 仅管理员：GET 返回 `configured`、`repository`；POST `{token}` 需 Idempotency-Key，非空时校验 `github_pat_`/`ghp_` 格式并访问反馈仓库验证，空字符串停用。令牌只需反馈仓库的 Issues 与 Contents 读写，存 `Company.feedback_token`，任何响应、审计和回执都不含原值。
 
 ## 审计整改补充（2026-09-25，优先于上述旧描述）
 

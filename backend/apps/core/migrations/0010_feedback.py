@@ -31,6 +31,7 @@ class Migration(migrations.Migration):
                 ('issue_number', models.PositiveIntegerField(unique=True)),
                 ('issue_url', models.CharField(max_length=300)),
                 ('state', models.CharField(default='open', max_length=20)),
+                ('attachments', models.JSONField(blank=True, default=list)),
                 ('created_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='+', to=settings.AUTH_USER_MODEL)),
                 ('updated_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='+', to=settings.AUTH_USER_MODEL)),
             ],
