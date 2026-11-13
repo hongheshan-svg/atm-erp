@@ -314,14 +314,20 @@ class FeedbackTests(TestCase):
             (error(401), '令牌无效或已过期'),
             (error(404), '没有反馈仓库的 Issues 和 Contents 读写权限'),
             (error(403), '没有反馈仓库的 Issues 和 Contents 读写权限'),
-            (error(403, {'x-ratelimit-remaining': '0'}), '内容未提交'),
-            (urllib.error.URLError('down'), '内容未提交'),
-            (TimeoutError(), '内容未提交'),
+            (error(403, {'x-ratelimit-remaining': '0'}), '调用次数已达上限，内容未提交'),
+            (error(429), '调用次数已达上限，内容未提交'),
+            (error(422), 'GitHub 返回错误（422），内容未提交'),
+            (error(502), 'GitHub 返回错误（502），内容未提交'),
+            (urllib.error.URLError('down'), '暂时无法连接 GitHub，内容未提交'),
+            (TimeoutError(), '连接 GitHub 超时'),
+            (urllib.error.URLError(TimeoutError()), '连接 GitHub 超时'),
         )
         for raised, text in cases:
             with self.subTest(raised=raised), patch('urllib.request.urlopen', side_effect=raised):
-                with self.assertRaises(feedback.Unavailable) as caught:
+                with self.assertRaises(feedback.Unavailable) as caught, self.assertLogs('apps.core.feedback') as logs:
                     feedback.github('GET', '', TOKEN)
                 self.assertIn(text, str(caught.exception.detail))
+                # 每种失败都在日志里留下原因，且不带令牌。
+                self.assertNotIn(TOKEN, ''.join(logs.output))
         with patch('urllib.request.urlopen', side_effect=error(422)):
             self.assertEqual(feedback.github('PUT', '/x', TOKEN, {}, allow=(422,)), {'_status': 422})
