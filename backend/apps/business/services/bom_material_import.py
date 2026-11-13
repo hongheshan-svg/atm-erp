@@ -34,6 +34,39 @@ MATERIAL_FIELDS = (
 HEADERS = [label for label, _ in BOM_COLUMNS]
 SALT = 'lean-bom-material-import-v1'
 BRAND_BACKFILLED = '沿用已有物料，补填品牌'
+MODEL_REUSED = '按型号复用已有物料'
+FIELD_LABELS = {key: label for label, key in BOM_COLUMNS}
+# 品牌栏写的是购买渠道而不是厂家时，规格多为通用尺寸（M6、Φ6*18），同规格可能是垫片也可能是螺母，
+# 不能凭「规格、品牌、单位相同」就认定是同一物料。
+CHANNEL_BRANDS = {
+    masterdata.comparison_key(name)
+    for name in (
+        '淘宝', '天猫', '京东', '拼多多', '1688', '阿里', '阿里巴巴', '闲鱼', '咸鱼', '网购', '网上', '电商',
+        '外购', '市购', '市场', '五金店', '现货', '国产', '通用', '杂牌', '无', '无品牌', '其他', '其它', '不限',
+    )
+}  # fmt: skip
+
+
+def differences(item, data):
+    """文件填写的物料资料与系统现有资料不同的字段；文件留空的不算，比较忽略大小写、首尾及连续空白。"""
+    return [
+        field
+        for field, value in data.items()
+        if value and masterdata.normalized(getattr(item, field)).casefold() != masterdata.normalized(value).casefold()
+    ]
+
+
+def kept(item, fields):
+    """提示以系统资料为准：逐项列出系统现值，核对的人不用再去查主数据。"""
+    # 系统里本来就空着的资料（未分类、未填图号）没有可核对的内容，不提示。
+    fields = [field for field in fields if getattr(item, field)]
+    if not fields:
+        return ''
+    labels = dict(Item.ProductCategory.choices) | dict(Item.PartType.choices)
+    values = '、'.join(
+        f'{FIELD_LABELS[field]}「{labels.get(getattr(item, field), getattr(item, field)) or "空"}」' for field in fields
+    )
+    return f'本行所填与系统资料不同，已按系统为准：{values}。'
 
 
 def row_data(row):
@@ -67,29 +100,38 @@ def lock_existing(records):
     list(Item.objects.select_for_update().filter(pk__in=ids).order_by('pk').only('pk'))
 
 
-def material(actor, row):
+def material(actor, row, created=None):
+    """解析一行对应的物料，返回（物料，处理方式，需核对的提示）；created 为本文件前面各行新建的 {物料主键: 行号}。"""
+    created = created or {}
     data = row_data(row)
     code = row[0].strip()
     if code:
         item = Item.objects.filter(code=code, is_active=True).first()
         if item:
-            backfill = {}
-            for field, value in data.items():
-                current = masterdata.normalized(getattr(item, field))
-                if not value or current.casefold() == masterdata.normalized(value).casefold():
-                    continue
-                # 品牌原来为空时按文件补填（导出可回导模板、补品牌列再导回）；已有品牌和其他资料仍不覆盖。
-                if field == 'brand' and not current:
-                    backfill[field] = value
-                    continue
+            changed = differences(item, data)
+            # 规格或图号明确不同，多半是编码填错了物料，仍然拦下；名称、品牌、单位、类别的写法差异
+            # （拉手/把手、festo/费斯托、PCS/件）只提示，按系统资料使用，不覆盖主数据。
+            wrong = [
+                field
+                for field in ('specification', 'drawing_number', 'drawing_revision')
+                if field in changed
+                and getattr(item, field)
+                and masterdata.comparison_key(getattr(item, field)) != masterdata.comparison_key(data[field])
+            ]
+            if wrong:
                 raise ValidationError(
-                    '所填物料资料与编码对应的现有物料不一致，请核对编码；导入不会覆盖物料主数据，'
-                    '只会补填原来为空的品牌。'
+                    f'编码 {code} 在系统中是「{item.name} {item.specification}」，与本行填写的'
+                    f'{"、".join(FIELD_LABELS[field] for field in wrong)}不同，请核对编码是否填错。'
+                    '确认是同一物料：清空本行物料名称到单位各列，只留编码；不是同一物料：改正编码，'
+                    '或清空编码按新物料导入。导入不会覆盖物料主数据，只会补填原来为空的品牌。'
                 )
-            if backfill:
-                masterdata.masterdata(actor, str(uuid.uuid4()), Item, backfill, item.pk)
-                return Item.objects.get(pk=item.pk), BRAND_BACKFILLED
-            return item, '使用已有编码'
+            # 品牌原来为空时按文件补填（导出可回导模板、补品牌列再导回）；已有品牌和其他资料仍不覆盖。
+            if 'brand' in changed and not masterdata.normalized(item.brand):
+                changed.remove('brand')
+                masterdata.masterdata(actor, str(uuid.uuid4()), Item, {'brand': data['brand']}, item.pk)
+                item = Item.objects.get(pk=item.pk)
+                return item, BRAND_BACKFILLED, kept(item, changed)
+            return item, '使用已有编码', kept(item, changed)
         if Item.all_objects.filter(code=code).exists():
             raise ValidationError('填写的物料编码已停用或已删除，请先核对主数据，不能重复占用该编码。')
     required = ('name', 'specification', 'unit') + (() if code else ('product_category',))
@@ -104,14 +146,14 @@ def material(actor, row):
         raise ValidationError(errors)
     if code:
         result = masterdata.masterdata(actor, str(uuid.uuid4()), Item, {**data, 'code': code})
-        return Item.objects.get(pk=result['id']), '按填写编码新建物料'
+        return Item.objects.get(pk=result['id']), '按填写编码新建物料', ''
     matches = masterdata.duplicates(data)
     if len(matches) > 1:
         raise ValidationError('存在多个相同物料，请明确填写要复用的物料编码。')
     if matches:
         if not matches[0].is_active:
             raise ValidationError('相同物料已停用，请先核对主数据，不能自动重复建码。')
-        return matches[0], '复用相同物料'
+        return matches[0], '复用相同物料', ''
     if data['brand']:
         # 原始 BOM 表补上品牌、编码仍留空再导入：除品牌外完全相同、原来没有品牌的物料就是同一物料，
         # 补填品牌后复用，不另建一批重复物料（否则 BOM 会多出新行，需求量翻倍）。
@@ -122,9 +164,41 @@ def material(actor, row):
             if not unbranded[0].is_active:
                 raise ValidationError('相同物料已停用，请先核对主数据，不能自动重复建码。')
             masterdata.masterdata(actor, str(uuid.uuid4()), Item, {'brand': data['brand']}, unbranded[0].pk)
-            return Item.objects.get(pk=unbranded[0].pk), BRAND_BACKFILLED
+            return Item.objects.get(pk=unbranded[0].pk), BRAND_BACKFILLED, ''
+    # 型号、品牌、单位相同的已有物料（含本文件前面刚建的）就是同一物料的另一种写法：直接复用并在预览里
+    # 标明差异，不再要求先到基础资料填写独立建码原因——导入表里没有地方填，这一行以前无法处理。
+    similar = masterdata.suspected_duplicates(data)
+    if len(similar) > 1:
+        raise ValidationError(
+            f'系统中有多个规格、品牌、单位相同的物料（{"、".join(item.code for item in similar)}），'
+            '请核对后在物料编码列填写要使用的那个编码。'
+        )
+    if similar:
+        match = similar[0]
+        if not match.is_active:
+            raise ValidationError(f'规格相同的物料 {match.code} 已停用，请先核对主数据，不能自动重复建码。')
+        renamed = masterdata.comparison_key(match.name) != masterdata.comparison_key(data['name'])
+        # 预览时本文件新建的物料编号尚未生成（预览整体回滚），提示里只能指行号。
+        source = f'第 {created[match.pk]} 行' if match.pk in created else f'物料 {match.code}'
+        if renamed and masterdata.comparison_key(data['brand']) in CHANNEL_BRANDS:
+            same = (
+                f'把名称改成与第 {created[match.pk]} 行一致'
+                if match.pk in created
+                else f'在物料编码列填写 {match.code}'
+            )
+            raise ValidationError(
+                f'规格、品牌、单位与{source}「{match.name}」相同，但名称不同；品牌「{data["brand"]}」'
+                '是购买渠道，同规格可能是不同零件，系统不自动合并。'
+                f'是同一物料：{same}；不是同一物料：把规格写完整（如加上品名、材质或标准号）以便区分。'
+            )
+        changed = differences(match, data)
+        if match.pk in created:
+            labels = '、'.join(FIELD_LABELS[field] for field in changed)
+            hint = f'与{source}规格、品牌、单位相同，按同一物料处理'
+            return match, MODEL_REUSED, hint + (f'；{labels}以{source}为准。' if labels else '。')
+        return match, MODEL_REUSED, kept(match, changed)
     result = masterdata.masterdata(actor, str(uuid.uuid4()), Item, data)
-    return Item.objects.get(pk=result['id']), '自动新建物料'
+    return Item.objects.get(pk=result['id']), '自动新建物料', ''
 
 
 def resolve(actor, project, records, expected, *, collect_errors=False):
@@ -133,23 +207,23 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     CodeRule.objects.select_for_update().get(key='item')
     lock_existing(records)
     output, actions, errors = [], [], []
-    new_ids = set()
+    new_ids = {}
     for index, row in enumerate(records, 2):
         if not any(row):
             output.append(row[:7])
             continue
         try:
             with transaction.atomic():
-                item, action = material(actor, row)
+                item, action, hint = material(actor, row, new_ids)
         except ValidationError as exc:
             errors.append({'row': index, 'message': bom_import.message(exc.detail)})
             # Preserve source row numbers when validating the remaining BOM lines.
             output.append([''] * 7)
             continue
         if action in {'自动新建物料', '按填写编码新建物料'}:
-            new_ids.add(item.pk)
+            new_ids[item.pk] = index
         output.append([item.code, *row[1:7]])
-        actions.append((index, action, item.pk in new_ids))
+        actions.append((index, action, item.pk in new_ids, hint))
     stream = io.StringIO()
     writer = csv.writer(stream)
     writer.writerow(bom_import.HEADERS)
@@ -157,7 +231,7 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     result = bom_import.preview(project, SimpleUploadedFile('bom.csv', stream.getvalue().encode()))
     if errors and not actions:
         result['errors'] = []  # Material errors already explain why there are no valid lines.
-    if errors or any(action == BRAND_BACKFILLED for _, action, _ in actions):
+    if errors or any(action == BRAND_BACKFILLED for _, action, _, _ in actions):
         # 有物料问题时，「其余行与当前 BOM 一致」不是失败原因，不再另行提示；
         # 只补填品牌、BOM 用量不变时，这次导入照样有内容要保存。
         result['errors'] = [error for error in result['errors'] if not error.get('unchanged')]
@@ -165,9 +239,10 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     result['can_import'] = bool(result['lines']) and not result['errors']
     if not result['can_import'] and not collect_errors:
         raise ValidationError([f'第{error["row"]}行：{error["message"]}' for error in result['errors']])
-    by_row = {index: (action, new) for index, action, new in actions}
+    by_row = {index: (action, new, hint) for index, action, new, hint in actions}
     for line in result['lines']:
-        line['material_action'], line['new_material'] = by_row[line['row']]
+        line['material_action'], line['new_material'], line['material_hint'] = by_row[line['row']]
+    result['summary']['new_materials'] = len(new_ids)
     if collect_errors:
         resolved = {line['row']: line for line in result['lines']}
         issues = {error['row']: error['message'] for error in result['errors'] if 'row' in error}
@@ -248,7 +323,7 @@ def preview(actor, project, upload):
             'expected_revision': expected,
         }
     result['note'] = (
-        '预览不占用编号；自编编号原样保留，留空才在确认时自动生成。型号不会自动补全或改写。物料与BOM整批保存，完全相同物料可复用；任一行失败全部撤销。'
+        '预览不占用编号；自编编号原样保留，留空才在确认时自动生成。型号不会自动补全或改写。物料与BOM整批保存；完全相同或型号、品牌、单位相同的物料直接复用，同物料同单元的重复行合并数量；任一行失败全部撤销。'
     )
     for line in result['lines']:
         if line.get('new_material'):
@@ -286,7 +361,7 @@ def confirm(actor, project, data):
         changed = [
             {field: row.get(field) for field in fields}
             for row in result['lines']
-            if row.get('bom_action') != 'unchanged'
+            if row.get('bom_action') not in ('unchanged', 'merged')
         ]
         if not changed:
             # 只补填了品牌：物料主数据已在 resolve 里保存，BOM 本身没有修订。

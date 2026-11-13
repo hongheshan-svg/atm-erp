@@ -191,7 +191,7 @@ def preview(project, upload):
     grouped = by_item(existing)
     current = {(line.item_id, line.assembly_unit): line for line in existing}
     known = {line.assembly_unit for line in existing}
-    lines, errors, seen = [], [], set()
+    lines, errors, primary = [], [], {}
     linked = None  # 各 BOM 行关联的未取消在途，首次修改已有行时一次读取。
     for row_number, row in enumerate(raw, 2):
         if all(value in (None, '') for value in row):
@@ -215,11 +215,6 @@ def preview(project, upload):
             problem = unit_conflict(assembly_unit, known)
             if problem:
                 raise ValidationError(problem)
-            known.add(assembly_unit)
-            row_key = (item.pk, assembly_unit)
-            if row_key in seen:
-                raise ValidationError('同一文件中的物料编码和单元不能重复。')
-            seen.add(row_key)
             qty = number(values[1], '数量', 3, positive=True)
             details = {}
             if headers == HEADERS:
@@ -236,52 +231,76 @@ def preview(project, upload):
                     raise ValidationError('申请人不能超过80字符。')
             if len(assembly_unit) > 100:
                 raise ValidationError('单元不能超过100字符。')
-            existing_line = current.get(row_key)
-            action = 'create'
-            if existing_line is not None:
-                same = qty == existing_line.quantity and all(
-                    str(getattr(existing_line, field) or '') == str(details.get(field) or '') for field in details
-                )
-                # 从系统导出再回导时，没改的行原样跳过，不要求变更说明，也不写修订记录。
-                action = 'unchanged' if same and note in ('', existing_line.change_note) else 'update'
-            if len(note) > 500 or (action == 'update' and not note):
-                raise ValidationError('修改已有 BOM 必须填写变更说明，且不超过 500 字符。')
-            if action == 'update':
-                if linked is None:
-                    linked = linked_incoming_by_line([line.pk for line in existing])
-                pending = linked[current[row_key].pk]
-                if qty < pending:
-                    raise ValidationError('单元用量不能小于该行在途采购数量。')
-            lines.append(
-                {
-                    **details,
-                    'row': row_number,
-                    'item': item.pk,
-                    'item_code': code,
-                    'item_name': item.name,
-                    'brand': item.brand,
-                    'specification': item.specification,
-                    'drawing_number': item.drawing_number,
-                    'drawing_revision': item.drawing_revision,
-                    'product_category': item.product_category,
-                    'unit': item.unit,
-                    'part_type': item.part_type,
-                    'quantity': str(qty),
-                    'change_note': note,
-                    'assembly_unit': assembly_unit,
-                    'bom_action': action,
-                    'before_quantity': str(existing_line.quantity) if existing_line is not None else None,
-                }
-            )
+            if len(note) > 500:
+                raise ValidationError('变更说明不能超过 500 字符。')
+            known.add(assembly_unit)
+            line = {
+                **details,
+                'row': row_number,
+                'item': item.pk,
+                'item_code': code,
+                'item_name': item.name,
+                'brand': item.brand,
+                'specification': item.specification,
+                'drawing_number': item.drawing_number,
+                'drawing_revision': item.drawing_revision,
+                'product_category': item.product_category,
+                'unit': item.unit,
+                'part_type': item.part_type,
+                'quantity': str(qty),
+                'change_note': note,
+                'assembly_unit': assembly_unit,
+            }
+            first = primary.get((item.pk, assembly_unit))
+            if first is None:
+                primary[(item.pk, assembly_unit)] = line
+            else:
+                # 非标设备的设计 BOM 常按工位、气路逐处列料，同一物料在同一单元出现多次：数量并入首次出现的那行，
+                # 预览逐行标明并入哪一行，由人核对是独立用量还是重复粘贴；申请信息与变更说明以先填写的为准。
+                first['quantity'] = str(number(first['quantity'], '数量', 3) + qty)
+                first.setdefault('merged_rows', []).append(row_number)
+                for field in ('change_note', *details):
+                    first[field] = first[field] or line[field]
+                line |= {'bom_action': 'merged', 'merged_into': first['row'], 'before_quantity': None}
+            lines.append(line)
         except ValidationError as exc:
             errors.append({'row': row_number, 'message': message(exc.detail)})
+    # 合并完成后再按合计数量判断新增、修改或不变，校验变更说明与在途采购。
+    for row_key, line in primary.items():
+        existing_line = current.get(row_key)
+        qty = number(line['quantity'], '数量', 3)
+        action = 'create'
+        if existing_line is not None:
+            same = qty == existing_line.quantity and all(
+                str(getattr(existing_line, field) or '') == str(line.get(field) or '')
+                for field in ('required_date', 'application_date', 'applicant')
+                if field in line
+            )
+            # 从系统导出再回导时，没改的行原样跳过，不要求变更说明，也不写修订记录。
+            action = 'unchanged' if same and line['change_note'] in ('', existing_line.change_note) else 'update'
+        line['bom_action'] = action
+        line['before_quantity'] = str(existing_line.quantity) if existing_line is not None else None
+        problem = None
+        if action == 'update' and not line['change_note']:
+            problem = '修改已有 BOM 必须填写变更说明，且不超过 500 字符。'
+        elif action == 'update':
+            if linked is None:
+                linked = linked_incoming_by_line([line.pk for line in existing])
+            if qty < linked[existing_line.pk]:
+                problem = '单元用量不能小于该行在途采购数量。'
+        if problem:
+            rows = [line['row'], *line.get('merged_rows', [])]
+            errors.append({'row': line['row'], 'message': problem})
+            lines = [entry for entry in lines if entry['row'] not in rows]
+    errors.sort(key=lambda error: error['row'])
+    effective = [line for line in lines if line['bom_action'] != 'merged']
     if not lines and not errors:
         errors.append({'row': 2, 'message': '文件没有可导入的明细。'})
-    elif lines and not errors and all(line['bom_action'] == 'unchanged' for line in lines):
+    elif lines and not errors and all(line['bom_action'] == 'unchanged' for line in effective):
         errors.append({'message': '文件中的明细与当前 BOM 完全一致，没有需要导入的变化。', 'unchanged': True})
     updates = [
         (current.get((line['item'], line['assembly_unit'])), line['item'], number(line['quantity'], 'quantity', 3))
-        for line in lines
+        for line in effective
         if line['bom_action'] != 'unchanged'
     ]
     first_row = {}
@@ -307,7 +326,10 @@ def preview(project, upload):
         'errors': errors,
         'can_import': bool(lines) and not errors,
         'summary': {
-            **{key: sum(line['bom_action'] == key for line in lines) for key in ('create', 'update', 'unchanged')},
+            **{
+                key: sum(line['bom_action'] == key for line in lines)
+                for key in ('create', 'update', 'unchanged', 'merged')
+            },
             'untouched': len(untouched),
         },
         'untouched': untouched,

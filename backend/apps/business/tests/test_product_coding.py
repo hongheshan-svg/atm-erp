@@ -90,14 +90,19 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         self.assertEqual(
             {line['item_code']: line['brand'] for line in current['lines']}, {'BF-001': '哈丁', 'BF-002': '哈丁'}
         )
-        # 已有品牌不同、其他资料不同，仍按不一致拒绝，不覆盖主数据。
-        for changed in (
-            ['BF-002', '上料', '2', '', '', '', '', '公插芯', 'HE-024-M', '', '', '', '浩亭', '', '件'],
-            ['BF-001', '上料', '2', '', '', '', '', '侧出上壳', 'H24B-SE-X', '', '', '', '', '', '件'],
-        ):
-            rejected = self.auto_preview(project, [changed])
-            self.assertFalse(rejected['can_import'])
-            self.assertIn('只会补填原来为空的品牌', str(rejected['errors']))
+        # 规格不同多半是编码填错，仍然拒绝；已有品牌不同只提示并按系统资料为准。都不覆盖主数据。
+        rejected = self.auto_preview(
+            project, [['BF-001', '上料', '2', '', '', '', '', '侧出上壳', 'H24B-SE-X', '', '', '', '', '', '件']]
+        )
+        self.assertFalse(rejected['can_import'])
+        self.assertIn('请核对编码是否填错', str(rejected['errors']))
+        self.assertIn('只会补填原来为空的品牌', str(rejected['errors']))
+        tolerated = self.auto_preview(
+            project, [['BF-002', '上料', '3', '补料', '', '', '', '公插芯', 'HE-024-M', '', '', '', '浩亭', '', '件']]
+        )
+        self.assertTrue(tolerated['can_import'], tolerated)
+        self.assertEqual(tolerated['lines'][0]['material_action'], '使用已有编码')
+        self.assertIn('品牌「哈丁」', tolerated['lines'][0]['material_hint'])
         branded.refresh_from_db()
         self.assertEqual(branded.brand, '哈丁')
         # 补品牌与改用量同一张表：两样都保存。
@@ -111,6 +116,94 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         third.refresh_from_db()
         self.assertEqual(third.brand, '浩亭')
         self.assertEqual(BOMLine.objects.get(project=project, item=third).quantity, 3)
+
+    def test_bom_import_merges_repeated_rows_and_reuses_same_model(self):
+        project = self.active_project()
+        handle = Item.objects.create(
+            code='RM-001', name='把手', specification='XAG66-L132', brand='怡和达', unit='PCS', product_category='21'
+        )
+        washer = Item.objects.create(
+            code='RM-002', name='垫片', specification='M6', brand='淘宝', unit='PCS', product_category='21'
+        )
+
+        def row(name, specification, brand, quantity, unit='', code=''):
+            return [code, unit, quantity, '', '', '', '', name, specification, '', '', '21', brand, 'standard', 'PCS']
+
+        valve = row('调速阀', 'PTL601A', '亚德客', '10')
+        preview = self.auto_preview(
+            project,
+            [
+                valve,
+                row('拉手', 'XAG66-L132', '怡和达', '4'),
+                row('调速阀', 'PTL601A', '亚德客', '2.5'),
+                row('调速阀', 'PTL601A', '亚德客', '3', unit='1工位'),
+                row('调速阀', 'PTL601A', '亚德客', '1'),
+                row('提手', 'XAG66-L132', '怡和达', '6', code='RM-001'),
+            ],
+        )
+        self.assertTrue(preview['can_import'], preview)
+        lines = {line['row']: line for line in preview['lines']}
+        # 同物料同单元（空单元也算）的重复行并入首次出现的行；不同单元仍是独立行。
+        self.assertEqual(lines[2]['quantity'], '13.500')
+        self.assertEqual(lines[2]['merged_rows'], [4, 6])
+        self.assertEqual((lines[4]['bom_action'], lines[4]['merged_into']), ('merged', 2))
+        self.assertEqual((lines[5]['bom_action'], lines[5]['quantity']), ('create', '3.000'))
+        # 规格、品牌、单位相同而名称不同：按型号复用并提示系统名称；填了编码而名称不同同样只提示。
+        self.assertEqual(lines[3]['material_action'], '按型号复用已有物料')
+        self.assertIn('物料名称「把手」', lines[3]['material_hint'])
+        self.assertEqual((lines[7]['material_action'], lines[7]['merged_into']), ('使用已有编码', 3))
+        self.assertIn('物料名称「把手」', lines[7]['material_hint'])
+        self.assertEqual(lines[3]['quantity'], '10.000')
+        self.assertEqual(
+            preview['summary'],
+            {'create': 3, 'update': 0, 'unchanged': 0, 'merged': 3, 'untouched': 0, 'new_materials': 1},
+        )
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+        created = Item.objects.get(specification='PTL601A')
+        self.assertEqual(
+            sorted(
+                (line.item_id, line.assembly_unit, str(line.quantity))
+                for line in BOMLine.objects.filter(project=project)
+            ),
+            sorted([(handle.pk, '', '10.000'), (created.pk, '', '13.500'), (created.pk, '1工位', '3.000')]),
+        )
+        self.assertEqual(Item.objects.filter(specification='XAG66-L132').count(), 1)
+        handle.refresh_from_db()
+        self.assertEqual(handle.name, '把手')
+
+        # 品牌栏是购买渠道时，同规格可能是不同零件：名称不同不自动复用，告诉人两条出路。
+        other = self.active_project()
+        blocked = self.auto_preview(other, [row('螺母', 'M6', '淘宝', '2')])
+        self.assertFalse(blocked['can_import'])
+        self.assertIn('购买渠道', blocked['errors'][0]['message'])
+        self.assertIn('在物料编码列填写 RM-002', blocked['errors'][0]['message'])
+        same_name = self.auto_preview(other, [row('垫片', 'M6', '淘宝', '2')])
+        self.assertEqual(same_name['lines'][0]['material_action'], '按型号复用已有物料')
+        self.assertEqual(same_name['lines'][0]['material_hint'], '')
+        # 同一文件内先后两行：预览时前一行的编号还没生成，提示指向行号。
+        in_file = self.auto_preview(other, [row('开口销', 'M3*16', '淘宝', '1'), row('定位销', 'M3*16', '淘宝', '1')])
+        self.assertFalse(in_file['can_import'])
+        self.assertIn('把名称改成与第 2 行一致', in_file['errors'][0]['message'])
+        self.assertEqual(washer.pk, Item.objects.get(specification='M6').pk)
+
+    def test_bom_import_merged_total_decides_update_and_requires_note_once(self):
+        project = self.active_project()
+        item = Item.objects.create(code='MG-001', name='合并件', specification='MG-1', unit='件')
+        BOMLine.objects.create(project=project, item=item, quantity=5, assembly_unit='上料')
+        blank = ['MG-001', '上料', '2', '', '', '', '', '', '', '', '', '', '', '', '']
+        # 两行合计仍等于现有用量：视为不变。
+        unchanged = self.auto_preview(project, [blank, ['MG-001', '上料', '3', *blank[3:]]])
+        self.assertEqual(unchanged['summary']['unchanged'], 1)
+        self.assertTrue(any(error.get('unchanged') for error in unchanged['errors']))
+        # 合计变了就是修改：任一行写了变更说明即可，都没写则报在首次出现的行。
+        missing = self.auto_preview(project, [blank, ['MG-001', '上料', '4', *blank[3:]]])
+        self.assertEqual([error['row'] for error in missing['errors']], [2])
+        self.assertIn('变更说明', missing['errors'][0]['message'])
+        noted = self.auto_preview(project, [blank, ['MG-001', '上料', '4', '增加备件', *blank[4:]]])
+        self.assertTrue(noted['can_import'], noted)
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': noted['token']})
+        line = BOMLine.objects.get(project=project, item=item)
+        self.assertEqual((str(line.quantity), line.change_note), ('6.000', '增加备件'))
 
     def test_bom_import_locks_existing_items_in_key_order_before_backfilling(self):
         import re

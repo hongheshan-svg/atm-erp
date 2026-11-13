@@ -71,7 +71,10 @@ const importActions: Record<string, string> = { create: '新增', unchanged: '�
 // 预览表一眼分出新增行和修改行，修改行直接给出原数量；产品编码类别显示中文。
 const previewRows = computed(() => (preview.value?.lines || []).map((row: Row) => ({ row: row.row, data: {
   ...row,
-  bom_change: row.bom_action === 'update' ? `修改 ${qty(row.before_quantity)} → ${qty(row.quantity)}` : importActions[row.bom_action] || '',
+  bom_change: (row.bom_action === 'merged' ? `并入第 ${row.merged_into} 行`
+    : row.bom_action === 'update' ? `修改 ${qty(row.before_quantity)} → ${qty(row.quantity)}` : importActions[row.bom_action] || '')
+    + (row.merged_rows?.length ? `（含第 ${row.merged_rows.join('、')} 行，合计 ${qty(row.quantity)}）` : ''),
+  material_action: row.material_hint ? `${row.material_action}：${row.material_hint}` : row.material_action,
   product_category: productCategories[row.product_category] || row.product_category,
   quantity: qty(row.quantity),
 } })))
@@ -365,14 +368,19 @@ async function importFile(event: Event) {
   }
 }
 // 「可回导模板」补上品牌列再导回：已有物料原来没有品牌的，按文件补填到物料资料。
+// 重复行合并、按型号复用、资料以系统为准都不拦导入，但要人核对：单独列出来，不埋在几百行预览里。
+const previewHints = computed(() => (preview.value?.lines || []).flatMap((row: Row) => [
+  ...(row.bom_action === 'merged' ? [{ row: row.row, text: `${row.item_name}：与第 ${row.merged_into} 行是同一物料、同一单元，数量 ${qty(row.quantity)} 已并入第 ${row.merged_into} 行` }] : []),
+  ...(row.material_hint ? [{ row: row.row, text: `${row.item_name}：${row.material_hint}` }] : []),
+]))
 const previewBrandFills = computed(() => (preview.value?.lines || []).filter((row: Row) => row.material_action === '沿用已有物料，补填品牌').length)
 function confirmImport() {
   if (!preview.value?.can_import) return
   const result = preview.value
   const summary = result.summary || {}
-  const materials = (result.lines || []).filter((row: Row) => row.new_material).length
+  const materials = summary.new_materials ?? (result.lines || []).filter((row: Row) => row.new_material).length
   const brands = previewBrandFills.value
-  const text = `将新增 ${summary.create ?? 0} 行、修改 ${summary.update ?? 0} 行${summary.unchanged ? `，与现有一致的 ${summary.unchanged} 行跳过` : ''}${result.token ? `，新建物料 ${materials} 个` : ''}${brands ? `，为 ${brands} 行已有物料补填品牌` : ''}。`
+  const text = `将新增 ${summary.create ?? 0} 行、修改 ${summary.update ?? 0} 行${summary.unchanged ? `，与现有一致的 ${summary.unchanged} 行跳过` : ''}${summary.merged ? `，${summary.merged} 行重复物料已合并数量` : ''}${result.token ? `，新建物料 ${materials} 个` : ''}${brands ? `，为 ${brands} 行已有物料补填品牌` : ''}。`
   if (result.token) {
     command.value = {
       title: '确认导入 BOM 与物料',
@@ -393,7 +401,7 @@ function confirmImport() {
     notice: { type: 'info', text },
     prepare: () => ({
       expected_revision: result.expected_revision,
-      lines: result.lines.filter((r: Row) => r.bom_action !== 'unchanged').map((r: Row) => ({
+      lines: result.lines.filter((r: Row) => !['unchanged', 'merged'].includes(r.bom_action)).map((r: Row) => ({
         item: r.item,
         quantity: r.quantity,
         change_note: r.change_note,
@@ -571,7 +579,7 @@ function saved() {
         <ol class="bom-import-steps">
           <li v-if="preview" class="bom-import-step-done"><details><summary>下载并填写模板（需要时可重新下载）</summary><div class="toolbar"><el-button :disabled="busy" @click="template()">下载 Excel 模板</el-button><el-button :disabled="busy" @click="template('html')">下载填写说明</el-button><el-button :disabled="busy" @click="template('csv')">下载 CSV 模板</el-button></div></details></li>
           <li v-else><strong>下载并填写模板</strong><div class="toolbar"><el-button :disabled="busy" @click="template()">下载 Excel 模板</el-button><el-button :disabled="busy" @click="template('html')">下载填写说明</el-button><details><summary>更多格式</summary><el-button :disabled="busy" @click="template('csv')">下载 CSV 模板</el-button></details></div>
-            <details class="import-help"><summary>导入模板填写说明</summary><p>改现有 BOM 时，可在列表「导出 ▾」里选「可回导模板」，改数量后只给改过的行写变更说明，未改动的行会自动跳过。Excel 模板自带“填写说明”页和表头提示。产品编码类别、标准/非标可下拉选择，单位可选择或手填；缺少必填内容会标红。已有物料填写编码，后方资料留空或与现有资料一致；新物料可填自编编码，并填写名称、完整型号和单位；编码留空时还须选择产品编码类别自动生成，有图件再填图号。型号按厂家确认原文保存，不自动补全。完全相同物料可复用，疑似重复先人工核对，多重匹配须明确编码。需求、单元和申请信息按项目填写，已有 BOM 修改须填写变更说明。旧版模板仍可使用。</p></details>
+            <details class="import-help"><summary>导入模板填写说明</summary><p>改现有 BOM 时，可在列表「导出 ▾」里选「可回导模板」，改数量后只给改过的行写变更说明，未改动的行会自动跳过。Excel 模板自带“填写说明”页和表头提示。产品编码类别、标准/非标可下拉选择，单位可选择或手填；缺少必填内容会标红。已有物料填写编码，后方资料可留空，名称等与系统不同时按系统资料为准并提示；新物料可填自编编码，并填写名称、完整型号和单位；编码留空时还须选择产品编码类别自动生成，有图件再填图号。型号按厂家确认原文保存，不自动补全。完全相同物料可复用；规格、品牌、单位相同而名称不同的也按同一物料复用并在预览提示（品牌栏填淘宝等购买渠道时需人工确认），多重匹配须明确编码。同物料同单元的重复行合并数量。需求、单元和申请信息按项目填写，已有 BOM 修改须填写变更说明。旧版模板仍可使用。</p></details>
           </li>
           <li><strong>上传并检查问题</strong><label class="file-button">{{ preview ? '重新选择文件并预览' : '选择文件并预览' }}<input type="file" accept=".csv,.xlsx" :disabled="busy" @change="importFile" /></label></li>
           <li><strong>核对后确认导入</strong> · 任一行失败整批不保存，修正后重新上传。</li>
@@ -583,7 +591,8 @@ function saved() {
           <p v-if="mismatch"><router-link v-if="destination" :to="destination" @click="closeImport">前往{{ mismatch.title }}导入入口</router-link><span v-else>请联系具备相应权限的同事，在{{ mismatch.entry }}操作。</span> 切换后请重新选择文件。</p>
           <template v-if="preview">
             <p role="status">{{ preview.can_import ? `校验通过，共 ${preview.lines.length} 条明细。请核对后确认导入。` : '校验未通过，尚未导入任何数据。请按文件行号修改后重新上传。' }}</p>
-            <p v-if="preview.summary" class="bom-import-summary">新增 <strong>{{ preview.summary.create }}</strong> 行、修改 <strong>{{ preview.summary.update }}</strong> 行、不变 <strong>{{ preview.summary.unchanged }}</strong> 行<template v-if="preview.summary.unchanged">（与现有一致，跳过，不需要变更说明）</template><template v-if="previewBrandFills">；为 <strong>{{ previewBrandFills }}</strong> 行已有物料补填品牌</template>。</p>
+            <p v-if="preview.summary" class="bom-import-summary">新增 <strong>{{ preview.summary.create }}</strong> 行、修改 <strong>{{ preview.summary.update }}</strong> 行、不变 <strong>{{ preview.summary.unchanged }}</strong> 行<template v-if="preview.summary.unchanged">（与现有一致，跳过，不需要变更说明）</template><template v-if="preview.summary.merged">；<strong>{{ preview.summary.merged }}</strong> 行重复物料已合并数量</template><template v-if="previewBrandFills">；为 <strong>{{ previewBrandFills }}</strong> 行已有物料补填品牌</template>。</p>
+            <details v-if="previewHints.length" class="bom-import-hints" open><summary>请核对 {{ previewHints.length }} 条自动处理：不影响导入；如有不对，改文件后重新上传</summary><ul><li v-for="hint in previewHints" :key="`${hint.row}-${hint.text}`">第 {{ hint.row }} 行 · {{ hint.text }}</li></ul></details>
             <details v-if="preview.untouched?.length" class="bom-import-untouched"><summary>文件中未出现的现有行 {{ preview.untouched.length }} 条：导入不会移除这些行，需移除请在列表行尾「操作」里移除</summary><ul><li v-for="line in preview.untouched" :key="`${line.item_code}-${line.assembly_unit}`">{{ line.assembly_unit || '未分单元' }} · {{ line.item_code }} {{ line.item_name }} · {{ qty(line.quantity) }}</li></ul></details>
             <ImportFeedback :rows="previewRows" :columns="[{ key: 'item_name', label: '物料名称' }, ...importColumns, { key: 'brand', label: '品牌' }, { key: 'specification', label: '规格' }]" :errors="preview.errors || []" :error-file="preview.error_file" :busy="busy" />
           </template>
@@ -641,9 +650,10 @@ function saved() {
 .overdue-flag.pending { color: var(--warn); }
 .bom-issue-link { text-decoration: none; }
 .bom-import-summary { margin: 4px 0 8px; }
-.bom-import-untouched { margin-bottom: 8px; font-size: 13px; }
+.bom-import-untouched, .bom-import-hints { margin-bottom: 8px; font-size: 13px; }
 .bom-import-untouched summary { cursor: pointer; color: var(--ink-3); }
-.bom-import-untouched ul { max-height: 160px; overflow: auto; margin: 6px 0; padding-left: 20px; }
+.bom-import-hints summary { cursor: pointer; color: var(--warn); }
+.bom-import-untouched ul, .bom-import-hints ul { max-height: 160px; overflow: auto; margin: 6px 0; padding-left: 20px; }
 .bom-import-step-done summary { cursor: pointer; color: var(--ink-3); }
 .bom-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--brand-wash-2); padding: 8px 14px; border: 1px solid var(--brand-line); border-radius: 8px; margin-top: 10px; z-index: 5; }
 .bom-selection-bar > .el-button--primary { margin-left: auto; }
@@ -728,6 +738,6 @@ function saved() {
   .el-dialog.bom-mobile-dialog .el-dialog__header, .el-dialog.bom-mobile-dialog .el-dialog__footer { flex-shrink: 0; }
   :is(.el-dialog.bom-mobile-dialog, .el-dialog.bom-import-dialog) .el-button { min-height: 40px; }
   /* 正文已是唯一的滚动区，里面的列表不再各自限高滚动。 */
-  .el-dialog.bom-import-dialog .bom-import-untouched ul { max-height: none; overflow: visible; }
+  .el-dialog.bom-import-dialog .bom-import-untouched ul, .el-dialog.bom-import-dialog .bom-import-hints ul { max-height: none; overflow: visible; }
 }
 </style>
