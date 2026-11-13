@@ -287,7 +287,7 @@ class FeedbackTests(TestCase):
         with patch('apps.core.feedback.github', return_value={'full_name': 'x'}) as github:
             response = save(f' {new} ', 'cfg-1')
         self.assertEqual(response.status_code, 200, response.data)
-        github.assert_called_once_with('GET', '', new)
+        github.assert_called_once_with('GET', '', new, retries=2)
         self.assertEqual(Company.objects.get(pk=1).feedback_token, new)
         self.assertNotIn(new, str(response.data) + str(self.client.get('/api/core/feedback/settings/').data))
         self.assertNotIn(new, str(list(ActionReceipt.objects.values())))
@@ -331,3 +331,31 @@ class FeedbackTests(TestCase):
                 self.assertNotIn(TOKEN, ''.join(logs.output))
         with patch('urllib.request.urlopen', side_effect=error(422)):
             self.assertEqual(feedback.github('PUT', '/x', TOKEN, {}, allow=(422,)), {'_status': 422})
+
+    def test_read_retries_connection_failures_but_not_github_errors(self):
+        class Reply(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        down = urllib.error.URLError('reset')
+        with patch('urllib.request.urlopen', side_effect=[down, TimeoutError(), Reply(b'{"ok": 1}')]) as urlopen:
+            with self.assertLogs('apps.core.feedback'):
+                self.assertEqual(feedback.github('GET', '', TOKEN, retries=2), {'ok': 1})
+        self.assertEqual(urlopen.call_count, 3)
+        with patch('urllib.request.urlopen', side_effect=[down, down, down]) as urlopen:
+            with self.assertRaises(feedback.Unavailable), self.assertLogs('apps.core.feedback'):
+                feedback.github('GET', '', TOKEN, retries=2)
+        self.assertEqual(urlopen.call_count, 3)
+        denied = urllib.error.HTTPError('u', 401, 'x', {}, io.BytesIO(b''))
+        with patch('urllib.request.urlopen', side_effect=[denied, Reply(b'{}')]) as urlopen:
+            with self.assertRaises(feedback.Unavailable), self.assertLogs('apps.core.feedback'):
+                feedback.github('GET', '', TOKEN, retries=2)
+        self.assertEqual(urlopen.call_count, 1)
+        # 默认不重试：建 issue 这类写入不能因为重发而重复。
+        with patch('urllib.request.urlopen', side_effect=[down, Reply(b'{}')]) as urlopen:
+            with self.assertRaises(feedback.Unavailable), self.assertLogs('apps.core.feedback'):
+                feedback.github('POST', '/issues', TOKEN, {})
+        self.assertEqual(urlopen.call_count, 1)

@@ -96,8 +96,11 @@ def token():
     return Company.objects.filter(pk=1).values_list('feedback_token', flat=True).first() or ''
 
 
-def github(method, path, secret, data=None, *, allow=(), timeout=20):
-    """调用 GitHub REST API。allow 中的状态码返回 {'_status': code}，其余错误转为中文提示。"""
+def github(method, path, secret, data=None, *, allow=(), timeout=20, retries=0):
+    """调用 GitHub REST API。allow 中的状态码返回 {'_status': code}，其余错误转为中文提示。
+
+    retries 只用于没有副作用的读取：连接失败或超时时立即重试，GitHub 给出的错误码不重试。
+    """
     body = None if data is None else json.dumps(data, ensure_ascii=False).encode()
     headers = {
         'Accept': 'application/vnd.github+json',
@@ -110,8 +113,17 @@ def github(method, path, secret, data=None, *, allow=(), timeout=20):
     url = f'https://api.github.com/repos/{REPO}{path}'
     request = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(2_000_001)
+        for attempt in range(retries + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    raw = response.read(2_000_001)
+                break
+            except urllib.error.HTTPError:
+                raise
+            except OSError as exc:
+                if attempt == retries:
+                    raise
+                logger.warning('问题反馈连接 GitHub 失败，重试：%s %s：%r', method, url, exc)
     except urllib.error.HTTPError as exc:
         if exc.code in allow:
             return {'_status': exc.code}
@@ -450,7 +462,7 @@ class FeedbackSettingsView(PermissionMixin, APIView):
             raise ValidationError({'token': '令牌格式不正确，请粘贴以 github_pat_ 开头的细粒度令牌。'})
         key = require_key(request.headers.get('Idempotency-Key'))
         if secret and not ActionReceipt.objects.filter(actor=request.user, key=key).exists():
-            github('GET', '', secret)  # 保存前确认令牌有效、能访问反馈仓库。
+            github('GET', '', secret, retries=2)  # 保存前确认令牌有效、能访问反馈仓库。
 
         def execute(actor):
             company = Company.objects.select_for_update().filter(pk=1).first()
