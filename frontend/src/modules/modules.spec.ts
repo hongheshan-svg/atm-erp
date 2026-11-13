@@ -20,7 +20,7 @@ describe('模块边界', () => {
   })
   it('销售经理的签约交接与菜单不继承项目管理权限', async () => {
     user.value = { id: 7, role: 'sales_manager' }
-    expect(navigation().map(n => n.key)).toEqual(['workbench', 'sales', 'masterdata', 'settings'])
+    expect(navigation().map(n => n.key)).toEqual(['workbench', 'sales', 'masterdata', 'feedback', 'settings'])
     expect(userFields.find(f => f.key === 'roles')?.options).toContainEqual({ value: 'sales_manager', label: '销售经理' })
     vi.mocked(all).mockResolvedValue([{ id: 7, role: 'sales_manager' }, { id: 8, role: 'manager' }, { id: 9, role: 'finance' }])
     const create = await createCommand('sales')

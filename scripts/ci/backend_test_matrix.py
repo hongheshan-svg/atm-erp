@@ -9,6 +9,7 @@ TARGETS = {
         'apps.core.tests.test_ota',
         'apps.accounts.tests.test_auth',
         'apps.core.tests.test_setup',
+        'apps.core.tests.test_feedback',
     ),
     'business': (
         'apps.business.tests.test_models',
@@ -207,7 +208,16 @@ MODULE_TESTS = {
         'commercial_chain',
         'payment_terms',
     ),
-    'accounts': ('deletions', 'auth', 'setup', 'platform', 'audit_remediation', 'concurrency', 'hardening'),
+    'accounts': (
+        'deletions',
+        'auth',
+        'setup',
+        'platform',
+        'audit_remediation',
+        'concurrency',
+        'hardening',
+        'feedback',
+    ),
     'reports': (
         'deletions',
         'money_scope',

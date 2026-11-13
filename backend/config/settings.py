@@ -89,6 +89,7 @@ REST_FRAMEWORK = {
         'password': '10/min',
         'export': '12/min',
         'import': '30/min',
+        'feedback': '20/hour',  # 每次提交都在公开仓库建 issue。
         'user': '600/min',
     },
     'EXCEPTION_HANDLER': 'apps.core.api.exception_handler',

@@ -48,6 +48,7 @@ watch(user, (value) => {
           <el-button class="mobile-menu-toggle" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">菜单</el-button>
           <div class="breadcrumb"><span>工作空间</span><span aria-hidden="true">/</span><strong>{{ currentModule }}</strong></div>
           <div class="account-menu">
+            <router-link v-if="route.path !== '/feedback'" class="topbar-feedback" :to="{ path: '/feedback', query: { from: route.fullPath } }">反馈问题</router-link>
             <span class="account-avatar" aria-hidden="true">{{ (user?.display_name || user?.username || 'P').slice(0, 1).toUpperCase() }}</span>
             <span class="account-name">{{ user?.display_name || user?.username }}</span><el-button text @click="logout">退出登录</el-button>
           </div>

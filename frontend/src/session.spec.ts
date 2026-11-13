@@ -10,13 +10,13 @@ afterEach(() => { user.value = null })
 
 describe('固定岗位与权限并集', () => {
   const oldNavigation: Record<string, string[]> = {
-    admin: ['workbench', 'reports', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'settings'],
-    manager: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'settings'],
-    sales_manager: ['workbench', 'sales', 'masterdata', 'settings'],
-    purchaser: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'settings'],
-    warehouse: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'settings'],
-    finance: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'settings'],
-    member: ['workbench', 'projects', 'bom', 'masterdata', 'settings'],
+    admin: ['workbench', 'reports', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'],
+    manager: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'],
+    sales_manager: ['workbench', 'sales', 'masterdata', 'feedback', 'settings'],
+    purchaser: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'],
+    warehouse: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'],
+    finance: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'],
+    member: ['workbench', 'projects', 'bom', 'masterdata', 'feedback', 'settings'],
   }
   for (const [role, pages] of Object.entries(oldNavigation)) it(`原岗位 ${role} 菜单保持不变`, () => {
     user.value = { roles: [role] }

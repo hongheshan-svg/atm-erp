@@ -307,6 +307,7 @@ h3 {
   flex-shrink: 0;
 }
 .account-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-feedback { font-size: 13px; white-space: nowrap; }
 .content {
   max-width: 1640px;
   margin: auto;
