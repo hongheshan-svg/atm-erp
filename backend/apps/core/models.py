@@ -190,6 +190,19 @@ class UpgradeJob(BaseModel):
         db_table = 'lean_upgrade_job'
 
 
+class Feedback(BaseModel):
+    """员工在 ERP 里提交、已建成公开 GitHub issue 的问题；提交人只记在本地，不写进 issue。"""
+
+    category = models.CharField(max_length=20)
+    title = models.CharField(max_length=80)
+    issue_number = models.PositiveIntegerField(unique=True)
+    issue_url = models.CharField(max_length=300)
+    state = models.CharField(max_length=20, default='open')
+
+    class Meta(BaseModel.Meta):
+        db_table = 'lean_feedback'
+
+
 class Company(models.Model):
     setup_required = models.BooleanField(default=False)
     setup_completed_at = models.DateTimeField(null=True, blank=True)
@@ -198,6 +211,8 @@ class Company(models.Model):
     phone = models.CharField(max_length=50, blank=True)
     locked_through = models.DateField(null=True, blank=True)
     period_revision = models.PositiveIntegerField(default=0)
+    # 问题反馈建 GitHub issue 用的令牌，只由管理员写入，任何接口都不回显。
+    feedback_token = models.CharField(max_length=255, blank=True, default='')
 
     class Meta:
         db_table = 'lean_company'

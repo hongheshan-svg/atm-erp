@@ -22,6 +22,7 @@ export const router = createRouter({
     { path: '/finance', component: () => import('./views/FinancePage.vue') },
     { path: '/masterdata', component: () => import('./views/MasterdataPage.vue') },
     { path: '/settings', component: () => import('./views/SettingsPage.vue') },
+    { path: '/feedback', component: () => import('./views/FeedbackPage.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/workbench' },
   ],
 })

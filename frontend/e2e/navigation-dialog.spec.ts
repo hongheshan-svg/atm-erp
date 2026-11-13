@@ -33,7 +33,7 @@ test('管理员从左上角查看版本，已是最新版本时不能升级', as
 test('各入口可直接操作，长表单在短视口保留保存和取消', async ({ page }, info) => {
   await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
   const nav = page.getByRole('navigation', { name: '主导航' })
-  for (const name of ['工作台', '经营报表', '销售', '项目', 'BOM', '采购', '库存', '收付款', '基础资料', '设置']) {
+  for (const name of ['工作台', '经营报表', '销售', '项目', 'BOM', '采购', '库存', '收付款', '基础资料', '问题反馈', '设置']) {
     if (info.project.name === 'mobile' && !(await nav.isVisible())) await page.getByRole('button', { name: '菜单', exact: true }).click()
     const link = nav.getByRole('link', { name, exact: true })
     await expect(link).toBeInViewport({ ratio: 1 })

@@ -329,6 +329,13 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - container 状态依次为 queued/downloading/ready/restarting/backing_up/installing/verifying/succeeded；兼容 host 不经过 ready/restarting，异常均为 failed。ready 仍是活动任务，不能并发准备其他版本，不停止当前业务或迁移。先校验发布包，管理员确认重启后停机备份，再前向迁移及检查目标版本健康；保留任务、审计和升级日志。迁移后失败不自动降级数据库。
 - Docker 默认容器内更新：程序、独立 venv、备份和任务日志持久化到 runtime 卷；Supervisor 只控制容器内业务进程，无 docker.sock。包须声明 container_runtime=1 并携带匹配架构的离线 wheelhouse；先预备依赖，再停机备份、迁移、切换目录并验证运行版本。迁移阶段中断阻止重启旧代码。原生及显式 host 模式保留宿主机脚本；首次配置及恢复边界见 README 在线升级章节。
 
+## 问题反馈接口（2026-11-13）
+
+- `GET /api/core/feedback/` 所有在职账号可读：`enabled`（是否已配置令牌）、`issues_url`、`results`（最近 100 条：id、category、title、issue_number、issue_url、state=open/completed/not_planned、submitter、mine、created_at）。读取时全安装每 120 秒最多向 GitHub 同步一次状态，失败保留上次状态。
+- `POST /api/core/feedback/` 需 Idempotency-Key，字段 category（bug/feature/question）、title（≤80）、description（≤5000）、可选 steps（≤3000）、page、request_id、client，未知字段拒绝。GitHub 调用在事务外进行，成功后在 perform 内落 Feedback 与审计 `feedback.submit`；同一标识重放不再访问 GitHub，并发同标识在建 issue 前互斥。未配置令牌 409，GitHub 不可用 503 且不留记录或回执。每账号 20 次/小时（scope `feedback`）。
+- issue 正文不含提交人；page 只保留路径与 resource/section 参数；用户文字放入代码围栏。标签 `from-erp` 加类型标签（bug/enhancement/question）。
+- `GET/POST /api/core/feedback/settings/` 仅管理员：GET 返回 `configured`、`repository`；POST `{token}` 需 Idempotency-Key，非空时校验 `github_pat_`/`ghp_` 格式并访问仓库验证，空字符串停用。令牌存 `Company.feedback_token`，任何响应、审计和回执都不含原值。
+
 ## 审计整改补充（2026-09-25，优先于上述旧描述）
 
 - 经营报表：已取消项目合同额计 0；`sales/` 序列化增加只读 `project_status`，列表对已签约且项目已取消的销售单标注“项目已取消”。

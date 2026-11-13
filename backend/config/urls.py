@@ -1,4 +1,5 @@
 from apps.accounts.api import DirectoryView, LoginView, MeView, PasswordView, RefreshView, UserView
+from apps.core.feedback import FeedbackSettingsView, FeedbackView
 from apps.core.ota import AgentView, RestartView, UpgradeView
 from apps.core.setup import SetupView
 from apps.core.views import AuditView, CodeView, CompanyView, health
@@ -20,6 +21,8 @@ urlpatterns = [
     path('api/core/upgrade/', UpgradeView.as_view()),
     path('api/core/upgrade/restart/', RestartView.as_view()),
     path('api/core/upgrade/agent/', AgentView.as_view()),
+    path('api/core/feedback/', FeedbackView.as_view()),
+    path('api/core/feedback/settings/', FeedbackSettingsView.as_view()),
     path('api/health/', health),
     path('api/auth/login/', LoginView.as_view()),
     path('api/auth/refresh/', RefreshView.as_view()),

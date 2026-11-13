@@ -10,6 +10,7 @@ import {
   Wallet,
   Collection,
   Setting,
+  ChatDotRound,
 } from '@element-plus/icons-vue'
 export function navigation() {
   return [
@@ -27,6 +28,7 @@ export function navigation() {
       ? [{ key: 'finance', label: '收付款', icon: Wallet }]
       : []),
     { key: 'masterdata', label: '基础资料', icon: Collection },
+    { key: 'feedback', label: '问题反馈', icon: ChatDotRound },
     { key: 'settings', label: '设置', icon: Setting },
   ]
 }
