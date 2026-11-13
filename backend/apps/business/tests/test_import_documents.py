@@ -49,7 +49,8 @@ class ImportTests(BusinessFixtures, TestCase):
             f'物料编码,数量,变更说明\nUNKNOWN,1,\n{self.item.code},NaN,\n{self.item.code},2,\n'.encode()
         )
         self.assertFalse(preview['can_import'])
-        self.assertEqual([row['row'] for row in preview['errors']], [2, 3, 4])
+        # 第 4 行与出错的第 3 行是同一物料：重复行合并数量，不再因重复报错。
+        self.assertEqual([row['row'] for row in preview['errors']], [2, 3])
         self.assertNotIn('ErrorDetail', str(preview))
         self.assertIn('数量：', preview['errors'][1]['message'])
         self.assertFalse(BOMLine.objects.exists())
@@ -139,7 +140,7 @@ class ImportTests(BusinessFixtures, TestCase):
     def test_bom_guide_download_uses_bom_rules_and_existing_permissions(self):
         response = self.clients['manager'].get('/api/business/projects/bom-template/', {'file_format': 'html'})
         self.assertEqual(response.status_code, 200)
-        for hint in ('新增物料必填', '同一文件', '不能填1或2', '不是任务的执行人账号'):
+        for hint in ('新增物料必填', '重复的行会合并数量', '不能填1或2', '不是任务的执行人账号'):
             self.assertContains(response, hint)
         self.assertEqual(
             self.clients['member'].get('/api/business/projects/bom-template/', {'file_format': 'html'}).status_code,

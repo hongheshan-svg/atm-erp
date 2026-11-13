@@ -457,6 +457,32 @@ it('导入预览区分新增、修改、不变，列出文件外现有行，确�
   wrapper.unmount()
 })
 
+it('导入预览列出重复行合并和按型号复用的提示，旧模板确认不提交被合并的行', async () => {
+  vi.mocked(write).mockResolvedValueOnce({ can_import: true, expected_revision: 'r1',
+    lines: [
+      { row: 2, item: 1, item_code: 'A', item_name: '调速阀', bom_action: 'create', quantity: '13.500', merged_rows: [4], assembly_unit: '', change_note: '' },
+      { row: 3, item: 2, item_code: 'B', item_name: '把手', bom_action: 'create', quantity: '4.000', material_action: '按型号复用已有物料', material_hint: '本行所填与系统资料不同，已按系统为准：物料名称「把手」。', assembly_unit: '', change_note: '' },
+      { row: 4, item: 1, item_code: 'A', item_name: '调速阀', bom_action: 'merged', merged_into: 2, quantity: '3.500', assembly_unit: '', change_note: '' },
+    ],
+    summary: { create: 2, update: 0, unchanged: 0, merged: 1, untouched: 0 }, untouched: [], errors: [] })
+  const wrapper = mountImport()
+  await uploadFile(wrapper)
+  await flushPromises()
+  expect(wrapper.text()).toContain('；1 行重复物料已合并数量')
+  const hints = wrapper.get('.bom-import-hints')
+  expect(hints.text()).toContain('请核对 2 条自动处理')
+  expect(hints.text()).toContain('第 4 行 · 调速阀：与第 2 行是同一物料、同一单元，数量 3.5 已并入第 2 行')
+  expect(hints.text()).toContain('第 3 行 · 把手：本行所填与系统资料不同，已按系统为准：物料名称「把手」。')
+  const rows = wrapper.getComponent({ name: 'ImportFeedback' }).props('rows')
+  expect(rows.map((row: { data: { bom_change: string } }) => row.data.bom_change)).toEqual(['新增（含第 4 行，合计 13.5）', '新增', '并入第 2 行'])
+  expect(rows[1].data.material_action).toBe('按型号复用已有物料：本行所填与系统资料不同，已按系统为准：物料名称「把手」。')
+  await wrapper.findAll('el-button-stub').find(button => button.text() === '确认导入')!.trigger('click')
+  const command = wrapper.getComponent({ name: 'ActionDialog' }).props('command')
+  expect(command.notice.text).toContain('将新增 2 行、修改 0 行，1 行重复物料已合并数量。')
+  expect(command.prepare({}).lines.map((line: { item: number; quantity: string }) => [line.item, line.quantity])).toEqual([[1, '13.500'], [2, '4.000']])
+  wrapper.unmount()
+})
+
 it('手机窄屏只留勾选、物料摘要和操作，筛选收起显示生效数，采购选择栏压成一行', async () => {
   vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   user.value = { roles: ['mechanical_engineer'] }

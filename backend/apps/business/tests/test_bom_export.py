@@ -176,7 +176,10 @@ class BOMRoundTripTests(BusinessFixtures, TestCase):
         sheet.delete_rows(4)
         changed = self.upload(sheet)
         self.assertTrue(changed['can_import'], changed['errors'])
-        self.assertEqual(changed['summary'], {'create': 0, 'update': 1, 'unchanged': 1, 'untouched': 1})
+        self.assertEqual(
+            changed['summary'],
+            {'create': 0, 'update': 1, 'unchanged': 1, 'merged': 0, 'untouched': 1, 'new_materials': 0},
+        )
         first = next(line for line in changed['lines'] if line['row'] == 2)
         self.assertEqual(
             (first['bom_action'], first['before_quantity'], first['quantity']), ('update', '2.000', '5.000')
