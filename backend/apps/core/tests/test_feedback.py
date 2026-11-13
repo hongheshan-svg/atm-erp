@@ -287,7 +287,7 @@ class FeedbackTests(TestCase):
         with patch('apps.core.feedback.github', return_value={'full_name': 'x'}) as github:
             response = save(f' {new} ', 'cfg-1')
         self.assertEqual(response.status_code, 200, response.data)
-        github.assert_called_once_with('GET', '', new)
+        github.assert_called_once_with('GET', '', new, retries=2)
         self.assertEqual(Company.objects.get(pk=1).feedback_token, new)
         self.assertNotIn(new, str(response.data) + str(self.client.get('/api/core/feedback/settings/').data))
         self.assertNotIn(new, str(list(ActionReceipt.objects.values())))
@@ -314,14 +314,48 @@ class FeedbackTests(TestCase):
             (error(401), '令牌无效或已过期'),
             (error(404), '没有反馈仓库的 Issues 和 Contents 读写权限'),
             (error(403), '没有反馈仓库的 Issues 和 Contents 读写权限'),
-            (error(403, {'x-ratelimit-remaining': '0'}), '内容未提交'),
-            (urllib.error.URLError('down'), '内容未提交'),
-            (TimeoutError(), '内容未提交'),
+            (error(403, {'x-ratelimit-remaining': '0'}), '调用次数已达上限，内容未提交'),
+            (error(429), '调用次数已达上限，内容未提交'),
+            (error(422), 'GitHub 返回错误（422），内容未提交'),
+            (error(502), 'GitHub 返回错误（502），内容未提交'),
+            (urllib.error.URLError('down'), '暂时无法连接 GitHub，内容未提交'),
+            (TimeoutError(), '连接 GitHub 超时'),
+            (urllib.error.URLError(TimeoutError()), '连接 GitHub 超时'),
         )
         for raised, text in cases:
             with self.subTest(raised=raised), patch('urllib.request.urlopen', side_effect=raised):
-                with self.assertRaises(feedback.Unavailable) as caught:
+                with self.assertRaises(feedback.Unavailable) as caught, self.assertLogs('apps.core.feedback') as logs:
                     feedback.github('GET', '', TOKEN)
                 self.assertIn(text, str(caught.exception.detail))
+                # 每种失败都在日志里留下原因，且不带令牌。
+                self.assertNotIn(TOKEN, ''.join(logs.output))
         with patch('urllib.request.urlopen', side_effect=error(422)):
             self.assertEqual(feedback.github('PUT', '/x', TOKEN, {}, allow=(422,)), {'_status': 422})
+
+    def test_read_retries_connection_failures_but_not_github_errors(self):
+        class Reply(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        down = urllib.error.URLError('reset')
+        with patch('urllib.request.urlopen', side_effect=[down, TimeoutError(), Reply(b'{"ok": 1}')]) as urlopen:
+            with self.assertLogs('apps.core.feedback'):
+                self.assertEqual(feedback.github('GET', '', TOKEN, retries=2), {'ok': 1})
+        self.assertEqual(urlopen.call_count, 3)
+        with patch('urllib.request.urlopen', side_effect=[down, down, down]) as urlopen:
+            with self.assertRaises(feedback.Unavailable), self.assertLogs('apps.core.feedback'):
+                feedback.github('GET', '', TOKEN, retries=2)
+        self.assertEqual(urlopen.call_count, 3)
+        denied = urllib.error.HTTPError('u', 401, 'x', {}, io.BytesIO(b''))
+        with patch('urllib.request.urlopen', side_effect=[denied, Reply(b'{}')]) as urlopen:
+            with self.assertRaises(feedback.Unavailable), self.assertLogs('apps.core.feedback'):
+                feedback.github('GET', '', TOKEN, retries=2)
+        self.assertEqual(urlopen.call_count, 1)
+        # 默认不重试：建 issue 这类写入不能因为重发而重复。
+        with patch('urllib.request.urlopen', side_effect=[down, Reply(b'{}')]) as urlopen:
+            with self.assertRaises(feedback.Unavailable), self.assertLogs('apps.core.feedback'):
+                feedback.github('POST', '/issues', TOKEN, {})
+        self.assertEqual(urlopen.call_count, 1)

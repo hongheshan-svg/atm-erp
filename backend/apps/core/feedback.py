@@ -96,8 +96,11 @@ def token():
     return Company.objects.filter(pk=1).values_list('feedback_token', flat=True).first() or ''
 
 
-def github(method, path, secret, data=None, *, allow=(), timeout=10):
-    """调用 GitHub REST API。allow 中的状态码返回 {'_status': code}，其余错误转为中文提示。"""
+def github(method, path, secret, data=None, *, allow=(), timeout=20, retries=0):
+    """调用 GitHub REST API。allow 中的状态码返回 {'_status': code}，其余错误转为中文提示。
+
+    retries 只用于没有副作用的读取：连接失败或超时时立即重试，GitHub 给出的错误码不重试。
+    """
     body = None if data is None else json.dumps(data, ensure_ascii=False).encode()
     headers = {
         'Accept': 'application/vnd.github+json',
@@ -110,26 +113,46 @@ def github(method, path, secret, data=None, *, allow=(), timeout=10):
     url = f'https://api.github.com/repos/{REPO}{path}'
     request = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(2_000_001)
+        for attempt in range(retries + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    raw = response.read(2_000_001)
+                break
+            except urllib.error.HTTPError:
+                raise
+            except OSError as exc:
+                if attempt == retries:
+                    raise
+                logger.warning('问题反馈连接 GitHub 失败，重试：%s %s：%r', method, url, exc)
     except urllib.error.HTTPError as exc:
         if exc.code in allow:
             return {'_status': exc.code}
         limited = exc.headers.get('x-ratelimit-remaining') == '0' if exc.headers else False
+        # 原因只进日志和提示里的状态码；不记录请求头和返回内容，避免带出令牌或反馈原文。
+        logger.warning('问题反馈调用 GitHub 失败：%s %s 返回 %s', method, url, exc.code)
         if exc.code == 401:
             raise Unavailable('问题反馈的 GitHub 令牌无效或已过期，请管理员在「问题反馈」页更新。') from exc
         if exc.code in (403, 404) and not limited:
             raise Unavailable(
                 '问题反馈的 GitHub 令牌没有反馈仓库的 Issues 和 Contents 读写权限，请管理员在「问题反馈」页更换。'
             ) from exc
-        raise Unavailable() from exc
+        if limited or exc.code == 429:
+            raise Unavailable('GitHub 接口调用次数已达上限，内容未提交，请稍后重试。') from exc
+        raise Unavailable(f'GitHub 返回错误（{exc.code}），内容未提交，请稍后重试。') from exc
     except OSError as exc:
+        logger.warning('问题反馈无法连接 GitHub：%s %s：%r', method, url, exc)
+        if isinstance(exc, TimeoutError) or isinstance(getattr(exc, 'reason', None), TimeoutError):
+            # 超时可能发生在 GitHub 已收到请求之后，不能断言没有提交。
+            raise Unavailable(
+                '连接 GitHub 超时，请稍后刷新列表确认后再重试；多次超时请管理员检查服务器到 api.github.com 的网络。'
+            ) from exc
         raise Unavailable() from exc
     try:
         if len(raw) > 2_000_000:
             raise ValueError('返回内容过大')
         return json.loads(raw)
     except ValueError as exc:
+        logger.warning('问题反馈收到无法解析的 GitHub 返回：%s %s：%r', method, url, exc)
         raise Unavailable() from exc
 
 
@@ -439,7 +462,7 @@ class FeedbackSettingsView(PermissionMixin, APIView):
             raise ValidationError({'token': '令牌格式不正确，请粘贴以 github_pat_ 开头的细粒度令牌。'})
         key = require_key(request.headers.get('Idempotency-Key'))
         if secret and not ActionReceipt.objects.filter(actor=request.user, key=key).exists():
-            github('GET', '', secret)  # 保存前确认令牌有效、能访问反馈仓库。
+            github('GET', '', secret, retries=2)  # 保存前确认令牌有效、能访问反馈仓库。
 
         def execute(actor):
             company = Company.objects.select_for_update().filter(pk=1).first()
