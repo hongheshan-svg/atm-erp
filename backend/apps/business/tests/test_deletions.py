@@ -216,21 +216,107 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertTrue(Item.objects.filter(pk=self.item.pk).exists())
         self.assertEqual(AuditLog.objects.filter(operation='record.delete').count(), 1000)
 
-    def test_item_used_only_by_removed_bom_line_stays_protected(self):
+    def test_item_with_only_history_is_retired_keeping_its_code(self):
         line = BOMLine.objects.create(project=self.project, item=self.item, quantity=2)
         self.remove('bom', [line.pk])
         self.assertFalse(BOMLine.objects.filter(item=self.item).exists())
-        # 已移除的 BOM 行仍指向该物料；删除物料会释放其图号版本，历史 BOM 就失去唯一对应。
-        self.assert_batch_rejected('items', [self.item.pk], '已移除的BOM明细')
-        self.assertFalse(Item.all_objects.get(pk=self.item.pk).is_deleted)
-        live = Item.objects.create(code='LIVE', name='在用物料')
-        BOMLine.objects.create(project=self.project, item=live, quantity=1)
-        detail = str(self.remove('items', [live.pk], status=409))
-        self.assertIn('BOM明细', detail)
-        self.assertNotIn('已移除', detail)
+        # 已移除的 BOM 行仍指向该物料：软删除会释放其图号版本，历史 BOM 就失去唯一对应，所以只停用并移出列表。
+        result = self.remove('items', [self.item.pk])
+        self.assertEqual(result['records'], [{'id': self.item.pk, 'mode': 'disable'}])
+        item = Item.all_objects.get(pk=self.item.pk)
+        self.assertFalse(item.is_deleted)
+        self.assertFalse(item.is_active)
+        self.assertEqual(item.updated_by, self.users['admin'])
+        self.assertNotIn(item.pk, self.listed('items'))
+        self.assertEqual(self.history('items')[0]['detail']['mode'], 'disable')
+        self.assertEqual(self.get('admin', f'items/{item.pk}/')['code'], 'I1')
         unused = Item.objects.create(code='FREE', name='未用物料')
         self.remove('items', [unused.pk])
         self.assertTrue(Item.all_objects.get(pk=unused.pk).is_deleted)
+
+    def test_item_in_live_use_is_rejected_naming_the_project_purchase_or_stock(self):
+        in_bom = Item.objects.create(code='LIVE', name='在用物料')
+        BOMLine.objects.create(project=self.project, item=in_bom, quantity=1)
+        self.assert_batch_rejected('items', [in_bom.pk], '未结束项目的 BOM', self.project.code)
+        ordered = Item.objects.create(code='ORDERED', name='在途物料')
+        purchase = PurchaseOrder.objects.create(
+            code='PO-OPEN', project=self.project, supplier=self.supplier, due_date=timezone.localdate()
+        )
+        PurchaseLine.objects.create(purchase=purchase, item=ordered, quantity=1, unit_price=1)
+        self.assert_batch_rejected('items', [ordered.pk], '未完成的采购单', 'PO-OPEN')
+        stocked = Item.objects.create(code='STOCKED', name='有库存物料', unit='个')
+        stock = Stock.objects.create(item=stocked, quantity=3, value=30)
+        self.assert_batch_rejected('items', [stocked.pk], '还有库存', '主仓 3 个')
+        # 采购单删除、库存清零后只剩历史引用，物料即可停用归档；零库存行不必先整理。
+        self.remove('purchases', [purchase.pk])
+        Stock.objects.filter(pk=stock.pk).update(quantity=0, value=0)
+        result = self.remove('items', [ordered.pk, stocked.pk])
+        self.assertEqual({row['mode'] for row in result['records']}, {'disable'})
+        self.project.status = 'closed'
+        self.project.save()
+        self.assertEqual(self.remove('items', [in_bom.pk])['records'][0]['mode'], 'disable')
+
+    def test_partner_with_only_ended_history_is_retired_and_live_business_is_named(self):
+        self.assert_batch_rejected('partners', [self.customer.pk], '未结束项目的客户', self.project.code)
+        quoting = Partner.objects.create(code='QUOTING', name='报价中客户', kind='customer')
+        SalesOrder.objects.create(code='SO-Q', name='报价', customer=quoting, manager=self.users['manager'])
+        self.assert_batch_rejected('partners', [quoting.pk], '未结束的销售单', 'SO-Q')
+        self.assert_batch_rejected('partners', [self.supplier.pk], '未完成的采购单', self.purchase(self.project).code)
+        owed = Partner.objects.create(code='OWED', name='待付款供应商', kind='supplier')
+        received = PurchaseOrder.objects.create(
+            code='PO-OWED', project=self.project, supplier=owed, due_date=timezone.localdate(), status='received'
+        )
+        payable = Entry.objects.create(
+            project=self.project,
+            purchase=received,
+            kind='payable',
+            title='PO-OWED 货款',
+            amount=100,
+            due_date=timezone.localdate(),
+        )
+        self.assert_batch_rejected('partners', [owed.pk], '未结清或待退款的款项', 'PO-OWED 货款')
+        Payment.objects.create(entry=payable, amount=100, date=timezone.localdate(), reason='付清')
+        result = self.remove('partners', [owed.pk])
+        self.assertEqual(result['records'], [{'id': owed.pk, 'mode': 'disable'}])
+        owed.refresh_from_db()
+        self.assertFalse(owed.is_deleted)
+        self.assertFalse(owed.is_active)
+        self.assertNotIn(owed.pk, self.listed('partners'))
+        # 历史采购单仍指向它，原单照常显示供应商。
+        self.assertEqual(PurchaseOrder.objects.get(pk=received.pk).supplier_id, owed.pk)
+
+    def test_retired_masterdata_cannot_be_edited_until_restored(self):
+        line = BOMLine.objects.create(project=self.project, item=self.item, quantity=2)
+        self.remove('bom', [line.pk])
+        self.remove('items', [self.item.pk])
+        edit = self.clients['admin'].patch(
+            f'/api/business/items/{self.item.pk}/',
+            {'is_active': True},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(edit.status_code, 409, edit.data)
+        self.assertIn('已移入“已删除记录”', str(edit.data))
+        self.restore(self.item.pk, role='finance', resource='items', status=403)
+        restored = self.restore(self.item.pk, resource='items', reason='仍要使用，恢复')
+        self.assertEqual(restored['is_active'], False)
+        self.assertIn(self.item.pk, self.listed('items'))
+        self.assertTrue(self.history('items')[0]['restored'])
+        self.assertIn('未处于已删除状态', str(self.restore(self.item.pk, resource='items', status=409)))
+        edit = self.clients['admin'].patch(
+            f'/api/business/items/{self.item.pk}/',
+            {'is_active': True},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(edit.status_code, 200, edit.data)
+        self.assertTrue(Item.objects.get(pk=self.item.pk).is_active)
+        # 从未被使用的误建资料是彻底软删除，没有可恢复的行。
+        unused = Item.objects.create(code='FREE', name='未用物料')
+        self.remove('items', [unused.pk])
+        self.assertIn('不支持恢复', str(self.restore(unused.pk, resource='items', status=404)))
+        self.remove('partners', [self.supplier.pk])
+        self.assertIn('不支持恢复', str(self.restore(self.supplier.pk, resource='partners', status=404)))
 
     def test_bulk_material_reference_failure_rolls_back_all_rows(self):
         items = Item.objects.bulk_create([Item(code=f'ROLL-{i}', name=f'回滚物料{i}') for i in range(201)])
@@ -317,6 +403,148 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.assertTrue(Partner.objects.filter(pk=unused.pk).exists())
         self.assertFalse(AuditLog.objects.filter(operation='record.delete').exists())
         self.assertFalse(ActionReceipt.objects.filter(key=key).exists())
+
+    def test_batch_reports_every_blocked_record_before_rolling_back(self):
+        unused = Partner.objects.create(code='EMPTY', name='未使用客户', kind='customer')
+        first = Partner.objects.create(code='USED1', name='报价客户甲', kind='customer')
+        second = Partner.objects.create(code='USED2', name='报价客户乙', kind='customer')
+        for index, partner in enumerate((first, second), 1):
+            SalesOrder.objects.create(code=f'SO-B{index}', name='报价', customer=partner, manager=self.users['manager'])
+        key = str(uuid.uuid4())
+        data = self.remove('partners', [second.pk, unused.pk, first.pk], status=409, key=key)
+        # 每条被拦记录都带编号、名称和原因，页面据此一次列全，不必逐条试错。
+        self.assertEqual([row['id'] for row in data['blocked']], [str(first.pk), str(second.pk)])
+        self.assertEqual(data['blocked_id'], str(first.pk))
+        self.assertIn('USED1 · 报价客户甲', data['blocked'][0]['label'])
+        self.assertIn('SO-B1', data['blocked'][0]['reason'])
+        self.assertIn('SO-B2', data['blocked'][1]['reason'])
+        self.assertIn('另有 1 条也不能删除', str(data['detail']))
+        self.assertIn('整批未删除', str(data['detail']))
+        self.assertTrue(Partner.objects.filter(pk=unused.pk).exists())
+        self.assertFalse(AuditLog.objects.filter(operation='record.delete').exists())
+        self.assertFalse(ActionReceipt.objects.filter(key=key).exists())
+        # 去掉被拦的两条后，其余记录照常删除。
+        self.assertEqual(self.remove('partners', [unused.pk])['count'], 1)
+
+    def document(self, name='误传.pdf', **owner):
+        return Document.objects.create(
+            category='other', file=f'protected/{name}', original_name=name, sha256='b' * 64, size=10, **owner
+        )
+
+    def test_mistaken_forms_take_their_unused_attachments_with_them(self):
+        sale = SalesOrder.objects.create(
+            code='SO-DOC', name='误建销售', customer=self.customer, manager=self.users['manager']
+        )
+        sale_doc = self.document('报价单.pdf', sale=sale)
+        result = self.remove('sales', [sale.pk])
+        self.assertEqual(result['records'], [{'id': sale.pk, 'mode': 'soft', 'documents': 1}])
+        self.assertTrue(Document.all_objects.get(pk=sale_doc.pk).is_deleted)
+        self.assertEqual(Document.all_objects.get(pk=sale_doc.pk).file.name, 'protected/报价单.pdf')
+        removal = self.history('documents', sale=sale.pk)[0]['detail']
+        self.assertEqual(removal['via'], {'resource': 'sales', 'id': sale.pk, 'label': 'SO-DOC · 误建销售'})
+        self.assertEqual(removal['reason'], '清理误建记录')
+
+        purchase = PurchaseOrder.objects.create(
+            code='PO-DOC', project=self.project, supplier=self.supplier, due_date=timezone.localdate()
+        )
+        PurchaseLine.objects.create(purchase=purchase, item=self.item, quantity=1, unit_price=1)
+        purchase_doc = self.document('询价.pdf', purchase=purchase)
+        result = self.remove('purchases', [purchase.pk])
+        self.assertEqual(result['records'], [{'id': purchase.pk, 'mode': 'purchase', 'documents': 1}])
+        self.assertTrue(Document.all_objects.get(pk=purchase_doc.pk).is_deleted)
+
+        draft = Project.objects.create(
+            code='DRAFT-DOC', name='误建项目', customer=self.customer, manager=self.users['manager']
+        )
+        self.document('需求.pdf', project=draft)
+        self.assertEqual(
+            self.remove('projects', [draft.pk])['records'][0], {'id': draft.pk, 'mode': 'soft', 'documents': 1}
+        )
+        self.assertFalse(Document.objects.filter(project=draft).exists())
+
+    def test_attachment_backing_a_posted_fact_keeps_its_form(self):
+        sale = SalesOrder.objects.create(
+            code='SO-EVID', name='带凭证销售', customer=self.customer, manager=self.users['manager']
+        )
+        evidence = self.document('回单.pdf', sale=sale)
+        entry, _ = self.settled_entry()
+        Payment.objects.create(entry=entry, amount=1, date=timezone.localdate(), reason='补付', document=evidence)
+        self.assert_batch_rejected('sales', [sale.pk], '附件「回单.pdf」已作为收付款流水的依据')
+        self.assertFalse(Document.all_objects.get(pk=evidence.pk).is_deleted)
+
+    def test_ended_project_takes_its_cross_project_forms_off_their_lists(self):
+        sale = self.project.sale
+        receivable = Entry.objects.get(project=self.project, kind='receivable')
+        task = Task.objects.create(
+            project=self.project, title='已完成设计', kind='design', assignee=self.users['manager'], status='done'
+        )
+        hours = TimeEntry.objects.create(
+            task=task, user=self.users['manager'], date=timezone.localdate(), hours=2, reason='设计'
+        )
+        idle = Task.objects.create(
+            project=self.project, title='未开始任务', kind='design', assignee=self.users['manager']
+        )
+        cancelled = PurchaseOrder.objects.create(
+            code='PO-CANCEL',
+            project=self.project,
+            supplier=self.supplier,
+            due_date=timezone.localdate(),
+            status='cancelled',
+        )
+        expense, payment = self.settled_entry()
+        bom = BOMLine.objects.create(project=self.project, item=self.item, quantity=1)
+        self.post('manager', f'projects/{self.project.pk}/cancel/', {'reason': '客户取消'})
+        costs_before = costs([self.project.pk])
+
+        result = self.remove('projects', [self.project.pk])['records'][0]
+        self.assertEqual(result['mode'], 'archive')
+        self.assertEqual(
+            result['cascaded'],
+            {'sales': 1, 'purchases': 1, 'tasks': 2, 'time': 1, 'entries': 2, 'payments': 1},
+        )
+        self.assertNotIn('kept', result)
+        for resource, pk in (
+            ('projects', self.project.pk),
+            ('sales', sale.pk),
+            ('purchases', cancelled.pk),
+            ('tasks', task.pk),
+            ('tasks', idle.pk),
+            ('time', hours.pk),
+            ('entries', receivable.pk),
+            ('entries', expense.pk),
+            ('payments', payment.pk),
+        ):
+            with self.subTest(resource=resource, pk=pk):
+                self.assertNotIn(pk, self.listed(resource))
+        # 事实都还在：只有取消后未开始的空任务按任务自身规则软删除，其余仅移出列表，成本不变。
+        self.assertFalse(Project.objects.get(pk=self.project.pk).is_deleted)
+        self.assertFalse(SalesOrder.objects.get(pk=sale.pk).is_deleted)
+        self.assertTrue(Task.all_objects.get(pk=idle.pk).is_deleted)
+        self.assertFalse(Task.all_objects.get(pk=task.pk).is_deleted)
+        self.assertEqual(costs([self.project.pk]), costs_before)
+        # BOM 只在项目页内出现，不逐条另记删除；从已删除记录打开原项目仍能看到。
+        self.assertFalse(AuditLog.objects.filter(operation='record.delete', resource=f'bomline:{bom.pk}').exists())
+        via = {'resource': 'projects', 'id': self.project.pk, 'label': f'{self.project.code} · {self.project.name}'}
+        self.assertEqual(self.history('sales')[0]['detail']['via'], via)
+        self.assertEqual(self.history('projects')[0]['detail']['cascaded'], result['cascaded'])
+        # 已随项目移出的单据不能再单独删除一次。
+        self.remove('sales', [sale.pk], status=409)
+        # 客户只剩这段已结束的历史，可以停用归档。
+        self.assertEqual(self.remove('partners', [self.customer.pk])['records'][0]['mode'], 'disable')
+
+    def test_open_children_stay_listed_when_their_ended_project_is_removed(self):
+        receivable = Entry.objects.get(project=self.project, kind='receivable')
+        Payment.objects.create(entry=receivable, amount=300, date=timezone.localdate(), reason='定金')
+        self.post('manager', f'projects/{self.project.pk}/cancel/', {'reason': '客户取消'})
+        result = self.remove('projects', [self.project.pk])['records'][0]
+        # 取消后定金待退：款项和它的收款流水仍在办，不随项目隐藏。
+        self.assertEqual(result['cascaded'], {'sales': 1})
+        self.assertEqual(result['kept_count'], 2)
+        self.assertEqual([row['resource'] for row in result['kept']], ['entries', 'payments'])
+        self.assertIn('合同款', result['kept'][0]['label'])
+        self.assertIn('待退款 300.00 元', result['kept'][0]['reason'])
+        self.assertIn(receivable.pk, self.listed('entries'))
+        self.assertNotIn(self.project.pk, self.listed('projects'))
 
     def test_permission_union_replay_and_role_revocation(self):
         self.remove('items', [self.item.pk], role='manager', status=403)
@@ -412,12 +640,15 @@ class DeletionTests(BusinessFixtures, TestCase):
         self.remove('purchases', [active.pk], status=409)
 
     def test_project_and_signed_sale_protected_until_ended_then_archived(self):
-        self.remove('projects', [self.project.pk], status=409)
+        detail = str(self.remove('projects', [self.project.pk], status=409))
+        # 拦截原因写明是哪张单据，并说明取消或结项后会连带整理。
+        self.assertIn(f'销售单（{self.project.sale.code}）', detail)
+        self.assertIn('取消项目或完成结项', detail)
         self.remove('sales', [self.project.sale.pk], status=409)
         self.project.status = 'closed'
         self.project.save()
-        self.remove('projects', [self.project.pk])
         self.remove('sales', [self.project.sale.pk])
+        self.assertEqual(self.remove('projects', [self.project.pk])['records'][0]['mode'], 'archive')
         self.project.refresh_from_db()
         self.assertFalse(self.project.is_deleted)
         self.assertTrue(Entry.objects.filter(project=self.project).exists())
@@ -585,8 +816,8 @@ class DeletionTests(BusinessFixtures, TestCase):
         for role in ['finance', 'warehouse', 'manager', 'production_manager', 'purchase_manager']:
             with self.subTest(role=role):
                 self.restore(member.pk, role=role, status=403)
-        self.assertIn('本轮仅支持恢复用户账号', str(self.restore(self.item.pk, resource='items', status=400)))
-        self.assertIn('本轮仅支持恢复用户账号', str(self.restore(member.pk, resource='audit', status=400)))
+        self.assertIn('仅支持恢复用户账号', str(self.restore(self.item.pk, resource='entries', status=400)))
+        self.assertIn('仅支持恢复用户账号', str(self.restore(member.pk, resource='audit', status=400)))
         for reason in ['  ', 'x' * 501]:
             self.restore(member.pk, reason=reason, status=400)
         for value in [True, 'abc', 0, None]:

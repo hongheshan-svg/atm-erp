@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { Row } from '../types'
 import { read, write } from '../api'
 import { columns, display } from '../business'
-import { deletionLabel, deletionNotice, canDeleteRecords, canRestoreRecords, restoreNotice, deletionLimit } from '../modules/deletions'
+import { deletionLabel, deletionNotice, canDeleteRecords, canRestoreRecord, restoreNotice, deletionLimit, deletionModeLabel, deletionOutcome, cascadeText } from '../modules/deletions'
 import { message, requestKey } from '../utils/request'
 import ListPagination from './ListPagination.vue'
 import { pageSize } from '../pagination'
@@ -13,9 +14,19 @@ const history = computed(() => props.rows === undefined)
 const reason = ref(''), confirmed = ref(false), busy = ref(false), error = ref('')
 const records = ref<Row[]>([]), detail = ref<Row | null>(null), page = ref(1), count = ref(0)
 const selectionSearch = ref(''), blockedId = ref<number | null>(null), selectionList = ref<HTMLElement>()
-const blockedRow = computed(() => props.rows?.find(row => row.id === blockedId.value))
+// 服务端一次返回全部不能删除的记录及原因；管理员可以把它们从本批去掉，只删其余记录，不必逐条试错。
+const blocked = ref<Array<{ id: number; label: string; reason: string }>>([]), excluded = ref(new Set<number>())
+const outcome = ref<ReturnType<typeof deletionOutcome> | null>(null)
+const activeRows = computed(() => (props.rows || []).filter(row => !excluded.value.has(row.id)))
+const blockedIds = computed(() => new Set([...blocked.value.map(item => item.id), ...(blockedId.value === null ? [] : [blockedId.value])]))
+const deletable = computed(() => activeRows.value.length - blockedIds.value.size)
+const blockedRow = computed(() => activeRows.value.find(row => row.id === blockedId.value))
 const visibleSelection = computed(() => (props.rows || []).map((row, index) => ({ row, number: index + 1 }))
-  .filter(({ row }) => deletionLabel(row).toLocaleLowerCase().includes(selectionSearch.value.trim().toLocaleLowerCase())))
+  .filter(({ row }) => !excluded.value.has(row.id) && deletionLabel(row).toLocaleLowerCase().includes(selectionSearch.value.trim().toLocaleLowerCase())))
+function dropBlocked() {
+  excluded.value = new Set([...excluded.value, ...blockedIds.value])
+  blocked.value = []; blockedId.value = null; error.value = ''; key = requestKey()
+}
 async function locateBlocked() {
   if (!blockedRow.value) return
   selectionSearch.value = ''
@@ -42,21 +53,30 @@ watch([() => props.resource, () => props.projectId, () => props.saleId, () => pr
 watch(pageSize, () => { page.value = 1; void load() })
 async function submit() {
   if (busy.value || !canDeleteRecords(props.resource)) return
-  if (!props.rows?.length || !reason.value.trim() || !confirmed.value) { error.value = '请填写删除原因，并勾选确认。'; return }
-  if (props.rows.length > deletionLimit(props.resource)) { error.value = '每批最多删除 ' + deletionLimit(props.resource) + ' 条，请减少勾选数量。'; return }
-  busy.value = true; error.value = ''; blockedId.value = null
+  const rows = activeRows.value
+  if (!rows.length || !reason.value.trim() || !confirmed.value) { error.value = '请填写删除原因，并勾选确认。'; return }
+  if (rows.length > deletionLimit(props.resource)) { error.value = '每批最多删除 ' + deletionLimit(props.resource) + ' 条，请减少勾选数量。'; return }
+  busy.value = true; error.value = ''; blockedId.value = null; blocked.value = []
   try {
-    await write('/business/record-deletions/', { resource: props.resource, ids: props.rows.map(row => row.id), reason: reason.value.trim() }, key)
+    const result = deletionOutcome(await write('/business/record-deletions/', { resource: props.resource, ids: rows.map(row => row.id), reason: reason.value.trim() }, key))
+    // 有仍在办而保留在原列表的记录时停在结果页，让管理员看清哪些没有随项目移出；其余情况照常关闭。
+    if (result.kept.length) { outcome.value = result; return }
+    if (result.notes.length) ElMessage.success(`已删除 ${result.count} 条${props.title}。${result.notes.join('；')}。`)
     emit('saved'); emit('close')
   } catch (e) {
     error.value = message(e)
-    const id = Number((e as { response?: { data?: { blocked_id?: unknown } } } | null)?.response?.data?.blocked_id)
-    blockedId.value = Number.isSafeInteger(id) && props.rows.some(row => row.id === id) ? id : null
+    const data = (e as { response?: { data?: { blocked_id?: unknown; blocked?: unknown } } } | null)?.response?.data
+    const mine = new Set(rows.map(row => row.id))
+    blocked.value = (Array.isArray(data?.blocked) ? data.blocked as Row[] : [])
+      .map(item => ({ id: Number(item?.id), label: String(item?.label || ''), reason: String(item?.reason || '') }))
+      .filter(item => mine.has(item.id))
+    const id = Number(data?.blocked_id)
+    blockedId.value = Number.isSafeInteger(id) && mine.has(id) ? id : null
     await locateBlocked()
   }
   finally { busy.value = false }
 }
-// 恢复只针对账号：恢复后仍停用，需管理员在用户管理中确认角色后再启用。
+// 恢复只针对删除时仅停用的记录（账号、有历史单据的物料和往来单位）：恢复后仍停用，核对后再在编辑中启用。
 const restoring = ref<Row | null>(null), restoreReason = ref('')
 let restoreKey = requestKey()
 watch(restoreReason, () => { restoreKey = requestKey() })
@@ -64,7 +84,7 @@ const time = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12
 function startRestore(record: Row) { restoring.value = record; restoreReason.value = ''; restoreKey = requestKey(); error.value = '' }
 async function restore() {
   const record = restoring.value
-  if (busy.value || !record || !canRestoreRecords(props.resource)) return
+  if (busy.value || !record || !canRestoreRecord(props.resource, record)) return
   if (!restoreReason.value.trim()) { error.value = '请填写恢复原因。'; return }
   busy.value = true; error.value = ''
   let done = false
@@ -78,22 +98,42 @@ async function restore() {
   emit('saved')
   await load()
 }
-function close() { if (!busy.value) emit('close') }
+function close() {
+  if (busy.value) return
+  // 结果页关闭时才通知列表刷新：删除已经完成，只是先让管理员看完保留在原列表的记录。
+  if (outcome.value) emit('saved')
+  emit('close')
+}
 </script>
 <template>
-  <el-dialog class="record-deletion-dialog" :model-value="true" :title="history ? `${title} · 已删除记录` : `确认删除 ${rows?.length || 0} 条${title}`" width="min(900px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" @close="close">
+  <el-dialog class="record-deletion-dialog" :model-value="true" :title="history ? `${title} · 已删除记录` : outcome ? `已删除 ${outcome.count} 条${title}` : `确认删除 ${activeRows.length} 条${title}`" width="min(900px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" @close="close">
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
-    <template v-if="!history">
+    <template v-if="outcome">
+      <el-alert :title="`已删除 ${outcome.count} 条${title}。${outcome.notes.join('；')}`" type="success" :closable="false" show-icon />
+      <section class="deletion-blocked-panel" aria-label="保留在原列表的记录">
+        <p><strong>{{ outcome.keptCount }} 条仍在办，保留在原列表</strong>，办结后可以在各自列表中单独删除：</p>
+        <ul><li v-for="(item, index) in outcome.kept" :key="index"><strong>{{ item.label }}</strong>：{{ item.reason }}</li></ul>
+        <p v-if="outcome.keptCount > outcome.kept.length" class="muted">其余 {{ outcome.keptCount - outcome.kept.length }} 条未逐条列出。</p>
+      </section>
+      <div class="deletion-buttons"><el-button type="primary" @click="close">知道了</el-button></div>
+    </template>
+    <template v-else-if="!history">
       <el-alert :title="deletionNotice(resource)" type="warning" :closable="false" show-icon />
-      <p>仅删除下列已勾选记录；任何一条不能处理，整批都不会删除。</p>
+      <p>仅删除下列已勾选记录；任何一条不能处理，整批都不会删除。系统会一次列出全部不能删除的记录，可以去掉它们后删除其余记录。</p>
+      <section v-if="blockedIds.size" class="deletion-blocked-panel" aria-label="不能删除的记录">
+        <p><strong>{{ blockedIds.size }} 条不能删除</strong><template v-if="deletable > 0">，其余 {{ deletable }} 条可以删除</template>：</p>
+        <ul v-if="blocked.length"><li v-for="item in blocked" :key="item.id"><strong>{{ item.label }}</strong>：{{ item.reason }}</li></ul>
+        <el-button v-if="deletable > 0" type="primary" plain :disabled="busy" @click="dropBlocked">去掉这 {{ blockedIds.size }} 条，只删其余 {{ deletable }} 条</el-button>
+      </section>
+      <p v-if="excluded.size" class="muted">已从本批去掉 {{ excluded.size }} 条不能删除的记录，它们保持原样。</p>
       <div class="deletion-search">
         <label>搜索已选记录<input v-model="selectionSearch" type="search" placeholder="输入编码、名称或单元" /></label>
         <el-button v-if="blockedRow" type="danger" plain @click="locateBlocked">定位不能删除的记录</el-button>
       </div>
-      <p class="muted">显示 {{ visibleSelection.length }} / {{ rows?.length || 0 }} 条；序号为本次勾选顺序。</p>
+      <p class="muted">显示 {{ visibleSelection.length }} / {{ activeRows.length }} 条；序号为本次勾选顺序。</p>
       <ol ref="selectionList" class="deletion-records" aria-label="本次删除记录">
-        <li v-for="{ row, number } in visibleSelection" :key="row.id" :data-record-id="row.id" :value="number" :class="{ 'deletion-blocked': row.id === blockedId }" tabindex="-1">
-          <strong v-if="row.id === blockedId" class="deletion-blocked-label">不能删除：</strong>{{ deletionLabel(row) }}
+        <li v-for="{ row, number } in visibleSelection" :key="row.id" :data-record-id="row.id" :value="number" :class="{ 'deletion-blocked': blockedIds.has(row.id) }" tabindex="-1">
+          <strong v-if="blockedIds.has(row.id)" class="deletion-blocked-label">不能删除：</strong>{{ deletionLabel(row) }}
         </li>
       </ol>
       <p v-if="!visibleSelection.length">没有匹配的已选记录，请更换关键词。</p>
@@ -101,7 +141,7 @@ function close() { if (!busy.value) emit('close') }
         <label for="deletion-reason">删除原因</label>
         <textarea id="deletion-reason" v-model="reason" maxlength="500" rows="3" :disabled="busy" placeholder="说明为什么删除，便于以后追溯" required />
         <label class="deletion-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />{{ resource === 'users' ? '我已核对所选账号，了解删除后不能通过普通编辑恢复，原用户名不能再次使用；误删需在“已删除记录”中恢复账号' : '我已核对所选记录，并了解本次删除的影响' }}</label>
-        <div class="deletion-buttons"><el-button :disabled="busy" @click="close">取消</el-button><el-button type="danger" native-type="submit" :loading="busy" :disabled="!reason.trim() || !confirmed">确认删除 {{ rows?.length }} 条</el-button></div>
+        <div class="deletion-buttons"><el-button :disabled="busy" @click="close">取消</el-button><el-button type="danger" native-type="submit" :loading="busy" :disabled="!reason.trim() || !confirmed">确认删除 {{ activeRows.length }} 条</el-button></div>
       </form>
     </template>
     <template v-else>
@@ -112,12 +152,14 @@ function close() { if (!busy.value) emit('close') }
         <span class="muted">序号 {{ (page - 1) * pageSize + index + 1 }} · </span><strong>{{ deletionLabel(record.detail.record) }}</strong>
         <p>{{ record.actor_name }} · {{ time(record.created_at) }}</p>
         <p>删除原因：{{ record.detail.reason }}</p>
+        <p v-if="deletionModeLabel(resource, record.detail.mode)" class="muted">处理方式：{{ deletionModeLabel(resource, record.detail.mode) }}<template v-if="record.detail.via?.label">（随「{{ record.detail.via.label }}」一并处理）</template></p>
+        <p v-if="cascadeText(record.detail.cascaded)" class="muted">随项目一并移出列表：{{ cascadeText(record.detail.cascaded) }}</p>
         <p v-if="record.restored" class="deletion-restored">已恢复 · {{ record.restored_by }} · {{ time(record.restored_at) }}</p>
         <el-button @click="detail = detail?.id === record.id ? null : record">{{ detail?.id === record.id ? '收起内容' : '查看删除时内容' }}</el-button>
         <el-button v-if="showOriginal && record.detail.mode === 'archive'" @click="emit('open', record.detail.record.id)">查看原始记录</el-button>
-        <el-button v-if="!record.restored && canRestoreRecords(resource)" type="primary" plain :disabled="busy" @click="startRestore(record)">恢复账号</el-button>
+        <el-button v-if="!record.restored && canRestoreRecord(resource, record)" type="primary" plain :disabled="busy" @click="startRestore(record)">{{ resource === 'users' ? '恢复账号' : '恢复到列表' }}</el-button>
         <form v-if="restoring?.id === record.id" class="deletion-form" @submit.prevent="restore">
-          <el-alert :title="restoreNotice" type="info" :closable="false" show-icon />
+          <el-alert :title="restoreNotice(resource)" type="info" :closable="false" show-icon />
           <label :for="`restore-reason-${record.id}`">恢复原因</label>
           <textarea :id="`restore-reason-${record.id}`" v-model="restoreReason" maxlength="500" rows="3" :disabled="busy" placeholder="说明为什么恢复，便于以后追溯" required />
           <div class="deletion-buttons"><el-button :disabled="busy" @click="restoring = null">取消</el-button><el-button type="primary" native-type="submit" :loading="busy" :disabled="!restoreReason.trim()">确认恢复</el-button></div>
@@ -139,6 +181,10 @@ function close() { if (!busy.value) emit('close') }
 .deletion-records li { padding: 6px 8px; overflow-wrap: anywhere; }
 .deletion-blocked { background: var(--el-color-danger-light-9); outline: 2px solid var(--el-color-danger); outline-offset: -2px; }
 .deletion-blocked-label { color: var(--el-color-danger); }
+.deletion-blocked-panel { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--el-color-danger-light-5); border-radius: 6px; background: var(--el-color-danger-light-9); }
+.deletion-blocked-panel p { margin: 0 0 8px; }
+.deletion-blocked-panel ul { max-height: 180px; margin: 0 0 10px; padding-left: 20px; overflow: auto; }
+.deletion-blocked-panel li { padding: 3px 0; overflow-wrap: anywhere; }
 .deletion-form { display: grid; gap: 12px; margin-top: 16px; }
 .deletion-form textarea { width: 100%; box-sizing: border-box; padding: 10px; font: inherit; }
 .deletion-confirm { display: flex; gap: 8px; align-items: start; }
