@@ -4,7 +4,7 @@ import ElementPlus from 'element-plus'
 import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { read, write } from '../api'
 import { user } from '../session'
-import { deletionLabel, deletionNotice, deletionLimit, removableResources } from '../modules/deletions'
+import { deletionLabel, deletionNotice, deletionLimit, deletionOutcome, removableResources } from '../modules/deletions'
 
 vi.mock('../api', () => ({ read: vi.fn(), write: vi.fn(), all: vi.fn().mockResolvedValue([]), download: vi.fn() }))
 const props = { resource: 'items', title: '物料', rows: [{ id: 12, code: 'MAT12', name: '气缸' }, { id: 13, name: '导轨' }] }
@@ -206,4 +206,125 @@ it.each([['items', 1000], ['bom', 1000], ['partners', 1000]] as const)('%s确认
 it('全部可删除表单统一1000项，公司、编号及审计不提供批量删除', () => {
   for (const resource of removableResources) expect(deletionLimit(resource)).toBe(1000)
   for (const resource of ['company', 'codes', 'audit']) expect(deletionLimit(resource)).toBe(0)
+})
+
+const rejectedBatch = () => ({ isAxiosError: true, response: { status: 409, data: {
+  detail: '往来单位「USED1 · 甲」不能删除：往来单位仍有未结束的销售单（SO-1）。另有 1 条也不能删除，整批未删除。', blocked_id: '12',
+  blocked: [{ id: '12', label: 'USED1 · 甲', reason: '往来单位仍有未结束的销售单（SO-1）。' }, { id: '14', label: 'USED2 · 乙', reason: '往来单位还有未结清或待退款的款项（货款）。' }, { id: '999', label: '不在本批', reason: '忽略' }],
+} } })
+const fill = async (wrapper: ReturnType<typeof make>) => { await wrapper.get('textarea').setValue('清理误建'); await wrapper.get('input[type="checkbox"]').setValue(true) }
+
+it('一次列出全部不能删除的记录和原因，去掉它们后只删其余记录', async () => {
+  const rows = [{ id: 12, code: 'USED1', name: '甲' }, { id: 13, code: 'FREE', name: '丙' }, { id: 14, code: 'USED2', name: '乙' }]
+  const wrapper = make({ resource: 'partners', title: '往来单位', rows })
+  await fill(wrapper)
+  vi.mocked(write).mockRejectedValueOnce(rejectedBatch()).mockResolvedValueOnce({ count: 1, records: [{ id: 13, mode: 'soft' }] })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  const panel = wrapper.get('[aria-label="不能删除的记录"]')
+  expect(panel.text()).toContain('2 条不能删除，其余 1 条可以删除')
+  for (const text of ['USED1 · 甲', 'SO-1', 'USED2 · 乙', '未结清或待退款']) expect(panel.text()).toContain(text)
+  expect(panel.text()).not.toContain('不在本批')
+  expect(wrapper.findAll('.deletion-blocked').map(row => row.attributes('data-record-id'))).toEqual(['12', '14'])
+  const firstKey = vi.mocked(write).mock.calls[0]![2]
+  await buttons(wrapper, '去掉这 2 条，只删其余 1 条')[0]!.trigger('click')
+  expect(wrapper.find('[aria-label="不能删除的记录"]').exists()).toBe(false)
+  expect(wrapper.text()).not.toContain('整批未删除。')
+  expect(wrapper.findAll('.deletion-records li').map(row => row.attributes('data-record-id'))).toEqual(['13'])
+  expect(wrapper.text()).toContain('已从本批去掉 2 条不能删除的记录')
+  expect(wrapper.get('button[type="submit"]').text()).toBe('确认删除 1 条')
+  expect(wrapper.get('textarea').element.value).toBe('清理误建')
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  const [, payload, secondKey] = vi.mocked(write).mock.calls[1]!
+  expect(payload).toEqual({ resource: 'partners', ids: [13], reason: '清理误建' })
+  expect(secondKey).not.toBe(firstKey)
+  expect(wrapper.emitted('saved')).toHaveLength(1)
+  expect(wrapper.emitted('close')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+it('整批都不能删除时只列原因，不提供删除其余记录', async () => {
+  const wrapper = make({ resource: 'partners', title: '往来单位', rows: [{ id: 12, code: 'USED1', name: '甲' }, { id: 14, code: 'USED2', name: '乙' }] })
+  await fill(wrapper)
+  vi.mocked(write).mockRejectedValue(rejectedBatch())
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.get('[aria-label="不能删除的记录"]').text()).toContain('2 条不能删除：')
+  expect(wrapper.findAll('button').some(button => button.text().startsWith('去掉这'))).toBe(false)
+  wrapper.unmount()
+})
+
+it('项目连带移出子单据后，仍在办的记录留在结果页，关闭时才刷新列表', async () => {
+  const wrapper = make({ resource: 'projects', title: '项目', rows: [{ id: 12, code: 'PRJ1', name: '已取消项目' }] })
+  expect(wrapper.text()).toContain('销售单、采购单、任务、工时和款项随项目一并移出列表')
+  await fill(wrapper)
+  vi.mocked(write).mockResolvedValue({ count: 1, records: [{ id: 12, mode: 'archive', cascaded: { sales: 1, tasks: 3 }, kept_count: 2,
+    kept: [{ resource: 'entries', label: '应收应付与费用「合同款」', reason: '账款还有待退款 300.00 元，请先完成退款对账和退款后再删除。' }, { resource: 'payments', label: '收付款流水「记录编号：7」', reason: '所属账款尚未结清。' }] }] })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.text()).toContain('已删除 1 条项目。随项目一并移出列表：销售单 1、任务 3')
+  const kept = wrapper.get('[aria-label="保留在原列表的记录"]')
+  expect(kept.text()).toContain('2 条仍在办，保留在原列表')
+  expect(kept.text()).toContain('应收应付与费用「合同款」')
+  expect(kept.text()).toContain('待退款 300.00 元')
+  expect(wrapper.find('form').exists()).toBe(false)
+  expect(wrapper.emitted('saved')).toBeUndefined()
+  await buttons(wrapper, '知道了')[0]!.trigger('click')
+  expect(wrapper.emitted('saved')).toHaveLength(1)
+  expect(wrapper.emitted('close')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+it('没有保留记录时照常关闭，附带结果只作提示', async () => {
+  const wrapper = make({ resource: 'sales', title: '销售订单', rows: [{ id: 12, code: 'SO1', name: '误建' }] })
+  expect(wrapper.text()).toContain('草稿上未被引用的附件随单据一并删除')
+  await fill(wrapper)
+  vi.mocked(write).mockResolvedValue({ count: 1, records: [{ id: 12, mode: 'soft', documents: 2 }] })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.emitted('saved')).toHaveLength(1)
+  expect(wrapper.emitted('close')).toHaveLength(1)
+  expect(deletionOutcome({ count: 1, records: [{ id: 12, mode: 'soft', documents: 2 }] }).notes).toEqual(['同时删除 2 份未被引用的附件'])
+  expect(deletionOutcome({ count: 2, records: [{ id: 1, mode: 'soft' }, { id: 2, mode: 'soft' }] })).toEqual({ count: 2, notes: [], kept: [], keptCount: 0 })
+  wrapper.unmount()
+})
+
+it('停用归档的物料和往来单位可恢复到列表，彻底删除的不提供恢复', async () => {
+  for (const [resource, texts] of [['items', ['停用并移出列表', '编码、图号和历史单据保留', '还有库存']], ['partners', ['停用并移出列表', '未结清款项']]] as const)
+    for (const text of texts) expect(deletionNotice(resource), resource).toContain(text)
+  vi.mocked(read).mockResolvedValue({ count: 3, results: [
+    { id: 31, actor_name: '管理员', created_at: '2026-11-16T08:00:00Z', restored: false, detail: { reason: '不再使用', mode: 'disable', record: { id: 5, code: 'MAT5', name: '旧气缸' } } },
+    { id: 30, actor_name: '管理员', created_at: '2026-11-16T07:00:00Z', restored: false, detail: { reason: '误建', mode: 'soft', record: { id: 6, code: 'MAT6', name: '误建物料' } } },
+    { id: 29, actor_name: '管理员', created_at: '2026-11-16T06:00:00Z', restored: true, restored_at: '2026-11-16T09:00:00Z', restored_by: '管理员', detail: { reason: '停用', mode: 'disable', record: { id: 7, code: 'MAT7', name: '已恢复物料' } } },
+  ] })
+  const wrapper = make({ resource: 'items', title: '物料', rows: undefined })
+  await flushPromises()
+  expect(wrapper.text()).toContain('处理方式：已停用并移出列表，编码和历史单据保留')
+  expect(wrapper.text()).toContain('处理方式：未被使用，已删除')
+  expect(buttons(wrapper, '恢复到列表')).toHaveLength(1)
+  await buttons(wrapper, '恢复到列表')[0]!.trigger('click')
+  expect(wrapper.text()).toContain('仍为停用状态，请核对后在编辑中启用')
+  await wrapper.get('textarea').setValue('仍要使用')
+  vi.mocked(write).mockResolvedValue({ id: 5, is_active: false })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(write).toHaveBeenCalledWith('/business/record-deletions/restore/', { resource: 'items', id: 5, reason: '仍要使用' }, expect.any(String))
+  expect(wrapper.emitted('saved')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+it('已删除记录说明随哪个项目或单据一并处理，以及项目连带移出的子单据', async () => {
+  vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 40, actor_name: '管理员', created_at: '2026-11-16T08:00:00Z', restored: false,
+    detail: { reason: '项目取消', mode: 'archive', via: { resource: 'projects', id: 3, label: 'PRJ3 · 已取消项目' }, record: { id: 8, code: 'SO8', name: '销售' } } }] })
+  const sales = make({ resource: 'sales', title: '销售订单', rows: undefined })
+  await flushPromises()
+  expect(sales.text()).toContain('处理方式：已移出列表，原始记录保留（随「PRJ3 · 已取消项目」一并处理）')
+  sales.unmount()
+  vi.mocked(read).mockResolvedValue({ count: 1, results: [{ id: 41, actor_name: '管理员', created_at: '2026-11-16T08:00:00Z', restored: false,
+    detail: { reason: '项目取消', mode: 'archive', cascaded: { sales: 1, purchases: 2, payments: 4 }, record: { id: 3, code: 'PRJ3', name: '已取消项目' } } }] })
+  const projects = make({ resource: 'projects', title: '项目', rows: undefined })
+  await flushPromises()
+  expect(projects.text()).toContain('随项目一并移出列表：销售单 1、采购单 2、收付款流水 4')
+  projects.unmount()
 })

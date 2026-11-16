@@ -5,6 +5,7 @@ from django.db.models.functions import Lower
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.actions import perform
+from apps.core.api import Conflict
 from apps.core.models import CodeRule
 from apps.core.permissions import ITEM_WRITERS, PURCHASERS, has_role, require_role
 
@@ -160,6 +161,12 @@ def masterdata(actor, key, model, data, object_id=None):
             # 先锁物料再锁编码规则会与导入确认形成锁环；物料行在锁后读取，下面的校验都基于最新数据。
             CodeRule.objects.select_for_update().get(key='item')
         obj = model.objects.select_for_update().get(pk=identity(object_id)) if object_id else model()
+        if object_id:
+            from .deletions import visible_rows
+
+            # 管理员停用归档的资料不在列表里；直接改回启用会得到一条在用却看不到的资料。
+            if not visible_rows(model.objects.filter(pk=obj.pk)).exists():
+                raise Conflict('该资料已移入“已删除记录”，请先由管理员在已删除记录中恢复，再编辑或启用。')
         category = ''
         if model is Item:
             category = data.get('product_category', obj.product_category)

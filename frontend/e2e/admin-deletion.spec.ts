@@ -1,5 +1,5 @@
 import { businessDate } from './fixtures'
-import { test, expect, login, openRowAction, expectHttpError, goToListPage } from './fixtures'
+import { test, expect, login, api, searchList, submitDialog, openRowAction, expectHttpError, goToListPage } from './fixtures'
 
 // 删除入口默认收起，本文件的用例都在「批量管理」开启的状态下进行；开关本身由下面第一条用例验证。
 test.beforeEach(async ({ page }) => {
@@ -445,4 +445,100 @@ test('销售附件弹窗跨页全选21个文件，仅删除当前单据的附件
   await expect(attachments.getByLabel('附件批量选择')).toContainText('已选 0 项')
   expect((await (await page.request.get('/api/business/documents/?sale=' + sale.id, { headers })).json()).count).toBe(0)
   expect((await (await page.request.get('/api/business/documents/?sale=' + other.id, { headers })).json()).count).toBe(1)
+})
+
+test('批量删除一次列出全部被拦记录可去掉后删其余，有历史单据的往来单位停用归档并可恢复', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', '同一删除确认框，桌面端验证一次即可')
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const suffix = Date.now() + '-' + info.project.name
+  const me = await api(page, 'auth/me/')
+  const partner = async (label: string) => (await api(page, 'business/partners/', { name: `${label}${suffix}`, kind: 'customer' }, 201))
+  const [unused, quoting, history] = [await partner('未使用'), await partner('报价中'), await partner('有历史')]
+  const sale = await api(page, 'business/sales/', { name: '报价' + suffix, customer: quoting.id, manager: me.id }, 201)
+  const project = await api(page, 'business/projects/', { name: '已取消项目' + suffix, customer: history.id, manager: me.id }, 201)
+  await api(page, `business/projects/${project.id}/cancel/`, { reason: '客户取消' })
+  const saleCode = (await api(page, `business/sales/${sale.id}/`)).code
+
+  await page.goto('/erp/masterdata?section=partners')
+  const panel = await searchList(page, '客户与供应商', String(suffix))
+  await panel.getByRole('button', { name: '全选筛选结果（3项，跨页）', exact: true }).click()
+  await panel.getByRole('button', { name: '批量删除（3）', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '确认删除 3 条客户与供应商', exact: true })
+  await expect(dialog).toContainText('停用并移出列表')
+  await dialog.getByLabel('删除原因', { exact: true }).fill('隔离验收：清理往来单位')
+  await dialog.getByRole('checkbox').check()
+  const stopExpecting = expectHttpError(page, '/api/business/record-deletions/', 409)
+  await dialog.getByRole('button', { name: '确认删除 3 条', exact: true }).click()
+  // 被拦的只有仍在报价的客户；原因写明是哪张销售单，其余两条可以继续删除。
+  const blocked = dialog.getByRole('region', { name: '不能删除的记录', exact: true })
+  await expect(blocked).toContainText('1 条不能删除，其余 2 条可以删除')
+  await expect(blocked).toContainText('报价中' + suffix)
+  await expect(blocked).toContainText(saleCode)
+  await page.screenshot({ path: info.outputPath('deletion-blocked-list.png'), animations: 'disabled' })
+  stopExpecting()
+  await dialog.getByRole('button', { name: '去掉这 1 条，只删其余 2 条', exact: true }).click()
+  const remaining = page.getByRole('dialog', { name: '确认删除 2 条客户与供应商', exact: true })
+  await expect(remaining.locator('.deletion-records li')).toHaveCount(2)
+  await expect(remaining.getByLabel('删除原因', { exact: true })).toHaveValue('隔离验收：清理往来单位')
+  await submitDialog(page, 'business/record-deletions/', 200, remaining)
+  await expect(panel.getByRole('row').filter({ hasText: '报价中' + suffix })).toHaveCount(1)
+  await expect(panel.getByRole('row').filter({ hasText: '未使用' + suffix })).toHaveCount(0)
+  await expect(panel.getByRole('row').filter({ hasText: '有历史' + suffix })).toHaveCount(0)
+
+  // 从未使用的直接删除；已有历史项目的只是停用并移出列表，可在已删除记录中恢复，恢复后仍停用。
+  const removed = await api(page, 'business/record-deletions/?resource=partners&page_size=100')
+  const modes = Object.fromEntries(removed.results.map((row: { detail: { mode: string; record: { id: number } } }) => [row.detail.record.id, row.detail.mode]))
+  expect(modes[unused.id]).toBe('soft')
+  expect(modes[history.id]).toBe('disable')
+  await page.getByRole('button', { name: '已删除记录', exact: true }).click()
+  const records = page.getByRole('dialog', { name: '客户与供应商 · 已删除记录', exact: true })
+  const retired = records.locator('.deletion-history').filter({ hasText: '有历史' + suffix })
+  await expect(retired).toContainText('处理方式：已停用并移出列表，编码和历史单据保留')
+  await expect(records.locator('.deletion-history').filter({ hasText: '未使用' + suffix }).getByRole('button', { name: '恢复到列表', exact: true })).toHaveCount(0)
+  await retired.getByRole('button', { name: '恢复到列表', exact: true }).click()
+  await retired.getByLabel('恢复原因', { exact: true }).fill('隔离验收：仍有往来')
+  await page.screenshot({ path: info.outputPath('deletion-restore-masterdata.png'), animations: 'disabled' })
+  const restored = page.waitForResponse(response => response.url().endsWith('/record-deletions/restore/') && response.request().method() === 'POST')
+  await retired.getByRole('button', { name: '确认恢复', exact: true }).click()
+  expect((await restored).status()).toBe(200)
+  await expect(retired).toContainText('已恢复')
+  expect((await api(page, `business/partners/${history.id}/`)).is_active).toBe(false)
+})
+
+test('删除已取消的项目时销售单和款项随项目一并移出列表，客户随后可停用归档', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', '同一删除确认框，桌面端验证一次即可')
+  await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!)
+  const suffix = Date.now() + '-' + info.project.name
+  const me = await api(page, 'auth/me/')
+  const customer = await api(page, 'business/partners/', { name: '连带客户' + suffix, kind: 'customer' }, 201)
+  const sale = await api(page, 'business/sales/', { name: '连带删除' + suffix, customer: customer.id, manager: me.id }, 201)
+  await api(page, `business/sales/${sale.id}/quote/`, { amount: '1000.00', reason: '双方确认方案' })
+  const signed = await api(page, `business/sales/${sale.id}/sign/`, { date: businessDate(), milestones: [{ title: '合同款' + suffix, amount: '1000.00', due_date: businessDate() }] })
+  const listed = async (resource: string) => (await api(page, `business/${resource}/?search=${encodeURIComponent(String(suffix))}&page_size=100`)).results.length
+
+  await page.goto('/erp/projects')
+  const panel = await searchList(page, '项目列表', String(suffix))
+  const row = panel.getByRole('row').filter({ hasText: '连带删除' + suffix })
+  // 执行中的项目先拦住，并写明是哪张销售单、下一步做什么。
+  await row.getByRole('button', { name: '删除', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '确认删除 1 条项目列表', exact: true })
+  await expect(dialog).toContainText('销售单、采购单、任务、工时和款项随项目一并移出列表')
+  await dialog.getByLabel('删除原因', { exact: true }).fill('隔离验收：清理已取消项目')
+  await dialog.getByRole('checkbox').check()
+  const stopExpecting = expectHttpError(page, '/api/business/record-deletions/', 409)
+  await dialog.getByRole('button', { name: '确认删除 1 条', exact: true }).click()
+  await expect(dialog.getByRole('alert').first()).toContainText('请先在项目页取消项目或完成结项')
+  stopExpecting()
+  await api(page, `business/projects/${signed.project}/cancel/`, { reason: '客户取消' })
+  await submitDialog(page, 'business/record-deletions/', 200, dialog)
+  await expect(page.locator('.el-message--success')).toContainText('随项目一并移出列表：销售单 1、款项 1')
+  await expect(row).toHaveCount(0)
+  // 不必再到销售、收付款列表各删一遍；原始记录都还在，只是移入各自的已删除记录。
+  expect(await listed('sales')).toBe(0)
+  expect(await listed('entries')).toBe(0)
+  const removedSales = await api(page, 'business/record-deletions/?resource=sales&project=' + signed.project)
+  expect(removedSales.results[0].detail.via.resource).toBe('projects')
+  expect((await api(page, `business/sales/${sale.id}/`)).status).toBe('signed')
+  const retired = await api(page, 'business/record-deletions/', { resource: 'partners', ids: [customer.id], reason: '隔离验收：客户不再往来' })
+  expect(retired.records[0].mode).toBe('disable')
 })
