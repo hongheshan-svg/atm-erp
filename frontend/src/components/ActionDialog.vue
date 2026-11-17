@@ -51,8 +51,8 @@ async function confirmLeave(keep = true) {
   if (locked.value) return false
   if (!dirty.value) return true
   try {
-    await ElMessageBox.confirm(keep && currentDraftKey.value ? '填写内容尚未提交。离开前可以暂存，返回后继续填写。' : '填写内容尚未保存，放弃后需要重新填写。', '内容尚未保存', {
-      confirmButtonText: keep && currentDraftKey.value ? '暂存并离开' : '放弃修改', cancelButtonText: '继续填写', type: 'warning', closeOnClickModal: false,
+    await ElMessageBox.confirm(keep && currentDraftKey.value ? '填写内容尚未提交。可以先在本机保留已填内容，回来后继续填写（不会提交，也不会生成草稿单据）。' : '填写内容尚未保存，放弃后需要重新填写。', '内容尚未保存', {
+      confirmButtonText: keep && currentDraftKey.value ? '保留填写并离开' : '放弃修改', cancelButtonText: '继续填写', type: 'warning', closeOnClickModal: false,
     })
     clearTimeout(draftTimer)
     if (keep && currentDraftKey.value) { if (!rememberDraft()) { ElMessage.error('浏览器未能暂存，请保留此页面或提交后再离开。'); return false } }
@@ -80,7 +80,7 @@ const dialogProps = computed(() => props.inline ? {} : {
 function keepAndClose() {
   if (!rememberDraft()) { ElMessage.error('浏览器未能暂存，请保留此页面或提交后再关闭。'); return }
   baseline.value = formSignature(data.value); emit('close')
-  ElMessage.success('填写内容已暂存，返回此操作可继续填写。')
+  ElMessage.success('已在本机保留填写内容（未提交），重新打开此操作可继续填写。')
 }
 function restore() {
   if (!restored.value || !command.value) return
@@ -95,9 +95,10 @@ if (inject(matchedRouteKey, undefined)) { onBeforeRouteLeave(() => confirmLeave(
 const unregisterGuard = registerFormGuard(() => confirmLeave())
 defineExpose({ confirmLeave })
 async function follow(path: string) { if (await confirmLeave()) { emit('close'); await router?.push(path) } }
-function mapServerIssues(error: unknown) {
+// 返回 true 表示服务端的每条错误都已落到具体字段：此时不再另起顶部红条，同一条错误只在汇总和字段下各出现一次。
+function mapServerIssues(error: unknown): boolean {
   const response = (error as { response?: { data?: Row } })?.response?.data
-  if (!response || !command.value) return
+  if (!response || typeof response !== 'object' || !command.value) return false
   const visit = (fields: Field[], errors: Row, path = '', prefix = ''): FieldIssue[] => fields.flatMap(field => {
     const value = errors[field.key]
     if (value == null) return []
@@ -115,6 +116,8 @@ function mapServerIssues(error: unknown) {
   if (!serverIssues.value.length && command.value.path.includes('/revise-bom/') && !command.value.fields.some(f => f.key === 'lines') && response.lines?.[0]) {
     serverIssues.value = visit(command.value.fields, response.lines[0])
   }
+  const fieldKeys = new Set(command.value.fields.map(field => field.key))
+  return serverIssues.value.length > 0 && Object.keys(response).every(key => fieldKeys.has(key))
 }
 const panelHeading = ref<HTMLElement>()
 const panelHeight = ref('calc(100dvh - 36px)')
@@ -234,7 +237,7 @@ async function previewChange() {
     const signature = formSignature(data.value)
     preview.value = await write(c.previewPath, c.prepare ? c.prepare(body) : body, requestKey())
     previewedSignature.value = signature
-  } catch (e) { error.value = message(e); mapServerIssues(e) } finally { busy.value = false }
+  } catch (e) { error.value = mapServerIssues(e) ? '' : message(e) } finally { busy.value = false }
 }
 const fieldsContainer = ref<HTMLElement>()
 let key = ''
@@ -301,8 +304,7 @@ async function submit() {
     const note = c.successNote?.(result || {})
     if (note) ElMessage({ type: 'warning', message: note, duration: 10000, showClose: true, grouping: true })
   } catch (e) {
-    error.value = message(e)
-    mapServerIssues(e)
+    error.value = mapServerIssues(e) ? '' : message(e)
     recovery.value = usefulRecovery(e)
     await nextTick()
     if (fieldsContainer.value) fieldsContainer.value.scrollTop = 0
@@ -377,7 +379,8 @@ async function submit() {
         <el-button v-if="command.previewPath" :disabled="locked" @click="previewChange">预览变更影响</el-button>
         <el-button v-for="action in shownActions" :key="action.label" :type="action.label === primary ? 'primary' : undefined" :disabled="locked" @click="runAction(action.label)">{{ action.label }}</el-button>
         <el-dropdown v-if="moreActions.length" trigger="click" :disabled="locked" @command="(label: string) => runAction(String(label))"><el-button :disabled="locked">更多操作 ▾</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="action in moreActions" :key="action.label" :command="action.label">{{ action.label }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
-        <el-button v-if="dirty && currentDraftKey" :disabled="locked" @click="keepAndClose">暂存并关闭</el-button>
+        <!-- 「稍后再填」只把已填内容留在本机浏览器，与业务上的「保存草稿」（服务端草稿单据）区分开。 -->
+        <el-button v-if="dirty && currentDraftKey" :disabled="locked" title="已填内容只保留在本机浏览器，重新打开此操作可继续填写；不会提交，也不会生成草稿单据" @click="keepAndClose">稍后再填</el-button>
         <el-button :disabled="locked" @click="requestClose">{{ command.readonly ? '关闭' : '取消' }}</el-button
         ><el-button v-if="!command.readonly && !command.blocked" type="primary" native-type="submit" :loading="locked"
           >{{ submitText }}</el-button

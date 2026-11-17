@@ -22,7 +22,7 @@ it('工程岗位只显示本人任务与工程入口，不显示采购、财务�
 it('多角色按并集显示且共同任务只出现一次，兼采购不增加工程或项目管理职责', async () => {
   user.value = { id: 7, role: 'mechanical_engineer', roles: ['mechanical_engineer', 'electrical_engineer', 'purchaser'] }
   const wrapper = await render()
-  expect(wrapper.findAll('h3').map(item => item.text())).toEqual(['处理我的任务', '编制项目用料', '从缺料开始采购'])
+  expect(wrapper.findAll('h3').map(item => item.text())).toEqual(['处理我的任务', '维护项目用料', '从缺料开始采购'])
   expect(wrapper.text()).toContain('选择参与的项目')
   wrapper.unmount()
 })
@@ -42,6 +42,6 @@ it('跳过后按账号记忆，可通过按钮或设置链接重新打开，换�
   user.value = { id: 8, roles: ['finance'] }
   const other = await render()
   expect(other.text()).toContain('核对后登记收付款')
-  expect(other.text()).not.toContain('编制项目用料')
+  expect(other.text()).not.toContain('维护项目用料')
   other.unmount()
 })

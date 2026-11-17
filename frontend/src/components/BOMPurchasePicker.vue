@@ -272,8 +272,8 @@ async function save() {
         </header>
         <form @submit.prevent="save">
           <div class="draft-fields">
-            <label>供应商 <span class="required">*</span><RemoteSelect v-model="form.supplier" path="/business/partners/" :params="{ is_active: true }" :accept="row => row.kind !== 'customer'" label="供应商" :disabled="saving || !project" required /></label>
-            <div class="draft-field-row"><label>计划交期 <span class="required">*</span><input v-model="form.due_date" type="date" aria-label="交期" required :disabled="saving || !project" /></label><label>结算方式<select v-model="form.payment_term" aria-label="结算方式" :disabled="saving || !project"><option value="">{{ supplierInfo ? `沿用供应商：${termLabel(supplierInfo)}` : '沿用供应商' }}</option><option v-for="(label, value) in termLabels" :key="value" :value="value">{{ label }}</option></select></label></div>
+            <label>供应商<RemoteSelect v-model="form.supplier" path="/business/partners/" :params="{ is_active: true }" :accept="row => row.kind !== 'customer'" label="供应商" :disabled="saving || !project" required /></label>
+            <div class="draft-field-row"><label>计划交期<input v-model="form.due_date" type="date" aria-label="交期" required :disabled="saving || !project" /></label><label>结算方式（选填）<select v-model="form.payment_term" aria-label="结算方式" :disabled="saving || !project"><option value="">{{ supplierInfo ? `沿用供应商：${termLabel(supplierInfo)}` : '沿用供应商' }}</option><option v-for="(label, value) in termLabels" :key="value" :value="value">{{ label }}</option></select></label></div>
             <small>{{ termHint }}</small>
             <label v-if="effectiveTerm === 'custom'">自定义月结天数<input v-model="form.payment_days" aria-label="自定义月结天数" inputmode="numeric" placeholder="0～365，留空沿用供应商" :disabled="saving" /></label>
             <label v-if="effectiveTerm === 'manual'">付款到期日<input v-model="form.payment_due_date" aria-label="付款到期日" type="date" :disabled="saving" /></label>
@@ -361,8 +361,8 @@ async function save() {
 .purchase-draft form { display: flex; flex-direction: column; max-height: calc(var(--draft-height) - 44px); }
 .draft-fields { display: grid; gap: 12px; flex-shrink: 0; }
 .draft-field-row { display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; }
-.required, .draft-line-error { color: var(--el-color-danger); }
-.required { display: contents; }
+/* 必填项与全站表单同一规则：不标即必填，选填项写「（选填）」，不再单独用红色星号。 */
+.draft-line-error { color: var(--el-color-danger); }
 .draft-extra { font-size: 12px; color: var(--mute); }
 .draft-extra summary { cursor: pointer; }
 .draft-extra[open] { max-height: 180px; overflow: auto; }

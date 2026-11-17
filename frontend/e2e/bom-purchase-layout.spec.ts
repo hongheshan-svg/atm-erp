@@ -149,7 +149,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   }
   await page.goto(`/erp/projects/${project.id}?tab=bom`)
   const projectBom = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
-  await projectBom.getByRole('radio', { name: '采购缺料', exact: true }).check()
+  await projectBom.getByRole('radio', { name: '缺料下单', exact: true }).check()
   await projectBom.getByRole('checkbox', { name: `选择 ${items[3]!.code} ${samples[3]!.assembly_unit}`, exact: true }).check()
   await projectBom.getByRole('button', { name: '从 BOM 多选下单', exact: true }).click()
   await expect(draft.locator('.draft-item')).toHaveCount(1)

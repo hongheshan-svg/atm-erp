@@ -426,8 +426,8 @@ function saved() {
     <header class="panel-heading bom-panel-heading">
       <h2 class="bom-panel-title">BOM 与缺料</h2>
       <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
-        <label><input v-model="view" type="radio" value="prepare" />编制用料</label>
-        <label><input v-model="view" type="radio" value="purchase" />采购缺料</label>
+        <label><input v-model="view" type="radio" value="prepare" />维护用料</label>
+        <label><input v-model="view" type="radio" value="purchase" />缺料下单</label>
         <button v-if="mobile" type="button" class="bom-help-toggle" :aria-expanded="helpOpen" @click="helpOpen = !helpOpen">说明 {{ helpOpen ? '▴' : '▾' }}</button>
         <el-tooltip v-else :content="viewHelp" placement="bottom-start" popper-class="bom-help-popper"><button type="button" class="bom-help-icon" :aria-label="`视图说明：${viewHelp}`">?</button></el-tooltip>
         <small v-if="mobile && helpOpen" class="muted">{{ viewHelp }}</small>

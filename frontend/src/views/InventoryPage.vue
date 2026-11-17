@@ -54,7 +54,6 @@ function closeBomIssue() {
 <template>
   <ModulePage :key="String(projectQuery)" title="库存" :project-filter="['moves', 'receipts', 'slips'].includes(String(route.query.section)) || bomIssue" v-slot="{ revision, projectId, refresh }">
     <nav v-if="can(['admin', 'warehouse'])" class="panel daily-actions" aria-label="日常库存操作">
-      <router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }">采购收货</router-link>
       <router-link :to="{ path: '/inventory', query: { section: 'stocks', intent: 'issue', project: projectId || 'all' } }">项目领料</router-link>
       <router-link :to="{ path: '/inventory', query: { section: 'moves', intent: 'return', project: projectId || 'all' } }">项目退料</router-link>
       <router-link :to="{ path: '/inventory', query: { section: 'stocks', issue: 'bom', project: projectId || 'all' } }">按 BOM 领料</router-link>
@@ -62,7 +61,7 @@ function closeBomIssue() {
     <el-alert v-if="issueError" :title="`按 BOM 领料读取失败：${issueError}`" type="error" :closable="false" show-icon role="alert" />
     <section v-if="issuedSlip" class="saved-result" role="status"><strong>按 BOM 领料成功 · 领料单 {{ issuedSlip.code }}</strong><span>可查看并打印领料单，交领料人签字。</span><router-link class="el-button el-button--primary" :to="slipRoute(issuedSlip.id)">查看 / 打印领料单</router-link><el-button text aria-label="关闭结果提示" @click="issuedSlip = null">关闭提示</el-button></section>
     <ActionDialog :command="issueCommand" @close="closeBomIssue" @saved="bomIssued($event, refresh)" />
-    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted tab-hint"><span class="full-hint">先查找物料与库位，再点该行“领料”选择项目并核对本次数量；要领多种物料时勾选各行（可翻页、换搜索继续勾选），点“批量领料”一次出库，生成一张领料单。整个项目按 BOM 一次领多行请用上方“按 BOM 领料”。现有库存为全公司共享库存。</span><span class="short-hint">点该行“领料”；多种物料勾选后点“批量领料”。</span></p><ResourcePanel
+    <ModuleTabs :tabs="tabs" storage-key="inventory"><template #stocks><p class="muted tab-hint"><span class="full-hint">点该行“领料”出库；多种物料勾选后点“批量领料”，生成一张领料单（可翻页继续勾选）。整个项目按 BOM 领料请用上方“按 BOM 领料”。库存为全公司共享。</span><span class="short-hint">点该行“领料”；多种物料勾选后点“批量领料”。</span></p><ResourcePanel
       resource="stocks"
       title="现有库存"
       :allow-create="false"
@@ -78,29 +77,32 @@ function closeBomIssue() {
       :revision="revision"
       @changed="refresh"
     /></template><template #slips>
-      <p class="muted tab-hint"><span class="full-hint">每次领料（单行领料、勾选批量领料、按 BOM 领料）生成一张领料单。可按项目、日期、单号或物料查找，点单号查看并打印，交领料人签字。</span><span class="short-hint">按单号或物料查找，点单号查看并打印。</span></p>
+      <p class="muted tab-hint"><span class="full-hint">每次领料都生成一张领料单。点单号查看并打印，交领料人签字。</span><span class="short-hint">按单号或物料查找，点单号查看并打印。</span></p>
       <ResourcePanel resource="issue-slips" title="领料单" :params="{ project: projectId }" :project-id="projectId" :allow-create="false" :revision="revision" @changed="refresh" />
     </template><template #receipts>
-      <p class="muted tab-hint"><span class="full-hint">选择采购单后点“收货”，核对待收数量与本次数量；支持部分到货，不合格物料仍走隔离处理。</span><span class="short-hint">点“收货”核对本次数量，支持部分到货。</span></p>
+      <p class="muted tab-hint"><span class="full-hint">点采购单的“收货”核对本次数量，支持部分到货；有质量问题或待检的到货填在“不合格隔离数量”，之后用“隔离品合格入库”或“隔离品退回供应商”处理。</span><span class="short-hint">点“收货”核对本次数量，支持部分到货。</span></p>
       <nav class="receipt-states" aria-label="收货进度"><router-link :to="{ path: '/inventory', query: { section: 'receipts', project: projectId || 'all' } }" :aria-current="receiptStatus === 'approved' ? 'page' : undefined">待收货采购</router-link><router-link :to="{ path: '/inventory', query: { section: 'receipts', receipt: 'partial', project: projectId || 'all' } }" :aria-current="receiptStatus === 'partial' ? 'page' : undefined">部分收货采购</router-link></nav>
       <ResourcePanel v-if="can(['admin', 'warehouse'])" :key="receiptStatus" class="daily-filtered-list" resource="purchases" :title="receiptStatus === 'partial' ? '部分收货采购' : '待收货采购'" :params="{ project: projectId, status: receiptStatus }" :project-id="projectId" :allow-create="false" :empty-hint="receiptStatus === 'partial' ? '没有部分收货的采购单。' : '没有待收货的采购单；采购批准后会出现在这里。'" :revision="revision" @changed="refresh" />
     </template></ModuleTabs></ModulePage>
 </template>
 <style scoped>
-.daily-actions, .receipt-states { display: flex; flex-wrap: wrap; gap: 12px 24px; }
-.daily-actions a { padding: 8px 0; font-weight: 600; }
-.receipt-states { margin-bottom: 16px; }
-.receipt-states [aria-current="page"] { font-weight: 600; text-decoration: underline; }
+/* 日常入口与工作台同一种按钮样式；收货进度与列表的状态筛选同一种灰底分段样式，不再是第四种「链接页签」。 */
+.daily-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 20px; }
+.daily-actions a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border: 1px solid var(--brand-line); border-radius: var(--r-ctl); background: var(--brand-wash-2); color: var(--brand-ink); font-size: 14px; font-weight: 500; }
+.daily-actions a:hover { background: var(--brand-wash); border-color: var(--brand-soft); }
+.receipt-states { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; margin-bottom: 16px; background: var(--line-2); border-radius: var(--r-field); }
+.receipt-states a { padding: 5px 12px; border-radius: var(--r-ctl); color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+.receipt-states [aria-current="page"] { color: var(--brand-ink); background: #fff; font-weight: 600; box-shadow: var(--shadow-card); }
 .short-hint { display: none; }
 /* 手机：快捷入口与工作台一致改 2×2 网格（触控 ≥40px）；页签说明缩成一行短句，收货进度链接压缩间距。 */
 @media (max-width: 600px) {
-  .daily-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 8px 16px; }
-  .daily-actions a { display: flex; align-items: center; min-height: 40px; padding: 0; }
+  .daily-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px 12px; }
+  .daily-actions a { justify-content: center; min-height: 40px; }
   .tab-hint { margin: 0 0 6px; font-size: 13px; }
   .tab-hint .full-hint { display: none; }
   .tab-hint .short-hint { display: inline; }
-  .receipt-states { gap: 0 20px; margin-bottom: 8px; }
-  .receipt-states a { display: inline-flex; align-items: center; min-height: 40px; }
+  .receipt-states { margin-bottom: 8px; }
+  .receipt-states a { display: inline-flex; align-items: center; min-height: 36px; }
 }
 .daily-filtered-list :deep(.resource-status-tabs) { display: none; }
 </style>

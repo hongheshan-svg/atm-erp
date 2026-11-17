@@ -129,3 +129,9 @@ it('各类待办全为 0 时只留一行「无待办事项」，手机也不再�
   expect(phone.find('.attention-toggle').exists()).toBe(false)
   expect(phone.get('.attention-empty').text()).toBe('无待办事项')
 })
+it('计数为 0 的类别不显示胶囊，只提示其余几类无待办', async () => {
+  vi.mocked(read).mockImplementation(async (path, params) => path.endsWith('/demand/') ? { lines: [] } : { count: params?.kind === 'acceptance' ? 0 : 2, results: [] })
+  const wrapper = await render()
+  expect(wrapper.findAll('a').map(link => link.text())).toEqual(['未完成任务2 项'])
+  expect(wrapper.get('.attention-zero').text()).toBe('其余 2 类无待办')
+})

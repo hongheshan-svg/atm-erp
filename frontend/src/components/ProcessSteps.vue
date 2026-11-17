@@ -77,7 +77,7 @@ const summary = computed(() =>
 .process-marker { position: relative; width: 25px; height: 25px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; font-weight: 600; border: 2px solid var(--field-line); background: #fff; color: var(--ink-5); }
 .process-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .process-text strong { font-size: 12px; font-weight: 500; color: var(--mute); overflow-wrap: anywhere; }
-.process-text small { font-size: 11px; line-height: 1.45; color: var(--ink-6); }
+.process-text small { font-size: 12px; line-height: 1.45; color: var(--ink-6); }
 .process-done .process-marker { border-color: var(--el-color-primary); background: var(--el-color-primary); color: #fff; }
 .process-done .process-text strong { color: var(--ink-3); }
 .process-current .process-marker { border-color: var(--el-color-primary); color: var(--el-color-primary); box-shadow: 0 0 0 4px var(--brand-ring); }

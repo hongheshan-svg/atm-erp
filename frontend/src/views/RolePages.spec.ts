@@ -38,7 +38,9 @@ it('库存从日常入口进入原采购收货，保留项目并覆盖部分收�
   await flushPromises()
   panel = wrapper.findComponent(ResourcePanel)
   expect(panel.props('params')).toEqual({ project: 7, status: 'partial' })
-  await wrapper.get('[aria-label="日常库存操作"]').findAll('a')[2]!.trigger('click')
+  // 「采购收货」已是下方页签，日常入口不再重复：只剩领料、退料、按 BOM 领料。
+  expect(wrapper.get('[aria-label="日常库存操作"]').findAll('a').map(link => link.text())).toEqual(['项目领料', '项目退料', '按 BOM 领料'])
+  await wrapper.get('[aria-label="日常库存操作"]').findAll('a')[1]!.trigger('click')
   await flushPromises()
   expect(router.currentRoute.value.query).toMatchObject({ project: '7', intent: 'return', section: 'moves' })
   expect(wrapper.findComponent(ResourcePanel).props()).toMatchObject({ resource: 'moves', params: { project: 7, kind: 'issue' } })
@@ -123,5 +125,21 @@ it('非管理员不能进入期初初始化；设置仍提供再次查看岗位�
   const { wrapper } = await render(SettingsPage, '/settings?section=initialization')
   expect(wrapper.find('[aria-label="管理员初始化"]').exists()).toBe(false)
   expect(wrapper.findAll('a').some(link => link.attributes('href') === '/workbench?guide=show')).toBe(true)
+  wrapper.unmount()
+})
+it('BOM 未选项目时列出在推进中的项目，点一下进入该项目 BOM', async () => {
+  user.value = { id: 2, roles: ['mechanical_engineer'] }
+  vi.mocked(read).mockImplementation(async path => path === '/business/projects/' ? { results: [
+    { id: 7, code: 'PRJ-7', name: '装配线', status: 'active' },
+    { id: 8, code: 'PRJ-8', name: '已结项目', status: 'closed' },
+    { id: 9, code: 'PRJ-9', name: '新需求', status: 'draft', customer_name: '甲客户', due_date: '2026-12-01' },
+  ] } : project)
+  const { wrapper, router } = await render(BOMPage, '/bom')
+  const links = wrapper.get('.bom-landing').findAll('a')
+  expect(links.map(link => link.find('strong').text())).toEqual(['装配线', '新需求'])
+  expect(links[1]!.text()).toContain('PRJ-9 · 甲客户 · 交期 2026-12-01')
+  await links[0]!.trigger('click')
+  await flushPromises()
+  expect(router.currentRoute.value.query.project).toBe('7')
   wrapper.unmount()
 })

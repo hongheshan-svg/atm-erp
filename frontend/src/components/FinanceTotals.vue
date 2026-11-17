@@ -88,7 +88,7 @@ watch(() => [props.projectId, props.revision], load, { immediate: true })
 .finance-total:last-child { border-right: 0; }
 .finance-total span { color: var(--ink-4); font-size: 12px; }
 .finance-total strong { color: var(--brand-ink); font-size: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.finance-total small { color: var(--ink-6); font-size: 11px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.finance-total small { color: var(--ink-5); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .finance-risk { color: var(--risk); }
 .finance-muted { opacity: 0.55; }
 /* 手机：两列小卡，金额不在「¥」后折行；普通说明收起，逾期提示仍保留。 */

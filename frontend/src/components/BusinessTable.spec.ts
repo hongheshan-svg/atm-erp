@@ -71,7 +71,7 @@ it('宽表显示左右按钮，到边界禁用；尺寸和内容变化后同步�
   expect(observers[0]!.disconnect).toHaveBeenCalled()
 })
 
-it('序号列默认 70 宽，列多的明细表可用 numberWidth 收窄', async () => {
+it('序号列默认 56 宽，列多的明细表可用 numberWidth 收窄', async () => {
   const widthOf = async (props: Record<string, unknown>) => {
     const wrapper = mount({ render: () => h(BusinessTable, { data: [{ id: 1, name: '气缸' }], rowKey: 'id', ...props }, { default: () => h(ElTableColumn, { prop: 'name', label: '名称' }) }) }, { global: { plugins: [ElementPlus] } })
     await flushPromises()
@@ -79,6 +79,6 @@ it('序号列默认 70 宽，列多的明细表可用 numberWidth 收窄', async
     wrapper.unmount()
     return width
   }
-  expect(await widthOf({})).toBe(70)
+  expect(await widthOf({})).toBe(56)
   expect(await widthOf({ numberWidth: 48 })).toBe(48)
 })

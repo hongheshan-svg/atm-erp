@@ -78,7 +78,7 @@ it('领料的售后任务只列所选项目，换项目后清空原选择', asyn
   wrapper.unmount()
 })
 
-it('采购退货与领料一样提供确认占用其他项目到货', async () => {
+it('采购退货与领料一样提供「允许领用其他项目的到货」', async () => {
   const command = await actionCommand('moves', { id: 7 }, '采购退货')
   const shared = command.fields.find(f => f.key === 'confirm_shared')!
   expect(shared.type).toBe('boolean')

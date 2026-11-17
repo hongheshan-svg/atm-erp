@@ -22,18 +22,11 @@ test('分模块页签支持直达、刷新、记忆和无效入口回退', async
     await page.screenshot({ path: info.outputPath(`${path}-tabs.png`), fullPage: true, animations: 'disabled' })
   }
   if (info.project.name === 'mobile') {
+    // 手机上页签换行全部露出，不必横向滑动去找后面的页签。
     await page.goto('/erp/settings?section=users')
-    const bar = page.locator('.module-tabs > .el-tabs__header .el-tabs__nav-scroll')
-    const box = (await bar.boundingBox())!
-    const cdp = await page.context().newCDPSession(page)
-    const y = box.y + box.height / 2
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width - 30, y }] })
-    for (let step = 1; step <= 5; step++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.x + box.width - 30 - step * 45, y }] })
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-    await expect.poll(() => bar.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+    for (const tab of await page.locator('.module-tabs > .el-tabs__header [role="tab"]').all()) await expect(tab).toBeInViewport()
     await page.getByRole('tab', { name: '我的账户', exact: true }).click()
     await page.reload()
     await expect(page.getByRole('tab', { name: '我的账户', exact: true })).toBeInViewport()
-    await cdp.detach()
   }
 })

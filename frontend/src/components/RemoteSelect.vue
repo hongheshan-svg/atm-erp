@@ -249,7 +249,7 @@ onBeforeUnmount(() => { cancelSearch(); selectedGeneration++ })
         aria-autocomplete="list" aria-haspopup="listbox" :aria-expanded="opened" :aria-controls="`${uid}-list`"
         :aria-activedescendant="opened ? activeId : undefined" :aria-invalid="invalid || Boolean(selectedError) || undefined"
         :aria-describedby="description" :required="required" :disabled="locked" autocomplete="off"
-        :placeholder="`输入${label}名称或编号`" @input="type" @focus="open" @click="open" @keydown="keydown" />
+        :placeholder="`输入${label.replace(/筛选$/, '')}名称或编号`" @input="type" @focus="open" @click="open" @keydown="keydown" />
       <button v-if="hasValue(model) || search" type="button" class="remote-clear" :aria-label="`清空${label}`" :disabled="locked" @click="clear">×</button>
       <button type="button" class="remote-toggle" :aria-label="`展开${label}选项`" :disabled="locked" tabindex="-1" @mousedown.prevent @click="opened ? close() : (input?.focus(), open())">⌄</button>
     </span>

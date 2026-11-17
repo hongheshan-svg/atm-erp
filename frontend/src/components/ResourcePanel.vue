@@ -81,6 +81,8 @@ const wide = computed(() => wideCommand(command.value))
 const savedRecord = ref<{ title: string; resource: string; id: number; project?: number; timeTask?: number; slip?: boolean } | null>(null)
 const timeTask = ref<number | null>(null)
 const hasFilter = computed(() => !!(appliedSearch.value || filterValue.value || Object.keys(appliedExtra.value).length))
+// 只有默认的「仅看未结」生效、没有别的筛选时，空列表说的是「都结清了」，而不是「筛选太严」。
+const onlyUnsettled = computed(() => props.resource === 'entries' && !appliedSearch.value && !filterValue.value && Object.keys(appliedExtra.value).join() === 'unsettled')
 const fallbackHint = computed(() => ({
   purchases: '按项目缺料可从 BOM 多选下单；零星物料可新建采购。',
   projects: '已签约销售请从销售单生成项目，避免重复创建。',
@@ -108,8 +110,11 @@ const supplierFilter = ref<string | number>()
 const supplierActive = computed(() => supplierFilter.value != null && supplierFilter.value !== '')
 const notCustomer = (partner: Row) => partner.kind !== 'customer'
 watch(supplierFilter, (value, before) => { if (value !== before) searchRecords() })
-const appliedExtra = ref<Row>({})
-const unsettled = ref(false)
+// 收付款页默认只看未结：财务进来先看到要处理的款项。带搜索词或定位某条记录进来时不加这个限制，免得已结清的找不到；
+// 项目内的款项是这个项目的完整台账，条数不多，已付的费用也可能还要取消退款，照旧全部显示。
+const unsettledDefault = props.resource === 'entries' && !props.projectId && !route.query.search && !route.query.focus
+const appliedExtra = ref<Row>(unsettledDefault ? { unsettled: 'true' } : {})
+const unsettled = ref(unsettledDefault)
 const extraConfig = computed(() => extraFilters[props.resource] || [])
 const filterId = useId()
 const filtersOpen = ref(false)
@@ -135,6 +140,7 @@ const filterParams = computed(() => ({
   ...appliedExtra.value,
 }))
 const sidePanel = computed(() => sidePanelResources.includes(props.resource))
+const compactList = computed(() => sidePanel.value && Boolean(command.value) && !wide.value && !mobile.value)
 const selectedId = ref<number | null>(null)
 const selectedRow = ref<Row | null>(null)
 const deletionAllowed = computed(() => canDeleteRecords(props.resource))
@@ -223,7 +229,8 @@ const merged: Record<string, Record<string, string | string[]>> = {
   // 最近入库日期作为库存数量的副行：勾选领料列加入后 1366 宽仍不被右侧操作列挡住。
   stocks: { item_name: 'item_code', specification: 'brand', quantity: 'last_received_date' },
   purchases: { supplier_name: 'project_name', payment_term: 'payment_due_date' },
-  items: { drawing_number: 'drawing_revision', specification: ['unit', 'brand'], product_category: 'part_type' },
+  // 单位单独成列：夹在规格和品牌之间时，第二行到底是什么要靠猜。
+  items: { drawing_number: 'drawing_revision', specification: 'brand', product_category: 'part_type' },
 }
 // 项目页里的列表已经限定了项目，副行不再重复项目名。
 const pairs = computed<Record<string, string[]>>(() => Object.fromEntries(
@@ -233,11 +240,22 @@ const pairs = computed<Record<string, string[]>>(() => Object.fromEntries(
 ))
 const combinedKey = computed(() => Object.keys(pairs.value)[0])
 const secondaryKeys = computed(() => new Set(Object.values(pairs.value).flat()))
+// 副行带上简短名称（「到期金额 ¥ 300.00」），不再靠第几行猜意思；主行为「—」时副行也读得懂。
+const secondaryPrefix: Record<string, string> = { due_amount: '到期金额', agreed_payment_date: '约定付款', paid_amount: '已结算', payment_due_date: '付款到期', drawing_revision: '版本', brand: '品牌', completed_date: '实际完成', started_date: '开始于' }
 // 副行没有内容（空值、「—」）时不画一行空白。
 function secondaryText(row: Row, key: string) {
   const format = columns[props.resource]?.find(c => c.key === key)?.format
-  const text = format ? format(row) : cell(row, key)
-  return text === '—' ? '' : text
+  const text = String(format ? format(row) : cell(row, key) ?? '')
+  if (!text || text === '—') return ''
+  // 副行与主行说的是同一件事（「无图·标准件」下面再写「标准件」）时不重复显示。
+  const main = Object.keys(pairs.value).find(name => pairs.value[name]!.includes(key))
+  const mainColumn = main ? columns[props.resource]?.find(c => c.key === main) : undefined
+  const mainText = mainColumn ? String(mainColumn.format ? mainColumn.format(row) : cell(row, main!)) : ''
+  if (/^\D+$/.test(text) && mainText.includes(text)) return ''
+  // 主列已用醒目的标记写了同一句（逾期任务的「已逾期 4 天」），副行不再重复。
+  if (mainColumn?.flag?.(row)?.text === text) return ''
+  const prefix = secondaryPrefix[key]
+  return prefix && !text.startsWith(prefix) ? `${prefix} ${text}` : text
 }
 // 合并列的表头里，副列名用简称，免得表头折成三四行。
 const shortLabels: Record<string, string> = { supervisor_name: '主管', discipline_label: '专业', completed_date: '实际完成', schedule_variance_days: '提前/延期', started_date: '开始日', elapsed_days: '历时', milestone_label: '节点', due_amount: '到期金额', agreed_payment_date: '约定付款日', last_received_date: '最近入库' }
@@ -249,11 +267,17 @@ function columnLabel(col: { key: string; label: string }) {
 const nameColumns = new Set(['supplier_name', 'project_name', 'customer_name', 'partner_name', 'item_name', 'task_title'])
 function columnWidth(col: { key: string; format?: unknown }) {
   const key = col.key
-  if (key === 'stage_label') return 150
-  if (key === combinedKey.value || key === 'title' || key === 'name') return props.resource === 'tasks' ? 180 : props.resource === 'projects' ? 260 : 190
+  if (key === 'stage_label') return 130
+  if (props.resource === 'items' && key === 'drawing_number') return 150
+  // 物料编码可能是 CUSTOM-902169449 这样的长码：编码列放宽，名称列让出一点。
+  if (props.resource === 'items' && key === 'code') return 150
+  if (props.resource === 'items' && key === 'name') return 170
+  if (key === combinedKey.value || key === 'title' || key === 'name') return props.resource === 'tasks' ? 180 : props.resource === 'projects' ? 240 : 190
   if (key === 'status' && col.format) return 150
   if (key === 'payment_term') return 130
-  if (['status', 'is_active'].includes(key)) return 100
+  if (key === 'is_active') return 80
+  if (key === 'status') return 100
+  if (key === 'unit') return 64
   if (['discipline_label', 'logged_hours'].includes(key)) return 104
   if (nameColumns.has(key)) return 180
   if (key === 'specification') return 150
@@ -273,7 +297,9 @@ const shownColumns = computed(() => {
   const first = leading[props.resource] || []
   const rank = (key: string) => first.includes(key) ? first.indexOf(key) : first.length
   const sorted = columns[props.resource] ? visible.map((col, index) => ({ col, index })).sort((a, b) => rank(a.col.key) - rank(b.col.key) || a.index - b.index).map(item => item.col) : undefined
-  return mobileTasks.value && sorted ? sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key) || (props.resource === 'moves' && col.key === 'kind')) : sorted
+  if (mobileTasks.value && sorted) return sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key) || (props.resource === 'moves' && col.key === 'kind'))
+  // 右侧面板打开时列表只剩约 640px：只留名称列和状态，其余信息看右侧面板，不再把客户名、金额切成半截。
+  return compactList.value && sorted ? sorted.filter((col, index) => index === 0 || ['status', 'is_active'].includes(col.key)) : sorted
 })
 // 窄屏下被收进名称格副行的列（不含首列自己的合并副行，那些本来就显示在名称下面）。
 const hiddenColumns = computed(() => (columns[props.resource] || []).filter(col => {
@@ -329,6 +355,7 @@ function cell(row: Row, key: string) {
 }
 // 每行 1~2 行摘要；窄屏模式下把被隐藏的列并进来，关键信息不丢。
 const joined = (...parts: unknown[]) => parts.filter(part => part != null && part !== '' && part !== '—').join(' · ')
+const onlyMine = (row: Row) => row.assignee === user.value?.id && (!Array.isArray(row.assignees) || row.assignees.length <= 1)
 function mobileSummary(row: Row): string[] {
   const lines = (...rows: string[]) => rows.filter(Boolean)
   if (props.resource === 'purchases' && row.change_request) return ['修改申请待处理']
@@ -337,7 +364,8 @@ function mobileSummary(row: Row): string[] {
   // 库存流水：首行「数量 · 日期」；项目与来源采购单在下一行以链接显示（mobileLinks）。
   if (props.resource === 'moves' && mobileTasks.value) return [joined(columnText(row, 'quantity'), row.kind === 'receipt' ? `入库 ${columnText(row, 'received_date')}` : '', columnText(row, 'created_at'))]
   // 状态已有独立的列，窄屏的名称格下改写成「计划日期 · 执行人」，不再把状态重复一遍。
-  if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', row.assignee_name), mobileTasks.value ? joined(props.projectId ? '' : row.project_name, row.stage_label, row.milestone_label) : '')
+  // 项目名已在任务名下面的副行里；只由本人执行的任务不必每张卡片再写自己的名字，多人共同执行时照常列出全部执行人。
+  if (props.resource === 'tasks') return lines(joined(row.due_date ? `计划 ${row.due_date}` : '', onlyMine(row) ? '' : row.assignee_name), mobileTasks.value ? joined(row.stage_label, row.milestone_label) : '')
   if (props.resource === 'projects') return [joined(row.customer_name, row.due_date ? `交期 ${row.due_date}` : '', row.manager_name)]
   if (mobileTasks.value) {
     if (props.resource === 'purchases') {
@@ -375,7 +403,13 @@ function mobileLinks(row: Row) {
 }
 // 库存流水逐条备注（如领用工位）在窄屏摘要末行原样显示。
 const mobileNote = (row: Row) => props.resource === 'moves' && mobileTasks.value && row.remark ? String(row.remark) : ''
-// 窄屏下摘要里逾期的计划日期标红。
+// 窄屏摘要逾期时只把那个日期标红，不把整段摘要（项目、执行人……）都染成红色。
+function overdueText(row: Row) {
+  if (!mobileTasks.value || !summaryOverdue(row)) return ''
+  return props.resource === 'tasks' ? `计划 ${row.due_date}` : props.resource === 'purchases' ? `下一交期 ${row.next_delivery_date}` : `交期 ${row.due_date}`
+}
+// 总经理经营报表授权只对项目经理岗位有意义（管理员默认可看），其他岗位不再一律显示「未授权」。
+const reportRelevant = (row: Row) => Boolean(row.is_superuser) || (row.roles || [row.role]).some((role: string) => ['admin', 'manager'].includes(role))
 const summaryOverdue = (row: Row) => (props.resource === 'tasks' && isOverdueCell('tasks', 'due_date', row, day)) || (props.resource === 'purchases' && isOverdueCell('purchases', 'next_delivery_date', row, day)) || (props.resource === 'projects' && isOverdueCell('projects', 'due_date', row, day))
 async function load(preserveSelection: unknown = false) {
   selectionGeneration++; selectingAll.value = false
@@ -498,7 +532,8 @@ async function action(row: Row, name: string) {
       const next = await actionCommand(props.resource, row, name)
       if (current !== commandGeneration) return
       if (next.readonly) next.actions = [...(next.actions || []), ...actionNames(props.resource, row).filter(label => label !== name).map(label => ({ label, run: () => action(row, label) }))]
-      next.subject = row.code || row.title || row.reference || `#${row.id}`
+      // 库存、流水等没有单号的记录用物料编码和名称作标题，不显示「#2」这类内部序号。
+      next.subject = row.code || row.title || row.reference || [row.item_code, row.item_name].filter(Boolean).join(' · ') || row.name || `#${row.id}`
       next.flow = flowFor(props.resource, row)
       command.value = next
     }
@@ -544,7 +579,7 @@ async function viewSaved() {
   try { await inspect(await read(`${endpoint(record.resource)}${record.id}/`)) } catch (e) { error.value = message(e) }
 }
 function resetFilters() {
-  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = false; dateFrom.value = ''; dateTo.value = ''; extraValues.value = blankExtra()
+  search.value = ''; filterValue.value = ''; enabledFilter.value = ''; locationFilter.value = ''; brandFilter.value = ''; unsettled.value = unsettledDefault; dateFrom.value = ''; dateTo.value = ''; extraValues.value = blankExtra()
   // 清空供应商由上面的 watch 触发查询；没有选供应商时才需要自己查。
   if (supplierFilter.value == null) searchRecords(); else supplierFilter.value = undefined
 }
@@ -647,13 +682,13 @@ async function inspect(row: Row) {
       </div>
       <!-- 加载中仍可提交：禁用的提交按钮会让回车搜索被浏览器静默忽略；load 按代次丢弃过期结果。 -->
       <el-button native-type="submit">搜索</el-button>
-      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled || dateFrom || dateTo || supplierActive || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
+      <el-button v-if="search || filterValue || enabledFilter || locationFilter || brandFilter || unsettled !== unsettledDefault || dateFrom || dateTo || supplierActive || Object.values(extraValues).some(Boolean)" text @click="resetFilters">重置</el-button>
     </form>
     <p v-if="resource === 'tasks' && records.some(row => !row.can_confirm && !row.system_managed)" class="task-confirm-note">本项目任务由对应专业主管确认完成并登记工时。</p>
     <section v-if="savedRecord" class="saved-result" role="status"><strong>{{ savedRecord.title }}</strong><span>{{ savedRecord.timeTask ? '可查看本次记录及任务累计工时。' : savedRecord.slip ? '可查看并打印领料单，交领料人签字。' : '下一步：查看结果并继续处理。' }}</span><el-button :type="savedRecord.slip ? 'primary' : undefined" @click="viewSaved">{{ savedRecord.timeTask ? '查看工时明细' : savedRecord.slip ? '查看 / 打印领料单' : '查看结果并继续' }}</el-button><el-button text aria-label="关闭结果提示" @click="savedRecord = null">关闭提示</el-button></section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
     <p v-if="preparing" role="status">正在准备操作…</p>
-    <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint || fallbackHint }}</p><el-button v-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!emptyHint && !hideContactHint && (!createLabel(resource) || !allowCreate)">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
+    <section v-if="!loading && !error && !records.length" class="empty-guidance" role="status"><strong>{{ onlyUnsettled ? '没有未结清的款项' : hasFilter ? '没有符合当前筛选条件的记录' : projectId ? '当前项目还没有此类记录' : `还没有${title}记录` }}</strong><p>{{ onlyUnsettled ? '已结清的款项默认不显示。' : hasFilter ? '可清除搜索和状态筛选后再查看。' : emptyHint || fallbackHint }}</p><el-button v-if="onlyUnsettled" @click="unsettled = false; searchRecords()">显示已结清款项</el-button><el-button v-else-if="hasFilter" @click="resetFilters">清除筛选</el-button><p v-else-if="!emptyHint && !hideContactHint && (!createLabel(resource) || !allowCreate)">可联系负责此业务的同事处理；你能查看的记录以当前账号权限为准。</p></section>
     <div v-if="issuePicking && issueSelection.length" class="record-batch-selection issue-selection" role="group" aria-label="批量领料选择">
       <span>已选 <strong>{{ issueSelection.length }}</strong> 项物料（跨页、换搜索都保留），一次最多 {{ issueSelectionLimit }} 项</span>
       <el-button type="primary" :disabled="actionBusy || loading || preparing" @click="openIssueBatch">批量领料（{{ issueSelection.length }}）</el-button>
@@ -666,7 +701,7 @@ async function inspect(row: Row) {
       <el-button type="danger" plain :disabled="!deletionSelection.length || loading || actionBusy || selectingAll" @click="openDeletion(deletionSelection)">批量删除{{ deletionSelection.length ? `（${deletionSelection.length}）` : '' }}</el-button>
       <el-button :disabled="actionBusy" @click="openDeletionHistory">已删除记录</el-button>
     </div>
-    <BusinessTable :label="title" :numbered="!mobileTasks" :row-offset="(page - 1) * pageSize" :max-height="pageSize > 20 ? 560 : undefined" v-show="records.length || loading"
+    <BusinessTable :label="title" :numbered="!mobileTasks" :row-offset="(page - 1) * pageSize" v-show="records.length || loading"
       v-loading="loading"
       :data="records"
       stripe
@@ -688,7 +723,7 @@ async function inspect(row: Row) {
         :key="col.key"
         :label="columnLabel(col)"
         :align="moneyKeys.has(col.key) ? 'right' : 'left'"
-        :min-width="mobileTasks ? (col.key === shownColumns?.[0]?.key ? 130 : 84) : columnWidth(col)"
+        :min-width="mobileTasks ? (col.key === shownColumns?.[0]?.key ? 130 : 84) : compactList && col.key !== shownColumns?.[0]?.key ? 110 : columnWidth(col)"
         show-overflow-tooltip
       >
         <template #default="{ row }"
@@ -698,12 +733,13 @@ async function inspect(row: Row) {
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
           ><router-link v-else-if="col.link?.(row)" :to="col.link!(row)!">{{ col.format ? col.format(row) : cell(row, col.key) }}</router-link
           ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" :title="col.format?.(row)" :class="{ 'status-wrap': col.format }" />
-          <el-button v-else-if="resource === 'tasks' && col.key === 'logged_hours'" link type="primary" @click="action(row, '查看工时')">{{ row.time_entry_count ? `${row.logged_hours} 小时` : '未登记 · 查看' }}</el-button>
+          <el-button v-else-if="resource === 'tasks' && col.key === 'logged_hours'" link type="primary" :title="row.time_entry_count ? '查看工时明细' : '还没有登记工时，点击查看'" @click="action(row, '查看工时')">{{ row.time_entry_count ? `${row.logged_hours} 小时` : '未登记' }}</el-button>
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>
+          <span v-else-if="col.key === 'management_reports' && !reportRelevant(row)" class="muted" title="只有项目经理岗位（总经理）需要单独授权经营报表">—</span>
           <StatusBadge v-else-if="col.key === 'management_reports'" :value="row[col.key] || row.is_superuser || (row.roles || [row.role]).includes('admin')" :text="row.is_superuser || (row.roles || [row.role]).includes('admin') ? '管理员默认' : row[col.key] ? '已授权' : '未授权'" />
           <button v-else-if="sidePanel && col.key === shownColumns?.[0]?.key" class="record-link" :disabled="actionBusy" @click="inspect(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</button>
           <span v-else-if="isOverdueCell(resource, col.key, row, day)" class="overdue-cell">{{ cell(row, col.key) }}<strong class="overdue-flag">{{ col.flag?.(row)?.text || '已逾期' }}</strong></span>
-          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.flag?.(row) && !isOverdueCell(resource, col.key, row, day)" :class="col.flag(row)!.risk ? 'overdue-flag' : 'record-secondary'">{{ col.flag(row)!.text }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary" :class="{ 'is-overdue': mobileTasks && summaryOverdue(row) }"><span v-for="(line, index) in mobileSummary(row)" :key="index">{{ line }}</span></small><small v-if="col.key === shownColumns?.[0]?.key && (mobileLinks(row).length || mobileNote(row))" class="mobile-row-summary mobile-row-links"><template v-for="(link, index) in mobileLinks(row)" :key="index"><template v-if="index"> · </template><router-link v-if="link.to" :to="link.to" @click.stop>{{ link.text }}</router-link><template v-else>{{ link.text }}</template></template><span v-if="mobileNote(row)">{{ mobileNote(row) }}</span></small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button></template
+          <span v-else :title="col.tip?.(row) ?? (col.format ? col.format(row) : undefined)">{{ col.format ? col.format(row) : cell(row, col.key) }}</span><template v-for="secondary in pairs[col.key]" :key="secondary"><small v-if="secondaryText(row, secondary)" class="record-secondary">{{ secondaryText(row, secondary) }}</small></template><small v-if="col.flag?.(row) && !isOverdueCell(resource, col.key, row, day)" :class="col.flag(row)!.risk ? 'overdue-flag' : 'record-secondary'">{{ col.flag(row)!.text }}</small><small v-if="col.key === shownColumns?.[0]?.key" class="mobile-row-summary"><span v-for="(line, index) in mobileSummary(row)" :key="index"><template v-for="(part, i) in line.split(' · ')" :key="i"><template v-if="i"> · </template><em v-if="overdueText(row) && part === overdueText(row)" class="summary-overdue">{{ part }}</em><template v-else>{{ part }}</template></template></span></small><small v-if="col.key === shownColumns?.[0]?.key && (mobileLinks(row).length || mobileNote(row))" class="mobile-row-summary mobile-row-links"><template v-for="(link, index) in mobileLinks(row)" :key="index"><template v-if="index"> · </template><router-link v-if="link.to" :to="link.to" @click.stop>{{ link.text }}</router-link><template v-else>{{ link.text }}</template></template><span v-if="mobileNote(row)">{{ mobileNote(row) }}</span></small><el-button v-if="mobileTasks && col.key === shownColumns?.[0]?.key && primaryAction(row)" class="mobile-primary-action" type="primary" size="small" :disabled="actionBusy" @click="action(row, primaryAction(row)!)">{{ actionLabel(row, primaryAction(row)!) }}</el-button></template
         >
       </el-table-column>
       <el-table-column label="操作" fixed="right" :width="actionWidth"
@@ -745,7 +781,7 @@ async function inspect(row: Row) {
 .record-batch-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
 .task-confirm-note { margin: 0 0 10px; font-size: 13px; color: var(--el-text-color-secondary); }
 .resource-list :deep(.flash-record > td.el-table__cell) { background: var(--brand-wash) !important; transition: background .4s; }
-.mobile-row-summary.is-overdue { color: var(--risk); }
+.mobile-row-summary .summary-overdue { color: var(--risk); font-style: normal; font-weight: 600; }
 .mobile-row-summary > span { display: block; }
 .resource-filter-group { display: contents; }
 .resource-search .filter-toggle { display: none; }

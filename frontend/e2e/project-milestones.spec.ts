@@ -153,7 +153,7 @@ test('项目六阶段模板支持一键生成、并行任务、日期调整和�
   }
   expect((await get('business/time/?task=' + completed.id)).count).toBe(0)
   if (!mobile) {
-    await row.getByText(yesterday, { exact: true }).scrollIntoViewIfNeeded()
+    await row.getByText(`实际完成 ${yesterday}`, { exact: true }).scrollIntoViewIfNeeded()
     await page.screenshot({ path: info.outputPath('actual-completion-date.png'), animations: 'disabled' })
   }
   await openRowAction(page, row, '更正开始日期')

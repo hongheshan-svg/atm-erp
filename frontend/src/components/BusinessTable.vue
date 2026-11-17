@@ -3,8 +3,8 @@ import { useSlots } from 'vue'
 import TableScroll from './TableScroll.vue'
 
 defineOptions({ inheritAttrs: false })
-// numberWidth：序号列宽，默认 70；列多的明细表（如 BOM 采购视图）可收窄。
-const props = withDefaults(defineProps<{ label?: string; rowOffset?: number; numbered?: boolean; numberWidth?: number }>(), { label: '表格', rowOffset: 0, numbered: true, numberWidth: 70 })
+// numberWidth：序号列宽，默认 56（三位数序号够用）；列多的明细表（如 BOM 采购视图）可再收窄。
+const props = withDefaults(defineProps<{ label?: string; rowOffset?: number; numbered?: boolean; numberWidth?: number }>(), { label: '表格', rowOffset: 0, numbered: true, numberWidth: 56 })
 const slots = useSlots()
 const numberOf = (index: number) => props.rowOffset + index + 1
 </script>

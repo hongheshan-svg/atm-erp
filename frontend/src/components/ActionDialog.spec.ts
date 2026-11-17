@@ -44,7 +44,7 @@ describe('业务表单失败与重试', () => {
     expect(confirm).toHaveBeenCalled()
     expect(wrapper.emitted('close')).toBeUndefined()
     expect(wrapper.get('input').element).toHaveProperty('value', '25.00')
-    await wrapper.findAll('button').find(b => b.text() === '暂存并关闭')!.trigger('click')
+    await wrapper.findAll('button').find(b => b.text() === '稍后再填')!.trigger('click')
     expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
     wrapper = open()

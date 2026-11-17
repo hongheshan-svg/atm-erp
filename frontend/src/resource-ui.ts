@@ -29,7 +29,8 @@ export const extraFilters: Record<string, ExtraFilter[]> = {
   ],
 }
 export const searchableResources = ['sales', 'projects', 'tasks', 'purchases', 'items', 'partners', 'documents', 'reconciliations', 'bank-records', 'users', 'stocks', 'entries', 'audit', 'issue-slips']
-export const sidePanelResources = ['sales', 'purchases', 'items', 'partners', 'users', 'company', 'codes', 'audit', 'stocks', 'tasks', 'deliveries', 'entries', 'reconciliations', 'bank-records', 'payments']
+// 项目与销售同一套：长表单（新建项目）占满工作区，短操作在右侧面板，不再单独弹居中对话框。
+export const sidePanelResources = ['projects', 'sales', 'purchases', 'items', 'partners', 'users', 'company', 'codes', 'audit', 'stocks', 'tasks', 'deliveries', 'entries', 'reconciliations', 'bank-records', 'payments']
 
 // 未完成且早于今天（上海业务日期）的计划日期，与工作台逾期口径一致；只改展示，不改数据。
 export function isOverdueCell(resource: string, key: string, row: Record<string, unknown>, day: string) {

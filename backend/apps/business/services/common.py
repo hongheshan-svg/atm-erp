@@ -58,7 +58,10 @@ def number(value, key, places=2, *, positive=False):
             raise ValueError
         return rounded
     except (ValueError, InvalidOperation):
-        raise ValidationError({key: f'请输入范围内的{"正数" if positive else "非负数"}，最多 {places} 位小数。'})
+        # 写明规则本身（大于 0 / 不小于 0、几位小数），「范围内」让人猜不到范围是多少。
+        raise ValidationError(
+            {key: f'请输入{"大于 0 的" if positive else "不小于 0 的"}数字，最多 {places} 位小数，不要带单位或千分位。'}
+        )
 
 
 def rounded(value):

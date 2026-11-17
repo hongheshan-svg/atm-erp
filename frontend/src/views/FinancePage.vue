@@ -12,7 +12,7 @@ const tabs = [{ key: 'entries', label: '应收应付与费用' }, { key: 'reconc
 <template>
   <ModulePage title="收付款" project-filter v-slot="{ revision, projectId, refresh }"
     >
-    <details class="finance-help" :open="helpOpen"><summary>说明</summary><p class="muted">金额为人民币含税经营口径，不替代法定会计账。采购付款及退款先对账，预付款按合同核准；客户到账可先登记。未知项目的银行收入请清除项目筛选后认领。</p></details>
+    <details class="finance-help" :open="helpOpen"><summary>说明</summary><p class="muted">金额为含税经营口径，不替代会计账。付款先对账，预付款按合同核准；客户到账可先登记，再认领到项目（认领时先清除项目筛选）。</p></details>
     <ModuleTabs :tabs="tabs" storage-key="finance"><template #monthly><SupplierMonthly /></template><template #entries><FinanceTotals :project-id="projectId" :revision="revision" /><ResourcePanel
       resource="entries"
       title="应收应付与费用"
@@ -26,7 +26,7 @@ const tabs = [{ key: 'entries', label: '应收应付与费用' }, { key: 'reconc
       :project-id="projectId"
       :revision="revision"
       @changed="refresh"
-  /></template><template #reconciliations><p class="muted">从款项操作生成对账单，也可导入对账草稿（编号可手填）。先查看明细核对差异，再确认；预付款由项目经理或管理员核准。</p><ResourcePanel resource="reconciliations" title="业务对账" :params="{ entry__project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template><template #bank><ResourcePanel resource="bank-records" title="银行到账与认领" :params="{ project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template></ModuleTabs></ModulePage>
+  /></template><template #reconciliations><p class="muted">在款项上生成对账单（也可导入）。先查看明细核对差异，再确认；预付款由项目经理或管理员核准。</p><ResourcePanel resource="reconciliations" title="业务对账" :params="{ entry__project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template><template #bank><ResourcePanel resource="bank-records" title="银行到账与认领" :params="{ project: projectId }" :project-id="projectId" :revision="revision" @changed="refresh" /></template></ModuleTabs></ModulePage>
 </template>
 <style scoped>
 /* 桌面：details 退化为普通容器，说明段落排版与原来一致。 */

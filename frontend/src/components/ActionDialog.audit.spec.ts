@@ -28,3 +28,22 @@ it('嵌套服务端错误含行号，点击汇总可翻页定位实际数量输�
   expect(wrapper.find('.field-issues').exists()).toBe(false)
   wrapper.unmount()
 })
+it('服务端错误全部落到字段时不再另起顶部红条，非字段错误仍在顶部提示', async () => {
+  const mountWith = () => mount(ActionDialog, {
+    props: { inline: true, command: { title: '报价', path: '/business/sales/1/quote/', fields: [{ key: 'amount', label: '报价金额（元）' }], initial: { amount: '5' } } },
+    global: { plugins: [{ install: installElementPlus }] }, attachTo: document.body,
+  })
+  vi.mocked(write).mockRejectedValue({ response: { data: { amount: ['请输入大于 0 的数字，最多 2 位小数。'] } } })
+  const wrapper = mountWith()
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.find('.el-alert').exists()).toBe(false)
+  expect(wrapper.get('.field-issues').text()).toContain('报价金额（元）：请输入大于 0 的数字')
+  wrapper.unmount()
+  vi.mocked(write).mockRejectedValue({ response: { data: { detail: '销售已签约，不能再报价。' } } })
+  const other = mountWith()
+  await other.get('form').trigger('submit')
+  await flushPromises()
+  expect(other.get('.el-alert').text()).toContain('销售已签约')
+  other.unmount()
+})

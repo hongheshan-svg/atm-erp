@@ -28,7 +28,7 @@ test('BOM筛选81项标准件跨页导出保持准确，勾选与筛选范围分
 
   await page.goto(`/erp/bom?project=${project.id}`)
   const panel = page.getByRole('region', { name: 'BOM 缺料需求', exact: true })
-  await panel.getByRole('radio', { name: '采购缺料', exact: true }).check()
+  await panel.getByRole('radio', { name: '缺料下单', exact: true }).check()
   await panel.getByLabel('每页显示条目', { exact: true }).selectOption('10')
   // 手机上次级筛选收在「筛选 ▾」里，展开后保持展开。
   const filterToggle = panel.getByRole('button', { name: /^筛选( · \d+)? [▾▴]$/ })
@@ -38,7 +38,7 @@ test('BOM筛选81项标准件跨页导出保持准确，勾选与筛选范围分
   await panel.getByRole('button', { name: '全选筛选结果', exact: true }).click()
   await expect(panel.getByRole('button', { name: '导出BOM', exact: true })).toContainText('已选 81 项')
   await expect(panel.locator('tbody tr')).toHaveCount(10)
-  const radio = panel.getByRole('radio', { name: '采购缺料', exact: true })
+  const radio = panel.getByRole('radio', { name: '缺料下单', exact: true })
   expect(await radio.evaluate(el => el.getBoundingClientRect().width)).toBeLessThan(25)
 
   async function download(label: string, name: string) {

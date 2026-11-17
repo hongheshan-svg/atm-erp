@@ -149,4 +149,4 @@ export function display(value: any, key?: string) {
   return labels[String(value)] || String(value)
 }
 
-export const codeField = (label = '编号', key = 'code'): Field => ({ key, label, optional: true, hint: '可自行编号，最多30字符；留空自动生成。已用编号不可重复，前导零会保留。' })
+export const codeField = (label = '编号', key = 'code'): Field => ({ key, label, optional: true, hint: '可自行编号（最多 30 个字符），留空自动生成；编号不能重复，开头的 0 会原样保留（如 007）。' })

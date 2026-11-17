@@ -81,6 +81,44 @@
   background: var(--canvas);
   font-synthesis: none;
   --el-color-primary: var(--brand);
+  /* Element Plus 只在样式表里给默认蓝 #409eff 预算了深浅色阶：只改主色时悬停、按下、禁用、浅底仍是默认浅蓝，
+     主按钮一悬停就像「不可点」。这里按品牌色与白 / 黑混合补齐全部色阶（light-N = N0% 白，dark-2 = 20% 黑）。 */
+  --el-color-primary-light-3: #6692f1;
+  --el-color-primary-light-5: #92b1f5;
+  --el-color-primary-light-7: #bed0f9;
+  --el-color-primary-light-8: #d3e0fb;
+  --el-color-primary-dark-2: #1e4fbc;
+  /* 语义色与自定义徽章同一套（--risk / --ok / --warn），不再一处用 Element 默认的亮红亮绿、一处用深红深绿。 */
+  --el-color-danger: var(--risk);
+  --el-color-danger-light-3: #d25977;
+  --el-color-danger-light-5: #df899e;
+  --el-color-danger-light-7: #ecb8c5;
+  --el-color-danger-light-8: var(--risk-line);
+  --el-color-danger-light-9: var(--risk-wash);
+  --el-color-danger-dark-2: #980e30;
+  --el-color-error: var(--risk);
+  --el-color-error-light-3: #d25977;
+  --el-color-error-light-5: #df899e;
+  --el-color-error-light-7: #ecb8c5;
+  --el-color-error-light-8: var(--risk-line);
+  --el-color-error-light-9: var(--risk-wash);
+  --el-color-error-dark-2: #980e30;
+  --el-color-success: var(--ok);
+  --el-color-success-light-3: #4fa189;
+  --el-color-success-light-5: #82bcab;
+  --el-color-success-light-7: #b4d7cd;
+  --el-color-success-light-8: var(--ok-line);
+  --el-color-success-light-9: var(--ok-wash);
+  --el-color-success-dark-2: #036046;
+  --el-color-warning: var(--warn);
+  --el-color-warning-light-3: #cb8753;
+  --el-color-warning-light-5: #daa984;
+  --el-color-warning-light-7: #e9cbb5;
+  --el-color-warning-light-8: var(--warn-line);
+  --el-color-warning-light-9: var(--warn-wash);
+  --el-color-warning-dark-2: #904207;
+  /* 占位文字：原生输入与 Element 输入同一灰度，且明显浅于正文，多行模板不会被看成已填写内容。 */
+  --el-text-color-placeholder: var(--ink-7);
   --el-border-radius-base: var(--r-field);
   --el-text-color-primary: var(--ink);
   --el-text-color-regular: var(--ink-3);
@@ -112,12 +150,27 @@ select,
 textarea {
   width: 100%;
   min-height: 38px;
+  /* 与 Element Plus 控件同为 14px：同一行的搜索框、下拉框不再一大一小。手机上见下方 16px（避免 iOS 聚焦放大）。 */
+  font-size: 14px;
   border: 1px solid var(--field-line);
   border-radius: var(--r-field);
   padding: 8px 12px;
   background: white;
   color: var(--ink);
 }
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-7);
+  opacity: 1;
+}
+@media (max-width: 600px) {
+  input:not([type='checkbox']):not(.el-select__input), select, textarea { font-size: 16px; }
+}
+/* 原生日期框保留（键盘可直接输入、手机弹系统日期盘），外观与其他输入框对齐：同高、同边框，空值的「年/月/日」用占位色。 */
+input[type='date'] { font-variant-numeric: tabular-nums; }
+input[type='date']:required:invalid { color: var(--ink-7); }
+input[type='date']::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointer; }
+input[type='date']::-webkit-calendar-picker-indicator:hover { opacity: 0.9; }
 input:not(.el-select__input):focus,
 select:focus,
 textarea:focus {
@@ -396,6 +449,19 @@ h3 {
 .el-button { font-weight: 500; }
 .el-button:not(.el-button--small):not(.is-text) { min-height: 36px; }
 .el-button--primary { box-shadow: var(--shadow-btn); }
+/* 实心按钮悬停加深、按下更深，不再变浅：浅色只留给禁用态，避免「悬停像禁用」。 */
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-hover-bg-color: var(--brand-ink);
+  --el-button-hover-border-color: var(--brand-ink);
+  --el-button-active-bg-color: var(--brand-deep);
+  --el-button-active-border-color: var(--brand-deep);
+}
+.el-button--danger:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-hover-bg-color: var(--el-color-danger-dark-2);
+  --el-button-hover-border-color: var(--el-color-danger-dark-2);
+  --el-button-active-bg-color: var(--el-color-danger-dark-2);
+  --el-button-active-border-color: var(--el-color-danger-dark-2);
+}
 .toolbar > .el-button + .el-button,
 .dialog-footer > .el-button + .el-button { margin-left: 0; }
 .el-dropdown-menu { padding: 6px; }
@@ -736,6 +802,15 @@ button:focus-visible {
 .scrollable-tabs > .el-tabs__header .el-tabs__nav-next { display: none; }
 .scrollable-tabs > .el-tabs__header .el-tabs__nav-scroll { overflow-x: auto; scrollbar-width: thin; }
 .scrollable-tabs > .el-tabs__header .el-tabs__nav { transform: none !important; }
+/* 手机：页签换行全部露出，不再靠横向滑动藏起后几个（收付款 5 个页签原来只看得到 3 个，也没有可滑动的提示）。
+   换行后 Element 的下划线定位不准，改用浅底标出当前页签。 */
+@media (max-width: 600px) {
+  .scrollable-tabs > .el-tabs__header .el-tabs__nav-scroll { overflow: visible; }
+  .scrollable-tabs > .el-tabs__header .el-tabs__nav { float: none; flex-wrap: wrap; gap: 4px; padding-bottom: 6px; }
+  .scrollable-tabs > .el-tabs__header .el-tabs__active-bar { display: none; }
+  .scrollable-tabs > .el-tabs__header .el-tabs__item { height: 36px; padding: 0 12px !important; border-radius: var(--r-ctl); }
+  .scrollable-tabs > .el-tabs__header .el-tabs__item.is-active { background: var(--brand-wash); font-weight: 600; }
+}
 .resource-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
 .resource-workspace.with-detail { grid-template-columns: minmax(0, 1fr) minmax(360px, 390px); }
 .resource-list { min-width: 0; }
@@ -762,6 +837,10 @@ button:focus-visible {
 .inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
 .resource-search .inline-check input { width: 16px; height: 16px; accent-color: var(--brand); }
 .record-link { border: 0; padding: 0; background: transparent; color: var(--brand); font-weight: 500; text-align: left; cursor: pointer; }
+/* 单行省略的单元格（show-overflow-tooltip）里，按钮和副行默认是独立的盒子，父级的省略号管不到它们，
+   长名称会被硬切成半个字。让它们自己按宽度省略，完整内容在悬停提示里。 */
+.el-table .cell.el-tooltip .record-link { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+.el-table .cell.el-tooltip .record-secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overdue-flag { display: block; color: var(--risk); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
 .el-table .status-badge.status-wrap { white-space: normal; max-width: 100%; line-height: 18px; }
 .record-secondary { display: block; font-size: 12px; color: var(--mute); margin-top: 5px; line-height: 1.5; }
@@ -788,7 +867,8 @@ button:focus-visible {
 .record-headline + .record-flow { margin: -6px 0 22px; }
 .record-flow { padding: 14px 4px; border: 1px solid var(--surface-border); border-radius: var(--r-field); background: var(--subtle-2); }
 .project-flow { margin: 4px 0 18px; }
-.detail-pane .dialog-footer > .el-button--primary { order: -1; flex: 1 0 100%; }
+/* 侧栏底部：「取消」与主按钮并排靠右（主按钮在最右），不再让主按钮独占一行、取消掉到下一行。 */
+.detail-pane .dialog-footer > .el-button--primary { min-width: 96px; }
 .mobile-row-summary { display: none; }
 .dialog-footer { flex-wrap: wrap; gap: 8px; }
 @media (max-width: 760px) {
@@ -864,7 +944,7 @@ input:not(.el-select__input):focus,
 select:focus,
 textarea:focus { border-color: var(--brand); }
 
-/* 详情面板底部：主操作整行，其余动作与关闭按钮靠右排成一行。 */
+/* 详情面板底部：按钮靠右排成一行，放不下时整体换行。 */
 .detail-pane .dialog-footer { justify-content: flex-end; align-items: center; }
 .el-table .cell .row-actions { flex-wrap: nowrap; }
 .project-filter { align-items: center; }

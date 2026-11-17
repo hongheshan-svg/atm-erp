@@ -124,8 +124,9 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     return {
       title: action,
       path: `${path}${row.id}/quote/`,
-      fields: [{ key: 'amount', label: '报价金额（元）' }, { key: 'reason', label: '报价说明', optional: true }],
-      initial: { amount: row.quote_amount },
+      // 未报过价时留空，不预填 0.00：预填的 0 一提交就被拒，像是系统替人填错了。
+      fields: [{ key: 'amount', label: '报价金额（元）', numeric: { scale: 2, min: 0.01 }, placeholder: '例如 380000' }, { key: 'reason', label: '报价说明', optional: true }],
+      initial: { amount: Number(row.quote_amount) > 0 ? row.quote_amount : '' },
     }
   if (action === '取消销售')
     return { title: action, path: `${path}${row.id}/cancel/`, fields: [reason] }

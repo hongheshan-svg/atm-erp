@@ -12,9 +12,11 @@ watch([preferenceKey, () => route.query.guide], () => {
 }, { immediate: true })
 function dismiss() { open.value = false; localStore.set(preferenceKey.value, 'hidden') }
 const steps = computed(() => [
+  // 新系统先要有客户、供应商和物料，后面的销售、BOM、采购才选得到；管理员的第一步放在最前面。
+  ...(can(['admin']) ? [{ key: 'masterdata', title: '准备基础资料', note: '添加客户与供应商，添加或导入物料；已有库存在设置的「初始化」里登记期初。', to: '/masterdata?section=partners', action: '添加客户与供应商' }] : []),
   ...(operations() ? [{ key: 'tasks', title: '处理我的任务', note: '查看分配给自己的任务和工时；由负责专业主管统一确认完成并登记实际小时数。', to: '/projects?section=tasks', action: '查看我的任务' }] : []),
   ...(can(['admin', 'manager']) ? [{ key: 'projects', title: '安排项目执行', note: '选择负责的项目，维护成员、计划并分配任务。', to: '/projects?section=projects', action: '选择项目' }] : []),
-  ...(can(['mechanical_engineer', 'electrical_engineer']) ? [{ key: 'engineering', title: '编制项目用料', note: '选择参与的项目，在 BOM 维护或导入物料清单；图纸与程序放在项目附件。', to: '/bom', action: '维护 BOM' }] : []),
+  ...(can(['mechanical_engineer', 'electrical_engineer']) ? [{ key: 'engineering', title: '维护项目用料', note: '选择参与的项目，在 BOM 维护或导入物料清单；图纸与程序放在项目附件。', to: '/bom', action: '维护 BOM' }] : []),
   ...(can(['production_manager']) ? [{ key: 'production', title: '安排生产与售后', note: '选择参与的项目，安排装配、调试、安装及售后任务。', to: '/projects?section=projects', action: '选择生产项目' }] : []),
   ...(can(['admin', 'purchase_manager', 'purchaser']) ? [{ key: 'purchasing', title: '从缺料开始采购', note: '进入采购，使用“从 BOM 多选下单”选择项目和缺料，生成采购草稿。', to: '/purchases?project=all', action: '按 BOM 下单' }] : []),
   ...(can(['admin', 'warehouse']) ? [{ key: 'warehouse', title: '收货、领料与退料', note: '收货选择待收采购；领料选择现有库存；退料选择原领料流水。', to: '/inventory?section=receipts&project=all', action: '进入日常库存操作' }] : []),
