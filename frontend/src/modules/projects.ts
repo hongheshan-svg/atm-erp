@@ -138,7 +138,8 @@ export async function createCommand(resource: string, projectId?: number): Promi
   const c = await catalog(['users'])
   let fields: Field[] = []
   const path = endpoint(resource)
-  if (resource === 'projects') fields = [codeField('项目编号'), ...projectFields(c)]
+  // 负责人默认填当前用户（与新建销售一致），当前用户不在负责人候选里时留空。
+  if (resource === 'projects') fields = [codeField('项目编号'), ...projectFields(c).map(field => field.key === 'manager' && field.options?.some(option => option.value === user.value?.id) ? { ...field, initial: user.value?.id } : field)]
   if (resource === 'tasks') {
     const scope = projectId ? await read(`/business/projects/${projectId}/`) : null
     if (scope && !productionProject(scope)) throw new Error('没有当前项目的生产派工权限，请刷新项目后重试。')
@@ -151,6 +152,8 @@ export async function createCommand(resource: string, projectId?: number): Promi
     path,
     fields,
     initial: projectId ? { project: projectId } : {},
+    // 已签约销售会自动生成执行项目：在表单顶部提醒，避免同一合同再手工建一个重复项目。
+    ...(resource === 'projects' ? { notice: { type: 'warning' as const, text: '已签约的销售单会自动生成执行项目，请先到「销售」页确认，避免重复建项目。这里只用于没有销售单的内部、试制或补录项目。' } } : {}),
     ...(resource === 'tasks' && projectId ? { prepare: (data: Row) => ({ ...data, project: projectId }) } : {}),
   }
 }

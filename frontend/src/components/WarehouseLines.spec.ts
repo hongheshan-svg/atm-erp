@@ -20,7 +20,7 @@ it('收货表包含截图资料，末列备注；输入按行保留且资料不�
   // 1366 宽度下不横向滚动：项目号移到表头，编号与名称、图号型号版本品牌与类型各并成一列，数量输入紧随待收。
   expect(wrapper.findAll('th').map(th => th.text()).slice(1)).toEqual(['产品编号 / 零件名称', '单元', '图号 / 型号 / 版本 / 类型', '单位', '需求数量', '待收数量', '本次合格数量', '不合格隔离数量', '备注'])
   expect(wrapper.get('legend').text()).toContain('项目 A2608')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/2 行，本次合格 2.000 / 待收 4.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/2 行，本次合格 2 / 待收 4')
   // 待收 2、本次只填 1：两行都高亮提醒部分到货。
   expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(2)
   expect(wrapper.text()).toContain('001226000006')
@@ -35,7 +35,7 @@ it('收货表包含截图资料，末列备注；输入按行保留且资料不�
   const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
   await button('全部按待收填入').trigger('click')
   expect(data.lines.map((line: Row) => line.quantity)).toEqual(['2', '2'])
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 4.000 / 待收 4.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 4 / 待收 4')
   expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(0)
   await button('全部清零').trigger('click')
   expect(data.lines.map((line: Row) => line.quantity)).toEqual(['0', '0'])
@@ -51,13 +51,13 @@ it('按 BOM 批量领料：服务端给出需求和未领量，不逐行读取�
   expect(read).not.toHaveBeenCalled()
   expect(wrapper.findAll('th').map(th => th.text())).toContain('BOM 未领')
   expect(wrapper.get('legend').text()).toContain('项目 A2608 · 上料线')
-  expect(wrapper.text()).toContain('5.000')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3.000')
+  expect(wrapper.text()).toContain('5')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3 /')
   const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
   await button('全部清零').trigger('click')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 0.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 0 /')
   await button('恢复建议数量').trigger('click')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3 /')
   expect(field.fields!.find(f => f.key === 'quantity')!.numeric!.min).toBe(0)
   wrapper.unmount()
 })
@@ -135,7 +135,7 @@ it('收货逐行勾选到货：取消勾选清零并禁用、不提交，重新�
   expect(data.lines[1]).toMatchObject({ selected: false, quantity: '0', pending_quantity: '0' })
   expect(row(1).classes()).toContain('unpicked-line')
   expect((row(1).get('input[id$="-quantity"]').element as HTMLInputElement).disabled).toBe(true)
-  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/3 行，本次合格 6.000 / 待收 6.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/3 行，本次合格 6 / 待收 6')
   expect(receiptLines(payload([field], data), { 1: '3.000', 2: '3.000', 3: '3.000' }).lines.map((l: Row) => l.line)).toEqual([1, 3])
   await pick(1).setValue(true)
   expect(data.lines[1]).toMatchObject({ selected: true, quantity: '3.000' })
@@ -174,10 +174,10 @@ it('超过待收在数量下方直接提示并标记输入无效；少于待收�
   expect(data.lines[0].cancel_remainder).toBe(false)
   expect((row(0).get('.remainder-cancel input').element as HTMLInputElement).disabled).toBe(true)
   expect(row(0).text()).toContain('隔离品处理后才能取消余量')
-  // 原有隔离待处理的行同样不能取消。
+  // 原有到货待检的行同样不能取消。
   await quantity(1).setValue('1')
   expect((row(1).get('.remainder-cancel input').element as HTMLInputElement).disabled).toBe(true)
-  expect(row(1).text()).toContain('本行已有隔离待处理 1')
+  expect(row(1).text()).toContain('本行已有到货待检 1')
   // 收足后不再提供取消。
   await quantity(1).setValue('5')
   expect(row(1).find('.remainder-cancel').exists()).toBe(false)
@@ -192,12 +192,12 @@ it('大批收货按明细标识取原始行：行序不同也对得上待收，�
   const find = vi.spyOn(initial, 'find')
   const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: lines, context: {} } })
   const first = () => wrapper.get('tbody tr')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 30/30 行，本次合格 465.000 / 待收 465.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 30/30 行，本次合格 465 / 待收 465')
   expect(wrapper.findAll('tbody tr')).toHaveLength(20)
   expect(first().text()).toContain('零件30')
   expect(wrapper.findAll('tbody tr.partial-line')).toHaveLength(0)
   await first().get('input[id$="-quantity"]').setValue('31')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 466.000 / 待收 465.000')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('本次合格 466 / 待收 465')
   expect(first().classes()).toContain('excess-line')
   expect(first().text()).toContain('超过待收 30：')
   await first().get('input[id$="-quantity"]').setValue('28')
@@ -224,7 +224,8 @@ it('库存勾选批量领料：逐行显示库位，数量默认留空，可一�
   await flushPromises()
   expect(wrapper.findAll('th').map(th => th.text()).slice(1)).toEqual(['产品编号 / 零件名称', '库位', '图号 / 型号 / 版本 / 类型', '单位', '需求数量', '本库位可用', '本次出库数量', '备注'])
   expect(wrapper.get('legend').text()).toContain('项目 ATM01 · 上料线')
-  expect(wrapper.findAll('tbody tr')[0]!.text()).toContain('4.000')
+  // 需求数量与库存列表同一格式：4.000 显示为 4。
+  expect(wrapper.findAll('tbody tr')[0]!.get('td.col-required_quantity').text()).toBe('4')
   const button = (text: string) => wrapper.findAll('.warehouse-fill button').find(item => item.text() === text)!
   expect(wrapper.findAll('.warehouse-fill button').map(item => item.text())).toEqual(['全部按可用填入', '全部清空'])
   await button('全部按可用填入').trigger('click')

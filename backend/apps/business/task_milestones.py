@@ -67,8 +67,9 @@ def stage_label(task):
 
 
 def node_label(task):
+    # 没有对应里程碑节点的任务留空：列表与手机卡片只显示阶段，不再出现「自定义任务」这种内部说法。
     return DEFINITIONS.get(task.milestone, {}).get('title') or {
         'install': '批次安装',
         'acceptance': '批次验收',
         'service': '售后任务',
-    }.get(task.kind, '自定义任务')
+    }.get(task.kind, '')

@@ -33,7 +33,7 @@ test('导入纠错与BOM双视图在桌面和手机可操作', async ({ page }, 
   else await expect(region.getByRole('columnheader', { name: '需求数量', exact: true })).toBeVisible()
   await expect(region.getByRole('columnheader', { name: '图号', exact: true })).toHaveCount(0)
   await page.screenshot({ path: info.outputPath('bom-prepare.png'), animations: 'disabled', fullPage: true })
-  await region.getByLabel('采购缺料', { exact: true }).check()
+  await region.getByLabel('缺料下单', { exact: true }).check()
   if (mobile) await expect(region.locator('.bom-mobile-summary').first()).toContainText('缺')
   else await expect(region.getByRole('columnheader', { name: '缺料', exact: true })).toBeVisible()
   await region.getByLabel('选择 M001 上料单元', { exact: true }).check()

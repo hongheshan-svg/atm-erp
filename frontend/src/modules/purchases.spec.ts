@@ -70,7 +70,7 @@ it('查看明细：首列合并名称、编码、规格，项目号与单元同�
   expect(command.readonly).toBe(true)
   const lines = command.fields.find(f => f.key === 'lines')!
   const columns = lines.fields!.map((f: Field) => f.label)
-  expect(columns).toEqual(['物料 / 编码 / 规格', '项目号 / 单元', '明细交期', '采购数量', '已收', '待收', '已取消', '隔离待处理', '入库日期'])
+  expect(columns).toEqual(['物料 / 编码 / 规格', '项目号 / 单元', '明细交期', '采购数量', '已收', '待收', '已取消', '到货待检', '入库日期'])
   expect(lines.fields!.filter((f: Field) => f.multiline).map(f => f.key)).toEqual(['material_text', 'project_unit', 'received_label'])
   expect(command.initial!.last_received_label).toBe('2026-11-08')
   const [first, second, third] = command.initial!.lines as Row[]

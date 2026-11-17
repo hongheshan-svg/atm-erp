@@ -3,7 +3,8 @@ import type { Command, Field } from './types'
 // Presentation only: keep original field keys, permissions, defaults and payload preparation.
 // Context-specific guidance belongs to the business operation, never to a new data store.
 const guidance: Record<string, Partial<Field>> = {
-  requirements: { type: 'textarea', wide: true, placeholder: '加工产品与样件：\n工艺 / 节拍 / 精度：\n工位与设备范围：\n电源、气源及现场接口：\n验收标准与交付资料：', hint: '填写双方已确认的指标；未确认项注明待确认。技术协议、布局图及版本文件从单据附件上传。' },
+  requirements: { type: 'textarea', wide: true, // 多行提纲写在占位文字里会被看成「已经填好」，改为一行提示要写哪几项。
+  placeholder: '建议写明：加工产品与样件；工艺、节拍、精度；工位与设备范围；电源、气源及现场接口；验收标准与交付资料', hint: '填写双方已确认的指标；未确认项注明待确认。技术协议、布局图及版本文件从单据附件上传。' },
   specification: { placeholder: '完整订货型号、材质、尺寸及表面处理', hint: '产品型号/规格与图号、图档版本分别填写；品牌不用于存放版本。选择产品编码类别后型号/规格必填。' },
   brand: { placeholder: '填写指定品牌；未指定可留空', hint: '标准件按确认品牌填写，替代品牌需先确认；不要用供应商名称代替品牌。' },
   part_type: { hint: '标准件用于外购选型件；非标件用于按图加工件。分类会用于 BOM 筛选采购。' },

@@ -28,6 +28,9 @@ const cards = computed(() => [
 ])
 // 各类都已加载且全为 0 时只留一行「无待办事项」，不再常驻一排 0 项胶囊（已验收、质保期项目常见）。
 const empty = computed(() => !loading.value && !error.value && cards.value.every(card => summary.value[card.key] === 0))
+// 计数为 0 的类别不再占一个胶囊，只在末尾说一句「其余 N 类无待办」；未加载完（—）的照常显示。
+const visibleCards = computed(() => cards.value.filter(card => summary.value[card.key] !== 0))
+const zeroCount = computed(() => cards.value.length - visibleCards.value.length)
 const note = '缺料按 BOM 明细行统计，共享库存不代表项目预留；采购草稿尚未提交审批；待验收任务由项目经理登记验收。'
 async function load() {
   const current = ++generation
@@ -68,9 +71,10 @@ onBeforeUnmount(() => { generation++ })
     <div :id="detailsId" v-show="expanded" class="attention-details">
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <div class="attention-grid">
-      <router-link v-for="card in cards" :key="card.key" :to="{ path: `/projects/${project.id}`, query: { tab: card.tab, section: card.section || undefined, attention: card.attention || undefined } }">
+      <router-link v-for="card in visibleCards" :key="card.key" :to="{ path: `/projects/${project.id}`, query: { tab: card.tab, section: card.section || undefined, attention: card.attention || undefined } }">
         <span>{{ card.label }}</span><strong>{{ summary[card.key] ?? '—' }} <small>{{ card.unit }}</small></strong>
       </router-link>
+      <span v-if="zeroCount" class="attention-zero">其余 {{ zeroCount }} 类无待办</span>
     </div>
     </div>
     </template>
@@ -96,6 +100,7 @@ onBeforeUnmount(() => { generation++ })
 .attention-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px; }
 .compact-error { color: var(--risk); }
 .attention-empty { color: var(--mute); font-size: 13px; }
+.attention-zero { align-self: center; color: var(--mute); font-size: 12px; }
 @media (max-width: 600px) {
   .project-attention { display: block; padding: 10px 12px; }
   .project-attention header { flex-wrap: nowrap; gap: 8px; margin-bottom: 0; }

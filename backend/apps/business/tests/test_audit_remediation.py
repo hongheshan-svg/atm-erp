@@ -334,7 +334,7 @@ class AuditRemediationTests(BusinessFixtures, TestCase):
         url = f'moves/{receipt.pk}/return-purchase/'
         conflict = self.post('warehouse', url, {'quantity': '2', 'reason': '退货'}, status=409)
         self.assertIn(theirs.code, str(conflict['detail']))
-        self.assertIn('确认占用其他项目到货', str(conflict['detail']))
+        self.assertIn('允许领用其他项目的到货', str(conflict['detail']))
         self.post('warehouse', url, {'quantity': '2', 'reason': '退货', 'confirm_shared': 'yes'}, status=400)
         self.assertEqual(Stock.objects.get().quantity, Decimal('5'))
         self.post('warehouse', url, {'quantity': '2', 'reason': '退货', 'confirm_shared': True})

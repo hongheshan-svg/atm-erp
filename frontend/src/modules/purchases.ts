@@ -75,7 +75,7 @@ export const columns: Record<string, Column[]> = {
     // 含税合计按明细汇总；无单价权限（仓管）时显示「—」。
     { key: 'total', label: '含税合计（元）', format: row => purchaseTotal(row.lines || []) },
     { key: 'payment_term', label: '采购账期', format: termLabel },
-    { key: 'status', label: '状态 / 隔离待处理', format: receiptStatus },
+    { key: 'status', label: '状态 / 到货待检', format: receiptStatus },
     C('next_delivery_date', '最近待到货日'), C('payment_due_date', '付款到期日'),
   ],
 }
@@ -283,7 +283,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           { ...t('remaining', '待收'), width: 64, short: true },
           { ...t('cancelled_quantity', '已取消'), width: 72, short: true },
           ...(has('returned_quantity') ? [{ ...t('returned_quantity', '已退货'), width: 64, short: true }] : []),
-          ...(has('pending_quantity') ? [{ ...t('pending_quantity', '隔离待处理'), width: 88, short: true }] : []),
+          ...(has('pending_quantity') ? [{ ...t('pending_quantity', '到货待检'), width: 88, short: true }] : []),
           { key: 'received_label', label: '入库日期', multiline: true, width: 136 },
         ]),
       ]

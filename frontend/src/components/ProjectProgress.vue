@@ -82,7 +82,7 @@ onBeforeUnmount(() => { generation++ })
 .progress-groups span, .progress-groups strong { display: block; }
 .progress-groups span { font-size: 13px; }
 .progress-groups strong { margin-top: 6px; font-size: 20px; }
-.progress-groups small { font-size: 11px; font-weight: normal; color: var(--mute); }
+.progress-groups small { font-size: 12px; font-weight: normal; color: var(--mute); }
 .group-overdue { display: block; margin-top: 2px; font-size: 12px; font-style: normal; font-weight: 600; color: var(--risk); }
 .progress-tools { margin-bottom: 16px; }
 /* 一条记录一行：十几二十个节点时能一屏扫完，而不是翻三屏卡片。 */

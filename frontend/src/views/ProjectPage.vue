@@ -33,6 +33,8 @@ const route = useRoute()
 const router = useRouter()
 const id = Number(route.params.id)
 const project = ref<Row | null>(null)
+// 标签页标题用项目名称，同时打开几个项目时能分清。
+watch(() => project.value?.name, name => { if (name) document.title = `${name} · 项目 ERP` })
 const revision = ref(0)
 const tabsRef = ref<TabsInstance>()
 async function revealTab() {

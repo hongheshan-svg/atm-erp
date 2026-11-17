@@ -129,7 +129,7 @@ class ImportFeedbackTests(BusinessFixtures, TestCase):
         self.assertEqual(result.data['lines'][0]['row'], 2)
         self.assertEqual(result.data['lines'][0]['quantity'], '0')
         book = self.workbook(result.data)
-        self.assertIn('正数', book.active['B2'].comment.text)
+        self.assertIn('大于 0 的数字', book.active['B2'].comment.text)
         book.active['B2'] = 3
         corrected = self.reupload(path, book)
         book.close()

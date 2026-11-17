@@ -131,7 +131,7 @@ def shared_from(claims, on_hand, qty, confirm_shared, action, codes):
         summary = '、'.join(f'{row["project"]} {row["quantity"]}' for row in shared)
         raise Conflict(
             f'本次{action}会占用其他项目已到货、尚未领用的物料（{summary}）。'
-            '确认挪用请勾选「确认占用其他项目到货」后重新提交，并通知相关项目补采。'
+            '确认挪用请勾选「允许领用其他项目的到货」后重新提交，并通知相关项目补采。'
         )
     return shared
 

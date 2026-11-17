@@ -15,7 +15,7 @@ const steps = ['管理员账号', '公司资料', '人员与兼岗', '编号规�
 const stepHelp = [
   '请妥善保存管理员账号与新密码。完成配置后，需要使用新密码重新登录。',
   '此处信息将用于采购合同等业务单据，可在设置中维护。',
-  '岗位可兼任。总经理经营报表需单独授权，日后可在用户管理中调整。',
+  '岗位可兼任。系统没有单独的「总经理」岗位：总经理请选「项目经理」，再勾选「总经理经营报表授权」，日后可在用户管理中调整。',
   '可直接使用默认规则。物料支持手填编码，编号规则只影响之后新建的单据。',
   '请核对公司与人员信息。启用后即可维护客户、物料并创建销售单。',
 ]
@@ -26,6 +26,7 @@ const busy = ref(false)
 const error = ref('')
 const confirmed = ref(false)
 const heading = ref<HTMLElement>()
+const formEl = ref<HTMLFormElement>()
 const repeatPassword = ref('')
 const form = reactive({ display_name: user.value?.display_name || '', old_password: '', new_password: '', company: { name: '', address: '', phone: '' } })
 const team = ref<Row[]>([])
@@ -49,6 +50,27 @@ onMounted(load)
 watch(step, async () => { await nextTick(); heading.value?.focus(); heading.value?.scrollIntoView({ block: 'start' }) })
 function addMember() {
   team.value.push({ username: '', display_name: '', password: '', roles: ['member'], hourly_cost: '0.00', management_reports: false })
+}
+// 不用浏览器自带的英文/系统气泡：逐项检查当前步骤的必填与格式，标红字段并在页面上用中文列出，焦点落到第一项。
+function fieldName(input: HTMLInputElement | HTMLSelectElement) {
+  const label = input.closest('label')
+  return (input.getAttribute('aria-label') || label?.querySelector('span')?.textContent || label?.textContent || '').replace(/（.*?）/g, '').trim()
+}
+function stepValid() {
+  const inputs = Array.from(formEl.value?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('.setup-fields input, .setup-fields select') || [])
+  const invalid = inputs.filter(input => !input.disabled && !input.checkValidity())
+  inputs.forEach(input => input.toggleAttribute('aria-invalid', invalid.includes(input)))
+  if (!invalid.length) return true
+  const names = [...new Set(invalid.map(input => input.type === 'checkbox' ? `请勾选「${fieldName(input)}」` : `${fieldName(input)}${input.validity.valueMissing ? '未填写' : '格式或范围不对'}`))]
+  error.value = `请先完成以下 ${names.length} 项：${names.join('；')}。`
+  invalid[0]!.focus()
+  return false
+}
+function clearInvalid(event: Event) { (event.target as HTMLElement).removeAttribute?.('aria-invalid') }
+function submit() {
+  error.value = ''
+  if (!stepValid()) return
+  if (step.value < 4) next(); else void finish()
 }
 function next() {
   error.value = ''
@@ -86,14 +108,14 @@ onBeforeRouteLeave(() => { clearPasswords() })
     <section v-if="!loaded" class="panel"><p>正在读取安装状态…</p><el-button v-if="error" @click="load">重新加载</el-button></section>
     <template v-else-if="required">
       <ol class="setup-steps" aria-label="配置进度"><li v-for="(name, i) in steps" :key="name" :class="{ active: i === step, done: i < step }" :aria-current="i === step ? 'step' : undefined"><span>{{ i + 1 }}</span>{{ name }}</li></ol>
-      <form class="panel setup-form" @submit.prevent="step < 4 ? next() : finish()">
+      <form ref="formEl" class="panel setup-form" novalidate @submit.prevent="submit" @input="clearInvalid" @change="clearInvalid">
         <h2 ref="heading" tabindex="-1">{{ steps[step] }}</h2>
         <div class="setup-form-layout">
         <fieldset :disabled="busy" class="setup-fields">
           <template v-if="step === 0">
             <p>当前账号：{{ user?.username }}。请将安装器生成的初始密码换成自己的密码。</p>
             <label class="field"><span>管理员姓名</span><input v-model="form.display_name" required maxlength="80" autocomplete="name" /></label>
-            <label class="field"><span>初始密码</span><input v-model="form.old_password" required type="password" autocomplete="current-password" /></label>
+            <label class="field"><span>初始密码（刚才登录用的密码）</span><input v-model="form.old_password" required type="password" autocomplete="current-password" /><small>为确认是你本人在操作，请再输入一次安装时生成、刚才用来登录的密码。</small></label>
             <label class="field"><span>新密码</span><input v-model="form.new_password" required type="password" autocomplete="new-password" /></label>
             <label class="field"><span>确认新密码</span><input v-model="repeatPassword" required type="password" autocomplete="new-password" /></label>
             <p class="muted">至少12位，避免常见密码和账号信息。填写内容仅保留在当前页面，刷新后密码需重新输入。</p>
@@ -117,7 +139,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
               <el-button type="danger" plain @click="team.splice(i, 1)">移除此人员</el-button>
             </section>
             <el-button :disabled="team.length >= 50" @click="addMember">添加人员</el-button>
-            <p class="muted">总经理报表权限默认关闭。本人申请仍执行审批隔离，兼岗不会取消该限制。</p>
+            <p class="muted">总经理报表权限默认关闭。自己提交的采购、付款等仍要由别人审批，兼任多个岗位也不例外。</p>
           </template>
           <template v-else-if="step === 3">
             <p>直接使用默认规则即可。物料新增及导入也支持手填编码；实际合同编号在签约时填写。</p>
@@ -133,7 +155,7 @@ onBeforeRouteLeave(() => { clearPasswords() })
           <template v-else>
             <dl class="setup-summary"><dt>管理员</dt><dd>{{ user?.username }} · {{ form.display_name }}（使用新密码）</dd><dt>公司</dt><dd>{{ form.company.name }}<br />{{ form.company.address }}<br />{{ form.company.phone }}</dd><dt>新增人员</dt><dd>{{ team.length ? team.map(r => `${r.display_name}（${r.roles.map((s: string) => roleNames[s]).join('、')}）`).join('；') : '暂不添加，仅管理员开始使用' }}</dd><dt>编号</dt><dd>{{ changedRules.length ? `调整 ${changedRules.length} 项规则` : '使用默认编号规则' }}</dd></dl>
             <p>启用后可新增客户、物料并创建销售单。已有资料可从基础资料导入，不会自动生成示例订单或库存。</p>
-            <label><input v-model="confirmed" type="checkbox" required />我已核对以上资料，确认启用</label>
+            <label class="setup-confirm"><input v-model="confirmed" type="checkbox" required />我已核对以上资料，确认启用</label>
           </template>
         </fieldset>
         <aside class="setup-step-help"><el-icon aria-hidden="true"><Document /></el-icon><p>{{ stepHelp[step] }}</p></aside>
@@ -155,6 +177,10 @@ onBeforeRouteLeave(() => { clearPasswords() })
 .setup-steps { display: flex; gap: 12px; list-style: none; padding: 0; margin: 32px 0; }
 .setup-steps li { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 10px; color: var(--mute); border-top: 2px solid var(--line); padding-top: 14px; text-align: center; }
 .setup-form { box-shadow: none; margin-bottom: 0; }
+.setup-confirm { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border: 1px solid var(--brand-line); border-radius: var(--r-ctl); background: var(--brand-wash-2); color: var(--ink-1); font-weight: 600; cursor: pointer; }
+.setup-confirm input { width: 18px; height: 18px; }
+.setup-form :is(input, select)[aria-invalid] { border-color: var(--risk); box-shadow: 0 0 0 3px var(--risk-wash); }
+.setup-confirm:has(input[aria-invalid]) { border-color: var(--risk); background: var(--risk-wash); }
 .setup-form-layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 28px; }
 .setup-step-help { background: var(--brand-wash-2); border-radius: 8px; padding: 28px 22px; color: var(--mute); line-height: 1.8; align-self: start; }
 .setup-step-help .el-icon { font-size: 48px; color: var(--brand-soft); display: block; margin: 12px auto 26px; }

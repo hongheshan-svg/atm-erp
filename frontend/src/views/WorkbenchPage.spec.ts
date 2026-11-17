@@ -40,7 +40,8 @@ it.each([
 
 it('三个指标合并全部风险提示，分类入口直达完整列表', async () => {
   const wrapper = await render()
-  expect(read).toHaveBeenCalledWith('/business/workbench/', { page_size: 5 })
+  // 每类取前 7 条：合并后的前 7 项不会因为某类只取 5 条而漏掉今日到期的事项。
+  expect(read).toHaveBeenCalledWith('/business/workbench/', { page_size: 7 })
   const metrics = wrapper.findAll('.work-metric')
   expect(metrics).toHaveLength(3)
   expect(metrics.map(metric => metric.get('span').text())).toEqual(['任务 / 到货逾期', '我的任务今日截止', '等待我审批'])
@@ -49,8 +50,9 @@ it('三个指标合并全部风险提示，分类入口直达完整列表', asyn
   expect(metrics[0].element.tagName).toBe('DIV')
   const categories = wrapper.findAll('.work-category')
   expect(categories.every(entry => entry.element.tagName === 'A')).toBe(true)
-  // 「我的待办」落到项目页的任务清单，不再只是一张项目列表。
-  expect(categories.map(entry => entry.attributes('href'))).toEqual(['/projects?section=tasks', '/purchases', '/finance?section=reconciliations&project=all', '/finance?section=bank&project=all'])
+  // 「我的待办」只在「接下来的任务」区块给出完整入口，分类里不再重复一行。
+  expect(categories.map(entry => entry.attributes('href'))).toEqual(['/purchases', '/finance?section=reconciliations&project=all', '/finance?section=bank&project=all'])
+  expect(wrapper.get('.work-ongoing a').attributes('href')).toBe('/projects?section=tasks')
   const bank = wrapper.get('[aria-label="查看全部银行待认领 / 匹配"]')
   expect(bank.text()).toContain('银行待认领 / 匹配')
   expect(bank.text()).toContain('389')
@@ -100,13 +102,20 @@ it('优先事项按逾期、今日到期、待审批排序并最多展示 7 条'
   wrapper.unmount()
 })
 
-it('未到期任务直接展示项目、计划完成日期和继续处理入口，工程师不出现仓储资金入口', async () => {
+it('未到期任务直接展示项目、计划完成日期，未开始写「查看任务」、已开始写「继续处理」，工程师不出现仓储资金入口', async () => {
   user.value = { id: 9, roles: ['mechanical_engineer'] }
-  vi.mocked(read).mockResolvedValue({ tasks: bucket([{ id: 8, project: 4, project_name: '自动检测线', title: '机械设计', due_date: '2999-10-30' }]) })
+  vi.mocked(read).mockResolvedValue({ tasks: bucket([
+    { id: 8, project: 4, project_name: '自动检测线', title: '机械设计', due_date: '2999-10-30' },
+    { id: 9, project: 4, project_name: '自动检测线', title: '电气设计', due_date: '2999-11-30', started_date: '2026-01-02' },
+  ]) })
   const wrapper = await render()
+  expect(wrapper.get('#ongoing-heading').text()).toBe('接下来的任务')
   expect(wrapper.get('.work-ongoing').text()).toContain('自动检测线')
   expect(wrapper.get('.work-ongoing').text()).toContain('计划完成日期：2999-10-30')
-  expect(wrapper.get('[aria-label="继续处理机械设计"]').attributes('href')).toBe('/projects/4?tab=tasks&resource=tasks&focus=8')
+  expect(wrapper.get('[aria-label="查看任务机械设计"]').attributes('href')).toBe('/projects/4?tab=tasks&resource=tasks&focus=8')
+  expect(wrapper.get('[aria-label="继续处理电气设计"]').attributes('href')).toBe('/projects/4?tab=tasks&resource=tasks&focus=9')
+  // 只有本人任务时没有其他分类，不再显示一个空的「其他待办」。
+  expect(wrapper.find('.work-categories').exists()).toBe(false)
   expect(wrapper.find('[aria-label="日常库存入口"]').exists()).toBe(false)
   expect(wrapper.text()).not.toContain('登记收付款')
   wrapper.unmount()
@@ -124,7 +133,10 @@ it('生产任务链接到任务，不重复列出本人和团队的同一逾期�
   expect(rows(wrapper)[0].findAll('a')[0].attributes('href')).toBe('/projects/1?tab=tasks&resource=tasks&focus=12')
   // 分类计数是参与项目的装配、调试、安装、售后任务（不只本人的）：清单不勾「只看我的」并按这几类筛选。
   expect(wrapper.get('[aria-label="查看全部生产与售后派工"]').attributes('href')).toBe('/projects?section=tasks&mine=0&kinds=assembly,test,install,service')
-  expect(wrapper.get('[aria-label="查看全部我的待办"]').attributes('href')).toBe('/projects?section=tasks')
+  expect(wrapper.find('[aria-label="查看全部我的待办"]').exists()).toBe(false)
+  expect(wrapper.get('.work-ongoing a').attributes('href')).toBe('/projects?section=tasks')
+  // 已列入「今天要处理的」的任务不在「接下来的任务」里重复。
+  expect(wrapper.get('.work-ongoing').text()).not.toContain('装配跟进')
   // 逾期任务 1 + 生产任务逾期 2 合并为一个指标
   expect(wrapper.findAll('.work-metric strong')[0].text()).toBe('3')
   wrapper.unmount()
@@ -195,9 +207,11 @@ it('无待办时保持中性配色、空态文案与错误提示', async () => {
   const wrapper = await render()
   // 指标为 0 时不标成危险色
   expect(wrapper.findAll('.work-metric').map(metric => metric.classes().join(' '))).toEqual(['work-metric', 'work-metric'])
-  expect(wrapper.get('.work-categories').text()).toContain('当前没有待处理事项。')
+  // 只有本人任务这一类时不显示空的「其他待办」；整页无事可做时岗位指引排到最前。
+  expect(wrapper.find('.work-categories').exists()).toBe(false)
   expect(wrapper.find('.work-idle').exists()).toBe(false)
   expect(wrapper.text()).toContain('今天没有需要优先处理的事项')
+  expect(wrapper.element.firstElementChild?.nextElementSibling?.getAttribute('aria-label')).toBe('岗位首任务指引')
   vi.mocked(read).mockRejectedValueOnce(new Error('网络异常'))
   await wrapper.get('.work-refresh button').trigger('click')
   await flushPromises()

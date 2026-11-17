@@ -50,11 +50,11 @@ const projectLabel = computed(() => {
 })
 const decimal = /^\d+(\.\d{1,3})?$/
 const sum = (values: unknown[]) => sumQuantities(values.map(value => String(value ?? '').trim()).filter(value => decimal.test(value)))
-const total = (key: string) => sum(model.value.map(row => row[key]))
+const total = (key: string) => quantityText(sum(model.value.map(row => row[key])), '0')
 const pickedRows = computed(() => model.value.filter(picked))
 const allPicked = computed(() => model.value.length > 0 && pickedRows.value.length === model.value.length)
 const summary = computed(() => receipt.value
-  ? `${props.context.received_date ? `入库日期 ${props.context.received_date} · ` : ''}已勾选 ${pickedRows.value.length}/${model.value.length} 行，本次合格 ${sum(pickedRows.value.map(row => row.quantity))} / 待收 ${sum(pickedRows.value.map(row => source(row).remaining))}`
+  ? `${props.context.received_date ? `入库日期 ${props.context.received_date} · ` : ''}已勾选 ${pickedRows.value.length}/${model.value.length} 行，本次合格 ${quantityText(sum(pickedRows.value.map(row => row.quantity)), '0')} / 待收 ${quantityText(sum(pickedRows.value.map(row => source(row).remaining)), '0')}`
   : `本次出库 ${total('quantity')}${batch.value ? ` / BOM 未领 ${total('bom_remaining')}` : ''}，共 ${model.value.length} 行`)
 // 数量按千分之一取整数比较，避免浮点误差；格式不对时交给通用校验提示。
 const milli = (value: unknown) => toScaled(String(value ?? '').trim() || '0', QUANTITY_SCALE, { signed: false })
@@ -75,7 +75,7 @@ const errorOf = (i: number, key: string) => (key === 'quantity' ? excess(model.v
 // 取消余量沿用「取消未收余量」规则：本次或原有隔离数量须先处理。
 function cancelBlocked(row: Row) {
   if ((milli(row.pending_quantity) ?? 0n) > 0n) return '本次有隔离数量，隔离品处理后才能取消余量。'
-  if ((milli(source(row).quarantined) ?? 0n) > 0n) return `本行已有隔离待处理 ${quantityText(source(row).quarantined)}，处理后才能取消余量。`
+  if ((milli(source(row).quarantined) ?? 0n) > 0n) return `本行已有到货待检 ${quantityText(source(row).quarantined)}，处理后才能取消余量。`
   return ''
 }
 function cancelShown(row: Row) {
@@ -121,10 +121,12 @@ function shown(row: Row, key: string) {
       if (props.context.task) return '按售后任务领用'
       if (!projectInfo.value || error.value) return '—'
       const values = demand.value.filter(line => line.item === source(row).item).map(line => String(line.quantity))
-      return sumQuantities(values)
+      return quantityText(sumQuantities(values))
     }
   }
-  return source(row)[key] || '—'
+  const value = source(row)[key]
+  // 数量统一按「去掉末尾 0」显示（0.000 → 0、2.500 → 2.5），与库存列表一致；编码等非小数原样显示。
+  return typeof value === 'string' && /^-?\d+\.\d+$/.test(value) ? quantityText(value) : value || '—'
 }
 async function loadProject() {
   const current = ++generation
@@ -161,7 +163,6 @@ defineExpose({ focusPath })
       ><button v-else type="button" :disabled="disabled" @click="fill('suggested')">恢复建议数量</button
       ><button type="button" :disabled="disabled" @click="fill(stockPicks ? 'clear' : 'zero')">{{ stockPicks ? '全部清空' : '全部清零' }}</button></span
     ><small v-if="receipt" class="muted">未到货的行取消勾选；合格与隔离合计少于待收的行已高亮，余量继续待收。{{ cancellable ? '供应商不再补货时，勾选该行的「余量不再到货」一并取消余量。' : '供应商不再补货时，请采购在「取消未收余量」中处理。' }}</small></div>
-    <p class="table-guide">手机上按每款物料逐项填写。</p>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
       <table :aria-label="`${field.label}明细`">
         <thead><tr><th scope="col" class="col-index"><label v-if="selectable" class="line-pick"><input type="checkbox" :checked="allPicked" :indeterminate="pickedRows.length > 0 && !allPicked" :disabled="disabled || !model.length" aria-label="全选本次到货明细" @change="pickAll(($event.target as HTMLInputElement).checked)" /><span>到货</span></label><template v-else>序号</template></th><th v-for="column in columns" :key="column.key" scope="col" :class="`col-${column.key}`">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
@@ -189,7 +190,6 @@ defineExpose({ focusPath })
 <style scoped>
 .warehouse-lines { grid-column: 1 / -1; min-width: 0; margin: 0; border: 1px solid var(--field-line); border-radius: 10px; padding: 14px; }
 legend { font-weight: 650; padding: 0 6px; }
-.table-guide { color: var(--mute); font-size: 12px; margin: 8px 0; }
 .warehouse-scroll { position: relative; overflow: auto; max-width: 100%; max-height: 520px; border: 1px solid var(--field-line); border-radius: 6px; }
 table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
 /* 列宽按「1366 桌面侧栏约 1040px 内放下全部列」收紧：只读数量列窄、表头可换行，数量与备注输入列不再需要横向滚动。 */
@@ -247,7 +247,6 @@ small { display: block; color: var(--mute); font-size: 11px; line-height: 1.4; m
   .warehouse-lines { padding: 8px; }
   .warehouse-fill { display: flex; width: 100%; }
   .warehouse-fill button { flex: 1 1 0; min-height: 40px; }
-  .table-guide { display: none; }
   tr { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row dense; margin-bottom: 10px; }
   td { display: block; grid-column: span 6; padding: 6px 10px; border-bottom: 0; }
   td::before { display: block; font-size: 11px; line-height: 1.4; margin-bottom: 2px; }

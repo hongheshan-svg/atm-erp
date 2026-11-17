@@ -51,6 +51,6 @@ onBeforeUnmount(() => { generation++ })
 .file-summary, .stock-history-row { border: 1px solid var(--soft-line); border-radius: 6px; padding: 10px; margin-top: 8px; font-size: 13px; }
 .file-summary > span, .stock-history-row > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .file-summary > .el-icon { color: var(--brand); font-size: 20px; flex-shrink: 0; }
-small { display: block; font-size: 11px; margin-top: 6px; }
+small { display: block; font-size: 12px; margin-top: 6px; }
 .preview-link { border: 0; background: none; padding: 0; color: var(--el-color-primary); cursor: pointer; text-align: left; overflow-wrap: anywhere; font: inherit; }
 </style>

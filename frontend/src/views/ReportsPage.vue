@@ -97,8 +97,8 @@ watch(pageSize, () => load())
         <el-table-column type="expand" width="42"><template #default="{ row }"><div class="report-detail"><p>实际＋在途：{{ money(row.occupied_cost) }}</p><span v-if="row.overdue" class="report-warning">交付逾期 · {{ row.due_date }}</span><span v-for="warning in row.warnings" :key="warning" class="report-warning">{{ warning }}</span><span v-if="!row.overdue && !row.over_budget">{{ row.unbudgeted ? '尚未设置项目预算' : '当前无预算或交期预警' }}</span></div></template></el-table-column>
       </BusinessTable>
       <ListPagination :page="data.page" :total="data.count" @change="load" />
-      <p v-if="!narrow" class="muted report-basis">{{ basisText }}</p>
-      <details v-else class="report-basis-details"><summary>口径说明</summary><p class="muted report-basis">{{ basisText }}</p></details>
+      <!-- 五行口径说明默认收起：标题直接写出最关键的一句，需要时再展开看全文。 -->
+      <details class="report-basis-details"><summary>口径说明{{ narrow ? '' : '：人民币含税经营口径，按筛选项目累计，不是期间收入或会计利润' }}</summary><p class="muted report-basis">{{ basisText }}</p></details>
     </section>
   </template>
   <ReportAttention />
@@ -118,7 +118,9 @@ watch(pageSize, () => load())
 .report-watch strong { color: var(--brand-ink); margin-left: 4px; font-variant-numeric: tabular-nums; }
 .report-watch :deep(.el-button) { font-size: 12px; height: auto; padding: 2px 4px; }
 .report-risk { color: var(--risk); }
-.report-basis { margin-bottom: 0; font-size: 11px; }
+.report-basis { margin: 6px 0 0; font-size: 12px; line-height: 1.7; }
+.report-basis-details { margin-top: 12px; font-size: 12px; }
+.report-basis-details > summary { cursor: pointer; color: var(--ink-4); }
 .report-code, .report-warning, .report-cost-note { display: block; margin-top: 5px; }
 .report-cost-note { font-weight: 400; }
 .report-warning { color: var(--warn); }

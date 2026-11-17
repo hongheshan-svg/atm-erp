@@ -22,7 +22,8 @@ watch(user, (value) => {
   <ElConfigProvider :locale="zhCn">
     <DocumentPreview v-if="user && documentPreview" :document="documentPreview" @close="closeDocumentPreview" />
     <router-view v-if="['/login', '/setup'].includes(route.path)" />
-    <div v-else class="shell">
+    <!-- 登录资料到手之前不画带导航的外壳：未登录打开 /erp/ 时不会先闪一下工作台再跳到登录页。 -->
+    <div v-else-if="user" class="shell">
       <button v-if="menuOpen" class="nav-backdrop" aria-label="关闭导航" @click="menuOpen = false" />
       <aside class="sidebar" :class="{ 'mobile-open': menuOpen }">
         <div class="sidebar-navigation">

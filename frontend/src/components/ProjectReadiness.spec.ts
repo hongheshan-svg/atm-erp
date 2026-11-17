@@ -21,11 +21,13 @@ it('发货前一次列出全部缺项并可跳到对应阶段，应收逾期只�
   expect(read).toHaveBeenCalledWith('/business/projects/81/readiness/')
   expect(wrapper.text()).toContain('发货前还差')
   const links = wrapper.findAll('a').map(link => [link.text(), link.attributes('href')])
+  // 芯片只写名称，详情放在悬停提示里，页头不再被半截长文字挤满。
   expect(links).toEqual([
-    ['装配阶段 · 已完成 0 / 2', '/projects/81?tab=tasks&section=tasks&phase=assembly'],
-    ['设备 BOM · 尚未登记 BOM', '/projects/81?tab=bom'],
-    ['应收状态 · 其中已逾期 1 笔', '/projects/81?tab=finance'],
+    ['装配阶段', '/projects/81?tab=tasks&section=tasks&phase=assembly'],
+    ['设备 BOM', '/projects/81?tab=bom'],
+    ['应收状态', '/projects/81?tab=finance'],
   ])
+  expect(wrapper.findAll('a')[0]!.attributes('title')).toBe('装配阶段：已完成 0 / 2')
   expect(wrapper.findAll('button').some(button => button.text() === '登记发货')).toBe(false)
   await wrapper.get('.readiness-toggle').trigger('click')
   expect(wrapper.findAll('.readiness-list li')).toHaveLength(4)
@@ -68,4 +70,15 @@ it('手机默认一行「发货前还差 N 项」，展开后才列出缺项和�
   expect(wrapper.findAll('a')).toHaveLength(3)
   expect(wrapper.get('.readiness-blocked').text()).toBe('发货前还差')
   expect(wrapper.find('.readiness-toggle').exists()).toBe(true)
+})
+it('电脑上只展开最近一步，最多 3 个缺项，其余收进「全部检查（另有 N 项）」', async () => {
+  const miss = (key: string) => ({ key, ok: false, label: key, detail: `${key} 未完成`, blocking: true, target: { tab: 'tasks' } })
+  vi.mocked(read).mockResolvedValue({ status: 'active', ship: ['a', 'b', 'c', 'd'].map(miss), accept: [miss('e')], close: [miss('f'), miss('g')] })
+  const wrapper = render(); await flushPromises()
+  expect(wrapper.findAll('.readiness-chip').map(chip => chip.text())).toEqual(['a', 'b', 'c'])
+  expect(wrapper.text()).toContain('发货前还差')
+  expect(wrapper.text()).not.toContain('结项前还差')
+  expect(wrapper.get('.readiness-toggle').text()).toBe('全部检查（另有 4 项）')
+  await wrapper.get('.readiness-toggle').trigger('click')
+  expect(wrapper.findAll('.readiness-list li')).toHaveLength(7)
 })

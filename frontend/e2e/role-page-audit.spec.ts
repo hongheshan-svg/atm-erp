@@ -131,6 +131,8 @@ for (const identity of identities) {
     const visited: Record<string, unknown>[] = []
     await login(page, accounts[identity.key]!.username, password)
     const nav = page.getByRole('navigation', { name: '主导航', includeHidden: true })
+    // evaluateAll 不会自动等待：先等导航渲染出第一项，冷启动时才不会读到空列表。
+    await expect(nav.getByRole('link', { includeHidden: true }).first()).toBeAttached()
     const hrefs = await nav.getByRole('link', { includeHidden: true }).evaluateAll(nodes => nodes.map(n => n.getAttribute('href')!.split('?')[0]!.replace('/erp/', '')))
     expect(hrefs).toEqual(identity.pages)
     for (const route of identity.pages) {

@@ -32,7 +32,8 @@ test('设备需求提示、整数校验和多行输入适应桌面与移动端',
   let writes = 0
   page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/business/projects/')) writes++ })
   await dialog.locator('button[type="submit"]').click()
-  await expect(dialog.getByRole('alert')).toContainText('整数')
+  // 表单顶部另有「已签约销售自动生成项目」的提醒，这里只看填写问题汇总。
+  await expect(dialog.getByRole('alert', { name: '填写问题汇总' })).toContainText('整数')
   expect(writes).toBe(0)
   await dialog.getByLabel('设备数量', { exact: true }).fill('1')
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeInViewport()

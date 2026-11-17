@@ -72,9 +72,9 @@ export function milestoneFields(c: Catalog, metadata: Row, scope?: Row | null, c
       optionsFor: data => nodes.filter(node => node.kind === data.kind).map(node => ({
         value: node.milestone, label: node.title + (node.system_managed ? '（业务自动同步）' : ''),
       })),
-      hint: '先选阶段，再选节点；留空可新增自定义任务。',
+      hint: '先选阶段，再选节点；节点里没有的工作，节点留空并在下面填写任务名称。',
     },
-    { ...t('title', '任务名称', true), hint: '选定节点后可留空，自动使用节点名称；自定义任务请填写名称。' },
+    { ...t('title', '任务名称', true), hint: '选定节点后可留空，自动使用节点名称；没有对应节点时请填写名称。' },
     disciplineField(),
     executorField(c, scope),
     date('due_date', '计划完成日期', true),
@@ -110,7 +110,7 @@ export async function milestoneTemplateCommand(projectId: number): Promise<Comma
     title: supplement ? `补充里程碑节点（缺 ${nodes.length} 个）` : '生成六阶段里程碑',
     submitLabel: supplement ? '确认补充节点' : '确认生成里程碑',
     path: '/business/tasks/apply-milestones/', draftScope: String(projectId),
-    notice: { type: 'info', text: '可移除不需要的行或添加自定义任务；行内日期留空时用所属阶段日期。发货、现场安装接线、现场验收按实际业务同步。' },
+    notice: { type: 'info', text: '可移除不需要的行，或添加节点之外的任务；行内日期留空时用所属阶段日期。发货、现场安装接线、现场验收按实际业务同步。' },
     blocked: !metadata.can_generate
       ? '仅项目经理或管理员可为执行中、交付中的项目生成模板。'
       : !nodes.length ? '六阶段节点已全部生成，新增其他任务请用「新建任务」。' : undefined,
@@ -125,7 +125,7 @@ export async function milestoneTemplateCommand(projectId: number): Promise<Comma
       assignees: [metadata.assignee], due_date: '',
     })) },
     prepare: data => {
-      if (!data.lines?.length) throw new Error('请至少保留一个节点，或添加自定义任务。')
+      if (!data.lines?.length) throw new Error('请至少保留一个节点，或添加一项节点之外的任务。')
       return {
         project: projectId,
         lines: data.lines.map((row: Row) => ({

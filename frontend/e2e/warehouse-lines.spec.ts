@@ -67,7 +67,9 @@ test('仓管收货及项目出库展示完整物料资料并逐条保存备注',
   await selectRemoteOption(dialog(wh).getByLabel('项目', { exact: true }), { id: project.id })
   const issueTable = dialog(wh).getByRole('table', { name: '本次出库明细', exact: true })
   await expect(dialog(wh).locator('.warehouse-lines legend')).toContainText(project.code)
-  for (const text of ['5.000', 'A2608-01-00017']) await expect(issueTable).toContainText(text)
+  await expect(issueTable).toContainText('A2608-01-00017')
+  // 数量与库存列表一致按实际位数显示（5，不再是 5.000）。
+  await expect(issueTable.locator('td.col-required_quantity')).toHaveText('5')
   await issueTable.getByLabel('数量', { exact: true }).fill('1')
   await issueTable.getByLabel('备注', { exact: true }).fill('用于上料单元一号工位')
   await dialog(wh).getByLabel('原因 / 说明', { exact: true }).fill('装配领料')

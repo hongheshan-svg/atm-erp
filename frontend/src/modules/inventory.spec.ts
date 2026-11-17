@@ -152,3 +152,8 @@ it('领料单列表链到打印页；库存流水的关联单据按类型链到�
   expect(related.link!({ slip_code: 'LL000003', slip: 3 })).toEqual({ path: '/inventory/issue-slips/3' })
   expect(related.format!({ kind: 'count' })).toBe('—')
 })
+
+it('库存为 0 的行只能盘点，不出现「领料」入口', () => {
+  expect(actionNames('stocks', { id: 1, quantity: '0.000' })).toEqual(['盘点'])
+  expect(actionNames('stocks', { id: 2, quantity: '3.000' })).toEqual(['领料', '盘点'])
+})

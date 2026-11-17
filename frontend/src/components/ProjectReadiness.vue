@@ -37,26 +37,41 @@ const groups = computed(() => [
   warnings: group.items.filter(item => item.blocking === false && !item.ok),
 })))
 const path = (item: Check) => readinessPath(props.project.id, item.target)
+// 电脑上页头只讲眼前这一步：第一个还有缺项的环节，最多 3 个芯片，芯片只写名称（详情在悬停提示里），
+// 后面环节和其余缺项收进「全部检查（另有 N 项）」，不再把 7 个半截芯片铺满页头。
+const CHIP_LIMIT = 3
+const focus = computed(() => groups.value.find(group => group.missing.length)?.key)
+const visibleGroups = computed(() => compact.value ? groups.value.map(group => ({ ...group, chips: group.missing })) : (() => {
+  let room = CHIP_LIMIT
+  return groups.value.filter(group => !group.missing.length || group.key === focus.value).map(group => {
+    const chips = group.missing.slice(0, room); room -= chips.length
+    const warnings = group.warnings.slice(0, room); room -= warnings.length
+    return { ...group, chips, warnings }
+  })
+})())
+const unsatisfied = computed(() => groups.value.reduce((total, group) => total + group.missing.length + group.warnings.length, 0))
+const hidden = computed(() => unsatisfied.value - visibleGroups.value.reduce((total, group) => total + group.chips.length + group.warnings.length, 0))
+const chipTitle = (item: Check) => item.detail ? `${item.label}：${item.detail}` : item.label
 </script>
 
 <template>
   <div v-if="groups.length || error" class="project-readiness" role="group" aria-label="项目推进检查">
     <span class="readiness-title">下一步</span>
     <span v-if="error" class="readiness-error" role="alert">推进检查未加载：{{ error }}</span>
-    <span v-for="group in groups" :key="group.key" class="readiness-group" :data-group="group.key">
+    <span v-for="group in visibleGroups" :key="group.key" class="readiness-group" :data-group="group.key">
       <template v-if="group.missing.length">
         <strong class="readiness-blocked">{{ group.title }}前还差{{ collapsed ? ` ${group.missing.length} 项` : '' }}</strong>
-        <template v-if="!collapsed"><router-link v-for="item in group.missing" :key="item.key" class="readiness-chip" :to="path(item)" :title="item.detail">{{ item.label }} · {{ item.detail }}</router-link></template>
+        <template v-if="!collapsed"><router-link v-for="item in group.chips" :key="item.key" class="readiness-chip" :to="path(item)" :title="chipTitle(item)">{{ item.label }}</router-link></template>
       </template>
       <template v-else-if="group.action">
         <strong class="readiness-ready">{{ group.title }}条件已满足</strong>
         <el-button type="primary" size="small" @click="emit('act', group.action)">{{ group.button }}</el-button>
       </template>
       <small v-if="collapsed && group.warnings.length" class="readiness-warning-count">{{ group.warnings.length }} 项提示</small>
-      <template v-else><router-link v-for="item in group.warnings" :key="item.key" class="readiness-chip readiness-warning" :to="path(item)" :title="item.detail">{{ item.label }} · {{ item.detail }}</router-link></template>
+      <template v-else><router-link v-for="item in group.warnings" :key="item.key" class="readiness-chip readiness-warning" :to="path(item)" :title="chipTitle(item)">{{ item.label }}</router-link></template>
     </span>
     <button v-if="compact && groups.length" type="button" class="readiness-expand" :aria-expanded="!collapsed" :aria-label="collapsed ? '展开推进检查' : '收起推进检查'" @click="mobileOpen = !mobileOpen">{{ collapsed ? '展开' : '收起' }} <span aria-hidden="true">{{ collapsed ? '▾' : '▴' }}</span></button>
-    <button v-if="groups.length && !collapsed" type="button" class="readiness-toggle" :aria-expanded="open" :aria-controls="listId" @click="open = !open">{{ open ? '收起检查' : '全部检查' }}</button>
+    <button v-if="groups.length && !collapsed" type="button" class="readiness-toggle" :aria-expanded="open" :aria-controls="listId" @click="open = !open">{{ open ? '收起检查' : hidden > 0 && !compact ? `全部检查（另有 ${hidden} 项）` : '全部检查' }}</button>
     <ul v-if="groups.length" v-show="open && !collapsed" :id="listId" class="readiness-list">
       <li v-for="item in groups.flatMap(group => group.items.map(check => ({ ...check, group: group.title })))" :key="`${item.group}-${item.key}`" :class="item.ok ? 'readiness-ok' : item.blocking === false ? 'readiness-note' : 'readiness-missing'">
         <span class="readiness-mark"><span aria-hidden="true">{{ item.ok ? '✓' : item.blocking === false ? '!' : '✗' }}</span><span class="visually-hidden">{{ item.ok ? '已满足' : item.blocking === false ? '提示' : '未满足' }}</span></span>

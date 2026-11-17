@@ -154,6 +154,14 @@ describe('列表创建入口', () => {
         expect((panel.vm as any).mobileSummary(row).join(' | ')).not.toMatch(raw)
         panel.unmount()
       }
+      // 只由本人执行的任务不再写自己的名字；多人共同执行时列出全部执行人。
+      user.value = { id: 3, roles: ['member'] }
+      const own = shallowMount(ResourcePanel, { props: { resource: 'tasks', title: '任务' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
+      await flushPromises()
+      expect((own.vm as any).mobileSummary({ title: '任务', due_date: '2026-11-01', assignee: 3, assignees: [3], assignee_name: '钱' })[0]).toBe('计划 2026-11-01')
+      expect((own.vm as any).mobileSummary({ title: '任务', due_date: '2026-11-01', assignee: 3, assignees: [3, 5], assignee_name: '钱；孙' })[0]).toBe('计划 2026-11-01 · 钱；孙')
+      expect((own.vm as any).mobileSummary({ title: '任务', due_date: '2026-11-01', assignee: 5, assignee_name: '孙' })[0]).toBe('计划 2026-11-01 · 孙')
+      own.unmount()
       // 库存流水：保留物料与类型列；摘要首行「数量 · 时间」，次行项目与来源采购单可点击。
       user.value = { id: 1, roles: ['warehouse'] }
       const moves = shallowMount(ResourcePanel, { props: { resource: 'moves', title: '库存流水' }, global: { plugins: [ElementPlus], stubs: { BusinessTable: true } } })
@@ -494,7 +502,8 @@ it.each([...removableResources].filter(resource => resource !== 'bom'))('%s全�
   await flushPromises()
   await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '选择筛选结果前1000项（跨页）')!.trigger('click')
   await flushPromises()
-  expect(read).toHaveBeenLastCalledWith(endpoint(resource), { page: 5, page_size: 200, search: '' })
+  // 收付款默认「仅看未结」，跨页全选同样只选筛选结果。
+  expect(read).toHaveBeenLastCalledWith(endpoint(resource), { page: 5, page_size: 200, search: '', ...(resource === 'entries' ? { unsettled: 'true' } : {}) })
   expect(wrapper.get('[aria-label="测试记录批量选择"]').text()).toContain('已选 1000')
   wrapper.getComponent(ListPagination).vm.$emit('change', 2)
   await flushPromises()
@@ -509,4 +518,33 @@ it.each([...removableResources].filter(resource => resource !== 'bom'))('%s全�
   expect(wrapper.get('[aria-label="测试记录批量选择"]').text()).toContain('已选 0')
   wrapper.unmount()
   vi.mocked(read).mockResolvedValue({ count: 0, results: [] })
+})
+
+it('收付款页默认只看未结；全部结清时说明原因并可一键显示已结清，带搜索词进入或在项目内时不加限制', async () => {
+  user.value = { roles: ['finance'] }
+  route.query = {}
+  sessionStorage.clear()
+  vi.mocked(read).mockClear().mockResolvedValue({ count: 0, results: [], next: null })
+  const mountPanel = () => shallowMount(ResourcePanel, { props: { resource: 'entries', title: '收付款' }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'ElTable', template: '<div />' } } } })
+  const wrapper = mountPanel()
+  await flushPromises()
+  expect(vi.mocked(read).mock.calls[0]![1]).toMatchObject({ unsettled: 'true' })
+  expect(wrapper.get('.empty-guidance').text()).toContain('没有未结清的款项')
+  await wrapper.findAllComponents({ name: 'ElButton' }).find(button => button.text() === '显示已结清款项')!.trigger('click')
+  await flushPromises()
+  expect(vi.mocked(read).mock.lastCall![1]).not.toHaveProperty('unsettled')
+  wrapper.unmount()
+  route.query = { search: 'AR-9' }
+  vi.mocked(read).mockClear()
+  const searched = mountPanel()
+  await flushPromises()
+  expect(vi.mocked(read).mock.calls[0]![1]).not.toHaveProperty('unsettled')
+  searched.unmount()
+  // 项目内的款项是完整台账（已付费用也可能要取消退款），不默认隐藏已结清的。
+  route.query = {}
+  vi.mocked(read).mockClear()
+  const scoped = shallowMount(ResourcePanel, { props: { resource: 'entries', title: '项目款项', projectId: 7, params: { project: 7 } }, global: { plugins: [ElementPlus], renderStubDefaultSlot: true, stubs: { BusinessTable: { name: 'ElTable', template: '<div />' } } } })
+  await flushPromises()
+  expect(vi.mocked(read).mock.calls[0]![1]).not.toHaveProperty('unsettled')
+  scoped.unmount()
 })

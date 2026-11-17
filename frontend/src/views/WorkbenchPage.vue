@@ -2,7 +2,7 @@
 import BusinessTable from '../components/BusinessTable.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useNarrow } from '../utils/media'
-import { CircleCheck, List, Document, Box, Wallet, ArrowRight } from '@element-plus/icons-vue'
+import { CircleCheck, List, Document, Box, Wallet, ArrowRight, Upload, Download } from '@element-plus/icons-vue'
 import { ElSkeleton } from 'element-plus'
 import { read } from '../api'
 import { today } from '../forms'
@@ -35,7 +35,8 @@ const notes: Record<string, string> = {
   sale_receivables: '本人销售合同已过到期日的应收，联系客户回款', quoted_sales: '跟进客户确认，及时签约', sales: '跟进报价、签约、交付和回款',
 }
 const count = (key: string) => work.value[key]?.count || 0
-const groups = computed(() => Object.keys(labels).filter(key => work.value[key]))
+// 「我的待办」已在「接下来的任务」区块带完整入口和总数，这里不再重复列一类。
+const groups = computed(() => Object.keys(labels).filter(key => work.value[key] && key !== 'tasks'))
 // Only categories with work are listed; the rest are summarised in one line so the page stays short.
 const active = computed(() => groups.value.filter(key => count(key)))
 const idleNote = computed(() => {
@@ -110,10 +111,14 @@ const priority = computed(() => Object.entries(work.value).flatMap(([key, bucket
   .sort((a, b) => a.rank - b.rank || due(a.key, a.row).localeCompare(due(b.key, b.row)))
   .filter((item, index, all) => all.findIndex(other => identity(other.key, other.row) === identity(item.key, item.row)) === index)
   .slice(0, 7))
-const ongoing = computed(() => work.value.tasks?.results || [])
+// 已排进「今天要处理的」的任务不再重复列出；这里只列接下来要做的。
+const ongoing = computed(() => (work.value.tasks?.results || []).filter(task => !priority.value.some(item => identity(item.key, item.row) === `task:${task.id}`)))
+// 进入工作台却没有任何待办（多见于新安装）时，岗位指引放到最前面，告诉人从哪里开始。
+const idle = computed(() => initialized.value && !priority.value.length && !active.value.length && !ongoing.value.length)
 const emptyTaskNote = computed(() => can(['mechanical_engineer', 'electrical_engineer', 'member', 'production_manager'])
   ? '目前没有分配给你的未完成任务。可查看参与项目；如需派工，请联系项目经理。'
   : '目前没有分配给你的未完成任务。可从下方岗位指引继续处理日常工作。')
+const taskAction = (task: Row) => task.started_date ? '继续处理' : '查看任务'
 function title(key: string, row: Row) { return key === 'bank_records' ? row.counterparty || '待核实户名' : row.title || row.code || row.reference || '待处理事项' }
 
 function amount(key: string, row: Row) {
@@ -139,7 +144,7 @@ async function load() {
   const current = ++generation
   loading.value = true; error.value = ''
   try {
-    const result = await read('/business/workbench/', { page_size: 5 })
+    const result = await read('/business/workbench/', { page_size: 7 })
     if (current !== generation) return
     work.value = result; day.value = today(); initialized.value = true
     updated.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -154,13 +159,14 @@ onBeforeUnmount(() => { generation++ })
     <header class="page-heading"><div><p class="eyebrow">今日协作 / {{ day }}</p><h1>工作台</h1><p class="muted">{{ user?.display_name }}，先处理紧急事项，再推进今天的工作。</p></div><div class="work-refresh"><span v-if="updated" role="status">{{ updated }} 更新</span><el-button :loading="loading" @click="load">刷新</el-button></div></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <div v-if="!initialized && loading" class="panel" role="status" aria-label="正在加载工作台"><el-skeleton :rows="8" animated /></div>
-    <nav v-if="can(['admin', 'warehouse'])" class="panel warehouse-shortcuts" aria-label="日常库存入口"><router-link to="/inventory?section=receipts&project=all">采购收货</router-link><router-link to="/inventory?section=stocks&intent=issue">项目领料</router-link><router-link to="/inventory?section=moves&intent=return&project=all">项目退料</router-link><router-link to="/inventory?section=stocks&issue=bom&project=all">按 BOM 领料</router-link></nav>
+    <RoleTaskGuide v-if="idle" />
+    <nav v-if="can(['admin', 'warehouse'])" class="panel warehouse-shortcuts" aria-label="日常库存入口"><span class="shortcut-label">日常库存</span><router-link to="/inventory?section=receipts&project=all"><el-icon aria-hidden="true"><Box /></el-icon>采购收货</router-link><router-link to="/inventory?section=stocks&intent=issue"><el-icon aria-hidden="true"><Upload /></el-icon>项目领料</router-link><router-link to="/inventory?section=moves&intent=return&project=all"><el-icon aria-hidden="true"><Download /></el-icon>项目退料</router-link><router-link to="/inventory?section=stocks&issue=bom&project=all"><el-icon aria-hidden="true"><List /></el-icon>按 BOM 领料</router-link></nav>
     <template v-if="initialized">
       <section v-if="metrics.length" class="work-overview" aria-label="待办概览"><div v-for="metric in metrics" :key="metric.label" class="work-metric" :class="metric.value ? `tone-${metric.tone}` : ''"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.note }}</small></div></section>
       <div class="work-main" :class="{ 'no-priority': !priority.length }">
       <section class="panel work-priority" aria-labelledby="priority-heading">
         <header><h2 id="priority-heading">今天要处理的</h2><span class="muted">按逾期、今日到期、待审批排序，最多 7 项</span></header>
-        <BusinessTable label="待办事项" v-if="priority.length" :data="priority" :numbered="!narrow" :max-height="narrow ? undefined : 420" class="priority-table">
+        <BusinessTable label="待办事项" v-if="priority.length" :data="priority" :numbered="!narrow" class="priority-table">
           <el-table-column label="事项 / 关联项目" :min-width="narrow ? 150 : 220"><template #default="{ row: item }"><router-link :to="target(item.key, item.row)">{{ title(item.key, item.row) }}</router-link><small class="record-secondary">{{ narrow ? [labels[item.key], context(item.key, item.row)].filter(Boolean).join(' · ') : context(item.key, item.row) }}</small><small v-if="narrow && due(item.key, item.row)" class="record-secondary">{{ due(item.key, item.row) }}</small></template></el-table-column>
           <el-table-column v-if="!narrow" label="类型" min-width="110"><template #default="{ row: item }">{{ labels[item.key] }}</template></el-table-column>
           <el-table-column v-if="!narrow" label="截止 / 到期日期" width="135"><template #default="{ row: item }">{{ due(item.key, item.row) || '—' }}</template></el-table-column>
@@ -170,20 +176,21 @@ onBeforeUnmount(() => { generation++ })
         <p v-else class="priority-empty muted">今天没有需要优先处理的事项</p>
       </section>
       <section v-if="work.tasks" class="panel work-ongoing" aria-labelledby="ongoing-heading">
-        <header><h2 id="ongoing-heading">我正在做的工作</h2><router-link :to="collection('tasks')">查看我的全部任务（{{ count('tasks') }}）</router-link></header>
-        <ul v-if="ongoing.length"><li v-for="task in ongoing" :key="task.id"><div><strong>{{ title('tasks', task) }}</strong><span>{{ task.project_name || '关联项目' }}</span><span>计划完成日期：{{ task.due_date || '未设置' }}</span></div><router-link :to="target('tasks', task)" :aria-label="`继续处理${title('tasks', task)}`">继续处理 →</router-link></li></ul>
+        <header><h2 id="ongoing-heading">接下来的任务</h2><router-link :to="collection('tasks')">查看我的全部任务（{{ count('tasks') }}）</router-link></header>
+        <ul v-if="ongoing.length"><li v-for="task in ongoing" :key="task.id"><div><strong>{{ title('tasks', task) }}</strong><span>{{ task.project_name || '关联项目' }}</span><span>计划完成日期：{{ task.due_date || '未设置' }}</span></div><router-link :to="target('tasks', task)" :aria-label="`${taskAction(task)}${title('tasks', task)}`">{{ taskAction(task) }} →</router-link></li></ul>
+        <p v-else-if="count('tasks')" class="muted">紧急的任务已列在上方「今天要处理的」。</p>
         <p v-else class="muted">{{ emptyTaskNote }}</p>
       </section>
       </div>
-      <section class="panel work-categories" aria-labelledby="categories-heading">
+      <!-- 没有任何其他待办时整块不显示，不留一个只写「当前没有其他待办」的空面板。 -->
+      <section v-if="active.length" class="panel work-categories" aria-labelledby="categories-heading">
         <header><h2 id="categories-heading">其他待办</h2><span class="muted">点击进入对应的完整列表</span></header>
         <router-link v-for="key in active" :key="key" :to="collection(key)" class="work-category" :aria-label="`查看全部${labels[key]}`"><el-icon aria-hidden="true"><component :is="icons[key as keyof typeof icons]" /></el-icon><span><strong>{{ labels[key] }}</strong><small>{{ notes[key] }}</small></span><b>{{ count(key) }}</b><el-icon aria-hidden="true"><ArrowRight /></el-icon></router-link>
-        <p v-if="!active.length" class="work-calm"><el-icon aria-hidden="true"><CircleCheck /></el-icon>{{ groups.length ? '当前没有待处理事项。' : '当前岗位暂无工作台事项。' }}</p>
         <p v-if="idleNote" class="muted work-idle">{{ idleNote }}</p>
       </section>
     </template>
     <TaskNotices v-if="operations()" />
-    <RoleTaskGuide />
+    <RoleTaskGuide v-if="!idle" />
   </div>
 </template>
 <style scoped>
@@ -191,7 +198,10 @@ onBeforeUnmount(() => { generation++ })
 .work-main { display: flex; flex-direction: column; }
 .no-priority .work-ongoing { order: -1; }
 .priority-empty { padding: 16px 20px; margin: 0; font-size: 14px; }
-.warehouse-shortcuts { display: flex; flex-wrap: wrap; gap: 16px; }
+.warehouse-shortcuts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 20px; }
+.shortcut-label { color: var(--ink-4); font-size: 13px; margin-right: 4px; }
+.warehouse-shortcuts a { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 14px; border: 1px solid var(--brand-line); border-radius: var(--r-ctl); background: var(--brand-wash-2); color: var(--brand-ink); font-size: 14px; font-weight: 500; }
+.warehouse-shortcuts a:hover { background: var(--brand-wash); border-color: var(--brand-soft); }
 .work-ongoing header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .work-ongoing h2 { font-size: 18px; margin: 0; }
 .work-ongoing ul { list-style: none; padding: 0; margin-bottom: 0; }
@@ -202,7 +212,7 @@ onBeforeUnmount(() => { generation++ })
 .work-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .work-metric { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 20px; background: white; border: 1px solid var(--surface-border); border-radius: 8px; color: var(--ink-2); }
 .work-metric strong { font-size: 32px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.work-metric small { color: var(--ink-4); font-size: 11px; }
+.work-metric small { color: var(--ink-4); font-size: 12px; line-height: 1.5; }
 .workbench-page :is(button, a):focus-visible { outline: 3px solid var(--brand-ink); outline-offset: 3px; }
 .work-priority, .work-categories { padding: 0; overflow: hidden; }
 .priority-table { border-radius: 0; }
@@ -215,7 +225,6 @@ onBeforeUnmount(() => { generation++ })
 .tone-primary { color: var(--brand-ink); }
 .work-status.tone-danger { background: var(--risk-wash); color: var(--risk); }
 .work-status.tone-warning { background: var(--warn-wash); color: var(--warn); }
-.work-calm { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 24px; color: var(--ink-4); font-size: 13px; margin: 0; }
 .work-category { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line-3); color: var(--ink); }
 .work-category:first-of-type { border-top: 0; }
 .work-category:hover { background: var(--brand-wash-2); }
@@ -240,7 +249,8 @@ onBeforeUnmount(() => { generation++ })
   .work-metric > span { font-size: 13px; line-height: 1.35; }
   .work-metric strong { font-size: 24px; }
   .warehouse-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 8px 16px; }
-  .warehouse-shortcuts a { display: flex; align-items: center; min-height: 40px; }
+  .warehouse-shortcuts a { min-height: 40px; justify-content: center; }
+  .shortcut-label { grid-column: 1 / -1; }
   .work-priority :deep(.el-table__cell) { padding: 8px 4px; }
   .work-priority .work-status { padding: 3px 6px; font-size: 11px; white-space: nowrap; }
   .work-priority :deep(td a) { white-space: nowrap; }

@@ -88,7 +88,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
     initial: projectId ? { project: projectId } : {},
   }
 }
-const sharedArrival: Field = { key: 'confirm_shared', label: '确认占用其他项目到货', type: 'boolean', initial: false, optional: true }
+const sharedArrival: Field = { key: 'confirm_shared', label: '允许领用其他项目的到货', type: 'boolean', initial: false, optional: true }
 const sharedHint = '库存不按项目预留。系统提示本次领料会用到其他项目已到货、未领用的物料时，确认挪用再勾选，并通知相关项目补采。'
 // 领料关联的售后任务：只列所选项目未完成的售后任务；别的项目的任务选了也会被服务端拒绝。
 function serviceTask(tasks: Row[]): Field {
@@ -175,7 +175,8 @@ export async function bomIssueCommand(projectId?: number): Promise<Command> {
 }
 export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
-  if (resource === 'stocks' && warehouse()) a.push('领料', '盘点')
+  // 库存为 0 时不给「领料」：勾选框本来就不可选，按钮也不能让人填完整张领料单再被拒绝。
+  if (resource === 'stocks' && warehouse()) a.push(...(issueSelectable(r) ? ['领料'] : []), '盘点')
   if (resource === 'issue-slips') a.push('查看 / 打印')
   if (resource === 'moves' && warehouse()) {
     if (r.kind === 'issue') a.push('退料')
