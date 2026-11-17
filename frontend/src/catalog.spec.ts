@@ -9,6 +9,10 @@ describe('选择器名称与最近使用', () => {
       { value: 7, label: '伺服电机 · M007 · 750W · 品牌甲 · 台' },
     ])
     expect(referenceLabel({ id: 1, display_name: '王工', username: 'wang1' })).toEqual({ name: '王工', detail: 'wang1' })
+    // 同图号已换成新版的旧版：下拉里写明新版，免得继续选旧图。
+    expect(options([{ id: 8, name: '夹爪安装板', code: 'JG-001', drawing_number: 'DWG-001', drawing_revision: 'A', newer_revision: { id: 9, code: 'JG-001B', drawing_revision: 'B' } }])).toEqual([
+      { value: 8, label: '夹爪安装板 · JG-001 · DWG-001 · A · 该图已有新版 B 版（JG-001B）' },
+    ])
     expect(options([{ id: 1, display_name: '王工', username: 'wang1' }, { id: 2, display_name: '王工', username: 'wang2' }])).toEqual([
       { value: 1, label: '王工（wang1）' }, { value: 2, label: '王工（wang2）' },
     ])

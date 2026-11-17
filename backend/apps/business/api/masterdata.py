@@ -48,6 +48,16 @@ class ItemView(MasterView):
     }
     search_fields = ['code', 'name', 'specification', 'brand', 'drawing_number']
 
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), 'revision_hints': self.action in {'list', 'retrieve', 'similar'}}
+
+    @action(detail=True, methods=['get'])
+    def revisions(self, request, pk=None):
+        """同图号的全部版本与可见项目里的换版记录。"""
+        from ..services.revision_chain import history
+
+        return Response(history(request.user, self.get_object()))
+
     @action(detail=False, methods=['get'])
     def similar(self, request):
         items = masterdata.similar({key: request.query_params.get(key, '')[:2000] for key in ('name', 'specification')})

@@ -41,6 +41,7 @@ MODULE_FILES = {
         'BOMPurchasePicker',
         'bom-purchase',
         'revisions',
+        'revision_chain',
         'BOMRevisionPanel',
     ),
     'purchases': (
@@ -77,7 +78,7 @@ MODULE_FILES = {
         'FinanceTotals',
         'business-date',
     ),
-    'masterdata': ('manual-codes', 'masterdata', 'product-categories', 'MasterdataPage'),
+    'masterdata': ('manual-codes', 'masterdata', 'product-categories', 'MasterdataPage', 'revision_chain'),
     'accounts': (
         'settings',
         'SettingsPage',

@@ -6,7 +6,8 @@ import { useNarrow } from '../utils/media'
 import { read, write, download } from '../api'
 import { downloadBOM, type BOMExportLayout } from '../api/bom'
 import { actionCommand, bomCommand, permission } from '../business'
-import { batchRemoveCommand, batchReviseCommand, unitNames } from '../modules/bom'
+import { batchRemoveCommand, batchReviseCommand, impactText, unitNames } from '../modules/bom'
+import { newerText } from '../catalog'
 import { warehouse } from '../modules/shared'
 import { decimalDifference, today } from '../forms'
 import { bomEditor, engineer, purchaseReader } from '../session'
@@ -377,7 +378,8 @@ async function importFile(event: Event) {
 const previewHints = computed(() => (preview.value?.lines || []).flatMap((row: Row) => [
   ...(row.bom_action === 'merged' ? [{ row: row.row, text: `${row.item_name}：与第 ${row.merged_into} 行是同一物料、同一单元，数量 ${qty(row.quantity)} 已并入第 ${row.merged_into} 行` }] : []),
   ...(row.material_hint ? [{ row: row.row, text: `${row.item_name}：${row.material_hint}` }] : []),
-  ...(row.bom_action === 'replace' ? [{ row: row.row, text: `${row.replaces} ${row.replaces_name || ''} 换版为本行物料：旧版未到货的采购按新图改单，已到货和已领用超出需求的旧版进入「旧版待处理」` }] : []),
+  ...(row.revision_hint ? [{ row: row.row, text: `${row.item_name || row.item_code}：${row.revision_hint}` }] : []),
+  ...(row.bom_action === 'replace' ? [{ row: row.row, text: `${row.replaces} ${row.replaces_name || ''} 换版为本行物料。${impactText(row.replace_impact)}` }] : []),
 ]))
 const previewBrandFills = computed(() => (preview.value?.lines || []).filter((row: Row) => row.material_action === '沿用已有物料，补填品牌').length)
 function confirmImport() {
@@ -519,7 +521,7 @@ function saved() {
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM行 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="maintain.has(row)" :disabled="busy || !maintain.selectable(row)" @change="maintain.toggle(row)" /></template>
       </el-table-column>
       <el-table-column v-if="purchaseSelecting" :label="mobile ? '' : '选择'" :width="mobile ? 40 : 44" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" :title="purchaseBlocked(row)" @change="toggle(row)" /></template></el-table-column>
-      <el-table-column :label="mobile ? '物料' : '物料名称 / 编码'" :min-width="mobile ? 150 : 140" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><el-tag v-if="inactive(row)" size="small" type="info" class="bom-inactive-tag" :title="purchaseBlocked(row)">已停用</el-tag><small class="bom-item-code" :class="{ 'is-inline': !mobile }">{{ row.item_code }}</small>
+      <el-table-column :label="mobile ? '物料' : '物料名称 / 编码'" :min-width="mobile ? 150 : 140" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><el-tag v-if="inactive(row)" size="small" type="info" class="bom-inactive-tag" :title="purchaseBlocked(row)">已停用</el-tag><el-tag v-else-if="row.newer_revision" size="small" type="warning" class="bom-inactive-tag" :title="`${newerText(row)}；本项目仍用旧版，需要时在「操作 → 升版」换成新版`">有新版 {{ row.newer_revision.drawing_revision || row.newer_revision.code }}</el-tag><small class="bom-item-code" :class="{ 'is-inline': !mobile }">{{ row.item_code }}</small>
         <small v-if="mobile && view === 'purchase'" class="bom-mobile-summary"><span><b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b> · <i>在途 {{ qty(approvedIncoming(row)) }}</i><em v-if="unapproved(row) > 0" class="unapproved-inline">（待批 {{ qty(row.unapproved) }}）</em> · <i>可用 {{ qty(row.available) }}</i></span><span>{{ row.assembly_unit || '未分单元' }}<template v-if="row.required_date"> · <i>需 {{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
         <small v-else-if="mobile" class="bom-mobile-summary"><span>{{ [row.specification, row.assembly_unit || '未分单元'].filter(Boolean).join(' · ') }}</span><span><i>需求 {{ qty(row.quantity) }}{{ row.unit ? ` ${row.unit}` : '' }}</i> · <b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b><template v-if="row.required_date"> · <i>{{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
       </template></el-table-column>
@@ -549,7 +551,7 @@ function saved() {
       <el-table-column v-if="view === 'prepare' && (batchVisible || canMaintain)" label="操作" :width="mobile ? 76 : batchVisible && canMaintain ? 150 : 96" fixed="right"><template #default="{ row }"><div class="row-actions">
         <el-dropdown v-if="canMaintain && view === 'prepare'" trigger="click" :persistent="false" @command="(name: string) => rowAction(row, String(name))">
           <el-button size="small" :disabled="busy">操作 ▾</el-button>
-          <template #dropdown><el-dropdown-menu><el-dropdown-item command="修改此行" :disabled="inactive(row)">{{ inactive(row) ? '修改此行（物料已停用，请替换）' : '修改此行' }}</el-dropdown-item><el-dropdown-item v-if="row.drawing_number" command="升版">升版</el-dropdown-item><el-dropdown-item command="替换物料">替换物料</el-dropdown-item><el-dropdown-item v-if="!batchVisible" command="移除">移除</el-dropdown-item></el-dropdown-menu></template>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item command="修改此行" :disabled="inactive(row)">{{ inactive(row) ? '修改此行（物料已停用，请替换）' : '修改此行' }}</el-dropdown-item><el-dropdown-item v-if="row.drawing_number" command="升版">{{ row.newer_revision ? `升版（换成已有 ${row.newer_revision.drawing_revision || row.newer_revision.code} 版）` : '升版' }}</el-dropdown-item><el-dropdown-item command="替换物料">替换物料</el-dropdown-item><el-dropdown-item v-if="!batchVisible" command="移除">移除</el-dropdown-item></el-dropdown-menu></template>
         </el-dropdown>
         <el-button v-if="batchVisible" type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button>
       </div></template></el-table-column>

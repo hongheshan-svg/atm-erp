@@ -28,7 +28,7 @@ from .bom import (
     total_shortfalls,
     unit_conflict,
 )
-from .common import day, number, state
+from .common import ZERO, day, number, state
 from .import_guides import BOM_COLUMNS, GUIDE_MARKER, GUIDE_SHEET
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -179,6 +179,42 @@ def message(detail, labels=None):
     if isinstance(detail, (list, tuple)):
         return '；'.join(message(value, labels) for value in detail)
     return str(chinese_error(detail))
+
+
+def annotate_revisions(project, existing, effective):
+    """预览提示：仍用旧版的行标出「该图已有新版」；换版行给出旧版在途怎么转、换版后旧版待处理大约多少。"""
+    from .revision_chain import label, newer
+    from .revisions import impact_rows, in_transit
+
+    latest = newer([line['item'] for line in effective if line['bom_action'] in {'create', 'update'}])
+    for line in effective:
+        hint = latest.get(line['item'])
+        if hint is None or line['bom_action'] not in {'create', 'update'}:
+            continue
+        line['newer_revision'] = hint
+        line['revision_hint'] = (
+            f'该图已有新版 {label(hint)}。确认仍用旧版可直接导入；要用新版请把物料编码改为 {hint["code"]}。'
+            if line['bom_action'] == 'create'
+            else f'该图已有新版 {label(hint)}，本行仍是旧版。要换成新版：「替换原编码」填本行编码，物料编码填 {hint["code"]}。'
+        )
+    replaced = {line.pk: line for line in existing}
+    rows = [line for line in effective if line['bom_action'] == 'replace' and line['replaces_line'] in replaced]
+    if not rows:
+        return
+    final = {(line.item_id, line.assembly_unit): line.quantity for line in existing}
+    for line in effective:
+        if line['bom_action'] in {'create', 'update', 'replace'}:
+            final[(line['item'], line['assembly_unit'])] = number(line['quantity'], 'quantity', 3)
+    for line in rows:
+        old = replaced[line['replaces_line']]
+        final.pop((old.item_id, old.assembly_unit), None)
+    olds = {replaced[line['replaces_line']].item_id for line in rows}
+    estimates = impact_rows(
+        project, {pk: sum((qty for (item, _), qty in final.items() if item == pk), ZERO) for pk in olds}
+    )
+    for line in rows:
+        old = replaced[line['replaces_line']]
+        line['replace_impact'] = {'in_transit': in_transit(old), **estimates[old.item_id]}
 
 
 def preview(project, upload):
@@ -372,6 +408,7 @@ def preview(project, upload):
     problems = conversion_problems(project, existing, updates, replacements)
     if problems:
         errors = sorted([*errors, *problems], key=lambda error: error.get('row', 0))
+    annotate_revisions(project, existing, effective)
     listed = {(line['item'], line['assembly_unit']) for line in lines} | set(replaced_keys)
     # 导入只新增和修改，不会移除文件里没有的行；列出来，免得人以为上传整表就等于整批替换。
     untouched = [

@@ -96,3 +96,17 @@ it('已有归档可直接归档新版本，切回历史预览不改变已打开�
   expect(command.prepare?.({ document: 8 }).expected_snapshot).toBe('current-snapshot')
   wrapper.unmount()
 })
+
+it('归档后合同内容有变化（如换版改单）时，页面上方逐条列出并提醒归档新版本', async () => {
+  vi.mocked(read).mockResolvedValue({ ...complete, draft: false, status: 'approved', archived_version: 1, latest_archived_version: 1, versions: [{ version: 1 }], changes_since_archive: ['JG-001（A 版） 数量 4 → 0', '新增 JG-001B（B 版） 夹爪安装板 4 件，单价 12.00'] })
+  const { wrapper } = await mountContract()
+  const alert = wrapper.get('.contract-changed')
+  expect(alert.text()).toContain('合同内容自已归档第 1 版后已变化')
+  expect(alert.findAll('li').map(li => li.text())).toEqual(['JG-001（A 版） 数量 4 → 0', '新增 JG-001B（B 版） 夹爪安装板 4 件，单价 12.00'])
+  await alert.get('button').trigger('click')
+  await flushPromises()
+  expect(read).toHaveBeenLastCalledWith('/business/purchases/1/contract-preview/', { version: 'current' })
+  wrapper.unmount()
+  vi.mocked(read).mockResolvedValue({ ...complete, changes_since_archive: [] })
+  expect((await mountContract()).wrapper.find('.contract-changed').exists()).toBe(false)
+})

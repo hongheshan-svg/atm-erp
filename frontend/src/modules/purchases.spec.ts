@@ -135,6 +135,9 @@ it('换版转来的新版明细待采购确认：采购可按新图改单（改�
   expect(review.prepare!({ line: 4, decision: 'confirm', unit_price: '5.00', reason: '供应商确认' })).toEqual({ line: 4, decision: 'confirm', reason: '供应商确认' })
   expect(review.prepare!({ line: 4, decision: 'confirm', unit_price: '6', reason: '重新报价' })).toEqual({ line: 4, decision: 'confirm', reason: '重新报价', unit_price: '6' })
   expect(review.prepare!({ line: 4, decision: 'cancel', unit_price: '6', reason: '不接受' })).toEqual({ line: 4, decision: 'cancel', reason: '不接受' })
+  // 已归档合同的，确认后提醒与供应商签回并归档新版本。
+  expect(review.successNote!({ id: 9, contract_version: 2 })).toContain('已归档合同第 2 版')
+  expect(review.successNote!({ id: 9, contract_version: null })).toBe('')
   expect(purchaseDetailLine(converted, withRevision).material_text).toContain('换版：由 JG-001 按新图改单，待采购确认')
   user.value = { id: 2, roles: ['warehouse'] }
   const receive = industryCommand(await actionCommand('purchases', withRevision, '收货'))

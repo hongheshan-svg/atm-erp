@@ -268,8 +268,8 @@ class ReviewRemediationTests(BusinessFixtures, TestCase):
         with CaptureQueriesContext(connection) as queries:
             result = bom.demand(self.project)
         self.assertEqual(len(result), 1000)
-        # 固定条数与 BOM 行数无关；其中两条是「其他在执行项目还需多少」的汇总。
-        self.assertLessEqual(len(queries), 6)
+        # 固定条数与 BOM 行数无关；其中两条是「其他在执行项目还需多少」的汇总，一条是「该图已有新版」的换版链（无换版时只查一次）。
+        self.assertLessEqual(len(queries), 7)
 
     def test_two_thousand_settlements_export_without_per_row_queries(self):
         Entry.objects.bulk_create(
