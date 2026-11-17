@@ -274,6 +274,30 @@ class BOMLine(BaseModel):
         ]
 
 
+class RevisionChange(ImmutableLedger):
+    """换版记录：项目 BOM 某单元把旧版（或旧型号）物料换成新物料的一次变更。
+
+    旧版的在途采购在换版时转为新版（已批准的待采购确认），已到货和已领用的旧版留作待处理，
+    由仓管报废或留作备件、采购下返修单改制成新版；待处理数量按项目实时口径计算，不另记余额。
+    """
+
+    project = models.ForeignKey(Project, models.PROTECT, related_name='revision_changes')
+    old_item = models.ForeignKey(Item, models.PROTECT, related_name='+')
+    new_item = models.ForeignKey(Item, models.PROTECT, related_name='+')
+    old_line = models.ForeignKey(BOMLine, models.PROTECT, related_name='+')
+    new_line = models.ForeignKey(BOMLine, models.PROTECT, related_name='+')
+    assembly_unit = models.CharField(max_length=100, blank=True)
+    old_quantity = quantity()
+    new_quantity = quantity()
+    # 换版时由旧版转为新版的未到货采购数量（快照，只用于展示）。
+    converted_quantity = quantity()
+    reason = models.CharField(max_length=500)
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_revision_change'
+        indexes = [models.Index(fields=['project', 'old_item'], name='lean_revision_project_item')]
+
+
 class PurchaseOrder(BaseModel):
     class Status(models.TextChoices):
         DRAFT = 'draft', '草稿'
@@ -320,6 +344,18 @@ class PurchaseLine(BaseModel):
     returned_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     pending_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=0)
     due_date = models.DateField(null=True, blank=True)
+
+    class RevisionRole(models.TextChoices):
+        NONE = '', ''
+        CONVERTED = 'converted', '换版改单'
+        REWORK_STOCK = 'rework_stock', '在库旧版返修'
+        REWORK_ISSUED = 'rework_issued', '已领旧版返修'
+
+    # 换版产生的明细：旧版在途转成的新版明细，或把旧版返修改制成新版的返修明细。
+    revision = models.ForeignKey(RevisionChange, models.PROTECT, null=True, blank=True, related_name='purchase_lines')
+    revision_role = models.CharField(max_length=20, choices=RevisionRole.choices, blank=True, default='')
+    # 已批准采购的旧版在途转为新版后，须采购向供应商确认（可调价）或取消余量，确认前不能收货。
+    revision_pending = models.BooleanField(default=False)
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_purchase_line'
@@ -476,6 +512,8 @@ class StockMove(ImmutableLedger):
         RETURN = 'return', '项目退料'
         PURCHASE_RETURN = 'purchase_return', '采购退货'
         COUNT = 'count', '盘点'
+        SCRAP = 'scrap', '旧版报废'
+        REWORK = 'rework', '送修改制'
 
     stock = models.ForeignKey(Stock, models.PROTECT, related_name='moves')
     project = models.ForeignKey(Project, models.PROTECT, null=True, blank=True, related_name='stock_moves')
@@ -498,6 +536,37 @@ class StockMove(ImmutableLedger):
             # 项目成本、已领量和缺料计算都按项目或库存加流水类型过滤。
             models.Index(fields=['project', 'kind'], condition=Q(is_deleted=False), name='lean_move_project_kind'),
             models.Index(fields=['stock', 'kind'], condition=Q(is_deleted=False), name='lean_move_stock_kind'),
+        ]
+
+
+class RevisionDisposition(ImmutableLedger):
+    """旧版处理：换版后项目里多出的旧版，报废（在库的出库、已装机的只登记）或留作公用备件。
+
+    返修改制不在这里登记，以返修采购明细为准（见 PurchaseLine.revision_role）。
+    """
+
+    class Source(models.TextChoices):
+        STOCK = 'stock', '在库'
+        ISSUED = 'issued', '已领用'
+
+    class Kind(models.TextChoices):
+        SCRAP = 'scrap', '报废'
+        KEEP = 'keep', '留作备件'
+
+    change = models.ForeignKey(RevisionChange, models.PROTECT, related_name='dispositions')
+    source = models.CharField(max_length=10, choices=Source.choices)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    quantity = quantity(validators=[MinValueValidator(Decimal('0.001'))])
+    move = models.OneToOneField(StockMove, models.PROTECT, null=True, blank=True, related_name='disposition')
+    reason = models.CharField(max_length=500)
+
+    class Meta(ImmutableLedger.Meta):
+        db_table = 'lean_revision_disposition'
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='lean_disposition_positive'),
+            models.CheckConstraint(
+                condition=~Q(source='issued', kind='keep'), name='lean_disposition_issued_scrap_only'
+            ),
         ]
 
 

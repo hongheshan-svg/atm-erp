@@ -170,8 +170,8 @@ class ImportTests(BusinessFixtures, TestCase):
             str(region.sqref): sheet.conditional_formatting[region][0].formula[0]
             for region in sheet.conditional_formatting
         }
-        self.assertEqual(rules['I2:I1001'], 'AND(COUNTA($A2:$O2)>0,LEN(TRIM($A2&""))=0,LEN(TRIM(I2&""))=0)')
-        self.assertEqual(rules['C2:C1001'], 'AND(COUNTA($A2:$O2)>0,TRUE,LEN(TRIM(C2&""))=0)')
+        self.assertEqual(rules['I2:I1001'], 'AND(COUNTA($A2:$P2)>0,LEN(TRIM($A2&""))=0,LEN(TRIM(I2&""))=0)')
+        self.assertEqual(rules['C2:C1001'], 'AND(COUNTA($A2:$P2)>0,TRUE,LEN(TRIM(C2&""))=0)')
         self.assertIn('LEFT($L2&"",2)="有图"', rules['J2:J1001'])
         self.assertNotIn('A2:A1001', rules)  # New materials legitimately have no existing code.
         # Format/validation ranges must not become 1000 phantom records or formula cells.

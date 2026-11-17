@@ -453,7 +453,12 @@ def remove_bom_lines(actor, key, data):
 
 
 def replace_bom(actor, key, line_id, data):
-    """替换物料（升版或换型）：同一事务里在原单元新增新物料行并移除原行，不出现新旧两行同时算缺料的中间状态。"""
+    """替换物料（升版或换型）：同一事务里在原单元新增新物料行并移除原行，不出现新旧两行同时算缺料的中间状态。
+
+    旧版已领用、已到货或在途不再拦截：在途按新图改单，多出的旧版转入「旧版待处理」（见 services/revisions）。
+    """
+    from .revisions import change_revision
+
     source = get_object_or_404(BOMLine.all_objects, pk=identity(line_id))
 
     def execute(user, project):
@@ -468,57 +473,11 @@ def replace_bom(actor, key, line_id, data):
         if item_id == line.item_id:
             raise ValidationError({'item': '请选择与原物料不同的新物料；只改数量请用「修改此行」。'})
         item = lock_items({item_id, line.item_id})[item_id]
-        if not item.is_active:
-            raise ValidationError({'item': 'BOM 不能添加或修改为已停用物料。'})
         qty = number(data.get('quantity'), 'quantity', 3, positive=True)
         note = text(data, 'change_note')
-        if BOMLine.objects.filter(project=project, item=item, assembly_unit=line.assembly_unit).exists():
-            raise Conflict(
-                f'单元「{line.assembly_unit or "未分单元"}」已有物料 {item.code}，请用「修改此行」调整该行数量后移除原行。'
-            )
-        problems = removal_problems(project, [line])
-        if problems:
-            raise Conflict('；'.join(problems))
-        replacement = BOMLine(
-            project=project,
-            item=item,
-            quantity=qty,
-            assembly_unit=line.assembly_unit,
-            change_note=note,
-            required_date=line.required_date,
-            application_date=line.application_date,
-            applicant=line.applicant,
-        )
-        for field in ('required_date', 'application_date'):
-            if field in data:
-                setattr(replacement, field, day(data, field, optional=True))
-        if 'applicant' in data:
-            replacement.applicant = text(data, 'applicant', default='', maximum=80)
-        line.soft_delete(user)
-        save(replacement, user)
-        detail = {'replaced_line': line.pk, 'replaced_item': line.item.code, 'replacement_item': item.code}
-        audit(
-            user,
-            'bom.remove',
-            line,
-            reason=note,
-            quantity=str(line.quantity),
-            assembly_unit=line.assembly_unit,
-            replacement=replacement.pk,
-            **detail,
-        )
-        audit(
-            user,
-            'bom.revise',
-            replacement,
-            before=None,
-            after=str(qty),
-            reason=note,
-            before_unit='',
-            after_unit=replacement.assembly_unit,
-            **detail,
-        )
-        return {'id': replacement.pk, 'removed': line.pk}
+        details = {field: data[field] for field in ('required_date', 'application_date', 'applicant') if field in data}
+        change, converted = change_revision(user, project, line, item, qty, note, details)
+        return {'id': change.new_line_id, 'removed': line.pk, 'change': change.pk, 'converted': converted}
 
     return project_action(
         actor, key, 'bom.replace', source.project_id, {'line': source.pk, 'data': data}, BOM_WRITERS, execute

@@ -15,6 +15,7 @@ import { message, requestKey } from '../utils/request'
 import ActionDialog from './ActionDialog.vue'
 import ListPagination from './ListPagination.vue'
 import BOMPurchasePicker from './BOMPurchasePicker.vue'
+import BOMRevisionPanel from './BOMRevisionPanel.vue'
 import { pageSize } from '../pagination'
 import { partTypes, partTypeLabel, productCategories } from '../product-categories'
 import ImportFeedback from './ImportFeedback.vue'
@@ -72,13 +73,17 @@ const importActions: Record<string, string> = { create: '新增', unchanged: '�
 const previewRows = computed(() => (preview.value?.lines || []).map((row: Row) => ({ row: row.row, data: {
   ...row,
   bom_change: (row.bom_action === 'merged' ? `并入第 ${row.merged_into} 行`
-    : row.bom_action === 'update' ? `修改 ${qty(row.before_quantity)} → ${qty(row.quantity)}` : importActions[row.bom_action] || '')
+    : row.bom_action === 'update' ? `修改 ${qty(row.before_quantity)} → ${qty(row.quantity)}`
+      : row.bom_action === 'replace' ? `换版：替换 ${row.replaces}${row.replaces_revision ? `（${row.replaces_revision} 版）` : ''} ${qty(row.before_quantity)} → ${qty(row.quantity)}`
+        : importActions[row.bom_action] || '')
     + (row.merged_rows?.length ? `（含第 ${row.merged_rows.join('、')} 行，合计 ${qty(row.quantity)}）` : ''),
   material_action: row.material_hint ? `${row.material_action}：${row.material_hint}` : row.material_action,
   product_category: productCategories[row.product_category] || row.product_category,
   quantity: qty(row.quantity),
 } })))
 const command = ref<Command | null>(null)
+// 换版、报废、返修后刷新「旧版待处理」。
+const partsVersion = ref(0)
 const search = ref(''), brand = ref(''), unit = ref(''), partType = ref(''), shortageOnly = ref(view.value === 'purchase')
 // 草稿和待批采购照常扣减缺料（防止重复下单），但「仅看缺料」默认仍保留这些行，草稿被遗忘时还有人看得到。
 const includeUnapproved = ref(true), overdueOnly = ref(false), inactiveOnly = ref(false)
@@ -372,6 +377,7 @@ async function importFile(event: Event) {
 const previewHints = computed(() => (preview.value?.lines || []).flatMap((row: Row) => [
   ...(row.bom_action === 'merged' ? [{ row: row.row, text: `${row.item_name}：与第 ${row.merged_into} 行是同一物料、同一单元，数量 ${qty(row.quantity)} 已并入第 ${row.merged_into} 行` }] : []),
   ...(row.material_hint ? [{ row: row.row, text: `${row.item_name}：${row.material_hint}` }] : []),
+  ...(row.bom_action === 'replace' ? [{ row: row.row, text: `${row.replaces} ${row.replaces_name || ''} 换版为本行物料：旧版未到货的采购按新图改单，已到货和已领用超出需求的旧版进入「旧版待处理」` }] : []),
 ]))
 const previewBrandFills = computed(() => (preview.value?.lines || []).filter((row: Row) => row.material_action === '沿用已有物料，补填品牌').length)
 function confirmImport() {
@@ -380,7 +386,7 @@ function confirmImport() {
   const summary = result.summary || {}
   const materials = summary.new_materials ?? (result.lines || []).filter((row: Row) => row.new_material).length
   const brands = previewBrandFills.value
-  const text = `将新增 ${summary.create ?? 0} 行、修改 ${summary.update ?? 0} 行${summary.unchanged ? `，与现有一致的 ${summary.unchanged} 行跳过` : ''}${summary.merged ? `，${summary.merged} 行重复物料已合并数量` : ''}${result.token ? `，新建物料 ${materials} 个` : ''}${brands ? `，为 ${brands} 行已有物料补填品牌` : ''}。`
+  const text = `将新增 ${summary.create ?? 0} 行、修改 ${summary.update ?? 0} 行${summary.replace ? `、换版 ${summary.replace} 行` : ''}${summary.unchanged ? `，与现有一致的 ${summary.unchanged} 行跳过` : ''}${summary.merged ? `，${summary.merged} 行重复物料已合并数量` : ''}${result.token ? `，新建物料 ${materials} 个` : ''}${brands ? `，为 ${brands} 行已有物料补填品牌` : ''}。`
   if (result.token) {
     command.value = {
       title: '确认导入 BOM 与物料',
@@ -414,6 +420,7 @@ function confirmImport() {
 function saved() {
   // 不整体清空采购勾选：随后的重新读取按行剔除已不可选的行（load）。
   closeImport()
+  partsVersion.value += 1
   // 父页面收到 changed 会递增 revision 并触发重新读取；这里再读一次就是同一份需求重复请求。
   if (props.revision === undefined) void load()
   emit('changed')
@@ -466,6 +473,7 @@ function saved() {
       <button v-for="group in unitSummary" :key="group.unit" type="button" class="bom-unit-chip" :class="{ active: unit === group.unit }" :aria-pressed="unit === group.unit" @click="unit = unit === group.unit ? '' : group.unit"><strong>{{ unitLabel(group.unit) }}</strong><small><span class="bom-unit-rows">{{ group.rows }} 行 · </span><span :class="{ 'shortage-number': group.short }">缺 {{ group.short }}</span><template v-if="group.overdue"> · <span class="overdue-count">逾期 {{ group.overdue }}</span></template></small></button>
     </div>
     <p v-if="inactiveCount" class="bom-inactive-note" role="status"><el-tag size="small" type="info">已停用</el-tag><span>{{ view === 'purchase' ? `${inactiveCount} 行物料已停用，不能采购；请联系工程师在 BOM 里替换为在用物料。` : `${inactiveCount} 行物料已停用，不能修改数量或采购；请在行尾「操作」用「替换物料」换成在用物料，或移除。` }}</span><button type="button" class="bom-link-button" :aria-pressed="inactiveOnly" @click="inactiveOnly = !inactiveOnly">{{ inactiveOnly ? '显示全部' : '只看这些行' }}</button></p>
+    <BOMRevisionPanel v-if="demand.revision_changes" :project-id="projectId" :refresh="(revision ?? 0) + partsVersion" :can-edit-bom="canEditBom" :status="status" @command="value => { command = value }" />
     <div class="bom-demand-filters">
       <label class="bom-search"><span class="visually-hidden">搜索物料</span><input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号、品牌" /></label>
       <el-button v-if="mobile" class="bom-filter-toggle" :aria-expanded="filtersOpen" :aria-controls="filterId" @click="filtersOpen = !filtersOpen">筛选{{ activeFilters ? ` · ${activeFilters}` : '' }} {{ filtersOpen ? '▴' : '▾' }}</el-button>
@@ -541,7 +549,7 @@ function saved() {
       <el-table-column v-if="view === 'prepare' && (batchVisible || canMaintain)" label="操作" :width="mobile ? 76 : batchVisible && canMaintain ? 150 : 96" fixed="right"><template #default="{ row }"><div class="row-actions">
         <el-dropdown v-if="canMaintain && view === 'prepare'" trigger="click" :persistent="false" @command="(name: string) => rowAction(row, String(name))">
           <el-button size="small" :disabled="busy">操作 ▾</el-button>
-          <template #dropdown><el-dropdown-menu><el-dropdown-item command="修改此行" :disabled="inactive(row)">{{ inactive(row) ? '修改此行（物料已停用，请替换）' : '修改此行' }}</el-dropdown-item><el-dropdown-item command="替换物料">替换物料</el-dropdown-item><el-dropdown-item v-if="!batchVisible" command="移除">移除</el-dropdown-item></el-dropdown-menu></template>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item command="修改此行" :disabled="inactive(row)">{{ inactive(row) ? '修改此行（物料已停用，请替换）' : '修改此行' }}</el-dropdown-item><el-dropdown-item v-if="row.drawing_number" command="升版">升版</el-dropdown-item><el-dropdown-item command="替换物料">替换物料</el-dropdown-item><el-dropdown-item v-if="!batchVisible" command="移除">移除</el-dropdown-item></el-dropdown-menu></template>
         </el-dropdown>
         <el-button v-if="batchVisible" type="danger" text size="small" :disabled="busy || deletionLoading" @click="openDeletion([row])">删除</el-button>
       </div></template></el-table-column>

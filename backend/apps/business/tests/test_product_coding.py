@@ -156,7 +156,7 @@ class ProductCodingTests(BusinessFixtures, TestCase):
         self.assertEqual(lines[3]['quantity'], '10.000')
         self.assertEqual(
             preview['summary'],
-            {'create': 3, 'update': 0, 'unchanged': 0, 'merged': 3, 'untouched': 0, 'new_materials': 1},
+            {'create': 3, 'update': 0, 'unchanged': 0, 'merged': 3, 'replace': 0, 'untouched': 0, 'new_materials': 1},
         )
         self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
         created = Item.objects.get(specification='PTL601A')

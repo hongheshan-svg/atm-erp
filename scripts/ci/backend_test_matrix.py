@@ -34,6 +34,7 @@ TARGETS = {
         'apps.business.tests.test_reports',
         'apps.business.tests.test_transfers',
         'apps.business.tests.test_bom_selection',
+        'apps.business.tests.test_bom_revision',
         'apps.business.tests.test_bom_export',
         'apps.business.tests.test_product_coding',
         'apps.business.tests.test_manual_codes',
@@ -108,6 +109,7 @@ MODULE_TESTS = {
         'import_feedback',
     ),
     'bom': (
+        'bom_revision',
         'bom_export',
         'deletions',
         'audit_business',
@@ -126,6 +128,7 @@ MODULE_TESTS = {
         'audit_fixes',
     ),
     'purchases': (
+        'bom_revision',
         'purchase_changes',
         'purchase_contract',
         'document_preview',
@@ -153,6 +156,7 @@ MODULE_TESTS = {
         'bom_selection',
     ),
     'inventory': (
+        'bom_revision',
         'deletions',
         'audit_business',
         'import_dedup',

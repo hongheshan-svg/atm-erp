@@ -122,6 +122,7 @@ def template(lines, file_format):
             'brand': item.brand,
             'part_type': item.get_part_type_display() if item.part_type else '',
             'unit': item.unit,
+            'replaces': '',
         }
         rows.append([values[key] for _, key in BOM_COLUMNS])
     return tabular.document('bom-template', [label for label, _ in BOM_COLUMNS], rows, file_format, numeric={2})

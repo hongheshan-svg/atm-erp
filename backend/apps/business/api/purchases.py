@@ -28,7 +28,7 @@ class PurchaseView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     write_roles = PURCHASE_READERS
     queryset = PurchaseOrder.objects.select_related('supplier', 'project').prefetch_related(
-        'lines__item', 'lines__bom_line', 'project__members'
+        'lines__item', 'lines__bom_line', 'lines__revision__old_item', 'project__members'
     )
     serializer_class = PurchaseSerializer
     filterset_fields = ['project', 'supplier', 'status']
@@ -191,6 +191,12 @@ class PurchaseView(ImportableMixin, ReadView):
     @action(detail=True, methods=['post'])
     def receive(self, request, pk=None):
         return Response(supply.receive(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['post'], url_path='revision-review')
+    def revision_review(self, request, pk=None):
+        from ..services import revisions
+
+        return Response(revisions.review(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['post'], url_path='cancel-remainder')
     def cancel_remainder(self, request, pk=None):

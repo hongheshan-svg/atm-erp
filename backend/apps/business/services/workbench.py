@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from django.core.paginator import Paginator
 from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Sum, Value
@@ -28,6 +29,7 @@ from .bom import allocations
 from .common import ZERO
 from .execution import with_task_flags
 from .payment_terms import due_entries, with_sources
+from .revisions import PARTS_READERS, open_parts, pending_reviews
 from .supply import applicants_by_purchase
 from .task_supervision import supervised_tasks
 
@@ -66,6 +68,26 @@ def handover_projects(user):
             'project_name': project.name,
             'due_date': project.due_date,
             'missing': missing,
+        }
+
+
+def obsolete_projects(user):
+    """换版后仍有旧版待处理的未结项目：仓管报废或留用在库旧版，工程师登记已装机报废，采购开返修单。"""
+    projects = projects_for(user, Project.objects.exclude(status__in=['closed', 'cancelled']), PARTS_READERS)
+    for project, rows in open_parts(projects):
+        stock = sum((Decimal(row['pending_stock']) for row in rows), ZERO)
+        issued = sum((Decimal(row['pending_issued']) for row in rows), ZERO)
+        yield {
+            'id': project.pk,
+            'project': project.pk,
+            'code': project.code,
+            'title': f'{project.code} {project.name}',
+            'project_name': project.name,
+            'due_date': project.due_date,
+            'parts': len(rows),
+            'pending_stock': str(stock),
+            'pending_issued': str(issued),
+            'items': '、'.join(f'{row["old_item_code"]}→{row["new_item_code"]}' for row in rows[:3]),
         }
 
 
@@ -127,6 +149,8 @@ def summary(request):
         'handover_projects',
         'approved_purchases',
         'shortage_projects',
+        'revision_reviews',
+        'obsolete_parts',
     }
     if selected_bucket and selected_bucket not in allowed:
         raise ValidationError('未知待办分类。')
@@ -247,7 +271,7 @@ def summary(request):
     purchases = (
         PurchaseOrder.objects.filter(project__in=projects)
         .select_related('project', 'supplier')
-        .prefetch_related('lines__item', 'lines__bom_line', 'project__members')
+        .prefetch_related('lines__item', 'lines__bom_line', 'lines__revision__old_item', 'project__members')
         .order_by('due_date', 'pk')
     )
 
@@ -279,6 +303,18 @@ def summary(request):
         result['approved_purchases'] = bucket(approved, PurchaseSerializer, 'approved_purchases')
         if wanted('shortage_projects'):
             result['shortage_projects'] = bucket(shortage_projects(user), Plain, 'shortage_projects')
+        if wanted('revision_reviews'):
+            # 换版后已批准采购里转成新版的明细：向供应商确认新图（可调价）或取消，确认前仓库不能收货。
+            reviews = purchases.filter(
+                project__in=projects_for(user, Project.objects.all(), PURCHASERS),
+                pk__in=pending_reviews().values('purchase_id'),
+            )
+            if reviews.exists():
+                result['revision_reviews'] = bucket(reviews, PurchaseSerializer, 'revision_reviews')
+    if has_role(user, PARTS_READERS) and wanted('obsolete_parts'):
+        rows = list(obsolete_projects(user))
+        if rows:
+            result['obsolete_parts'] = bucket(rows, Plain, 'obsolete_parts')
     if has_role(user, PURCHASERS | WAREHOUSE) and wanted('overdue_purchases'):
         overdue = (
             purchases.filter(status__in=['approved', 'partial'])

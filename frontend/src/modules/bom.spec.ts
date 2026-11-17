@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { read } from '../api'
 import { user } from '../session'
-import { actionCommand, actionNames, bomCommand, unitNames } from './bom'
+import { actionCommand, actionNames, bomCommand, revisionResult, unitNames } from './bom'
 
 vi.mock('../api', () => ({ read: vi.fn() }))
 afterEach(() => { user.value = null; vi.resetAllMocks() })
@@ -30,9 +30,34 @@ it('替换物料一次提交新物料并移除原行，保留原单元与日期'
   expect(command.path).toBe('/business/bom/5/replace/')
   expect(command.submitLabel).toBe('确认替换')
   expect(command.notice!.text).toContain('「03 检测」')
+  expect(command.notice!.text).toContain('旧版待处理')
   expect(command.initial).toMatchObject({ quantity: '2', required_date: '2026-12-01' })
   expect(command.prepare!({ item: 9, quantity: '3', change_note: 'B版', required_date: '2026-12-01' })).toEqual({ item: 9, quantity: '3', change_note: 'B版', required_date: '2026-12-01', application_date: null, applicant: '' })
   expect(read).not.toHaveBeenCalled()
+})
+
+it('带图号的非标件可一步升版：默认只改本项目，可勾选同物料的其他项目，不能维护的项目写在提示里', async () => {
+  user.value = { roles: ['mechanical_engineer'] }
+  const row = { id: 5, project: 81, item: 7, item_code: 'JG-001', item_name: '夹爪安装板', specification: '6061', drawing_number: 'DWG-001', drawing_revision: 'A', quantity: '10', assembly_unit: '01 上料', can_edit_bom: true }
+  expect(actionNames('bom', row)).toEqual(['修改此行', '升版', '替换物料', '移除'])
+  vi.mocked(read).mockResolvedValue([
+    { id: 90, code: 'ATM2690', name: '下料线', quantity: '4.000', units: ['02 搬运'], writable: true },
+    { id: 91, code: 'ATM2691', name: '包装线', quantity: '2.000', units: ['未分单元'], writable: false },
+  ])
+  const command = await actionCommand('bom', row, '升版')
+  expect(read).toHaveBeenCalledWith('/business/bom/5/upgrade-scope/')
+  expect(command.path).toBe('/business/bom/5/upgrade/')
+  expect(command.notice!.text).toContain('按新图改单')
+  expect(command.notice!.text).toContain('ATM2691')
+  const scope = command.fields.find(field => field.key === 'projects')!
+  expect(scope.options).toEqual([{ value: 90, label: 'ATM2690 下料线（02 搬运，共 4）' }])
+  expect(command.initial).toMatchObject({ projects: [], quantity: '10' })
+  expect(command.prepare!({ drawing_revision: 'B', name: '', specification: '6061 加厚', quantity: '10', change_note: 'ECN-1', projects: [90] }))
+    .toEqual({ drawing_revision: 'B', specification: '6061 加厚', quantity: '10', change_note: 'ECN-1', projects: [90] })
+  expect(revisionResult({ item_code: 'JG-001C', created_item: true, converted: [{ code: 'PO-1', pending: true }, { code: 'PO-2', pending: false }], projects: [{ code: 'ATM2690', changes: [{ converted: [{ code: 'PO-3', pending: true }] }] }] }))
+    .toBe('新版物料 JG-001C（新建）。已同时换版：ATM2690。未批准的采购 PO-2 已直接改成新版。已批准的采购 PO-1、PO-3 已转新版，待采购向供应商确认。')
+  // 没有图号的标准件换型号仍用替换物料。
+  expect(actionNames('bom', { ...row, drawing_number: '' })).toEqual(['修改此行', '替换物料', '移除'])
 })
 
 it('移除确认写明物料编码、名称、单元和数量', async () => {

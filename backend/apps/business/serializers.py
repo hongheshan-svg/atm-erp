@@ -288,6 +288,9 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
     bom_quantity = serializers.DecimalField(
         source='bom_line.quantity', max_digits=18, decimal_places=3, read_only=True, allow_null=True, default=None
     )
+    # 换版产生的明细：由哪个旧版物料转来或返修改制而来。
+    revision_from = serializers.CharField(source='revision.old_item.code', read_only=True, default='')
+    revision_from_name = serializers.CharField(source='revision.old_item.name', read_only=True, default='')
 
     class Meta:
         model = PurchaseLine
@@ -313,6 +316,10 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
             'received_quantity',
             'cancelled_quantity',
             'returned_quantity',
+            'revision_role',
+            'revision_pending',
+            'revision_from',
+            'revision_from_name',
         ]
 
 

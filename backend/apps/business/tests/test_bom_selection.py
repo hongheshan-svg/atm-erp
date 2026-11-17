@@ -551,16 +551,17 @@ class BOMAuditRemediationTests(BusinessFixtures, TestCase):
         new = BOMLine.objects.get(pk=result['id'])
         self.assertEqual((new.item, new.assembly_unit, new.quantity), (replacement, '01 上料', 3))
         self.assertTrue(BOMLine.all_objects.get(pk=self.feed.pk).is_deleted)
-        # 原行有在途采购时整步拒绝，新物料行也不落库。
+        # 原行有在途采购时不再拦截：已批准采购的旧版余量转为新版明细，待采购向供应商确认。
         purchase = self.buy(self.check, '1', approve=True)
-        conflict = self.post(
+        result = self.post(
             'mechanical_engineer',
             f'bom/{self.check.pk}/replace/',
             {'item': replacement.pk, 'quantity': '3', 'change_note': '换型'},
-            status=409,
         )
-        self.assertIn(purchase.code, str(conflict))
-        self.assertFalse(BOMLine.objects.filter(item=replacement, assembly_unit='03 检测').exists())
+        self.assertEqual([(row['code'], row['pending']) for row in result['converted']], [(purchase.code, True)])
+        self.assertTrue(
+            purchase.lines.filter(item=replacement, bom_line_id=result['id'], revision_pending=True).exists()
+        )
 
     def test_inactive_material_is_flagged_and_can_only_be_replaced(self):
         Item.objects.filter(pk=self.other.pk).update(is_active=False)

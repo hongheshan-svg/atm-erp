@@ -1,9 +1,13 @@
 from django.shortcuts import get_object_or_404
+from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 
 from apps.core.permissions import (
+    BOM_WRITERS,
     projects_for,
+    require_project,
 )
 
 from ..models import (
@@ -13,7 +17,7 @@ from ..models import (
 from ..serializers import (
     BOMSerializer,
 )
-from ..services import bom, bom_export, corrections, tabular
+from ..services import bom, bom_export, corrections, revisions, tabular
 from ..services.common import identity
 from .common import ExportThrottle, ReadView, key
 
@@ -48,6 +52,17 @@ class BOMView(ReadView):
     def replace(self, request, pk=None):
         return Response(corrections.replace_bom(request.user, key(request), pk, request.data))
 
+    @action(detail=True, methods=['post'])
+    def upgrade(self, request, pk=None):
+        return Response(revisions.upgrade(request.user, key(request), pk, request.data))
+
+    @action(detail=True, methods=['get'], url_path='upgrade-scope')
+    def upgrade_scope(self, request, pk=None):
+        """升版时可勾选一并换版的其他项目（同一物料仍在其 BOM 中），并标明当前用户能否维护。"""
+        line = self.get_object()
+        require_project(request.user, line.project, BOM_WRITERS)
+        return Response(revisions.scope(request.user, line))
+
     @action(detail=False, methods=['post'], url_path='remove-batch')
     def remove_batch(self, request):
         return Response(corrections.remove_bom_lines(request.user, key(request), request.data))
@@ -62,3 +77,17 @@ class BOMView(ReadView):
         logs, lines = bom.change_log(project, request.query_params)
         page = self.paginate_queryset(logs)
         return self.get_paginated_response([bom.change_row(log, lines[log.resource]) for log in page])
+
+
+class RevisionChangeView(viewsets.ViewSet):
+    """换版记录上的旧版处理：报废、留作备件和开返修采购单；角色与项目范围由服务层按项目判断。"""
+
+    parser_classes = [JSONParser]
+
+    @action(detail=True, methods=['post'])
+    def dispose(self, request, pk=None):
+        return Response(revisions.dispose(request.user, key(request), pk, request.data))
+
+    @action(detail=True, methods=['post'])
+    def rework(self, request, pk=None):
+        return Response(revisions.rework(request.user, key(request), pk, request.data))

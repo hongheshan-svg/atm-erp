@@ -35,11 +35,13 @@ MAX_BYTES = 5 * 1024 * 1024
 LEGACY_HEADERS = ['物料编码', '数量', '变更说明', '单元']
 PREVIOUS_HEADERS = ['物料编码', '单元', '需求数量', '变更说明']
 HEADERS = PREVIOUS_HEADERS + ['需求日期', '申请日期', '申请人']
+# 物料导入解析后交给预览的格式：多一列「替换原编码」，表示本行在原单元把该物料换版为本行物料。
+REVISION_HEADERS = HEADERS + ['替换原编码']
 
 
 def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False):
     if headers is None:
-        legacy_headers = [PREVIOUS_HEADERS, LEGACY_HEADERS, LEGACY_HEADERS[:3]]
+        legacy_headers = [REVISION_HEADERS, PREVIOUS_HEADERS, LEGACY_HEADERS, LEGACY_HEADERS[:3]]
     headers = HEADERS if headers is None else headers
     if upload is None or not hasattr(upload, 'read'):
         raise ValidationError({'file': '请选择 CSV 或 XLSX 文件。'})
@@ -183,7 +185,7 @@ def preview(project, upload):
     state(project, BOM_STATES)
     expected_revision = revision(project)
     headers, raw = read_file(upload, return_headers=True)
-    if headers in (HEADERS, PREVIOUS_HEADERS):
+    if headers in (REVISION_HEADERS, HEADERS, PREVIOUS_HEADERS):
         raw = [[row[0], row[2], row[3], row[1], *row[4:]] for row in raw]
     codes = {str(row[0]).strip() for row in raw if row and row[0] is not None}
     items = {item.code: item for item in Item.objects.filter(code__in=codes, is_active=True)}
@@ -191,6 +193,9 @@ def preview(project, upload):
     grouped = by_item(existing)
     current = {(line.item_id, line.assembly_unit): line for line in existing}
     known = {line.assembly_unit for line in existing}
+    # 换版的原物料可能已停用，按编码在项目现有 BOM 里找；{原 BOM 行: 换版所在行号}。
+    old_items = {line.item.code: line.item for line in existing}
+    replacing = {}
     lines, errors, primary = [], [], {}
     linked = None  # 各 BOM 行关联的未取消在途，首次修改已有行时一次读取。
     for row_number, row in enumerate(raw, 2):
@@ -217,7 +222,7 @@ def preview(project, upload):
                 raise ValidationError(problem)
             qty = number(values[1], '数量', 3, positive=True)
             details = {}
-            if headers == HEADERS:
+            if headers in (HEADERS, REVISION_HEADERS):
                 for field, value in zip(('required_date', 'application_date'), row[4:6], strict=True):
                     if isinstance(value, datetime):
                         value = value.date().isoformat()
@@ -233,6 +238,32 @@ def preview(project, upload):
                 raise ValidationError('单元不能超过100字符。')
             if len(note) > 500:
                 raise ValidationError('变更说明不能超过 500 字符。')
+            replaced = None
+            replaces = str(row[7] or '').strip() if headers == REVISION_HEADERS and len(row) > 7 else ''
+            first = primary.get((item.pk, assembly_unit))
+            if replaces:
+                old = old_items.get(replaces)
+                if old is None:
+                    raise ValidationError(f'替换原编码 {replaces} 不在本项目 BOM 中，请从项目 BOM 复制原物料编码。')
+                if old.pk == item.pk:
+                    raise ValidationError('替换原编码与物料编码相同；只改数量请清空替换原编码。')
+                replaced = current.get((old.pk, assembly_unit))
+                if replaced is None:
+                    raise ValidationError(
+                        f'单元「{assembly_unit or "未分单元"}」没有原物料 {replaces}，无法换版；请核对单元和替换原编码。'
+                    )
+                if not note:
+                    raise ValidationError('换版必须填写变更说明（如设计变更单号和原因）。')
+            if first is not None and first.get('replaces_line') != (replaced.pk if replaced else None):
+                raise ValidationError('同一单元同一物料的多行，替换原编码必须一致；请合并为一行。')
+            if replaced is not None and first is None:
+                if replaced.pk in replacing:
+                    raise ValidationError(f'原物料 {replaces} 在本单元已由第 {replacing[replaced.pk]} 行换版。')
+                if (item.pk, assembly_unit) in current:
+                    raise ValidationError(
+                        f'单元「{assembly_unit or "未分单元"}」已有物料 {code}，不能再换成它；请修改那一行的数量，并另行移除原物料。'
+                    )
+                replacing[replaced.pk] = row_number
             known.add(assembly_unit)
             line = {
                 **details,
@@ -251,7 +282,13 @@ def preview(project, upload):
                 'change_note': note,
                 'assembly_unit': assembly_unit,
             }
-            first = primary.get((item.pk, assembly_unit))
+            if replaced is not None:
+                line |= {
+                    'replaces': replaced.item.code,
+                    'replaces_line': replaced.pk,
+                    'replaces_name': replaced.item.name,
+                    'replaces_revision': replaced.item.drawing_revision,
+                }
             if first is None:
                 primary[(item.pk, assembly_unit)] = line
             else:
@@ -266,10 +303,28 @@ def preview(project, upload):
         except ValidationError as exc:
             errors.append({'row': row_number, 'message': message(exc.detail)})
     # 合并完成后再按合计数量判断新增、修改或不变，校验变更说明与在途采购。
+    replaced_keys = {
+        (line.item_id, line.assembly_unit): replacing[line.pk] for line in existing if line.pk in replacing
+    }
     for row_key, line in primary.items():
         existing_line = current.get(row_key)
         qty = number(line['quantity'], '数量', 3)
         action = 'create'
+        if row_key in replaced_keys:
+            # 原物料这一单元已由另一行换版，同时再修改它会互相覆盖。
+            rows = [line['row'], *line.get('merged_rows', [])]
+            errors.append(
+                {
+                    'row': line['row'],
+                    'message': f'这一行的物料在本单元已由第 {replaced_keys[row_key]} 行换版，不能同时修改；请删除这一行。',
+                }
+            )
+            lines = [entry for entry in lines if entry['row'] not in rows]
+            continue
+        if line.get('replaces_line'):
+            line['bom_action'] = 'replace'
+            line['before_quantity'] = str(next(old.quantity for old in existing if old.pk == line['replaces_line']))
+            continue
         if existing_line is not None:
             same = qty == existing_line.quantity and all(
                 str(getattr(existing_line, field) or '') == str(line.get(field) or '')
@@ -308,7 +363,16 @@ def preview(project, upload):
         first_row.setdefault(line['item'], line['row'])
     for problem in total_shortfalls(project, existing, updates):
         errors.append({'row': first_row[problem['item']], 'message': problem['message']})
-    listed = {(line['item'], line['assembly_unit']) for line in lines}
+    from .revisions import conversion_problems
+
+    # 换版行：旧版在途按新图转为新版，新版各单元需求合计须覆盖新版已领、在途和转来的数量。
+    replacements = [
+        (line['replaces_line'], line['item'], line['row']) for line in effective if line['bom_action'] == 'replace'
+    ]
+    problems = conversion_problems(project, existing, updates, replacements)
+    if problems:
+        errors = sorted([*errors, *problems], key=lambda error: error.get('row', 0))
+    listed = {(line['item'], line['assembly_unit']) for line in lines} | set(replaced_keys)
     # 导入只新增和修改，不会移除文件里没有的行；列出来，免得人以为上传整表就等于整批替换。
     untouched = [
         {
@@ -328,7 +392,7 @@ def preview(project, upload):
         'summary': {
             **{
                 key: sum(line['bom_action'] == key for line in lines)
-                for key in ('create', 'update', 'unchanged', 'merged')
+                for key in ('create', 'update', 'unchanged', 'merged', 'replace')
             },
             'untouched': len(untouched),
         },

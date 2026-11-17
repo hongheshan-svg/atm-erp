@@ -178,7 +178,7 @@ class BOMRoundTripTests(BusinessFixtures, TestCase):
         self.assertTrue(changed['can_import'], changed['errors'])
         self.assertEqual(
             changed['summary'],
-            {'create': 0, 'update': 1, 'unchanged': 1, 'merged': 0, 'untouched': 1, 'new_materials': 0},
+            {'create': 0, 'update': 1, 'unchanged': 1, 'merged': 0, 'replace': 0, 'untouched': 1, 'new_materials': 0},
         )
         first = next(line for line in changed['lines'] if line['row'] == 2)
         self.assertEqual(

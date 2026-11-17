@@ -5,6 +5,7 @@ import hashlib
 import io
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -32,9 +33,13 @@ MATERIAL_FIELDS = (
     'unit',
 )
 HEADERS = [label for label, _ in BOM_COLUMNS]
+# v1.8.44 之前的模板没有末尾的「替换原编码」列，照常接受，按不换版处理。
+PREVIOUS_HEADERS = HEADERS[:-1]
 SALT = 'lean-bom-material-import-v1'
 BRAND_BACKFILLED = '沿用已有物料，补填品牌'
 MODEL_REUSED = '按型号复用已有物料'
+UPGRADED = '升版新建物料'
+REVISION_REUSED = '复用已有新版物料'
 FIELD_LABELS = {key: label for label, key in BOM_COLUMNS}
 # 品牌栏写的是购买渠道而不是厂家时，规格多为通用尺寸（M6、Φ6*18），同规格可能是垫片也可能是螺母，
 # 不能凭「规格、品牌、单位相同」就认定是同一物料。
@@ -72,7 +77,7 @@ def kept(item, fields):
 def row_data(row):
     from .transfers import ENUMS
 
-    data = {field: str(value or '').strip() for field, value in zip(MATERIAL_FIELDS, row[7:], strict=True)}
+    data = {field: str(value or '').strip() for field, value in zip(MATERIAL_FIELDS, row[7:15], strict=True)}
     for field in ('product_category', 'part_type'):
         data[field] = ENUMS[field].get(data[field], data[field])
     return data
@@ -201,6 +206,29 @@ def material(actor, row, created=None):
     return Item.objects.get(pk=result['id']), '自动新建物料', ''
 
 
+def revision_material(actor, row):
+    """换版行编码留空、原物料有图号时按升版处理：只需填写新的图档版本，其余资料沿用原物料（名称、规格可改）。
+
+    与 BOM「升版」同一规则：同图号新版本的在用物料已存在就复用，否则复制原物料资料新建；
+    原物料没有图号（换型号）或本行写了别的图号时，按普通新增物料解析。
+    """
+    from .revisions import new_revision
+
+    replaces = row[15].strip()
+    if not replaces or row[0].strip():
+        return None
+    old = Item.objects.filter(code=replaces).first()
+    data = row_data(row)
+    if old is None or not old.drawing_number or data['drawing_number'] not in ('', old.drawing_number):
+        return None
+    if not data['drawing_revision']:
+        raise ValidationError({'drawing_revision': '同图号升版请填写新的图档版本，或在物料编码列填写新版物料编码。'})
+    fields = {'drawing_revision': data['drawing_revision']}
+    fields.update({field: data[field] for field in ('name', 'specification') if data[field]})
+    item, created = new_revision(actor, str(uuid.uuid4()), old, fields)
+    return item, UPGRADED if created else REVISION_REUSED, ''
+
+
 def resolve(actor, project, records, expected, *, collect_errors=False):
     if bom.revision(project) != expected:
         raise Conflict('BOM 已变化，请重新上传预览。')
@@ -210,23 +238,23 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     new_ids = {}
     for index, row in enumerate(records, 2):
         if not any(row):
-            output.append(row[:7])
+            output.append([''] * 8)
             continue
         try:
             with transaction.atomic():
-                item, action, hint = material(actor, row, new_ids)
+                item, action, hint = revision_material(actor, row) or material(actor, row, new_ids)
         except ValidationError as exc:
             errors.append({'row': index, 'message': bom_import.message(exc.detail)})
             # Preserve source row numbers when validating the remaining BOM lines.
-            output.append([''] * 7)
+            output.append([''] * 8)
             continue
-        if action in {'自动新建物料', '按填写编码新建物料'}:
+        if action in {'自动新建物料', '按填写编码新建物料', UPGRADED}:
             new_ids[item.pk] = index
-        output.append([item.code, *row[1:7]])
+        output.append([item.code, *row[1:7], row[15]])
         actions.append((index, action, item.pk in new_ids, hint))
     stream = io.StringIO()
     writer = csv.writer(stream)
-    writer.writerow(bom_import.HEADERS)
+    writer.writerow(bom_import.REVISION_HEADERS)
     writer.writerows(output)
     result = bom_import.preview(project, SimpleUploadedFile('bom.csv', stream.getvalue().encode()))
     if errors and not actions:
@@ -267,9 +295,18 @@ def preview(actor, project, upload):
     headers, records = bom_import.read_file(
         upload,
         HEADERS,
-        [bom_import.HEADERS, bom_import.PREVIOUS_HEADERS, bom_import.LEGACY_HEADERS, bom_import.LEGACY_HEADERS[:3]],
+        [
+            PREVIOUS_HEADERS,
+            bom_import.HEADERS,
+            bom_import.PREVIOUS_HEADERS,
+            bom_import.LEGACY_HEADERS,
+            bom_import.LEGACY_HEADERS[:3],
+        ],
         return_headers=True,
     )
+    if headers == PREVIOUS_HEADERS:
+        # 旧模板补上空的「替换原编码」列；带问题标注的回传文件也换成新表头。
+        headers, records = HEADERS, [[*row, ''] for row in records]
     if headers != HEADERS:
         upload.seek(0)
         result = bom_import.preview(project, upload)
@@ -344,6 +381,24 @@ def preview(actor, project, upload):
     )
 
 
+def replace_row(user, project, row):
+    """导入确认里的换版行：锁定原 BOM 行后与「替换物料」走同一换版逻辑。"""
+    from django.shortcuts import get_object_or_404
+
+    from ..models import BOMLine
+    from .revisions import change_revision
+
+    line = get_object_or_404(
+        BOMLine.objects.select_for_update(of=('self',)).select_related('item'), pk=row['replaces_line'], project=project
+    )
+    item = Item.objects.get(pk=row['item'])
+    details = {field: row[field] for field in ('required_date', 'application_date', 'applicant') if field in row}
+    change, converted = change_revision(
+        user, project, line, item, Decimal(row['quantity']), row['change_note'], details, operation='import'
+    )
+    return {'change': change.pk, 'row': row['row'], 'line': change.new_line_id, 'converted': converted}
+
+
 def confirm(actor, project, data):
     if not isinstance(data, dict) or set(data) != {'token'} or not isinstance(data['token'], str):
         raise ValidationError('请提交预览确认凭据。')
@@ -357,22 +412,26 @@ def confirm(actor, project, data):
     def execute(user, locked):
         result = resolve(user, locked, payload['records'], payload['revision'])
         fields = ('item', 'quantity', 'assembly_unit', 'change_note', 'required_date', 'application_date', 'applicant')
-        # 与当前 BOM 完全一致的行不提交，不要求变更说明，也不写修订记录。
+        # 与当前 BOM 完全一致的行不提交，不要求变更说明，也不写修订记录；换版行另走换版，不经 revise_bom。
         changed = [
             {field: row.get(field) for field in fields}
             for row in result['lines']
-            if row.get('bom_action') not in ('unchanged', 'merged')
+            if row.get('bom_action') not in ('unchanged', 'merged', 'replace')
         ]
-        if not changed:
+        replacements = [row for row in result['lines'] if row.get('bom_action') == 'replace']
+        if not changed and not replacements:
             # 只补填了品牌：物料主数据已在 resolve 里保存，BOM 本身没有修订。
             return {'id': locked.pk, 'revision': bom.revision(locked), 'lines': result['lines']}
-        saved = bom.revise_bom(
-            user,
-            str(uuid.uuid4()),
-            locked.pk,
-            {'expected_revision': payload['revision'], 'lines': changed},
-        )
-        return {**saved, 'lines': result['lines']}
+        saved = {'id': locked.pk}
+        if changed:
+            saved = bom.revise_bom(
+                user,
+                str(uuid.uuid4()),
+                locked.pk,
+                {'expected_revision': payload['revision'], 'lines': changed},
+            )
+        changes = [replace_row(user, locked, row) for row in replacements]
+        return {**saved, 'revision': bom.revision(locked), 'lines': result['lines'], 'changes': changes}
 
     return project_action(
         actor,
