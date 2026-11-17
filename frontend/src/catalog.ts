@@ -9,12 +9,18 @@ export async function catalog(keys: 'users'[]): Promise<Catalog> {
   if (keys.includes('users')) result.users = await all('/auth/directory/', {})
   return result
 }
+// 同图号已换成新版的旧版物料：下拉里写明新版，免得别的项目继续选旧图。
+export function newerText(row: Row): string {
+  const newer = row.newer_revision
+  if (!newer) return ''
+  return `该图已有新版 ${newer.drawing_revision ? `${newer.drawing_revision} 版（${newer.code}）` : newer.code}`
+}
 export function referenceLabel(row: Row): { name: string; detail: string } {
   const name = row.name || row.display_name || row.username || row.code || `记录 ${row.id}`
   return {
     name,
     detail: [row.username !== name ? row.username : '', row.code !== name ? row.code : '', row.specification,
-      row.drawing_number, row.drawing_revision, row.brand, row.unit].filter(Boolean).join(' · '),
+      row.drawing_number, row.drawing_revision, row.brand, row.unit, newerText(row)].filter(Boolean).join(' · '),
   }
 }
 export const options = (rows: Row[]): Option[] => rows.map(row => {

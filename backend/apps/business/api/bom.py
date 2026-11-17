@@ -63,6 +63,11 @@ class BOMView(ReadView):
         require_project(request.user, line.project, BOM_WRITERS)
         return Response(revisions.scope(request.user, line))
 
+    @action(detail=True, methods=['get'], url_path='revision-impact')
+    def revision_impact(self, request, pk=None):
+        """升版、替换物料前的影响预估：旧版在途怎么转，换版后旧版待处理大约多少。"""
+        return Response(revisions.impact(request.user, self.get_object()))
+
     @action(detail=False, methods=['post'], url_path='remove-batch')
     def remove_batch(self, request):
         return Response(corrections.remove_bom_lines(request.user, key(request), request.data))

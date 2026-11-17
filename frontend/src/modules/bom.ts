@@ -13,6 +13,7 @@ import { item } from './shared'
 import { endpoint } from './shared'
 import { productCategories } from '../product-categories'
 import { quantityText } from '../utils/quantity'
+import { newerText } from '../catalog'
 const qty: Field = { ...baseQty, numeric: { scale: 3, min: 0.001 } }
 export const columns: Record<string, Column[]> = {
   bom: [
@@ -94,15 +95,16 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   // 升版或换型：一次提交在原单元新增新物料并移除原行，不出现新旧两行同时算缺料的中间状态。
   if (name === '替换物料') {
+    const impact = await read(`/business/bom/${r.id}/revision-impact/`) as Row
     return {
       title: `替换 ${r.item_code} ${r.item_name}`,
       submitLabel: '确认替换',
       path: `/business/bom/${r.id}/replace/`,
-      notice: { type: 'info', text: revisionNotice(r) },
+      notice: { type: impactBlocked(impact) ? 'warning' : 'info', text: [revisionNotice(r), impactText(impact)].filter(Boolean).join('') },
       successNote: revisionResult,
       fields: [
         { ...t('item_label', '原物料'), readonly: true, displayOnly: true },
-        item({ label: '新物料', hint: r.drawing_number ? '同图号升版可直接用「升版」，不必先新建物料。' : '换成另一个型号的在用物料。' }),
+        item({ label: '新物料', hint: [r.newer_revision ? `${newerText(r)}。` : '', r.drawing_number ? '同图号升版可直接用「升版」，不必先新建物料。' : '换成另一个型号的在用物料。'].join('') }),
         qty,
         { key: 'required_date', label: '需求日期', type: 'date', optional: true },
         { key: 'application_date', label: '申请日期', type: 'date', optional: true },
@@ -122,14 +124,15 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   // 一步升版：复制原物料资料建新版本物料（同图号同版本已有则复用），在原单元换版；可勾选同物料的其他项目一并换版。
   if (name === '升版') {
-    const scope = await read(`/business/bom/${r.id}/upgrade-scope/`) as Row[]
+    const [scope, impact] = await Promise.all([read(`/business/bom/${r.id}/upgrade-scope/`) as Promise<Row[]>, read(`/business/bom/${r.id}/revision-impact/`) as Promise<Row>])
     const writable = scope.filter(row => row.writable)
     const locked = scope.filter(row => !row.writable)
+    const newer = r.newer_revision as Row | undefined
     return {
       title: `升版 ${r.item_code} ${r.item_name}`,
       submitLabel: '确认升版',
       path: `/business/bom/${r.id}/upgrade/`,
-      notice: { type: 'info', text: revisionNotice(r) + (locked.length ? ` 项目 ${locked.map(row => row.code).join('、')} 也在用此物料，需由该项目的工程师或项目经理换版。` : '') },
+      notice: { type: impactBlocked(impact) ? 'warning' : 'info', text: [newer ? `${newerText(r)}，新图档版本已填好，确认后直接换成这一版。` : '', revisionNotice(r), impactText(impact), locked.length ? `项目 ${locked.map(row => row.code).join('、')} 也在用此物料，需由该项目的工程师或项目经理换版。` : ''].filter(Boolean).join('') },
       successNote: revisionResult,
       fields: [
         { ...t('item_label', '原物料'), readonly: true, displayOnly: true },
@@ -143,13 +146,13 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           label: '同时换版的其他项目',
           type: 'checks' as const,
           optional: true,
-          options: writable.map(row => ({ value: row.id, label: `${row.code} ${row.name}（${row.units.join('、')}，共 ${quantityText(row.quantity)}）` })),
+          options: writable.map(row => ({ value: row.id, label: `${row.code} ${row.name}（${row.units.join('、')}，共 ${quantityText(row.quantity)}${Number(row.in_transit) > 0 ? `，在途 ${quantityText(row.in_transit)} 一并改单` : ''}${Number(row.issued) > 0 ? `，已领 ${quantityText(row.issued)}` : ''}）` })),
           hint: '默认只改本项目。勾选的项目里该物料的所有单元都换成新版，数量不变，在途同样按新图改单。',
         }] : []),
       ],
       initial: {
         item_label: [r.item_code, r.item_name, r.specification, `图号 ${r.drawing_number}`, r.drawing_revision ? `版本 ${r.drawing_revision}` : '', r.assembly_unit || '未分单元'].filter(Boolean).join(' · '),
-        drawing_revision: '',
+        drawing_revision: newer?.drawing_revision || '',
         name: '',
         specification: '',
         quantity: quantityText(r.quantity, ''),
@@ -178,7 +181,26 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   return { title: name, path: `${endpoint(resource)}${r.id}/`, fields: [reason] }
 }
 function revisionNotice(r: Row): string {
-  return `将在「${r.assembly_unit || '未分单元'}」换成新物料并移除原行。原物料未到货的采购会按新图改单（已批准的需采购向供应商确认后才能收货）；已到货、已领用超出需求的原物料进入「旧版待处理」，由仓管报废或留作备件、采购开返修单。`
+  return `将在「${r.assembly_unit || '未分单元'}」换成新物料并移除原行。`
+}
+const impactBlocked = (impact: Row) => (impact?.in_transit || []).some((row: Row) => row.blocked)
+// 换版前逐项写明旧版怎么处理：在途按新图改单（已批准的待采购确认），超出需求的已领和已到货进入「旧版待处理」。
+// 数字按移除这一行后的需求估算，与提交后的结果一致；同物料其他单元仍需要的部分先留给它们。
+export function impactText(impact: Row | undefined): string {
+  if (!impact) return ''
+  const transit = (impact.in_transit || []) as Row[]
+  const blocked = transit.filter(row => row.blocked).map(row => row.code)
+  const pending = transit.filter(row => row.pending && !row.blocked).map(row => `${row.code} ${quantityText(row.quantity)}`)
+  const direct = transit.filter(row => !row.pending && !row.blocked).map(row => `${row.code}（${row.status_label}）${quantityText(row.quantity)}`)
+  const leftover = [Number(impact.pending_issued) > 0 ? `已装机 ${quantityText(impact.pending_issued)}` : '', Number(impact.pending_stock) > 0 ? `在库 ${quantityText(impact.pending_stock)}` : ''].filter(Boolean)
+  const parts = [
+    blocked.length ? `采购单 ${blocked.join('、')} 有待审批的修改申请，需先由审批人处理才能换版。` : '',
+    direct.length ? `未批准的采购 ${direct.join('、')} 直接改成新版。` : '',
+    pending.length ? `已批准采购的未到货部分 ${pending.join('、')} 转为新版，待采购向供应商确认后才能收货。` : '',
+    leftover.length ? `换版后旧版 ${leftover.join('、')} 超出需求，进入「旧版待处理」，由仓管报废或留作备件、采购开返修单。` : '',
+    Number(impact.need_after) > 0 && (Number(impact.issued) > 0 || Number(impact.received_unissued) > 0) ? `其他单元仍需旧版 ${quantityText(impact.need_after)}，已领和已到货先留给它们。` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join('') : '原物料没有在途、已领或到货，直接换版。'
 }
 // 换版提交后说明在途采购怎么处理了，让工程师知道要通知谁。
 export function revisionResult(result: Row): string {

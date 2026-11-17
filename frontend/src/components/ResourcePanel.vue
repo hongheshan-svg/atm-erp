@@ -372,7 +372,8 @@ function mobileSummary(row: Row): string[] {
       const amount = row.total_amount ?? row.amount
       return lines(joined(row.supplier_name, props.projectId ? '' : row.project_name), joined(amount != null && amount !== '' ? `金额 ${money(amount)}` : '', row.next_delivery_date ? `下一交期 ${row.next_delivery_date}` : ''))
     }
-    if (props.resource === 'items') return lines(joined(row.name, row.specification, row.brand), joined(row.unit, row.drawing_number, columns.items?.find(col => col.key === 'part_type')?.format?.(row)))
+    // 手机也写出图档版本：旧版注明「已有新版」，与电脑列表一致。
+    if (props.resource === 'items') return lines(joined(row.name, row.specification, row.brand), joined(row.unit, row.drawing_number, row.drawing_number ? columns.items?.find(col => col.key === 'drawing_revision')?.format?.(row) : '', columns.items?.find(col => col.key === 'part_type')?.format?.(row)))
     // 对账、银行流水、收付款流水：两行摘要，金额统一走 money。
     if (props.resource === 'reconciliations') return lines(joined(row.partner_name || row.entry_title, props.projectId ? '' : row.project_name), joined(row.approved_amount != null && row.approved_amount !== '' ? `额度 ${money(row.approved_amount)}` : '', row.difference != null && row.difference !== '' ? `差异 ${money(row.difference)}` : '', row.confirmed_name))
     if (props.resource === 'bank-records') {

@@ -681,8 +681,12 @@ class ItemSupply:
 
 def demand(project):
     result = []
+    from .revision_chain import newer
+
     lines, plan = allocation(project)
     competing = competing_demand(project, {line.item_id for line in lines})
+    # 同图号在别的项目已换成新版：本项目仍用旧版的行标出来，由工程师决定是否跟着升版。
+    latest = newer([line.item_id for line in lines])
     for line in lines:
         entry = plan[line.pk]
         used, ordered, unapproved = line_supply(entry)
@@ -715,6 +719,7 @@ def demand(project):
                 'other_demand': str(competing.get(line.item_id, {}).get('quantity', ZERO)),
                 'other_projects': competing.get(line.item_id, {}).get('projects', 0),
                 'shortage': str(shortage(line, entry)),
+                'newer_revision': latest.get(line.item_id),
             }
         )
     return result

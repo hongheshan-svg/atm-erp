@@ -107,3 +107,27 @@ it('已编码的物料编辑对话框说明类别、规格、图号、版本为�
   const free = await actionCommand('items', { id: 2, name: '螺钉', product_category: '' }, '编辑')
   expect(free.notice).toBeUndefined()
 })
+
+it('有图号的物料可查版本记录：列出同图号全部版本和参与项目的换版原因，旧版在列表里注明已有新版', async () => {
+  const { read } = await import('../api')
+  const { actionNames, columns } = await import('./masterdata')
+  user.value = { roles: ['member'] }
+  const old = { id: 7, code: 'JG-001', name: '夹爪安装板', drawing_number: 'DWG-001', drawing_revision: 'A', newer_revision: { id: 8, code: 'JG-001B', drawing_revision: 'B' } }
+  expect(actionNames('items', old)).toEqual(['版本记录'])
+  expect(actionNames('items', { ...old, drawing_number: '' })).toEqual([])
+  expect(columns.items!.find(column => column.key === 'drawing_revision')!.format!(old)).toBe('A · 已有新版 B')
+  vi.mocked(read).mockResolvedValue({
+    drawing_number: 'DWG-001',
+    versions: [
+      { id: 7, code: 'JG-001', name: '夹爪安装板', drawing_revision: 'A', is_active: true, superseded_by: 'JG-001B', latest: false },
+      { id: 8, code: 'JG-001B', name: '夹爪安装板', drawing_revision: 'B', is_active: true, superseded_by: '', latest: true },
+    ],
+    changes: [{ id: 3, created_at: '2026-11-17T01:30:00Z', created_by: '机械工程师', project_code: 'ATM2681', project_name: '上料线', assembly_unit: '01 上料', old_item_code: 'JG-001', old_revision: 'A', new_item_code: 'JG-001B', new_revision: 'B', old_quantity: '10.000', new_quantity: '10.000', converted_quantity: '2.000', reason: 'ECN-01 孔位调整' }],
+  })
+  const command = await actionCommand('items', old, '版本记录')
+  expect(read).toHaveBeenCalledWith('/business/items/7/revisions/')
+  expect(command.readonly).toBe(true)
+  expect(command.notice!.text).toContain('当前最新为 B 版（JG-001B）')
+  expect(command.initial!.versions.map((row: Record<string, string>) => row.state)).toEqual(['已由 JG-001B 取代', '最新'])
+  expect(command.initial!.changes[0]).toMatchObject({ time: '2026-11-17 09:30', project: 'ATM2681 上料线', change: 'JG-001（A） → JG-001B（B）', amount: '10 → 10，在途 2 改单' })
+})

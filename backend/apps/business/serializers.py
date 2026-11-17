@@ -104,9 +104,25 @@ class MoneyFilter:
         return result
 
 
+class ItemListSerializer(serializers.ListSerializer):
+    """整页一起查版本链，不随行数逐条查询。"""
+
+    def to_representation(self, data):
+        items = list(data.all() if hasattr(data, 'all') else data)
+        if 'newer_revision' in self.child.fields:
+            from .services.revision_chain import newer
+
+            self.child.context['newer_revisions'] = newer([item.pk for item in items])
+        return super().to_representation(items)
+
+
 class ItemSerializer(serializers.ModelSerializer):
+    # 「该图已有新版」：只在物料列表、详情和查重候选里返回，导出与删除快照不带这一列。
+    newer_revision = serializers.SerializerMethodField()
+
     class Meta:
         model = Item
+        list_serializer_class = ItemListSerializer
         fields = [
             'id',
             'code',
@@ -120,7 +136,21 @@ class ItemSerializer(serializers.ModelSerializer):
             'unit',
             'is_active',
             'updated_at',
+            'newer_revision',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.context.get('revision_hints'):
+            self.fields.pop('newer_revision', None)
+
+    def get_newer_revision(self, obj):
+        known = self.context.get('newer_revisions')
+        if known is None:
+            from .services.revision_chain import newer
+
+            known = newer([obj.pk])
+        return known.get(obj.pk)
 
 
 class PartnerSerializer(serializers.ModelSerializer):

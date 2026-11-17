@@ -52,6 +52,11 @@ async function load() {
   catch (e) { if (current === generation) error.value = message(e) }
   finally { if (current === generation) loading.value = false }
 }
+// 归档后有变化时，从提示条直接切到当前采购资料核对，再「归档新版本」。
+function showCurrent() {
+  selectedVersion.value = 'current'
+  void load()
+}
 watch(() => route.params.id, () => { selectedVersion.value = ''; command.value = null; void load() }, { immediate: true })
 function print() { window.print() }
 async function archive() {
@@ -86,13 +91,17 @@ async function archive() {
       <el-button :disabled="loading" @click="load">刷新预览</el-button>
     </div>
     <el-alert v-if="error" type="error" :title="error" :closable="false" />
+    <el-alert v-if="data?.changes_since_archive?.length" type="warning" :closable="false" class="contract-changed" :title="`合同内容自已归档第 ${data.latest_archived_version} 版后已变化，请与供应商确认并签回后归档新版本`">
+      <ul><li v-for="change in data.changes_since_archive" :key="change">{{ change }}</li></ul>
+      <el-button v-if="data.archived_version" link type="primary" @click="showCurrent">查看改单后的当前合同</el-button>
+    </el-alert>
     <div class="contract-workspace">
     <aside v-if="data" class="contract-toolbar contract-actions" aria-label="合同版本与打印">
       <el-button type="primary" :disabled="loading" @click="print">打印 / 另存为 PDF</el-button>
       <el-button v-if="data.signed_document" @click="openDocumentPreview(data.signed_document, '签署合同')">预览签署文件</el-button>
       <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
-      <el-button v-if="buyer() && !data.draft && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">{{ data.archived_version ? '归档新版本' : '归档签署版本' }}</el-button>
-      <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : '当前采购资料预览，尚未归档签署版本' }}</span>
+      <el-button v-if="buyer() && !data.draft && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">{{ data.versions?.length ? '归档新版本' : '归档签署版本' }}</el-button>
+      <span>{{ data.archived_version ? `当前为已归档第 ${data.archived_version} 版，资料保持不变` : data.versions?.length ? `当前采购资料预览，最近归档为第 ${data.versions[0].version} 版` : '当前采购资料预览，尚未归档签署版本' }}</span>
       <details class="contract-help-details" :open="helpOpen">
         <summary>签署与打印说明</summary>
         <p class="contract-help">本页完整显示双方信息、全部明细、合同条款和签章区。打印 / 另存为 PDF 将输出整份合同，内容较长时自动分为多页 A4。</p>
@@ -132,6 +141,8 @@ async function archive() {
 .contract-toolbar label { display:flex; align-items:center; gap:8px; font-size:13px; }
 .contract-toolbar label select { width:260px; max-width:100%; }
 .contract-help { color:var(--ink-6); line-height:1.7; }
+.contract-changed { margin-bottom:12px; }
+.contract-changed ul { margin:4px 0 0; padding-left:18px; }
 .contract-workspace { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:24px; align-items:start; }
 .contract-pages { min-width:0; grid-column:1; grid-row:1; }
 .contract-actions { grid-column:2; grid-row:1; position:sticky; top:18px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; padding:20px; border:1px solid var(--step-line); border-radius:8px; background:white; font-size:13px; }

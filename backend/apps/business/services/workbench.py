@@ -150,6 +150,7 @@ def summary(request):
         'approved_purchases',
         'shortage_projects',
         'revision_reviews',
+        'contract_updates',
         'obsolete_parts',
     }
     if selected_bucket and selected_bucket not in allowed:
@@ -311,6 +312,18 @@ def summary(request):
             )
             if reviews.exists():
                 result['revision_reviews'] = bucket(reviews, PurchaseSerializer, 'revision_reviews')
+        if wanted('contract_updates'):
+            # 已归档合同的采购单按新图改单后，合同内容与签署版本不一致：提醒与供应商确认后归档新版本。
+            from .purchase_contract import stale_contracts
+
+            scoped = purchases.filter(
+                project__in=projects_for(user, Project.objects.all(), PURCHASERS), status__in=['approved', 'partial']
+            )
+            stale = stale_contracts(user, scoped)
+            if stale:
+                result['contract_updates'] = bucket(
+                    purchases.filter(pk__in=stale), PurchaseSerializer, 'contract_updates'
+                )
     if has_role(user, PARTS_READERS) and wanted('obsolete_parts'):
         rows = list(obsolete_projects(user))
         if rows:

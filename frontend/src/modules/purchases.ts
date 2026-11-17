@@ -184,6 +184,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       title: name, subject: detail.code,
       path: `${endpoint(resource)}${r.id}/revision-review/`,
       submitLabel: '提交',
+      // 已归档过签署合同的，确认后合同内容就变了：提醒拿新图和价格与供应商签补充协议，再归档新版本。
+      successNote: (result: Row) => result.contract_version ? `本单已归档合同第 ${result.contract_version} 版，按新图改单后请与供应商确认新图和价格，签回后在「预览采购合同」归档新版本。` : '',
       blocked: lines.length ? undefined : '本单没有待确认的换版明细，请刷新采购单。',
       notice: { type: 'info', text: '工程师已把这批物料换成新版：旧版未到货的余量已取消，同单新增了新版明细。请向供应商确认能否按新图供货：能做就确认（报价变化可改单价，应付同步调整）；不能做就取消余量，再按缺料重新下单。确认前仓库不能收这一行。' },
       fields: [

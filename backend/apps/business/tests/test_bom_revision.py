@@ -431,3 +431,229 @@ class ImportRevisionTests(RevisionFixtures, TestCase):
         self.buy(self.line, '8')
         short = self.upload([self.row('JG-001B', replaces='JG-001', qty='5')])['errors']
         self.assertIn('至少 8', ' '.join(error['message'] for error in short))
+
+
+class RevisionChainTests(RevisionFixtures, TestCase):
+    """版本链：同图号换版把旧版指向新版；别的项目仍用旧版时在物料、BOM 和导入里提示「该图已有新版」。"""
+
+    def setUp(self):
+        super().setUp()
+        self.other = self.active_project()
+        self.other.members.add(self.users['mechanical_engineer'])
+        self.revise([{'item': self.old.pk, 'quantity': '2', 'assembly_unit': '02 搬运'}], project=self.other)
+
+    def newer(self, item, role='purchaser'):
+        return self.get(role, f'items/{item.pk}/')['newer_revision']
+
+    def upgrade(self, line, revision, status=200):
+        return self.post(
+            'mechanical_engineer',
+            f'bom/{line.pk}/upgrade/',
+            {'drawing_revision': revision, 'change_note': f'ECN 升 {revision}'},
+            status=status,
+        )
+
+    def test_newer_revision_follows_chain_and_falls_back_when_latest_is_disabled(self):
+        self.assertIsNone(self.newer(self.old))
+        self.replace()
+        self.assertEqual(self.newer(self.old)['code'], 'JG-001B')
+        self.assertIsNone(self.newer(self.new))
+        listed = {
+            row['code']: row['newer_revision']
+            for row in self.get('purchaser', 'items/', {'search': 'JG-001'})['results']
+        }
+        self.assertEqual((listed['JG-001']['drawing_revision'], listed['JG-001B']), ('B', None))
+        # 另一个项目仍用 A 版：BOM 行标出新版，工程师自己决定是否跟着升版。
+        rows = self.get('mechanical_engineer', f'projects/{self.other.pk}/demand/')['lines']
+        self.assertEqual(rows[0]['newer_revision']['code'], 'JG-001B')
+
+        third = self.upgrade(BOMLine.objects.get(project=self.project, item=self.new), 'C')
+        latest = Item.objects.get(pk=third['item'])
+        self.assertEqual((self.newer(self.old)['code'], self.newer(self.new)['code']), (latest.code, latest.code))
+        Item.objects.filter(pk=latest.pk).update(is_active=False)
+        self.assertEqual((self.newer(self.old)['code'], self.newer(self.new)), ('JG-001B', None))
+
+        # 导出与删除快照不带提示列。
+        export = self.clients['purchaser'].get('/api/business/items/export/', {'file_format': 'csv'})
+        self.assertEqual(export.status_code, 200)
+        self.assertNotIn('newer', export.content.decode('utf-8-sig'))
+
+    def test_rollback_to_old_revision_and_model_replacement(self):
+        self.replace()
+        line = BOMLine.objects.get(project=self.project, item=self.new)
+        back = self.upgrade(line, 'A')
+        self.assertEqual((back['item'], back['created_item']), (self.old.pk, False))
+        # A→B 之后又改回 A：最近一次换版的新版 A 是当前版本，B 才是旧版。
+        self.assertIsNone(self.newer(self.old))
+        self.assertEqual(self.newer(self.new)['code'], 'JG-001')
+        # 换成另一个型号（不同图号）只是该项目的替代，原物料不算过时。
+        bolt = Item.objects.create(code='STD-1', name='螺钉', specification='M6')
+        other_bolt = Item.objects.create(code='STD-2', name='螺钉', specification='M8')
+        self.revise([{'item': bolt.pk, 'quantity': '4', 'assembly_unit': '03 检测'}])
+        self.post(
+            'mechanical_engineer',
+            f'bom/{BOMLine.objects.get(item=bolt).pk}/replace/',
+            {'item': other_bolt.pk, 'quantity': '4', 'change_note': '换型'},
+        )
+        self.assertIsNone(self.newer(bolt))
+
+    def test_item_history_lists_versions_and_only_visible_project_changes(self):
+        self.replace()
+        other_line = BOMLine.objects.get(project=self.other, item=self.old)
+        self.post(
+            'mechanical_engineer',
+            f'bom/{other_line.pk}/replace/',
+            {'item': self.new.pk, 'quantity': '2', 'change_note': 'ECN-01 跟进'},
+        )
+        self.other.members.remove(self.users['member'])
+        plain = Item.objects.create(code='STD-9', name='垫片')
+        self.assertEqual(self.get('purchaser', f'items/{plain.pk}/revisions/')['versions'], [])
+        history = self.get('purchaser', f'items/{self.old.pk}/revisions/')
+        self.assertEqual(
+            [(row['code'], row['superseded_by'], row['latest']) for row in history['versions']],
+            [('JG-001', 'JG-001B', False), ('JG-001B', '', True)],
+        )
+        self.assertEqual({row['project'] for row in history['changes']}, {self.project.pk, self.other.pk})
+        # 成员只看到自己参与项目的换版记录；物料版本本身是公共资料。
+        member = self.get('member', f'items/{self.new.pk}/revisions/')
+        self.assertEqual(len(member['versions']), 2)
+        self.assertEqual([row['project'] for row in member['changes']], [self.project.pk])
+        self.assertEqual(member['changes'][0]['reason'], 'ECN-01 孔位调整')
+
+
+class RevisionImpactTests(RevisionFixtures, TestCase):
+    """换版前的影响预估与实际换版结果一致：在途怎么转、旧版待处理多少。"""
+
+    def setUp(self):
+        super().setUp()
+        self.approved = self.buy(self.line, '6', price='10')
+        self.receive(self.approved, self.approved.lines.get(), '4')
+        self.issue('2')
+        self.draft = self.buy(self.line, '3', approve=False)
+
+    def test_dialog_impact_matches_the_change(self):
+        impact = self.get('mechanical_engineer', f'bom/{self.line.pk}/revision-impact/')
+        self.assertEqual(
+            [(row['code'], row['quantity'], row['pending'], row['blocked']) for row in impact['in_transit']],
+            [(self.approved.code, '2.000', True, False), (self.draft.code, '3.000', False, False)],
+        )
+        self.assertEqual(
+            (impact['issued'], impact['received_unissued'], impact['need_after']), ('2.000', '2.000', '0.000')
+        )
+        self.assertEqual((impact['pending_issued'], impact['pending_stock']), ('2.000', '2.000'))
+        self.get('purchaser', f'bom/{self.line.pk}/revision-impact/', status=403)
+        self.replace()
+        row = self.parts()['JG-001']
+        self.assertEqual((row['pending_issued'], row['pending_stock']), ('2.000', '2.000'))
+
+    def test_other_unit_still_needing_old_revision_reduces_the_estimate(self):
+        self.revise([{'item': self.old.pk, 'quantity': '3', 'assembly_unit': '02 搬运', 'change_note': '增加搬运单元'}])
+        impact = self.get('mechanical_engineer', f'bom/{self.line.pk}/revision-impact/')
+        # 换掉 01 单元后旧版仍需 3：已领 2 全部留用，到货未领 2 里 1 件补足 02 单元，只有 1 件进入待处理。
+        self.assertEqual(
+            (impact['need_after'], impact['pending_issued'], impact['pending_stock']), ('3.000', '0.000', '1.000')
+        )
+
+    def test_scope_shows_in_transit_and_issued_of_other_projects(self):
+        other = self.active_project()
+        other.members.add(self.users['mechanical_engineer'])
+        self.revise([{'item': self.old.pk, 'quantity': '5', 'assembly_unit': '02 搬运'}], project=other)
+        other_line = BOMLine.objects.get(project=other, item=self.old)
+        self.buy(other_line, '4', project=other)
+        [row] = self.get('mechanical_engineer', f'bom/{self.line.pk}/upgrade-scope/')
+        self.assertEqual(
+            (row['id'], row['quantity'], row['in_transit'], row['issued']), (other.pk, '5.000', '4.000', '0.000')
+        )
+
+
+class ImportRevisionHintTests(ImportRevisionTests):
+    def test_preview_marks_old_revision_rows_and_estimates_replace_impact(self):
+        approved = self.buy(self.line, '6', price='10')
+        self.receive(approved, approved.lines.get(), '4')
+        self.issue('2')
+        other = self.active_project()
+        self.revise([{'item': self.old.pk, 'quantity': '1', 'assembly_unit': '09 备件'}], project=other)
+        self.post(
+            'manager',
+            f'bom/{BOMLine.objects.get(project=other, item=self.old).pk}/replace/',
+            {'item': self.new.pk, 'quantity': '1', 'change_note': '别的项目先升版'},
+        )
+        preview = self.upload(
+            [
+                self.row('JG-001B', replaces='JG-001'),
+                self.row('JG-001', unit='03 检测', qty='1', note='新增'),
+            ]
+        )
+        self.assertTrue(preview['can_import'], preview['errors'])
+        replace, added = preview['lines']
+        self.assertEqual(replace['bom_action'], 'replace')
+        impact = replace['replace_impact']
+        self.assertEqual([(row['code'], row['quantity']) for row in impact['in_transit']], [(approved.code, '2.000')])
+        # 03 单元新增 1 件旧版：换版后旧版仍需 1，已领 2 里 1 件留用。
+        self.assertEqual(
+            (impact['need_after'], impact['pending_issued'], impact['pending_stock']), ('1.000', '1.000', '2.000')
+        )
+        self.assertEqual(added['bom_action'], 'create')
+        self.assertEqual(added['newer_revision']['code'], 'JG-001B')
+        self.assertIn('物料编码改为 JG-001B', added['revision_hint'])
+        self.assertNotIn('revision_hint', replace)
+
+
+class ContractUpdateTests(RevisionFixtures, TestCase):
+    """已归档合同的采购单按新图改单后，提醒采购与供应商确认并归档新版本合同。"""
+
+    def setUp(self):
+        super().setUp()
+        from apps.core.models import Company
+
+        Company.objects.create(pk=1, name='采购方', address='采购方地址', phone='123')
+        self.supplier.address, self.supplier.phone = '供应商地址', '456'
+        self.supplier.save()
+        self.purchase = self.buy(self.line, '4', price='10')
+        self.archive()
+
+    def archive(self):
+        from apps.business.models import Document
+
+        url = f'purchases/{self.purchase.pk}/'
+        current = self.get('purchaser', url + 'contract-preview/', {'version': 'current'})
+        document = Document.objects.create(
+            purchase=self.purchase, category='contract', original_name='签署.pdf', file='f', size=1, sha256='b' * 64
+        )
+        self.post(
+            'purchaser',
+            url + 'archive-contract/',
+            {
+                'expected_snapshot': current['snapshot_hash'],
+                'document': document.pk,
+                'delivery_address': '工厂',
+                'confirmed': True,
+            },
+            status=201,
+        )
+
+    def test_confirmed_revision_flags_contract_until_new_version_is_archived(self):
+        url = f'purchases/{self.purchase.pk}/'
+        self.assertEqual(self.get('purchaser', url + 'contract-preview/')['changes_since_archive'], [])
+        self.replace()
+        converted = self.purchase.lines.get(item=self.new)
+        # 待确认期间只在「换版改单待确认」里，不重复提醒重签。
+        self.assertNotIn('contract_updates', self.get('purchaser', 'workbench/'))
+        result = self.post(
+            'purchaser',
+            url + 'revision-review/',
+            {'line': converted.pk, 'decision': 'confirm', 'unit_price': '12', 'reason': '供应商按 B 版报价'},
+        )
+        self.assertEqual(result['contract_version'], 1)
+        preview = self.get('purchaser', url + 'contract-preview/')
+        self.assertEqual(preview['latest_archived_version'], 1)
+        self.assertEqual(
+            preview['changes_since_archive'],
+            ['JG-001（A 版） 数量 4 → 0', '新增 JG-001B（B 版） 夹爪安装板 4 件，单价 12.00'],
+        )
+        workbench = self.get('purchaser', 'workbench/')
+        self.assertEqual([row['id'] for row in workbench['contract_updates']['results']], [self.purchase.pk])
+        self.assertNotIn('contract_updates', self.get('warehouse', 'workbench/'))
+        self.archive()
+        self.assertEqual(self.get('purchaser', url + 'contract-preview/')['changes_since_archive'], [])
+        self.assertNotIn('contract_updates', self.get('purchaser', 'workbench/'))

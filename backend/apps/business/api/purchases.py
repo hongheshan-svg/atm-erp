@@ -61,7 +61,7 @@ class PurchaseView(ImportableMixin, ReadView):
 
     @action(detail=True, methods=['get'], url_path='contract-preview')
     def contract_preview(self, request, pk=None):
-        from ..services.purchase_contract import fingerprint, preview
+        from ..services.purchase_contract import contract_changes, fingerprint, preview
 
         purchase = self.get_object()
         current = preview(request.user, purchase)
@@ -83,6 +83,9 @@ class PurchaseView(ImportableMixin, ReadView):
                 'archived_version': saved.version if saved else None,
                 'signed_document': saved.document_id if saved else None,
                 'versions': list(versions.values('version', 'created_at', 'document_id', 'reason')),
+                # 最近一次归档之后合同实质内容的变化（如换版改单、改价、取消余量），提醒与供应商确认后归档新版本。
+                'latest_archived_version': versions[0].version if versions else None,
+                'changes_since_archive': contract_changes(versions[0].snapshot, current) if versions else [],
             }
         )
 

@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.core.api import Conflict
-from apps.core.permissions import BOM_WRITERS, PURCHASERS, WAREHOUSE, has_role, projects_for
+from apps.core.permissions import BOM_WRITERS, PURCHASERS, WAREHOUSE, has_role, projects_for, require_project
 
 from ..models import BOMLine, Entry, Item, Project, PurchaseLine, RevisionChange, RevisionDisposition, Stock, StockMove
 from .bom import BOM_STATES, incoming_by_item, issued_by_item, received_unissued_by_item
@@ -291,28 +291,15 @@ def live_target(change):
     return None if line.is_deleted else line
 
 
-def obsolete(project, item_ids=None):
-    """{旧物料: 旧版待处理明细}。
+def leftovers(project, needed):
+    """{旧物料: 数量明细}：按给定的现 BOM 需求算旧版余量与已处理、待处理数量。
 
-    超出现 BOM 需求的已领用和到货未领（报废、送修出库已从到货里扣除）为旧版余量；在库的再扣除留作备件
+    超出需求的已领用和到货未领（报废、送修出库已从到货里扣除）为旧版余量；在库的再扣除留作备件
     和尚未收货的在库返修，已领用的再扣除已登记报废和全部已装机返修（未作废的返修采购数量）。
     """
-    changes = RevisionChange.objects.filter(project=project).select_related('old_item', 'new_item', 'new_line__item')
-    if item_ids is not None:
-        changes = changes.filter(old_item_id__in=list(item_ids))
-    latest, history_ids = {}, {}
-    for change in changes.order_by('pk'):
-        latest[change.old_item_id] = change
-        history_ids.setdefault(change.old_item_id, []).append(change.pk)
-    if not latest:
+    ids = list(needed)
+    if not ids:
         return {}
-    ids = list(latest)
-    needed = {
-        row['item_id']: row['total']
-        for row in BOMLine.objects.filter(project=project, item_id__in=ids)
-        .values('item_id')
-        .annotate(total=Sum('quantity'))
-    }
     used = issued_by_item(project, ids)
     stocked = received_unissued_by_item(project, ids)
     disposed = {
@@ -336,20 +323,66 @@ def obsolete(project, item_ids=None):
         .values('revision__old_item_id', 'revision_role')
         .annotate(total=Sum(F('quantity') - F('cancelled_quantity')), received=Sum('received_quantity'))
     }
+    result = {}
+    for item_id in ids:
+        need = needed[item_id] or ZERO
+        issued_qty = used[item_id]
+        received = stocked.get(item_id, ZERO)
+        excess_issued = max(ZERO, issued_qty - need)
+        excess_stock = max(ZERO, received - max(ZERO, need - issued_qty))
+        rework_issued, rework_issued_received = reworked.get((item_id, 'issued'), (ZERO, ZERO))
+        rework_stock, rework_stock_received = reworked.get((item_id, 'stock'), (ZERO, ZERO))
+        scrapped_issued = disposed.get((item_id, 'issued', 'scrap'), ZERO)
+        kept = disposed.get((item_id, 'stock', 'keep'), ZERO)
+        result[item_id] = {
+            'need': need,
+            'issued_total': issued_qty,
+            'received_unissued': received,
+            'issued': excess_issued,
+            'stock': excess_stock,
+            'scrapped_issued': scrapped_issued,
+            'scrapped_stock': disposed.get((item_id, 'stock', 'scrap'), ZERO),
+            'kept': kept,
+            'rework_issued': rework_issued,
+            'rework_issued_received': rework_issued_received,
+            'rework_stock': rework_stock,
+            'rework_stock_received': rework_stock_received,
+            'pending_issued': max(ZERO, excess_issued - scrapped_issued - rework_issued),
+            'pending_stock': max(ZERO, excess_stock - kept - (rework_stock - rework_stock_received)),
+        }
+    return result
+
+
+def needed_by_item(project, ids):
+    return {
+        row['item_id']: row['total']
+        for row in BOMLine.objects.filter(project=project, item_id__in=list(ids))
+        .values('item_id')
+        .annotate(total=Sum('quantity'))
+    }
+
+
+def obsolete(project, item_ids=None):
+    """{旧物料: 旧版待处理明细}，按本项目每个换下来的旧物料最近一次换版汇总。"""
+    changes = RevisionChange.objects.filter(project=project).select_related('old_item', 'new_item', 'new_line__item')
+    if item_ids is not None:
+        changes = changes.filter(old_item_id__in=list(item_ids))
+    latest, history_ids = {}, {}
+    for change in changes.order_by('pk'):
+        latest[change.old_item_id] = change
+        history_ids.setdefault(change.old_item_id, []).append(change.pk)
+    if not latest:
+        return {}
+    ids = list(latest)
+    needed = needed_by_item(project, ids)
+    numbers = leftovers(project, {pk: needed.get(pk) or ZERO for pk in ids})
     on_hand = {
         row['item_id']: row['total']
         for row in Stock.objects.filter(item_id__in=ids).values('item_id').annotate(total=Sum('quantity'))
     }
     result = {}
     for item_id, change in latest.items():
-        need = needed.get(item_id) or ZERO
-        issued_qty = used[item_id]
-        excess_issued = max(ZERO, issued_qty - need)
-        excess_stock = max(ZERO, stocked.get(item_id, ZERO) - max(ZERO, need - issued_qty))
-        rework_issued, rework_issued_received = reworked.get((item_id, 'issued'), (ZERO, ZERO))
-        rework_stock, rework_stock_received = reworked.get((item_id, 'stock'), (ZERO, ZERO))
-        scrapped_issued = disposed.get((item_id, 'issued', 'scrap'), ZERO)
-        kept = disposed.get((item_id, 'stock', 'keep'), ZERO)
+        row = numbers[item_id]
         target = live_target(change)
         new_item = target.item if target else change.new_item
         result[item_id] = {
@@ -368,20 +401,60 @@ def obsolete(project, item_ids=None):
             'assembly_unit': change.assembly_unit,
             'reason': change.reason,
             'created_at': change.created_at,
-            'issued': excess_issued,
-            'stock': excess_stock,
             'on_hand': on_hand.get(item_id) or ZERO,
-            'scrapped_issued': scrapped_issued,
-            'scrapped_stock': disposed.get((item_id, 'stock', 'scrap'), ZERO),
-            'kept': kept,
-            'rework_issued': rework_issued,
-            'rework_issued_received': rework_issued_received,
-            'rework_stock': rework_stock,
-            'rework_stock_received': rework_stock_received,
-            'pending_issued': max(ZERO, excess_issued - scrapped_issued - rework_issued),
-            'pending_stock': max(ZERO, excess_stock - kept - (rework_stock - rework_stock_received)),
+            **{key: row[key] for key in row if key not in {'need', 'issued_total', 'received_unissued'}},
         }
     return result
+
+
+def in_transit(line):
+    """原 BOM 行关联的未到货采购（不加锁）：换版时会按新图转为新版的部分。"""
+    from .purchase_changes import pending_requests
+
+    lines = [
+        row
+        for row in PurchaseLine.objects.select_related('purchase')
+        .filter(bom_line=line, purchase__is_deleted=False)
+        .exclude(purchase__status__in=['cancelled', 'received'])
+        .order_by('purchase_id', 'pk')
+        if unreceived(row) > ZERO
+    ]
+    waiting = pending_requests([row.purchase for row in lines])
+    return [
+        {
+            'purchase': row.purchase_id,
+            'code': row.purchase.code,
+            'status': row.purchase.status,
+            'status_label': row.purchase.get_status_display(),
+            'quantity': quantity(unreceived(row)),
+            'pending': row.purchase.status not in {'draft', 'submitted'},
+            'blocked': row.purchase_id in waiting,
+        }
+        for row in lines
+    ]
+
+
+def impact_rows(project, removed):
+    """换版前的影响预估。removed 为 {旧物料: 换版后旧物料在本项目剩余的需求合计}。"""
+    numbers = leftovers(project, removed)
+    return {
+        item_id: {
+            'issued': quantity(row['issued_total']),
+            'received_unissued': quantity(row['received_unissued']),
+            'need_after': quantity(row['need']),
+            'pending_issued': quantity(row['pending_issued']),
+            'pending_stock': quantity(row['pending_stock']),
+        }
+        for item_id, row in numbers.items()
+    }
+
+
+def impact(actor, line):
+    """升版、替换物料前展示：旧版在途怎么转、换版后旧版待处理大约多少（按移除这一行后的需求估算）。"""
+    require_project(actor, line.project, BOM_WRITERS)
+    needed = needed_by_item(line.project, [line.item_id]).get(line.item_id) or ZERO
+    estimate = impact_rows(line.project, {line.item_id: max(ZERO, needed - line.quantity)})[line.item_id]
+    return {'line': line.pk, 'item_code': line.item.code, 'in_transit': in_transit(line), **estimate}
 
 
 def quantity(value):
@@ -638,7 +711,7 @@ def review(actor, key, purchase_id, data):
             line.unit_price = price
         line.revision_pending = False
         save(line, user)
-        return audit(
+        audit(
             user,
             'purchase.revision_confirm',
             purchase,
@@ -648,6 +721,9 @@ def review(actor, key, purchase_id, data):
             after_price=str(price),
             reason=reason,
         )
+        # 已归档过签署合同的，提示与供应商确认新图和价格后归档新版本合同。
+        archived = purchase.contract_versions.order_by('-version').values_list('version', flat=True).first()
+        return {'id': purchase.pk, 'contract_version': archived}
 
     return purchase_action(actor, key, 'purchase.revision_review', purchase_id, data, PURCHASERS, execute)
 
@@ -666,12 +742,15 @@ def scope(actor, line):
         projects_for(actor, Project.objects.filter(status__in=BOM_STATES), BOM_WRITERS).values_list('pk', flat=True)
     )
     result = {}
-    for row in (
+    rows = list(
         BOMLine.objects.filter(item_id=line.item_id, project__status__in=BOM_STATES)
         .exclude(project_id=line.project_id)
         .select_related('project')
         .order_by('project_id', 'pk')
-    ):
+    )
+    # 勾选前看到对方项目的在途和已领：在途会一并按新图改单，已领超出需求的进入该项目的旧版待处理。
+    transit = unreceived_by_line([row.pk for row in rows])
+    for row in rows:
         entry = result.setdefault(
             row.project_id,
             {
@@ -679,13 +758,18 @@ def scope(actor, line):
                 'code': row.project.code,
                 'name': row.project.name,
                 'quantity': ZERO,
+                'in_transit': ZERO,
+                'issued': issued_by_item(row.project, [line.item_id])[line.item_id],
                 'units': [],
                 'writable': row.project_id in writable,
             },
         )
         entry['quantity'] += row.quantity
+        entry['in_transit'] += max(ZERO, transit.get(row.pk, ZERO))
         entry['units'].append(row.assembly_unit or '未分单元')
-    return [{**row, 'quantity': str(row['quantity'])} for row in result.values()]
+    return [
+        {**row, **{key: quantity(row[key]) for key in ('quantity', 'in_transit', 'issued')}} for row in result.values()
+    ]
 
 
 def new_revision(user, key, old, data):
