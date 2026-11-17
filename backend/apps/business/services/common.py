@@ -13,6 +13,8 @@ from apps.core.permissions import require_project, require_role
 from ..models import Entry, Item, Project, Stock
 
 ZERO = Decimal('0')
+# 计入项目材料成本的库存流水：领料、退料，以及换版后旧版的报废和送修出库。
+MATERIAL_KINDS = ['issue', 'return', 'scrap', 'rework']
 
 
 def fields(data, allowed):

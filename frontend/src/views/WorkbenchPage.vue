@@ -11,6 +11,7 @@ import TaskNotices from '../components/TaskNotices.vue'
 import RoleTaskGuide from '../components/RoleTaskGuide.vue'
 import { message } from '../utils/request'
 import { money } from '../utils/money'
+import { quantityText } from '../utils/quantity'
 import type { Row } from '../types'
 type Bucket = { count: number; page: number; results: Row[]; overdue_count?: number; overdue_total?: number; today_count?: number }
 const work = ref<Record<string, Bucket>>({})
@@ -19,12 +20,12 @@ const day = ref(today())
 let generation = 0
 // 手机宽度（与列表组件同一判定）：待办表改为「事项 / 状态 / 处理」三列，类型和截止日期并入事项下方的副行。
 const narrow = useNarrow()
-const icons = { handover_projects: List, supervised_tasks: List, sales: Document, quoted_sales: Document, sale_receivables: Wallet, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, approved_purchases: Document, shortage_projects: Box, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
+const icons = { handover_projects: List, supervised_tasks: List, sales: Document, quoted_sales: Document, sale_receivables: Wallet, tasks: List, production_tasks: List, approvals: CircleCheck, receipts: Box, drafts: Document, approved_purchases: Document, shortage_projects: Box, revision_reviews: Document, obsolete_parts: Box, settlements: Wallet, overdue_purchases: Box, prepayments: CircleCheck, reconciliations: Document, bank_records: Wallet }
 // 交接待办：签约后待启动的项目、批准后待下单的采购、有缺料的项目、本人合同的逾期应收，各自成类，不再只能逐个项目翻找。
 const labels: Record<string, string> = {
   handover_projects: '待启动项目', supervised_tasks: '我负责确认的任务', tasks: '我的待办', production_tasks: '生产与售后派工', overdue_purchases: '采购明细逾期', approvals: '待批准采购', prepayments: '待核准预付款',
   settlements: '到期收付 / 待退款', reconciliations: '待确认业务对账', bank_records: '银行待认领 / 匹配',
-  receipts: '待收货', drafts: '采购草稿', approved_purchases: '已批准待下单', shortage_projects: '缺料待采购项目',
+  receipts: '待收货', drafts: '采购草稿', approved_purchases: '已批准待下单', shortage_projects: '缺料待采购项目', revision_reviews: '换版改单待确认', obsolete_parts: '旧版待处理',
   sale_receivables: '我的合同逾期应收', quoted_sales: '已报价待签约', sales: '我的销售订单',
 }
 const notes: Record<string, string> = {
@@ -32,6 +33,8 @@ const notes: Record<string, string> = {
   prepayments: '按合同条款核准预付款', settlements: '处理到期款项与退款', reconciliations: '核对差异，确认可结算额度',
   bank_records: '核实户名和用途后认领或匹配', receipts: '核对到货，及时更新库存', drafts: '完善采购明细后提交',
   approved_purchases: '归档采购合同、向供应商下单并跟进到货', shortage_projects: '项目 BOM 仍有缺料，点项目直接打开 BOM 缺料清单，勾选后「从 BOM 多选下单」',
+  revision_reviews: 'BOM 换版后已批准采购里的新版明细，向供应商确认新图或取消余量，确认前仓库不能收货',
+  obsolete_parts: '换版后多出来的旧版：仓管报废或留作备件，工程师登记已装机报废，采购开返修单',
   sale_receivables: '本人销售合同已过到期日的应收，联系客户回款', quoted_sales: '跟进客户确认，及时签约', sales: '跟进报价、签约、交付和回款',
 }
 const count = (key: string) => work.value[key]?.count || 0
@@ -75,6 +78,8 @@ function target(key: string, row: Row) {
   if (key === 'handover_projects') return { path: `/projects/${row.project}` }
   // 缺料项目直接打开该项目 BOM 的采购缺料视图（默认只看缺料），勾选后「从 BOM 多选下单」。
   if (key === 'shortage_projects') return { path: '/bom', query: { project: String(row.project), view: 'purchase' } }
+  // 旧版待处理在项目 BOM 页上方列出，处理入口也在那里。
+  if (key === 'obsolete_parts') return { path: '/bom', query: { project: String(row.project) } }
   const resource = ['tasks', 'production_tasks', 'supervised_tasks'].includes(key) ? 'tasks' : key === 'settlements' ? 'entries' : 'purchases'
   if (!row.project) return { ...collection(key), query: { ...collection(key).query, resource, focus: row.id } }
   return { path: `/projects/${row.project}`, query: { tab: resource === 'tasks' ? 'tasks' : resource === 'entries' ? 'finance' : 'purchases', resource, focus: row.id } }
@@ -95,6 +100,8 @@ function urgency(key: string, row: Row) {
   if (key === 'handover_projects') return { text: '待启动', tone: 'warning', rank: 2 }
   if (key === 'approved_purchases') return { text: '待下单', tone: 'warning', rank: 3 }
   if (key === 'shortage_projects') return { text: '缺料', tone: 'warning', rank: 3 }
+  if (key === 'revision_reviews') return { text: '待确认新图', tone: 'warning', rank: 2 }
+  if (key === 'obsolete_parts') return { text: '旧版待处理', tone: 'warning', rank: 3 }
   if (key === 'quoted_sales') return { text: '待签约', tone: 'warning', rank: 3 }
   if (key === 'bank_records' && row.needs_review) return { text: '待核实户名', tone: 'warning', rank: 3 }
   return { text: '', tone: '', rank: 4 }
@@ -134,10 +141,11 @@ function amount(key: string, row: Row) {
   if (['approvals', 'prepayments'].includes(key) && row.self_requested) return '本人申请，需填写例外原因'
   if (key === 'handover_projects' && row.missing?.length) return `缺${row.missing.join('、')}`
   if (key === 'shortage_projects') return `缺料 ${row.shortage_lines} 行`
+  if (key === 'obsolete_parts') return [Number(row.pending_stock) > 0 ? `在库 ${quantityText(row.pending_stock)}` : '', Number(row.pending_issued) > 0 ? `已装机 ${quantityText(row.pending_issued)}` : '', row.items].filter(Boolean).join(' · ')
   return ''
 }
 function context(key: string, row: Row) {
-  const party = key === 'sale_receivables' ? [row.partner_name, row.project_name].filter(Boolean).join(' · ') : ['handover_projects', 'shortage_projects'].includes(key) ? '' : row.project_name || row.supplier_name || row.customer_name || '—'
+  const party = key === 'sale_receivables' ? [row.partner_name, row.project_name].filter(Boolean).join(' · ') : ['handover_projects', 'shortage_projects', 'obsolete_parts'].includes(key) ? '' : row.project_name || row.supplier_name || row.customer_name || '—'
   return [party, amount(key, row)].filter(Boolean).join(' · ')
 }
 async function load() {

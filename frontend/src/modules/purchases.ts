@@ -116,8 +116,18 @@ export function actionNames(resource: string, r: Row): string[] {
     if (warehouse() && r.lines?.some((l: Row) => Number(l.pending_quantity) > 0)) a.push('隔离品合格入库', '隔离品退回供应商')
     if (buyer() && r.status === 'draft') a.push('作废采购')
     if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('取消未收余量', '整单取消未收余量')
+    // BOM 换版后已批准采购里转成新版的明细：向供应商确认新图（可调价）或取消，确认前仓库不能收货。
+    if (buyer() && ['approved', 'partial'].includes(r.status) && r.lines?.some(revisionPending)) a.unshift('确认换版改单')
   }
   return a
+}
+const revisionPending = (line: Row) => line.revision_pending && Number(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity)) > 0
+// 采购明细上的换版标记：由哪个旧版转来，或返修改制。
+export function revisionTag(line: Row): string {
+  if (line.revision_role === 'converted') return `换版：由 ${line.revision_from} 按新图改单${line.revision_pending ? '，待采购确认' : ''}`
+  if (line.revision_role === 'rework_stock') return `返修改制：在库旧版 ${line.revision_from}，收货时旧版出库`
+  if (line.revision_role === 'rework_issued') return `返修改制：已装机旧版 ${line.revision_from}`
+  return ''
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
   if (['申请修改', '处理修改申请', '查看修改申请'].includes(name)) {
@@ -163,6 +173,27 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       prepare: data => ({ reason: data.reason }),
       alternatives: [{ label: '改为按明细取消', open: () => actionCommand(resource, r, '取消未收余量') }],
       notice: { type: 'warning', text: `将一次取消本 PO 全部 ${remaining.length} 条明细的未收余量，无需逐条填写数量。已收货、库存和付款流水保留，应付按取消金额冲减；提交时以最新未收余量为准。` },
+    }
+  }
+  if (name === '确认换版改单') {
+    const detail = await read(`${endpoint(resource)}${r.id}/`)
+    const lines = (detail.lines || []).filter(revisionPending)
+    const options = lines.map((line: Row) => ({ value: line.id, label: `${line.item_code} ${line.item_name}（由 ${line.revision_from} 转来）· 未收 ${quantityText(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity))}` }))
+    const prices = Object.fromEntries(lines.map((line: Row) => [line.id, line.unit_price]))
+    return {
+      title: name, subject: detail.code,
+      path: `${endpoint(resource)}${r.id}/revision-review/`,
+      submitLabel: '提交',
+      blocked: lines.length ? undefined : '本单没有待确认的换版明细，请刷新采购单。',
+      notice: { type: 'info', text: '工程师已把这批物料换成新版：旧版未到货的余量已取消，同单新增了新版明细。请向供应商确认能否按新图供货：能做就确认（报价变化可改单价，应付同步调整）；不能做就取消余量，再按缺料重新下单。确认前仓库不能收这一行。' },
+      fields: [
+        { key: 'line', label: '换版明细', type: 'select', options },
+        { key: 'decision', label: '处理', type: 'select', options: [{ value: 'confirm', label: '按新图改单（供应商确认）' }, { value: 'cancel', label: '取消余量（供应商不接受改图）' }] },
+        { ...price, label: '新版含税单价（元）', visibleWhen: (data: Row) => data.decision === 'confirm', hint: '默认沿用原单价；供应商重新报价时修改。' },
+        { ...reason, label: '说明', hint: '如供应商确认的邮件或报价单号。' },
+      ],
+      initial: { line: lines[0]?.id, decision: 'confirm', unit_price: lines[0]?.unit_price ?? '' },
+      prepare: data => ({ line: data.line, decision: data.decision, reason: data.reason, ...(data.decision === 'confirm' && data.unit_price !== '' && data.unit_price != null && String(data.unit_price) !== String(prices[data.line]) ? { unit_price: data.unit_price } : {}) }),
     }
   }
   if (name === '取消未收余量') {
@@ -329,7 +360,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           quarantined: line.pending_quantity || '0',
           selected: true, ...(cancel ? { cancel_remainder: false } : {}),
           pending_quantity: '0', remark: '',
-        })).filter((line: Row) => Number(line.remaining) > 0)
+        })).filter((line: Row) => Number(line.remaining) > 0 && !detail.lines.find((source: Row) => source.id === line.line)?.revision_pending)
         fields[fields.length - 1] = warehouseLines('receipt', lines, { cancel })
         // 「余量不再到货」与「取消未收余量」同一规则：原因必填，应付按取消金额冲减，需采购权限。
         if (cancel) fields.push({
@@ -350,7 +381,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     ? { type: 'warning', text: `将作废本单全部采购明细，请填写作废原因。${r.status === 'submitted' ? '待审批单作废后审批人无需再处理。' : ''}` }
     : name === '提交采购'
       ? { type: 'info', text: `${[r.supplier_name, r.project_code || r.project_name].filter(Boolean).join(' · ')} · ${(r.lines || []).length} 行明细 · 含税合计 ${purchaseTotal(r.lines || [])} 元。提交后由项目经理、采购经理或管理员审批，申请人不能审批本人提交的采购。` }
-      : undefined
+      : name === '收货' && r.lines?.some(revisionPending)
+        ? { type: 'warning', text: '本单有 BOM 换版转来的新版明细，待采购向供应商确认新图后才能收货，暂不在本次收货列表中。' }
+        : undefined
   const successNote: Command['successNote'] = name === '收货' ? result => (result.cancelled?.length ? `已同时取消 ${result.cancelled.length} 行未收余量，应付已按取消金额冲减。` : '') : undefined
   return { title: name, path, fields, initial, method, readonly, ...(prepare ? { prepare } : {}), ...(notice ? { notice } : {}), ...(successNote ? { successNote } : {}) }
 }
@@ -365,6 +398,7 @@ export function purchaseDetailLine(line: Row, detail: Row): Row {
       line.item_name || '—',
       [line.item_code && `编码 ${line.item_code}`, line.specification && `规格 ${line.specification}`].filter(Boolean).join(' · '),
       [drawing, line.brand && `品牌 ${line.brand}`].filter(Boolean).join(' · '),
+      revisionTag(line),
     ].filter(Boolean).join('\n'),
     project_unit: [detail.project_code || '—', line.assembly_unit || '未分单元'].join('\n'),
     remaining: remaining.startsWith('-') ? '0' : remaining,

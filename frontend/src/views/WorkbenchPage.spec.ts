@@ -296,3 +296,20 @@ it('手机宽度：待办表不渲染序号和类型列，类型并入事项副�
     wrapper.unmount()
   } finally { window.matchMedia = original }
 })
+
+it('换版待办：采购的换版改单待确认进采购单，旧版待处理直达项目 BOM 页', async () => {
+  user.value = { id: 7, roles: ['purchaser', 'warehouse'], display_name: '采购兼仓管' }
+  vi.mocked(read).mockResolvedValue({
+    revision_reviews: bucket([{ id: 61, code: 'PO000061', project: 83, project_name: '换型线', status: 'approved' }]),
+    obsolete_parts: bucket([{ id: 83, project: 83, code: 'ATM2683', title: 'ATM2683 换型线', project_name: '换型线', parts: 1, pending_stock: '3.000', pending_issued: '2.000', items: 'JG-001→JG-001B' }]),
+  })
+  const wrapper = await render()
+  const items = rows(wrapper).map((row: any) => [row.findAll('a')[0].text(), row.get('.work-status').text(), row.findAll('a')[0].attributes('href')])
+  expect(items).toEqual([
+    ['PO000061', '待确认新图', '/projects/83?tab=purchases&resource=purchases&focus=61'],
+    ['ATM2683 换型线', '旧版待处理', '/bom?project=83'],
+  ])
+  expect(wrapper.text()).toContain('在库 3 · 已装机 2 · JG-001→JG-001B')
+  for (const label of ['换版改单待确认', '旧版待处理']) expect(wrapper.find(`[aria-label="查看全部${label}"]`).exists()).toBe(true)
+  wrapper.unmount()
+})

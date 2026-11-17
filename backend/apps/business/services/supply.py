@@ -527,6 +527,10 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
                 cancels[line_id] = index
             if not from_quarantine and qty == ZERO and pending == ZERO:
                 continue
+            if line.revision_pending:
+                raise Conflict(
+                    f'{line.item.code} {line.item.name} 是换版改单的新版明细，请采购先向供应商确认新图（或取消余量）后再收货。'
+                )
             if from_quarantine:
                 if pending or qty <= ZERO or qty > line.pending_quantity:
                     raise Conflict('处理数量超过待处理数量。')
@@ -558,7 +562,12 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
                             f'{arrived.isoformat()}，请填写该日期当天或之后的检验合格日期。'
                         }
                     )
-        stocks = lock_stocks([lines[line_id].item_id for line_id, qty in selected.items() if qty], location, user)
+        from .revisions import receive_rework, rework_items
+
+        arriving = [lines[line_id] for line_id, qty in selected.items() if qty]
+        # 在库旧版返修的收货要同时出库旧版：旧版与新版物料按主键一次锁齐，再锁新版收货库位。
+        lock_items({line.item_id for line in arriving} | rework_items(arriving))
+        stocks = lock_stocks([line.item_id for line in arriving], location, user)
         for line_id, qty in selected.items():
             if not qty:
                 continue
@@ -586,6 +595,7 @@ def receive(actor, key, purchase_id, data, *, from_quarantine=False):
             )
             line.received_quantity += qty
             save(line, user)
+            receive_rework(user, purchase.project, line, qty, purchase)
         purchase.status = receiving_status(purchase.lines.all())
         save(purchase, user)
         operation = 'purchase.quality_accept' if from_quarantine else 'purchase.receive'

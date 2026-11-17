@@ -29,6 +29,8 @@ from .common import (
 UNAPPROVED = ('draft', 'submitted')
 PURCHASE_STATUS = dict(PurchaseOrder.Status.choices)
 # 可维护 BOM（修订、导入、移除、替换）的项目状态。
+# 项目到货口径：收货、采购退货，以及换版后旧版的报废和送修出库（已不在库，不再算项目的到货未领）。
+ARRIVAL_KINDS = ['receipt', 'purchase_return', 'scrap', 'rework']
 BOM_STATES = {'draft', 'quoted', 'active', 'delivering'}
 
 
@@ -128,9 +130,7 @@ def received_unissued_by_item(project, item_ids):
     if not received:
         return {}
     for row in (
-        StockMove.objects.filter(
-            project=project, stock__item_id__in=list(received), kind__in=['receipt', 'purchase_return']
-        )
+        StockMove.objects.filter(project=project, stock__item_id__in=list(received), kind__in=ARRIVAL_KINDS)
         .values('stock__item_id')
         .annotate(total=Sum('quantity'))
     ):
@@ -318,7 +318,7 @@ def claimed_by_others(project, item_id):
         row['project_id']: row['total']
         for row in StockMove.objects.filter(
             stock__item_id=item_id,
-            kind__in=['receipt', 'purchase_return'],
+            kind__in=ARRIVAL_KINDS,
             project__status__in=['active', 'delivering'],
         )
         .exclude(project=project)
@@ -368,7 +368,7 @@ def claimed_by_others_by_item(project, item_ids):
     for row in (
         StockMove.objects.filter(
             stock__item_id__in=list(result),
-            kind__in=['receipt', 'purchase_return'],
+            kind__in=ARRIVAL_KINDS,
             project__status__in=['active', 'delivering'],
         )
         .exclude(project=project)
@@ -723,9 +723,9 @@ def demand(project):
 def received_unissued(project, item_id):
     """本项目采购已到货（扣除退货）但还没领走的数量，即减量后可能多出来、留在共享库存的料。"""
     received = (
-        StockMove.objects.filter(
-            project=project, stock__item_id=item_id, kind__in=['receipt', 'purchase_return']
-        ).aggregate(total=Sum('quantity'))['total']
+        StockMove.objects.filter(project=project, stock__item_id=item_id, kind__in=ARRIVAL_KINDS).aggregate(
+            total=Sum('quantity')
+        )['total']
         or ZERO
     )
     return max(ZERO, received - issued(project, item_id))

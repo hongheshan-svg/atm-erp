@@ -8,7 +8,21 @@ from apps.core.permissions import FINANCE
 
 from ..models import Document, Entry, Payment, PaymentEvidence, StockMove, TimeEntry
 from . import bank_identity
-from .common import ZERO, audit, day, event_date, fields, lookup, number, project_action, rounded, save, state, text
+from .common import (
+    MATERIAL_KINDS,
+    ZERO,
+    audit,
+    day,
+    event_date,
+    fields,
+    lookup,
+    number,
+    project_action,
+    rounded,
+    save,
+    state,
+    text,
+)
 from .payment_terms import due_amount
 
 
@@ -282,7 +296,7 @@ def costs(project_ids):
         StockMove.objects.filter(project_id__in=project_ids)
         .values('project_id')
         .annotate(
-            materials=Sum('value', filter=Q(kind__in=['issue', 'return'])),
+            materials=Sum('value', filter=Q(kind__in=MATERIAL_KINDS)),
             returned=Sum('value', filter=Q(kind='purchase_return')),
             credit=Sum('supplier_credit', filter=Q(kind='purchase_return')),
         )

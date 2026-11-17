@@ -32,6 +32,7 @@ from ..services import (
     finance,
     progress,
     projects,
+    revisions,
     task_supervision,
 )
 from .common import ImportableMixin, ReadView, key
@@ -162,7 +163,18 @@ class ProjectView(ImportableMixin, ReadView):
 
             visible = set(visible_rows(BOMLine.objects.filter(project=project)).values_list('pk', flat=True))
             lines = [line for line in lines if line['bom_line'] in visible]
-        return Response({'revision': bom.revision(project), 'lines': lines})
+        from ..models import RevisionChange
+
+        # 有换版记录时 BOM 页再读取「旧版待处理」，没有就不多发一次请求。
+        changes = RevisionChange.objects.filter(project=project).count()
+        return Response({'revision': bom.revision(project), 'lines': lines, 'revision_changes': changes})
+
+    @action(detail=True, methods=['get'], url_path='obsolete-parts')
+    def obsolete_parts(self, request, pk=None):
+        """换版后的旧版待处理与换版记录：工程师、项目经理、仓管和采购按项目范围读取，不含金额。"""
+        project = self.get_object()
+        require_project(request.user, project, revisions.PARTS_READERS)
+        return Response({'parts': revisions.parts(project), 'changes': revisions.history(project)})
 
     @action(detail=True, methods=['get'], url_path='bom-impact')
     def bom_impact(self, request, pk=None):
@@ -191,13 +203,14 @@ class ProjectView(ImportableMixin, ReadView):
         from django.db.models import DecimalField, ExpressionWrapper, F
 
         from ..models import Entry, StockMove, TimeEntry
+        from ..services.common import MATERIAL_KINDS
 
         project = self.get_object()
         require_project(request.user, project, MONEY_READERS)
         category = request.query_params.get('category', 'materials')
         if category == 'materials':
             records = (
-                StockMove.objects.filter(project=project, kind__in=['issue', 'return'])
+                StockMove.objects.filter(project=project, kind__in=MATERIAL_KINDS)
                 .select_related('stock__item')
                 .annotate(contribution=-F('value'))
             )

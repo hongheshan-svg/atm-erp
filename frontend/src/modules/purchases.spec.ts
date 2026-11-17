@@ -5,7 +5,7 @@ import { industryCommand } from '../industry-forms'
 import { user } from '../session'
 import type { Field, Row } from '../types'
 import { all } from '../api'
-import { actionCommand, purchaseDetailLine, purchaseTotal, receiptLines } from './purchases'
+import { actionCommand, actionNames, purchaseDetailLine, purchaseTotal, receiptLines } from './purchases'
 
 vi.mock('../api', () => ({ all: vi.fn(), read: vi.fn() }))
 
@@ -120,4 +120,24 @@ it('明细待收不出现负数；批次多时入库日期只列最近 3 批', (
   const receipts = ['01', '02', '03', '04'].map((day, index) => ({ id: index, received_date: `2026-11-${day}`, quantity: '1.000' }))
   expect(purchaseDetailLine({ quantity: '9.000', received_quantity: '4.000', receipts, last_received_date: '2026-11-04' }, {}).received_label)
     .toBe('2026-11-04\n共 4 批，列出最近 3 批\n2026-11-02 入库 1\n2026-11-03 入库 1\n2026-11-04 入库 1')
+})
+
+it('换版转来的新版明细待采购确认：采购可按新图改单（改价才提交单价）或取消余量，收货列表暂不列出这一行', async () => {
+  const converted = { id: 4, item_code: 'JG-001B', item_name: '夹爪安装板', unit: '件', quantity: '2.000', unit_price: '5.00', received_quantity: '0.000', cancelled_quantity: '0.000', returned_quantity: '0.000', pending_quantity: '0.000', receipts: [], revision_role: 'converted', revision_pending: true, revision_from: 'JG-001' }
+  const withRevision = { ...detail, status: 'approved', lines: [...detail.lines, converted] }
+  vi.mocked(read).mockImplementation(async (path: string) => (path.includes('locations') ? ['主仓'] : withRevision))
+  user.value = { id: 3, roles: ['purchaser'] }
+  expect(actionNames('purchases', withRevision)[0]).toBe('确认换版改单')
+  expect(actionNames('purchases', detail)).not.toContain('确认换版改单')
+  const review = await actionCommand('purchases', withRevision, '确认换版改单')
+  expect(review.path).toBe('/business/purchases/9/revision-review/')
+  expect(review.fields.find(field => field.key === 'line')!.options).toEqual([{ value: 4, label: 'JG-001B 夹爪安装板（由 JG-001 转来）· 未收 2' }])
+  expect(review.prepare!({ line: 4, decision: 'confirm', unit_price: '5.00', reason: '供应商确认' })).toEqual({ line: 4, decision: 'confirm', reason: '供应商确认' })
+  expect(review.prepare!({ line: 4, decision: 'confirm', unit_price: '6', reason: '重新报价' })).toEqual({ line: 4, decision: 'confirm', reason: '重新报价', unit_price: '6' })
+  expect(review.prepare!({ line: 4, decision: 'cancel', unit_price: '6', reason: '不接受' })).toEqual({ line: 4, decision: 'cancel', reason: '不接受' })
+  expect(purchaseDetailLine(converted, withRevision).material_text).toContain('换版：由 JG-001 按新图改单，待采购确认')
+  user.value = { id: 2, roles: ['warehouse'] }
+  const receive = industryCommand(await actionCommand('purchases', withRevision, '收货'))
+  expect(receive.notice!.text).toContain('待采购向供应商确认新图')
+  expect(defaults(receive.fields, receive.initial).lines.map((line: Row) => line.line)).not.toContain(4)
 })

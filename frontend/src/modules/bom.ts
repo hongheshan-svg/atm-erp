@@ -47,7 +47,8 @@ export async function createCommand(resource: string, projectId?: number): Promi
 }
 export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
-  if (resource === 'bom' && bomEditor(r)) a.push('修改此行', '替换物料', '移除')
+  // 带图号的非标件可一步升版：自动建新版本物料并换版；其他物料换型号用「替换物料」。
+  if (resource === 'bom' && bomEditor(r)) a.push('修改此行', ...(r.drawing_number ? ['升版'] : []), '替换物料', '移除')
   return a
 }
 export async function actionCommand(resource: string, r: Row, name: string): Promise<Command> {
@@ -97,10 +98,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       title: `替换 ${r.item_code} ${r.item_name}`,
       submitLabel: '确认替换',
       path: `/business/bom/${r.id}/replace/`,
-      notice: { type: 'info', text: `将在「${r.assembly_unit || '未分单元'}」新增所选物料，并在同一次提交中移除原行。原行有在途采购或移除后其余单元不够覆盖已领时会被拦截，需先联系采购或仓管处理。` },
+      notice: { type: 'info', text: revisionNotice(r) },
+      successNote: revisionResult,
       fields: [
         { ...t('item_label', '原物料'), readonly: true, displayOnly: true },
-        item({ label: '新物料', hint: '图档升版请先新建带新版本号的物料。' }),
+        item({ label: '新物料', hint: r.drawing_number ? '同图号升版可直接用「升版」，不必先新建物料。' : '换成另一个型号的在用物料。' }),
         qty,
         { key: 'required_date', label: '需求日期', type: 'date', optional: true },
         { key: 'application_date', label: '申请日期', type: 'date', optional: true },
@@ -118,6 +120,50 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       prepare: data => ({ ...data, required_date: data.required_date || null, application_date: data.application_date || null, applicant: data.applicant || '' }),
     }
   }
+  // 一步升版：复制原物料资料建新版本物料（同图号同版本已有则复用），在原单元换版；可勾选同物料的其他项目一并换版。
+  if (name === '升版') {
+    const scope = await read(`/business/bom/${r.id}/upgrade-scope/`) as Row[]
+    const writable = scope.filter(row => row.writable)
+    const locked = scope.filter(row => !row.writable)
+    return {
+      title: `升版 ${r.item_code} ${r.item_name}`,
+      submitLabel: '确认升版',
+      path: `/business/bom/${r.id}/upgrade/`,
+      notice: { type: 'info', text: revisionNotice(r) + (locked.length ? ` 项目 ${locked.map(row => row.code).join('、')} 也在用此物料，需由该项目的工程师或项目经理换版。` : '') },
+      successNote: revisionResult,
+      fields: [
+        { ...t('item_label', '原物料'), readonly: true, displayOnly: true },
+        { ...t('drawing_revision', '新图档版本'), hint: `原版本 ${r.drawing_revision || '（空）'}。同图号、同版本的物料已存在时直接使用，否则自动新建物料编码。` },
+        { ...t('name', '物料名称', true), hint: '留空沿用原名称。' },
+        { ...t('specification', '规格', true), hint: '新版规格有变化时填写，留空沿用原规格。' },
+        qty,
+        { ...t('change_note', '变更说明'), hint: '写明 ECN 编号、改了什么。' },
+        ...(writable.length ? [{
+          key: 'projects',
+          label: '同时换版的其他项目',
+          type: 'checks' as const,
+          optional: true,
+          options: writable.map(row => ({ value: row.id, label: `${row.code} ${row.name}（${row.units.join('、')}，共 ${quantityText(row.quantity)}）` })),
+          hint: '默认只改本项目。勾选的项目里该物料的所有单元都换成新版，数量不变，在途同样按新图改单。',
+        }] : []),
+      ],
+      initial: {
+        item_label: [r.item_code, r.item_name, r.specification, `图号 ${r.drawing_number}`, r.drawing_revision ? `版本 ${r.drawing_revision}` : '', r.assembly_unit || '未分单元'].filter(Boolean).join(' · '),
+        drawing_revision: '',
+        name: '',
+        specification: '',
+        quantity: quantityText(r.quantity, ''),
+        change_note: '',
+        projects: [],
+      },
+      prepare: data => {
+        const payload: Row = { drawing_revision: data.drawing_revision, quantity: data.quantity, change_note: data.change_note, projects: data.projects || [] }
+        if (data.name) payload.name = data.name
+        if (data.specification) payload.specification = data.specification
+        return payload
+      },
+    }
+  }
   // 移除前写明是哪一行：同一物料常分布在多个单元，标题和提示里给出编码、名称、单元和数量。
   if (name === '移除') {
     const unitName = r.assembly_unit || '未分单元'
@@ -130,6 +176,22 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     }
   }
   return { title: name, path: `${endpoint(resource)}${r.id}/`, fields: [reason] }
+}
+function revisionNotice(r: Row): string {
+  return `将在「${r.assembly_unit || '未分单元'}」换成新物料并移除原行。原物料未到货的采购会按新图改单（已批准的需采购向供应商确认后才能收货）；已到货、已领用超出需求的原物料进入「旧版待处理」，由仓管报废或留作备件、采购开返修单。`
+}
+// 换版提交后说明在途采购怎么处理了，让工程师知道要通知谁。
+export function revisionResult(result: Row): string {
+  const converted = [...(result.converted || []), ...(result.projects || []).flatMap((row: Row) => row.changes.flatMap((change: Row) => change.converted))]
+  const pending = converted.filter((row: Row) => row.pending).map((row: Row) => row.code)
+  const changed = converted.filter((row: Row) => !row.pending).map((row: Row) => row.code)
+  const others = (result.projects || []).map((row: Row) => row.code)
+  return [
+    result.item_code ? `新版物料 ${result.item_code}${result.created_item ? '（新建）' : ''}。` : '',
+    others.length ? `已同时换版：${others.join('、')}。` : '',
+    changed.length ? `未批准的采购 ${[...new Set(changed)].join('、')} 已直接改成新版。` : '',
+    pending.length ? `已批准的采购 ${[...new Set(pending)].join('、')} 已转新版，待采购向供应商确认。` : '',
+  ].join('')
 }
 export async function bomCommand(projectId: number): Promise<Command> {
   const demand = await read(`/business/projects/${projectId}/demand/`)

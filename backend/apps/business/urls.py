@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import SimpleRouter
 
-from .api.bom import BOMView
+from .api.bom import BOMView, RevisionChangeView
 from .api.data_checks import DataCheckView
 from .api.deletions import DeletionView
 from .api.execution import DeliveryView, TaskView, TimeView
@@ -24,6 +24,7 @@ router.register('partners', PartnerView)
 router.register('projects', ProjectView)
 router.register('sales', SalesView)
 router.register('bom', BOMView)
+router.register('revision-changes', RevisionChangeView, basename='revision-changes')
 router.register('purchases', PurchaseView)
 router.register('stocks', StockView)
 router.register('moves', MoveView)
