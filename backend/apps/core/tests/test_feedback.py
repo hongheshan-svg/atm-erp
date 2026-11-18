@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import urllib.error
+from contextlib import contextmanager
 from unittest.mock import patch
 
 from django.core.cache import cache
@@ -69,6 +70,13 @@ class FeedbackTests(TestCase):
             'client': 'Mozilla/5.0 | `x` · 390×844',
             **changes,
         }
+
+    @contextmanager
+    def expect_unavailable(self):
+        # 503 是预期结果：断言接口确实记了错误日志，同时不把堆栈打到测试输出（CI 会把其中的 raise 行标成红色错误）。
+        with self.assertLogs('apps.core.api', 'ERROR'), self.assertLogs('django.request', 'ERROR') as logs:
+            yield
+        self.assertIn('Service Unavailable: /api/core/feedback/', logs.output[0])
 
     def submit(self, key='fb-1', **changes):
         return self.client.post('/api/core/feedback/', self.fields(**changes), format='json', HTTP_IDEMPOTENCY_KEY=key)
@@ -148,7 +156,10 @@ class FeedbackTests(TestCase):
     def test_existing_attachment_is_reused_and_unconfirmed_conflict_fails(self):
         with patch('apps.core.feedback.github', side_effect=GitHubStub(put={'_status': 422}, get={'sha': 'x'})):
             self.assertEqual(self.submit_files([png()], key='a').status_code, 200)
-        with patch('apps.core.feedback.github', side_effect=GitHubStub(put={'_status': 422}, get={'_status': 404})):
+        with (
+            patch('apps.core.feedback.github', side_effect=GitHubStub(put={'_status': 422}, get={'_status': 404})),
+            self.expect_unavailable(),
+        ):
             response = self.submit_files([png()], key='b')
         self.assertEqual(response.status_code, 503)
         self.assertEqual(Feedback.objects.count(), 1)
@@ -201,7 +212,7 @@ class FeedbackTests(TestCase):
             self.assertEqual(self.submit().status_code, 409)
         github.assert_not_called()
         Company.objects.filter(pk=1).update(feedback_token=TOKEN)
-        with patch('apps.core.feedback.github', side_effect=feedback.Unavailable()):
+        with patch('apps.core.feedback.github', side_effect=feedback.Unavailable()), self.expect_unavailable():
             response = self.submit()
         self.assertEqual(response.status_code, 503)
         self.assertIn('内容未提交', response.data['detail'])
@@ -210,7 +221,10 @@ class FeedbackTests(TestCase):
             self.assertEqual(self.submit().status_code, 200)
 
     def test_unexpected_github_response_is_not_recorded(self):
-        with patch('apps.core.feedback.github', return_value={'number': 41, 'html_url': 'https://evil.example/41'}):
+        with (
+            patch('apps.core.feedback.github', return_value={'number': 41, 'html_url': 'https://evil.example/41'}),
+            self.expect_unavailable(),
+        ):
             self.assertEqual(self.submit().status_code, 503)
         self.assertFalse(Feedback.objects.exists())
 
@@ -269,8 +283,12 @@ class FeedbackTests(TestCase):
 
     def test_sync_failure_keeps_last_known_state(self):
         Feedback.objects.create(category='bug', title='甲', issue_number=5, issue_url='u5', created_by=self.member)
-        with patch('apps.core.feedback.github', side_effect=feedback.Unavailable()):
+        with (
+            patch('apps.core.feedback.github', side_effect=feedback.Unavailable()),
+            self.assertLogs('apps.core.feedback', 'WARNING') as logs,
+        ):
             response = self.client.get('/api/core/feedback/')
+        self.assertIn('问题反馈状态同步失败', logs.output[0])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['results'][0]['state'], 'open')
 

@@ -77,7 +77,7 @@ jobs:
       browser_specs: ${{ steps.select.outputs.browser_specs }}
       browser_matrix: ${{ steps.select.outputs.browser_matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0

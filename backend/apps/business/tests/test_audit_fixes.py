@@ -229,8 +229,13 @@ class DocumentRemovalTests(BusinessFixtures, TestCase):
                 SalesOrder.objects.filter(pk=sale.pk).update(project=self.project)
             return found
 
-        with patch.object(documents, 'get_object_or_404', signed_meanwhile):
+        # 唯一约束冲突转 409 时会记一条带堆栈的警告：断言记了，不打到测试输出。
+        with (
+            patch.object(documents, 'get_object_or_404', signed_meanwhile),
+            self.assertLogs('apps.core.api', 'WARNING') as logs,
+        ):
             self.post('sales_manager', f'documents/{document}/remove/', {'reason': '传错文件'}, status=409)
+        self.assertIn('数据库唯一约束冲突已转为 409', logs.output[0])
         self.assertFalse(Document.all_objects.get(pk=document).is_deleted)
         SalesOrder.objects.filter(pk=sale.pk).update(project=None)
         self.post('sales_manager', f'documents/{document}/remove/', {'reason': '传错文件'})
