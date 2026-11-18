@@ -177,7 +177,8 @@ class TaskSupervisionTests(BusinessFixtures, TestCase):
         with patch(
             'apps.business.services.execution.notify_task', side_effect=RuntimeError('notice storage unavailable')
         ):
-            with self.assertRaises(RuntimeError):
+            # 预期的 500：断言记了错误日志，不把堆栈打到测试输出。
+            with self.assertRaises(RuntimeError), self.assertLogs('django.request', 'ERROR'):
                 self.post('manager', 'tasks/', {**data, 'title': '事务回滚'}, status=201)
         self.assertEqual(before, (Task.objects.count(), TaskNotice.objects.count(), ActionReceipt.objects.count()))
 

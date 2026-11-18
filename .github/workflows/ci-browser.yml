@@ -37,9 +37,9 @@ jobs:
       E2E_BASE_URL: http://127.0.0.1:18320
       E2E_ADMIN_PASSWORD: Lean-CI-only-password-2026
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: {ref: '${{ inputs.ref || github.ref }}'}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
       # 前端依赖、Chromium 及其字体包（apt）与镜像构建、安装互不依赖：放到后台，与后面三步同时进行，
       # 每片少等约半分钟。只对这一步网络安装重试（apt 源解析失败曾让整轮浏览器任务失败），用例本身不重试。
@@ -59,8 +59,8 @@ jobs:
             done
             echo "$status" > "$RUNNER_TEMP/browser-deps.status"
           ) > "$RUNNER_TEMP/browser-deps.log" 2>&1 &
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/app/Dockerfile
@@ -88,7 +88,7 @@ jobs:
           PROJECT: ${{ matrix.project }}
           TEST_TARGETS: ${{ matrix.specs }}
           E2E_ADMIN_PASSWORD: Lean-CI-ready-password-2026
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: browser-${{ matrix.project }}-${{ matrix.shard }}-${{ github.run_attempt }}

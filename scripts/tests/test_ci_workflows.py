@@ -11,7 +11,7 @@ from unittest.mock import patch
 from scripts.ci.impact import BROWSERS, BUSINESS, FULL_ONLY_BROWSERS, ROOT, SHARED_UI_BROWSERS, plan, version_only_paths
 from scripts.ci.publish_release import is_highest_stable, verify
 from scripts.ci.publish_release import main as publish_main
-from scripts.ci.release_gate import preflight, release_scope, reusable_run
+from scripts.ci.release_gate import api, preflight, release_scope, reusable_run
 from scripts.ci.run_selected import command
 from scripts.ci.select_suites import BROWSER_MAX_SHARDS, BROWSER_SECONDS, SUITES, browser_matrix, browser_shards, select
 
@@ -167,7 +167,9 @@ class RoutingTests(unittest.TestCase):
             self.assertEqual(select([path]), {'fast'}, path)
         for path in ('frontend/package-lock.json', 'backend/requirements.txt', 'backend/constraints.txt'):
             scope = plan([path])
-            self.assertEqual(scope['modules'], sorted(BUSINESS + (('ota',) if path.startswith('backend/') else ())), path)
+            self.assertEqual(
+                scope['modules'], sorted(BUSINESS + (('ota',) if path.startswith('backend/') else ())), path
+            )
             self.assertNotIn('e2e/full-chain.spec.ts', scope['browser_specs'])
         for path in ('unknown.file', 'backend/apps/business/new_module.py', 'frontend/src/components/NewWidget.vue'):
             with self.assertRaises(ValueError):
@@ -700,6 +702,39 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 preflight('v2.0.0-beta', 'owner/erp')
             git.assert_not_called()
             api.assert_not_called()
+
+    def test_api_retries_only_transient_github_errors(self):
+        def done(code, out='', err=''):
+            return subprocess.CompletedProcess(['gh'], code, out, err)
+
+        waits = []
+        # 偶发 502、断连后重试成功，按 2、4 秒退避。
+        with patch(
+            'scripts.ci.release_gate.subprocess.run',
+            side_effect=[
+                done(1, err='gh: Server Error (HTTP 502)'),
+                done(1, err='read: connection reset by peer'),
+                done(0, '{"jobs": []}'),
+            ],
+        ) as run:
+            self.assertEqual(api('repos/o/r/actions/runs/1/jobs', pause=waits.append), {'jobs': []})
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual(waits, [2, 4])
+        # 404 等客户端错误不重试，直接失败。
+        waits.clear()
+        with patch(
+            'scripts.ci.release_gate.subprocess.run', return_value=done(1, err='gh: Not Found (HTTP 404)')
+        ) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                api('repos/o/r/releases', pause=waits.append)
+        self.assertEqual((run.call_count, waits), (1, []))
+        # 一直 5xx：用满次数后失败，不无限重试。
+        with patch(
+            'scripts.ci.release_gate.subprocess.run', return_value=done(1, err='gh: Server Error (HTTP 503)')
+        ) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                api('repos/o/r/releases', pause=waits.append)
+        self.assertEqual((run.call_count, waits), (4, [2, 4, 8]))
 
 
 if __name__ == '__main__':

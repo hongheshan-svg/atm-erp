@@ -391,7 +391,7 @@ class WorkflowCostTests(unittest.TestCase):
         browser = (WORKFLOWS / 'ci-browser.yml').read_text()
         order = [
             browser.index('- name: Start frontend dependencies and Chromium in the background'),
-            browser.index('- uses: docker/build-push-action@v6'),
+            browser.index('- uses: docker/build-push-action@v7'),
             browser.index('- run: bash install.sh --skip-build --no-ota'),
             browser.index('- name: Wait for frontend dependencies and Chromium'),
             browser.index('- name: First-install wizard'),

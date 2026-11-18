@@ -5,14 +5,30 @@ import json
 import os
 import re
 import subprocess
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from scripts.ci.impact import plan, version_only_paths
 
+# 预检一次要并发查询约 200 次运行的任务列表，GitHub 偶发 502/503/504 或断连会让整次发版失败（v1.8.42、v1.8.45
+# 都因此重跑）。只重试服务端与网络错误，按 2、4、8 秒退避；404、权限等 4xx 及其他错误仍直接失败。
+API_ATTEMPTS = 4
+TRANSIENT = re.compile(r'HTTP 5\d\d|timed? ?out|connection (reset|refused)|unexpected EOF|TLS handshake', re.IGNORECASE)
 
-def api(path):
-    return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
+
+def api(path, attempts=API_ATTEMPTS, pause=time.sleep):
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(['gh', 'api', path], capture_output=True, text=True)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+        error = result.stderr.strip()
+        if attempt == attempts or not TRANSIENT.search(error):
+            print(error, file=sys.stderr)
+            raise subprocess.CalledProcessError(result.returncode, ['gh', 'api', path], result.stdout, result.stderr)
+        print(f'GitHub API 暂时出错（{error}），{2**attempt} 秒后第 {attempt} 次重试：{path}', file=sys.stderr)
+        pause(2**attempt)
 
 
 def git(*args):
