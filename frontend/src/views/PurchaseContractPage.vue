@@ -11,6 +11,7 @@ import ActionDialog from '../components/ActionDialog.vue'
 import { buyer } from '../modules/shared'
 import { money } from '../utils/money'
 import { quantityText } from '../utils/quantity'
+import { printFileName } from '../utils/print'
 const route = useRoute()
 const data = ref<Row | null>(null), error = ref(''), loading = ref(false)
 const selectedVersion = ref(''), command = ref<Command | null>(null)
@@ -59,6 +60,14 @@ function showCurrent() {
 }
 watch(() => route.params.id, () => { selectedVersion.value = ''; command.value = null; void load() }, { immediate: true })
 function print() { window.print() }
+// 页面标题即「另存为 PDF」的默认文件名：供应商 + 合同编号，归档版本、草稿、已取消一并标出。
+const fileName = computed(() => {
+  const d = data.value
+  if (!d) return ''
+  const state = d.archived_version ? `第${d.archived_version}版` : d.status === 'cancelled' ? '已取消' : d.draft ? '草稿' : ''
+  return printFileName('采购合同', d.supplier?.name, d.code, state)
+})
+watch(fileName, name => { if (name) document.title = name })
 async function archive() {
   if (!data.value) return
   const purchaseId = route.params.id
@@ -98,6 +107,7 @@ async function archive() {
     <div class="contract-workspace">
     <aside v-if="data" class="contract-toolbar contract-actions" aria-label="合同版本与打印">
       <el-button type="primary" :disabled="loading" @click="print">打印 / 另存为 PDF</el-button>
+      <p class="contract-print-tip">在打印窗口的「打印机」里选「另存为 PDF」再保存，得到的就是 PDF 文件，文件名已按供应商和合同编号填好。浏览器菜单里的「另存为」存下的是网页，不是 PDF。</p>
       <el-button v-if="data.signed_document" @click="openDocumentPreview(data.signed_document, '签署合同')">预览签署文件</el-button>
       <label>合同版本 <select v-model="selectedVersion" aria-label="合同版本" @change="load"><option value="">最新归档（无归档时当前资料）</option><option value="current">当前采购资料 · 待确认</option><option v-for="v in data.versions" :key="v.version" :value="String(v.version)">已归档第 {{ v.version }} 版</option></select></label>
       <el-button v-if="buyer() && !data.draft && data.status !== 'cancelled'" @click="archive().catch(e => error = message(e))">{{ data.versions?.length ? '归档新版本' : '归档签署版本' }}</el-button>
@@ -150,6 +160,7 @@ async function archive() {
 .contract-actions label { flex-wrap:wrap; min-width:0; }
 .contract-actions label select { width:100%; min-width:0; }
 .contract-actions .contract-help { margin-bottom:0; font-size:12px; }
+.contract-print-tip { margin:0; font-size:12px; line-height:1.6; color:var(--ink-3); }
 .contract-pages .contract-paper { margin-top:0; }
 @media screen and (max-width:1100px) { .contract-workspace { display:flex; flex-direction:column; }.contract-actions { position:static; width:100%; }.contract-pages { width:100%; } }
 .contract-paper { box-sizing:border-box; max-width:210mm; margin:20px auto; padding:16mm 12mm; background:white; color:var(--ink); box-shadow:0 4px 24px #16283a12; font-size:13px; line-height:1.7; overflow-wrap:anywhere; }

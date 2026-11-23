@@ -20,6 +20,8 @@ it('按领料单号读取服务端单据并打印：单头、逐行明细与签�
   const wrapper = mount(IssueSlipPage, { global: { plugins: [ElementPlus], stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
   await flushPromises()
   expect(read).toHaveBeenCalledWith('/business/issue-slips/5/')
+  expect(document.title).toBe('领料单-LL000005-ATM2601')
+  expect(wrapper.get('.slip-print-tip').text()).toContain('「打印机」里选「另存为 PDF」')
   const paper = wrapper.find('article.slip-paper')
   expect(paper.text()).toContain('示例自动化')
   for (const text of ['LL000005', 'ATM2601 · 上料线', '现场换件', '售后领料', '王仓管', '2 行']) expect(paper.text()).toContain(text)
