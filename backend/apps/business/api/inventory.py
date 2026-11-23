@@ -1,4 +1,4 @@
-from django.db.models import OuterRef, Prefetch, Subquery
+from django.db.models import Exists, OuterRef, Prefetch, Subquery
 from django.db.models.functions import Coalesce, TruncDate
 from django_filters import rest_framework as filters
 from rest_framework.decorators import action
@@ -24,11 +24,12 @@ from ..serializers import (
     StockSerializer,
 )
 from ..services import inventory
+from ..services.common import live_receipts
 from .common import ImportableMixin, ReadView, key
 
 # 每个库位行最近一次采购合格入库的日期（历史流水无实际收货日时按登记当天），列表一条子查询带出。
 LAST_RECEIPT = (
-    StockMove.objects.filter(stock=OuterRef('pk'), kind='receipt')
+    live_receipts(StockMove.objects.filter(stock=OuterRef('pk')))
     .annotate(day=Coalesce('received_date', TruncDate('created_at')))
     .order_by('-day', '-id')
     .values('day')[:1]
@@ -85,9 +86,10 @@ class StockView(ImportableMixin, ReadView):
 
 class MoveView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
+    # reversed：采购收货已在反审时冲回，前端不再提供「采购退货」。
     queryset = StockMove.objects.select_related(
         'stock__item', 'project', 'purchase_line__purchase', 'slip', 'created_by'
-    )
+    ).annotate(reversed=Exists(StockMove.objects.filter(source=OuterRef('pk'), kind='receipt_reversal')))
     serializer_class = MoveSerializer
     filterset_fields = ['project', 'stock', 'kind', 'slip']
 

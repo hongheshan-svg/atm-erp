@@ -2,6 +2,7 @@ import re
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
+from django.db.models import Exists, OuterRef
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import ValidationError
 
@@ -10,11 +11,24 @@ from apps.core.api import Conflict
 from apps.core.models import AuditLog
 from apps.core.permissions import require_project, require_role
 
-from ..models import Entry, Item, Project, Stock
+from ..models import Entry, Item, Project, Stock, StockMove
 
 ZERO = Decimal('0')
 # 计入项目材料成本的库存流水：领料、退料，以及换版后旧版的报废和送修出库。
 MATERIAL_KINDS = ['issue', 'return', 'scrap', 'rework']
+# 采购反审冲回原收货的流水（source 指向原收货）。原收货仍留在流水里，但已不算到货：
+# 不能再退货、报修，也不再列为采购单的入库批次；金额上按 supplier_credit 抵减原收货，与采购退货同一口径。
+RECEIPT_REVERSAL = 'receipt_reversal'
+# 抵减原收货金额的流水：采购退货和反审冲回，都按 source 找到原收货、按 supplier_credit 冲减。
+RECEIPT_CREDIT_KINDS = ['purchase_return', RECEIPT_REVERSAL]
+
+
+def live_receipts(queryset=None):
+    """尚未被反审冲回的采购收货。"""
+    queryset = StockMove.objects.all() if queryset is None else queryset
+    return queryset.filter(kind='receipt').exclude(
+        Exists(StockMove.objects.filter(source=OuterRef('pk'), kind=RECEIPT_REVERSAL))
+    )
 
 
 def fields(data, allowed):

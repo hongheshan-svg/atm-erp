@@ -82,7 +82,8 @@ export type Column = {
   // 单元格链接到站外网页（物料购买链接），新标签页打开；返回空串时按普通文本显示。
   href?: (row: Row) => string | undefined
   // 值下方的一行小字（如「3 项逾期」「剩 20 天」）；risk 时用风险色。
-  flag?: (row: Row) => { text: string; risk?: boolean } | undefined
+  // wrap：较长的说明（如退回原因）在列宽内换行，不截断。
+  flag?: (row: Row) => { text: string; risk?: boolean; wrap?: boolean } | undefined
 }
 export type FlowNode = { key: string; label: string; hint?: string }
 export type Flow = {

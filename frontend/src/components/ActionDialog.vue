@@ -394,6 +394,7 @@ async function submit() {
 .compact-flow { margin: 0 0 16px; color: var(--ink-3); font-size: 13px; }
 .compact-flow summary { cursor: pointer; padding: 8px 0; }
 .field-issues, .draft-notice, .action-blocker { padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--field-line); border-radius: 8px; background: var(--subtle-2); }
+.action-blocker p { white-space: pre-line; }
 .field-issues { color: var(--risk); }
 .field-issues button { border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; padding: 6px 0; text-decoration: underline; }
 .field-issues ul { padding-left: 18px; margin: 6px 0; }

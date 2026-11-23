@@ -35,7 +35,7 @@ from .models import (
     TimeEntry,
 )
 from .services import payment_terms
-from .services.common import ZERO, rounded
+from .services.common import ZERO, live_receipts, rounded
 from .services.execution import stage_cancel_block
 from .services.finance import balance, paid
 from .services.task_supervision import can_confirm_task, supervisor_id
@@ -367,7 +367,7 @@ class PurchaseLineDetailSerializer(PurchaseLineSerializer):
     def _receipts(self, obj):
         moves = getattr(obj, 'receipt_moves', None)
         if moves is None:
-            moves = list(StockMove.objects.filter(purchase_line=obj, kind='receipt').select_related('stock'))
+            moves = list(live_receipts(StockMove.objects.filter(purchase_line=obj)).select_related('stock'))
         # 历史流水没有填写实际收货日时按登记当天计，与账期、质保起算口径一致。
         dated = [(move.received_date or timezone.localdate(move.created_at), move) for move in moves]
         return sorted(dated, key=lambda pair: (pair[0], pair[1].pk))
@@ -397,6 +397,52 @@ class PurchaseSerializer(serializers.ModelSerializer):
     change_request = serializers.SerializerMethodField()
     can_review_change = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
+    # 谁建的、谁提交的；回到草稿的单子另写明是退回、同意修改申请还是反审，谁、何时、为什么。
+    created_by_name = PersonNameField(source='created_by')
+    submitted_by_name = serializers.SerializerMethodField()
+    returned_action = serializers.SerializerMethodField()
+    returned_note = serializers.SerializerMethodField()
+    returned_reason = serializers.SerializerMethodField()
+
+    def _trail(self, obj):
+        from .services.supply import purchase_trail
+
+        if not hasattr(self, '_purchase_trail'):
+            page = self.parent.instance if isinstance(self.parent, serializers.ListSerializer) else [obj]
+            self._purchase_trail = purchase_trail(page)
+            ids = {row['submitted_by'] for row in self._purchase_trail.values()} | {
+                row['returned']['actor'] for row in self._purchase_trail.values() if row['returned']
+            }
+            self._trail_people = {user.pk: user for user in User.objects.filter(pk__in=ids - {None})}
+            root = self.root
+            if not hasattr(root, '_ambiguous_people'):
+                root._ambiguous_people = ambiguous_people()
+        if obj.pk not in self._purchase_trail:
+            del self._purchase_trail
+            return self._trail(obj)
+        return self._purchase_trail[obj.pk]
+
+    def _person(self, user_id):
+        return person_name(self._trail_people.get(user_id), self.root._ambiguous_people)
+
+    def get_submitted_by_name(self, obj):
+        return self._person(self._trail(obj)['submitted_by'])
+
+    def get_returned_action(self, obj):
+        returned = self._trail(obj)['returned']
+        return returned['action'] if returned else ''
+
+    def get_returned_reason(self, obj):
+        returned = self._trail(obj)['returned']
+        return returned['reason'] if returned else ''
+
+    def get_returned_note(self, obj):
+        returned = self._trail(obj)['returned']
+        if not returned:
+            return ''
+        when = timezone.localtime(returned['at']).strftime('%m-%d %H:%M')
+        note = f'{self._person(returned["actor"])} {when} {returned["action"]}'
+        return f'{note}：{returned["reason"]}' if returned['reason'] else note
 
     def get_change_request(self, obj):
         from .services.purchase_changes import pending_requests
@@ -465,6 +511,11 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'lines',
             'created_at',
             'updated_at',
+            'created_by_name',
+            'submitted_by_name',
+            'returned_action',
+            'returned_note',
+            'returned_reason',
         ]
 
 
@@ -528,6 +579,8 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
     purchase_code = serializers.CharField(source='purchase_line.purchase.code', read_only=True, default='')
     slip_code = serializers.CharField(source='slip.code', read_only=True, default='')
     created_by_name = PersonNameField(source='created_by')
+    # 采购收货已在反审时冲回（列表查询带注解；其他读取默认未冲回）。
+    reversed = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = StockMove
@@ -559,6 +612,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'created_at',
             'created_by',
             'created_by_name',
+            'reversed',
         ]
 
 

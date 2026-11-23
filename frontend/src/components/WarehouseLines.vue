@@ -18,13 +18,37 @@ const columns = computed(() => props.field.fields!.filter(field => !field.hidden
 const batch = computed(() => props.field.fields!.some(field => field.key === 'bom_remaining'))
 const receipt = computed(() => props.field.warehouse === 'receipt')
 // 收货：每行勾选「本次到货」，未勾选的行数量为 0、不能填写、不提交；有采购权限时未收足的行可勾选「余量不再到货」。
-const selectable = computed(() => receipt.value && props.field.fields!.some(field => field.key === 'selected'))
+// 按 BOM 领料：每行勾选「本次领用」（默认不勾），勾上才按建议数量填入并提交，没勾的行本次不领。
+const selectable = computed(() => props.field.fields!.some(field => field.key === 'selected'))
+const pickName = computed(() => receipt.value ? '本次到货' : '本次领用')
+// 按 BOM 领料几百行时按物料类别筛开：非标件（机加、钣金）一拨，标准件（气缸、阀、开关等外购件）一拨。
+// 物料类别没填的按产品分类判断：有图（1x）算非标件，无图·标准件（21）算标准件，其余列为未分类。
+const groupLabels = { custom: '非标件（机加、钣金）', standard: '标准件 / 电气件', other: '未分类' } as const
+type Group = keyof typeof groupLabels
+function group(row: Row): Group {
+  const item = source(row)
+  if (item.part_type === 'custom' || item.part_type === 'standard') return item.part_type
+  const category = String(item.product_category || '')
+  return category.startsWith('1') ? 'custom' : category === '21' ? 'standard' : 'other'
+}
+const filter = ref<'all' | Group>('all')
+const filters = computed(() => {
+  if (!batch.value) return []
+  const counts: Record<Group, number> = { custom: 0, standard: 0, other: 0 }
+  for (const row of model.value) counts[group(row)]++
+  return [{ key: 'all' as const, label: '全部', count: model.value.length },
+    ...(Object.keys(groupLabels) as Group[]).filter(key => counts[key]).map(key => ({ key, label: groupLabels[key], count: counts[key] }))]
+})
+// 当前筛选下列出的行（model 下标，按原顺序）；分页、全选和 Shift 连选都只作用于这些行。
+const visible = computed(() => model.value.flatMap((row, i) => (filter.value === 'all' || group(row) === filter.value ? [i] : [])))
+let anchor: number | null = null
+function setFilter(key: 'all' | Group) { filter.value = key; page.value = 0; anchor = null }
 const cancellable = computed(() => receipt.value && props.field.fields!.some(field => field.key === 'cancel_remainder'))
 const picked = (row: Row) => !selectable.value || row.selected !== false
 // 库存页勾选多行领料（与收货的逐行勾选无关）：没有建议数量，提供「全部按可用填入」和「全部清空」。
 const stockPicks = computed(() => props.field.warehouse === 'issue' && !batch.value)
-const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(model.value.length / 20) - 1)) * 20)
-const indices = computed(() => Array.from({ length: Math.min(20, model.value.length - start.value) }, (_, i) => start.value + i))
+const start = computed(() => Math.min(page.value, Math.max(0, Math.ceil(visible.value.length / 20) - 1)) * 20)
+const indices = computed(() => visible.value.slice(start.value, start.value + 20))
 const path = (i: number, key: string) => `${props.prefix}.${i}.${key}`
 const inputId = (i: number, key: string) => `${uid}-${i}-${key}`
 // 每行输入框的名称＝列名＋行号与物料，读屏逐格切换时能分清是哪一行；列名仍是可见表头的简称。
@@ -52,10 +76,15 @@ const decimal = /^\d+(\.\d{1,3})?$/
 const sum = (values: unknown[]) => sumQuantities(values.map(value => String(value ?? '').trim()).filter(value => decimal.test(value)))
 const total = (key: string) => quantityText(sum(model.value.map(row => row[key])), '0')
 const pickedRows = computed(() => model.value.filter(picked))
-const allPicked = computed(() => model.value.length > 0 && pickedRows.value.length === model.value.length)
+const visibleRows = computed(() => visible.value.map(i => model.value[i]!))
+const allPicked = computed(() => visibleRows.value.length > 0 && visibleRows.value.every(picked))
+const somePicked = computed(() => visibleRows.value.some(picked))
+const pickAllLabel = computed(() => receipt.value ? '全选本次到货明细' : filter.value === 'all' ? '全选本次领用明细' : `全选${groupLabels[filter.value]}`)
 const summary = computed(() => receipt.value
   ? `${props.context.received_date ? `入库日期 ${props.context.received_date} · ` : ''}已勾选 ${pickedRows.value.length}/${model.value.length} 行，本次合格 ${quantityText(sum(pickedRows.value.map(row => row.quantity)), '0')} / 待收 ${quantityText(sum(pickedRows.value.map(row => source(row).remaining)), '0')}`
-  : `本次出库 ${total('quantity')}${batch.value ? ` / BOM 未领 ${total('bom_remaining')}` : ''}，共 ${model.value.length} 行`)
+  : batch.value
+    ? `已勾选 ${pickedRows.value.length}/${model.value.length} 行，本次出库 ${quantityText(sum(pickedRows.value.map(row => row.quantity)), '0')}`
+    : `本次出库 ${total('quantity')}，共 ${model.value.length} 行`)
 // 数量按千分之一取整数比较，避免浮点误差；格式不对时交给通用校验提示。
 const milli = (value: unknown) => toScaled(String(value ?? '').trim() || '0', QUANTITY_SCALE, { signed: false })
 // 待收 − 本次合格 − 本次隔离：正数是余量，负数是多送。
@@ -94,17 +123,29 @@ function partial(row: Row) {
 }
 function pick(row: Row, on: boolean) {
   row.selected = on
+  // 按 BOM 领料：勾上按服务端建议数量（BOM 未领量按库位依次分配）填入，取消勾选清零、不提交。
+  if (!receipt.value) { row.quantity = on ? String(source(row).suggested ?? '0') : '0'; return }
   // 重新勾选默认按待收填入；取消勾选清零，不再提交本行。
   row.quantity = on ? source(row).remaining : '0'
   row.pending_quantity = '0'
   if (cancellable.value) row.cancel_remainder = false
 }
-function pickAll(on: boolean) { for (const row of model.value) if (picked(row) !== on) pick(row, on) }
-function fill(mode: 'pending' | 'suggested' | 'zero' | 'clear') {
+function pickAll(on: boolean) { for (const row of visibleRows.value) if (picked(row) !== on) pick(row, on) }
+function unpickAll() { for (const row of model.value) if (picked(row)) pick(row, false) }
+// 按住 Shift 点勾选框：从上一次点的行到这一行（当前筛选下列出的）一起勾上或取消。
+// click 时勾选状态已切换，在 click 里按 Shift 处理；随后的 change 对同一行再处理一次不改变结果。
+function onPick(i: number, on: boolean, shift = false) {
+  const from = anchor ?? i
+  const range = shift ? visible.value.filter(index => index >= Math.min(from, i) && index <= Math.max(from, i)) : [i]
+  for (const index of range) { const row = model.value[index]!; if (picked(row) !== on) pick(row, on) }
+  anchor = i
+}
+function onPickClick(i: number, event: MouseEvent) { onPick(i, (event.target as HTMLInputElement).checked, event.shiftKey) }
+function fill(mode: 'pending' | 'zero' | 'clear') {
   for (const row of model.value) {
     if (selectable.value && mode === 'pending') row.selected = true
     if (mode === 'zero' || mode === 'clear') row.quantity = mode === 'zero' ? '0' : ''
-    else row.quantity = mode === 'pending' ? source(row).remaining : source(row).quantity
+    else row.quantity = source(row).remaining
     if (receipt.value) row.pending_quantity = '0'
     if (cancellable.value) row.cancel_remainder = false
   }
@@ -145,7 +186,9 @@ watch(() => [props.context.project, props.context.task], loadProject, { immediat
 onBeforeUnmount(() => { generation++ })
 async function focusPath(target: string) {
   const [index, key] = target.slice(props.prefix.length + 1).split('.')
-  page.value = Math.floor(Number(index) / 20)
+  // 出错的行不在当前筛选里时先切回全部，再翻到所在页。
+  if (!visible.value.includes(Number(index))) { filter.value = 'all'; anchor = null }
+  page.value = Math.floor(visible.value.indexOf(Number(index)) / 20)
   await nextTick()
   const input = root.value?.querySelector<HTMLElement>(`[id="${inputId(Number(index), key!)}"]`)
   input?.scrollIntoView?.({ block: 'center', inline: 'center' }); input?.focus()
@@ -158,16 +201,18 @@ defineExpose({ focusPath })
     <p class="form-hint">{{ field.hint }}</p>
     <p v-if="error" role="alert">{{ error }} <button type="button" @click="loadProject">重试</button></p>
     <div class="warehouse-summary" role="status"><strong>{{ summary }}</strong><span v-if="receipt || model.length > 1" class="warehouse-fill"
-      ><label v-if="selectable" class="pick-all-mobile"><input type="checkbox" :checked="allPicked" :indeterminate="pickedRows.length > 0 && !allPicked" :disabled="disabled || !model.length" aria-label="全选本次到货明细" @change="pickAll(($event.target as HTMLInputElement).checked)" />全选</label
+      ><label v-if="selectable" class="pick-all-mobile"><input type="checkbox" :checked="allPicked" :indeterminate="somePicked && !allPicked" :disabled="disabled || !visible.length" :aria-label="pickAllLabel" @change="pickAll(($event.target as HTMLInputElement).checked)" />全选</label
       ><button v-if="receipt || stockPicks" type="button" :disabled="disabled" @click="fill('pending')">{{ receipt ? '全部按待收填入' : '全部按可用填入' }}</button
-      ><button v-else type="button" :disabled="disabled" @click="fill('suggested')">恢复建议数量</button
-      ><button type="button" :disabled="disabled" @click="fill(stockPicks ? 'clear' : 'zero')">{{ stockPicks ? '全部清空' : '全部清零' }}</button></span
+      ><button v-if="batch" type="button" :disabled="disabled || !pickedRows.length" @click="unpickAll">取消全部勾选</button
+      ><button v-else type="button" :disabled="disabled" @click="fill(stockPicks ? 'clear' : 'zero')">{{ stockPicks ? '全部清空' : '全部清零' }}</button></span
+    ><div v-if="filters.length" class="warehouse-filter" role="group" aria-label="按物料类别筛选"><button v-for="option in filters" :key="option.key" type="button" :class="{ active: filter === option.key }" :aria-pressed="filter === option.key" @click="setFilter(option.key)">{{ option.label }} {{ option.count }}</button></div
+    ><small v-if="batch" class="muted">勾选本次要领的行，没勾的行本次不领；按住 Shift 点勾选框可连续多选。</small
     ><small v-if="receipt" class="muted">未到货的行取消勾选；合格与隔离合计少于待收的行已高亮，余量继续待收。{{ cancellable ? '供应商不再补货时，勾选该行的「余量不再到货」一并取消余量。' : '供应商不再补货时，请采购在「取消未收余量」中处理。' }}</small></div>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
       <table :aria-label="`${field.label}明细`">
-        <thead><tr><th scope="col" class="col-index"><label v-if="selectable" class="line-pick"><input type="checkbox" :checked="allPicked" :indeterminate="pickedRows.length > 0 && !allPicked" :disabled="disabled || !model.length" aria-label="全选本次到货明细" @change="pickAll(($event.target as HTMLInputElement).checked)" /><span>到货</span></label><template v-else>序号</template></th><th v-for="column in columns" :key="column.key" scope="col" :class="`col-${column.key}`">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
+        <thead><tr><th scope="col" class="col-index"><label v-if="selectable" class="line-pick"><input type="checkbox" :checked="allPicked" :indeterminate="somePicked && !allPicked" :disabled="disabled || !visible.length" :aria-label="pickAllLabel" @change="pickAll(($event.target as HTMLInputElement).checked)" /><span>{{ receipt ? '到货' : '领用' }}</span></label><template v-else>序号</template></th><th v-for="column in columns" :key="column.key" scope="col" :class="`col-${column.key}`">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
         <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock" :class="{ 'partial-line': partial(model[i]!), 'unpicked-line': !picked(model[i]!), 'excess-line': Boolean(excess(model[i]!)) }">
-          <td :data-label="selectable ? '到货' : '序号'" class="line-index"><label v-if="selectable" class="line-pick" :for="inputId(i, 'selected')"><input :id="inputId(i, 'selected')" type="checkbox" :checked="picked(model[i]!)" :disabled="disabled" :aria-label="`本次到货：第 ${i + 1} 行 ${itemName(model[i]!)}`" @change="pick(model[i]!, ($event.target as HTMLInputElement).checked)" /><span>{{ i + 1 }}</span></label><template v-else>{{ i + 1 }}</template><span :id="rowId(i)" hidden>第 {{ i + 1 }} 行 {{ itemName(model[i]!) }}</span></td>
+          <td :data-label="selectable ? (receipt ? '到货' : '领用') : '序号'" class="line-index"><label v-if="selectable" class="line-pick" :for="inputId(i, 'selected')"><input :id="inputId(i, 'selected')" type="checkbox" :checked="picked(model[i]!)" :disabled="disabled" :aria-label="`${pickName}：第 ${i + 1} 行 ${itemName(model[i]!)}`" @click="onPickClick(i, $event)" @change="onPick(i, ($event.target as HTMLInputElement).checked)" /><span>{{ i + 1 }}</span></label><template v-else>{{ i + 1 }}</template><span :id="rowId(i)" hidden>第 {{ i + 1 }} 行 {{ itemName(model[i]!) }}</span></td>
           <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="[`col-${column.key}`, { 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark', 'material-cell': column.key === 'material_label' }]" :data-field-path="path(i, column.key)">
             <span v-if="column.displayOnly" class="material-value">{{ shown(model[i]!, column.key) }}</span>
             <template v-else>
@@ -184,7 +229,8 @@ defineExpose({ focusPath })
         </tr></tbody>
       </table>
     </div></TableScroll>
-    <div v-if="model.length > 20" class="warehouse-pages"><button type="button" :disabled="start === 0" @click="page--">上一页明细</button><span>{{ start + 1 }}–{{ Math.min(start + 20, model.length) }} / {{ model.length }}</span><button type="button" :disabled="start + 20 >= model.length" @click="page++">下一页明细</button></div>
+    <p v-if="!visible.length && model.length" class="muted">当前筛选下没有物料。</p>
+    <div v-if="visible.length > 20" class="warehouse-pages"><button type="button" :disabled="start === 0" @click="page--">上一页明细</button><span>{{ start + 1 }}–{{ Math.min(start + 20, visible.length) }} / {{ visible.length }}</span><button type="button" :disabled="start + 20 >= visible.length" @click="page++">下一页明细</button></div>
   </fieldset>
 </template>
 <style scoped>
@@ -216,6 +262,9 @@ th:first-child, td:first-child { min-width: 36px; }
 .warehouse-fill { display: inline-flex; gap: 6px; }
 .warehouse-fill button { min-height: 30px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--brand-ink); background: var(--paper, #fff); border: 1px solid var(--field-line); border-radius: 5px; cursor: pointer; }
 .warehouse-fill button:disabled { cursor: not-allowed; opacity: .6; }
+.warehouse-filter { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.warehouse-filter button { min-height: 30px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--ink-3); background: var(--paper, #fff); border: 1px solid var(--field-line); border-radius: 15px; cursor: pointer; }
+.warehouse-filter button.active { color: var(--brand-ink); border-color: var(--brand); background: var(--brand-wash, var(--subtle-2)); font-weight: 600; }
 .partial-line td { background: var(--warn-wash); }
 .excess-line td { background: var(--risk-wash); }
 input, textarea { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px; font: inherit; border: 1px solid var(--field-line); border-radius: 5px; background: var(--paper, #fff); }
@@ -247,6 +296,8 @@ small { display: block; color: var(--mute); font-size: 11px; line-height: 1.4; m
   .warehouse-lines { padding: 8px; }
   .warehouse-fill { display: flex; width: 100%; }
   .warehouse-fill button { flex: 1 1 0; min-height: 40px; }
+  .warehouse-filter { display: flex; width: 100%; }
+  .warehouse-filter button { flex: 1 1 auto; min-height: 40px; }
   tr { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row dense; margin-bottom: 10px; }
   td { display: block; grid-column: span 6; padding: 6px 10px; border-bottom: 0; }
   td::before { display: block; font-size: 11px; line-height: 1.4; margin-bottom: 2px; }

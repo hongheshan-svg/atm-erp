@@ -56,6 +56,7 @@ MODULE_FILES = {
         'purchase_warranty',
         'purchase_changes',
         'purchase-changes',
+        'unapprove',
         'contract_clauses',
         'payment_terms',
         'payment-terms',

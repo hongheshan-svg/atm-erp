@@ -18,7 +18,8 @@ export function materialDetails(item: Row): Row {
     spec_label: [drawing_model, revision_brand, part_label].filter(Boolean).join('\n'),
   }
 }
-// batch：按 BOM 批量领料，每行是一个库位，可填 0 表示本次不领；单行领料数量须大于 0。
+// batch：按 BOM 批量领料，每行是一个库位，行前勾选「本次领用」（selected，默认不勾）：勾上按建议数量（suggested）填入，
+// 没勾的行数量为 0、不提交；可按物料类别筛开非标件和标准件。单行领料数量须大于 0。
 // location：库存页勾选多行领料，逐行显示库位，数量仍须大于 0（勾选了就是要领）。
 // 收货：每行前有「本次到货」勾选（selected，默认勾选，不提交）；cancel 为 true 时（有采购权限）
 // 未收足的行可勾选「余量不再到货」（cancel_remainder），同一次提交里取消该行剩余未收数量。
@@ -29,6 +30,7 @@ export function warehouseLines(kind: 'receipt' | 'issue', initial: Row[], option
     ...rows('lines', kind === 'receipt' ? '本次收货' : '本次出库', [
       { key: kind === 'receipt' ? 'line' : 'stock', label: '明细标识', hidden: true },
       ...(kind === 'receipt' ? [{ key: 'selected', label: '本次到货', type: 'boolean', hidden: true, initial: true } satisfies Field] : []),
+      ...(batch ? [{ key: 'selected', label: '本次领用', type: 'boolean', hidden: true, initial: false } satisfies Field] : []),
       ...(kind === 'receipt' && options.cancel ? [{ key: 'cancel_remainder', label: '余量不再到货', type: 'boolean', hidden: true, initial: false } satisfies Field] : []),
       detail('material_label', '产品编号 / 零件名称'),
       ...(kind === 'receipt' ? [detail('assembly_unit', '单元')] : located ? [detail('location', '库位')] : []),
@@ -36,7 +38,7 @@ export function warehouseLines(kind: 'receipt' | 'issue', initial: Row[], option
       detail('required_quantity', '需求数量'),
       ...(batch ? [detail('bom_remaining', 'BOM 未领')] : []),
       detail('remaining', kind === 'receipt' ? '待收数量' : located ? '本库位可用' : '可用库存'),
-      { key: 'quantity', label: '数量', numeric: { scale: 3, min: kind === 'receipt' || batch ? 0 : 0.001 }, hint: kind === 'receipt' ? '本次实际到货的合格数量；可少于待收，余量继续待收。' : batch ? '本次领用数量；填 0 表示本行不领。' : '本次实际领料出库数量。' },
+      { key: 'quantity', label: '数量', numeric: { scale: 3, min: kind === 'receipt' || batch ? 0 : 0.001 }, hint: kind === 'receipt' ? '本次实际到货的合格数量；可少于待收，余量继续待收。' : batch ? '勾选后按建议数量填入，可改小。' : '本次实际领料出库数量。' },
       ...(kind === 'receipt' ? [{ key: 'pending_quantity', label: '不合格隔离数量', initial: '0', numeric: { scale: 3, min: 0 }, hint: '待检或不合格数量，不进入可用库存。' } satisfies Field] : []),
       { key: 'remark', label: '备注', optional: true, placeholder: '选填，如外观异常、使用工位；最多500字' },
     ]),
@@ -44,7 +46,7 @@ export function warehouseLines(kind: 'receipt' | 'issue', initial: Row[], option
     hint: kind === 'receipt'
       ? '勾选本次实际到货的行，未到货的行取消勾选；核对产品编号、图号和版本后填写本次数量。需求数量取该BOM单元总需求，无BOM时显示采购数量。备注按本次明细保存。'
       : batch
-        ? '需求数量为本项目 BOM 中该物料的合计，BOM 未领 = 需求 − 已领；同一物料有多个库位时按库位依次预填。库存为共享库存，保存时再次校验。'
+        ? '需求数量为本项目 BOM 中该物料的合计，BOM 未领 = 需求 − 已领；勾选后按 BOM 未领数量填入，同一物料有多个库位时按库位依次分配。库存为共享库存，保存时再次校验。'
         : '需求数量按所选项目同物料的BOM需求汇总；售后领料按任务处理。库存为共享库存，保存时再次校验可领数量。',
   }
 }

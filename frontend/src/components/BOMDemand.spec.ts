@@ -685,3 +685,21 @@ it('网购件在物料名称旁显示购买链接，新标签页打开；没有�
   wrapper.unmount()
   batchMode.value = true
 })
+
+it('展开完整列显示本项目最近入库日期，没有到货写「—」', async () => {
+  user.value = { roles: ['purchaser'] }
+  const wrapper = mountFull([
+    { bom_line: 1, item: 7, item_code: 'PKS', item_name: '直线导轨', assembly_unit: '01', quantity: '3', issued: '0', incoming: '0', available: '2', shortage: '1', last_received_date: '2026-11-18' },
+    { bom_line: 2, item: 8, item_code: 'QG', item_name: '气缸', assembly_unit: '01', quantity: '1', issued: '0', incoming: '1', available: '0', shortage: '1', last_received_date: null },
+  ])
+  await flushPromises()
+  const full = wrapper.findAll('button').find(button => button.text() === '展开完整列')!
+  await full.trigger('click')
+  await flushPromises()
+  const table = wrapper.get('.bom-details-table')
+  expect(table.findAll('th').map(th => th.text())).toContain('本项目最近入库')
+  const rows = table.findAll('tbody tr').map(row => row.text())
+  expect(rows.find(text => text.includes('直线导轨'))).toContain('2026-11-18')
+  expect(rows.find(text => text.includes('气缸'))).toContain('—')
+  wrapper.unmount()
+})

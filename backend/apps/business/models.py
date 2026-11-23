@@ -516,6 +516,8 @@ class StockMove(ImmutableLedger):
         COUNT = 'count', '盘点'
         SCRAP = 'scrap', '旧版报废'
         REWORK = 'rework', '送修改制'
+        # 采购反审时冲回原收货（source 指向原收货）：数量、库存金额为负，supplier_credit 为原收货金额。
+        RECEIPT_REVERSAL = 'receipt_reversal', '反审冲回'
 
     stock = models.ForeignKey(Stock, models.PROTECT, related_name='moves')
     project = models.ForeignKey(Project, models.PROTECT, null=True, blank=True, related_name='stock_moves')

@@ -696,3 +696,84 @@ class PurchaseLinkTests(BusinessFixtures, TestCase):
         self.assertEqual(preview.status_code, 200, preview.data)
         self.post('purchaser', 'items/import-confirm/', {'token': preview.data['token']})
         self.assertEqual(Item.objects.get(name='导入螺母').purchase_url, 'https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf')
+
+
+class DrawingOwnerImportTests(BusinessFixtures, TestCase):
+    """表里的编码系统里没有、同图号同版本的物料已在系统里：名称一致按系统编码沿用，不一致拦下并写出系统编码。"""
+
+    def setUp(self):
+        self.setup_business()
+        self.owner = Item.objects.create(
+            code='1126000123',
+            name='气缸安装板',
+            specification='A2608-01-000030',
+            drawing_number='A2608-01-000030',
+            drawing_revision='A',
+            unit='PCS',
+            product_category='11',
+            part_type='custom',
+        )
+
+    def preview(self, project, rows):
+        return PurchaseLinkTests.link_preview(self, project, rows)
+
+    @staticmethod
+    def row(code, name, drawing='a2608-01-000030', revision='a'):
+        return [
+            code,
+            '模具',
+            '1',
+            '',
+            '',
+            '',
+            '',
+            name,
+            drawing.upper(),
+            drawing,
+            revision,
+            '有图·机加',
+            '',
+            '非标件',
+            'PCS',
+            '',
+            '',
+        ]
+
+    def test_unknown_code_with_existing_drawing_uses_the_system_item(self):
+        project = self.active_project()
+        preview = self.preview(project, [self.row('1326000056', '气缸安装板')])
+        self.assertTrue(preview['can_import'], preview['errors'])
+        line = preview['lines'][0]
+        self.assertEqual(line['material_action'], '按图号使用已有物料')
+        self.assertIn('表中编码 1326000056 系统里没有；同图号同版本的物料是 1126000123', line['material_hint'])
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+        self.assertEqual(
+            list(BOMLine.objects.filter(project=project).values_list('item__code', flat=True)), ['1126000123']
+        )
+        self.assertFalse(Item.all_objects.filter(code='1326000056').exists())
+
+    def test_different_name_or_stopped_owner_is_rejected_with_the_system_code(self):
+        project = self.active_project()
+        rejected = self.preview(project, [self.row('1326000056', '定位底模')])
+        self.assertFalse(rejected['can_import'])
+        self.assertIn('图号 A2608-01-000030 A版已是物料 1126000123「气缸安装板」', str(rejected['errors']))
+        self.assertIn('把编码改成 1126000123', str(rejected['errors']))
+        self.owner.is_active = False
+        self.owner.save()
+        stopped = self.preview(project, [self.row('1326000056', '气缸安装板')])
+        self.assertIn('该物料已停用', str(stopped['errors']))
+        response = self.clients['purchaser'].post(
+            '/api/business/items/',
+            {
+                'name': '气缸安装板',
+                'specification': 'X',
+                'unit': 'PCS',
+                'product_category': '11',
+                'drawing_number': 'A2608-01-000030',
+                'drawing_revision': 'A',
+            },
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('物料 1126000123「气缸安装板」（已停用）', str(response.data['drawing_number']))

@@ -469,6 +469,8 @@ def return_purchase(actor, key, source_id, data):
         state(project, {'active', 'delivering', 'warranty'})
         original = get_object_or_404(StockMove.objects, pk=source.pk, project=project, kind='receipt')
         purchase = PurchaseOrder.objects.select_for_update().get(pk=original.purchase_line.purchase_id, project=project)
+        if original.returns.filter(kind='receipt_reversal').exists():
+            raise Conflict('这次收货已在采购反审时冲回，不能再退货；请按采购单重新收货后的批次办理。')
         line = PurchaseLine.objects.select_for_update().get(pk=original.purchase_line_id, purchase=purchase)
         entry = Entry.objects.select_for_update().get(purchase=purchase)
         qty = number(data.get('quantity'), 'quantity', 3, positive=True)

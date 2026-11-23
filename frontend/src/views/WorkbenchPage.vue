@@ -96,6 +96,8 @@ function due(key: string, row: Row): string {
 }
 function urgency(key: string, row: Row) {
   if (key === 'approvals' && row.change_request) return { text: '修改申请待处理', tone: 'warning', rank: 2 }
+  // 审批人退回或反审的本人采购：排进今天要处理的，免得混在草稿里没人发现。
+  if (key === 'drafts' && row.returned_action) return { text: row.returned_action === '反审' ? '已反审' : '已退回', tone: 'danger', rank: 1 }
   const date = due(key, row)
   if (key === 'overdue_purchases' || (date && date < day.value)) return { text: '已逾期', tone: 'danger', rank: 0 }
   if (date === day.value) return { text: '今日到期', tone: 'warning', rank: 1 }
@@ -145,6 +147,7 @@ function amount(key: string, row: Row) {
   if (['approvals', 'prepayments'].includes(key) && row.self_requested) return '本人申请，需填写例外原因'
   if (key === 'handover_projects' && row.missing?.length) return `缺${row.missing.join('、')}`
   if (key === 'shortage_projects') return `缺料 ${row.shortage_lines} 行`
+  if (key === 'drafts' && row.returned_note) return row.returned_note
   if (key === 'obsolete_parts') return [Number(row.pending_stock) > 0 ? `在库 ${quantityText(row.pending_stock)}` : '', Number(row.pending_issued) > 0 ? `已装机 ${quantityText(row.pending_issued)}` : '', row.items].filter(Boolean).join(' · ')
   return ''
 }

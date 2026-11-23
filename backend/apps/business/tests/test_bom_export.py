@@ -149,6 +149,8 @@ class BOMRoundTripTests(BusinessFixtures, TestCase):
         rows = list(csv.DictReader(io.StringIO(self.export('purchase', 'csv').content.decode('utf-8-sig'))))
         demand = self.clients['manager'].get(f'/api/business/projects/{self.project.pk}/demand/').data['lines']
         self.assertEqual([row['缺料'] for row in rows], [line['shortage'] for line in demand])
+        # 本项目最近入库日期跟页面同一口径，没有到货留空。
+        self.assertEqual([row['本项目最近入库'] for row in rows], [line['last_received_date'] or '' for line in demand])
         headers = list(rows[0])
         self.assertEqual(
             headers[headers.index('需求数量') + 1 : headers.index('需求数量') + 4], ['已领', '在途', '其中待批采购']
