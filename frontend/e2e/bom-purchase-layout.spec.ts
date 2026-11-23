@@ -26,7 +26,8 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   })
   const samples = [
     { name: '伺服电机', specification: '750W', brand: '台达', product_category: '21', part_type: 'standard', assembly_unit: '输送单元', quantity: '4' },
-    { name: '直线导轨', specification: 'HGR20 / 500mm', brand: 'HIWIN', product_category: '21', part_type: 'standard', assembly_unit: '输送单元', quantity: '8' },
+    // 网购件：粘贴淘宝 App 的整段分享文字，只存其中的链接，选料时可直接点开。
+    { name: '直线导轨', specification: 'HGR20 / 500mm', brand: 'HIWIN', product_category: '21', part_type: 'standard', assembly_unit: '输送单元', quantity: '8', purchase_url: '【淘宝】https://m.tb.cn/h.E2eLink?tk=Ab12 「HGR20直线导轨」点击链接直接打开' },
     { name: '光电传感器', specification: '对射型 24V', brand: 'OMRON', product_category: '21', part_type: 'standard', assembly_unit: '检测单元', quantity: '6' },
     { name: '安装底板', specification: '6061 铝板', brand: '', product_category: '11', part_type: 'custom', assembly_unit: '检测单元', quantity: '2' },
     { name: '电控箱', specification: '钣金机柜', brand: '', product_category: '12', part_type: 'custom', assembly_unit: '电气单元', quantity: '1' },
@@ -41,6 +42,7 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
     })
     items.push(await api(page, `business/items/${created.id}/`))
   }
+  expect((items[1] as { purchase_url?: string }).purchase_url).toBe('https://m.tb.cn/h.E2eLink?tk=Ab12')
   const initialDemand = await api(page, `business/projects/${project.id}/demand/`)
   await api(page, `business/projects/${project.id}/revise-bom/`, {
     expected_revision: initialDemand.revision,
@@ -74,6 +76,10 @@ test('BOM 同屏采购桌面左右与移动上下布局，键盘纠错后仅保�
   }
   await expect(selection).toContainText('已选 3 项 · 筛选结果 6 项')
   await expect(materialPane.locator('.el-table__body tbody tr')).toHaveCount(6)
+  const buyLink = materialPane.getByRole('link', { name: '淘宝 ↗', exact: true })
+  await expect(buyLink).toHaveCount(1)
+  await expect(buyLink).toHaveAttribute('href', 'https://m.tb.cn/h.E2eLink?tk=Ab12')
+  await expect(buyLink).toHaveAttribute('target', '_blank')
   await selectRemoteOption(draft.getByLabel('供应商', { exact: true }), { id: partner.id, text: partner.name })
   await draft.getByLabel('交期', { exact: true }).fill('2026-09-18')
   await expect(draft).toContainText('每批合格收货当月月底 + 30天')

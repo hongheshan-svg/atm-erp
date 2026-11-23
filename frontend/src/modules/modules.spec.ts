@@ -196,7 +196,7 @@ describe('模块边界', () => {
 
   it('设置与基础资料编辑保持各自字段，用户密码可留空', async () => {
     const item = await actionCommand('items', { id: 1 }, '编辑')
-    expect(item.fields.map(f => f.key)).toEqual(['name', 'specification', 'drawing_number', 'drawing_revision', 'product_category', 'brand', 'part_type', 'unit', 'duplicate_reason', 'is_active'])
+    expect(item.fields.map(f => f.key)).toEqual(['name', 'specification', 'drawing_number', 'drawing_revision', 'product_category', 'brand', 'part_type', 'unit', 'purchase_url', 'duplicate_reason', 'is_active'])
     const coded = await actionCommand('items', { id: 1, product_category: '11' }, '编辑')
     expect(coded.fields.filter(f => f.displayOnly).map(f => f.key)).toEqual(['specification', 'drawing_number', 'drawing_revision', 'product_category'])
     const account = await actionCommand('users', { id: 2 }, '编辑')
@@ -229,9 +229,9 @@ describe('模块边界', () => {
     expect(company.prepare?.({ name: '公司' })).toEqual({ name: '公司', address: '', phone: '' })
     expect((await actionCommand('users', { id: 2 }, '编辑')).prepare).toBeUndefined()
     const item = await actionCommand('items', { id: 1, specification: '旧规格' }, '编辑')
-    expect(item.prepare?.({ name: '电机', unit: '台' })).toEqual({ name: '电机', unit: '台', brand: '', part_type: '', specification: '', drawing_number: '', drawing_revision: '' })
+    expect(item.prepare?.({ name: '电机', unit: '台' })).toEqual({ name: '电机', unit: '台', brand: '', part_type: '', purchase_url: '', specification: '', drawing_number: '', drawing_revision: '' })
     const coded = await actionCommand('items', { id: 1, product_category: '11' }, '编辑')
-    expect(coded.prepare?.({ name: '电机', unit: '台' })).toEqual({ name: '电机', unit: '台', brand: '', part_type: '' })
+    expect(coded.prepare?.({ name: '电机', unit: '台' })).toEqual({ name: '电机', unit: '台', brand: '', part_type: '', purchase_url: '' })
   })
 
   it('签约后仅经理可签补充协议，财务仍只读', () => {

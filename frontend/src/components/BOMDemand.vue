@@ -25,6 +25,7 @@ import RecordDeletionDialog from './RecordDeletionDialog.vue'
 import { canDeleteRecords, deletionLimit } from '../modules/deletions'
 import { useBatchSelection } from '../utils/batch-selection'
 import { quantityText as qty } from '../utils/quantity'
+import { linkLabel, purchaseLink } from '../utils/links'
 const qtyCell = (_row: Row, _column: unknown, value: unknown) => qty(value)
 const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean; initialView?: 'prepare' | 'purchase' }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -521,7 +522,7 @@ function saved() {
         <template #default="{ row }"><input type="checkbox" :aria-label="'选择BOM行 ' + row.item_code + ' ' + (row.assembly_unit || '')" :checked="maintain.has(row)" :disabled="busy || !maintain.selectable(row)" @change="maintain.toggle(row)" /></template>
       </el-table-column>
       <el-table-column v-if="purchaseSelecting" :label="mobile ? '' : '选择'" :width="mobile ? 40 : 44" fixed="left"><template #default="{ row }"><input type="checkbox" :aria-label="`选择 ${row.item_code} ${row.assembly_unit || ''}`" :checked="selected.includes(row.bom_line)" :disabled="busy || !eligible(row)" :title="purchaseBlocked(row)" @change="toggle(row)" /></template></el-table-column>
-      <el-table-column :label="mobile ? '物料' : '物料名称 / 编码'" :min-width="mobile ? 150 : 140" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><el-tag v-if="inactive(row)" size="small" type="info" class="bom-inactive-tag" :title="purchaseBlocked(row)">已停用</el-tag><el-tag v-else-if="row.newer_revision" size="small" type="warning" class="bom-inactive-tag" :title="`${newerText(row)}；本项目仍用旧版，需要时在「操作 → 升版」换成新版`">有新版 {{ row.newer_revision.drawing_revision || row.newer_revision.code }}</el-tag><small class="bom-item-code" :class="{ 'is-inline': !mobile }">{{ row.item_code }}</small>
+      <el-table-column :label="mobile ? '物料' : '物料名称 / 编码'" :min-width="mobile ? 150 : 140" fixed="left"><template #default="{ row }"><strong>{{ row.item_name }}</strong><el-tag v-if="inactive(row)" size="small" type="info" class="bom-inactive-tag" :title="purchaseBlocked(row)">已停用</el-tag><el-tag v-else-if="row.newer_revision" size="small" type="warning" class="bom-inactive-tag" :title="`${newerText(row)}；本项目仍用旧版，需要时在「操作 → 升版」换成新版`">有新版 {{ row.newer_revision.drawing_revision || row.newer_revision.code }}</el-tag><small class="bom-item-code" :class="{ 'is-inline': !mobile }">{{ row.item_code }}</small><a v-if="purchaseLink(row.purchase_url)" class="bom-buy-link" :href="purchaseLink(row.purchase_url)" target="_blank" rel="noopener noreferrer" :title="`在新标签页打开购买链接：${purchaseLink(row.purchase_url)}`" :aria-label="`${row.item_name} 的${linkLabel(purchaseLink(row.purchase_url))}购买链接`" @click.stop>{{ linkLabel(purchaseLink(row.purchase_url)) }} ↗</a>
         <small v-if="mobile && view === 'purchase'" class="bom-mobile-summary"><span><b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b> · <i>在途 {{ qty(approvedIncoming(row)) }}</i><em v-if="unapproved(row) > 0" class="unapproved-inline">（待批 {{ qty(row.unapproved) }}）</em> · <i>可用 {{ qty(row.available) }}</i></span><span>{{ row.assembly_unit || '未分单元' }}<template v-if="row.required_date"> · <i>需 {{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
         <small v-else-if="mobile" class="bom-mobile-summary"><span>{{ [row.specification, row.assembly_unit || '未分单元'].filter(Boolean).join(' · ') }}</span><span><i>需求 {{ qty(row.quantity) }}{{ row.unit ? ` ${row.unit}` : '' }}</i> · <b :class="{ 'shortage-number': Number(row.shortage) > 0 }">缺 {{ qty(row.shortage) }}</b><template v-if="row.required_date"> · <i>{{ row.required_date }}</i></template></span><strong v-if="overdue(row)" :class="Number(row.shortage) > 0 ? 'overdue-flag' : 'overdue-flag pending'">{{ overdue(row) }}</strong></small>
       </template></el-table-column>
@@ -635,6 +636,7 @@ function saved() {
 /* 筛选下拉的首项已写明「全部品牌 / 全部单元 / 全部类别」，标题只留给读屏，筛选行压成一行。 */
 .bom-item-code.is-inline { display: inline; margin-left: 6px; }
 .bom-inactive-tag { margin-left: 6px; vertical-align: 1px; }
+.bom-buy-link { margin-left: 6px; font-size: 12px; font-weight: normal; white-space: nowrap; }
 .bom-inactive-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; font-size: 13px; color: var(--ink-3); }
 .bom-link-button { border: 0; padding: 0; background: transparent; color: var(--brand); font: inherit; cursor: pointer; }
 /* 单元名、其他项目待领不换行（单元列的 show-overflow-tooltip 负责省略和悬停全名）。 */

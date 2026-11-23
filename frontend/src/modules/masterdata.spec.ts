@@ -131,3 +131,19 @@ it('有图号的物料可查版本记录：列出同图号全部版本和参与�
   expect(command.initial!.versions.map((row: Record<string, string>) => row.state)).toEqual(['已由 JG-001B 取代', '最新'])
   expect(command.initial!.changes[0]).toMatchObject({ time: '2026-11-17 09:30', project: 'ATM2681 上料线', change: 'JG-001（A） → JG-001B（B）', amount: '10 → 10，在途 2 改单' })
 })
+
+it('物料表单可填购买链接，编辑时清空也提交空串；列表按网店显示可点开的链接', async () => {
+  const { columns } = await import('./masterdata')
+  const column = columns.items!.find(col => col.key === 'purchase_url')!
+  expect(column.format!({ purchase_url: 'https://item.taobao.com/item.htm?id=1' })).toBe('淘宝 ↗')
+  expect(column.href!({ purchase_url: 'https://item.taobao.com/item.htm?id=1' })).toBe('https://item.taobao.com/item.htm?id=1')
+  expect(column.format!({ purchase_url: '' })).toBe('—')
+  expect(column.href!({ purchase_url: 'javascript:alert(1)' })).toBe('')
+  const created = await createCommand('items')
+  const field = created.fields.find(f => f.key === 'purchase_url')!
+  expect(field.optional).toBe(true)
+  expect(field.hint).toContain('分享 → 复制链接')
+  const edit = await actionCommand('items', { id: 7, name: '膨胀螺栓', unit: 'PCS', purchase_url: 'https://item.taobao.com/item.htm?id=1' }, '编辑')
+  expect(edit.prepare!({ name: '膨胀螺栓', unit: 'PCS' }).purchase_url).toBe('')
+  expect(edit.prepare!({ name: '膨胀螺栓', unit: 'PCS', purchase_url: 'https://item.jd.com/1.html' }).purchase_url).toBe('https://item.jd.com/1.html')
+})

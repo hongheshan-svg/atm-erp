@@ -5,6 +5,7 @@ import { project } from './shared'
 import { remote } from './shared'
 import { date } from './shared'
 import { termFields, termLabel } from './payment-terms'
+import { linkLabel, purchaseLink } from '../utils/links'
 // 未关联 BOM 行的物料超出本项目缺口（BOM 需求 − 已领 / 已到货 − 在途）时，服务端要求写明原因并在审批时提示。
 const overBomReason: Field = {
   key: 'over_bom_reason', label: '超 BOM 采购原因', type: 'textarea', optional: true,
@@ -307,7 +308,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         // 明细首列合并名称、编码、规格（窄面板不用横向找编码）；入库日期列出最近一批，分批到货逐批列出。
         rows('lines', '采购明细', [
           // 列宽按 1366 宽屏的明细工作区（约 1010px）收紧，入库日期列不用横向滚动就能看到。
-          { key: 'material_text', label: '物料 / 编码 / 规格', multiline: true, width: 192 },
+          { key: 'material_text', label: '物料 / 编码 / 规格', multiline: true, width: 192, href: row => purchaseLink(row.purchase_url), hrefLabel: row => `${linkLabel(purchaseLink(row.purchase_url))}购买链接` },
           { key: 'project_unit', label: '项目号 / 单元', multiline: true, width: 110 },
           { ...t('due_date', '明细交期'), width: 116, short: true },
           { ...qty, label: '采购数量', width: 80, short: true },

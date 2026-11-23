@@ -132,4 +132,19 @@ describe('明细表单编辑', () => {
     narrow.unmount()
     vi.unstubAllGlobals()
   })
+  it('只读明细的多行列可附购买链接：桌面表格和手机卡片都在新标签页打开，没有链接的行不显示', async () => {
+    const rows = { key: 'rows', label: '采购明细', type: 'rows' as const, fields: [
+      { key: 'material', label: '物料 / 编码 / 规格', multiline: true, href: (row: Record<string, string>) => row.url || '', hrefLabel: () => '淘宝购买链接' },
+    ] }
+    const data = { rows: [{ material: '膨胀螺栓\n编码 2199000144', url: 'https://m.tb.cn/h.Abc' }, { material: '垫片\n编码 2199000168', url: '' }] }
+    for (const narrowScreen of [false, true]) {
+      vi.stubGlobal('matchMedia', () => ({ matches: narrowScreen, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+      const wrapper = mount(FormFields, { props: { modelValue: data, fields: [rows], readonly: true }, global: { plugins: [ElementPlus] } })
+      await flushPromises()
+      const links = wrapper.findAll('a.cell-link')
+      expect(links.map(link => [link.text(), link.attributes('href'), link.attributes('target'), link.attributes('rel')])).toEqual([['淘宝购买链接 ↗', 'https://m.tb.cn/h.Abc', '_blank', 'noopener noreferrer']])
+      wrapper.unmount()
+    }
+    vi.unstubAllGlobals()
+  })
 })

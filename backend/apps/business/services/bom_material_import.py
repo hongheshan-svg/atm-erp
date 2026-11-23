@@ -33,10 +33,13 @@ MATERIAL_FIELDS = (
     'unit',
 )
 HEADERS = [label for label, _ in BOM_COLUMNS]
-# v1.8.44 之前的模板没有末尾的「替换原编码」列，照常接受，按不换版处理。
+# v1.8.47 之前的模板没有末尾的「购买链接」列，v1.8.44 之前的还没有「替换原编码」列；都照常接受，缺的列按空处理。
 PREVIOUS_HEADERS = HEADERS[:-1]
+OLDER_HEADERS = HEADERS[:-2]
+LINK_COLUMN = HEADERS.index('购买链接')
 SALT = 'lean-bom-material-import-v1'
 BRAND_BACKFILLED = '沿用已有物料，补填品牌'
+CREATED = {'自动新建物料', '按填写编码新建物料', '升版新建物料'}
 MODEL_REUSED = '按型号复用已有物料'
 UPGRADED = '升版新建物料'
 REVISION_REUSED = '复用已有新版物料'
@@ -101,8 +104,42 @@ def lock_existing(records):
         ids.update(item.pk for item in masterdata.duplicates(data))
         if data['brand']:
             ids.update(item.pk for item in masterdata.duplicates({**data, 'brand': ''}))
+        if link_text(row):
+            # 带链接的行可能给按型号复用的已有物料补填链接，一并先锁。
+            ids.update(item.pk for item in masterdata.suspected_duplicates(data))
     ids.update(Item.objects.filter(code__in=codes).values_list('pk', flat=True))
     list(Item.objects.select_for_update().filter(pk__in=ids).order_by('pk').only('pk'))
+
+
+def link_text(row):
+    # 确认时的记录来自预览凭据；升级前生成的凭据没有链接列。
+    return str(row[LINK_COLUMN] or '').strip() if len(row) > LINK_COLUMN else ''
+
+
+def apply_link(actor, item, row, new):
+    """文件里的购买链接：物料原来没有链接就按文件保存，已有不同链接不覆盖。
+
+    链接只是辅助资料，填错不挡住这一行的 BOM 用量：不保存链接并在预览提示。
+    返回（物料，提示，是否给已有物料补填了链接）。
+    """
+    value = link_text(row)
+    if not value:
+        return item, '', False
+    try:
+        link = masterdata.purchase_link(value)
+    except ValidationError:
+        reason = (
+            f'超过{masterdata.LINK_MAX}字符'
+            if masterdata.LINK.search(value)
+            else '不是以 http:// 或 https:// 开头的网址'
+        )
+        return item, f'购买链接{reason}，未保存；本行其余内容照常导入。', False
+    if item.purchase_url == link:
+        return item, '', False
+    if item.purchase_url:
+        return item, '购买链接与系统不同，已按系统为准；要换链接请到基础资料修改物料。', False
+    item = masterdata.fill_purchase_link(actor, item, link)
+    return item, '' if new else '已补填购买链接。', not new
 
 
 def material(actor, row, created=None):
@@ -243,15 +280,17 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
         try:
             with transaction.atomic():
                 item, action, hint = revision_material(actor, row) or material(actor, row, new_ids)
+                item, link_hint, linked = apply_link(actor, item, row, action in CREATED)
         except ValidationError as exc:
             errors.append({'row': index, 'message': bom_import.message(exc.detail)})
             # Preserve source row numbers when validating the remaining BOM lines.
             output.append([''] * 8)
             continue
-        if action in {'自动新建物料', '按填写编码新建物料', UPGRADED}:
+        if action in CREATED:
             new_ids[item.pk] = index
         output.append([item.code, *row[1:7], row[15]])
-        actions.append((index, action, item.pk in new_ids, hint))
+        hint = ' '.join(text for text in (hint, link_hint) if text)
+        actions.append((index, action, item.pk in new_ids, hint, linked))
     stream = io.StringIO()
     writer = csv.writer(stream)
     writer.writerow(bom_import.REVISION_HEADERS)
@@ -259,15 +298,15 @@ def resolve(actor, project, records, expected, *, collect_errors=False):
     result = bom_import.preview(project, SimpleUploadedFile('bom.csv', stream.getvalue().encode()))
     if errors and not actions:
         result['errors'] = []  # Material errors already explain why there are no valid lines.
-    if errors or any(action == BRAND_BACKFILLED for _, action, _, _ in actions):
+    if errors or any(action == BRAND_BACKFILLED or linked for _, action, _, _, linked in actions):
         # 有物料问题时，「其余行与当前 BOM 一致」不是失败原因，不再另行提示；
-        # 只补填品牌、BOM 用量不变时，这次导入照样有内容要保存。
+        # 只补填品牌或购买链接、BOM 用量不变时，这次导入照样有内容要保存。
         result['errors'] = [error for error in result['errors'] if not error.get('unchanged')]
     result['errors'] = sorted([*errors, *result['errors']], key=lambda error: error.get('row', 0))
     result['can_import'] = bool(result['lines']) and not result['errors']
     if not result['can_import'] and not collect_errors:
         raise ValidationError([f'第{error["row"]}行：{error["message"]}' for error in result['errors']])
-    by_row = {index: (action, new, hint) for index, action, new, hint in actions}
+    by_row = {index: (action, new, hint) for index, action, new, hint, _ in actions}
     for line in result['lines']:
         line['material_action'], line['new_material'], line['material_hint'] = by_row[line['row']]
     result['summary']['new_materials'] = len(new_ids)
@@ -297,6 +336,7 @@ def preview(actor, project, upload):
         HEADERS,
         [
             PREVIOUS_HEADERS,
+            OLDER_HEADERS,
             bom_import.HEADERS,
             bom_import.PREVIOUS_HEADERS,
             bom_import.LEGACY_HEADERS,
@@ -304,9 +344,10 @@ def preview(actor, project, upload):
         ],
         return_headers=True,
     )
-    if headers == PREVIOUS_HEADERS:
-        # 旧模板补上空的「替换原编码」列；带问题标注的回传文件也换成新表头。
-        headers, records = HEADERS, [[*row, ''] for row in records]
+    if headers in (PREVIOUS_HEADERS, OLDER_HEADERS):
+        # 旧模板补上缺少的末尾列（替换原编码、购买链接）；带问题标注的回传文件也换成新表头。
+        missing = len(HEADERS) - len(headers)
+        headers, records = HEADERS, [[*row, *[''] * missing] for row in records]
     if headers != HEADERS:
         upload.seek(0)
         result = bom_import.preview(project, upload)
@@ -420,7 +461,7 @@ def confirm(actor, project, data):
         ]
         replacements = [row for row in result['lines'] if row.get('bom_action') == 'replace']
         if not changed and not replacements:
-            # 只补填了品牌：物料主数据已在 resolve 里保存，BOM 本身没有修订。
+            # 只补填了品牌或购买链接：物料主数据已在 resolve 里保存，BOM 本身没有修订。
             return {'id': locked.pk, 'revision': bom.revision(locked), 'lines': result['lines']}
         saved = {'id': locked.pk}
         if changed:

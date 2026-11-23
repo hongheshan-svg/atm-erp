@@ -26,6 +26,7 @@ HEADERS = [
     '申请日期',
     '申请人',
     '变更说明',
+    '购买链接',
 ]
 # 采购缺料视图导出：在「需求数量」后追加与页面同一口径的占用和缺口，拿去询价或汇报不必再手工对数。
 DEMAND_COLUMNS = [
@@ -90,6 +91,7 @@ def document(lines, file_format, layout='standard'):
                 line.application_date,
                 line.applicant,
                 line.change_note,
+                item.purchase_url,
             ]
         )
     headers = list(HEADERS)
@@ -123,6 +125,7 @@ def template(lines, file_format):
             'part_type': item.get_part_type_display() if item.part_type else '',
             'unit': item.unit,
             'replaces': '',
+            'purchase_url': item.purchase_url,
         }
         rows.append([values[key] for _, key in BOM_COLUMNS])
     return tabular.document('bom-template', [label for label, _ in BOM_COLUMNS], rows, file_format, numeric={2})

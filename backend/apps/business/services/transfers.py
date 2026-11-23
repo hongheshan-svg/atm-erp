@@ -249,6 +249,8 @@ for resource, (roles, old_columns) in LEGACY_SCHEMAS.items():
     SCHEMAS[resource] = (roles, [(PERSON_LABELS.get(key, label), key) for label, key in previous])
 
 PREVIOUS_TASK_COLUMNS = SCHEMAS['tasks'][1][:]
+# 物料模板末尾加「购买链接」（v1.8.47）；之前下载的模板即 PREVIOUS_SCHEMAS['items']，照常接受，链接留空。
+SCHEMAS['items'][1].append(('购买链接', 'purchase_url'))
 SCHEMAS['tasks'][1].append(('里程碑节点', 'milestone'))
 
 MANUAL_CODE_LABELS = {

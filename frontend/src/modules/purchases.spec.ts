@@ -13,7 +13,7 @@ const detail = {
   id: 9, code: 'PO-9', status: 'partial', project: 4, project_code: 'ATM2690', project_name: '下料线', supplier_name: '精工机械',
   due_date: '2026-12-01', payment_term: 'cash', created_at: '2026-11-01T09:00:00+08:00',
   lines: [
-    { id: 1, item_code: 'M-1', item_name: '伺服电机', specification: '400W', brand: '安川', drawing_number: '', unit: '台', assembly_unit: '上料单元', quantity: '5.000', unit_price: '100.00', received_quantity: '3.000', cancelled_quantity: '0.000', returned_quantity: '0.000', pending_quantity: '0.000',
+    { id: 1, item_code: 'M-1', item_name: '伺服电机', specification: '400W', brand: '安川', purchase_url: 'https://item.taobao.com/item.htm?id=1', drawing_number: '', unit: '台', assembly_unit: '上料单元', quantity: '5.000', unit_price: '100.00', received_quantity: '3.000', cancelled_quantity: '0.000', returned_quantity: '0.000', pending_quantity: '0.000',
       receipts: [{ id: 11, received_date: '2026-11-03', quantity: '1.000', location: '主仓' }, { id: 12, received_date: '2026-11-08', quantity: '2.000', location: 'A区' }], last_received_date: '2026-11-08' },
     { id: 2, item_code: 'M-2', item_name: '气缸', specification: 'SC32x50', brand: '', drawing_number: 'A-01', drawing_revision: 'B', unit: '件', assembly_unit: '', quantity: '4.000', unit_price: '20.00', received_quantity: '1.000', cancelled_quantity: '1.000', returned_quantity: '0.000', pending_quantity: '1.000',
       receipts: [{ id: 13, received_date: '2026-11-05', quantity: '1.000', location: '主仓' }], last_received_date: '2026-11-05' },
@@ -81,6 +81,12 @@ it('查看明细：首列合并名称、编码、规格，项目号与单元同�
   expect(second!.material_text).toBe('气缸\n编码 M-2 · 规格 SC32x50\n图号 A-01（B）')
   expect([second!.project_unit, second!.received_label, second!.remaining]).toEqual(['ATM2690\n未分单元', '2026-11-05', '1'])
   expect(third!.received_label).toBe('—')
+  // 网购件在物料格下方附购买链接（按网店命名），没有链接的行不显示。
+  const material = lines.fields!.find((f: Field) => f.key === 'material_text')!
+  expect(material.href!({ purchase_url: 'https://item.taobao.com/item.htm?id=1' })).toBe('https://item.taobao.com/item.htm?id=1')
+  expect(material.hrefLabel!({ purchase_url: 'https://item.taobao.com/item.htm?id=1' })).toBe('淘宝购买链接')
+  expect(material.href!({ purchase_url: '' })).toBe('')
+  expect(first!.purchase_url).toBe('https://item.taobao.com/item.htm?id=1')
   // 有单价权限的采购才看到单价列。
   user.value = { id: 3, roles: ['purchaser'] }
   const buyerView = await actionCommand('purchases', { id: 9, status: 'partial' }, '查看明细')

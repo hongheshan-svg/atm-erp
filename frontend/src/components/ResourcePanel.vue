@@ -733,6 +733,7 @@ async function inspect(row: Row) {
           }}</router-link
           ><router-link v-else-if="resource === 'sales' && col.key === 'project_code' && row.project && operations()" :to="`/projects/${row.project}`">{{ row.project_code }}</router-link
           ><router-link v-else-if="col.link?.(row)" :to="col.link!(row)!">{{ col.format ? col.format(row) : cell(row, col.key) }}</router-link
+          ><a v-else-if="col.href?.(row)" :href="col.href!(row)" target="_blank" rel="noopener noreferrer" :title="col.href!(row)">{{ col.format ? col.format(row) : cell(row, col.key) }}</a
           ><StatusBadge v-else-if="['status', 'is_active', 'kind'].includes(col.key)" :value="row[col.key]" :text="col.format?.(row)" :title="col.format?.(row)" :class="{ 'status-wrap': col.format }" />
           <el-button v-else-if="resource === 'tasks' && col.key === 'logged_hours'" link type="primary" :title="row.time_entry_count ? '查看工时明细' : '还没有登记工时，点击查看'" @click="action(row, '查看工时')">{{ row.time_entry_count ? `${row.logged_hours} 小时` : '未登记' }}</el-button>
           <span v-else-if="col.key === 'roles'" class="role-tags"><StatusBadge v-for="role in row.roles || [row.role]" :key="role" :value="role" :text="labels[role] || role" /></span>

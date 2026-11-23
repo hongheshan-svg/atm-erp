@@ -17,6 +17,7 @@ import { fromScaled, QUANTITY_SCALE } from '../utils/decimal'
 import type { Row } from '../types'
 import RemoteSelect from './RemoteSelect.vue'
 import ListPagination from './ListPagination.vue'
+import { linkLabel, purchaseLink } from '../utils/links'
 
 // shortageOnly：从 BOM 页打开时沿用该页当前的「仅看缺料」筛选；从采购页打开不传，默认显示全部。
 const props = defineProps<{ projectId?: number; initialSelection?: number[]; shortageOnly?: boolean }>()
@@ -255,7 +256,7 @@ async function save() {
         <BusinessTable label="采购选料" :numbered="false" v-loading="loading" :data="visible" row-key="bom_line" :max-height="560" :row-class-name="({ row }: { row: Row }) => selected.includes(row.bom_line) ? 'selected-bom-row' : ''" :empty-text="project ? '没有符合条件的物料，请调整筛选条件' : '请先选择采购项目'" @row-click="handleRowClick">
           <el-table-column label="选择" width="44"><template #default="{ row }"><input class="material-checkbox" type="checkbox" :aria-label="`选择 ${row.item_code}`" :checked="selected.includes(row.bom_line)" :disabled="disabled || !eligible(row)" @change="toggle(row)" /></template></el-table-column>
           <el-table-column type="expand" width="28"><template #default="{ row }"><dl class="material-details"><div v-for="(label, field) in { drawing_number: '图号', drawing_revision: '图档版本', application_date: '申请日期', applicant: '申请人', issued: '已领', unit: '计量单位' }" :key="field"><dt>{{ label }}</dt><dd>{{ field === 'issued' ? qty(row[field]) : row[field] || '—' }}</dd></div><div><dt>类别</dt><dd>{{ partTypeLabel(row.part_type) }}</dd></div><div><dt>产品编码类别</dt><dd>{{ productCategories[row.product_category] || '未分类' }}</dd></div><div><dt>其他项目待领</dt><dd>{{ Number(row.other_demand) > 0 ? `${qty(row.other_demand)} · ${row.other_projects} 个在执行项目` : '—' }}</dd></div></dl></template></el-table-column>
-          <el-table-column label="物料" min-width="150"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small v-if="row.is_active === false"> 已停用</small><small class="material-code material-spec" :title="[row.item_code, row.specification].filter(Boolean).join(' · ')">{{ [row.item_code, row.specification].filter(Boolean).join(' · ') }}</small><small class="material-narrow" :class="{ 'overdue-date': overdue(row) }">缺 {{ qty(row.shortage) }}{{ row.required_date ? ` · 需 ${String(row.required_date).slice(5)}` : '' }}</small></template></el-table-column>
+          <el-table-column label="物料" min-width="150"><template #default="{ row }"><strong class="material-name">{{ row.item_name }}</strong><small v-if="row.is_active === false"> 已停用</small><a v-if="purchaseLink(row.purchase_url)" class="material-link" :href="purchaseLink(row.purchase_url)" target="_blank" rel="noopener noreferrer" :title="purchaseLink(row.purchase_url)">{{ linkLabel(purchaseLink(row.purchase_url)) }} ↗</a><small class="material-code material-spec" :title="[row.item_code, row.specification].filter(Boolean).join(' · ')">{{ [row.item_code, row.specification].filter(Boolean).join(' · ') }}</small><small class="material-narrow" :class="{ 'overdue-date': overdue(row) }">缺 {{ qty(row.shortage) }}{{ row.required_date ? ` · 需 ${String(row.required_date).slice(5)}` : '' }}</small></template></el-table-column>
           <el-table-column label="单元 / 品牌" min-width="92"><template #default="{ row }"><span>{{ row.assembly_unit || '未分单元' }}</span><small class="material-code">{{ row.brand || '—' }}</small></template></el-table-column>
           <el-table-column label="缺料" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }"><strong :class="Number(row.shortage) > 0 ? 'shortage-number' : 'muted'">{{ qty(row.shortage) }}</strong></template></el-table-column>
           <el-table-column label="需求" min-width="68" align="right" class-name="nowrap-col"><template #default="{ row }">{{ qty(row.quantity) }}</template></el-table-column>
@@ -341,6 +342,7 @@ async function save() {
 .material-checkbox:disabled { cursor: not-allowed; }
 .purchase-materials :deep(.el-table__row) { cursor: pointer; }
 .material-name { font-size: 13px; font-weight: 600; }
+.material-link { margin-left: 6px; font-size: 12px; white-space: nowrap; }
 .material-code { display: block; overflow-wrap: anywhere; line-height: 1.5; margin-top: 3px; font-size: 12px; }
 .purchase-materials :deep(.nowrap-col .cell) { white-space: nowrap; word-break: normal; }
 .material-spec { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; max-width: 260px; }
