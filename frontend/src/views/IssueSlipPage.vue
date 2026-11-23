@@ -5,6 +5,7 @@ import { read } from '../api'
 import { message } from '../utils/request'
 import { quantityText } from '../utils/quantity'
 import { dateTimeText } from '../utils/datetime'
+import { printFileName } from '../utils/print'
 import type { Row } from '../types'
 // 领料单：领料成功后、领料单列表和库存流水都链到这里；数据全部来自服务端领料单与其领料流水，可随时重新打开打印。
 const route = useRoute()
@@ -26,6 +27,8 @@ const project = computed(() => [slip.value?.project_code, slip.value?.project_na
 const spec = (line: Row) => [line.specification, line.brand].filter(Boolean).join(' / ') || '—'
 const drawing = (line: Row) => [line.drawing_number && `图号 ${line.drawing_number}`, line.drawing_revision && `版本 ${line.drawing_revision}`].filter(Boolean).join('；')
 function print() { window.print() }
+// 页面标题即「另存为 PDF」的默认文件名。
+watch(() => slip.value && printFileName('领料单', slip.value.code, slip.value.project_code), name => { if (name) document.title = name })
 </script>
 <template>
   <section class="issue-slip-page" v-loading="loading">
@@ -33,6 +36,7 @@ function print() { window.print() }
       <div><router-link :to="{ path: '/inventory', query: { section: 'slips', project: slip?.project ? String(slip.project) : 'all' } }">返回领料单列表</router-link><h1>领料单</h1></div>
       <div><el-button :disabled="loading" @click="load">刷新</el-button><el-button v-if="slip" type="primary" @click="print">打印 / 另存为 PDF</el-button></div>
     </div>
+    <p v-if="slip" class="slip-print-tip">点「打印 / 另存为 PDF」后，在打印窗口的「打印机」里选「另存为 PDF」再保存，得到的就是 PDF 文件。浏览器菜单里的「另存为」存下的是网页，不是 PDF。</p>
     <el-alert v-if="error" type="error" :title="error" :closable="false" show-icon role="alert" />
     <article v-if="slip" class="slip-paper" aria-label="领料单">
       <p v-if="slip.company_name" class="slip-company">{{ slip.company_name }}</p>
@@ -76,6 +80,7 @@ function print() { window.print() }
 .issue-slip-page .slip-toolbar > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .issue-slip-page .slip-toolbar h1 { margin: 0 0 0 8px; font-size: 20px; }
 .issue-slip-page .slip-toolbar .el-button + .el-button { margin-left: 0; }
+.issue-slip-page .slip-print-tip { margin: -8px 0 12px; font-size: 12px; line-height: 1.6; color: var(--ink-3); }
 .slip-paper { box-sizing: border-box; max-width: 210mm; margin: 0 auto 20px; padding: 14mm 12mm; background: white; color: var(--ink); box-shadow: 0 4px 24px #16283a12; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .slip-paper .slip-company { margin: 0; text-align: center; font-size: 14px; color: var(--ink-3); }
 .slip-paper h1 { margin: 2px 0 14px; text-align: center; font-size: 22px; letter-spacing: 8px; }
@@ -116,7 +121,7 @@ function print() { window.print() }
   body:has(.issue-slip-page) .el-overlay,
   body:has(.issue-slip-page) .el-loading-mask { display: none !important; }
   html:has(.issue-slip-page), body:has(.issue-slip-page) { background: white; }
-  body:has(.issue-slip-page) .sidebar, body:has(.issue-slip-page) .topbar, .issue-slip-page .slip-toolbar { display: none !important; }
+  body:has(.issue-slip-page) .sidebar, body:has(.issue-slip-page) .topbar, .issue-slip-page .slip-toolbar, .issue-slip-page .slip-print-tip { display: none !important; }
   body:has(.issue-slip-page) .shell { display: block; min-height: 0; background: white; }
   body:has(.issue-slip-page) main, body:has(.issue-slip-page) .content { margin: 0; padding: 0; width: auto; min-height: 0; background: white; }
   .slip-paper { width: 100%; max-width: none; margin: 0; padding: 0; box-shadow: none; font-size: 10pt; line-height: 1.5; }
