@@ -44,6 +44,9 @@ export type Field = {
   flow?: string
   // 只读明细表：值按换行拆成多行，首行为主值、其余为小字，不截断（如名称下列出编码、规格）。
   multiline?: boolean
+  // 只读明细里该格下方附一条站外链接（物料购买链接），新标签页打开；返回空串时不显示。
+  href?: (row: Row) => string | undefined
+  hrefLabel?: (row: Row) => string
   // 只读明细在手机卡片里两项并排（数量、日期等短值），其余项仍占整行。
   short?: boolean
   upload?: { context: Row; category: string }
@@ -76,6 +79,8 @@ export type Column = {
   tip?: (row: Row) => string | undefined
   // 单元格链接到关联单据（项目、采购单等）；返回 undefined 时按普通文本显示。
   link?: (row: Row) => RouteLocationRaw | undefined
+  // 单元格链接到站外网页（物料购买链接），新标签页打开；返回空串时按普通文本显示。
+  href?: (row: Row) => string | undefined
   // 值下方的一行小字（如「3 项逾期」「剩 20 天」）；risk 时用风险色。
   flag?: (row: Row) => { text: string; risk?: boolean } | undefined
 }

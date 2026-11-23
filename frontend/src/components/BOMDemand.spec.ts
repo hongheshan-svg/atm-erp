@@ -657,3 +657,31 @@ it.each([
   expect(wrapper.get('[aria-label="BOM批量选择"]').text()).toContain('已选 0')
   wrapper.unmount()
 })
+
+it('网购件在物料名称旁显示购买链接，新标签页打开；没有或不是 http(s) 链接时不显示', async () => {
+  user.value = { roles: ['purchaser'] }
+  batchMode.value = false
+  vi.mocked(read).mockResolvedValueOnce({ lines: [
+    { bom_line: 1, item_code: '2199000144', item_name: '膨胀螺栓', brand: '淘宝', part_type: 'standard', assembly_unit: '1工位', quantity: '12', shortage: '12', purchase_url: 'https://m.tb.cn/h.TzQ9AbC?tk=1' },
+    { bom_line: 2, item_code: '2299000002', item_name: '接头', brand: '京东', part_type: 'standard', assembly_unit: '1工位', quantity: '10', shortage: '10', purchase_url: 'https://item.jd.com/100012.html' },
+    { bom_line: 3, item_code: '2199000168', item_name: '垫片', brand: '淘宝', part_type: 'standard', assembly_unit: '1工位', quantity: '5', shortage: '5', purchase_url: '' },
+    { bom_line: 4, item_code: '2199000159', item_name: '定位销', brand: '淘宝', part_type: 'standard', assembly_unit: '1工位', quantity: '4', shortage: '4', purchase_url: 'javascript:alert(1)' },
+  ] })
+  const wrapper = mount(BOMDemand, { props: { projectId: 1, status: 'active' }, global: {
+    plugins: [ElementPlus], stubs: { RecordDeletionDialog: true, ActionDialog: true, BOMPurchasePicker: true, ImportFeedback: true, RouterLink: true },
+  } })
+  await flushPromises()
+  const links = wrapper.findAll('a.bom-buy-link')
+  expect(links.map(link => [link.text(), link.attributes('href')])).toEqual([
+    ['淘宝 ↗', 'https://m.tb.cn/h.TzQ9AbC?tk=1'],
+    ['京东 ↗', 'https://item.jd.com/100012.html'],
+  ])
+  for (const link of links) {
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+  }
+  expect(links[0]!.attributes('aria-label')).toBe('膨胀螺栓 的淘宝购买链接')
+  expect(wrapper.html()).not.toContain('javascript:')
+  wrapper.unmount()
+  batchMode.value = true
+})

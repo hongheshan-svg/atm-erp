@@ -233,6 +233,7 @@ SOURCES = {
     'drawing_revision': '查图纸上的实际版本；没有版本可空，不是计量单位。',
     'replaces': '升版或换型时，从项目 BOM 复制被替换的原物料编码；不换版的行留空。',
     'brand': '按实物铭牌、厂家资料或原物料档案填写。',
+    'purchase_url': '在淘宝、京东等网店打开商品页，复制浏览器地址栏的链接，或 App 里“分享 → 复制链接”。',
     'group': '自己为本次采购文件编写分组号：同张单相同，不同单不同。',
     'phone': '向业务联系人核实号码；保留区号和前导零。',
 }
@@ -310,6 +311,12 @@ FIELDS = {
     'drawing_revision': ('可空', '填写实际图档版本，最多30字符；没有版本可留空。不要填写PCS、品牌或数量。', 'A'),
     'product_category': ('可空', PRODUCT_HINT, '无图·标准件'),
     'brand': ('可空', '填写品牌，最多80字符；不要填写图档版本。', '上银'),
+    'purchase_url': (
+        '可空',
+        '网购件填写商品页链接，以http://或https://开头，最多1000字符；可直接粘贴淘宝、京东的分享文字，'
+        '系统只保留其中的链接。不是网购的物料留空。',
+        'https://item.taobao.com/item.htm?id=123456',
+    ),
     'part_type': (
         '可空',
         '只区分标准件/非标件；通常外购标准产品选标准件，按项目图纸定制的零件选非标件，不确定可先留空。'
@@ -487,6 +494,12 @@ OVERRIDES = {
         '填写品牌，最多80字符；不要填写图档版本。已有物料原来没有品牌时按此补填到物料资料，已有品牌须与系统一致，不会被覆盖。',
         '上银',
     ),
+    ('bom', 'purchase_url'): (
+        '可空',
+        '网购件填写商品页链接，以http://或https://开头；可直接粘贴淘宝、京东的分享文字，系统只保留其中的链接。'
+        '已有物料原来没有链接时按此补填，已有链接不会被覆盖（要换链接到基础资料修改）；链接无效时本行照常导入，只是不保存链接。',
+        'https://item.taobao.com/item.htm?id=123456',
+    ),
 }
 
 OVERRIDES[('reconciliations', 'kind')] = (
@@ -512,6 +525,7 @@ BOM_COLUMNS = [
     ('物料类别', 'part_type'),
     ('单位', 'unit'),
     ('替换原编码', 'replaces'),
+    ('购买链接', 'purchase_url'),
 ]
 
 
@@ -638,6 +652,7 @@ def input_controls(data, layout):
             'acceptor',
             'drawing_number',
             'drawing_revision',
+            'purchase_url',
             'group',
             'entry',
             'stock',

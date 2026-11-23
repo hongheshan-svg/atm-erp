@@ -708,6 +708,7 @@ def demand(project):
                 'part_type': line.item.part_type,
                 'assembly_unit': line.assembly_unit,
                 'unit': line.item.unit,
+                'purchase_url': line.item.purchase_url,
                 'is_active': line.item.is_active,
                 'quantity': str(line.quantity),
                 'change_note': line.change_note,

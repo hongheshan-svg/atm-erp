@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -495,3 +496,203 @@ class ProductCodingTests(BusinessFixtures, TestCase):
             self.assertTrue(response.data['can_import'], response.data)
         self.assertFalse(Item.objects.filter(name='新模板件').exists())
         self.assertEqual(CodeRule.objects.get(key='item').product_counters, {})
+
+
+class PurchaseLinkTests(BusinessFixtures, TestCase):
+    """网购件的购买链接：物料资料可填，BOM 导入可带入或补填，BOM 缺料、采购明细和导出都能看到。"""
+
+    SHARE = '【淘宝】假一赔四 https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf CZ0001 「M6膨胀螺栓 304不锈钢」\n点击链接直接打开'
+
+    def setUp(self):
+        self.setup_business()
+
+    def link_preview(self, project, rows, headers=None):
+        import csv
+        import io
+
+        from apps.business.services.bom_material_import import HEADERS
+
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(headers or HEADERS)
+        writer.writerows(rows)
+        response = self.clients['manager'].post(
+            f'/api/business/projects/{project.pk}/import-preview/',
+            {'file': SimpleUploadedFile('bom.csv', stream.getvalue().encode())},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    @staticmethod
+    def row(code, name, spec, link, quantity='2', note=''):
+        # 列顺序见 BOM_COLUMNS：编码…单位（15 列）、替换原编码、购买链接。
+        category = '' if code else '无图·标准件'
+        return [code, '上料', quantity, note, '', '', '', name, spec, '', '', category, '淘宝', '', 'PCS', '', link]
+
+    def test_item_link_keeps_only_the_url_from_share_text_and_rejects_non_links(self):
+        created = self.post(
+            'purchaser',
+            'items/',
+            {'name': '膨胀螺栓', 'specification': 'M6*60', 'unit': 'PCS', 'purchase_url': self.SHARE},
+            status=201,
+        )
+        item = Item.objects.get(pk=created['id'])
+        self.assertEqual(item.purchase_url, 'https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf')
+        for value, message in (
+            ('淘宝搜 M6 膨胀螺栓', 'http:// 或 https://'),
+            ('javascript:alert(1)', 'http:// 或 https://'),
+            ('https://item.taobao.com/item.htm?id=' + '9' * 1000, '最长1000字符'),
+        ):
+            with self.subTest(value=value[:30]):
+                response = self.clients['purchaser'].patch(
+                    f'/api/business/items/{item.pk}/',
+                    {'purchase_url': value},
+                    format='json',
+                    HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+                )
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertIn(message, str(response.data['purchase_url']))
+        # 链接不是物料身份：已被 BOM 引用、已按类别编码的物料照样可以改链接或清空。
+        coded = Item.objects.create(
+            code='2199000777', name='接头', specification='PC6-01', unit='PCS', product_category='21'
+        )
+        BOMLine.objects.create(project=self.active_project(), item=coded, quantity=1)
+        response = self.clients['mechanical_engineer'].patch(
+            f'/api/business/items/{coded.pk}/',
+            {'purchase_url': 'https://item.jd.com/100012.html'},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        coded.refresh_from_db()
+        self.assertEqual(coded.purchase_url, 'https://item.jd.com/100012.html')
+        self.clients['mechanical_engineer'].patch(
+            f'/api/business/items/{coded.pk}/',
+            {'purchase_url': ''},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        coded.refresh_from_db()
+        self.assertEqual(coded.purchase_url, '')
+        listed = self.clients['purchaser'].get('/api/business/items/', {'search': '膨胀螺栓'}).data
+        rows = listed['results'] if isinstance(listed, dict) else listed
+        self.assertEqual(rows[0]['purchase_url'], 'https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf')
+
+    def test_bom_import_brings_links_in_without_overwriting_and_never_blocks_the_row(self):
+        project = self.active_project()
+        blank = Item.objects.create(code='PL-001', name='垫片', specification='M6平垫', unit='PCS', brand='淘宝')
+        linked = Item.objects.create(
+            code='PL-002',
+            name='弹簧',
+            specification='0.8*6*20',
+            unit='PCS',
+            brand='淘宝',
+            purchase_url='https://item.taobao.com/item.htm?id=1',
+        )
+        for item in (blank, linked):
+            BOMLine.objects.create(project=project, item=item, quantity=2, assembly_unit='上料')
+        revision = self.clients['manager'].get(f'/api/business/projects/{project.pk}/demand/').data['revision']
+        # 「可回导模板」只补了链接列：用量都没变，也能导入，原来没有链接的补上，已有的不覆盖。
+        preview = self.link_preview(
+            project,
+            [
+                self.row('PL-001', '垫片', 'M6平垫', self.SHARE),
+                self.row('PL-002', '弹簧', '0.8*6*20', 'https://item.taobao.com/item.htm?id=2'),
+                self.row('', '定位销', 'Φ6*20', 'https://detail.tmall.com/item.htm?id=3', quantity='4', note='新增'),
+                self.row('', '膨胀螺栓', 'M8*80', '见淘宝收藏夹', quantity='12', note='新增'),
+            ],
+        )
+        self.assertTrue(preview['can_import'], preview)
+        hints = [line['material_hint'] for line in preview['lines']]
+        self.assertEqual(hints[0], '已补填购买链接。')
+        self.assertIn('购买链接与系统不同，已按系统为准', hints[1])
+        self.assertEqual(hints[2], '')
+        self.assertIn('不是以 http:// 或 https:// 开头的网址，未保存', hints[3])
+        blank.refresh_from_db()
+        self.assertEqual(blank.purchase_url, '', '预览整体回滚，不改主数据')
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+        blank.refresh_from_db()
+        linked.refresh_from_db()
+        self.assertEqual(blank.purchase_url, 'https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf')
+        self.assertEqual(linked.purchase_url, 'https://item.taobao.com/item.htm?id=1')
+        self.assertEqual(Item.objects.get(name='定位销').purchase_url, 'https://detail.tmall.com/item.htm?id=3')
+        self.assertEqual(Item.objects.get(name='膨胀螺栓').purchase_url, '')
+        self.assertTrue(
+            AuditLog.objects.filter(
+                operation='item.save', resource=f'item:{blank.pk}', detail__fields=['purchase_url']
+            ).exists()
+        )
+        demand = self.clients['manager'].get(f'/api/business/projects/{project.pk}/demand/').data
+        self.assertNotEqual(demand['revision'], revision)
+        links = {line['item_code']: line['purchase_url'] for line in demand['lines']}
+        self.assertEqual(links['PL-001'], 'https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf')
+        # 只补链接、用量不变的回导文件：同样可以导入（否则「与当前 BOM 一致」会挡住）。
+        third = Item.objects.create(code='PL-003', name='挡圈', specification='Φ10', unit='PCS', brand='淘宝')
+        BOMLine.objects.create(project=project, item=third, quantity=1, assembly_unit='上料')
+        only_link = self.link_preview(
+            project, [self.row('PL-003', '挡圈', 'Φ10', 'https://item.taobao.com/item.htm?id=4', quantity='1')]
+        )
+        self.assertTrue(only_link['can_import'], only_link)
+        self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': only_link['token']})
+        third.refresh_from_db()
+        self.assertEqual(third.purchase_url, 'https://item.taobao.com/item.htm?id=4')
+
+    def test_previous_bom_templates_without_link_column_still_import(self):
+        from apps.business.services.bom_material_import import HEADERS
+
+        project = self.active_project()
+        for headers in (HEADERS[:-1], HEADERS[:-2]):
+            with self.subTest(columns=len(headers)):
+                row = self.row('', f'旧模板物料{len(headers)}', f'OLD-{len(headers)}', '', note='新增')[: len(headers)]
+                preview = self.link_preview(project, [row], headers=headers)
+                self.assertTrue(preview['can_import'], preview)
+                self.post('manager', f'projects/{project.pk}/bom-import-confirm/', {'token': preview['token']})
+                self.assertEqual(Item.objects.get(name=f'旧模板物料{len(headers)}').purchase_url, '')
+
+    def test_link_shows_in_purchase_lines_bom_template_export_and_item_import(self):
+        import csv
+        import io
+
+        from openpyxl import load_workbook
+
+        project = self.active_project()
+        item = Item.objects.create(
+            code='PL-010',
+            name='气缸',
+            specification='TCL32X50S',
+            unit='PCS',
+            brand='淘宝',
+            purchase_url='https://item.taobao.com/item.htm?id=10',
+        )
+        line = BOMLine.objects.create(project=project, item=item, quantity=1, assembly_unit='上料')
+        lines = self.clients['manager'].get('/api/business/bom/', {'project': project.pk}).data
+        lines = lines['results'] if isinstance(lines, dict) else lines
+        self.assertEqual(lines[0]['purchase_url'], 'https://item.taobao.com/item.htm?id=10')
+        response = self.clients['manager'].post(
+            '/api/business/bom/export/',
+            {'project': project.pk, 'ids': [line.pk], 'file_format': 'xlsx', 'layout': 'import'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        sheet = load_workbook(io.BytesIO(response.content)).active
+        header = [cell.value for cell in sheet[1]]
+        self.assertEqual(header[-1], '购买链接')
+        self.assertEqual(sheet.cell(row=2, column=len(header)).value, 'https://item.taobao.com/item.htm?id=10')
+        # 物料导入模板末尾多一列「购买链接」，带分享文字导入时只存链接；旧模板照常接受。
+        from apps.business.services.transfers import SCHEMAS
+
+        labels = [label for label, _ in SCHEMAS['items'][1]]
+        self.assertEqual(labels[-1], '购买链接')
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(labels)
+        writer.writerow(['', '导入螺母', 'M6', '', '', '', '淘宝', '', 'PCS', '', self.SHARE])
+        preview = self.clients['purchaser'].post(
+            '/api/business/items/import-file/',
+            {'file': SimpleUploadedFile('items.csv', stream.getvalue().encode())},
+            format='multipart',
+        )
+        self.assertEqual(preview.status_code, 200, preview.data)
+        self.post('purchaser', 'items/import-confirm/', {'token': preview.data['token']})
+        self.assertEqual(Item.objects.get(name='导入螺母').purchase_url, 'https://m.tb.cn/h.TzQ9AbC?tk=Ab12CdEf')

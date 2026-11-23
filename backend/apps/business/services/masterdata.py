@@ -1,3 +1,4 @@
+import re
 import unicodedata
 
 from django.db.models import Q
@@ -21,6 +22,46 @@ from .common import (
 
 def normalized(value):
     return ' '.join(unicodedata.normalize('NFKC', value).split())
+
+
+# 淘宝、京东 App「分享」复制出来的是一段文字（【淘宝】… https://m.tb.cn/h.xxx?tk=… 「商品名」点击链接直接打开），
+# 只保留其中第一个 http(s) 链接；链接到空白或中文标点为止。
+LINK = re.compile(r'https?://[^\s<>"\'「」『』【】（）《》，。；：！？、]+', re.IGNORECASE)
+LINK_MAX = Item._meta.get_field('purchase_url').max_length
+
+
+def purchase_link(value):
+    """物料购买链接：空串表示清除；否则只接受 http(s) 链接，存入前去掉分享文字和结尾标点。"""
+    if not isinstance(value, str):
+        raise ValidationError({'purchase_url': '购买链接必须是文本。'})
+    if not value.strip():
+        return ''
+    match = LINK.search(value)
+    if not match:
+        raise ValidationError(
+            {
+                'purchase_url': '请填写以 http:// 或 https:// 开头的商品链接；可直接粘贴淘宝、京东的分享文字，'
+                '系统只保留其中的链接。表格里只显示“链接”等文字的单元格，请复制实际链接地址。'
+            }
+        )
+    link = match.group().rstrip('.,;:!?')
+    if len(link) > LINK_MAX:
+        raise ValidationError(
+            {'purchase_url': f'购买链接最长{LINK_MAX}字符，请改用 App 里“分享 → 复制链接”得到的短链接。'}
+        )
+    return link
+
+
+def fill_purchase_link(actor, item, link):
+    """BOM 导入给已有或刚建的物料补填购买链接：只改这一项，不重走名称、规格查重。
+
+    链接不参与物料身份；按原因独立建码的相似物料补链接时，不应再被要求填写独立建码原因。
+    """
+    item = Item.objects.select_for_update().get(pk=item.pk)
+    item.purchase_url = link
+    save(item, actor)
+    audit(actor, 'item.save', item, fields=['purchase_url'], source='bom.import')
+    return item
 
 
 def comparison_key(value):
@@ -137,7 +178,16 @@ def masterdata(actor, key, model, data, object_id=None):
                 raise PermissionDenied('销售经理只能维护纯客户资料。')
 
     allowed = {'name', 'is_active'} | (
-        {'specification', 'unit', 'brand', 'part_type', 'product_category', 'drawing_number', 'drawing_revision'}
+        {
+            'specification',
+            'unit',
+            'brand',
+            'part_type',
+            'product_category',
+            'drawing_number',
+            'drawing_revision',
+            'purchase_url',
+        }
         if model is Item
         else {'kind', 'contact', 'phone', 'address', 'payment_term', 'payment_days'}
     )
@@ -223,7 +273,14 @@ def masterdata(actor, key, model, data, object_id=None):
                 raise ValidationError({'payment_term': '采购账期仅适用于供应商。'})
             for field, value in values.items():
                 setattr(obj, field, value)
-        for field in allowed - {'is_active', 'code', 'payment_term', 'payment_days', 'duplicate_reason'}:
+        for field in allowed - {
+            'is_active',
+            'code',
+            'payment_term',
+            'payment_days',
+            'duplicate_reason',
+            'purchase_url',
+        }:
             if field in data or (not object_id and field in {'name', 'kind'}):
                 setattr(
                     obj,
@@ -235,6 +292,8 @@ def masterdata(actor, key, model, data, object_id=None):
                         default=None if field in {'name', 'kind', 'unit'} else '',
                     ),
                 )
+        if 'purchase_url' in data:
+            obj.purchase_url = purchase_link(data['purchase_url'])
         if 'is_active' in data:
             if not isinstance(data['is_active'], bool):
                 raise ValidationError({'is_active': '必须为布尔值。'})

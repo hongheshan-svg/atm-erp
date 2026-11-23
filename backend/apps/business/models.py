@@ -110,6 +110,8 @@ class Item(BaseModel):
     brand = models.CharField(max_length=80, blank=True)
     part_type = models.CharField(max_length=20, choices=PartType.choices, blank=True, default='')
     unit = models.CharField(max_length=20, default='件')
+    # 网购件（淘宝、京东等）的商品页链接：采购按链接下单。不参与查重和物料身份，可随时改。
+    purchase_url = models.CharField(max_length=1000, blank=True, default='')
     is_active = models.BooleanField(default=True)
 
     class Meta(BaseModel.Meta):

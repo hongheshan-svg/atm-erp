@@ -38,6 +38,7 @@ LABELS = {
     'reference': '银行流水号',
     'document': '凭证ID',
     'brand': '品牌',
+    'purchase_url': '购买链接',
     'part_type': '物料类别',
     'product_category': '产品编码类别',
     'drawing_number': '图号',

@@ -77,7 +77,7 @@ function readonlyValue(field: Field) {
           <li v-for="(row, index) in model[field.key]" :key="index" class="row-card">
             <template v-for="column in field.fields?.filter(c => !c.hidden)" :key="column.key">
               <div v-if="column.flow && flowFor(column.flow, row)" class="row-card-flow"><span>{{ column.label }}：</span><ProcessSteps :flow="flowFor(column.flow, row)!" compact /></div>
-              <div v-else-if="column.multiline" class="row-card-line is-multiline" :class="{ 'is-short': column.short }"><span>{{ column.label }}{{ column.short ? '' : '：' }}</span><b class="cell-lines"><span v-for="(line, n) in cellLines(row[column.key])" :key="n" :class="n ? 'cell-sub' : 'cell-main'">{{ line }}</span></b></div>
+              <div v-else-if="column.multiline" class="row-card-line is-multiline" :class="{ 'is-short': column.short }"><span>{{ column.label }}{{ column.short ? '' : '：' }}</span><b class="cell-lines"><span v-for="(line, n) in cellLines(row[column.key])" :key="n" :class="n ? 'cell-sub' : 'cell-main'">{{ line }}</span><a v-if="column.href?.(row)" class="cell-link" :href="column.href!(row)" target="_blank" rel="noopener noreferrer">{{ column.hrefLabel?.(row) || '打开链接' }} ↗</a></b></div>
               <div v-else class="row-card-line" :class="{ 'is-short': column.short }"><span>{{ column.label }}{{ column.short ? '' : '：' }}</span><b>{{ row[column.key] == null || row[column.key] === '' ? '—' : row[column.key] }}</b></div>
             </template>
           </li>
@@ -88,7 +88,7 @@ function readonlyValue(field: Field) {
             ><template v-if="column.flow" #default="{ row }"
               ><ProcessSteps v-if="flowFor(column.flow, row)" :flow="flowFor(column.flow, row)!" compact /><span v-else>{{ row[column.key] }}</span></template
             ><template v-else-if="column.multiline" #default="{ row }"
-              ><span class="cell-lines"><span v-for="(line, n) in cellLines(row[column.key])" :key="n" :class="n ? 'cell-sub' : 'cell-main'">{{ line }}</span></span></template
+              ><span class="cell-lines"><span v-for="(line, n) in cellLines(row[column.key])" :key="n" :class="n ? 'cell-sub' : 'cell-main'">{{ line }}</span><a v-if="column.href?.(row)" class="cell-link" :href="column.href!(row)" target="_blank" rel="noopener noreferrer">{{ column.hrefLabel?.(row) || '打开链接' }} ↗</a></span></template
             ></el-table-column
           >
         </BusinessTable>
@@ -193,6 +193,7 @@ function readonlyValue(field: Field) {
 .cell-lines { display: grid; gap: 2px; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
 .cell-lines .cell-main { font-weight: 600; color: var(--ink); }
 .cell-lines .cell-sub { font-size: 12px; font-weight: 400; color: var(--ink-4); }
+.cell-lines .cell-link { justify-self: start; font-size: 12px; font-weight: 400; }
 .row-card-line.is-multiline > b { display: grid; }
 .readonly-fields input:not([type='checkbox']), .readonly-fields textarea, .readonly-fields select { border-color: transparent; background: transparent; color: var(--ink); padding: 0; min-height: 24px; font-size: 14px; opacity: 1; -webkit-text-fill-color: var(--ink); }
 .readonly-fields .field > label { color: var(--mute); font-size: 12px; }

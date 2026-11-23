@@ -16,6 +16,7 @@ import { endpoint } from './shared'
 import { materialEditor, partnerEditor, customerOnly } from '../session'
 import { termFields, termLabel } from './payment-terms'
 import { partTypeLabel, partTypes, productCategories } from '../product-categories'
+import { linkLabel, purchaseLink } from '../utils/links'
 function partnerPayload(data: Row): Row {
   // 转为纯客户时同步清除已保存的供应商条款，避免后端沿用原账期后拒绝保存。
   return data.kind === 'customer' ? { ...data, payment_term: 'manual', payment_days: 0 } : data
@@ -32,6 +33,8 @@ export const columns: Record<string, Column[]> = {
     C('brand', '品牌'),
     { key: 'part_type', label: '物料类别', format: r => partTypeLabel(r.part_type) },
     C('unit', '单位'),
+    // 网购件的商品页：点开直接下单，按网店写「淘宝 ↗」「京东 ↗」。
+    { key: 'purchase_url', label: '购买链接', format: r => purchaseLink(r.purchase_url) ? `${linkLabel(purchaseLink(r.purchase_url))} ↗` : '—', href: r => purchaseLink(r.purchase_url) },
     C('is_active', '启用'),
   ],
   partners: [
@@ -69,6 +72,7 @@ export async function createCommand(resource: string, projectId?: number): Promi
       t('brand', '品牌', true),
       select('part_type', '物料类别', choices(partTypes), true),
       { key: 'unit', label: '单位', initial: '件' },
+      { ...t('purchase_url', '购买链接', true), placeholder: 'https://…', hint: '网购件填写商品页链接；可直接粘贴淘宝、京东 App 里“分享 → 复制链接”得到的整段文字，系统只保存其中的链接。' },
       { ...t('duplicate_reason', '相同物料独立编码原因', true), hint: '名称或型号疑似重复时，先核对厂家完整型号；确认是不同物料后填写独立建码原因。' },
     ]
   if (resource === 'partners')
@@ -112,7 +116,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     fields: [...(await createCommand(resource)).fields.filter(f => f.key !== 'code').map(f => resource === 'items' && r.product_category && ['product_category', 'specification', 'drawing_number', 'drawing_revision'].includes(f.key) ? { ...f, readonly: true, displayOnly: true } : f), { key: 'is_active', label: '启用', type: 'boolean' }],
     // 选填文本清空后也提交空串，否则服务端按「未提交」保留原值；已编码物料的规格、图号、图档版本只读，不提交。
     prepare: data => resource === 'items'
-      ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '', ...(r.product_category ? {} : { specification: data.specification ?? '', drawing_number: data.drawing_number ?? '', drawing_revision: data.drawing_revision ?? '' }) }
+      ? { ...data, brand: data.brand ?? '', part_type: data.part_type ?? '', purchase_url: data.purchase_url ?? '', ...(r.product_category ? {} : { specification: data.specification ?? '', drawing_number: data.drawing_number ?? '', drawing_revision: data.drawing_revision ?? '' }) }
       : partnerPayload({ ...data, contact: data.contact ?? '', phone: data.phone ?? '', address: data.address ?? '' }),
     // 前后端口径一致：已按产品编码类别编码的物料，类别、规格、图号、图档版本不可覆盖；另外被 BOM、采购、库存引用后，已有的单位、规格、图档也不能改写（由服务端校验）。
     ...(resource === 'items' && r.product_category ? { notice: { type: 'info' as const, text: '该物料已按产品编码类别编码：产品编码类别、规格、图号、图档版本不能在此修改；版本升级请新增物料编码并修订 BOM。物料一旦被 BOM、采购或库存引用，已有的单位、规格、图档也不能改写。' } } : {}),

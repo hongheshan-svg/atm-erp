@@ -134,6 +134,7 @@ class ItemSerializer(serializers.ModelSerializer):
             'brand',
             'part_type',
             'unit',
+            'purchase_url',
             'is_active',
             'updated_at',
             'newer_revision',
@@ -274,6 +275,7 @@ class BOMSerializer(serializers.ModelSerializer):
     item_code = serializers.CharField(source='item.code', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
     unit = serializers.CharField(source='item.unit', read_only=True)
+    purchase_url = serializers.CharField(source='item.purchase_url', read_only=True)
 
     class Meta:
         model = BOMLine
@@ -295,6 +297,7 @@ class BOMSerializer(serializers.ModelSerializer):
             'part_type',
             'assembly_unit',
             'unit',
+            'purchase_url',
             'quantity',
             'change_note',
             'updated_at',
@@ -315,6 +318,7 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
     product_category = serializers.CharField(source='item.product_category', read_only=True)
     part_type = serializers.CharField(source='item.part_type', read_only=True)
     unit = serializers.CharField(source='item.unit', read_only=True)
+    purchase_url = serializers.CharField(source='item.purchase_url', read_only=True)
     bom_quantity = serializers.DecimalField(
         source='bom_line.quantity', max_digits=18, decimal_places=3, read_only=True, allow_null=True, default=None
     )
@@ -336,6 +340,7 @@ class PurchaseLineSerializer(MoneyFilter, serializers.ModelSerializer):
             'product_category',
             'part_type',
             'unit',
+            'purchase_url',
             'bom_quantity',
             'bom_line',
             'assembly_unit',
