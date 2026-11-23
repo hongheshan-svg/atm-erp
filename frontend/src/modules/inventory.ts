@@ -150,6 +150,8 @@ export async function bomIssueCommand(projectId?: number): Promise<Command> {
   const lines = (data.lines || []).map((line: Row) => ({
     ...materialDetails(line), project_code: data.project_code, project_name: data.project_name,
     assembly_unit: line.assembly_units, remaining: line.available, remark: '',
+    // 默认不勾、数量为 0；勾上才按服务端建议数量填入（见 WarehouseLines）。
+    suggested: line.quantity, quantity: '0', selected: false,
   }))
   const missing = data.missing_items ? `其中 ${data.missing_items} 种当前无库存，需采购或等待到货。` : ''
   if (!lines.length) return {
@@ -165,10 +167,16 @@ export async function bomIssueCommand(projectId?: number): Promise<Command> {
       { ...sharedArrival, hint: sharedHint },
     ],
     initial: { project: projectId, lines },
-    notice: { type: 'info', text: `本项目 BOM 还有 ${data.pending_items} 种物料未领完。${missing}已按 BOM 未领数量和库位预填本次领料，可改小或清零；整单一次出库，任一行不通过则全部不出库。` },
+    notice: { type: 'info', text: `本项目 BOM 还有 ${data.pending_items} 种物料未领完。${missing}勾选本次要领的行，系统按 BOM 未领数量和库位填入数量，可改小；没勾的行本次不领。可按非标件、标准件筛选，按住 Shift 点勾选框连续多选。整单一次出库，任一行不通过则全部不出库。` },
     prepare: ({ lines: rows, ...rest }) => {
-      const selected = (rows || []).filter((row: Row) => Number(row.quantity || 0) > 0)
-      if (!selected.length) throw new Error('请至少填写一行本次领料数量。')
+      const picked = ((rows || []) as Row[]).map((row, index) => ({ row, index })).filter(({ row }) => row.selected)
+      if (!picked.length) throw new Error('请先勾选本次要领的物料。')
+      const empty = picked.find(({ row }) => !(Number(row.quantity || 0) > 0))
+      if (empty) {
+        const line = lines.find((item: Row) => item.stock === empty.row.stock) || {}
+        throw new Error(`第 ${empty.index + 1} 行 ${line.item_name || ''}（${line.location || ''}）已勾选，请填写本次领料数量，或取消勾选。`)
+      }
+      const selected = picked.map(({ row }) => row)
       return { ...rest, project: projectId, lines: selected.map((row: Row) => ({ stock: row.stock, quantity: row.quantity, ...(row.remark ? { remark: row.remark } : {}) })) }
     },
   }
@@ -180,7 +188,8 @@ export function actionNames(resource: string, r: Row): string[] {
   if (resource === 'issue-slips') a.push('查看 / 打印')
   if (resource === 'moves' && warehouse()) {
     if (r.kind === 'issue') a.push('退料')
-    if (r.kind === 'receipt') a.push('采购退货')
+    // 采购反审已冲回的收货不能再退货（服务端同样拒绝）。
+    if (r.kind === 'receipt' && !r.reversed) a.push('采购退货')
   }
   return a
 }

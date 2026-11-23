@@ -13,21 +13,21 @@ from apps.core.permissions import (
 from ..models import (
     PurchaseLine,
     PurchaseOrder,
-    StockMove,
 )
 from ..serializers import (
     PurchaseDetailSerializer,
     PurchaseSerializer,
     person_name,
 )
-from ..services import budgets, purchase_changes, supply
+from ..services import budgets, purchase_changes, supply, unapprove
+from ..services.common import live_receipts
 from .common import ImportableMixin, ReadView, key
 
 
 class PurchaseView(ImportableMixin, ReadView):
     read_roles = PURCHASE_READERS
     write_roles = PURCHASE_READERS
-    queryset = PurchaseOrder.objects.select_related('supplier', 'project').prefetch_related(
+    queryset = PurchaseOrder.objects.select_related('supplier', 'project', 'created_by').prefetch_related(
         'lines__item', 'lines__bom_line', 'lines__revision__old_item', 'project__members'
     )
     serializer_class = PurchaseSerializer
@@ -38,7 +38,7 @@ class PurchaseView(ImportableMixin, ReadView):
         queryset = super().get_queryset()
         if self.action == 'retrieve':
             # 详情逐行列出合格入库批次（入库日期、数量、库位），一次预取，不按行查询。
-            receipts = StockMove.objects.filter(kind='receipt').select_related('stock')
+            receipts = live_receipts().select_related('stock')
             queryset = queryset.prefetch_related(Prefetch('lines__stockmove_set', receipts, to_attr='receipt_moves'))
         return queryset
 
@@ -146,6 +146,7 @@ class PurchaseView(ImportableMixin, ReadView):
                 'purchase.delivery_plan',
                 'purchase.request_change',
                 'purchase.review_change',
+                'purchase.unapprove',
             ],
         ).select_related('actor')
         page = self.paginate_queryset(logs)
@@ -169,6 +170,8 @@ class PurchaseView(ImportableMixin, ReadView):
                     ],
                     'next_step': '等待供应商补货；不再补货时由采购取消未收余量'
                     if log.operation == 'purchase.quality_return'
+                    else '采购修改后重新提交审批；批准后仓库重新收货'
+                    if log.operation == 'purchase.unapprove'
                     else '',
                 }
                 for log in page
@@ -200,6 +203,14 @@ class PurchaseView(ImportableMixin, ReadView):
         from ..services import revisions
 
         return Response(revisions.review(request.user, key(request), self.get_object().pk, request.data))
+
+    @action(detail=True, methods=['get'], url_path='unapprove-check')
+    def unapprove_check(self, request, pk=None):
+        return Response(unapprove.check(request.user, self.get_object()))
+
+    @action(detail=True, methods=['post'])
+    def unapprove(self, request, pk=None):
+        return Response(unapprove.unapprove(request.user, key(request), self.get_object().pk, request.data))
 
     @action(detail=True, methods=['post'], url_path='cancel-remainder')
     def cancel_remainder(self, request, pk=None):

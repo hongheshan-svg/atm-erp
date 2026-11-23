@@ -13,7 +13,7 @@ export const resourceFilters: Record<string, ResourceFilter> = {
   items: { key: 'part_type', label: '物料类别', options: partTypes },
   partners: { key: 'kind', label: '往来类型', options: { customer: '客户', supplier: '供应商', both: '客户及供应商' } },
   entries: { key: 'kind', label: '款项类型', options: { receivable: '应收', payable: '应付', expense: '费用' } },
-  moves: { key: 'kind', label: '流水类型', options: { opening: '期初', receipt: '采购收货', issue: '项目领料', return: '项目退料', purchase_return: '采购退货', count: '盘点', scrap: '旧版报废', rework: '送修改制' } },
+  moves: { key: 'kind', label: '流水类型', options: { opening: '期初', receipt: '采购收货', issue: '项目领料', return: '项目退料', purchase_return: '采购退货', receipt_reversal: '反审冲回', count: '盘点', scrap: '旧版报废', rework: '送修改制' } },
 }
 export function filterQuery(config: ResourceFilter | undefined, value: string): Record<string, string> {
   if (!config || !value) return {}

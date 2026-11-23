@@ -303,17 +303,22 @@ def masterdata(actor, key, model, data, object_id=None):
             # 图号判重同样在 CodeRule('item') 锁内，建料和改料不会并发占用同一图号版本。
             # 停用物料仍占用图号；管理员删除的物料只能是未被引用的误建记录，且不可见、不可恢复，
             # 不再占用图号版本（物料编码仍按含软删除的全局唯一，见上方 code 校验与自动取号）。
-            if (
-                obj.drawing_number
+            owner = (
                 # 与 lean_item_drawing_key 函数索引同一套表达式；iexact 生成的 UPPER(col::text) 用不上索引。
-                and Item.objects.annotate(drawing_key=Lower('drawing_number'), revision_key=Lower('drawing_revision'))
+                Item.objects.annotate(drawing_key=Lower('drawing_number'), revision_key=Lower('drawing_revision'))
                 .filter(drawing_key=obj.drawing_number.lower(), revision_key=obj.drawing_revision.lower())
                 .exclude(pk=obj.pk)
-                .exists()
-            ):
+                .first()
+                if obj.drawing_number
+                else None
+            )
+            if owner is not None:
+                # 写出占用者的编码和名称，填表的人不用再去基础资料里查是哪一个。
+                stopped = '（已停用）' if not owner.is_active else ''
                 raise ValidationError(
                     {
-                        'drawing_number': '此图号及版本已由其他物料使用，包括历史停用记录；请复用该物料，图档升级需填写新版本并新建编码。'
+                        'drawing_number': f'此图号及版本已由物料 {owner.code}「{owner.name}」{stopped}使用；'
+                        '请复用该物料，图档升级需填写新版本并新建编码。'
                     }
                 )
             repeated = suspected_duplicates(

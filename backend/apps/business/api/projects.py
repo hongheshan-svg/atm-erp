@@ -219,7 +219,7 @@ class ProjectView(ImportableMixin, ReadView):
                 return f'{row.stock.item.name} · {row.reason}'
         elif category == 'purchase_return_variance':
             records = (
-                StockMove.objects.filter(project=project, kind='purchase_return')
+                StockMove.objects.filter(project=project, kind__in=['purchase_return', 'receipt_reversal'])
                 .select_related('stock__item')
                 .annotate(
                     contribution=ExpressionWrapper(-F('value') - F('supplier_credit'), output_field=DecimalField())

@@ -111,7 +111,7 @@ def snapshot(statement):
                 m['value']
                 if m['kind'] == 'receipt'
                 else -m['supplier_credit']
-                if m['kind'] == 'purchase_return'
+                if m['kind'] in ('purchase_return', 'receipt_reversal')
                 else ZERO
                 for m in moves
             ),

@@ -10,6 +10,7 @@ from ..models import Document, Entry, Payment, PaymentEvidence, StockMove, TimeE
 from . import bank_identity
 from .common import (
     MATERIAL_KINDS,
+    RECEIPT_CREDIT_KINDS,
     ZERO,
     audit,
     day,
@@ -297,8 +298,9 @@ def costs(project_ids):
         .values('project_id')
         .annotate(
             materials=Sum('value', filter=Q(kind__in=MATERIAL_KINDS)),
-            returned=Sum('value', filter=Q(kind='purchase_return')),
-            credit=Sum('supplier_credit', filter=Q(kind='purchase_return')),
+            # 采购退货、反审冲回都按平均成本出库、按原价冲减应付，两者之差计入项目价差。
+            returned=Sum('value', filter=Q(kind__in=RECEIPT_CREDIT_KINDS)),
+            credit=Sum('supplier_credit', filter=Q(kind__in=RECEIPT_CREDIT_KINDS)),
         )
     )
     for row in moves:

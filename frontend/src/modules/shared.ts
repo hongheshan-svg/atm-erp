@@ -120,6 +120,7 @@ export const labels: Record<string, string> = {
   issue: '项目领料',
   return: '项目退料',
   purchase_return: '采购退货',
+  receipt_reversal: '反审冲回',
   scrap: '旧版报废',
   rework: '送修改制',
   count: '盘点',

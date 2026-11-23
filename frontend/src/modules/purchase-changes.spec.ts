@@ -77,3 +77,44 @@ it('处理记录将申请、同意和驳回全部显示为中文', async () => {
   expect(command.initial?.lines.map((l: { operation: string }) => l.operation)).toEqual(['申请修改', '同意修改申请', '驳回修改申请'])
   expect(command.initial?.lines[0].date).toBe('2026-10-28 01:30')
 })
+
+it('反审：审批人对已批准、部分收货、已收货的采购可反审；先列出要冲回的收货和作废应付，拦下时逐条写明办法', async () => {
+  const approved = { ...submitted, status: 'partial' }
+  expect(actionNames('purchases', approved)).not.toContain('反审')
+  user.value = { id: 3, roles: ['purchase_manager'] }
+  for (const status of ['approved', 'partial', 'received']) expect(actionNames('purchases', { ...submitted, status })).toContain('反审')
+  for (const status of ['draft', 'submitted', 'cancelled']) expect(actionNames('purchases', { ...submitted, status })).not.toContain('反审')
+  expect(actionNames('purchases', { ...approved, can_approve: false })).not.toContain('反审')
+  vi.mocked(read).mockResolvedValue({
+    can_unapprove: true, problems: [], payable: '120.00', contract_versions: 1,
+    receipts: [{ id: 7, item_code: 'M-1', item_name: '气缸', unit: '个', quantity: '4', location: '主仓', received_date: '2026-11-20' }],
+  })
+  const command = await actionCommand('purchases', approved, '反审')
+  expect(read).toHaveBeenCalledWith('/business/purchases/9/unapprove-check/')
+  expect(command.path).toBe('/business/purchases/9/unapprove/')
+  expect(command.blocked).toBeUndefined()
+  expect(command.notice?.text).toContain('将冲回 1 次收货：气缸 4 个（主仓，2026-11-20 收货）')
+  expect(command.notice?.text).toContain('应付 120.00 元作废')
+  expect(command.notice?.text).toContain('重签')
+  expect(command.fields[0]?.label).toBe('反审原因')
+  expect(command.prepare?.({ reason: '第 2 项单价改为 10.5', extra: 1 })).toEqual({ reason: '第 2 项单价改为 10.5' })
+  vi.mocked(read).mockResolvedValue({ can_unapprove: false, problems: ['本单已付款 50.00 元，请财务先冲销', '有到货在隔离待检'], payable: '0.00', contract_versions: 0, receipts: [] })
+  const blocked = await actionCommand('purchases', approved, '反审')
+  expect(blocked.blocked).toBe('1. 本单已付款 50.00 元，请财务先冲销\n2. 有到货在隔离待检')
+})
+
+it('采购列表写出提交人；退回草稿的单子状态写明退回方式，悬停看谁、何时、为什么', async () => {
+  const { columns, submitterText } = await import('./purchases')
+  expect(submitterText({ submitted_by_name: '李采购', created_by_name: '王助理' })).toBe('提交人 李采购')
+  expect(submitterText({ created_by_name: '王助理' })).toBe('创建人 王助理')
+  const reasonText = '第 2 项单价应为 10.5，第 3 项数量改 4 件，供应商已确认，请同时把交期改到下月底并补充比价单附件'
+  const draft = { status: 'draft', returned_action: '反审', returned_reason: reasonText, returned_note: `张经理（账号：zhang2） 11-20 09:30 反审：${reasonText}` }
+  expect(receiptStatus(draft)).toBe('已反审，待修改')
+  expect(receiptStatus({ ...draft, returned_action: '退回修改' })).toBe('已退回，待修改')
+  expect(receiptStatus({ status: 'draft' })).not.toContain('退回')
+  const status = columns.purchases!.find(column => column.key === 'status')!
+  // 状态下面先写原因（同名人员带账号时也不会把原因挤掉），谁、何时悬停看。
+  expect(status.flag?.(draft)).toEqual({ text: `${reasonText.slice(0, 36)}…`, risk: true, wrap: true })
+  expect(status.tip?.(draft)).toBe(draft.returned_note)
+  expect(status.flag?.({ ...draft, status: 'submitted' })).toBeUndefined()
+})

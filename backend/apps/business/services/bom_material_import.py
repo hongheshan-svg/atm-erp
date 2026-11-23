@@ -10,6 +10,7 @@ from decimal import Decimal
 from django.core import signing
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
+from django.db.models.functions import Lower
 from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
@@ -86,6 +87,22 @@ def row_data(row):
     return data
 
 
+def drawing_owner(data):
+    """图号、版本与本行相同的现有物料（含已停用，与建料时的图号判重同一口径）；没填图号或没有返回 None。"""
+    if not data['drawing_number']:
+        return None
+    return (
+        Item.objects.annotate(drawing_key=Lower('drawing_number'), revision_key=Lower('drawing_revision'))
+        .filter(drawing_key=data['drawing_number'].lower(), revision_key=data['drawing_revision'].lower())
+        .first()
+    )
+
+
+def drawing_label(item):
+    revision = f' {item.drawing_revision}版' if item.drawing_revision else ''
+    return f'图号 {item.drawing_number}{revision}'
+
+
 def lock_existing(records):
     """按主键顺序先锁住这批文件可能沿用或补填品牌的现有物料。
 
@@ -99,6 +116,10 @@ def lock_existing(records):
         code = row[0].strip()
         if code:
             codes.add(code)
+            # 编码系统里没有、按图号沿用已有物料的行，可能给它补填链接。
+            owner = drawing_owner(row_data(row))
+            if owner is not None:
+                ids.add(owner.pk)
             continue
         data = row_data(row)
         ids.update(item.pk for item in masterdata.duplicates(data))
@@ -176,6 +197,23 @@ def material(actor, row, created=None):
             return item, '使用已有编码', kept(item, changed)
         if Item.all_objects.filter(code=code).exists():
             raise ValidationError('填写的物料编码已停用或已删除，请先核对主数据，不能重复占用该编码。')
+        # 一个图号版本只对应一个物料编码。表里的编码系统里没有、同图号同版本的物料已在系统里（多是表里沿用了
+        # 自己的旧编号）：名称一致就按系统编码沿用，预览写明；名称不同多半是图号填错，拦下并写出系统编码。
+        owner = drawing_owner(data)
+        if owner is not None:
+            label = drawing_label(owner)
+            if not owner.is_active:
+                raise ValidationError(
+                    f'{label}已是物料 {owner.code}「{owner.name}」，该物料已停用；请先核对主数据，不能重复建码。'
+                )
+            if data['name'] and masterdata.comparison_key(owner.name) != masterdata.comparison_key(data['name']):
+                raise ValidationError(
+                    f'{label}已是物料 {owner.code}「{owner.name}」，与本行物料名称「{data["name"]}」不同；'
+                    f'请核对图号，或把编码改成 {owner.code}。'
+                )
+            note = f'表中编码 {code} 系统里没有；同图号同版本的物料是 {owner.code}，已按系统编码使用。'
+            extra = kept(owner, [field for field in differences(owner, data) if field != 'name'])
+            return owner, '按图号使用已有物料', f'{note}{extra}'
     required = ('name', 'specification', 'unit') + (() if code else ('product_category',))
     errors = {field: '新增物料时必填。' for field in required if not data[field]}
     if data['product_category'] and data['product_category'] not in Item.ProductCategory.values:

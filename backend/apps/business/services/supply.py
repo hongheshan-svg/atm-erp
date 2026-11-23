@@ -102,6 +102,41 @@ def _applicants(creators):
     return result
 
 
+# 让采购单回到草稿的处理：审批人退回、同意修改申请、反审。
+RETURNS = {'purchase.reject': '退回修改', 'purchase.review_change': '同意修改申请', 'purchase.unapprove': '反审'}
+
+
+def purchase_trail(purchases):
+    """{采购ID: {'submitted_by': 最近一次提交人ID, 'returned': 草稿最近一次被退回的经过或 None}}，整页一次查审计。
+
+    列表据此显示谁提交的单子；被退回、反审回到草稿的单子写明谁、何时、为什么退回，采购不必逐张打开处理记录。
+    """
+    purchases = list(purchases)
+    resources = {f'purchaseorder:{purchase.pk}': purchase.pk for purchase in purchases}
+    result = {purchase.pk: {'submitted_by': None, 'returned': None} for purchase in purchases}
+    logs = (
+        AuditLog.objects.filter(resource__in=resources, operation__in=['purchase.submit', *RETURNS])
+        .order_by('id')
+        .values_list('resource', 'operation', 'actor_id', 'created_at', 'detail')
+    )
+    for resource, operation, actor, created_at, detail in logs:
+        row = result[resources[resource]]
+        if operation == 'purchase.submit':
+            row['submitted_by'], row['returned'] = actor, None
+        elif operation != 'purchase.review_change' or (detail or {}).get('decision') == 'approve':
+            row['returned'] = {
+                'action': RETURNS[operation],
+                'actor': actor,
+                'at': created_at,
+                'reason': str((detail or {}).get('reason') or ''),
+            }
+    drafts = {purchase.pk for purchase in purchases if purchase.status == 'draft'}
+    for pk, row in result.items():
+        if pk not in drafts:
+            row['returned'] = None
+    return result
+
+
 def purchase_applicants(purchase):
     """单条采购的申请人ID集合：创建人、最近一次提交人、待审批前改过数量或单价的人。
 
@@ -437,17 +472,16 @@ def approve(actor, key, purchase_id, data, *, override=False):
                 reason_required='管理员调整预算后批准本单，必须填写例外审批原因并保留审计。',
             )
         reason = reason or '批准采购'
-        save(
-            Entry(
-                project=purchase.project,
-                purchase=purchase,
-                kind='payable',
-                title=f'采购 {purchase.code}',
-                amount=total(purchase),
-                due_date=purchase.payment_due_date or purchase.due_date,
-            ),
-            user,
-        )
+        # 反审过的采购单已有一条作废的应付（一单一条）：重新批准时沿用它，按新金额重新起算。
+        entry = Entry.objects.select_for_update().filter(purchase=purchase).first()
+        if entry is None:
+            entry = Entry(project=purchase.project, purchase=purchase, kind='payable', title=f'采购 {purchase.code}')
+        elif not entry.cancelled:
+            raise Conflict('本单已有应付，请刷新采购单。')
+        entry.amount = total(purchase)
+        entry.credit_amount, entry.cancelled = ZERO, False
+        entry.due_date = purchase.payment_due_date or purchase.due_date
+        save(entry, user)
         purchase.status = 'approved'
         save(purchase, user)
         return audit(

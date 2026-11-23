@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from ..models import PaymentTerm, StockMove
-from .common import ZERO
+from .common import RECEIPT_CREDIT_KINDS, ZERO
 
 
 def terms(data, source):
@@ -44,7 +44,7 @@ def schedule(entry):
     moves = [move for line in purchase.lines.all() for move in line.stockmove_set.all()]
     credits = defaultdict(lambda: ZERO)
     for move in moves:
-        if move.kind == 'purchase_return':
+        if move.kind in RECEIPT_CREDIT_KINDS:
             credits[move.source_id] += move.supplier_credit
     buckets = defaultdict(lambda: ZERO)
     for move in moves:
@@ -75,7 +75,7 @@ def prepaid_excess(entry):
         for move in line.stockmove_set.all():
             if move.kind == 'receipt':
                 received += move.value
-            elif move.kind == 'purchase_return':
+            elif move.kind in RECEIPT_CREDIT_KINDS:
                 received -= move.supplier_credit
     return max(ZERO, paid(entry) - max(ZERO, received))
 
@@ -107,7 +107,7 @@ def due_entries(queryset, today):
     """Filter maturity before pagination, using the same receipt/credit FIFO facts as schedule."""
     money = DecimalField(max_digits=18, decimal_places=2)
     credits = (
-        StockMove.objects.filter(kind='purchase_return', source_id=OuterRef('pk'))
+        StockMove.objects.filter(kind__in=RECEIPT_CREDIT_KINDS, source_id=OuterRef('pk'))
         .order_by()
         .values('source_id')
         .annotate(total=Sum('supplier_credit'))

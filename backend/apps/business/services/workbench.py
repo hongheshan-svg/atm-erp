@@ -271,7 +271,7 @@ def summary(request):
         result['production_tasks'] = bucket(production_tasks, TaskSerializer, 'production_tasks')
     purchases = (
         PurchaseOrder.objects.filter(project__in=projects)
-        .select_related('project', 'supplier')
+        .select_related('project', 'supplier', 'created_by')
         .prefetch_related('lines__item', 'lines__bom_line', 'lines__revision__old_item', 'project__members')
         .order_by('due_date', 'pk')
     )

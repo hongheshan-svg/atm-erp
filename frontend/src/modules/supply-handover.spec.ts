@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { all, read } from '../api'
 import { defaults, fieldIssues, payload } from '../forms'
 import { user } from '../session'
+import type { Row } from '../types'
 import { actionCommand as purchaseAction, columns as purchaseColumns, purchaseFields } from './purchases'
 import { bomIssueCommand, actionCommand as inventoryAction, columns as inventoryColumns, createCommand as inventoryCreate } from './inventory'
 import { actionCommand as financeAction, actionNames as financeActions, columns as financeColumns } from './finance'
@@ -93,12 +94,15 @@ it('按 BOM 领料：未选项目先提示，选项目后按服务端候选预�
   expect(command.path).toBe('/business/stocks/bom-issue/')
   expect(command.notice?.text).toContain('1 种当前无库存')
   const data = defaults(command.fields, command.initial)
-  data.lines[1].quantity = '0'
-  data.lines[0].remark = '一号工位'
+  // 默认不勾、数量为 0：直接提交提示先勾选。
+  expect(data.lines.map((line: Row) => [line.selected, line.quantity, line.suggested])).toEqual([[false, '0', '2.000'], [false, '0', '1.000']])
   expect(fieldIssues(command.fields, data)).toEqual([])
+  expect(() => command.prepare!(payload(command.fields, data))).toThrow('请先勾选')
+  Object.assign(data.lines[0], { selected: true, quantity: '2.000', remark: '一号工位' })
   expect(command.prepare!(payload(command.fields, data))).toEqual({ project: 6, confirm_shared: false, lines: [{ stock: 11, quantity: '2.000', remark: '一号工位' }] })
+  // 勾了但数量清成 0：指出是哪一行。
   data.lines[0].quantity = '0'
-  expect(() => command.prepare!(payload(command.fields, data))).toThrow('至少填写一行')
+  expect(() => command.prepare!(payload(command.fields, data))).toThrow('第 1 行 伺服电机（主仓）已勾选，请填写本次领料数量')
   vi.mocked(read).mockResolvedValue({ project: 6, project_code: 'ATM2690', pending_items: 0, missing_items: 0, lines: [] })
   expect((await bomIssueCommand(6)).blocked).toContain('已全部领完')
 })

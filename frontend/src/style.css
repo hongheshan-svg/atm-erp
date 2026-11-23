@@ -842,6 +842,7 @@ button:focus-visible {
 .el-table .cell.el-tooltip .record-link { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
 .el-table .cell.el-tooltip .record-secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overdue-flag { display: block; color: var(--risk); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
+.overdue-flag.flag-wrap { white-space: normal; overflow-wrap: anywhere; }
 .el-table .status-badge.status-wrap { white-space: normal; max-width: 100%; line-height: 18px; }
 .record-secondary { display: block; font-size: 12px; color: var(--mute); margin-top: 5px; line-height: 1.5; }
 .role-tags { display: flex; gap: 4px; flex-wrap: wrap; }

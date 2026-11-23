@@ -17,6 +17,7 @@ from .common import (
     day,
     fields,
     identity,
+    live_receipts,
     lock_items,
     number,
     project_action,
@@ -29,8 +30,8 @@ from .common import (
 UNAPPROVED = ('draft', 'submitted')
 PURCHASE_STATUS = dict(PurchaseOrder.Status.choices)
 # 可维护 BOM（修订、导入、移除、替换）的项目状态。
-# 项目到货口径：收货、采购退货，以及换版后旧版的报废和送修出库（已不在库，不再算项目的到货未领）。
-ARRIVAL_KINDS = ['receipt', 'purchase_return', 'scrap', 'rework']
+# 项目到货口径：收货、采购退货、反审冲回，以及换版后旧版的报废和送修出库（已不在库，不再算项目的到货未领）。
+ARRIVAL_KINDS = ['receipt', 'purchase_return', 'receipt_reversal', 'scrap', 'rework']
 BOM_STATES = {'draft', 'quoted', 'active', 'delivering'}
 
 
@@ -687,6 +688,7 @@ def demand(project):
     competing = competing_demand(project, {line.item_id for line in lines})
     # 同图号在别的项目已换成新版：本项目仍用旧版的行标出来，由工程师决定是否跟着升版。
     latest = newer([line.item_id for line in lines])
+    received_on = last_received(project, {line.item_id for line in lines})
     for line in lines:
         entry = plan[line.pk]
         used, ordered, unapproved = line_supply(entry)
@@ -721,9 +723,25 @@ def demand(project):
                 'other_projects': competing.get(line.item_id, {}).get('projects', 0),
                 'shortage': str(shortage(line, entry)),
                 'newer_revision': latest.get(line.item_id),
+                'last_received_date': received_on.get(line.item_id),
             }
         )
     return result
+
+
+def last_received(project, item_ids):
+    """{物料: 本项目采购最近一次合格入库日期}；反审冲回的收货不算，历史流水没填实际收货日按登记当天。"""
+    from django.db.models import Max
+    from django.db.models.functions import Coalesce, TruncDate
+
+    rows = (
+        live_receipts(StockMove.objects.filter(project=project, stock__item_id__in=list(item_ids)))
+        .annotate(day=Coalesce('received_date', TruncDate('created_at')))
+        .values('stock__item_id')
+        .annotate(last=Max('day'))
+        .values_list('stock__item_id', 'last')
+    )
+    return {item_id: day.isoformat() for item_id, day in rows}
 
 
 def received_unissued(project, item_id):

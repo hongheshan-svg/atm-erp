@@ -42,23 +42,56 @@ it('收货表包含截图资料，末列备注；输入按行保留且资料不�
   wrapper.unmount()
 })
 
-it('按 BOM 批量领料：服务端给出需求和未领量，不逐行读取项目需求，可清零后恢复建议数量', async () => {
-  const initial = [{ ...material, stock: 4, project_code: 'A2608', project_name: '上料线', location: '主仓', required_quantity: '5.000', bom_remaining: '3.000', remaining: '2.000', quantity: '2.000', remark: '' },
-    { ...material, stock: 5, project_code: 'A2608', project_name: '上料线', location: '二号仓', required_quantity: '5.000', bom_remaining: '3.000', remaining: '9.000', quantity: '1.000', remark: '' }]
+it('按 BOM 批量领料：服务端给出需求和未领量，不逐行读取项目需求；默认不勾，勾上按建议数量填入', async () => {
+  const initial = [{ ...material, stock: 4, project_code: 'A2608', project_name: '上料线', location: '主仓', required_quantity: '5.000', bom_remaining: '3.000', remaining: '2.000', suggested: '2.000', quantity: '0', selected: false, remark: '' },
+    { ...material, stock: 5, project_code: 'A2608', project_name: '上料线', location: '二号仓', required_quantity: '5.000', bom_remaining: '3.000', remaining: '9.000', suggested: '1.000', quantity: '0', selected: false, remark: '' }]
   const field = warehouseLines('issue', initial, { batch: true })
-  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: initial.map(row => ({ stock: row.stock, quantity: row.quantity, remark: '' })), context: { project: 1 } } })
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: initial.map(row => ({ stock: row.stock, selected: false, quantity: '0', remark: '' })), context: { project: 1 } } })
   await flushPromises()
   expect(read).not.toHaveBeenCalled()
   expect(wrapper.findAll('th').map(th => th.text())).toContain('BOM 未领')
   expect(wrapper.get('legend').text()).toContain('项目 A2608 · 上料线')
-  expect(wrapper.text()).toContain('5')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3 /')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 0/2 行，本次出库 0')
+  expect(wrapper.findAll('tbody tr.unpicked-line')).toHaveLength(2)
+  await wrapper.get('input[aria-label="全选本次领用明细"]').setValue(true)
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 2/2 行，本次出库 3')
   const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
-  await button('全部清零').trigger('click')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 0 /')
-  await button('恢复建议数量').trigger('click')
-  expect(wrapper.get('.warehouse-summary').text()).toContain('本次出库 3 /')
+  await button('取消全部勾选').trigger('click')
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 0/2 行，本次出库 0')
   expect(field.fields!.find(f => f.key === 'quantity')!.numeric!.min).toBe(0)
+  wrapper.unmount()
+})
+
+it('按 BOM 领料几百行：按非标件 / 标准件筛开，Shift 连选只勾当前筛选下的行，未勾的行不领', async () => {
+  const kinds = ['custom', 'standard', 'custom', '', 'custom', 'standard']
+  const initial = kinds.map((part_type, i) => ({
+    ...materialDetails({ item: i + 1, item_code: `M-${i + 1}`, item_name: `物料${i + 1}`, part_type, product_category: part_type ? '' : '22', unit: 'PCS' }),
+    stock: i + 1, project_code: 'A2608', location: '主仓', required_quantity: '2', bom_remaining: '2', remaining: '5', suggested: '2', quantity: '0', selected: false, remark: '',
+  }))
+  const field = warehouseLines('issue', initial, { batch: true })
+  const model = initial.map(row => ({ stock: row.stock, selected: false, quantity: '0', remark: '' }))
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: model, context: { project: 1 } } })
+  const filters = () => wrapper.findAll('.warehouse-filter button')
+  expect(filters().map(b => b.text())).toEqual(['全部 6', '非标件（机加、钣金） 3', '标准件 / 电气件 2', '未分类 1'])
+  await filters()[1]!.trigger('click')
+  expect(wrapper.findAll('tbody tr').map(tr => tr.text())).toEqual([expect.stringContaining('物料1'), expect.stringContaining('物料3'), expect.stringContaining('物料5')])
+  const boxes = () => wrapper.findAll<HTMLInputElement>('tbody input[type="checkbox"]')
+  // 点第 1 行，再按住 Shift 点第 3 行：三行非标件全部勾上，中间被筛掉的标准件不动。
+  await boxes()[0]!.trigger('click')
+  await boxes()[2]!.trigger('click', { shiftKey: true })
+  expect(model.map(row => row.selected)).toEqual([true, false, true, false, true, false])
+  expect(model.map(row => row.quantity)).toEqual(['2', '0', '2', '0', '2', '0'])
+  expect(wrapper.get('.warehouse-summary').text()).toContain('已勾选 3/6 行，本次出库 6')
+  // 全选只作用于当前筛选。
+  await filters()[2]!.trigger('click')
+  await wrapper.get('thead input[type="checkbox"]').setValue(true)
+  expect(model.map(row => row.selected)).toEqual([true, true, true, false, true, true])
+  // 取消勾选清零，本行不提交。
+  await boxes()[0]!.trigger('click')
+  expect(model[1]).toMatchObject({ selected: false, quantity: '0' })
+  // 出错的行在别的筛选里时，定位前先切回全部。
+  await wrapper.vm.focusPath('lines.3.quantity')
+  expect(filters().find(b => b.classes('active'))!.text()).toBe('全部 6')
   wrapper.unmount()
 })
 

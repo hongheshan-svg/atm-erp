@@ -36,6 +36,7 @@ DEMAND_COLUMNS = [
     ('可用库存', 'available'),
     ('缺料', 'shortage'),
     ('其他项目待领', 'other_demand'),
+    ('本项目最近入库', 'last_received_date'),
 ]
 LAYOUTS = ('standard', 'purchase', 'import')
 
@@ -98,7 +99,7 @@ def document(lines, file_format, layout='standard'):
     numeric = {12}
     if layout == 'purchase':
         headers[13:13] = [label for label, _ in DEMAND_COLUMNS]
-        numeric |= set(range(13, 13 + len(DEMAND_COLUMNS)))
+        numeric |= {13 + index for index, (_, key) in enumerate(DEMAND_COLUMNS) if key != 'last_received_date'}
     return tabular.document('bom', headers, rows, file_format, numeric=numeric)
 
 

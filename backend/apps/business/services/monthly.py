@@ -33,12 +33,17 @@ def entry_totals(entry, month, *, excluded_statement=None):
     for move in (move for line in entry.purchase.lines.all() for move in line.stockmove_set.all()):
         day = move.received_date or timezone.localdate(move.created_at)
         amount = (
-            move.value if move.kind == 'receipt' else -move.supplier_credit if move.kind == 'purchase_return' else ZERO
+            move.value
+            if move.kind == 'receipt'
+            else -move.supplier_credit
+            if move.kind in ('purchase_return', 'receipt_reversal')
+            else ZERO
         )
         if day < start:
             opening += amount
         elif day <= end:
-            if move.kind == 'receipt':
+            # 反审冲回是撤销原收货，按负数计入冲回当月的收货，不算退货。
+            if move.kind in ('receipt', 'receipt_reversal'):
                 received += amount
             else:
                 returned -= amount

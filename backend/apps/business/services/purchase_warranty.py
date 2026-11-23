@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from dateutil.relativedelta import relativedelta
 from django.db.models import Sum
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -10,7 +11,7 @@ from apps.core.models import AuditLog
 from apps.core.permissions import MONEY_READERS, PURCHASERS, WAREHOUSE, require_role
 
 from ..models import Entry, PurchaseWarranty, StockMove
-from .common import ZERO, audit, day, fields, lookup, number, save, text
+from .common import ZERO, audit, day, fields, identity, live_receipts, lookup, number, save, text
 from .supply import purchase_action
 
 
@@ -20,7 +21,8 @@ def warranty_end(receipt, months):
 
 
 def listing(purchase):
-    receipts = StockMove.objects.filter(purchase_line__purchase=purchase, kind='receipt').select_related('stock__item')
+    # 反审冲回的收货已不算到货，不再列为可报修批次。
+    receipts = live_receipts(StockMove.objects.filter(purchase_line__purchase=purchase)).select_related('stock__item')
     cases = list(
         PurchaseWarranty.objects.filter(receipt__purchase_line__purchase=purchase).select_related(
             'receipt__stock__item'
@@ -70,8 +72,9 @@ def record(actor, key, purchase_id, data):
     def execute(user, purchase):
         if 'case' not in data:
             fields(data, {'receipt', 'date', 'quantity', 'description'})
-            receipt = lookup(
-                StockMove, data.get('receipt'), 'receipt', purchase_line__purchase=purchase, kind='receipt'
+            receipt = get_object_or_404(
+                live_receipts(StockMove.objects.filter(purchase_line__purchase=purchase)),
+                pk=identity(data.get('receipt'), 'receipt'),
             )
             date = day(data, 'date')
             if not (receipt.received_date or timezone.localdate(receipt.created_at)) <= date <= timezone.localdate():
@@ -115,6 +118,8 @@ def record(actor, key, purchase_id, data):
                     stock__item=case.receipt.stock.item,
                     purchase_line__purchase__supplier=purchase.supplier,
                 )
+                if case.replacement.returns.filter(kind='receipt_reversal').exists():
+                    raise ValidationError({'replacement': '这次收货已在采购反审时冲回，不能作为补换货收货。'})
                 replacement_date = case.replacement.received_date or timezone.localdate(case.replacement.created_at)
                 allocated = (
                     PurchaseWarranty.objects.filter(replacement=case.replacement)

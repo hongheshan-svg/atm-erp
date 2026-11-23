@@ -23,7 +23,7 @@ async function load() {
 watch([category, pageSize, () => props.projectId], () => { page.value = 1; void load() }, { immediate: true })
 </script>
 <template>
-  <label>成本类别<select v-model="category"><option value="materials">材料领退料与旧版报废</option><option value="labor">任务人工</option><option value="expenses">费用</option><option value="purchase_return_variance">采购退货价差</option></select></label>
+  <label>成本类别<select v-model="category"><option value="materials">材料领退料与旧版报废</option><option value="labor">任务人工</option><option value="expenses">费用</option><option value="purchase_return_variance">采购退货与反审价差</option></select></label>
   <p class="muted">按成本贡献从高到低排列，负数为退回或冲销；复用原流水，不生成新台账。</p>
   <el-alert v-if="error" :title="error" type="error" />
   <BusinessTable label="成本来源" :row-offset="(page - 1) * pageSize" :data="data.results" max-height="420"><el-table-column prop="id" label="原记录" width="90" /><el-table-column prop="description" label="来源说明" min-width="230" /><el-table-column prop="amount" label="成本贡献（元）" align="right" width="150" /><el-table-column prop="date" label="登记时间" min-width="180" /></BusinessTable>
