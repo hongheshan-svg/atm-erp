@@ -12,6 +12,7 @@ const props = defineProps<{ title: string; projectFilter?: boolean; requireProje
 const descriptions: Record<string, string> = {
   销售: '从需求确认到签约交接。', 项目: '围绕交期推进设计、装配、调试与交付。',
   BOM: '按项目维护物料需求，跟进缺料与采购。',
+  物料跟踪: '跨项目查看每种物料的需求、采购、到货与领料。',
   采购: '按项目缺料下单用「从 BOM 多选下单」，无 BOM 的零星采购用「新建采购」；随后跟进合同、收货与结算。',
   库存: '共享库存统一维护，出入库有据可查。', 收付款: '核清业务款项，跟进收付与银行到账。',
   基础资料: '统一物料与往来单位，减少重复维护。',

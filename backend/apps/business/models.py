@@ -494,13 +494,15 @@ class TaskNotice(BaseModel):
 class IssueSlip(ImmutableLedger):
     """领料单：每次领料提交（单行领料、库存勾选批量领料、按 BOM 领料）生成一张，明细即挂在它下面的领料流水。
 
-    单头只记项目、任务和领料说明；经办人与时间取 created_by/created_at，数量、库位和成本仍以流水为准。
+    单头记项目、任务、领料人和领料说明；经办仓管与时间取 created_by/created_at，数量、库位和成本仍以流水为准。
     """
 
     code = models.CharField(max_length=30, unique=True)
     project = models.ForeignKey(Project, models.PROTECT, related_name='issue_slips')
     task = models.ForeignKey(Task, models.PROTECT, null=True, blank=True, related_name='issue_slips')
     reason = models.CharField(max_length=500)
+    # 实际来仓库领料的人（班组、装配人员等，不一定是系统用户）；经办仓管另记在 created_by。历史领料单为空。
+    recipient = models.CharField(max_length=80, blank=True, default='')
 
     class Meta(ImmutableLedger.Meta):
         db_table = 'lean_issue_slip'

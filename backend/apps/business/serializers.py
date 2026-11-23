@@ -578,6 +578,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
     purchase = serializers.IntegerField(source='purchase_line.purchase_id', read_only=True, default=None)
     purchase_code = serializers.CharField(source='purchase_line.purchase.code', read_only=True, default='')
     slip_code = serializers.CharField(source='slip.code', read_only=True, default='')
+    recipient = serializers.CharField(source='slip.recipient', read_only=True, default='')
     created_by_name = PersonNameField(source='created_by')
     # 采购收货已在反审时冲回（列表查询带注解；其他读取默认未冲回）。
     reversed = serializers.BooleanField(read_only=True, default=False)
@@ -601,6 +602,7 @@ class MoveSerializer(MoneyFilter, serializers.ModelSerializer):
             'purchase_line',
             'slip',
             'slip_code',
+            'recipient',
             'source',
             'kind',
             'quantity',
@@ -644,6 +646,7 @@ class IssueSlipSerializer(serializers.ModelSerializer):
             'task',
             'task_title',
             'reason',
+            'recipient',
             'line_count',
             'items_summary',
             'created_at',

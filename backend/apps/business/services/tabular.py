@@ -115,6 +115,7 @@ LABELS = {
     'task_title': '任务',
     'slip': '领料单ID',
     'slip_code': '领料单号',
+    'recipient': '领料人',
     'line_count': '明细行数',
     'items_summary': '物料',
     'discipline': '负责专业代码',

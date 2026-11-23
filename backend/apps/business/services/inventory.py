@@ -208,9 +208,22 @@ def issue_task(project, data):
     return task
 
 
-def open_slip(user, project, task, reason):
+def open_slip(user, project, task, reason, recipient=''):
     """开一张领料单（项目→单据→物料的加锁顺序：在锁物料、扣库存之前取号）；事务回滚时单据和号码一起撤销。"""
-    return save(IssueSlip(code=CodeRule.generate_code('issue_slip'), project=project, task=task, reason=reason), user)
+    return save(
+        IssueSlip(
+            code=CodeRule.generate_code('issue_slip'), project=project, task=task, reason=reason, recipient=recipient
+        ),
+        user,
+    )
+
+
+def recipient_of(data):
+    """领料人：实际来领料的人，选填，最多 80 字。"""
+    value = text(data, 'recipient', default='')
+    if len(value) > 80:
+        raise ValidationError({'recipient': '领料人最多80字。'})
+    return value
 
 
 def take_issue(user, project, source, qty, *, slip, remark, confirm_shared, batch=None):
@@ -254,7 +267,7 @@ def take_issue(user, project, source, qty, *, slip, remark, confirm_shared, batc
         ),
         user,
     )
-    audit(user, 'stock.issue', move, shared_from=shared, slip=slip.code)
+    audit(user, 'stock.issue', move, shared_from=shared, slip=slip.code, recipient=slip.recipient)
     if batch is not None:
         batch.took(source.item_id, qty, service)
     return move
@@ -273,7 +286,7 @@ def confirmation(data):
 
 def issue(actor, key, data):
     def execute(user, project):
-        fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared', 'remark'})
+        fields(data, {'project', 'stock', 'task', 'quantity', 'reason', 'confirm_shared', 'remark', 'recipient'})
         confirm_shared = confirmation(data)
         state(project, {'active', 'delivering', 'warranty'})
         source = lookup(Stock, data.get('stock'), 'stock')
@@ -282,8 +295,9 @@ def issue(actor, key, data):
         # 正常领料的说明选填，缺省记为动作名；退料、采购退货等纠错动作仍须写明原因。
         reason = text(data, 'reason', default='') or ('售后领料' if task and task.kind == 'service' else '项目领料')
         remark = text(data, 'remark', default='')
+        recipient = recipient_of(data)
         # 单行领料也开一张单行领料单，领料记录不再零散。
-        slip = open_slip(user, project, task, reason)
+        slip = open_slip(user, project, task, reason, recipient)
         move = take_issue(user, project, source, qty, slip=slip, remark=remark, confirm_shared=confirm_shared)
         return {'id': move.pk, **slip_result(slip, [move])}
 
@@ -360,7 +374,7 @@ def issue_batch(actor, key, data):
     售后领料不占 BOM 剩余。"""
 
     def execute(user, project):
-        fields(data, {'project', 'lines', 'task', 'reason', 'confirm_shared'})
+        fields(data, {'project', 'lines', 'task', 'reason', 'confirm_shared', 'recipient'})
         confirm_shared = confirmation(data)
         if data.get('task') is None and project.status == 'warranty':
             # 按 BOM 领料没有任务栏，保持原来的 409；提示改用库存页勾选领料并选售后任务。
@@ -370,6 +384,7 @@ def issue_batch(actor, key, data):
         state(project, {'active', 'delivering', 'warranty'})
         task = issue_task(project, data)
         reason = text(data, 'reason', default='') or ('售后领料' if task and task.kind == 'service' else '项目领料')
+        recipient = recipient_of(data)
         prepared, seen = [], set()
         # 所选库存行连同物料一次读出；不存在的行仍在原来的位置按单条查询返回 404。
         candidates = set()
@@ -392,7 +407,7 @@ def issue_batch(actor, key, data):
             seen.add(stock_id)
             prepared.append((sources.get(stock_id) or lookup(Stock, stock_id, 'stock'), qty, remark))
         # 项目→单据→物料：先取领料单号，再按物料顺序统一加锁、逐库位扣减，与单行领料、收货的加锁顺序一致。
-        slip = open_slip(user, project, task, reason)
+        slip = open_slip(user, project, task, reason, recipient)
         lock_items({source.item_id for source, _, _ in prepared})
         ordered = sorted(prepared, key=lambda row: (row[0].item_id, row[0].location, row[0].pk))
         # 领料单号的全局锁要持有到事务结束：锁内的读取按物料一次完成，不再逐行查库。

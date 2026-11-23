@@ -11,13 +11,14 @@ import {
   Collection,
   Setting,
   ChatDotRound,
+  Tickets,
 } from '@element-plus/icons-vue'
 export function navigation() {
   return [
     { key: 'workbench', label: '工作台', icon: House },
     ...(reports() ? [{ key: 'reports', label: '经营报表', icon: DataAnalysis }] : []),
     ...(can(['admin', 'manager', 'finance', 'sales_manager']) ? [{ key: 'sales', label: '销售', icon: Promotion }] : []),
-    ...(operations() ? [{ key: 'projects', label: '项目', icon: Folder }, { key: 'bom', label: 'BOM', icon: List }] : []),
+    ...(operations() ? [{ key: 'projects', label: '项目', icon: Folder }, { key: 'bom', label: 'BOM', icon: List }, { key: 'tracking', label: '物料跟踪', icon: Tickets }] : []),
     ...(purchaseReader()
       ? [
           { key: 'purchases', label: '采购', icon: ShoppingCart },
