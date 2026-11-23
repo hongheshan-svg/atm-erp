@@ -637,7 +637,11 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual(bank.source['counterparty'], '')
 
     def test_locked_legacy_record_is_kept_unchanged_while_new_rows_import(self):
-        preview = self.preview()
+        # 旧格式流水号含整份文件的哈希；openpyxl 保存时写入当前时间（精确到秒），重新生成的文件
+        # 跨秒就不再相同。「副本」必须逐字节复制原文件，否则在较慢的 CI 上会偶发匹配不到。
+        original = file()
+        content = original.file.getvalue()
+        preview = self.preview(original)
         last = preview['rows'][1]
         bank = self.post(
             'finance', 'bank-records/', {**last['data'], 'reference': last['legacy_reference']}, status=201
@@ -652,7 +656,7 @@ class BankImportTests(BusinessFixtures, TestCase):
         self.assertEqual((kept.source, kept.updated_at), ({}, original.updated_at))
         self.assertTrue(BankRecord.objects.exclude(pk=bank).get().import_fingerprint)
         self.assertFalse(AuditLog.objects.filter(operation='bank.import-evidence', resource=f'bankrecord:{bank}'))
-        repeated = self.preview(file(name='历史流水副本.xlsx'))
+        repeated = self.preview(SimpleUploadedFile('历史流水副本.xlsx', content))
         self.assertTrue(repeated['can_import'], repeated['errors'])
         self.assertEqual([row['status'] for row in repeated['rows']], ['已导入（跳过）', LOCKED_SKIP])
         self.assertEqual(self.confirm(repeated['token']), {'count': 0, 'skipped': 2})
