@@ -46,6 +46,7 @@ watch(() => slip.value && printFileName('领料单', slip.value.code, slip.value
         <div><dt>领料时间</dt><dd>{{ dateTimeText(slip.created_at) }}</dd></div>
         <div class="slip-wide"><dt>项目</dt><dd>{{ project || '—' }}</dd></div>
         <div v-if="slip.task_title" class="slip-wide"><dt>售后任务</dt><dd>{{ slip.task_title }}</dd></div>
+        <div><dt>领料人</dt><dd>{{ slip.recipient || '—' }}</dd></div>
         <div class="slip-wide"><dt>领料说明</dt><dd>{{ slip.reason || '—' }}</dd></div>
         <div><dt>经办仓管</dt><dd>{{ slip.created_by_name || '—' }}</dd></div>
         <div><dt>明细行数</dt><dd>{{ lines.length }} 行</dd></div>

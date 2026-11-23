@@ -26,6 +26,8 @@ const positiveQuantity: Field = { ...qty, numeric: { scale: 3, min: 0.001 } }
 export const receivedDate = (row: Row) => (row.kind === 'receipt' ? row.received_date || String(row.created_at || '').slice(0, 10) || '—' : '—')
 // 领料单打印页；领料成功提示、领料单列表和库存流水都链到这里。
 export const slipRoute = (id: number | string) => ({ path: `/inventory/issue-slips/${id}` })
+// 领料人：实际来仓库领料的人（班组、装配人员，不一定有系统账号），记在领料单上；经办仓管另由系统记录。
+export const recipientField: Field = { key: 'recipient', label: '领料人', optional: true, type: 'text', wide: false, placeholder: '选填，实际来领料的人，如装配班 张师傅' }
 export const columns: Record<string, Column[]> = {
   stocks: [
     C('item_code', '物料编码'),
@@ -57,8 +59,9 @@ export const columns: Record<string, Column[]> = {
     { key: 'project_name', label: '项目', format: row => [row.project_code, row.project_name].filter(Boolean).join(' · ') || '—', link: projectLink },
     { key: 'items_summary', label: '物料', format: row => row.items_summary ? `${row.items_summary}（${row.line_count} 行）` : '—' },
     { key: 'task_title', label: '售后/任务', format: row => row.task_title || '—' },
+    { key: 'recipient', label: '领料人', format: row => row.recipient || '—' },
     C('reason', '领料说明'),
-    C('created_by_name', '经办人'),
+    C('created_by_name', '经办仓管'),
     { key: 'created_at', label: '领料时间', format: row => dateTimeText(row.created_at) },
   ],
 }
@@ -125,6 +128,7 @@ export async function stockIssueCommand(selected: Row[]): Promise<Command> {
       project(),
       serviceTask(tasks),
       warehouseLines('issue', lines, { location: true }),
+      recipientField,
       optionalReason('领料说明', '选填，如使用工位；不填按「项目领料」记录，选售后任务按「售后领料」'),
       { ...sharedArrival, hint: sharedHint },
     ],
@@ -163,6 +167,7 @@ export async function bomIssueCommand(projectId?: number): Promise<Command> {
     fields: [
       { key: 'project', label: '项目', hidden: true },
       warehouseLines('issue', lines, { batch: true }),
+      recipientField,
       optionalReason(undefined, '选填；不填按「项目领料」记录'),
       { ...sharedArrival, hint: sharedHint },
     ],
@@ -216,6 +221,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       project(),
       serviceTask(tasks),
       warehouseLines('issue', lines),
+      recipientField,
       optionalReason(undefined, '选填，如使用工位；不填按「项目领料」记录'),
       { ...sharedArrival, hint: sharedHint },
     ]

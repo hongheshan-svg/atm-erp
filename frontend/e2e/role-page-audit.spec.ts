@@ -4,18 +4,18 @@ import { test, expect, login, accountTokens, type Page } from './fixtures'
 // Fixtures use the public API; successful business mutations are covered by full-chain.spec.ts.
 // Expected navigation is deliberately independent of the production navigation helper.
 const identities = [
-  { key: 'admin', roles: ['admin'], pages: ['workbench', 'reports', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
-  { key: 'general_manager', roles: ['manager'], pages: ['workbench', 'reports', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
-  { key: 'manager', roles: ['manager'], pages: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
+  { key: 'admin', roles: ['admin'], pages: ['workbench', 'reports', 'sales', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
+  { key: 'general_manager', roles: ['manager'], pages: ['workbench', 'reports', 'sales', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
+  { key: 'manager', roles: ['manager'], pages: ['workbench', 'sales', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
   { key: 'sales_manager', roles: ['sales_manager'], pages: ['workbench', 'sales', 'masterdata', 'feedback', 'settings'] },
-  { key: 'purchaser', roles: ['purchaser'], pages: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'] },
-  { key: 'warehouse', roles: ['warehouse'], pages: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'] },
-  { key: 'finance', roles: ['finance'], pages: ['workbench', 'sales', 'projects', 'bom', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
-  { key: 'member', roles: ['member'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'feedback', 'settings'] },
-  { key: 'purchase_manager', roles: ['purchase_manager'], pages: ['workbench', 'projects', 'bom', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'] },
-  { key: 'mechanical_engineer', roles: ['mechanical_engineer'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'feedback', 'settings'] },
-  { key: 'electrical_engineer', roles: ['electrical_engineer'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'feedback', 'settings'] },
-  { key: 'production_manager', roles: ['production_manager'], pages: ['workbench', 'projects', 'bom', 'masterdata', 'feedback', 'settings'] },
+  { key: 'purchaser', roles: ['purchaser'], pages: ['workbench', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'] },
+  { key: 'warehouse', roles: ['warehouse'], pages: ['workbench', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'] },
+  { key: 'finance', roles: ['finance'], pages: ['workbench', 'sales', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'finance', 'masterdata', 'feedback', 'settings'] },
+  { key: 'member', roles: ['member'], pages: ['workbench', 'projects', 'bom', 'tracking', 'masterdata', 'feedback', 'settings'] },
+  { key: 'purchase_manager', roles: ['purchase_manager'], pages: ['workbench', 'projects', 'bom', 'tracking', 'purchases', 'inventory', 'masterdata', 'feedback', 'settings'] },
+  { key: 'mechanical_engineer', roles: ['mechanical_engineer'], pages: ['workbench', 'projects', 'bom', 'tracking', 'masterdata', 'feedback', 'settings'] },
+  { key: 'electrical_engineer', roles: ['electrical_engineer'], pages: ['workbench', 'projects', 'bom', 'tracking', 'masterdata', 'feedback', 'settings'] },
+  { key: 'production_manager', roles: ['production_manager'], pages: ['workbench', 'projects', 'bom', 'tracking', 'masterdata', 'feedback', 'settings'] },
 ]
 const accounts: Record<string, { id: number; username: string }> = {}
 const everyone = (...except: string[]) => identities.map(identity => identity.key).filter(key => !except.includes(key))

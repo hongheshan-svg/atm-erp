@@ -43,6 +43,10 @@ MODULE_FILES = {
         'revisions',
         'revision_chain',
         'BOMRevisionPanel',
+        'material_tracking',
+        'material-tracking',
+        'MaterialTrackingPage',
+        'MaterialTrackingTable',
     ),
     'purchases': (
         'progress',
@@ -119,6 +123,7 @@ BROWSERS = {
         'import-surface-audit',
     ),
     'bom': (
+        'material-tracking',
         'bom-export',
         'admin-deletion',
         'bom-selection',
@@ -142,7 +147,13 @@ BROWSERS = {
         'specialist-roles',
         'import-surface-audit',
     ),
-    'inventory': ('cancel-actions-audit', 'import-surface-audit', 'warehouse-lines', 'bom-revision'),
+    'inventory': (
+        'cancel-actions-audit',
+        'import-surface-audit',
+        'warehouse-lines',
+        'bom-revision',
+        'material-tracking',
+    ),
     'finance': (
         'document-preview',
         'process-progress',

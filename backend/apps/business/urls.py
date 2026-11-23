@@ -8,6 +8,7 @@ from .api.execution import DeliveryView, TaskView, TimeView
 from .api.finance import EntryView, PaymentView
 from .api.inventory import IssueSlipView, MoveView, StockView
 from .api.masterdata import ItemView, PartnerView
+from .api.material_tracking import MaterialTrackingExportView, MaterialTrackingView
 from .api.projects import ProjectView
 from .api.purchases import PurchaseView
 from .api.reconciliation import BankMatchView, BankView, ReconciliationView
@@ -43,5 +44,7 @@ urlpatterns = [
     path('workbench/', WorkbenchView.as_view()),
     path('reports/', ReportsView.as_view()),
     path('data-checks/', DataCheckView.as_view()),
+    path('material-tracking/', MaterialTrackingView.as_view()),
+    path('material-tracking/export/', MaterialTrackingExportView.as_view()),
     *router.urls,
 ]

@@ -121,7 +121,14 @@ class IssueSlipView(ReadView):
     )
     serializer_class = IssueSlipSerializer
     filterset_class = IssueSlipFilter
-    search_fields = ['code', 'project__code', 'project__name', 'moves__stock__item__code', 'moves__stock__item__name']
+    search_fields = [
+        'code',
+        'recipient',
+        'project__code',
+        'project__name',
+        'moves__stock__item__code',
+        'moves__stock__item__name',
+    ]
 
     def get_serializer_class(self):
         return IssueSlipDetailSerializer if self.action == 'retrieve' else IssueSlipSerializer

@@ -93,7 +93,7 @@ describe('库存勾选批量领料', () => {
     expect(command.submitLabel).toBe('确认领料出库（2 行）')
     expect(command.notice).toMatchObject({ type: 'warning' })
     expect(command.notice?.text).toContain('另有 1 行已无可用库存')
-    expect(command.fields.map(field => field.key)).toEqual(['project', 'task', 'lines', 'reason', 'confirm_shared'])
+    expect(command.fields.map(field => field.key)).toEqual(['project', 'task', 'lines', 'recipient', 'reason', 'confirm_shared'])
     const lines = command.fields.find(field => field.key === 'lines')!
     expect(lines.fields!.find(field => field.key === 'location')?.label).toBe('库位')
     expect(lines.fields!.find(field => field.key === 'remaining')?.label).toBe('本库位可用')
@@ -114,13 +114,13 @@ describe('库存勾选批量领料', () => {
     expect(task.optional).toBe(true)
     expect(task.optionsFor!({ project: 7 })).toEqual([{ value: 41, label: '现场换件' }])
     const data = defaults(command.fields, command.initial)
-    Object.assign(data, { project: 7, task: 41, reason: '售后换件', confirm_shared: true })
+    Object.assign(data, { project: 7, task: 41, recipient: '装配班 张师傅', reason: '售后换件', confirm_shared: true })
     data.lines[0].quantity = '2'
     data.lines[1].quantity = '4'
     data.lines[1].remark = '夹爪'
     expect(fieldIssues(command.fields, data)).toEqual([])
     expect(command.prepare!(payload(command.fields, data))).toEqual({
-      project: 7, task: 41, reason: '售后换件', confirm_shared: true,
+      project: 7, task: 41, recipient: '装配班 张师傅', reason: '售后换件', confirm_shared: true,
       lines: [{ stock: 1, quantity: '2' }, { stock: 2, quantity: '4', remark: '夹爪' }],
     })
     data.task = ''

@@ -14,6 +14,7 @@ export const router = createRouter({
     { path: '/sales', component: () => import('./views/SalesPage.vue') },
     { path: '/projects', component: () => import('./views/ProjectsPage.vue') },
     { path: '/bom', component: () => import('./views/BOMPage.vue') },
+    { path: '/tracking', component: () => import('./views/MaterialTrackingPage.vue') },
     { path: '/purchases', component: () => import('./views/PurchasesPage.vue') },
     // 能看采购单不等于能预览合同（仓管）：路由与「预览采购合同」入口用同一判定，不让人进页面再被服务端拒绝。
     { path: '/purchases/:id/contract', component: () => import('./views/PurchaseContractPage.vue'), meta: { allowed: contractReader } },
@@ -43,7 +44,7 @@ router.beforeEach(async (to) => {
 })
 // 每页一个标签页标题（「库存 · 项目 ERP」），同时开多个页面时能分清；项目详情加载后由项目页换成项目名称。
 const pageTitles: Record<string, string> = {
-  login: '登录', setup: '初次安装', workbench: '工作台', reports: '经营报表', sales: '销售', projects: '项目', bom: 'BOM',
+  login: '登录', setup: '初次安装', workbench: '工作台', reports: '经营报表', sales: '销售', projects: '项目', bom: 'BOM', tracking: '物料跟踪',
   purchases: '采购', inventory: '库存', finance: '收付款', masterdata: '基础资料', settings: '设置', feedback: '问题反馈',
 }
 export function pageTitle(path: string) {
