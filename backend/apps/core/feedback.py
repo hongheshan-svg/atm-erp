@@ -15,6 +15,8 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from cryptography.fernet import Fernet, InvalidToken
+from django.conf import settings
 from django.core.cache import cache
 from django.utils.crypto import salted_hmac
 from rest_framework.exceptions import APIException, ValidationError
@@ -51,7 +53,8 @@ FIELDS = {
     'request_id',
     'client',
 }
-TOKEN = re.compile(r'(github_pat_|ghp_)[A-Za-z0-9_]{20,250}')
+TOKEN = re.compile(r'(github_pat_|ghp_)[A-Za-z0-9_]{20,115}')
+ENC_PREFIX = 'enc:v1:'
 REQUEST_ID = re.compile(r'[A-Za-z0-9._-]{1,64}')
 PATH = re.compile(r'/[A-Za-z0-9/_-]{0,100}')
 QUERY_KEYS = ('resource', 'section')
@@ -92,8 +95,33 @@ class FeedbackThrottle(UserRateThrottle):
     scope = 'feedback'
 
 
+def _fernet():
+    key = base64.urlsafe_b64encode(hashlib.sha256(f'{settings.SECRET_KEY}:feedback-token-v1'.encode()).digest())
+    return Fernet(key)
+
+
+def encrypt_token(secret):
+    if not secret:
+        return ''
+    return ENC_PREFIX + _fernet().encrypt(secret.encode()).decode('ascii')
+
+
+def decrypt_token(stored):
+    if not stored:
+        return ''
+    if not stored.startswith(ENC_PREFIX):
+        # 兼容升级前明文保存的旧记录；管理员重新保存后会自动加密落库。
+        return stored
+    try:
+        return _fernet().decrypt(stored[len(ENC_PREFIX) :].encode('ascii')).decode()
+    except InvalidToken:
+        logger.warning('问题反馈令牌无法用当前 SECRET_KEY 解密，请管理员重新配置。')
+        return ''
+
+
 def token():
-    return Company.objects.filter(pk=1).values_list('feedback_token', flat=True).first() or ''
+    stored = Company.objects.filter(pk=1).values_list('feedback_token', flat=True).first() or ''
+    return decrypt_token(stored)
 
 
 def github(method, path, secret, data=None, *, allow=(), timeout=20, retries=0):
@@ -142,9 +170,10 @@ def github(method, path, secret, data=None, *, allow=(), timeout=20, retries=0):
     except OSError as exc:
         logger.warning('问题反馈无法连接 GitHub：%s %s：%r', method, url, exc)
         if isinstance(exc, TimeoutError) or isinstance(getattr(exc, 'reason', None), TimeoutError):
-            # 超时可能发生在 GitHub 已收到请求之后，不能断言没有提交。
+            # 超时可能发生在 GitHub 已收到请求之后，本地未落库，刷新列表看不到已建单。
             raise Unavailable(
-                '连接 GitHub 超时，请稍后刷新列表确认后再重试；多次超时请管理员检查服务器到 api.github.com 的网络。'
+                '连接 GitHub 超时，内容可能已送达但本地尚未记录；请先由管理员在反馈仓库确认是否已建单，避免重复提交。'
+                '多次超时请管理员检查服务器到 api.github.com 的网络。'
             ) from exc
         raise Unavailable() from exc
     try:
@@ -468,7 +497,7 @@ class FeedbackSettingsView(PermissionMixin, APIView):
             company = Company.objects.select_for_update().filter(pk=1).first()
             if not company:
                 raise ValidationError('公司资料尚未初始化，请先完成启用指南。')
-            company.feedback_token = secret
+            company.feedback_token = encrypt_token(secret)
             company.save(update_fields=['feedback_token'])
             AuditLog.objects.create(
                 actor=actor, operation='feedback.configure', resource='company:1', detail={'configured': bool(secret)}

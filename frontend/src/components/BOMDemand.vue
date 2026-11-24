@@ -42,6 +42,14 @@ const mismatch = ref<ReturnType<typeof templateMismatch>>(null)
 const destination = computed(() => mismatch.value ? importDestination(mismatch.value.resource, props.projectId) : null)
 // 工作台「缺料待采购」带 view=purchase 进来时直接落在采购缺料视图，兼任工程师的采购也不必再切换。
 const view = ref<'prepare' | 'purchase'>(props.initialView || (bomEditor({ can_edit_bom: props.canEditBom }) || engineer() ? 'prepare' : 'purchase'))
+let viewTouched = false as boolean
+watch(() => props.projectId, () => { viewTouched = false })
+// 项目详情异步返回 canEditBom 后同步默认视图；若用户已手动切换或路由指定了 initialView 则保持现状。
+watch(() => props.canEditBom, (value, previous) => {
+  if (props.initialView || viewTouched || previous !== undefined || value === undefined) return
+  view.value = bomEditor({ can_edit_bom: value }) || engineer() ? 'prepare' : 'purchase'
+})
+function markViewTouched() { viewTouched = true }
 const fullColumns = ref(false)
 // 手机宽度（≤600px）走窄屏模式：明细只留勾选、物料（名称、编码与摘要）和操作，不再左右翻；筛选和说明默认收起。
 const mobile = useNarrow()
@@ -436,8 +444,8 @@ function saved() {
     <header class="panel-heading bom-panel-heading">
       <h2 class="bom-panel-title">BOM 与缺料</h2>
       <div class="bom-view-switch" role="group" aria-label="BOM 工作视图">
-        <label><input v-model="view" type="radio" value="prepare" />维护用料</label>
-        <label><input v-model="view" type="radio" value="purchase" />缺料下单</label>
+        <label><input v-model="view" type="radio" value="prepare" @change="markViewTouched" />维护用料</label>
+        <label><input v-model="view" type="radio" value="purchase" @change="markViewTouched" />缺料下单</label>
         <button v-if="mobile" type="button" class="bom-help-toggle" :aria-expanded="helpOpen" @click="helpOpen = !helpOpen">说明 {{ helpOpen ? '▴' : '▾' }}</button>
         <el-tooltip v-else :content="viewHelp" placement="bottom-start" popper-class="bom-help-popper"><button type="button" class="bom-help-icon" :aria-label="`视图说明：${viewHelp}`">?</button></el-tooltip>
         <small v-if="mobile && helpOpen" class="muted">{{ viewHelp }}</small>

@@ -317,7 +317,8 @@ def summary(request):
             from .purchase_contract import stale_contracts
 
             scoped = purchases.filter(
-                project__in=projects_for(user, Project.objects.all(), PURCHASERS), status__in=['approved', 'partial']
+                project__in=projects_for(user, Project.objects.all(), PURCHASERS),
+                status__in=['approved', 'partial', 'received'],
             )
             stale = stale_contracts(user, scoped)
             if stale:

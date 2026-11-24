@@ -116,7 +116,7 @@ request.interceptors.response.use(
       if (config.epoch !== epoch) throw error
       return request(config)
     }
-    if (!config || error.response?.status !== 401 || config.retried || config.url?.startsWith('/auth/login')) throw error
+    if (!config || error.response?.status !== 401 || config.retried || config.url?.startsWith('/auth/login') || config.url?.startsWith('/auth/logout')) throw error
     // 续期前与共享存储对齐：其他标签页已退出或换了账号时，不能拿别人的刷新令牌续期，也不能清掉别人的登录。
     syncSession()
     // 登录已变化后不重试：重试会带上新登录的令牌，把原账号的操作记到另一账号名下。

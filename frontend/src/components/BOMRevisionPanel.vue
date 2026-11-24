@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 换版后的「旧版待处理」：旧版已领用、已到货中超出现 BOM 需求的数量，由仓管报废或留作备件、
 // 工程师登记已装机报废、采购开返修单改制成新版；另列本项目的换版记录。
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { read } from '../api'
 import { bomEditor, purchasing, can } from '../session'
 import type { Command, Field, Row } from '../types'
@@ -23,18 +23,27 @@ const readable = computed(() => warehouseRole() || purchasing() || editor.value)
 const open = computed(() => parts.value.filter(row => row.open))
 const writable = computed(() => ['draft', 'quoted', 'active', 'delivering', 'warranty'].includes(props.status || ''))
 
+let generation = 0
+onBeforeUnmount(() => { generation++ })
 async function load() {
-  if (!readable.value) return
+  const current = ++generation
+  if (!readable.value) {
+    parts.value = []
+    changes.value = []
+    error.value = ''
+    return
+  }
   error.value = ''
   try {
     const result = await read(`/business/projects/${props.projectId}/obsolete-parts/`)
+    if (current !== generation) return
     parts.value = result?.parts || []
     changes.value = result?.changes || []
   } catch (e) {
-    error.value = message(e)
+    if (current === generation) error.value = message(e)
   }
 }
-watch(() => [props.projectId, props.refresh], () => { void load() }, { immediate: true })
+watch(() => [props.projectId, props.refresh, readable.value], () => { void load() }, { immediate: true })
 
 const label = (row: Row, side: 'old' | 'new') => {
   const code = row[`${side}_item_code`]

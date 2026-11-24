@@ -703,3 +703,22 @@ it('展开完整列显示本项目最近入库日期，没有到货写「—」'
   expect(rows.find(text => text.includes('气缸'))).toContain('—')
   wrapper.unmount()
 })
+
+it('canEditBom 异步到达后同步默认工作视图；用户手动切换后不再被覆盖', async () => {
+  user.value = { roles: ['manager'] }
+  const wrapper = mountFull(shortLines(2), { canEditBom: undefined })
+  await flushPromises()
+  expect((wrapper.get('input[type="radio"][value="prepare"]').element as HTMLInputElement).checked).toBe(true)
+  await wrapper.setProps({ canEditBom: false })
+  await flushPromises()
+  expect((wrapper.get('input[type="radio"][value="purchase"]').element as HTMLInputElement).checked).toBe(true)
+  wrapper.unmount()
+
+  const manual = mountFull(shortLines(2), { canEditBom: undefined })
+  await flushPromises()
+  await manual.get('input[type="radio"][value="purchase"]').setValue(true)
+  await manual.setProps({ canEditBom: true })
+  await flushPromises()
+  expect((manual.get('input[type="radio"][value="purchase"]').element as HTMLInputElement).checked).toBe(true)
+  manual.unmount()
+})

@@ -73,3 +73,24 @@ it('按岗位给处理入口：仓管报废或留用在库、登记已装机报�
   expect(read).not.toHaveBeenCalled()
   expect(wrapper.find('.bom-revision-panel').exists()).toBe(false)
 })
+
+it('工程师在 canEditBom 异步返回后自动拉取旧版待处理，并忽略切换项目后的迟到响应', async () => {
+  user.value = { roles: ['mechanical_engineer'] }
+  let resolveFirst!: (value: unknown) => void
+  vi.mocked(read)
+    .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    .mockResolvedValueOnce({ parts: [{ ...part, old_item_name: '项目82旧件' }], changes: [] })
+  const wrapper = mount(BOMRevisionPanel, { props: { projectId: 81, status: 'active' }, global: { plugins: [ElementPlus] } })
+  await flushPromises()
+  expect(read).not.toHaveBeenCalled()
+  await wrapper.setProps({ canEditBom: true })
+  expect(read).toHaveBeenCalledWith('/business/projects/81/obsolete-parts/')
+  await wrapper.setProps({ projectId: 82 })
+  await flushPromises()
+  expect(wrapper.text()).toContain('项目82旧件')
+  resolveFirst({ parts: [{ ...part, old_item_name: '项目81迟到旧件' }], changes: [] })
+  await flushPromises()
+  expect(wrapper.text()).toContain('项目82旧件')
+  expect(wrapper.text()).not.toContain('项目81迟到旧件')
+  wrapper.unmount()
+})

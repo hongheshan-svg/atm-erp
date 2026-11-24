@@ -79,7 +79,7 @@ class ReconciliationView(ImportableMixin, ReadView):
     search_fields = ['code', 'entry__title', 'entry__project__name']
 
     def get_serializer_class(self):
-        return ReconciliationListSerializer if self.action == 'list' else ReconciliationSerializer
+        return ReconciliationListSerializer if self.action in {'list', 'export'} else ReconciliationSerializer
 
     @action(detail=False, methods=['get', 'post'], url_path='supplier-monthly')
     def supplier_monthly(self, request):

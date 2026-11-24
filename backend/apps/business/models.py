@@ -252,7 +252,7 @@ class ContractAmendment(ImmutableLedger):
     after = models.JSONField()
     date = models.DateField()
 
-    class Meta(LedgerModel.Meta):
+    class Meta(ImmutableLedger.Meta):
         db_table = 'lean_contract_amendment'
 
 
@@ -536,7 +536,7 @@ class StockMove(ImmutableLedger):
     reason = models.CharField(max_length=500)
     remark = models.CharField(max_length=500, blank=True, default='')
 
-    class Meta(LedgerModel.Meta):
+    class Meta(ImmutableLedger.Meta):
         db_table = 'lean_stock_move'
         indexes = [
             # 项目成本、已领量和缺料计算都按项目或库存加流水类型过滤。
@@ -618,7 +618,7 @@ class Payment(ImmutableLedger):
     document = models.ForeignKey('Document', models.PROTECT, null=True, blank=True, related_name='payments')
     reversal_of = models.OneToOneField('self', models.PROTECT, null=True, blank=True, related_name='reversal')
 
-    class Meta(LedgerModel.Meta):
+    class Meta(ImmutableLedger.Meta):
         db_table = 'lean_payment'
         constraints = [models.CheckConstraint(condition=~Q(amount=0), name='lean_payment_nonzero')]
 
@@ -726,7 +726,7 @@ class TimeEntry(ImmutableLedger):
     reversal_of = models.OneToOneField('self', models.PROTECT, null=True, blank=True, related_name='reversal')
     correction_of = models.OneToOneField('self', models.PROTECT, null=True, blank=True, related_name='correction')
 
-    class Meta(LedgerModel.Meta):
+    class Meta(ImmutableLedger.Meta):
         db_table = 'lean_time_entry'
         # 每次登记或更正工时都要汇总此人当天的净工时。
         indexes = [models.Index(fields=['user', 'date'], condition=Q(is_deleted=False), name='lean_time_user_date')]

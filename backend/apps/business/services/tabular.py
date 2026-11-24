@@ -210,6 +210,22 @@ LABELS = {
     'confirmed_at': '确认时间',
     'size': '文件大小（字节）',
     'supplier_credit': '退货冲减货款',
+    'revision_role': '换版来源',
+    'revision_pending': '换版待确认',
+    'revision_from': '原物料编码',
+    'revision_from_name': '原物料名称',
+    'project_status': '项目状态',
+    'source': '来源',
+    'sale': '销售单ID',
+    'category': '附件类别',
+    'original_name': '原文件名',
+    'sha256': '校验摘要',
+    'valid': '当前有效',
+    'message': '通知内容',
+    'read_at': '已读时间',
+    'matches': '已核对流水',
+    'returns': '关联退回流水',
+    'expected_date': '预计日期',
 }
 
 
@@ -317,7 +333,7 @@ def document(name, headers, rows, file_format='csv', numeric=()):
     return response
 
 
-def export_rows(name, rows, file_format='csv', fields=None):
+def export_rows(name, rows, file_format='csv', fields=None, exclude=()):
     flattened = []
     for row in rows:
         if isinstance(row.get('lines'), list):
@@ -330,6 +346,8 @@ def export_rows(name, rows, file_format='csv', fields=None):
             flattened.append(row)
     rows = flattened
     keys = list(dict.fromkeys(key for row in rows for key in row)) if rows else list(fields or [])
+    # 行数据里由 to_representation 追加的按钮显隐等内部键不在 fields 里，只能按键名剔除。
+    keys = [key for key in keys if key not in exclude]
     return document(
         name,
         ['计划完成日期' if name in {'task', 'tasks'} and key == 'due_date' else LABELS.get(key, key) for key in keys],

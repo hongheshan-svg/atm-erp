@@ -395,6 +395,16 @@ class TransferTests(BusinessFixtures, TestCase):
         self.assertIn('当前筛选全部项目', report.content.decode())
         with patch('apps.business.services.tabular.MAX_EXPORT', 1):
             self.assertEqual(self.clients['admin'].get('/api/business/items/export/').status_code, 400)
+        # 导出排除仅用于前端按钮显隐和原始 JSON 快照的列，且不裸露未翻译的英文字段名。
+        for path, forbidden in (
+            ('/api/business/projects/export/', ('can_manage', 'can_edit_bom', 'has_sale')),
+            ('/api/business/purchases/export/', ('can_approve', 'change_request', 'revision_role', 'revision_pending')),
+            ('/api/business/reconciliations/export/', ('snapshot', 'valid')),
+            ('/api/business/documents/export/', ('download_url', 'original_name')),
+        ):
+            header = self.clients['admin'].get(path).content.decode('utf-8-sig').splitlines()[0]
+            for name in forbidden:
+                self.assertNotIn(name, header, (path, header))
 
     def test_templates_and_malformed_files(self):
         for resource in transfers.SCHEMAS:

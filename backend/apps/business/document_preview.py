@@ -94,8 +94,41 @@ def _sheet(sheets, index):
     return index
 
 
+class _BoundedStream:
+    """Enforce actual decompressed byte limits while streaming a ZIP member, ignoring spoofed headers."""
+
+    def __init__(self, stream, member_limit, total_limit):
+        self._stream = stream
+        self._member_left = member_limit
+        self._total_left = total_limit
+        self.bytes_read = 0
+
+    def read(self, size=-1):
+        cap = min(self._member_left, self._total_left)
+        chunk_size = 65536 if size is None or size < 0 else min(size, 65536)
+        data = self._stream.read(min(chunk_size, cap + 1))
+        if len(data) > cap:
+            raise ValidationError('文件解压后过大或部件过多，无法安全预览；请拆分文件或导出 PDF。')
+        self._member_left -= len(data)
+        self._total_left -= len(data)
+        self.bytes_read += len(data)
+        return data
+
+
+def _read_zip_member(archive, info, *, member_limit=MAX_BYTES, total_limit=MAX_EXPANDED_BYTES):
+    chunks = []
+    with archive.open(info) as raw:
+        bounded = _BoundedStream(raw, member_limit, total_limit)
+        while True:
+            chunk = bounded.read(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    return b''.join(chunks)
+
+
 def _check_zip(content, warnings):
-    """Validate sizes and every XML part before any office parser reads it."""
+    """Validate sizes (actual decompressed bytes) and every XML part before any office parser reads it."""
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         infos = archive.infolist()
         if (
@@ -107,23 +140,28 @@ def _check_zip(content, warnings):
         if len({info.filename for info in infos}) != len(infos):
             raise ValidationError('文件包含重复部件，无法预览；请重新保存后上传。')
         elements = 0
+        total_remaining = MAX_EXPANDED_BYTES
         for info in infos:
             if info.flag_bits & 1:
                 raise ValidationError('加密文件无法预览，请去除密码后重新上传。')
-            if not info.filename.lower().endswith(('.xml', '.rels')):
-                continue
-            with archive.open(info) as stream:
-                for _, element in ElementTree.iterparse(
-                    stream, forbid_dtd=True, forbid_entities=True, forbid_external=True
-                ):
-                    elements += 1
-                    if elements > MAX_XML_ELEMENTS:
-                        raise ValidationError('文档结构过于复杂，无法安全预览；请拆分文件或导出 PDF。')
-                    if element.tag == SPREADSHEET + 'c':
-                        coordinate = re.fullmatch(r'([A-Z]+)[0-9]+', element.get('r', ''))
-                        if coordinate and column_index_from_string(coordinate[1]) > MAX_COLUMNS:
-                            _warn(warnings, f'表格超过 {MAX_COLUMNS} 列，预览仅显示前 {MAX_COLUMNS} 列。')
-                    element.clear()
+            with archive.open(info) as raw:
+                bounded = _BoundedStream(raw, MAX_BYTES, total_remaining)
+                if info.filename.lower().endswith(('.xml', '.rels')):
+                    for _, element in ElementTree.iterparse(
+                        bounded, forbid_dtd=True, forbid_entities=True, forbid_external=True
+                    ):
+                        elements += 1
+                        if elements > MAX_XML_ELEMENTS:
+                            raise ValidationError('文档结构过于复杂，无法安全预览；请拆分文件或导出 PDF。')
+                        if element.tag == SPREADSHEET + 'c':
+                            coordinate = re.fullmatch(r'([A-Z]+)[0-9]+', element.get('r', ''))
+                            if coordinate and column_index_from_string(coordinate[1]) > MAX_COLUMNS:
+                                _warn(warnings, f'表格超过 {MAX_COLUMNS} 列，预览仅显示前 {MAX_COLUMNS} 列。')
+                        element.clear()
+                else:
+                    while bounded.read(65536):
+                        pass
+                total_remaining -= bounded.bytes_read
 
 
 def _display(value, number_format='General'):
@@ -294,9 +332,8 @@ def _docx(content, page, warnings):
     _check_zip(content, warnings)
     budget = TextBudget(warnings)
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
-        root = ElementTree.fromstring(
-            archive.read('word/document.xml'), forbid_dtd=True, forbid_entities=True, forbid_external=True
-        )
+        doc_bytes = _read_zip_member(archive, archive.getinfo('word/document.xml'))
+        root = ElementTree.fromstring(doc_bytes, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     body = root.find(WORD + 'body')
     if body is None:
         raise ValidationError('DOCX 缺少正文，无法预览；请重新保存后上传。')

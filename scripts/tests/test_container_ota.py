@@ -311,6 +311,39 @@ class ContainerTests(unittest.TestCase):
         manifest = json.loads((output / 'manifest.json').read_text())
         self.assertEqual(set(manifest['sha256']), {'database.dump', 'uploads.tar', 'config.json'})
 
+    def test_success_prunes_superseded_release_but_keeps_active_and_backups(self):
+        old_job = self.data / 'job-0'
+        (old_job / 'release/old').mkdir(parents=True)
+        (old_job / 'release/old/file.py').write_text('old')
+        (old_job / 'backup').mkdir(parents=True)
+        (old_job / 'backup/database.dump').write_bytes(b'old-backup')
+        (old_job / 'upgrade.log').write_text('old-log')
+
+        runner = self.runner()
+        self.execute(runner)
+        self.assertFalse((old_job / 'release').exists())
+        self.assertTrue((old_job / 'backup/database.dump').is_file())
+        self.assertTrue((old_job / 'upgrade.log').is_file())
+        self.assertTrue((self.target / 'backend').is_dir())
+
+    def test_prune_backups_keeps_newest_and_protected_jobs(self):
+        for idx in (1, 2, 3, 4):
+            job_dir = self.data / f'job-{idx}'
+            (job_dir / 'backup').mkdir(parents=True, exist_ok=True)
+            (job_dir / 'backup/database.dump').write_bytes(b'dump')
+            (job_dir / 'release').mkdir(parents=True, exist_ok=True)
+        (self.data / 'active.json').write_text(json.dumps({'release': 'job-2/release/app'}))
+        with self.assertRaises(ValueError):
+            ota.prune_backups(self.data, keep_backups=0)
+        removed = ota.prune_backups(self.data, keep_backups=1)
+        self.assertEqual({path.parent.name for path in removed}, {'job-1', 'job-3'})
+        # 保留最新一份（job-4）以及当前 active 对应的备份（job-2）。
+        self.assertTrue((self.data / 'job-2/backup').is_dir())
+        self.assertTrue((self.data / 'job-4/backup').is_dir())
+        removed_rel = ota.prune_releases(self.data)
+        self.assertEqual({path.parent.name for path in removed_rel}, {'job-1', 'job-3', 'job-4'})
+        self.assertTrue((self.data / 'job-2/release').is_dir())
+
 
 if __name__ == '__main__':
     unittest.main()

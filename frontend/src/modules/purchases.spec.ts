@@ -93,9 +93,13 @@ it('查看明细：首列合并名称、编码、规格，项目号与单元同�
   expect(buyerView.fields.find(f => f.key === 'lines')!.fields!.map(f => f.key)).toContain('unit_price')
 })
 
-it('含税合计与服务端同口径：逐行四舍五入到分后再相加', () => {
+it('含税合计与服务端同口径：逐行扣除已取消数量并四舍五入到分后再相加', () => {
   expect(purchaseTotal([{ quantity: '1.500', unit_price: '0.33' }, { quantity: '1.500', unit_price: '0.33' }])).toBe('1.00')
   expect(purchaseTotal([{ quantity: '1000.000', unit_price: '2095.50' }])).toBe('2,095,500.00')
+  expect(purchaseTotal([
+    { quantity: '4.000', cancelled_quantity: '4.000', unit_price: '10.00' },
+    { quantity: '4.000', cancelled_quantity: '0.000', unit_price: '12.00' },
+  ])).toBe('48.00')
   expect(purchaseTotal([{ quantity: '1', unit_price: null }])).toBe('—')
   expect(purchaseTotal([])).toBe('—')
 })
@@ -149,4 +153,26 @@ it('换版转来的新版明细待采购确认：采购可按新图改单（改�
   const receive = industryCommand(await actionCommand('purchases', withRevision, '收货'))
   expect(receive.notice!.text).toContain('待采购向供应商确认新图')
   expect(defaults(receive.fields, receive.initial).lines.map((line: Row) => line.line)).not.toContain(4)
+
+  // 采购审批人调高单价时可勾选超预算确认并提交 confirm_over_budget；处理记录展示换版与取消余量的中文说明。
+  user.value = { id: 8, roles: ['purchase_manager'] }
+  vi.mocked(read).mockResolvedValue({ ...withRevision, can_approve: true })
+  const approverReview = await actionCommand('purchases', withRevision, '确认换版改单')
+  const overBudget = approverReview.fields.find(field => field.key === 'confirm_over_budget')!
+  expect(overBudget.visibleWhen!({ line: 4, decision: 'confirm', unit_price: '5.00' })).toBe(false)
+  expect(overBudget.visibleWhen!({ line: 4, decision: 'confirm', unit_price: '6.00' })).toBe(true)
+  expect(approverReview.prepare!({ line: 4, decision: 'confirm', unit_price: '6', confirm_over_budget: true, reason: '特批' })).toEqual({
+    line: 4, decision: 'confirm', unit_price: '6', confirm_over_budget: true, reason: '特批',
+  })
+  vi.mocked(all).mockResolvedValueOnce([
+    { id: 1, date: '2026-11-18T10:00:00+08:00', actor: '张工', operation: 'purchase.revision_convert', reason: 'ECN-1', old_item: 'JG-001', new_item: 'JG-001B', quantity: '2.000', credit: '10.00', lines: [] },
+    { id: 2, date: '2026-11-18T11:00:00+08:00', actor: '李经理', operation: 'purchase.revision_confirm', reason: '确认', item: 'JG-001B', before_price: '5.00', after_price: '6.00', lines: [] },
+    { id: 3, date: '2026-11-18T12:00:00+08:00', actor: '采购员', operation: 'purchase.revision_cancel', reason: '取消', quantity: '1.000', lines: [] },
+    { id: 4, date: '2026-11-18T13:00:00+08:00', actor: '采购员', operation: 'purchase.cancel_remainder', reason: '停产', credit: '5.00', lines: [{ line: 1, quantity: '1.000' }] },
+  ])
+  const history = await actionCommand('purchases', withRevision, '处理记录')
+  const rows = history.initial!.lines as Row[]
+  expect(rows.map(row => row.operation)).toEqual(['换版按新图改单', '确认换版改单', '取消换版余量', '取消未收余量'])
+  expect(rows[0]!.quantity_summary).toContain('JG-001 → JG-001B')
+  expect(rows[1]!.quantity_summary).toContain('¥5.00 → ¥6.00')
 })

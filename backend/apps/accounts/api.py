@@ -5,18 +5,20 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.core.actions import perform, receipt_data
 from apps.core.models import AuditLog, Company
 from apps.core.permissions import ADMIN, PermissionMixin, has_role, require_role, role, roles
 
+from .authentication import RevocableJWTAuthentication, is_revoked, revoke_token
 from .models import User
 from .passwords import validate_password
 
@@ -52,7 +54,9 @@ class LoginView(TokenObtainPairView):
 class RefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
         token = self.token_class(attrs['refresh'])
-        JWTAuthentication().get_user(token)
+        if is_revoked(token):
+            raise AuthenticationFailed('登录状态已退出，请重新登录。')
+        RevocableJWTAuthentication().get_user(token)
         return super().validate(attrs)
 
 
@@ -68,7 +72,9 @@ class RefreshThrottle(LoginThrottle):
         if isinstance(raw, str):
             try:
                 token = RefreshSerializer.token_class(raw)
-                user = JWTAuthentication().get_user(token)
+                if is_revoked(token):
+                    raise AuthenticationFailed('登录状态已退出，请重新登录。')
+                user = RevocableJWTAuthentication().get_user(token)
             except (TokenError, AuthenticationFailed):
                 pass
             else:
@@ -86,6 +92,41 @@ class RefreshThrottle(LoginThrottle):
 class RefreshView(TokenRefreshView):
     throttle_classes = [RefreshThrottle]
     serializer_class = RefreshSerializer
+
+
+class LogoutView(APIView):
+    """主动退出登录：在服务端吊销请求带来的 access token 和 refresh token。
+
+    不要求登录态有效：闲置超过 access 有效期后点退出，仍要能吊销 refresh token，否则它在剩余有效期内还能续期。
+    access 仍有效时只吊销同一账号的 refresh，不能借退出接口吊销他人的令牌；access 已失效时，
+    持有 refresh 本身就等于能用它续期，吊销它不会扩大权限。
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if request.data and not isinstance(request.data, dict):
+            raise ValidationError('请提交 JSON 对象。')
+        owner = None
+        header = request.headers.get('Authorization', '')
+        if header.startswith('Bearer '):
+            try:
+                access = AccessToken(header[len('Bearer ') :].strip())
+            except TokenError:
+                access = None
+            if access is not None:
+                revoke_token(access)
+                owner = str(access.get('user_id'))
+        raw_refresh = request.data.get('refresh') if isinstance(request.data, dict) else None
+        if isinstance(raw_refresh, str) and raw_refresh.strip():
+            try:
+                refresh = RefreshSerializer.token_class(raw_refresh.strip())
+            except TokenError:
+                refresh = None
+            if refresh is not None and (owner is None or str(refresh.get('user_id')) == owner):
+                revoke_token(refresh)
+        return Response({'detail': '已退出登录。'})
 
 
 def profile(user):

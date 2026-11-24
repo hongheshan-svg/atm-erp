@@ -137,7 +137,7 @@ def save_new_task(user, values):
     task = save(Task(**values), user)
     if additional:
         task.co_assignees.set(additional)
-    notify_task(user, task, '新任务已分配')
+    notify_task(user, task, '新任务已分配', include_assignees=True)
     return task
 
 

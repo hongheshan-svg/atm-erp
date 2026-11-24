@@ -64,10 +64,18 @@ export function receiptStatus(row: Row): string {
   const arrivedOnly = !(row.lines || []).some((line: Row) => Number(line.received_quantity || 0) > 0)
   return `${arrivedOnly ? '已到货待检' : display(row.status)} · 隔离 ${fromScaled(pending, QUANTITY_SCALE)}`
 }
-// 明细合计只作展示：与服务端同口径，逐行按分四舍五入后再相加；任一行没有单价（无权查看）时不给合计。
+// 明细合计只作展示：与服务端有效含税合计同口径，逐行扣除已取消数量后按分四舍五入再相加；任一行没有单价（无权查看）时不给合计。
 export function purchaseTotal(lines: Row[]): string {
   if (!lines.length || lines.some(line => line.unit_price == null || line.unit_price === '')) return '—'
-  const cents = lines.map(line => purchaseLineCents(line.quantity, line.unit_price))
+  const cents = lines.map(line => {
+    const cancelled = line.cancelled_quantity
+    if (cancelled != null && cancelled !== '' && Number(cancelled) > 0) {
+      const effective = decimalDifference(String(line.quantity), String(cancelled))
+      if (toScaled(effective, QUANTITY_SCALE) === 0n) return 0n
+      return purchaseLineCents(effective, line.unit_price)
+    }
+    return purchaseLineCents(line.quantity, line.unit_price)
+  })
   if (cents.some(value => value == null)) return '—'
   return formatPurchaseAmount(cents.reduce((sum: bigint, value) => sum + value!, 0n))
 }
@@ -220,6 +228,8 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const lines = (detail.lines || []).filter(revisionPending)
     const options = lines.map((line: Row) => ({ value: line.id, label: `${line.item_code} ${line.item_name}（由 ${line.revision_from} 转来）· 未收 ${quantityText(decimalDifference(line.quantity, line.received_quantity, line.cancelled_quantity))}` }))
     const prices = Object.fromEntries(lines.map((line: Row) => [line.id, line.unit_price]))
+    const approver = purchaseApprover(detail)
+    const priceRaised = (data: Row) => data.decision === 'confirm' && data.unit_price !== '' && data.unit_price != null && Number(data.unit_price) > Number(prices[data.line] ?? 0)
     return {
       title: name, subject: detail.code,
       path: `${endpoint(resource)}${r.id}/revision-review/`,
@@ -227,15 +237,25 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       // 已归档过签署合同的，确认后合同内容就变了：提醒拿新图和价格与供应商签补充协议，再归档新版本。
       successNote: (result: Row) => result.contract_version ? `本单已归档合同第 ${result.contract_version} 版，按新图改单后请与供应商确认新图和价格，签回后在「预览采购合同」归档新版本。` : '',
       blocked: lines.length ? undefined : '本单没有待确认的换版明细，请刷新采购单。',
-      notice: { type: 'info', text: '工程师已把这批物料换成新版：旧版未到货的余量已取消，同单新增了新版明细。请向供应商确认能否按新图供货：能做就确认（报价变化可改单价，应付同步调整）；不能做就取消余量，再按缺料重新下单。确认前仓库不能收这一行。' },
+      notice: { type: 'info', text: '工程师已把这批物料换成新版：旧版未到货的余量已取消，同单新增了新版明细。请向供应商确认能否按新图供货：维持原价或降价可直接确认；调高单价会增加已批准应付，须由采购经理、项目经理或管理员独立确认并复核预算；不能做就取消余量。确认前仓库不能收这一行。' },
       fields: [
         { key: 'line', label: '换版明细', type: 'select', options },
         { key: 'decision', label: '处理', type: 'select', options: [{ value: 'confirm', label: '按新图改单（供应商确认）' }, { value: 'cancel', label: '取消余量（供应商不接受改图）' }] },
-        { ...price, label: '新版含税单价（元）', visibleWhen: (data: Row) => data.decision === 'confirm', hint: '默认沿用原单价；供应商重新报价时修改。' },
+        { ...price, label: '新版含税单价（元）', visibleWhen: (data: Row) => data.decision === 'confirm', hint: approver ? '默认沿用原单价；调高单价会增加已批准应付并触发独立审批与预算复核。' : '默认沿用原单价；维持原价或降价可直接确认，调高单价须由采购经理、项目经理或管理员确认。' },
+        { key: 'confirm_over_budget', label: '确认承担超预算调价（仅超预算时需勾选）', type: 'boolean', initial: false, optional: true, visibleWhen: (data: Row) => approver && priceRaised(data) },
         { ...reason, label: '说明', hint: '如供应商确认的邮件或报价单号。' },
       ],
-      initial: { line: lines[0]?.id, decision: 'confirm', unit_price: lines[0]?.unit_price ?? '' },
-      prepare: data => ({ line: data.line, decision: data.decision, reason: data.reason, ...(data.decision === 'confirm' && data.unit_price !== '' && data.unit_price != null && String(data.unit_price) !== String(prices[data.line]) ? { unit_price: data.unit_price } : {}) }),
+      initial: { line: lines[0]?.id, decision: 'confirm', unit_price: lines[0]?.unit_price ?? '', confirm_over_budget: false },
+      prepare: data => {
+        const changed = data.decision === 'confirm' && data.unit_price !== '' && data.unit_price != null && String(data.unit_price) !== String(prices[data.line])
+        return {
+          line: data.line,
+          decision: data.decision,
+          reason: data.reason,
+          ...(changed ? { unit_price: data.unit_price } : {}),
+          ...(changed && data.confirm_over_budget === true ? { confirm_over_budget: true } : {}),
+        }
+      },
     }
   }
   if (name === '取消未收余量') {
@@ -276,7 +296,21 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const detail = await read(`${endpoint(resource)}${r.id}/`)
     return { title: name, path: `${endpoint(resource)}${r.id}/delivery-plan/`, fields: [optionalReason(undefined, '选填，如供应商确认的改期原因；不填按「更新到货计划」记录'), { ...rows('lines', '未完成明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, date('due_date', '承诺到货日期')]), readonly: true }], initial: { lines: detail.lines.filter((l: Row) => Number(decimalDifference(l.quantity, l.received_quantity, l.cancelled_quantity)) > 0).map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ ...(data.reason ? { reason: data.reason } : {}), expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, due_date: l.due_date })) }), notice: { type: 'info', text: '更新供应商承诺到货日期并留记录，不改变原应付期限。' } }
   }
-  if (name === '处理记录') return { title: name, path: '', readonly: true, initial: { lines: (await all(`/business/purchases/${r.id}/handling-history/`)).map(l => ({ ...l, date: dateTimeText(l.date), quantity_summary: l.lines.map((row: Row) => `明细${row.line || row.id}：数量 ${row.quantity || '0'}，隔离 ${row.pending_quantity || '0'}${row.remark ? `，备注：${row.remark}` : ''}`).join('；'), operation: ({ 'purchase.request_change': '申请修改', 'purchase.review_change': l.decision === 'approve' ? '同意修改申请' : '驳回修改申请', 'purchase.reject': '退回修改', 'purchase.edit': '修改采购', 'purchase.receive': '到货登记', 'purchase.quality_accept': '隔离品合格入库', 'purchase.quality_return': '隔离品退回供应商', 'purchase.delivery_plan': '更新到货计划', 'purchase.unapprove': '反审（退回草稿）' } as Record<string, string>)[l.operation] || l.operation })) }, fields: [rows('lines', '处理记录', [t('date', '时间'), t('actor', '操作人'), t('operation', '操作'), t('reason', '原因 / 处理意见'), t('quantity_summary', '明细与数量'), t('next_step', '后续处理')])] }
+  if (name === '处理记录') {
+    const summary = (l: Row) => {
+      if (l.operation === 'purchase.revision_convert') {
+        return `${l.old_item || '旧版'} → ${l.new_item || '新版'}，数量 ${quantityText(l.quantity || '0')}${l.credit ? `，冲减 ¥${formatMoney(l.credit)}` : ''}`
+      }
+      if (l.operation === 'purchase.revision_confirm') {
+        const priceNote = l.before_price && l.after_price && l.before_price !== l.after_price ? `单价 ¥${formatMoney(l.before_price)} → ¥${formatMoney(l.after_price)}` : '按原价确认'
+        return [l.item, priceNote].filter(Boolean).join(' · ')
+      }
+      if (l.operation === 'purchase.revision_cancel') return `取消数量 ${quantityText(l.quantity || '0')}`
+      const text = (l.lines || []).map((row: Row) => `明细${row.line || row.id}：数量 ${row.quantity || '0'}${l.operation === 'purchase.cancel_remainder' ? '' : `，隔离 ${row.pending_quantity || '0'}`}${row.remark ? `，备注：${row.remark}` : ''}`).join('；')
+      return l.operation === 'purchase.cancel_remainder' && l.credit ? `${text}${text ? '；' : ''}冲减 ¥${formatMoney(l.credit)}` : text
+    }
+    return { title: name, path: '', readonly: true, initial: { lines: (await all(`/business/purchases/${r.id}/handling-history/`)).map(l => ({ ...l, date: dateTimeText(l.date), quantity_summary: summary(l), operation: ({ 'purchase.request_change': '申请修改', 'purchase.review_change': l.decision === 'approve' ? '同意修改申请' : '驳回修改申请', 'purchase.reject': '退回修改', 'purchase.edit': '修改采购', 'purchase.receive': '到货登记', 'purchase.quality_accept': '隔离品合格入库', 'purchase.quality_return': '隔离品退回供应商', 'purchase.delivery_plan': '更新到货计划', 'purchase.cancel_remainder': '取消未收余量', 'purchase.revision_convert': '换版按新图改单', 'purchase.revision_confirm': '确认换版改单', 'purchase.revision_cancel': '取消换版余量', 'purchase.unapprove': '反审（退回草稿）' } as Record<string, string>)[l.operation] || l.operation })) }, fields: [rows('lines', '处理记录', [t('date', '时间'), t('actor', '操作人'), t('operation', '操作'), t('reason', '原因 / 处理意见'), t('quantity_summary', '明细与数量'), t('next_step', '后续处理')])] }
+  }
   if (name === '修改采购') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
     return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), ...termFields(true).map(f => ({ ...f, ...(f.key === 'payment_days' ? { visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'custom' } : {}), label: f.key === 'payment_term' ? '采购账期' : f.label, optional: true, hint: f.key === 'payment_term' ? '草稿阶段可调整；月结＝每批合格收货当月月底＋天数。' : f.hint })), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'manual', hint: '仅指定日期账期填写；现付/月结由实际收货自动计算。' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, overBomReason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, { ...qty, numeric: { scale: 3, min: 0.001 } }, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, ...((data.payment_term || detail.payment_term) === 'manual' ? { payment_due_date: data.payment_due_date } : {}), ...(data.payment_term ? { payment_term: data.payment_term } : {}), ...(data.payment_days !== undefined && data.payment_days !== '' && data.payment_days !== null ? { payment_days: data.payment_days } : {}), note: data.note, warranty_months: data.warranty_months, reason: data.reason, ...(data.over_bom_reason ? { over_bom_reason: data.over_bom_reason } : {}), expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }

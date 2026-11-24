@@ -165,14 +165,34 @@ class TaskSupervisionTests(BusinessFixtures, TestCase):
         key = str(uuid.uuid4())
         created = self.post('manager', 'tasks/', data, key=key, status=201)
         self.post('manager', 'tasks/', data, key=key, status=201)
-        self.assertEqual(TaskNotice.objects.filter(task_id=created['id']).count(), 1)
+        # 主管与执行人均收到派工提醒，幂等重放不重复发通知。
+        self.assertEqual(
+            set(TaskNotice.objects.filter(task_id=created['id']).values_list('recipient_id', flat=True)),
+            {self.users['mechanical_engineer'].pk, self.users['member'].pk},
+        )
         self.post(
             'manager',
             f'tasks/{created["id"]}/assign/',
             {'assignee': self.users['member'].pk, 'discipline': 'electrical', 'reason': '电气接手'},
         )
-        notice = TaskNotice.objects.filter(task_id=created['id']).order_by('pk').last()
-        self.assertEqual(notice.recipient_id, self.users['electrical_engineer'].pk)
+        latest_two = list(TaskNotice.objects.filter(task_id=created['id']).order_by('pk'))[-2:]
+        self.assertEqual(
+            {item.recipient_id for item in latest_two},
+            {self.users['electrical_engineer'].pk, self.users['member'].pk},
+        )
+        # 专业主管本人作为操作者修改计划日期时，不给自己发通知，但执行人仍能收到提醒。
+        self.project.members.add(self.users['production_manager'])
+        self.configure({'production': self.users['production_manager'].pk})
+        assembly = self.post(
+            'production_manager',
+            'tasks/',
+            {'project': self.project.pk, 'kind': 'assembly', 'title': '装配排期', 'assignee': self.users['member'].pk},
+            status=201,
+        )
+        self.assertEqual(
+            list(TaskNotice.objects.filter(task_id=assembly['id']).values_list('recipient_id', flat=True)),
+            [self.users['member'].pk],
+        )
         before = (Task.objects.count(), TaskNotice.objects.count(), ActionReceipt.objects.count())
         with patch(
             'apps.business.services.execution.notify_task', side_effect=RuntimeError('notice storage unavailable')

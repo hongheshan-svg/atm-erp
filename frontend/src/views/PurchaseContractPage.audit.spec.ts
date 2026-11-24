@@ -113,3 +113,24 @@ it('归档后合同内容有变化（如换版改单）时，页面上方逐条�
   vi.mocked(read).mockResolvedValue({ ...complete, changes_since_archive: [] })
   expect((await mountContract()).wrapper.find('.contract-changed').exists()).toBe(false)
 })
+
+it('换版或取消余量后合同打印页按现行有效含税合计与有效行金额展示，不重复计入已取消旧版明细', async () => {
+  vi.mocked(read).mockResolvedValue({
+    ...complete,
+    draft: false,
+    status: 'approved',
+    total: '88.00',
+    cancelled_amount: '40.00',
+    effective_total: '48.00',
+    lines: [
+      { number: 1, code: 'JG-001', name: '夹爪安装板', specification: 'A', drawing_number: 'D-1', drawing_revision: 'A', brand: '', unit: '件', quantity: '4.000', effective_quantity: '0.000', cancelled_quantity: '4.000', unit_price: '10.00', amount: '40.00', effective_amount: '0.00', due_date: '2026-12-31' },
+      { number: 2, code: 'JG-001B', name: '夹爪安装板', specification: 'B', drawing_number: 'D-1', drawing_revision: 'B', brand: '', unit: '件', quantity: '4.000', effective_quantity: '4.000', cancelled_quantity: '0.000', unit_price: '12.00', amount: '48.00', effective_amount: '48.00', due_date: '2026-12-31' },
+    ],
+  })
+  const { wrapper } = await mountContract()
+  const total = wrapper.get('.contract-total').text()
+  expect(total).toContain('现行有效含税合计：人民币 ¥ 48.00')
+  expect(total).toContain('已取消 ¥ 40.00')
+  expect(wrapper.findAll('tbody tr')[0]!.text()).toContain('原 40.00')
+  wrapper.unmount()
+})

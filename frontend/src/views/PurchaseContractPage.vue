@@ -9,6 +9,7 @@ import { termLabel } from '../modules/payment-terms'
 import type { Command, Row } from '../types'
 import ActionDialog from '../components/ActionDialog.vue'
 import { buyer } from '../modules/shared'
+import { decimalDifference } from '../forms'
 import { money } from '../utils/money'
 import { quantityText } from '../utils/quantity'
 import { printFileName } from '../utils/print'
@@ -19,6 +20,12 @@ let generation = 0
 // 签署与打印说明：桌面默认展开（不依赖 ::details-content 支持），手机宽度默认收起，省出首屏给合同本身。
 const helpOpen = typeof window === 'undefined' || !window.matchMedia?.('(max-width: 600px)').matches
 onBeforeUnmount(() => { generation++ })
+const effectiveTotal = computed(() => {
+  const d = data.value
+  if (!d) return '0.00'
+  if (d.effective_total != null && d.effective_total !== '') return d.effective_total
+  return decimalDifference(String(d.total || '0'), String(d.cancelled_amount || '0'))
+})
 const payment = computed(() => {
   if (!data.value) return ''
   const d = data.value
@@ -131,8 +138,9 @@ async function archive() {
       <p v-if="data.delivery_address">收货地址：{{ data.delivery_address }}</p>
       <h2>一、采购明细（CNY 人民币，含税）</h2>
       <p>共 {{ data.lines.length }} 项物料，全部明细如下。</p>
-      <TableScroll label="采购合同"><div data-table-scroll class="contract-table-wrap" role="region" aria-label="完整采购明细" tabindex="0"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td data-label="序号">{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td data-label="规格 / 品牌">{{ line.specification || '—' }}<template v-if="line.drawing_number || line.drawing_revision"><br>图号：{{ line.drawing_number || '—' }}；版次：{{ line.drawing_revision || '—' }}</template><br>{{ line.brand }}</td><td data-label="单位">{{ line.unit }}</td><td data-label="数量（含已取消）">{{ quantityText(line.quantity) }}<small v-if="Number(line.cancelled_quantity) > 0">已取消 {{ quantityText(line.cancelled_quantity) }}</small></td><td data-label="含税单价">{{ money(line.unit_price) }}</td><td data-label="含税金额">{{ money(line.amount) }}</td><td data-label="交期">{{ line.due_date }}</td></tr></tbody></table></div></TableScroll>
-      <p class="contract-total">订单原含税合计：人民币 ¥ {{ money(data.total) }}</p>
+      <TableScroll label="采购合同"><div data-table-scroll class="contract-table-wrap" role="region" aria-label="完整采购明细" tabindex="0"><table><thead><tr><th>序号</th><th>物料编码 / 名称</th><th>规格 / 品牌</th><th>单位</th><th>数量</th><th>含税单价</th><th>含税金额</th><th>交期</th></tr></thead><tbody><tr v-for="line in data.lines" :key="line.number"><td data-label="序号">{{ line.number }}</td><td>{{ line.code }}<br>{{ line.name }}</td><td data-label="规格 / 品牌">{{ line.specification || '—' }}<template v-if="line.drawing_number || line.drawing_revision"><br>图号：{{ line.drawing_number || '—' }}；版次：{{ line.drawing_revision || '—' }}</template><br>{{ line.brand }}</td><td data-label="单位">{{ line.unit }}</td><td data-label="数量">{{ quantityText(line.effective_quantity ?? (Number(line.cancelled_quantity) > 0 ? decimalDifference(String(line.quantity), String(line.cancelled_quantity)) : line.quantity)) }}<small v-if="Number(line.cancelled_quantity) > 0">原 {{ quantityText(line.quantity) }} · 已取消 {{ quantityText(line.cancelled_quantity) }}</small></td><td data-label="含税单价">{{ money(line.unit_price) }}</td><td data-label="含税金额">{{ money(line.effective_amount ?? line.amount) }}<small v-if="Number(line.cancelled_quantity) > 0 && line.effective_amount != null">原 {{ money(line.amount) }}</small></td><td data-label="交期">{{ line.due_date }}</td></tr></tbody></table></div></TableScroll>
+      <p v-if="Number(data.cancelled_amount) > 0" class="contract-total">现行有效含税合计：人民币 ¥ {{ money(effectiveTotal) }}<small class="contract-total-detail">（含已取消明细前累计 ¥ {{ money(data.total) }}，已取消 ¥ {{ money(data.cancelled_amount) }}）</small></p>
+      <p v-else class="contract-total">订单原含税合计：人民币 ¥ {{ money(data.total) }}</p>
       <section v-for="(section, index) in sections" :key="section.key" class="contract-clauses" :aria-label="section.title">
         <h2>{{ sectionNumber(index + 1) }}、{{ section.title }}</h2>
         <p v-for="(clause, clauseIndex) in section.paragraphs" :key="clauseIndex">{{ clause }}</p>

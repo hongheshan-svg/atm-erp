@@ -1,4 +1,4 @@
-from apps.accounts.api import DirectoryView, LoginView, MeView, PasswordView, RefreshView, UserView
+from apps.accounts.api import DirectoryView, LoginView, LogoutView, MeView, PasswordView, RefreshView, UserView
 from apps.core.feedback import FeedbackSettingsView, FeedbackView
 from apps.core.ota import AgentView, RestartView, UpgradeView
 from apps.core.setup import SetupView
@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/core/feedback/settings/', FeedbackSettingsView.as_view()),
     path('api/health/', health),
     path('api/auth/login/', LoginView.as_view()),
+    path('api/auth/logout/', LogoutView.as_view()),
     path('api/auth/refresh/', RefreshView.as_view()),
     path('api/auth/me/', MeView.as_view()),
     path('api/auth/password/', PasswordView.as_view()),

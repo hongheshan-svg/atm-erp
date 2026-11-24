@@ -33,6 +33,10 @@ def preview(actor, purchase):
         ),
         ZERO,
     )
+    effective_total = sum(
+        (rounded((line.quantity - line.cancelled_quantity) * line.unit_price) for line in lines),
+        ZERO,
+    )
     return {
         'template_version': TEMPLATE_VERSION,
         'clauses': clauses(purchase.warranty_months),
@@ -65,6 +69,7 @@ def preview(actor, purchase):
         'note': purchase.note,
         'total': str(total(purchase)),
         'cancelled_amount': str(cancelled),
+        'effective_total': str(effective_total),
         'lines': [
             {
                 'number': index,
@@ -77,8 +82,10 @@ def preview(actor, purchase):
                 'brand': line.item.brand,
                 'unit': line.item.unit,
                 'quantity': str(line.quantity),
+                'effective_quantity': str(line.quantity - line.cancelled_quantity),
                 'unit_price': str(line.unit_price),
                 'amount': str(rounded(line.quantity * line.unit_price)),
+                'effective_amount': str(rounded((line.quantity - line.cancelled_quantity) * line.unit_price)),
                 'due_date': line.due_date or purchase.due_date,
                 'cancelled_quantity': str(line.cancelled_quantity),
             }
@@ -152,14 +159,13 @@ def contract_changes(archived, current):
 
 
 def stale_contracts(actor, queryset):
-    """换版改单确认后合同内容已变化、还没归档新版本的采购单 ID（工作台提醒采购重签）。"""
+    """换版改单确认或取消余量后合同内容已变化、还没归档新版本的采购单 ID（工作台提醒采购重签）。"""
     archived = PurchaseContractVersion.objects.filter(purchase=OuterRef('purchase_id')).order_by('-version')
     candidates = (
         PurchaseLine.objects.filter(
             purchase__in=queryset,
             revision_role='converted',
             revision_pending=False,
-            quantity__gt=F('cancelled_quantity'),
         )
         .annotate(archived_at=Subquery(archived.values('created_at')[:1]))
         .filter(archived_at__isnull=False, updated_at__gt=F('archived_at'))
