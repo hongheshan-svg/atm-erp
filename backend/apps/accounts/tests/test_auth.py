@@ -1,9 +1,11 @@
 import uuid
+from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.accounts.models import User
 from apps.core.models import AuditLog, Company
@@ -85,6 +87,67 @@ class AuthenticationTests(TestCase):
                 set(response.data),
                 {'id', 'username', 'display_name', 'role', 'roles', 'management_reports', 'setup_required'},
             )
+
+    def test_logout_revokes_access_and_refresh_tokens_for_owner_only(self):
+        member_tokens = self.login('member')
+        other_client = KeyedClient()
+        other_login = other_client.post('/api/auth/login/', {'username': 'warehouse', 'password': PASSWORD})
+        self.assertEqual(other_login.status_code, 200)
+        other_tokens = other_login.data
+
+        # 不能用自己的退出接口吊销他人的 refresh token。
+        response = self.client.post('/api/auth/logout/', {'refresh': other_tokens['refresh']}, format='json')
+        self.assertEqual(response.status_code, 200)
+        # 自身 access token 已立即吊销。
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)
+        # 他人 refresh token 仍可正常刷新。
+        self.assertEqual(
+            other_client.post('/api/auth/refresh/', {'refresh': other_tokens['refresh']}, format='json').status_code,
+            200,
+        )
+
+        # 正常退出携带本人 refresh token：access 与 refresh 同时失效。
+        fresh = self.login('member')
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 200)
+        self.assertEqual(
+            self.client.post('/api/auth/logout/', {'refresh': fresh['refresh']}, format='json').status_code, 200
+        )
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)
+        self.assertEqual(
+            self.client.post('/api/auth/refresh/', {'refresh': fresh['refresh']}, format='json').status_code, 401
+        )
+        self.assertEqual(
+            self.client.post('/api/auth/refresh/', {'refresh': member_tokens['refresh']}, format='json').status_code,
+            200,
+        )
+
+    def test_logout_after_access_expired_still_revokes_refresh_token(self):
+        tokens = self.login('member')
+        member = User.objects.get(username='member')
+        expired = AccessToken.for_user(member)
+        expired.set_exp(lifetime=-timedelta(minutes=1))
+        # 闲置超过 access 有效期后点退出：access 已过期，refresh 仍要被吊销。
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {expired}')
+        response = self.client.post('/api/auth/logout/', {'refresh': tokens['refresh']}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.client.credentials()
+        self.assertEqual(
+            self.client.post('/api/auth/refresh/', {'refresh': tokens['refresh']}, format='json').status_code, 401
+        )
+
+        # 不带 access、只带 refresh 也能退出；伪造或无效的令牌不报错也不影响他人。
+        other = self.login('member')
+        self.client.credentials()
+        self.assertEqual(
+            self.client.post('/api/auth/logout/', {'refresh': other['refresh']}, format='json').status_code, 200
+        )
+        self.assertEqual(
+            self.client.post('/api/auth/refresh/', {'refresh': other['refresh']}, format='json').status_code, 401
+        )
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer not-a-token')
+        self.assertEqual(
+            self.client.post('/api/auth/logout/', {'refresh': 'not-a-token'}, format='json').status_code, 200
+        )
 
     def test_all_fixed_roles_can_be_assigned_and_unknown_roles_are_rejected(self):
         self.login()

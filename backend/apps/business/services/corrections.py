@@ -356,7 +356,12 @@ def change_task(actor, key, task_id, data, operation):
             sync_milestones(user, project)
         from .task_supervision import notify_task
 
-        notify_task(user, task, {'assign': '任务分配已调整', 'reopen': '任务已重开', 'cancel': '任务已取消'}[operation])
+        notify_task(
+            user,
+            task,
+            {'assign': '任务分配已调整', 'reopen': '任务已重开', 'cancel': '任务已取消'}[operation],
+            include_assignees=True,
+        )
         return result
 
     return task_action(

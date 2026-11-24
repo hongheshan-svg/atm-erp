@@ -33,6 +33,29 @@ class ImportThrottle(UserRateThrottle):
     scope = 'import'
 
 
+# 仅用于前端按钮显隐或接口内部结构的字段，不导出到业务表格。
+EXPORT_EXCLUDED = {
+    'can_manage',
+    'can_edit_bom',
+    'can_manage_production',
+    'can_register_service',
+    'can_approve',
+    'can_review_change',
+    'can_cancel',
+    'can_reopen',
+    'can_amend',
+    'can_confirm',
+    'can_record_time',
+    'can_transfer',
+    'amounts_visible',
+    'has_sale',
+    'change_request',
+    'newer_revision',
+    'snapshot',
+    'download_url',
+}
+
+
 class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
     parser_classes = [JSONParser]
     write_roles = OPERATION_ROLES
@@ -67,7 +90,7 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
         queryset = self.filter_queryset(self.get_queryset())
         tabular.check_export_size(self.export_size(queryset))
         serializer = self.get_serializer()
-        fields = list(serializer.fields)
+        fields = [field for field in serializer.fields if field not in EXPORT_EXCLUDED]
         if hasattr(serializer, 'exports_money') and not serializer.exports_money(request.user):
             fields = [field for field in fields if field not in serializer.sensitive_fields]
         return tabular.export_rows(
@@ -75,6 +98,7 @@ class ReadView(PermissionMixin, viewsets.ReadOnlyModelViewSet):
             self.get_serializer(queryset, many=True).data,
             request.query_params.get('file_format', 'csv'),
             fields,
+            exclude=EXPORT_EXCLUDED,
         )
 
     def initial(self, request, *args, **kwargs):

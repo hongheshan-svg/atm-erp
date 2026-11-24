@@ -122,18 +122,40 @@ def read_file(upload, headers=None, legacy_headers=None, *, return_headers=False
     return (header, normalized) if return_headers else normalized
 
 
+MAX_XLSX_EXPANDED = 20 * 1024 * 1024
+
+
+def _read_zip_member_bounded(archive, info, remaining, *, keep=True):
+    """按实际解压字节上限读取 ZIP 成员，防止伪造 ZipInfo.file_size 绕过解压大小限制。"""
+    chunks, read_bytes = [], 0
+    with archive.open(info) as stream:
+        while True:
+            cap = remaining - read_bytes
+            chunk = stream.read(min(65536, cap + 1))
+            if not chunk:
+                break
+            read_bytes += len(chunk)
+            if read_bytes > remaining:
+                raise ValidationError({'file': 'XLSX 解压后过大或包含过多部件。'})
+            if keep:
+                chunks.append(chunk)
+    return (b''.join(chunks) if keep else b''), read_bytes
+
+
 def read_xlsx(content, columns=3):
-    # Bound decompression and reject entity declarations before openpyxl sees XML.
+    # Bound actual decompression bytes and reject entity declarations before openpyxl sees XML.
     allowed = {get_column_letter(i) for i in range(1, columns + 1)}
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         infos = archive.infolist()
-        if len(infos) > 200 or sum(info.file_size for info in infos) > 20 * 1024 * 1024:
+        if len(infos) > 200 or sum(info.file_size for info in infos) > MAX_XLSX_EXPANDED:
             raise ValidationError({'file': 'XLSX 解压后过大或包含过多部件。'})
+        remaining = MAX_XLSX_EXPANDED
         for info in infos:
-            if info.filename.lower().endswith(('.xml', '.rels')):
-                root = ElementTree.fromstring(
-                    archive.read(info), forbid_dtd=True, forbid_entities=True, forbid_external=True
-                )
+            is_xml = info.filename.lower().endswith(('.xml', '.rels'))
+            raw, used = _read_zip_member_bounded(archive, info, remaining, keep=is_xml)
+            remaining -= used
+            if is_xml:
+                root = ElementTree.fromstring(raw, forbid_dtd=True, forbid_entities=True, forbid_external=True)
                 if info.filename.startswith('xl/worksheets/'):
                     for row in root.iter('{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row'):
                         if int(row.get('r', '0')) > 1001:

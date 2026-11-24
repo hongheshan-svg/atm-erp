@@ -3,6 +3,7 @@ import { beforeEach, afterEach, describe, expect, it, onTestFinished, vi } from 
 import { download, readBlob, write } from '../api'
 import { downloadBOM } from '../api/bom'
 import { message, request, requestKey, resetSession, REQUEST_TIMEOUT, TRANSFER_TIMEOUT } from './request'
+import { logout } from '../session'
 
 const adapter = request.defaults.adapter
 function response(config: InternalAxiosRequestConfig, status = 200): AxiosResponse {
@@ -71,6 +72,23 @@ describe('JWT 会话与刷新', () => {
     expect(localStorage.getItem('refresh_token')).toBe('refresh-token')
     await expect(request.get('/business/projects/')).rejects.toBeTruthy()
     expect(localStorage.getItem('refresh_token')).toBeNull()
+  })
+
+  it('主动退出会立即清本地令牌并携带原凭证调用服务端吊销，401 不触发续期', async () => {
+    const refresh = vi.spyOn(axios, 'post')
+    const calls: { url?: string; auth?: string; data?: string }[] = []
+    request.defaults.adapter = async config => {
+      calls.push({ url: config.url, auth: String(config.headers.Authorization || ''), data: String(config.data || '') })
+      throw new AxiosError('unauthorized', '401', config, {}, response(config, 401))
+    }
+    logout()
+    expect(localStorage.getItem('access_token')).toBeNull()
+    expect(localStorage.getItem('refresh_token')).toBeNull()
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]!.url).toBe('/auth/logout/')
+    expect(calls[0]!.auth).toBe('Bearer old-token')
+    expect(calls[0]!.data).toContain('refresh-token')
+    expect(refresh).not.toHaveBeenCalled()
   })
 })
 

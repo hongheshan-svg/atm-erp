@@ -68,7 +68,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['apps.accounts.authentication.RevocableJWTAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     'DEFAULT_PAGINATION_CLASS': 'apps.core.api.Pagination',
     'PAGE_SIZE': 20,

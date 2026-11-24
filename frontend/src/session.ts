@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 import { clearFormDrafts } from './form-experience'
 import { read, write } from './api'
-import { resetSession, requestKey } from './utils/request'
+import { request, resetSession, requestKey } from './utils/request'
+import { localStore } from './utils/storage'
 import type { Row } from './types'
 export const user = ref<Row | null>(null)
 export const roleLabels: Record<string, string> = {
@@ -65,4 +66,15 @@ export async function login(username: string, password: string) {
   resetSession(tokens.access, tokens.refresh)
   await loadUser()
 }
-export const logout = () => resetSession()
+export function logout() {
+  const access = localStore.get('access_token')
+  const refresh = localStore.get('refresh_token')
+  resetSession()
+  if (access || refresh) {
+    void request.post(
+      '/auth/logout/',
+      refresh ? { refresh } : {},
+      { headers: access ? { Authorization: `Bearer ${access}` } : {} },
+    ).catch(() => {})
+  }
+}

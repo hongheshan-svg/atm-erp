@@ -306,7 +306,17 @@ class FeedbackTests(TestCase):
             response = save(f' {new} ', 'cfg-1')
         self.assertEqual(response.status_code, 200, response.data)
         github.assert_called_once_with('GET', '', new, retries=2)
-        self.assertEqual(Company.objects.get(pk=1).feedback_token, new)
+        stored = Company.objects.get(pk=1).feedback_token
+        self.assertTrue(stored.startswith(feedback.ENC_PREFIX))
+        self.assertNotIn(new, stored)
+        self.assertEqual(feedback.token(), new)
+        with self.settings(SECRET_KEY='different-deployment-secret-key-for-testing-1234'):
+            with self.assertLogs('apps.core.feedback', 'WARNING'):
+                self.assertEqual(feedback.token(), '')
+        # 兼容升级前已明文保存的旧记录。
+        Company.objects.filter(pk=1).update(feedback_token=new)
+        self.assertEqual(feedback.token(), new)
+        Company.objects.filter(pk=1).update(feedback_token=stored)
         self.assertNotIn(new, str(response.data) + str(self.client.get('/api/core/feedback/settings/').data))
         self.assertNotIn(new, str(list(ActionReceipt.objects.values())))
         self.assertEqual(AuditLog.objects.get(operation='feedback.configure').detail, {'configured': True})

@@ -17,6 +17,7 @@ from ..models import (
 from ..serializers import (
     PurchaseDetailSerializer,
     PurchaseSerializer,
+    ambiguous_people,
     person_name,
 )
 from ..services import budgets, purchase_changes, supply, unapprove
@@ -147,19 +148,31 @@ class PurchaseView(ImportableMixin, ReadView):
                 'purchase.request_change',
                 'purchase.review_change',
                 'purchase.unapprove',
+                'purchase.cancel_remainder',
+                'purchase.revision_convert',
+                'purchase.revision_confirm',
+                'purchase.revision_cancel',
             ],
         ).select_related('actor')
         page = self.paginate_queryset(logs)
+        ambiguous = ambiguous_people()
         return self.get_paginated_response(
             [
                 {
                     'id': log.pk,
                     'date': log.created_at,
-                    'actor': person_name(log.actor, ()),
+                    'actor': person_name(log.actor, ambiguous),
                     'operation': log.operation,
                     'reason': log.detail.get('reason', ''),
                     'decision': log.detail.get('decision', ''),
                     'request_id': log.detail.get('request_id'),
+                    'item': log.detail.get('item', ''),
+                    'old_item': log.detail.get('old_item', ''),
+                    'new_item': log.detail.get('new_item', ''),
+                    'quantity': log.detail.get('quantity', ''),
+                    'before_price': log.detail.get('before_price', ''),
+                    'after_price': log.detail.get('after_price', ''),
+                    'credit': log.detail.get('credit', ''),
                     'lines': [
                         {
                             key: value

@@ -10,6 +10,7 @@ from apps.business.models import (
     BOMLine,
     Entry,
     Item,
+    Project,
     PurchaseLine,
     PurchaseOrder,
     RevisionChange,
@@ -54,10 +55,12 @@ class RevisionFixtures(BusinessFixtures):
             status=status,
         )
 
-    def buy(self, line, qty, *, approve=True, price='5', item=None, project=None):
+    def buy(
+        self, line, qty, *, approve=True, price='5', item=None, project=None, buyer='purchaser', approver='manager'
+    ):
         project = project or self.project
         result = self.post(
-            'purchaser',
+            buyer,
             'purchases/',
             {
                 'project': project.pk,
@@ -69,8 +72,8 @@ class RevisionFixtures(BusinessFixtures):
         )
         purchase = PurchaseOrder.objects.get(pk=result['id'])
         if approve:
-            self.post('purchaser', f'purchases/{purchase.pk}/submit/')
-            self.post('manager', f'purchases/{purchase.pk}/approve/')
+            self.post(buyer, f'purchases/{purchase.pk}/submit/')
+            self.post(approver, f'purchases/{purchase.pk}/approve/')
             purchase.refresh_from_db()
         return purchase
 
@@ -157,17 +160,142 @@ class RevisionInTransitTests(RevisionFixtures, TestCase):
             {'line': converted.pk, 'decision': 'confirm', 'reason': '供应商确认'},
             status=403,
         )
+        # 调高单价会增加已批准应付，普通采购员不能自行确认；由独立采购审批人确认并同步调整应付。
         self.post(
             'purchaser',
+            f'purchases/{approved.pk}/revision-review/',
+            {'line': converted.pk, 'decision': 'confirm', 'unit_price': '6', 'reason': '供应商按B版报价'},
+            status=403,
+        )
+        self.post(
+            'purchase_manager',
             f'purchases/{approved.pk}/revision-review/',
             {'line': converted.pk, 'decision': 'confirm', 'unit_price': '6', 'reason': '供应商按B版报价'},
         )
         entry.refresh_from_db()
         self.assertEqual(entry.amount, Decimal('32.00'))
+        history = self.get('purchaser', f'purchases/{approved.pk}/handling-history/')['results']
+        self.assertTrue(
+            {'purchase.revision_convert', 'purchase.revision_confirm'} <= {row['operation'] for row in history}
+        )
         self.receive(approved, converted, '2')
         self.assertNotIn('revision_reviews', self.get('purchaser', 'workbench/'))
         # 已到货的 2 件旧版超出现 BOM 需求，进入在库待处理。
         self.assertEqual(self.parts()['JG-001']['pending_stock'], '2.000')
+
+    def test_revision_price_hike_enforces_approval_sod_and_budget(self):
+        # 1) 维持原价或降价：普通采购员可以直接确认。
+        po_drop = self.buy(self.line, '2', price='10')
+        self.replace()
+        converted_drop = po_drop.lines.get(item=self.new)
+        self.post(
+            'purchaser',
+            f'purchases/{po_drop.pk}/revision-review/',
+            {'line': converted_drop.pk, 'decision': 'confirm', 'unit_price': '8', 'reason': '供应商降价'},
+        )
+        self.assertEqual(Entry.objects.get(purchase=po_drop).amount, Decimal('36.00'))
+
+        # 2) 采购经理自己创建并提交的采购单，换版调高单价触发申请人分离（403），需其他审批人或管理员确认。
+        item_c = Item.objects.create(
+            code='JG-001C', name='夹爪安装板', drawing_number='DWG-JG-001', drawing_revision='C', unit='件'
+        )
+        new_line = BOMLine.objects.get(project=self.project, item=self.new)
+        po_self = self.buy(new_line, '2', price='10', buyer='purchase_manager', approver='manager')
+        self.project.budget_materials = Decimal('40.00')
+        self.project.budget_labor = Decimal('0.00')
+        self.project.budget_expenses = Decimal('0.00')
+        self.project.budget_changed_by = self.users['manager']
+        self.project.save(update_fields=['budget_materials', 'budget_labor', 'budget_expenses', 'budget_changed_by'])
+        self.post(
+            'mechanical_engineer',
+            f'bom/{new_line.pk}/replace/',
+            {'item': item_c.pk, 'quantity': '10', 'change_note': 'ECN-03 升C版'},
+        )
+        converted_self = po_self.lines.get(item=item_c)
+        # 采购员调高单价 -> 403
+        self.post(
+            'purchaser',
+            f'purchases/{po_self.pk}/revision-review/',
+            {'line': converted_self.pk, 'decision': 'confirm', 'unit_price': '15', 'reason': '涨价'},
+            status=403,
+        )
+        # 申请人（purchase_manager）不能自批调高单价 -> 403
+        self.post(
+            'purchase_manager',
+            f'purchases/{po_self.pk}/revision-review/',
+            {'line': converted_self.pk, 'decision': 'confirm', 'unit_price': '15', 'reason': '涨价'},
+            status=403,
+        )
+        # 独立审批人（manager）调价超预算但未勾选 confirm_over_budget -> 409；且 manager 是预算调整人 -> 403
+        self.post(
+            'manager',
+            f'purchases/{po_self.pk}/revision-review/',
+            {'line': converted_self.pk, 'decision': 'confirm', 'unit_price': '15', 'reason': '涨价'},
+            status=403,
+        )
+        # 管理员未勾选 confirm_over_budget -> 409
+        conflict = self.post(
+            'admin',
+            f'purchases/{po_self.pk}/revision-review/',
+            {'line': converted_self.pk, 'decision': 'confirm', 'unit_price': '15', 'reason': '涨价'},
+            status=409,
+        )
+        self.assertIn('确认承担超预算调价', str(conflict))
+        # 管理员勾选 confirm_over_budget -> 200 且记录超预算审计
+        self.post(
+            'admin',
+            f'purchases/{po_self.pk}/revision-review/',
+            {
+                'line': converted_self.pk,
+                'decision': 'confirm',
+                'unit_price': '15',
+                'confirm_over_budget': True,
+                'reason': '涨价特批',
+            },
+        )
+        log = AuditLog.objects.filter(
+            operation='purchase.revision_confirm', resource=f'purchaseorder:{po_self.pk}'
+        ).last()
+        self.assertTrue(log.detail['over_budget'])
+        self.assertEqual(log.detail['delta'], '10.00')
+
+    def test_revision_convert_fractional_rounding_preserves_accounting_invariant(self):
+        po = self.buy(self.line, '1.000', price='1.01')
+        old_line = po.lines.get(item=self.old)
+        self.receive(po, old_line, '0.500')
+        self.replace()
+        entry = Entry.objects.get(purchase=po)
+        preview = self.get('purchaser', f'purchases/{po.pk}/contract-preview/', {'version': 'current'})
+        self.assertEqual(entry.amount - entry.credit_amount, Decimal(preview['effective_total']))
+        self.assertEqual(Decimal(preview['effective_total']), Decimal('1.02'))
+        log = AuditLog.objects.filter(operation='purchase.revision_convert', resource=f'purchaseorder:{po.pk}').last()
+        self.assertEqual(log.detail.get('rounding_delta'), '0.01')
+
+    def test_open_parts_and_scope_query_counts_do_not_scale_with_projects(self):
+        from apps.business.services import revisions
+
+        extras = []
+        for idx in range(3):
+            proj = self.active_project()
+            proj.members.add(self.users['mechanical_engineer'])
+            line = BOMLine.objects.create(project=proj, item=self.old, quantity=Decimal('2.000'), assembly_unit='U1')
+            po = self.buy(line, '2', project=proj)
+            self.receive(po, po.lines.get(item=self.old), '2')
+            self.post(
+                'mechanical_engineer',
+                f'bom/{line.pk}/replace/',
+                {'item': self.new.pk, 'quantity': '2', 'change_note': f'ECN-{idx}'},
+            )
+            extras.append(proj)
+        with self.assertNumQueries(8):
+            opened = revisions.open_parts(Project.objects.filter(pk__in=[p.pk for p in extras]))
+        self.assertEqual(len(opened), 3)
+        # scope 批量聚合：即使有多个项目共用同物料也不按行查库。
+        for proj in extras:
+            BOMLine.objects.create(project=proj, item=self.old, quantity=Decimal('1.000'), assembly_unit='U2')
+        with self.assertNumQueries(4):
+            scoped = revisions.scope(self.users['mechanical_engineer'], self.line)
+        self.assertEqual(len(scoped), 3)
 
     def test_purchaser_can_cancel_converted_remainder(self):
         approved = self.buy(self.line, '4')
@@ -640,12 +768,15 @@ class ContractUpdateTests(RevisionFixtures, TestCase):
         # 待确认期间只在「换版改单待确认」里，不重复提醒重签。
         self.assertNotIn('contract_updates', self.get('purchaser', 'workbench/'))
         result = self.post(
-            'purchaser',
+            'purchase_manager',
             url + 'revision-review/',
             {'line': converted.pk, 'decision': 'confirm', 'unit_price': '12', 'reason': '供应商按 B 版报价'},
         )
         self.assertEqual(result['contract_version'], 1)
         preview = self.get('purchaser', url + 'contract-preview/')
+        current = self.get('purchaser', url + 'contract-preview/', {'version': 'current'})
+        self.assertEqual(current['effective_total'], '48.00')
+        self.assertEqual(current['cancelled_amount'], '40.00')
         self.assertEqual(preview['latest_archived_version'], 1)
         self.assertEqual(
             preview['changes_since_archive'],
@@ -657,3 +788,56 @@ class ContractUpdateTests(RevisionFixtures, TestCase):
         self.archive()
         self.assertEqual(self.get('purchaser', url + 'contract-preview/')['changes_since_archive'], [])
         self.assertNotIn('contract_updates', self.get('purchaser', 'workbench/'))
+
+    def test_cancelled_converted_line_also_flags_stale_contract(self):
+        from apps.business.models import Document
+
+        other = Item.objects.create(code='JG-OTHER', name='辅件', unit='件')
+        other_bom = BOMLine.objects.create(
+            project=self.project, item=other, quantity=Decimal('2.000'), assembly_unit='U2'
+        )
+        created = self.post(
+            'purchaser',
+            'purchases/',
+            {
+                'project': self.project.pk,
+                'supplier': self.supplier.pk,
+                'due_date': TODAY,
+                'lines': [
+                    {'item': self.old.pk, 'bom_line': self.line.pk, 'quantity': '4', 'unit_price': '10'},
+                    {'item': other.pk, 'bom_line': other_bom.pk, 'quantity': '2', 'unit_price': '15'},
+                ],
+            },
+            status=201,
+        )
+        po = PurchaseOrder.objects.get(pk=created['id'])
+        self.post('purchaser', f'purchases/{po.pk}/submit/')
+        self.post('manager', f'purchases/{po.pk}/approve/')
+        po.refresh_from_db()
+        url = f'purchases/{po.pk}/'
+        current = self.get('purchaser', url + 'contract-preview/', {'version': 'current'})
+        doc = Document.objects.create(
+            purchase=po, category='contract', original_name='双行签署.pdf', file='f2', size=1, sha256='c' * 64
+        )
+        self.post(
+            'purchaser',
+            url + 'archive-contract/',
+            {
+                'expected_snapshot': current['snapshot_hash'],
+                'document': doc.pk,
+                'delivery_address': '工厂',
+                'confirmed': True,
+            },
+            status=201,
+        )
+        self.replace()
+        converted = po.lines.get(item=self.new)
+        self.post(
+            'purchaser',
+            url + 'revision-review/',
+            {'line': converted.pk, 'decision': 'cancel', 'reason': '供应商不做新版'},
+        )
+        workbench = self.get('purchaser', 'workbench/')
+        self.assertIn(po.pk, [row['id'] for row in workbench['contract_updates']['results']])
+        updated = self.get('purchaser', url + 'contract-preview/', {'version': 'current'})
+        self.assertEqual(updated['effective_total'], '30.00')

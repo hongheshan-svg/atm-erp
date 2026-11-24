@@ -71,24 +71,44 @@ def supervised_tasks(user_id, queryset):
     return queryset.filter(scope)
 
 
-def notify_task(actor, task, event):
-    recipient = supervisor_id(task)
+def notify_task(actor, task, event, *, include_assignees=False):
+    actor_id = getattr(actor, 'pk', None)
+    supervisor = supervisor_id(task)
+    assigned = list(task.assigned_people())
+    people = '、'.join(person.display_name or person.username for person in assigned)
+    notified = set()
     # 主管自己派工或调整时已经知情，再给本人发提醒只会淹没别人派来的任务。
-    if recipient == getattr(actor, 'pk', None):
+    if supervisor and supervisor != actor_id and User.objects.filter(pk=supervisor, is_active=True).exists():
+        save(
+            TaskNotice(
+                task=task,
+                recipient_id=supervisor,
+                message=f'{event}：{task.title}；执行人：{people}；计划完成：{task.due_date or "未设置"}。请跟进并核对实际完成日期和人员工时。'[
+                    :1000
+                ],
+            ),
+            actor,
+        )
+        notified.add(supervisor)
+    if not include_assignees:
         return
-    if not User.objects.filter(pk=recipient, is_active=True).exists():
+    # 任务新建、改派、改期、重开或取消时同步提醒执行人本人，避免执行人只靠主管口头转达。
+    assignee_ids = [person.pk for person in assigned if person.pk != actor_id and person.pk not in notified]
+    if not assignee_ids:
         return
-    people = '、'.join(person.display_name or person.username for person in task.assigned_people())
-    save(
-        TaskNotice(
-            task=task,
-            recipient_id=recipient,
-            message=f'{event}：{task.title}；执行人：{people}；计划完成：{task.due_date or "未设置"}。请跟进并核对实际完成日期和人员工时。'[
-                :1000
-            ],
-        ),
-        actor,
-    )
+    active_ids = set(User.objects.filter(pk__in=assignee_ids, is_active=True).values_list('pk', flat=True))
+    for recipient_id in assignee_ids:
+        if recipient_id not in active_ids:
+            continue
+        save(
+            TaskNotice(
+                task=task,
+                recipient_id=recipient_id,
+                message=f'{event}：{task.title}；计划完成：{task.due_date or "未设置"}。请按计划推进。'[:1000],
+            ),
+            actor,
+        )
+        notified.add(recipient_id)
 
 
 def configure(actor, key, project_id, data):

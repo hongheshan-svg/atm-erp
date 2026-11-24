@@ -272,6 +272,39 @@ class DocumentPreviewParsingTests(SimpleTestCase):
         valid = docx_content('<w:p/>')
         with patch.object(preview, 'MAX_EXPANDED_BYTES', 10):
             self.assert_invalid('a.docx', valid, message='解压后过大')
+        # 伪造 ZipInfo.file_size=0 绕过头部预检时，仍按实际解压字节上限在流式读取阶段拦截。
+        real_infolist = zipfile.ZipFile.infolist
+        real_open = zipfile.ZipFile.open
+
+        def spoofed_infolist(archive_self):
+            infos = []
+            for item in real_infolist(archive_self):
+                clone = zipfile.ZipInfo(item.filename)
+                clone.file_size = 0
+                infos.append(clone)
+            return infos
+
+        def open_by_name(archive_self, name, *args, **kwargs):
+            return real_open(
+                archive_self, name.filename if isinstance(name, zipfile.ZipInfo) else name, *args, **kwargs
+            )
+
+        with (
+            patch.object(preview, 'MAX_EXPANDED_BYTES', 20),
+            patch.object(zipfile.ZipFile, 'infolist', spoofed_infolist),
+            patch.object(zipfile.ZipFile, 'open', open_by_name),
+        ):
+            self.assert_invalid('a.docx', valid, message='解压后过大')
+        from apps.business.services import bom_import
+
+        with (
+            patch.object(bom_import, 'MAX_XLSX_EXPANDED', 20),
+            patch.object(zipfile.ZipFile, 'infolist', spoofed_infolist),
+            patch.object(zipfile.ZipFile, 'open', open_by_name),
+        ):
+            with self.assertRaises(ValidationError) as caught:
+                bom_import.read_xlsx(valid)
+            self.assertIn('解压后过大', str(caught.exception))
         with patch.object(preview, 'MAX_ZIP_MEMBERS', 1):
             self.assert_invalid('a.docx', zip_content({'a.xml': '<a/>', 'b.xml': '<b/>'}), message='部件过多')
         with patch.object(preview, 'MAX_XML_ELEMENTS', 1):

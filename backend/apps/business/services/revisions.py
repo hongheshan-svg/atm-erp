@@ -11,14 +11,37 @@ import uuid
 from decimal import Decimal
 
 from django.db.models import F, Sum
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
+from apps.core.actions import perform
 from apps.core.api import Conflict
-from apps.core.permissions import BOM_WRITERS, PURCHASERS, WAREHOUSE, has_role, projects_for, require_project
+from apps.core.permissions import (
+    BOM_WRITERS,
+    PURCHASE_APPROVERS,
+    PURCHASERS,
+    WAREHOUSE,
+    has_role,
+    projects_for,
+    require_project,
+    require_role,
+)
 
-from ..models import BOMLine, Entry, Item, Project, PurchaseLine, RevisionChange, RevisionDisposition, Stock, StockMove
-from .bom import BOM_STATES, incoming_by_item, issued_by_item, received_unissued_by_item
+from ..models import (
+    BOMLine,
+    Entry,
+    Item,
+    Project,
+    PurchaseLine,
+    PurchaseOrder,
+    RevisionChange,
+    RevisionDisposition,
+    Stock,
+    StockMove,
+)
+from .approval import independent_approval
+from .bom import ARRIVAL_KINDS, BOM_STATES, incoming_by_item, issued_by_item, received_unissued_by_item
 from .common import ZERO, audit, day, fields, identity, lock_items, number, project_action, rounded, save, state, text
 
 REWORK_ROLES = {'rework_stock': 'stock', 'rework_issued': 'issued'}
@@ -39,15 +62,27 @@ def unreceived(line):
     return line.quantity - line.received_quantity - line.cancelled_quantity - line.pending_quantity
 
 
-def convertible(old_line):
-    """关联原 BOM 行、仍有未到货余量的采购明细（采购单未作废、未收完、未删除），加锁后按采购单和明细排序。"""
+def lock_convertible(old_lines):
+    """按全局锁顺序（PurchaseOrder → PurchaseLine）锁定关联原 BOM 行且仍有未到货余量的采购明细。"""
     from .purchase_changes import pending_requests
 
+    line_ids = [line.pk for line in old_lines]
+    if not line_ids:
+        return []
+    purchase_ids = sorted(
+        set(
+            PurchaseLine.objects.filter(bom_line_id__in=line_ids, purchase__is_deleted=False)
+            .exclude(purchase__status__in=['cancelled', 'received'])
+            .values_list('purchase_id', flat=True)
+        )
+    )
+    if purchase_ids:
+        list(PurchaseOrder.objects.select_for_update().filter(pk__in=purchase_ids).order_by('pk'))
     lines = [
         line
         for line in PurchaseLine.objects.select_for_update(of=('self',))
         .select_related('purchase')
-        .filter(bom_line=old_line, purchase__is_deleted=False)
+        .filter(bom_line_id__in=line_ids, purchase__is_deleted=False)
         .exclude(purchase__status__in=['cancelled', 'received'])
         .order_by('purchase_id', 'pk')
         if unreceived(line) > ZERO
@@ -59,6 +94,11 @@ def convertible(old_line):
     return lines
 
 
+def convertible(old_line):
+    """关联原 BOM 行、仍有未到货余量的采购明细（采购单未作废、未收完、未删除），加锁后按采购单和明细排序。"""
+    return lock_convertible([old_line])
+
+
 def convert_purchases(user, change, lines):
     """把旧版未到货余量转为新版；返回 [{purchase, code, quantity, pending}] 供提示和审计。"""
     from .supply import receiving_status
@@ -67,6 +107,7 @@ def convert_purchases(user, change, lines):
     for line in lines:
         purchase = line.purchase
         remainder = unreceived(line)
+        extra_audit = {}
         if purchase.status in {'draft', 'submitted'}:
             # 未批准：这一行直接改成新版，审批人批准的就是新版。
             line.item, line.bom_line = change.new_item, change.new_line
@@ -75,9 +116,11 @@ def convert_purchases(user, change, lines):
             converted = line
         else:
             # 已批准：旧版余量取消（应付按累计舍入差冲减，与取消未收余量同一算法），同单新增新版明细，
-            # 应付按新版明细金额增加；待采购向供应商确认新图（可调价）或取消，确认前不能收货。
+            # 应付按新版明细金额增加（保持 Entry 净额与逐行有效金额合计一致）；待采购确认新图或取消。
             retained = line.quantity - line.cancelled_quantity
             credit = rounded(retained * line.unit_price) - rounded((retained - remainder) * line.unit_price)
+            new_amount = rounded(remainder * line.unit_price)
+            rounding_delta = new_amount - credit
             line.cancelled_quantity += remainder
             save(line, user)
             converted = save(
@@ -96,9 +139,14 @@ def convert_purchases(user, change, lines):
             )
             entry = Entry.objects.select_for_update().filter(purchase=purchase).first()
             if entry:
-                entry.amount += rounded(remainder * line.unit_price)
+                if entry.amount + new_amount < entry.credit_amount + credit:
+                    raise Conflict('换版改单后应付金额小于已冲减金额，请先核对应付。')
+                entry.amount += new_amount
                 entry.credit_amount += credit
                 save(entry, user)
+            extra_audit = {'credit': str(credit)}
+            if rounding_delta != ZERO:
+                extra_audit['rounding_delta'] = str(rounding_delta)
             touched[purchase.pk] = purchase
         audit(
             user,
@@ -112,6 +160,7 @@ def convert_purchases(user, change, lines):
             change=change.pk,
             reason=change.reason,
             pending=converted.revision_pending,
+            **extra_audit,
         )
         result.append(
             {
@@ -185,23 +234,29 @@ def conversion_problems(project, existing, updates, replacements):
     return problems
 
 
-def change_revision(user, project, line, item, qty, note, details=None, *, operation='replace'):
+def change_revision(
+    user, project, line, item, qty, note, details=None, *, operation='replace', pending_lines=None, items_locked=False
+):
     """在调用方已锁定的项目里把 BOM 行 line（已加锁）换成物料 item，数量 qty；返回（换版记录，转换的采购）。
 
     旧版已领、已到货和在途都不再拦截：在途转新版，已领和到货多出的转「旧版待处理」。新物料须在用、
     与原物料不同，且原单元没有该物料（已有时请改那一行的数量并移除原行）。
+    锁顺序严格遵循 Project → BOMLine → PurchaseOrder → PurchaseLine → Item → Entry。
     """
     details = details or {}
     if item.pk == line.item_id:
         raise ValidationError({'item': '请选择与原物料不同的新物料；只改数量请用「修改此行」。'})
-    lock_items({item.pk, line.item_id})
+    if pending_lines is None:
+        pending_lines = convertible(line)
+    if not items_locked:
+        locked_items = lock_items({item.pk, line.item_id})
+        item = locked_items[item.pk]
     if not item.is_active:
         raise ValidationError({'item': 'BOM 不能添加或修改为已停用物料。'})
     if BOMLine.objects.filter(project=project, item=item, assembly_unit=line.assembly_unit).exists():
         raise Conflict(
             f'单元「{line.assembly_unit or "未分单元"}」已有物料 {item.code}，请用「修改此行」调整该行数量后移除原行。'
         )
-    pending_lines = convertible(line)
     converted_qty = sum((unreceived(row) for row in pending_lines), ZERO)
     minimum = converted_minimum(project, line, item, converted_qty)
     if qty < minimum:
@@ -461,10 +516,9 @@ def quantity(value):
     return str(value.quantize(Decimal('0.001')))
 
 
-def parts(project):
-    """项目「旧版待处理」：每个换下来的旧物料一行，仍有待处理的排前面。"""
+def format_parts(rows_by_item):
     rows = []
-    for row in obsolete(project).values():
+    for row in rows_by_item.values():
         pending = row['pending_issued'] + row['pending_stock']
         rows.append(
             {
@@ -476,11 +530,136 @@ def parts(project):
     return sorted(rows, key=lambda row: (not row['open'], -row['change']))
 
 
+def parts(project):
+    """项目「旧版待处理」：每个换下来的旧物料一行，仍有待处理的排前面。"""
+    return format_parts(obsolete(project))
+
+
+def _live_target_cached(change, next_by_old_line):
+    line, seen = change.new_line, set()
+    while line.is_deleted and line.pk not in seen:
+        seen.add(line.pk)
+        following = next_by_old_line.get((change.project_id, line.pk))
+        if following is None:
+            return None
+        line = following.new_line
+    return None if line.is_deleted else line
+
+
 def open_parts(projects):
-    """[(项目, 仍有旧版待处理的行)]，工作台用；只计算有换版记录的项目。"""
+    """[(项目, 仍有旧版待处理的行)]，工作台用；批量聚合所有有换版记录的项目，避免 N+1 查询。"""
+    project_list = list(projects.filter(pk__in=RevisionChange.objects.values('project_id')).order_by('pk'))
+    if not project_list:
+        return []
+    project_ids = [project.pk for project in project_list]
+    latest, history_ids, next_by_old_line = {}, {}, {}
+    for change in (
+        RevisionChange.objects.filter(project_id__in=project_ids)
+        .select_related('old_item', 'new_item', 'new_line__item')
+        .order_by('project_id', 'pk')
+    ):
+        key = (change.project_id, change.old_item_id)
+        latest[key] = change
+        history_ids.setdefault(key, []).append(change.pk)
+        next_by_old_line[(change.project_id, change.old_line_id)] = change
+    if not latest:
+        return []
+    item_ids = sorted({item_id for _, item_id in latest})
+    needed = {
+        (row['project_id'], row['item_id']): row['total'] or ZERO
+        for row in BOMLine.objects.filter(project_id__in=project_ids, item_id__in=item_ids)
+        .values('project_id', 'item_id')
+        .annotate(total=Sum('quantity'))
+    }
+    used = {
+        (row['project_id'], row['stock__item_id']): -(row['total'] or ZERO)
+        for row in StockMove.objects.filter(
+            project_id__in=project_ids, stock__item_id__in=item_ids, kind__in=['issue', 'return']
+        )
+        .exclude(task__kind='service')
+        .values('project_id', 'stock__item_id')
+        .annotate(total=Sum('quantity'))
+    }
+    arrived = {
+        (row['project_id'], row['stock__item_id']): row['total'] or ZERO
+        for row in StockMove.objects.filter(
+            project_id__in=project_ids, stock__item_id__in=item_ids, kind__in=ARRIVAL_KINDS
+        )
+        .values('project_id', 'stock__item_id')
+        .annotate(total=Sum('quantity'))
+    }
+    disposed = {
+        (row['change__project_id'], row['change__old_item_id'], row['source'], row['kind']): row['total'] or ZERO
+        for row in RevisionDisposition.objects.filter(
+            change__project_id__in=project_ids, change__old_item_id__in=item_ids
+        )
+        .values('change__project_id', 'change__old_item_id', 'source', 'kind')
+        .annotate(total=Sum('quantity'))
+    }
+    reworked = {
+        (row['revision__project_id'], row['revision__old_item_id'], REWORK_ROLES[row['revision_role']]): (
+            row['total'] or ZERO,
+            row['received'] or ZERO,
+        )
+        for row in PurchaseLine.objects.filter(
+            revision__project_id__in=project_ids,
+            revision__old_item_id__in=item_ids,
+            revision_role__in=list(REWORK_ROLES),
+            purchase__is_deleted=False,
+        )
+        .exclude(purchase__status='cancelled')
+        .values('revision__project_id', 'revision__old_item_id', 'revision_role')
+        .annotate(total=Sum(F('quantity') - F('cancelled_quantity')), received=Sum('received_quantity'))
+    }
+    on_hand = {
+        row['item_id']: row['total'] or ZERO
+        for row in Stock.objects.filter(item_id__in=item_ids).values('item_id').annotate(total=Sum('quantity'))
+    }
+    by_project = {}
+    for (project_id, item_id), change in latest.items():
+        need = needed.get((project_id, item_id), ZERO)
+        issued_qty = used.get((project_id, item_id), ZERO)
+        received = max(ZERO, arrived.get((project_id, item_id), ZERO) - issued_qty)
+        excess_issued = max(ZERO, issued_qty - need)
+        excess_stock = max(ZERO, received - max(ZERO, need - issued_qty))
+        rework_issued, rework_issued_received = reworked.get((project_id, item_id, 'issued'), (ZERO, ZERO))
+        rework_stock, rework_stock_received = reworked.get((project_id, item_id, 'stock'), (ZERO, ZERO))
+        scrapped_issued = disposed.get((project_id, item_id, 'issued', 'scrap'), ZERO)
+        kept = disposed.get((project_id, item_id, 'stock', 'keep'), ZERO)
+        target = _live_target_cached(change, next_by_old_line)
+        new_item = target.item if target else change.new_item
+        by_project.setdefault(project_id, {})[item_id] = {
+            'change': change.pk,
+            'changes': history_ids[(project_id, item_id)],
+            'old_item': item_id,
+            'old_item_code': change.old_item.code,
+            'old_item_name': change.old_item.name,
+            'old_revision': change.old_item.drawing_revision,
+            'unit': change.old_item.unit,
+            'new_item': new_item.pk,
+            'new_item_code': new_item.code,
+            'new_item_name': new_item.name,
+            'new_revision': new_item.drawing_revision,
+            'new_line': target.pk if target else None,
+            'assembly_unit': change.assembly_unit,
+            'reason': change.reason,
+            'created_at': change.created_at,
+            'on_hand': on_hand.get(item_id, ZERO),
+            'issued': excess_issued,
+            'stock': excess_stock,
+            'scrapped_issued': scrapped_issued,
+            'scrapped_stock': disposed.get((project_id, item_id, 'stock', 'scrap'), ZERO),
+            'kept': kept,
+            'rework_issued': rework_issued,
+            'rework_issued_received': rework_issued_received,
+            'rework_stock': rework_stock,
+            'rework_stock_received': rework_stock_received,
+            'pending_issued': max(ZERO, excess_issued - scrapped_issued - rework_issued),
+            'pending_stock': max(ZERO, excess_stock - kept - (rework_stock - rework_stock_received)),
+        }
     result = []
-    for project in projects.filter(pk__in=RevisionChange.objects.values('project_id')).order_by('pk'):
-        rows = [row for row in parts(project) if row['open']]
+    for project in project_list:
+        rows = [row for row in format_parts(by_project.get(project.pk, {})) if row['open']]
         if rows:
             result.append((project, rows))
     return result
@@ -669,15 +848,19 @@ def receive_rework(user, project, line, qty, purchase):
 
 
 def review(actor, key, purchase_id, data):
-    """采购处理换版改单：按新图确认（可调单价，应付同步调整）或取消该新版明细的余量。"""
-    from .supply import cancel_lines, purchase_action
+    """采购处理换版改单：按新图确认（调高单价须采购审批权限、独立审批与预算复核）或取消余量。"""
+    from . import budgets
+    from .supply import cancel_lines, purchase_action, purchase_applicants
 
     def execute(user, purchase):
-        fields(data, {'line', 'decision', 'unit_price', 'reason'})
+        fields(data, {'line', 'decision', 'unit_price', 'reason', 'confirm_over_budget'})
         state(purchase, {'approved', 'partial'})
         decision = data.get('decision')
         if decision not in {'confirm', 'cancel'}:
             raise ValidationError({'decision': '请选择按新图改单或取消余量。'})
+        confirm_over_budget = data.get('confirm_over_budget', False)
+        if not isinstance(confirm_over_budget, bool):
+            raise ValidationError({'confirm_over_budget': '必须为布尔值。'})
         reason = text(data, 'reason')
         lines = list(purchase.lines.select_for_update().order_by('item_id', 'pk'))
         line_id = identity(data.get('line'), 'line')
@@ -688,6 +871,8 @@ def review(actor, key, purchase_id, data):
         if decision == 'cancel':
             if 'unit_price' in data:
                 raise ValidationError({'unit_price': '取消余量不需要单价。'})
+            if 'confirm_over_budget' in data:
+                raise ValidationError({'confirm_over_budget': '取消余量不需要超预算确认。'})
             line.revision_pending = False
             save(line, user)
             if remaining > ZERO:
@@ -697,11 +882,46 @@ def review(actor, key, purchase_id, data):
             )
         before = line.unit_price
         price = number(data['unit_price'], 'unit_price') if 'unit_price' in data else before
+        delta = ZERO
+        audit_extra = {}
         if price != before:
             number(rounded(line.quantity * price), 'line_amount')
             # 换版明细确认前不能收货；已取消的部分按原价冲减过，调价只调整未取消的部分。
             retained = line.quantity - line.cancelled_quantity
             delta = rounded(retained * price) - rounded(retained * before)
+            if price > before:
+                try:
+                    require_role(user, PURCHASE_APPROVERS)
+                    require_project(user, purchase.project, PURCHASE_APPROVERS)
+                except PermissionDenied as exc:
+                    raise PermissionDenied(
+                        '换版改单调高单价会增加已批准应付，请由采购经理、项目经理或管理员确认。'
+                    ) from exc
+                self_approval = independent_approval(user, purchase_applicants(purchase), reason)
+                over_budget = False
+                budget_adjuster_approval = False
+                report = None
+                if delta > ZERO:
+                    report = budgets.analysis(purchase.project, delta)
+                    if report['over_budget']:
+                        if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
+                            raise PermissionDenied(
+                                '预算调整人不能确认本项目超预算调价，请由其他经理审批；管理员例外必须填写原因。'
+                            )
+                        if not confirm_over_budget:
+                            warnings = budgets.purchase_visibility(user, report, purchase.project)['warnings']
+                            raise Conflict(
+                                '；'.join(warnings) + '。调高单价会超出项目预算，请勾选「确认承担超预算调价」后提交。'
+                            )
+                        over_budget = True
+                        budget_adjuster_approval = user.pk == purchase.project.budget_changed_by_id
+                audit_extra.update(
+                    self_approval=self_approval,
+                    over_budget=over_budget,
+                    budget_adjuster_approval=budget_adjuster_approval,
+                )
+                if report is not None:
+                    audit_extra['budget_check'] = report
             entry = Entry.objects.select_for_update().filter(purchase=purchase).first()
             if entry:
                 if entry.amount + delta < entry.credit_amount:
@@ -709,6 +929,7 @@ def review(actor, key, purchase_id, data):
                 entry.amount += delta
                 save(entry, user)
             line.unit_price = price
+            audit_extra['delta'] = str(delta)
         line.revision_pending = False
         save(line, user)
         audit(
@@ -720,6 +941,7 @@ def review(actor, key, purchase_id, data):
             before_price=str(before),
             after_price=str(price),
             reason=reason,
+            **audit_extra,
         )
         # 已归档过签署合同的，提示与供应商确认新图和价格后归档新版本合同。
         archived = purchase.contract_versions.order_by('-version').values_list('version', flat=True).first()
@@ -748,22 +970,36 @@ def scope(actor, line):
         .select_related('project')
         .order_by('project_id', 'pk')
     )
-    # 勾选前看到对方项目的在途和已领：在途会一并按新图改单，已领超出需求的进入该项目的旧版待处理。
+    # 勾选前看到对方项目的在途和已领：一次批量查询，避免按 BOM 行重复查库。
     transit = unreceived_by_line([row.pk for row in rows])
+    project_ids = sorted({row.project_id for row in rows})
+    issued_totals = (
+        {
+            row['project_id']: -(row['total'] or ZERO)
+            for row in StockMove.objects.filter(
+                project_id__in=project_ids, stock__item_id=line.item_id, kind__in=['issue', 'return']
+            )
+            .exclude(task__kind='service')
+            .values('project_id')
+            .annotate(total=Sum('quantity'))
+        }
+        if project_ids
+        else {}
+    )
     for row in rows:
-        entry = result.setdefault(
-            row.project_id,
-            {
+        entry = result.get(row.project_id)
+        if entry is None:
+            entry = {
                 'id': row.project_id,
                 'code': row.project.code,
                 'name': row.project.name,
                 'quantity': ZERO,
                 'in_transit': ZERO,
-                'issued': issued_by_item(row.project, [line.item_id])[line.item_id],
+                'issued': issued_totals.get(row.project_id, ZERO),
                 'units': [],
                 'writable': row.project_id in writable,
-            },
-        )
+            }
+            result[row.project_id] = entry
         entry['quantity'] += row.quantity
         entry['in_transit'] += max(ZERO, transit.get(row.pk, ZERO))
         entry['units'].append(row.assembly_unit or '未分单元')
@@ -800,8 +1036,14 @@ def new_revision(user, key, old, data):
 
 
 def upgrade(actor, key, line_id, data):
-    """一步升版：复制原物料资料建新版（或复用已有新版）并在本单元换版；可勾选同物料的其他项目一并换版。"""
-    source = get_object_or_404(BOMLine.all_objects, pk=identity(line_id))
+    """一步升版：复制原物料资料建新版（或复用已有新版）并在本单元换版；可勾选同物料的其他项目一并换版。
+
+    按全局锁顺序（Project 升序 → BOMLine → PurchaseOrder → PurchaseLine → Item → Entry）一次锁齐全部目标项目，
+    避免跨项目双向升版或与收货并发产生死锁。
+    """
+    require_role(actor, BOM_WRITERS)
+    source = get_object_or_404(BOMLine.all_objects.select_related('project'), pk=identity(line_id))
+    require_project(actor, source.project, BOM_WRITERS)
     allowed = {
         'drawing_revision',
         'name',
@@ -813,9 +1055,42 @@ def upgrade(actor, key, line_id, data):
         'applicant',
         'projects',
     }
+    fields(data, allowed)
+    others = data.get('projects', [])
+    if not isinstance(others, list) or any(not isinstance(pk, int) or isinstance(pk, bool) for pk in others):
+        raise ValidationError({'projects': '请提交项目编号列表。'})
+    if len(set(others)) != len(others) or source.project_id in others:
+        raise ValidationError({'projects': '项目重复或包含本项目。'})
+    sorted_others = sorted(others)
+    project_ids = sorted({source.project_id, *sorted_others})
+    context = {}
 
-    def execute(user, project):
-        fields(data, allowed)
+    def authorize(current_actor):
+        require_role(current_actor, BOM_WRITERS)
+        locked = {
+            project.pk: project
+            for project in Project.objects.select_for_update().filter(pk__in=project_ids).order_by('pk')
+        }
+        if source.project_id not in locked:
+            raise Http404
+        current_actor.refresh_from_db(fields=['role', 'additional_roles', 'is_active', 'is_superuser'])
+        require_role(current_actor, BOM_WRITERS)
+        require_project(current_actor, locked[source.project_id], BOM_WRITERS)
+        for other_id in sorted_others:
+            other_project = locked.get(other_id)
+            if other_project is None or other_project.status not in BOM_STATES:
+                raise Conflict('所选项目已不再使用原物料或不能维护 BOM，请刷新后重新选择。')
+            try:
+                require_project(current_actor, other_project, BOM_WRITERS)
+            except PermissionDenied as exc:
+                raise PermissionDenied(
+                    f'你不能维护项目 {other_project.code} 的 BOM，请由该项目的工程师或项目经理换版。'
+                ) from exc
+        context['projects'] = locked
+
+    def execute(user):
+        locked = context['projects']
+        project = locked[source.project_id]
         state(project, BOM_STATES)
         line = get_object_or_404(
             BOMLine.all_objects.select_for_update(of=('self',)).select_related('item'), pk=source.pk, project=project
@@ -824,25 +1099,64 @@ def upgrade(actor, key, line_id, data):
             raise Conflict('此 BOM 行已移除。')
         if not line.item.drawing_number:
             raise ValidationError('只有带图号的物料可以升版；换成其他型号请用「替换物料」。')
-        others = data.get('projects', [])
-        if not isinstance(others, list) or any(not isinstance(pk, int) or isinstance(pk, bool) for pk in others):
-            raise ValidationError({'projects': '请提交项目编号列表。'})
-        if len(set(others)) != len(others) or project.pk in others:
-            raise ValidationError({'projects': '项目重复或包含本项目。'})
         qty = number(data.get('quantity', str(line.quantity)), 'quantity', 3, positive=True)
         note = text(data, 'change_note')
-        candidates = {row['id']: row for row in scope(user, line)}
-        for other in others:
-            row = candidates.get(other)
-            if row is None:
-                raise Conflict('所选项目已不再使用原物料或不能维护 BOM，请刷新后重新选择。')
-            if not row['writable']:
-                raise PermissionDenied(f'你不能维护项目 {row["code"]} 的 BOM，请由该项目的工程师或项目经理换版。')
         old = line.item
+        other_lines = {}
+        for other_id in sorted_others:
+            other_project = locked[other_id]
+            if other_project.status not in BOM_STATES:
+                raise Conflict('所选项目已不再使用原物料或不能维护 BOM，请刷新后重新选择。')
+            found = list(
+                BOMLine.objects.select_for_update(of=('self',))
+                .select_related('item')
+                .filter(project=other_project, item=old)
+                .order_by('pk')
+            )
+            if not found:
+                raise Conflict('所选项目已不再使用原物料或不能维护 BOM，请刷新后重新选择。')
+            other_lines[other_id] = found
         item, created = new_revision(user, key, old, data)
+        all_target_lines = [line, *(row for rows in other_lines.values() for row in rows)]
+        all_pending = lock_convertible(all_target_lines)
+        pending_by_line = {}
+        for purchase_line in all_pending:
+            pending_by_line.setdefault(purchase_line.bom_line_id, []).append(purchase_line)
+        locked_items = lock_items({old.pk, item.pk})
+        item = locked_items[item.pk]
         details = {field: data[field] for field in ('required_date', 'application_date', 'applicant') if field in data}
-        change, converted = change_revision(user, project, line, item, qty, note, details, operation='upgrade')
-        applied = [apply_elsewhere(user, key, other, old, item, note) for other in sorted(others)]
+        change, converted = change_revision(
+            user,
+            project,
+            line,
+            item,
+            qty,
+            note,
+            details,
+            operation='upgrade',
+            pending_lines=pending_by_line.get(line.pk, []),
+            items_locked=True,
+        )
+        applied = []
+        for other_id in sorted_others:
+            other_project = locked[other_id]
+            changes = []
+            for other_line in other_lines[other_id]:
+                other_change, other_converted = change_revision(
+                    user,
+                    other_project,
+                    other_line,
+                    item,
+                    other_line.quantity,
+                    note,
+                    operation='upgrade',
+                    pending_lines=pending_by_line.get(other_line.pk, []),
+                    items_locked=True,
+                )
+                changes.append(
+                    {'change': other_change.pk, 'assembly_unit': other_line.assembly_unit, 'converted': other_converted}
+                )
+            applied.append({'project': other_project.pk, 'code': other_project.code, 'changes': changes})
         return {
             'id': change.new_line_id,
             'change': change.pk,
@@ -853,35 +1167,13 @@ def upgrade(actor, key, line_id, data):
             'projects': applied,
         }
 
-    return project_action(
-        actor, key, 'bom.upgrade', source.project_id, {'line': source.pk, 'data': data}, BOM_WRITERS, execute
-    )
-
-
-def apply_elsewhere(user, key, project_id, old, item, note):
-    """在另一个项目里把原物料的各单元都换成新版（数量不变），按该项目自己的锁和权限执行。"""
-
-    def execute(current, project):
-        state(project, BOM_STATES)
-        result = []
-        for line in (
-            BOMLine.objects.select_for_update(of=('self',))
-            .select_related('item')
-            .filter(project=project, item=old)
-            .order_by('pk')
-        ):
-            change, converted = change_revision(current, project, line, item, line.quantity, note, operation='upgrade')
-            result.append({'change': change.pk, 'assembly_unit': line.assembly_unit, 'converted': converted})
-        return {'project': project.pk, 'code': project.code, 'changes': result}
-
-    return project_action(
-        user,
-        nested_key(key, 'project', project_id),
-        'bom.upgrade',
-        project_id,
-        {'old': old.pk, 'item': item.pk, 'note': note},
-        BOM_WRITERS,
-        execute,
+    return perform(
+        actor=actor,
+        key=key,
+        operation='bom.upgrade',
+        payload={'project': source.project_id, 'data': {'line': source.pk, 'data': data}},
+        authorize=authorize,
+        execute=execute,
     )
 
 

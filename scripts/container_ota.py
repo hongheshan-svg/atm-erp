@@ -1,6 +1,9 @@
 """In-container OTA, with no Docker API, root privileges or host service."""
+
+import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,6 +17,88 @@ from types import SimpleNamespace
 import container_runtime as runtime
 from ota_runner import Runner, atomic_json, download, file_hash, trusted_asset, unpack
 from release_install import native_dependencies
+
+JOB_DIR = re.compile(r'^job-([0-9]+)$')
+
+
+def _job_id(path):
+    match = JOB_DIR.fullmatch(path.name)
+    return int(match.group(1)) if match else None
+
+
+def _active_job_name(directory):
+    active_file = directory / 'active.json'
+    if not active_file.is_file():
+        return None
+    try:
+        release = json.loads(active_file.read_text()).get('release')
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(release, str) or not release:
+        return None
+    parts = Path(release).parts
+    return parts[0] if parts and JOB_DIR.fullmatch(parts[0]) else None
+
+
+def _protected_jobs(directory):
+    protected = set()
+    active = _active_job_name(directory)
+    if active:
+        protected.add(active)
+    state_file = directory / 'state.json'
+    if state_file.is_file():
+        try:
+            state = json.loads(state_file.read_text())
+        except (OSError, ValueError):
+            state = {}
+        for key in ('prepared', 'inflight'):
+            item = state.get(key)
+            if isinstance(item, dict) and item.get('id') is not None:
+                protected.add(f'job-{item["id"]}')
+    return protected
+
+
+def prune_releases(directory, *, log=None):
+    """删除已被新版本替代的历史 job-*/release 目录；严格保留当前 active、待重启 prepared 与所有备份和日志。"""
+    active = _active_job_name(directory)
+    if not active:
+        return []
+    protected = _protected_jobs(directory)
+    removed = []
+    for entry in sorted(directory.iterdir(), key=lambda path: _job_id(path) or 0):
+        if not entry.is_dir() or _job_id(entry) is None or entry.name in protected:
+            continue
+        release = entry / 'release'
+        if release.is_dir():
+            try:
+                shutil.rmtree(release)
+                removed.append(release)
+            except OSError as exc:
+                if log is not None:
+                    print(f'历史版本目录清理失败（{entry.name}/release）：{type(exc).__name__}', file=log, flush=True)
+    return removed
+
+
+def prune_backups(directory, *, keep_backups=3):
+    """按需清理过旧的升级备份目录，始终至少保留最近 keep_backups 份及当前生效/进行中任务对应的备份。"""
+    if keep_backups < 1:
+        raise ValueError('keep_backups 至少为 1，禁止清空全部备份。')
+    protected = _protected_jobs(directory)
+    candidates = []
+    for entry in directory.iterdir():
+        job_num = _job_id(entry)
+        if entry.is_dir() and job_num is not None and (entry / 'backup').is_dir():
+            candidates.append((job_num, entry))
+    candidates.sort(key=lambda item: item[0])
+    keep = {entry.name for _, entry in candidates[-keep_backups:]} | protected
+    removed = []
+    for _, entry in candidates:
+        if entry.name in keep:
+            continue
+        backup = entry / 'backup'
+        shutil.rmtree(backup)
+        removed.append(backup)
+    return removed
 
 
 class ContainerRunner(Runner):
@@ -72,6 +157,7 @@ class ContainerRunner(Runner):
                     (runtime.DATA / 'maintenance.json').unlink(missing_ok=True)
                     self.state.pop('inflight', None)
                     self.save()
+                    prune_releases(self.directory, log=log)
                 except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
                     atomic_json(runtime.DATA / 'maintenance.json', {
                         'phase': 'blocked', 'job': runtime.journal().get('job'),
@@ -219,11 +305,13 @@ class ContainerRunner(Runner):
                 self.verify(job)
                 self.report(job, 'succeeded', '新版本已启动且已持久化，刷新页面即可使用', str(backup))
                 (runtime.DATA / 'maintenance.json').unlink(missing_ok=True)
-                # Only the reproducible download is disposable. Keep active code, logs and all backups.
+                # Only the reproducible download and superseded release copies are disposable.
+                # Keep active code, logs and all backups.
                 try:
                     archive.unlink(missing_ok=True)
                 except OSError as exc:
                     print(f'下载缓存清理失败：{type(exc).__name__}', file=log, flush=True)
+                prune_releases(self.directory, log=log)
             except Exception as exc:
                 print(f'{type(exc).__name__}: {exc}', file=log, flush=True)
                 if migrated:
@@ -249,11 +337,34 @@ class ContainerRunner(Runner):
                 self.save()
 
 
-if __name__ == '__main__':
-    os.umask(0o077)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Container OTA worker and runtime cleanup')
+    sub = parser.add_subparsers(dest='command')
+    prune_cmd = sub.add_parser('prune', help='Prune superseded OTA release directories and old backups')
+    prune_cmd.add_argument('--keep-backups', type=int, default=3, help='Number of newest backups to keep (min 1)')
+    prune_cmd.add_argument('--data-dir', type=Path, default=runtime.DATA, help='Runtime data directory')
+    args = parser.parse_args(argv)
+    if args.command == 'prune':
+        removed_releases = prune_releases(args.data_dir)
+        removed_backups = prune_backups(args.data_dir, keep_backups=args.keep_backups)
+        print(
+            json.dumps(
+                {
+                    'removed_releases': [str(path) for path in removed_releases],
+                    'removed_backups': [str(path) for path in removed_backups],
+                },
+                ensure_ascii=False,
+            )
+        )
+        return
     if os.environ.get('OTA_MODE', 'container') == 'container':
         ContainerRunner().serve()
     else:
         # Supervisor keeps the optional worker idle for explicit legacy/disabled mode.
         while True:
             time.sleep(3600)
+
+
+if __name__ == '__main__':
+    os.umask(0o077)
+    main()
