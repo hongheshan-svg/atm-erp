@@ -43,18 +43,49 @@ function salesBusinessActions(row: Row): string[] {
 const cents = (value: unknown) => toScaled(value, MONEY_SCALE, { signed: false }) ?? 0n
 const milestoneCents = (rows: Row[] = []) => rows.reduce((sum, item) => sum + cents(item.amount), 0n)
 const centsText = (value: bigint) => money(fromScaled(value, MONEY_SCALE))
+const ESTIMATE_KEYS = ['estimate_materials', 'estimate_labor', 'estimate_expenses']
 const earlyMilestoneReminder = (contractDate?: string): Field => ({
   key: 'early_due_notice', label: '付款期限提醒', type: 'textarea', displayOnly: true, readonly: true,
   initial: '存在早于签约日的收款节点。允许按合同约定保存；已过付款期限的未收金额将计入逾期，请核对客户约定。',
-  visibleWhen: data => !!(contractDate || data.date) && (data.milestones || []).some((row: Row) => row.due_date && row.due_date < (contractDate || data.date)),
+  visibleWhen: data => !!(contractDate || data.date) && (data.milestones || []).some((row: Row) => !row.trigger && row.due_date && row.due_date < (contractDate || data.date)),
 })
 const reason: Field = { key: 'reason', label: '原因 / 说明' }
+// 收款起算事件：与后端 Entry.Trigger 一致；选了事件，到期日 = 事件日期 + 天数，签约时只填预计日期。
+const TRIGGERS = [
+  { value: '', label: '固定日期' },
+  { value: 'signed', label: '签约后' },
+  { value: 'first_shipment', label: '首批发货后' },
+  { value: 'all_shipped', label: '全部发货后' },
+  { value: 'all_accepted', label: '全部终验收后' },
+  { value: 'warranty_end', label: '质保期满后' },
+]
+const milestoneFields = (withSigning: boolean): Field[] => [
+  { key: 'title', label: '节点名称' },
+  { key: 'amount', label: '金额（元）' },
+  { key: 'trigger', label: '起算方式', type: 'select', optional: true, options: withSigning ? TRIGGERS : TRIGGERS.filter(item => item.value !== 'signed') },
+  { key: 'trigger_days', label: '事件后天数', optional: true, numeric: { scale: 0, min: 0, max: 365 }, placeholder: '0' },
+  { key: 'due_date', label: '收款到期日', type: 'date', hint: '固定日期按合同约定填写；选了起算方式时填预计日期，用于回款预测，事件发生后自动改为「事件日期 + 天数」，起算前不计逾期。' },
+]
+// 未选起算事件的行不提交天数，免得残留的数字被拒。
+const milestoneRows = (rows: Row[] = []) => rows.map(({ trigger, trigger_days, ...item }) => (trigger ? { ...item, trigger, trigger_days: trigger_days === '' || trigger_days == null ? 0 : Number(trigger_days) } : item))
+function estimateText(row: Row) {
+  if (row.estimate_total == null) return null
+  const parts = `材料 ${money(row.estimate_materials)} · 人工 ${money(row.estimate_labor)} · 费用 ${money(row.estimate_expenses)}，合计 ${money(row.estimate_total)} 元`
+  return `${parts}${row.estimated_margin != null ? `，测算毛利率 ${row.estimated_margin}%` : ''}${row.estimated_by_name ? `（${row.estimated_by_name}）` : ''}`
+}
+// 收款节点到期日的展示：起算事件未发生显示「预计」，已起算注明依据。
+export function receivableDueText(item: Row) {
+  if (!item.due_date) return '—'
+  if (!item.trigger_label) return item.due_date
+  const rule = `${item.trigger_label}${Number(item.trigger_days) ? ` + ${item.trigger_days} 天` : ''}`
+  return item.awaiting_trigger ? `预计 ${item.due_date}（待${rule}）` : `${item.due_date}（${rule}）`
+}
 export async function salesCommand(row?: Row, action?: string): Promise<Command> {
   const path = '/business/sales/'
   if (row && action === '交付与回款') {
     const data = await read(`${path}${row.id}/progress/`)
     const hidden = amountsHidden(data)
-    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), receivables: (data.receivables || []).map((item: Row) => ({ ...item, balance: money(item.balance, { refund: true }), paid: money(item.paid), amount: money(item.amount), credit_amount: money(item.credit_amount) })), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
+    return { title: '交付与回款', path: '', readonly: true, progressProject: data.progress_project, initial: { ...data, project_status: display(data.project_status), receivables: (data.receivables || []).map((item: Row) => ({ ...item, due_date: receivableDueText(item), balance: money(item.balance, { refund: true }), paid: money(item.paid), amount: money(item.amount), credit_amount: money(item.credit_amount) })), ...(hidden ? { receivables_hidden: `${HIDDEN}：未参与该项目，应收与回款明细仅项目负责人、成员、财务及管理员可见。` } : {}) }, fields: [
       { key: 'project_status', label: '项目状态' },
       { key: 'deliveries', label: '交付批次', type: 'rows', fields: [{ key: 'code', label: '批次' }, { key: 'quantity', label: '数量' }, { key: 'shipped_date', label: '发货日期' }, { key: 'accepted_date', label: '验收日期' }] },
       hidden
@@ -73,10 +104,10 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     return { title: action, path: `${path}${row.id}/amend/`, fields: [
       { key: 'amount', label: '变更后合同总额（元）' }, { key: 'equipment_quantity', label: '变更后设备数量' }, { key: 'warranty_months', label: '后续批次质保月数' }, { key: 'date', label: '协议日期', type: 'date', hint: '协议已签署的日期，不能晚于今天，也不能早于签约日期。' }, reason,
       { key: 'document', label: '补充协议附件', type: 'select', upload: { context: { sale: row.id }, category: 'contract' }, options: docs.filter(d => !d.purchase).map(d => ({ value: d.id, label: d.original_name })) },
-      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: [{ key: 'title', label: '款项名称' }, { key: 'amount', label: '增加金额' }, { key: 'due_date', label: '收款到期日', type: 'date', hint: '允许早于签约日，按合同约定填写；已到期未收款会计入逾期。' }] },
+      { key: 'milestones', label: '增额收款节点（仅增加金额时填写）', type: 'rows', optional: true, fields: milestoneFields(false) },
       earlyMilestoneReminder(detail.contract_date),
       { key: 'credits', label: '原合同款抵减（仅减少金额时填写）', type: 'rows', optional: true, fields: [{ key: 'entry', label: '原合同款', type: 'select', options: entries.filter(e => !e.task && !e.cancelled).map(e => ({ value: e.id, label: `${e.title} · 原金额 ${money(e.amount)} · 已抵减 ${money(e.credit_amount)}` })) }, { key: 'amount', label: '抵减金额' }] },
-    ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
+    ], initial: { amount: detail.contract_amount, equipment_quantity: detail.equipment_quantity, warranty_months: detail.warranty_months, date: today(), milestones: [], credits: [] }, prepare: data => ({ ...data, milestones: milestoneRows(data.milestones), expected_updated_at: detail.updated_at }), notice: { type: 'info', text: '原合同与协议记录保留。增额节点合计或减额抵减合计必须等于差额；已收款抵减后形成待退款。已交付批次质保不变，已发货不能修改设备总数。' } }
   }
   if (row && action === '转交负责人') {
     const users = await all('/auth/directory/')
@@ -86,7 +117,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
     ], notice: { type: 'info', text: '只更换销售负责人，不改变合同与回款。原负责人立即失去本人范围内的查看权限，新负责人立即获得。' } }
   }
   if (row && action === '查看明细') return {
-    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN } : { ...row, quote_amount: money(row.quote_amount), contract_amount: money(row.contract_amount), original_contract_amount: row.original_contract_amount == null ? row.original_contract_amount : money(row.original_contract_amount) },
+    title: '销售明细', path: `${path}${row.id}/`, readonly: true, initial: amountsHidden(row) ? { ...row, quote_amount: HIDDEN, contract_amount: HIDDEN, original_contract_amount: HIDDEN, estimate_text: HIDDEN } : { ...row, quote_amount: money(row.quote_amount), contract_amount: money(row.contract_amount), original_contract_amount: row.original_contract_amount == null ? row.original_contract_amount : money(row.original_contract_amount), estimate_text: estimateText(row) },
     fields: [
       { key: 'code', label: '销售单号' }, { key: 'name', label: '销售名称' },
       { key: 'customer_name', label: '客户' }, { key: 'manager_name', label: '负责人' },
@@ -97,6 +128,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       { key: 'original_contract_amount', label: '原签约金额（元）', optional: true },
       { key: 'contract_date', label: '签约日期', optional: true }, { key: 'project_code', label: '执行项目', optional: true },
       { key: 'contract_number', label: '合同编号', optional: true },
+      { key: 'estimate_text', label: '报价测算', optional: true },
     ],
   }
   if (!row || action === '编辑销售') {
@@ -125,8 +157,23 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       title: action,
       path: `${path}${row.id}/quote/`,
       // 未报过价时留空，不预填 0.00：预填的 0 一提交就被拒，像是系统替人填错了。
-      fields: [{ key: 'amount', label: '报价金额（元）', numeric: { scale: 2, min: 0.01 }, placeholder: '例如 380000' }, { key: 'reason', label: '报价说明', optional: true }],
-      initial: { amount: Number(row.quote_amount) > 0 ? row.quote_amount : '' },
+      fields: [
+        { key: 'amount', label: '报价金额（元）', numeric: { scale: 2, min: 0.01 }, placeholder: '例如 380000' },
+        { key: 'estimate_materials', label: '测算材料成本（元）', optional: true, numeric: { scale: 2, min: 0 }, placeholder: '按方案 BOM 估算' },
+        { key: 'estimate_labor', label: '测算人工成本（元）', optional: true, numeric: { scale: 2, min: 0 }, placeholder: '设计、装配、调试工时' },
+        { key: 'estimate_expenses', label: '测算费用（元）', optional: true, numeric: { scale: 2, min: 0 }, placeholder: '差旅、运输、现场安装等' },
+        { key: 'reason', label: '报价说明', optional: true },
+      ],
+      initial: {
+        amount: Number(row.quote_amount) > 0 ? row.quote_amount : '',
+        estimate_materials: row.estimate_materials ?? '', estimate_labor: row.estimate_labor ?? '', estimate_expenses: row.estimate_expenses ?? '',
+      },
+      prepare: data => {
+        const filled = ESTIMATE_KEYS.filter(key => data[key] !== '' && data[key] != null)
+        if (filled.length && filled.length !== ESTIMATE_KEYS.length) throw new Error('报价测算须同时填写材料、人工、费用三项（没有的填 0），或三项都留空。')
+        return filled.length ? data : Object.fromEntries(Object.entries(data).filter(([key]) => !ESTIMATE_KEYS.includes(key)))
+      },
+      notice: { type: 'info', text: '测算成本选填，三项要么都填、要么都不填；不填时保留上次测算。保存后可在「查看明细」看到测算毛利率；签约时测算带入执行项目的首版预算（项目已有预算则不覆盖），项目成本页和经营报表可对照报价测算与实际成本。' },
     }
   if (action === '取消销售')
     return { title: action, path: `${path}${row.id}/cancel/`, fields: [reason] }
@@ -166,11 +213,7 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
         label: '收款节点',
         type: 'rows',
         dense: true,
-        fields: [
-          { key: 'title', label: '节点名称' },
-          { key: 'amount', label: '金额（元）' },
-          { key: 'due_date', label: '收款到期日', type: 'date', hint: '允许早于签约日，按合同约定填写；已到期未收款会计入逾期。' },
-        ],
+        fields: milestoneFields(true),
       },
       {
         key: 'milestone_mismatch', label: '节点合计提醒', type: 'textarea', displayOnly: true, readonly: true,
@@ -179,13 +222,13 @@ export async function salesCommand(row?: Row, action?: string): Promise<Command>
       },
       earlyMilestoneReminder(),
     ],
-    initial: { milestones: [{ title: '合同款', amount: row.quote_amount, due_date: '' }] },
+    initial: { milestones: [{ title: '合同款', amount: row.quote_amount, trigger: '', trigger_days: '', due_date: '' }] },
     // 节点合计必须等于报价金额：提交前在前端按分核对并给出差额，服务端仍是最终校验。
     prepare: data => {
       const quote = cents(row.quote_amount), sum = milestoneCents(data.milestones)
       if (row.quote_amount != null && sum !== quote) throw new Error(`收款节点合计 ${centsText(sum)} 元，报价金额 ${centsText(quote)} 元，差额 ${centsText(sum - quote)} 元，请调整后再签约。`)
-      return data
+      return { ...data, milestones: milestoneRows(data.milestones) }
     },
-    notice: { type: 'info', text: `${[row.customer_name, row.name].filter(Boolean).join(' · ')}${row.quote_amount ? ` · 报价 ${money(row.quote_amount)} 元` : ''}${row.equipment_quantity ? ` · 设备 ${row.equipment_quantity} 台` : ''}。按签署合同拆分预付款、发货款、验收款及质保尾款，节点合计须等于报价金额；填写合同约定的收款日期，签约后自动建立执行项目。` },
+    notice: { type: 'info', text: `${[row.customer_name, row.name].filter(Boolean).join(' · ')}${row.quote_amount ? ` · 报价 ${money(row.quote_amount)} 元` : ''}${row.equipment_quantity ? ` · 设备 ${row.equipment_quantity} 台` : ''}。按签署合同拆分预付款、发货款、验收款及质保尾款，节点合计须等于报价金额。约定「发货后 / 验收后 / 质保期满后 N 天」付款的节点选起算方式并填预计日期，发货、验收登记后自动算出到期日；签约后自动建立执行项目${row.estimate_total != null ? '，报价测算带入项目首版预算' : ''}。` },
   }
 }

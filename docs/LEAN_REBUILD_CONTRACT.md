@@ -132,9 +132,9 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 - `sales/` GET/POST：name/customer/manager/requirements/due_date/equipment_quantity/warranty_months。项目经理、管理员或销售经理创建；管理员、项目经理、财务及按本人范围的销售经理可读，其他角色禁止。
 - 已签约销售单的金额可见性：未签约销售单对所有经理开放金额；已签约且关联项目的销售单，仅对本人负责（销售负责人）或对该项目有金额读取权的人员显示合同额、报价/原合同额、回款（交付与回款中的应收明细整体不返回）、补充协议金额与销售合同附件；其他人返回 `amounts_visible=false`，页面显示“无权查看”，合同附件 404。
-- `sales/{id}/quote/` POST amount/reason；需求中或已报价可报价。
+- `sales/{id}/quote/` POST amount/reason/estimate_materials?/estimate_labor?/estimate_expenses?；需求中或已报价可报价。报价测算三项（非负，CNY 含税经营口径）要么都填、要么都不填（只填部分返回 400）；不填时保留上次测算，填写时记录测算人 `estimated_by`。销售单返回 estimate_materials/estimate_labor/estimate_expenses/estimate_total/estimated_margin（测算毛利率%，签约前按报价、签约后按现行合同额）/estimated_by_name，与报价金额同一可见性规则（无权时不返回）。
 - `sales/{id}/edit/` POST reason、expected_updated_at 与待修改的销售基础字段；仅未签约单可改。expected_updated_at 必须等于打开表单时的版本，过时返回 409；无实际修改返回 400。修改后清除当前报价并回到需求状态，必须重新报价，原报价及修改前后内容保留在审计中。
-- `sales/{id}/sign/` POST date、contract_number?、manager?、members?、milestones[{title,amount,due_date}]；合同编号按实际签署合同填写，去首尾空格、最多 80 字符、全局唯一（含软删除），留空为 null；签约后不可直接覆盖，历史记录不自动补造编号。节点合计必须等于最终报价。单事务创建执行项目和应收，返回 id（销售）与 project。重复请求只回放，其他键再次签约拒绝。历史迁移的未签约项目保留原人员及编号。销售列表可按合同编号搜索。
+- `sales/{id}/sign/` POST date、contract_number?、manager?、members?、milestones[{title,amount,due_date,trigger?,trigger_days?}]；trigger 为收款起算事件 signed/first_shipment/all_shipped/all_accepted/warranty_end（留空为固定日期），trigger_days 为事件后天数 0–365（未选事件时不得填写非零天数）。选了起算事件时 due_date 是预计日期（存入 planned_date），事件发生后到期日改为「事件日期 + 天数」并记录 triggered_on、审计 `entry.trigger`；全部发货指已发货数量达到设备数量，全部终验收与质保期满取最后一批的验收日与质保到期日。起算后不再随交付记录变化，之后由财务调整到期日。签约销售单有报价测算、且项目尚未设置预算时，测算三项带入项目首版预算（budget_revision=1，预算调整人记为测算人，审计 `project.budget` 原因「签约带入报价测算」），已有预算的历史项目不覆盖。合同编号按实际签署合同填写，去首尾空格、最多 80 字符、全局唯一（含软删除），留空为 null；签约后不可直接覆盖，历史记录不自动补造编号。节点合计必须等于最终报价。单事务创建执行项目和应收，返回 id（销售）与 project。重复请求只回放，其他键再次签约拒绝。历史迁移的未签约项目保留原人员及编号。销售列表可按合同编号搜索。
 - 签约及补充协议日期为已发生事实，不得晚于今天。合同收款节点可早于签约日（如已约定定金），页面提醒后保留真实日期，逾期计算仍按实际到期日执行。补充协议缺少或无法解析 expected_updated_at 返回字段级400，已有版本过时仍返回409。
 - `sales/{id}/cancel/` POST reason；仅未签约单可取消。已签约合同保持历史，执行中止由项目处理，收款纠错由收付款处理。
 - `sales/{id}/transfer/` POST：`manager`（启用的销售经理，不同于当前负责人）、`reason`（必填，最多500字），需 Idempotency-Key；仅管理员或项目经理（manager）对已签约销售单操作。只改销售负责人并留审计，不改合同、金额、应收、项目及成员；原负责人随即失去本人范围访问。
@@ -155,7 +155,7 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 - `edit/`：reason 和待修改项目字段；签约或已有交付后不能直接改客户、设备数量、质保约定，包括无销售合同的独立项目；移除成员及更换负责人不能遗留待办，原负责人仍有任务时须先改派或保留为成员。关联未签约销售的历史项目修改需求后回到需求状态并清除当前报价，原报价保留审计。
 - `cancel/`、`reopen/`、`close/`：reason。取消需要处理采购、退料和应付，原合同历史保留；结项需要全部设备验收、任务及采购完成、余额为零。关联未签约销售的历史项目重开恢复需求或已报价状态，不能直接进入执行中；直接创建的执行项目沿用原规则。
 - `cost/` GET：materials（领料、退料与换版后的旧版报废、送修出库）、labor、expenses、purchase_return_variance、total。仅管理员、经理、财务可看。
-- `cost-analysis/` GET：预算、实际、已承诺（在途）、实际＋在途、预算余量，以及累计采购净额和超额提示；仅管理员、经理、财务可看。材料实际含采购退货价差；在途仅为已批准未收货采购，按累计收货分角规则计算。人工、费用没有承诺计划，列为零，不代表完工预测；未付款费用已经计入实际，不重复计入承诺。
+- `cost-analysis/` GET：预算、实际、已承诺（在途）、实际＋在途、预算余量，以及累计采购净额和超额提示；仅管理员、经理、财务可看。另返回 `quote_estimate`（签约销售单有报价测算时：rows[{key,label,estimate,actual}]、total、actual_total、margin；否则 null），只作报价准确度对照，不参与预算占用与超预算判断；经营报表行另返回 `estimated_cost`。材料实际含采购退货价差；在途仅为已批准未收货采购，按累计收货分角规则计算。人工、费用没有承诺计划，列为零，不代表完工预测；未付款费用已经计入实际，不重复计入承诺。
 - `budget/` POST materials/labor/expenses/reason/expected_revision：管理员、经理在执行中/交付中/已验收项目设置或更正预算。三个金额非负，0 为零额度；版本必须等于查询时的 budget_revision，否则 409。旧项目默认为未设置预算（null），不启用拦截，不能用 0 代替未设置；设置后不支持清空，所有更正留审计。
 
 ## BOM 与采购
@@ -236,7 +236,8 @@ APP_ENVIRONMENT=production（默认）时，登录保持每IP 10次/分钟；有
 
 - `entries/` GET（经理/财务/管理员）；`entries/expense/` 财务 POST project/title/amount/due_date。
 - `entries/{id}/pay/`、`refund/`：amount/date/reason/method?/account?/reference?/document?，金额为正，由服务器检查余额和方向。收款/付款 `reason` 选填（缺省“登记收款”/“登记付款”），`refund/` 退款仍须原因。
-- `entries/{id}/adjust-due-date/` POST due_date/expected_due_date/reason（仅财务/管理员，需 Idempotency-Key）：调整未取消应收的到期日（如合同约定发货后/验收后 N 天付款），只改到期日，金额与已收流水不变，审计 `entry.due_date` 保留前后值与原因。`expected_due_date` 必须等于当前到期日，否则 409 提示他人已调整；新日期不得与当前相同；原因必填；采购应付、费用、已结清或待退款的应收、已结项/取消项目的款项拒绝。
+- `entries/{id}/adjust-due-date/` POST due_date/expected_due_date/reason（仅财务/管理员，需 Idempotency-Key）：调整未取消应收的到期日（如合同约定发货后/验收后 N 天付款），只改到期日，金额与已收流水不变，审计 `entry.due_date` 保留前后值与原因。起算事件未发生的节点同时调整预计日期，事件发生后仍按事件日期加天数重算；已起算的节点调整后不再自动重算。
+- 应收列表返回 trigger/trigger_label/trigger_days/planned_date/triggered_on/awaiting_trigger；起算事件未发生的应收 status 为 `awaiting`，到期金额、逾期余额（列表汇总、经营报表、工作台到期结算、`reports/?view=aging`）都不计入，`reports/?view=cash30` 按预计日期列入回款预测并标注「预计待收 · 待〈事件〉」。补充协议增额节点同样可选起算事件（不含 signed）。`expected_due_date` 必须等于当前到期日，否则 409 提示他人已调整；新日期不得与当前相同；原因必填；采购应付、费用、已结清或待退款的应收、已结项/取消项目的款项拒绝。
 - 手工登记（pay）带银行流水号（`account` 与 `reference`）时：同一款项已有同账户、同流水号、同方向、未冲销且未与银行记录匹配的收付款则拒绝；若已存在同账户同流水号同方向的未作废银行记录，本次金额不得超过其未匹配余额（扣除其他未匹配的同号登记）；跨款项拆分允许；输入错误先于重复判断报告。超额提示按方向：应收“收款超过当前未收余额”，应付/费用“付款超过当前未付余额”。
 - `cancel-expense/`：reason；`payments/{id}/reverse/`：date/reason。通过冲减及冲销保留历史，不物理删除。
 - `payments/` 与 `time/` 的 `reversed_by` 为关联冲销记录 id，未冲销为 null；与 `reversal_of` 一起供页面展示原记录、冲销记录及有效记录，后端仍独立校验重复操作。

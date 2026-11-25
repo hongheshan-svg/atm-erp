@@ -16,6 +16,7 @@ from .common import (
     day,
     event_date,
     fields,
+    integer,
     lookup,
     number,
     project_action,
@@ -278,6 +279,9 @@ def adjust_due_date(actor, key, entry_id, data):
         reason = text(data, 'reason')
         before = entry.due_date
         entry.due_date = target
+        if entry.awaiting_trigger:
+            # 起算事件未发生时调整的是预计日期；事件发生后仍按事件日期加天数重算。
+            entry.planned_date = target
         save(entry, user)
         return audit(user, 'entry.due_date', entry, before=before.isoformat(), after=target.isoformat(), reason=reason)
 
@@ -327,4 +331,79 @@ def costs(project_ids):
 def record_contract(user, project, milestones):
     """Record validated sales milestones in the caller's signing transaction."""
     for row in milestones:
-        save(Entry(project=project, kind='receivable', **row), user)
+        save(Entry(project=project, kind='receivable', planned_date=row['due_date'], **row), user)
+    sync_triggers(user, project)
+
+
+def milestone_values(row):
+    """签约与补充协议共用的收款节点校验：到期日填预计日期，可选起算事件和事件后天数。"""
+    fields(row, {'title', 'amount', 'due_date', 'trigger', 'trigger_days'})
+    trigger = row.get('trigger') or ''
+    if trigger not in Entry.Trigger.values and trigger != '':
+        raise ValidationError({'trigger': '请选择有效的收款起算事件。'})
+    raw_days = row.get('trigger_days')
+    days = integer({'trigger_days': raw_days or 0}, 'trigger_days', 0, maximum=365) if trigger else 0
+    if not trigger and row.get('trigger_days') not in (None, '', 0, '0'):
+        raise ValidationError({'trigger_days': '未选择起算事件时不能填写事件后天数。'})
+    return {
+        'title': text(row, 'title', maximum=150),
+        'amount': number(row.get('amount'), 'amount', positive=True),
+        'due_date': day(row, 'due_date'),
+        'trigger': trigger,
+        'trigger_days': days,
+    }
+
+
+def trigger_dates(project):
+    """各起算事件在本项目实际发生的日期；尚未发生的事件不出现。只读交付与签约事实，不另记台账。"""
+    from .execution import shipped_quantity
+
+    result = {}
+    sale = getattr(project, 'sale', None)
+    if sale and not sale.is_deleted and sale.status == 'signed' and sale.contract_date:
+        result['signed'] = sale.contract_date
+    deliveries = list(project.deliveries.all())
+    if deliveries:
+        result['first_shipment'] = min(row.shipped_date for row in deliveries)
+        if shipped_quantity(project) >= project.equipment_quantity:
+            result['all_shipped'] = max(row.shipped_date for row in deliveries)
+            if all(row.accepted_date for row in deliveries):
+                result['all_accepted'] = max(row.accepted_date for row in deliveries)
+                result['warranty_end'] = max(row.warranty_until for row in deliveries)
+    return result
+
+
+def sync_triggers(user, project):
+    """起算事件发生后确定带起算事件的应收节点到期日；在签约、发货、验收的事务里调用。
+
+    到期日 = 事件日期 + 天数，并记录起算日期。已起算的节点不再随交付记录变化：交付批次只能在验收后整理删除，
+    回改会让已经通知客户的到期日漂移；之后的调整由财务「调整到期日」并留痕。
+    """
+    from datetime import timedelta
+
+    dates = trigger_dates(project)
+    changed = []
+    pending = (
+        project.entries.select_for_update()
+        .filter(kind='receivable', cancelled=False, triggered_on__isnull=True)
+        .exclude(trigger='')
+    )
+    for entry in pending:
+        happened = dates.get(entry.trigger)
+        if happened is None:
+            continue
+        before = entry.due_date
+        entry.due_date = happened + timedelta(days=entry.trigger_days)
+        entry.triggered_on = happened
+        save(entry, user)
+        audit(
+            user,
+            'entry.trigger',
+            entry,
+            trigger=entry.trigger,
+            triggered_on=happened.isoformat(),
+            before=before.isoformat(),
+            after=entry.due_date.isoformat(),
+        )
+        changed.append(entry.pk)
+    return changed

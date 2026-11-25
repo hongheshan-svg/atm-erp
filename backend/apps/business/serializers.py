@@ -696,6 +696,8 @@ class EntrySerializer(serializers.ModelSerializer):
     partner_name = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     prepaid_excess = serializers.SerializerMethodField()
+    trigger_label = serializers.CharField(source='get_trigger_display', read_only=True)
+    awaiting_trigger = serializers.BooleanField(read_only=True)
 
     def get_prepaid_excess(self, obj):
         value = payment_terms.prepaid_excess(obj)
@@ -724,7 +726,10 @@ class EntrySerializer(serializers.ModelSerializer):
             return 'closed'
         # 与到期明细同一口径：只有已经起算的批次逾期才算逾期，未到货的采购不算。
         today = timezone.localdate()
-        return 'overdue' if any(row['due_date'] < today for row in self.schedule(obj)) else 'open'
+        if any(row['due_date'] < today and not row.get('pending') for row in self.schedule(obj)):
+            return 'overdue'
+        # 起算事件未发生的收款节点只有预计日期，单列状态，不算逾期。
+        return 'awaiting' if obj.kind == 'receivable' and obj.awaiting_trigger else 'open'
 
     def get_due_date(self, obj):
         if not obj.purchase_id:
@@ -742,7 +747,18 @@ class EntrySerializer(serializers.ModelSerializer):
 
     def get_due_amount(self, obj):
         today = timezone.localdate()
-        return str(rounded(sum((row['amount'] for row in self.schedule(obj) if row['due_date'] <= today), ZERO)))
+        return str(
+            rounded(
+                sum(
+                    (
+                        row['amount']
+                        for row in self.schedule(obj)
+                        if row['due_date'] <= today and not row.get('pending')
+                    ),
+                    ZERO,
+                )
+            )
+        )
 
     def get_paid_amount(self, obj):
         return str(paid(obj))
@@ -772,6 +788,12 @@ class EntrySerializer(serializers.ModelSerializer):
             'prepaid_excess',
             'due_date',
             'agreed_payment_date',
+            'trigger',
+            'trigger_label',
+            'trigger_days',
+            'planned_date',
+            'triggered_on',
+            'awaiting_trigger',
             'cancelled',
             'updated_at',
         ]

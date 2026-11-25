@@ -337,6 +337,52 @@ class SalesTests(BusinessFixtures, TestCase):
         self.assertEqual(sale.project.status, 'active')
         self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '200', 'reason': '不允许改合同'}, status=409)
 
+    def test_quote_estimate_carries_into_first_budget_on_signing(self):
+        own = self.sales_manager_order()
+        estimate = {'estimate_materials': '50', 'estimate_labor': '20', 'estimate_expenses': '10'}
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '100', 'estimate_materials': '50'}, status=400)
+        self.assertEqual(SalesOrder.objects.get(pk=own).quote_amount, 0)
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '100', **estimate})
+        detail = self.clients['sales_manager'].get(f'/api/business/sales/{own}/').data
+        self.assertEqual((detail['estimate_total'], detail['estimated_margin']), ('80.00', '20.0'))
+        # 不带测算的重新报价保留上次测算，毛利率按新报价重算。
+        self.post('sales_manager', f'sales/{own}/quote/', {'amount': '160'})
+        detail = self.clients['sales_manager'].get(f'/api/business/sales/{own}/').data
+        self.assertEqual((detail['estimate_materials'], detail['estimated_margin']), ('50.00', '50.0'))
+        result = self.post(
+            'manager',
+            f'sales/{own}/sign/',
+            {
+                'date': TODAY,
+                'manager': self.users['manager'].pk,
+                'milestones': [{'title': '合同款', 'amount': '160', 'due_date': TODAY}],
+            },
+        )
+        project = Project.objects.get(pk=result['project'])
+        self.assertEqual(
+            (project.budget_materials, project.budget_labor, project.budget_expenses, project.budget_revision),
+            (50, 20, 10, 1),
+        )
+        self.assertEqual(project.budget_changed_by, self.users['sales_manager'])
+        log = AuditLog.objects.get(operation='project.budget')
+        self.assertEqual(log.detail['reason'], '签约带入报价测算')
+        report = self.clients['manager'].get(f'/api/business/projects/{project.pk}/cost-analysis/').data
+        self.assertTrue(report['configured'])
+        self.assertEqual(report['quote_estimate']['total'], '80.00')
+        self.assertEqual(report['quote_estimate']['margin'], '50.0')
+        self.assertEqual([row['estimate'] for row in report['quote_estimate']['rows']], ['50.00', '20.00', '10.00'])
+
+    def test_sign_without_estimate_leaves_budget_unset(self):
+        sale = self.sale()
+        self.post('manager', f'sales/{sale.pk}/quote/', {'amount': '100'})
+        result = self.post('manager', f'sales/{sale.pk}/sign/', self.signing())
+        project = Project.objects.get(pk=result['project'])
+        self.assertIsNone(project.budget_materials)
+        self.assertEqual(project.budget_revision, 0)
+        self.assertIsNone(
+            self.clients['manager'].get(f'/api/business/projects/{project.pk}/cost-analysis/').data['quote_estimate']
+        )
+
     def signed_sale_of_sales_manager(self):
         sale_id = self.sales_manager_order()
         self.post('sales_manager', f'sales/{sale_id}/quote/', {'amount': '100', 'reason': '报价'})

@@ -28,7 +28,7 @@ from ..serializers import EntrySerializer, PurchaseSerializer, TaskSerializer
 from .bom import allocations
 from .common import ZERO
 from .execution import with_task_flags
-from .payment_terms import due_entries, with_sources
+from .payment_terms import AWAITING_TRIGGER, due_entries, with_sources
 from .revisions import PARTS_READERS, open_parts, pending_reviews
 from .supply import applicants_by_purchase
 from .task_supervision import supervised_tasks
@@ -213,6 +213,8 @@ def summary(request):
                 due_date__lt=timezone.localdate(),
             )
             .exclude(project__status__in=['closed', 'cancelled'])
+            # 起算事件未发生的节点只有预计日期，客户尚未到付款条件，不催收。
+            .exclude(AWAITING_TRIGGER)
             .select_related('project__customer', 'project__sale')
             .annotate(net_paid=Coalesce(Sum('payments__amount'), Value(ZERO), output_field=amount))
             .annotate(remaining=F('amount') - F('credit_amount') - F('net_paid'))

@@ -235,6 +235,11 @@ class SalesOrder(BaseModel):
     quote_amount = money()
     contract_amount = money()
     contract_date = models.DateField(null=True, blank=True)
+    # 报价测算：报价时预估的材料、人工、费用成本（未测算为空）；签约时带入尚未设预算项目的首版预算。
+    estimate_materials = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    estimate_labor = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    estimate_expenses = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    estimated_by = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT, null=True, blank=True, related_name='+')
 
     class Meta(BaseModel.Meta):
         db_table = 'lean_sales_order'
@@ -582,6 +587,14 @@ class Entry(LedgerModel):
         PAYABLE = 'payable', '应付'
         EXPENSE = 'expense', '费用'
 
+    class Trigger(models.TextChoices):
+        # 收款节点的起算事件：事件发生后到期日 = 事件日期 + trigger_days；发生前 due_date 是签约时填的预计日期。
+        SIGNED = 'signed', '签约'
+        FIRST_SHIPMENT = 'first_shipment', '首批发货'
+        ALL_SHIPPED = 'all_shipped', '全部发货'
+        ALL_ACCEPTED = 'all_accepted', '全部终验收'
+        WARRANTY_END = 'warranty_end', '质保期满'
+
     project = models.ForeignKey(Project, models.PROTECT, related_name='entries')
     purchase = models.OneToOneField(PurchaseOrder, models.PROTECT, null=True, blank=True, related_name='entry')
     task = models.OneToOneField(Task, models.PROTECT, null=True, blank=True, related_name='entry')
@@ -592,6 +605,15 @@ class Entry(LedgerModel):
     cancellation_credit = models.DecimalField(max_digits=18, decimal_places=2, null=True, editable=False)
     due_date = models.DateField()
     cancelled = models.BooleanField(default=False)
+    trigger = models.CharField(max_length=20, choices=Trigger.choices, blank=True, default='')
+    trigger_days = models.PositiveSmallIntegerField(default=0)
+    # 签约时填的预计收款日（起算前可由财务调整），起算后保留作预计与实际的对照。
+    planned_date = models.DateField(null=True, blank=True)
+    triggered_on = models.DateField(null=True, blank=True)
+
+    @property
+    def awaiting_trigger(self):
+        return bool(self.trigger) and self.triggered_on is None
 
     class Meta(LedgerModel.Meta):
         db_table = 'lean_entry'
@@ -603,6 +625,7 @@ class Entry(LedgerModel):
         constraints = [
             models.CheckConstraint(condition=Q(amount__gte=0, credit_amount__gte=0), name='lean_entry_nonnegative'),
             models.CheckConstraint(condition=Q(credit_amount__lte=F('amount')), name='lean_entry_credit_limit'),
+            models.CheckConstraint(condition=Q(trigger_days__lte=365), name='lean_entry_trigger_days'),
         ]
 
 

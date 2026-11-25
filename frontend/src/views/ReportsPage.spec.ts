@@ -157,7 +157,7 @@ describe('经营报表', () => {
     expect(columns.map(column => column.attributes('data-label') || '展开')).toEqual(['项目', '状态', '合同额', '实际成本 / 预算', '待收 / 待付', '关注', '展开'])
     const cost = columns[3].findAll('.cell')
     expect(cost[0].text()).toContain('100,000.00')
-    expect(cost[0].text()).toContain('材料预算 60,000.00 · 在途 20,000.00')
+    expect(cost[0].text()).toContain('预算 60,000.00 · 在途 20,000.00')
     expect(cost[1].text()).toContain('未设置预算 · 在途 5,000.00')
     wrapper.unmount()
   })
