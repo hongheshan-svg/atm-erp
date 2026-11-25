@@ -48,6 +48,8 @@ EXPORT_EXCLUDED = {
     'can_record_time',
     'can_transfer',
     'amounts_visible',
+    # 收款起算事件只导出中文名称（trigger_label）。
+    'trigger',
     'has_sale',
     'change_request',
     'newer_revision',

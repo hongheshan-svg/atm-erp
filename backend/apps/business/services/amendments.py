@@ -12,7 +12,6 @@ from ..models import ContractAmendment, Document, Entry, SalesOrder
 from .common import (
     ZERO,
     audit,
-    day,
     event_date,
     fields,
     identity,
@@ -25,7 +24,7 @@ from .common import (
     state,
     text,
 )
-from .finance import record_contract
+from .finance import milestone_values, record_contract
 
 
 def amend(actor, key, sale_id, data):
@@ -91,14 +90,10 @@ def amend(actor, key, sale_id, data):
                 raise ValidationError('增额协议不能抵减原应收。')
             prepared = []
             for row in rows(data, 'milestones'):
-                fields(row, {'title', 'amount', 'due_date'})
-                prepared.append(
-                    {
-                        'title': text(row, 'title', maximum=150),
-                        'amount': number(row.get('amount'), 'amount', positive=True),
-                        'due_date': day(row, 'due_date'),
-                    }
-                )
+                values = milestone_values(row)
+                if values['trigger'] == 'signed':
+                    raise ValidationError({'trigger': '增额节点请直接填写收款日期，或选择发货、验收、质保期满起算。'})
+                prepared.append(values)
             if sum((row['amount'] for row in prepared), ZERO) != delta:
                 raise ValidationError('新增收款节点合计必须等于合同增加金额。')
             record_contract(user, project, prepared)

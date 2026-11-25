@@ -36,7 +36,9 @@ def schedule(entry):
 
     remaining = max(ZERO, balance(entry))
     if not entry.purchase_id:
-        return [{'due_date': entry.due_date, 'amount': remaining}] if remaining else []
+        # 起算事件尚未发生的应收节点只有预计日期：计入回款预测，不计逾期。
+        pending = entry.kind == 'receivable' and entry.awaiting_trigger
+        return [{'due_date': entry.due_date, 'amount': remaining, 'pending': pending}] if remaining else []
     purchase = entry.purchase
     # 指定日期账期也只对已合格收货的部分到期：未到货的货款付不出去（普通对账额度以收货净额为限），
     # 算进到期或逾期只会让报表和工作台提示一笔无法办理的应付。
@@ -82,7 +84,7 @@ def prepaid_excess(entry):
 
 def due_amount(entry, today):
     """今天之前到期未结的金额（报表逾期口径）。"""
-    return sum((r['amount'] for r in schedule(entry) if r['due_date'] < today), ZERO)
+    return sum((r['amount'] for r in schedule(entry) if r['due_date'] < today and not r.get('pending')), ZERO)
 
 
 def with_sources(queryset):
@@ -103,7 +105,11 @@ def with_balances(queryset):
     )
 
 
-def due_entries(queryset, today):
+# 起算事件尚未发生的应收节点（只有预计日期），与 Entry.awaiting_trigger 同一口径。
+AWAITING_TRIGGER = ~Q(trigger='') & Q(triggered_on__isnull=True)
+
+
+def due_entries(queryset, today, *, include_awaiting=False):
     """Filter maturity before pagination, using the same receipt/credit FIFO facts as schedule."""
     money = DecimalField(max_digits=18, decimal_places=2)
     credits = (
@@ -151,7 +157,7 @@ def due_entries(queryset, today):
         | (
             Q(remaining__gt=0)
             & (
-                (Q(purchase__isnull=True) & Q(due_date__lte=today))
+                (Q(purchase__isnull=True) & Q(due_date__lte=today) & (Q() if include_awaiting else ~AWAITING_TRIGGER))
                 | (manual & Q(due_date__lte=today) & Q(received_net__gt=F('net_paid')))
                 | (~manual & Q(purchase__isnull=False) & Q(matured__gt=F('net_paid')))
             )

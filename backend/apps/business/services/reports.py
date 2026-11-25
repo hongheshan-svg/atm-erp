@@ -64,6 +64,7 @@ def summary(params, *, export=False):
                 'actual_cost': budget['actual_total'],
                 'committed_cost': budget['committed_total'],
                 'budget': budget['budget_total'],
+                'estimated_cost': budget['quote_estimate']['total'] if budget['quote_estimate'] else None,
                 'occupied_cost': budget['occupied_total'],
                 'warnings': budget['warnings'],
                 **flags,

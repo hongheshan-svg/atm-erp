@@ -323,12 +323,17 @@ def receivable_rows(project):
                     'outstanding': str(part['receivable']),
                     'due_date': entry.due_date.isoformat(),
                     'overdue': bool(part.get('overdue_receivable')),
+                    'awaiting': entry.get_trigger_display() if entry.awaiting_trigger else '',
                 }
             )
     return rows
 
 
 def receivable_line(row):
+    if row.get('awaiting'):
+        return (
+            f'{row["title"]} ¥{Decimal(row["outstanding"]):,.2f}（待{row["awaiting"]}后起算，预计 {row["due_date"]}）'
+        )
     return f'{row["title"]} ¥{Decimal(row["outstanding"]):,.2f}（{"已逾期，" if row["overdue"] else ""}到期 {row["due_date"]}）'
 
 
@@ -966,6 +971,9 @@ def ship(actor, key, project_id, data):
         from .milestones import sync_milestones
 
         sync_milestones(user, project)
+        from .finance import sync_triggers
+
+        sync_triggers(user, project)
         # 只提示不拦截；金额只给能看项目金额的角色（与 readiness、项目序列化同一规则）。
         if project_allowed(user, project, MONEY_READERS):
             result['receivables'] = receivable_rows(project)
@@ -1004,9 +1012,11 @@ def accept(actor, key, delivery_id, data):
             project.status = 'warranty'
             save(project, user)
         result = audit(user, 'delivery.accept', delivery, date=date.isoformat(), reason=reason)
+        from .finance import sync_triggers
         from .milestones import sync_milestones
 
         sync_milestones(user, project)
+        sync_triggers(user, project)
         return result
 
     return project_action(

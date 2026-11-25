@@ -24,14 +24,15 @@ def projection(params):
             entries = due_entries(entries, today - timedelta(days=1))
         else:
             # A plain or manual-term entry has a single due date, so one already overdue has no batch in the window.
-            entries = due_entries(entries, today + timedelta(days=30)).filter(
+            entries = due_entries(entries, today + timedelta(days=30), include_awaiting=True).filter(
                 Q(due_date__gte=today) | (Q(purchase__isnull=False) & ~Q(purchase__payment_term='manual'))
             )
         for entry in entries:
             for part in schedule(entry):
                 due = part['due_date']
+                pending = part.get('pending', False)
                 if (view == 'cash30' and today <= due <= today + timedelta(days=30)) or (
-                    view == 'aging' and due < today
+                    view == 'aging' and due < today and not pending
                 ):
                     days = (today - due).days
                     rows.append(
@@ -41,8 +42,12 @@ def projection(params):
                             'project': entry.project.name,
                             'date': str(due),
                             'amount': str(part['amount']),
-                            'status': ('待收' if entry.kind == 'receivable' else '待付')
-                            + (f' · 逾期 {days} 天' if days > 0 else ''),
+                            'status': (
+                                f'预计待收 · 待{entry.get_trigger_display()}'
+                                if pending
+                                else ('待收' if entry.kind == 'receivable' else '待付')
+                                + (f' · 逾期 {days} 天' if days > 0 else '')
+                            ),
                             'age_band': '1–30天'
                             if days <= 30
                             else '31–60天'
@@ -52,7 +57,7 @@ def projection(params):
                             else '90天以上',
                         }
                     )
-        definition = '按原应收应付的剩余到期批次列示，净付款先抵最早到期；采购未收货部分不计入到期，不含负余额退款。'
+        definition = '按原应收应付的剩余到期批次列示，净付款先抵最早到期；采购未收货部分不计入到期，不含负余额退款；起算事件未发生的收款节点按预计日期列入回款预测、不计逾期。'
     elif view == 'late_purchase':
         for line in (
             PurchaseLine.objects.filter(

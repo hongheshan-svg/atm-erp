@@ -12,7 +12,16 @@ from .serializers import PersonNameField
 from .services import amendments, finance, progress, sales
 
 # 签约时合同额、原签约额均取自报价，三者都等于项目合同金额，按项目金额范围一起隐藏。
-SALE_AMOUNTS = ('quote_amount', 'contract_amount', 'original_contract_amount')
+SALE_AMOUNTS = (
+    'quote_amount',
+    'contract_amount',
+    'original_contract_amount',
+    'estimate_materials',
+    'estimate_labor',
+    'estimate_expenses',
+    'estimate_total',
+    'estimated_margin',
+)
 
 
 def sale_amounts_visible(request, sale):
@@ -29,6 +38,18 @@ class SalesSerializer(serializers.ModelSerializer):
     project_status = serializers.CharField(source='project.status', read_only=True, default=None)
     amounts_visible = serializers.SerializerMethodField()
     can_transfer = serializers.SerializerMethodField()
+    estimate_total = serializers.SerializerMethodField()
+    estimated_margin = serializers.SerializerMethodField()
+    estimated_by_name = PersonNameField(source='estimated_by')
+
+    def get_estimate_total(self, sale):
+        total = sales.estimate_total(sale)
+        return None if total is None else f'{total:.2f}'
+
+    def get_estimated_margin(self, sale):
+        """报价测算毛利率（%），按报价金额计；未测算或未报价为空。"""
+        margin = sales.estimated_margin(sale)
+        return None if margin is None else f'{margin:.1f}'
 
     class Meta:
         model = SalesOrder
@@ -53,6 +74,12 @@ class SalesSerializer(serializers.ModelSerializer):
             'original_contract_amount',
             'contract_date',
             'contract_number',
+            'estimate_materials',
+            'estimate_labor',
+            'estimate_expenses',
+            'estimate_total',
+            'estimated_margin',
+            'estimated_by_name',
             'created_at',
             'updated_at',
             'amounts_visible',
@@ -74,7 +101,7 @@ class SalesSerializer(serializers.ModelSerializer):
 
 
 class SalesView(ImportableMixin, ReadView):
-    queryset = SalesOrder.objects.select_related('customer', 'manager', 'project')
+    queryset = SalesOrder.objects.select_related('customer', 'manager', 'project', 'estimated_by')
     serializer_class = SalesSerializer
     read_roles = SALES_READERS
     write_roles = SALES
@@ -108,6 +135,9 @@ class SalesView(ImportableMixin, ReadView):
                     {
                         'title': entry.title,
                         'due_date': entry.due_date,
+                        'trigger_label': entry.get_trigger_display() if entry.trigger else '',
+                        'trigger_days': entry.trigger_days,
+                        'awaiting_trigger': entry.awaiting_trigger,
                         'amount': str(entry.amount),
                         'credit_amount': str(entry.credit_amount),
                         'paid': f'{finance.paid(entry):.2f}',

@@ -9,7 +9,18 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from apps.accounts.models import User
-from apps.business.models import BOMLine, Delivery, Entry, Item, Project, Stock, StockMove, Task, TimeEntry
+from apps.business.models import (
+    BOMLine,
+    Delivery,
+    Entry,
+    Item,
+    Project,
+    SalesOrder,
+    Stock,
+    StockMove,
+    Task,
+    TimeEntry,
+)
 from apps.business.services import execution
 from apps.core.models import ActionReceipt, AuditLog
 from apps.core.permissions import MONEY_READERS
@@ -1239,3 +1250,176 @@ class ProjectRiskListTests(ExecutionFixtures, TestCase):
         self.assertEqual(
             self.clients['manager'].get(f'/api/business/deliveries/{delivery.pk}/').data['stage'], 'accepted'
         )
+
+
+class ReceivableTriggerTests(ExecutionFixtures, TestCase):
+    """收款节点按交付事件起算：签约填预计日期，事件发生后到期日 = 事件日期 + 天数；未起算不计逾期。"""
+
+    def setUp(self):
+        self.setup_execution()
+
+    def signed(self, milestones, *, equipment=2):
+        sale = self.post(
+            'manager',
+            'sales/',
+            {
+                'name': '分批交付设备',
+                'customer': self.customer.pk,
+                'manager': self.users['manager'].pk,
+                'equipment_quantity': equipment,
+            },
+            status=201,
+        )
+        total = sum((Decimal(row['amount']) for row in milestones), Decimal('0'))
+        self.post('manager', f'sales/{sale["id"]}/quote/', {'amount': str(total)})
+        result = self.post(
+            'manager',
+            f'sales/{sale["id"]}/sign/',
+            {'date': TODAY, 'members': [self.users['member'].pk], 'milestones': milestones},
+        )
+        return Project.objects.get(pk=result['project'])
+
+    def ready(self, project):
+        self.post(
+            'manager',
+            f'projects/{project.pk}/revise-bom/',
+            {'expected_revision': self.bom_version(project.pk), 'lines': [{'item': self.item.pk, 'quantity': '4'}]},
+        )
+        for kind in ('design', 'assembly', 'test'):
+            self.complete(self.task(project, kind))
+        self.stock_and_issue(project)
+
+    def entry(self, title):
+        return Entry.objects.get(kind='receivable', title=title)
+
+    def test_milestones_start_on_signing_shipping_acceptance_and_warranty(self):
+        project = self.signed(
+            [
+                {'title': '预付款', 'amount': '300', 'due_date': TODAY, 'trigger': 'signed', 'trigger_days': 5},
+                {
+                    'title': '发货款',
+                    'amount': '300',
+                    'due_date': '2026-09-01',
+                    'trigger': 'first_shipment',
+                    'trigger_days': 30,
+                },
+                {'title': '到齐款', 'amount': '100', 'due_date': '2026-09-01', 'trigger': 'all_shipped'},
+                {
+                    'title': '验收款',
+                    'amount': '200',
+                    'due_date': '2026-09-20',
+                    'trigger': 'all_accepted',
+                    'trigger_days': 15,
+                },
+                {
+                    'title': '质保金',
+                    'amount': '100',
+                    'due_date': '2027-06-01',
+                    'trigger': 'warranty_end',
+                    'trigger_days': 0,
+                },
+            ]
+        )
+        signed_on = date.fromisoformat(TODAY)
+        advance = self.entry('预付款')
+        self.assertEqual((advance.triggered_on, advance.due_date), (signed_on, signed_on + timedelta(days=5)))
+        shipment = self.entry('发货款')
+        self.assertTrue(shipment.awaiting_trigger)
+        self.assertEqual((shipment.planned_date, shipment.due_date), (date(2026, 9, 1), date(2026, 9, 1)))
+        # 预计日期已过但起算事件未发生：列表显示待起算，汇总、报表都不计逾期。
+        rows = {row['title']: row for row in self.clients['finance'].get('/api/business/entries/').data['results']}
+        self.assertEqual(rows['发货款']['status'], 'awaiting')
+        self.assertEqual(rows['发货款']['trigger_label'], '首批发货')
+        self.assertEqual(rows['发货款']['due_amount'], '0.00')
+        summary = self.clients['finance'].get('/api/business/entries/summary/', {'project': project.pk}).data
+        self.assertEqual(Decimal(summary['overdue_receivable']), Decimal('0'))
+        aging = self.clients['admin'].get('/api/business/reports/', {'view': 'aging'}).data
+        self.assertFalse([row for row in aging['results'] if row['source'] in {'发货款', '到齐款', '验收款'}])
+        # 销售经理的「逾期应收」催收清单同样不含待起算节点。
+        SalesOrder.objects.filter(project=project).update(manager=self.users['sales_manager'])
+        work = self.clients['sales_manager'].get('/api/business/workbench/').data
+        self.assertEqual([row['title'] for row in work['sale_receivables']['results']], [])
+        forecast = self.clients['admin'].get('/api/business/reports/', {'view': 'cash30'}).data['results']
+        self.assertEqual([row['status'] for row in forecast if row['source'] == '验收款'], ['预计待收 · 待全部终验收'])
+
+        self.ready(project)
+        first = self.deliver(project)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.triggered_on, first.shipped_date)
+        self.assertEqual(shipment.due_date, first.shipped_date + timedelta(days=30))
+        self.assertTrue(self.entry('到齐款').awaiting_trigger)
+        second = self.deliver(project)
+        self.assertEqual(self.entry('到齐款').due_date, second.shipped_date)
+        self.accept(first)
+        self.assertTrue(self.entry('验收款').awaiting_trigger)
+        self.accept(second)
+        acceptance = self.entry('验收款')
+        self.assertEqual(acceptance.due_date, second.accepted_date + timedelta(days=15))
+        self.assertEqual(self.entry('质保金').due_date, second.warranty_until)
+        self.assertEqual(self.entry('质保金').planned_date, date(2027, 6, 1))
+        self.assertEqual(AuditLog.objects.filter(operation='entry.trigger').count(), 5)
+
+    def test_started_milestone_keeps_finance_adjustment_and_awaiting_adjusts_plan(self):
+        project = self.signed(
+            [
+                {
+                    'title': '发货款',
+                    'amount': '600',
+                    'due_date': '2026-12-01',
+                    'trigger': 'first_shipment',
+                    'trigger_days': 10,
+                },
+                {
+                    'title': '验收款',
+                    'amount': '400',
+                    'due_date': '2027-01-01',
+                    'trigger': 'all_accepted',
+                    'trigger_days': 0,
+                },
+            ],
+            equipment=1,
+        )
+        acceptance = self.entry('验收款')
+        self.post(
+            'finance',
+            f'entries/{acceptance.pk}/adjust-due-date/',
+            {'due_date': '2027-02-01', 'expected_due_date': '2027-01-01', 'reason': '客户排产推迟'},
+        )
+        acceptance.refresh_from_db()
+        self.assertEqual((acceptance.planned_date, acceptance.due_date), (date(2027, 2, 1), date(2027, 2, 1)))
+        self.ready(project)
+        delivery = self.deliver(project)
+        shipment = self.entry('发货款')
+        self.post(
+            'finance',
+            f'entries/{shipment.pk}/adjust-due-date/',
+            {
+                'due_date': '2026-10-31',
+                'expected_due_date': (delivery.shipped_date + timedelta(days=10)).isoformat(),
+                'reason': '合同约定月底付款',
+            },
+        )
+        self.accept(delivery)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.due_date, date(2026, 10, 31))
+        acceptance.refresh_from_db()
+        self.assertEqual(acceptance.due_date, delivery.accepted_date)
+
+    def test_invalid_trigger_rows_are_rejected_without_side_effects(self):
+        sale = self.post(
+            'manager',
+            'sales/',
+            {'name': '校验', 'customer': self.customer.pk, 'manager': self.users['manager'].pk},
+            status=201,
+        )
+        self.post('manager', f'sales/{sale["id"]}/quote/', {'amount': '100'})
+        base = {'title': '合同款', 'amount': '100', 'due_date': TODAY}
+        for row in (
+            {**base, 'trigger': 'delivered'},
+            {**base, 'trigger_days': 30},
+            {**base, 'trigger': 'all_shipped', 'trigger_days': 366},
+            {**base, 'trigger': 'all_shipped', 'trigger_days': -1},
+        ):
+            self.post('manager', f'sales/{sale["id"]}/sign/', {'date': TODAY, 'milestones': [row]}, status=400)
+        self.assertFalse(Entry.objects.exists())
+        self.assertFalse(Project.objects.exists())

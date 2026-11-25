@@ -108,17 +108,66 @@ def action(actor, key, operation, sale_id, data, execute, *, project_first=False
     )
 
 
+ESTIMATES = {'materials': '材料', 'labor': '人工', 'expenses': '费用'}
+
+
+def estimate_values(data):
+    """报价测算三项要么都填、要么都不填；不填表示本次报价不做测算，保留上次测算。"""
+    given = {key: data.get(f'estimate_{key}') for key in ESTIMATES}
+    filled = {key for key, value in given.items() if value not in (None, '')}
+    if not filled:
+        return None
+    if filled != set(ESTIMATES):
+        raise ValidationError({'estimate': '报价测算须同时填写材料、人工、费用三项预估成本（没有的填 0）。'})
+    return {key: number(value, f'estimate_{key}') for key, value in given.items()}
+
+
+def estimate_total(sale):
+    if sale.estimate_materials is None:
+        return None
+    return sum((getattr(sale, f'estimate_{key}') for key in ESTIMATES), ZERO)
+
+
+def estimated_margin(sale):
+    total = estimate_total(sale)
+    amount = sale.contract_amount if sale.status == 'signed' else sale.quote_amount
+    if total is None or amount <= ZERO:
+        return None
+    return (amount - total) * 100 / amount
+
+
+def estimate_snapshot(sale):
+    if sale.estimate_materials is None:
+        return None
+    return {key: str(getattr(sale, f'estimate_{key}')) for key in ESTIMATES}
+
+
 def quote(actor, key, sale_id, data):
     def execute(user, sale):
-        fields(data, {'amount', 'reason'})
+        fields(data, {'amount', 'reason', *(f'estimate_{key}' for key in ESTIMATES)})
         state(sale, {'draft', 'quoted'})
         # 报价说明选填，缺省记为「报价」；编辑、取消、转交仍须填写原因。
         reason = text(data, 'reason', default='报价') or '报价'
         before = str(sale.quote_amount)
+        estimate_before = estimate_snapshot(sale)
         sale.quote_amount = number(data.get('amount'), 'amount', positive=True)
+        estimate = estimate_values(data)
+        if estimate is not None:
+            for field, value in estimate.items():
+                setattr(sale, f'estimate_{field}', value)
+            sale.estimated_by = user
         sale.status = 'quoted'
         save(sale, user)
-        return audit(user, 'sale.quote', sale, before=before, after=str(sale.quote_amount), reason=reason)
+        return audit(
+            user,
+            'sale.quote',
+            sale,
+            before=before,
+            after=str(sale.quote_amount),
+            estimate_before=estimate_before,
+            estimate=estimate_snapshot(sale),
+            reason=reason,
+        )
 
     return action(actor, key, 'sale.quote', sale_id, data, execute)
 
@@ -164,16 +213,7 @@ def sign(actor, key, sale_id, data):
         sale.contract_number = text(data, 'contract_number', default='', maximum=80) or None
         if sale.contract_number and SalesOrder.all_objects.filter(contract_number=sale.contract_number).exists():
             raise ValidationError({'contract_number': '合同编号已使用。'})
-        milestones = []
-        for row in rows(data, 'milestones'):
-            fields(row, {'title', 'amount', 'due_date'})
-            milestones.append(
-                {
-                    'title': text(row, 'title', maximum=150),
-                    'amount': number(row.get('amount'), 'amount', positive=True),
-                    'due_date': day(row, 'due_date'),
-                }
-            )
+        milestones = [finance.milestone_values(row) for row in rows(data, 'milestones')]
         if sum((row['amount'] for row in milestones), ZERO) != sale.quote_amount:
             raise ValidationError({'milestones': '收款节点合计必须等于最终报价。'})
         sale.contract_date = event_date(data, 'date')
@@ -210,6 +250,7 @@ def sign(actor, key, sale_id, data):
         sale.status = 'signed'
         save(sale, user)
         finance.record_contract(user, project, milestones)
+        budget_from_estimate(user, sale, project)
         result = audit(
             user,
             'sale.sign',
@@ -222,6 +263,30 @@ def sign(actor, key, sale_id, data):
         return {**result, 'project': project.pk}
 
     return action(actor, key, 'sale.sign', sale_id, data, execute, project_first=True)
+
+
+def budget_from_estimate(user, sale, project):
+    """签约时把报价测算带入尚未设预算的项目，作为首版预算；已有预算的历史项目不覆盖。
+
+    预算调整人记为测算人：与手工改预算同一约束，测算人不能自批本项目的超预算采购。
+    """
+    if sale.estimate_materials is None or project.budget_materials is not None:
+        return
+    for key in ESTIMATES:
+        setattr(project, f'budget_{key}', getattr(sale, f'estimate_{key}'))
+    project.budget_revision += 1
+    project.budget_changed_by = sale.estimated_by
+    save(project, user)
+    audit(
+        user,
+        'project.budget',
+        project,
+        before=None,
+        after=estimate_snapshot(sale),
+        revision=project.budget_revision,
+        reason='签约带入报价测算',
+        estimated_by=sale.estimated_by_id,
+    )
 
 
 def cancel(actor, key, sale_id, data):

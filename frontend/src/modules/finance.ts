@@ -18,6 +18,7 @@ import { project } from './shared'
 import { endpoint } from './shared'
 import { ledgerStatus } from './shared'
 import { all, download, read } from '../api'
+import { receivableDueText } from './sales'
 import { reconciliationCommand } from './settlement'
 
 // 按绝对值取「分」：待退款余额为负，登记和对账额度都填正数；无法解析时按 0。
@@ -49,14 +50,14 @@ export const columns: Record<string, Column[]> = {
   entries: [
     C('title', '款项'), C('kind', '类型'),
     C('partner_name', '往来单位'), C('project_name', '项目'),
-    C('agreed_payment_date', '约定付款日'), C('due_date', '到期日'), C('due_amount', '当前到期金额'),
+    C('agreed_payment_date', '约定付款日'), { key: 'due_date', label: '到期日', format: receivableDueText }, C('due_amount', '当前到期金额'),
     C('balance', '待结算'), C('paid_amount', '已结算'),
     { key: 'purchase_code', label: '来源采购单', format: row => row.purchase_code || '—', link: purchaseLink },
     {
       key: 'status',
       label: '状态',
       format: row => {
-        const label = (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期' } as Record<string, string>)[String(row.status)] || '未结')
+        const label = (({ cancelled: '已取消', closed: '已结清', refund: '待退款', overdue: '已逾期', awaiting: '待起算' } as Record<string, string>)[String(row.status)] || '未结')
         return row.prepaid_excess ? `${label} · 含预付 ${row.prepaid_excess}` : label
       },
       tip: row => row.prepaid_excess
@@ -143,9 +144,11 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       date('due_date', '新到期日'),
       { ...reason, label: '调整原因', hint: '写明合同约定与实际依据，如「合同约定发货后 30 天付款，实际 2026-11-11 发货」。' },
     ],
-    initial: { current_due_date: r.due_date || '—', due_date: r.due_date || '' },
+    initial: { current_due_date: receivableDueText(r), due_date: r.due_date || '' },
     prepare: data => ({ due_date: data.due_date, reason: data.reason, expected_due_date: r.due_date }),
-    notice: { type: 'info', text: '只调整本应收节点的到期日，金额和已收流水不变；调整前后日期与原因写入操作审计。合同约定发货 / 验收后若干天付款时，按实际发生日调整。' },
+    notice: { type: 'info', text: r.awaiting_trigger
+      ? `本节点按「${r.trigger_label}」起算，事件尚未发生，这里调整的是预计日期；事件登记后仍自动按事件日期加天数算出到期日。金额和已收流水不变，调整写入操作审计。`
+      : '只调整本应收节点的到期日，金额和已收流水不变；调整前后日期与原因写入操作审计。已按发货、验收起算的节点调整后不再自动重算。' },
   }
   let path = endpoint(resource) + r.id + '/'
   let fields: Field[] = [reason]

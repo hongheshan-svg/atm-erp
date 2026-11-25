@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { actionNames } from '../business'
 import { primaryActions } from '../row-actions'
-import { salesColumns, salesCommand } from './sales'
+import { receivableDueText, salesColumns, salesCommand } from './sales'
+import type { Row } from '../types'
 import { user } from '../session'
 
 vi.mock('../api', () => ({ read: vi.fn(), all: vi.fn(async () => [{ id: 1, name: '张工', roles: ['manager'] }]), download: vi.fn(), write: vi.fn() }))
@@ -34,7 +35,36 @@ describe('销售列表与签约对话框', () => {
     expect(mismatch.visibleWhen!({ milestones: [{ amount: '300000' }, { amount: '200000.00' }] })).toBe(false)
     expect(() => command.prepare!({ milestones: [{ amount: '300000' }, { amount: '100000.50' }] })).toThrow('差额 -99,999.50 元')
     const ok = { milestones: [{ amount: '300000' }, { amount: '200000' }] }
-    expect(command.prepare!(ok)).toBe(ok)
+    expect(command.prepare!(ok)).toEqual(ok)
+  })
+
+  it('签约收款节点可按发货、验收起算：未选起算方式不提交天数，选了的天数转为整数', async () => {
+    const command = await salesCommand({ id: 3, status: 'quoted', manager: 1, name: '检测线', quote_amount: '500000.00' }, '签约')
+    const rows = command.fields.find(field => field.key === 'milestones')!.fields!
+    expect(rows.map(field => field.key)).toEqual(['title', 'amount', 'trigger', 'trigger_days', 'due_date'])
+    expect(rows.find(field => field.key === 'trigger')!.options!.map(option => option.value)).toContain('all_accepted')
+    const prepared = command.prepare!({ milestones: [
+      { title: '预付款', amount: '300000', trigger: '', trigger_days: '30', due_date: '2026-09-01' },
+      { title: '验收款', amount: '200000', trigger: 'all_accepted', trigger_days: '15', due_date: '2026-12-01' },
+    ] }) as Row
+    expect(prepared.milestones).toEqual([
+      { title: '预付款', amount: '300000', due_date: '2026-09-01' },
+      { title: '验收款', amount: '200000', trigger: 'all_accepted', trigger_days: 15, due_date: '2026-12-01' },
+    ])
+    const reminder = command.fields.find(field => field.key === 'early_due_notice')!
+    expect(reminder.visibleWhen!({ date: '2026-09-09', milestones: [{ trigger: 'all_accepted', due_date: '2026-09-01' }] })).toBe(false)
+  })
+
+  it('报价测算三项要么都填要么都不填，明细显示测算毛利率', async () => {
+    const quote = await salesCommand({ id: 3, status: 'quoted', quote_amount: '100.00', estimate_materials: null }, '报价')
+    expect(() => quote.prepare!({ amount: '100', estimate_materials: '50', estimate_labor: '', estimate_expenses: '' })).toThrow('三项')
+    expect(quote.prepare!({ amount: '100', estimate_materials: '', estimate_labor: '', estimate_expenses: '', reason: '' })).toEqual({ amount: '100', reason: '' })
+    expect(quote.prepare!({ amount: '100', estimate_materials: '50', estimate_labor: '0', estimate_expenses: '10' })).toMatchObject({ estimate_labor: '0' })
+    const detail = await salesCommand({ id: 3, status: 'quoted', quote_amount: '100.00', estimate_materials: '50.00', estimate_labor: '20.00', estimate_expenses: '10.00', estimate_total: '80.00', estimated_margin: '20.0', estimated_by_name: '销售甲' }, '查看明细')
+    expect(detail.initial!.estimate_text).toContain('测算毛利率 20.0%')
+    expect(receivableDueText({ due_date: '2026-12-01', trigger_label: '全部终验收', trigger_days: 15, awaiting_trigger: true })).toBe('预计 2026-12-01（待全部终验收 + 15 天）')
+    expect(receivableDueText({ due_date: '2026-12-16', trigger_label: '全部终验收', trigger_days: 15, awaiting_trigger: false })).toBe('2026-12-16（全部终验收 + 15 天）')
+    expect(receivableDueText({ due_date: '2026-12-01', trigger_label: '' })).toBe('2026-12-01')
   })
 
   it('报价说明选填，编辑与取消销售的原因仍必填', async () => {

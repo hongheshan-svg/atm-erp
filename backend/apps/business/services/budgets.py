@@ -70,6 +70,32 @@ def purchase_totals(project_ids):
     return result
 
 
+def quote_estimate(project, actuals):
+    """签约销售单上的报价测算与实际成本对照：用来回看报价算得准不准，不参与预算占用和超预算判断。"""
+    from .sales import ESTIMATES, estimate_total, estimated_margin
+
+    sale = getattr(project, 'sale', None)
+    if sale is None or sale.is_deleted or sale.status != 'signed' or sale.estimate_materials is None:
+        return None
+    margin = estimated_margin(sale)
+    return {
+        'rows': [
+            {
+                'key': key,
+                'label': label,
+                'estimate': str(getattr(sale, f'estimate_{key}')),
+                'actual': str(
+                    rounded(actuals[key] + (actuals['purchase_return_variance'] if key == 'materials' else ZERO))
+                ),
+            }
+            for key, label in ESTIMATES.items()
+        ],
+        'total': str(estimate_total(sale)),
+        'actual_total': str(rounded(actuals['total'])),
+        'margin': None if margin is None else f'{margin:.1f}',
+    }
+
+
 def analysis(project, additional=ZERO, *, actuals=None, committed=None, purchase_net=None):
     actuals = {key: Decimal(value) for key, value in (cost(project) if actuals is None else actuals).items()}
     # Use the same cumulative rounding as receipts and cancellation; returned goods
@@ -106,6 +132,7 @@ def analysis(project, additional=ZERO, *, actuals=None, committed=None, purchase
             warnings.append(f'合计占用超预算 ¥{rounded(occupied_total - budget_total)}')
     return {
         'configured': configured,
+        'quote_estimate': quote_estimate(project, actuals),
         'budget_revision': project.budget_revision,
         'rows': result,
         'budget_total': str(budget_total) if configured else None,
