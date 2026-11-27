@@ -1,4 +1,5 @@
-import { manager } from '../session'
+import { read } from '../api'
+import { can, manager } from '../session'
 import type { Command } from '../types'
 import type { Field } from '../types'
 import type { Row } from '../types'
@@ -34,20 +35,31 @@ export function createLabel(resource: string) {
 // 与服务端 documents.upload 一致：已结项项目不能再上传；已取消项目只能补传结算凭证（退款、冲抵依据）。
 const uploadableProject = (row: Row) => !['closed', 'cancelled'].includes(String(row.status))
 const receiptProject = (row: Row) => row.status !== 'closed'
+const contractProject = (row: Row) => uploadableProject(row) && row.can_manage !== false
 export async function createCommand(resource: string, projectId?: number): Promise<Command> {
   let fields: Field[] = []
   let path = endpoint(resource)
-  if (resource === 'documents')
+  if (resource === 'documents') {
+    let allowContract = manager()
+    if (projectId && allowContract && !can(['admin'])) {
+      const detail = await read(`/business/projects/${projectId}/`).catch(() => null)
+      if (detail && detail.can_manage === false) allowContract = false
+    }
     fields = [
-      remote('project', '项目', '/business/projects/', { remoteFilter: uploadableProject, remoteFilterFor: data => data.category === 'receipt' ? receiptProject : uploadableProject, hint: '已结项项目不能再上传；已取消项目只能上传结算凭证。' }),
-      // 分类名称与列表、服务端取值同一份 categoryLabels；合同仅项目经理、结算凭证仅财务可上传。
+      remote('project', '项目', '/business/projects/', {
+        remoteFilter: uploadableProject,
+        remoteFilterFor: data => data.category === 'receipt' ? receiptProject : data.category === 'contract' ? contractProject : uploadableProject,
+        hint: '已结项项目不能再上传；已取消项目只能上传结算凭证。',
+      }),
+      // 分类名称与列表、服务端取值同一份 categoryLabels；合同仅本项目经理、结算凭证仅财务可上传。
       select(
         'category',
         '分类',
-        choices(Object.fromEntries(Object.entries(categoryLabels).filter(([key]) => (key !== 'contract' || manager()) && (key !== 'receipt' || finance())))),
+        choices(Object.fromEntries(Object.entries(categoryLabels).filter(([key]) => (key !== 'contract' || allowContract) && (key !== 'receipt' || finance())))),
       ),
       { key: 'file', label: '文件', type: 'file' },
     ]
+  }
   return {
     title: String(createLabel(resource)),
     path,

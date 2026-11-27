@@ -569,3 +569,69 @@ class MoneyScopeTests(BusinessFixtures, TestCase):
         detail = self.fetch(f'sales/{self.sale_id}/').data
         self.assertEqual((detail['contract_amount'], detail['original_contract_amount']), ('25000.00', '20000.00'))
         self.assertEqual(len(self.fetch(f'sales/{self.sale_id}/progress/').data['receivables']), 2)
+
+    def test_non_member_manager_signed_sale_upload_foreign_warranty_expense_and_flags(self):
+        from apps.business.models import Delivery, StockMove
+
+        # 未参与项目的项目经理不能向他人已签约销售单上传附件，且 can_upload_documents 为 False。
+        sale_detail = self.fetch(f'sales/{self.sale_id}/').data
+        self.assertFalse(sale_detail['can_upload_documents'])
+        for category in ('contract', 'other'):
+            response = self.clients['manager'].post(
+                '/api/business/documents/',
+                {'sale': self.sale_id, 'category': category, 'file': SimpleUploadedFile('inject.pdf', b'x')},
+                format='multipart',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            )
+            self.assertEqual(response.status_code, 403, category)
+
+        # 经理兼仓管 / 经理兼采购在他人项目采购质保中不能越权关联他人项目的费用。
+        receipt = StockMove.objects.filter(purchase_line__purchase=self.approved, kind='receipt').first()
+        self.assertIsNotNone(receipt)
+        foreign_expense = Entry.objects.create(
+            project=self.other, kind='expense', title='他项目运费', amount=Decimal('500.00'), due_date=TODAY
+        )
+        warranty_url = f'purchases/{self.approved.pk}/warranty/'
+        created = self.post(
+            'warehouse',
+            warranty_url,
+            {'receipt': receipt.pk, 'date': self.today, 'quantity': '1', 'description': '异响'},
+        )
+        listing = self.fetch(warranty_url, role='warehouse').data
+        case_row = next(row for row in listing['cases'] if row['id'] == created['id'])
+        version = case_row['updated_at'].isoformat().replace('+00:00', 'Z')
+        for extra in ('warehouse', 'purchaser'):
+            self.act_as(extra)
+            self.post(
+                'manager',
+                warranty_url,
+                {
+                    'case': created['id'],
+                    'expected_updated_at': version,
+                    'status': 'repairing',
+                    'response': '尝试绑定他人项目费用',
+                    'expense': foreign_expense.pk,
+                },
+                status=403,
+            )
+
+        # 经理兼仓管访问他人项目/采购/交付时，前端门控所需的行级能力标记均为 False，本人项目均为 True。
+        self.act_as('warehouse')
+        other_project = self.fetch(f'projects/{self.other.pk}/').data
+        self.assertEqual((other_project['can_read_money'], other_project['can_edit_purchase']), (False, False))
+        own_project = self.fetch(f'projects/{self.own.pk}/').data
+        self.assertEqual((own_project['can_read_money'], own_project['can_edit_purchase']), (True, True))
+        other_po = self.fetch(f'purchases/{self.approved.pk}/').data
+        self.assertEqual(
+            (other_po['can_edit_purchase'], other_po['can_read_contract'], other_po['can_read_money']),
+            (False, False, False),
+        )
+        own_po = self.fetch(f'purchases/{self.own_approved.pk}/').data
+        self.assertEqual(
+            (own_po['can_edit_purchase'], own_po['can_read_contract'], own_po['can_read_money']),
+            (True, True, True),
+        )
+        delivery = Delivery.objects.create(project=self.other, code='DL-SCOPE', quantity=1, shipped_date=TODAY)
+        listed = self.fetch('deliveries/', {'project': self.other.pk}).data['results']
+        row = next(item for item in listed if item['id'] == delivery.pk)
+        self.assertFalse(row['can_accept'])

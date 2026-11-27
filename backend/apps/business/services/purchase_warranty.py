@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.core.api import Conflict
 from apps.core.models import AuditLog
-from apps.core.permissions import MONEY_READERS, PURCHASERS, WAREHOUSE, require_role
+from apps.core.permissions import MONEY_READERS, PURCHASERS, WAREHOUSE, require_project
 
 from ..models import Entry, PurchaseWarranty, StockMove
 from .common import ZERO, audit, day, fields, identity, live_receipts, lookup, number, save, text
@@ -146,7 +146,7 @@ def record(actor, key, purchase_id, data):
                 if PurchaseWarranty.objects.filter(returned=case.returned).exclude(pk=case.pk).exists():
                     raise Conflict('该退货流水已关联其他质保单，不能重复关联。')
             if data.get('expense'):
-                require_role(user, MONEY_READERS)
+                require_project(user, purchase.project, MONEY_READERS)
                 case.expense = lookup(
                     Entry, data['expense'], 'expense', kind='expense', project=purchase.project, cancelled=False
                 )

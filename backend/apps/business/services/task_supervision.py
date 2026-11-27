@@ -63,12 +63,13 @@ def require_confirmation(user, task):
 
 def supervised_tasks(user_id, queryset):
     scope = Q(pk__in=[])
+    member_or_manager = Q(project__members=user_id) | Q(project__manager_id=user_id)
     for discipline in Task.Discipline.values:
         scope |= Q(discipline=discipline) & (
-            Q(**{f'project__task_supervisors__{discipline}': user_id})
+            (Q(**{f'project__task_supervisors__{discipline}': user_id}) & member_or_manager)
             | (~Q(project__task_supervisors__has_key=discipline) & Q(project__manager_id=user_id))
         )
-    return queryset.filter(scope)
+    return queryset.filter(scope).distinct()
 
 
 def notify_task(actor, task, event, *, include_assignees=False):
@@ -77,8 +78,11 @@ def notify_task(actor, task, event, *, include_assignees=False):
     assigned = list(task.assigned_people())
     people = '、'.join(person.display_name or person.username for person in assigned)
     notified = set()
-    # 主管自己派工或调整时已经知情，再给本人发提醒只会淹没别人派来的任务。
-    if supervisor and supervisor != actor_id and User.objects.filter(pk=supervisor, is_active=True).exists():
+    # 主管自己派工或调整时已经知情，再给本人发提醒只会淹没别人派来的任务；并复核主管当前仍有确认资格。
+    supervisor_person = (
+        User.objects.filter(pk=supervisor, is_active=True).first() if supervisor and supervisor != actor_id else None
+    )
+    if supervisor_person is not None and can_confirm_task(supervisor_person, task):
         save(
             TaskNotice(
                 task=task,

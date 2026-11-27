@@ -463,12 +463,144 @@ class UpgradeTests(RevisionFixtures, TestCase):
         plain = Item.objects.create(code='STD-1', name='螺钉')
         self.revise([{'item': plain.pk, 'quantity': '4', 'assembly_unit': '01 上料'}])
         line = BOMLine.objects.get(item=plain)
+        self.get('mechanical_engineer', f'bom/{line.pk}/upgrade-scope/', status=400)
         self.post(
             'mechanical_engineer', f'bom/{line.pk}/upgrade/', {'drawing_revision': 'B', 'change_note': '改'}, status=400
         )
         self.post(
             'purchaser', f'bom/{self.line.pk}/upgrade/', {'drawing_revision': 'B', 'change_note': '改'}, status=403
         )
+
+    def test_upgrade_scope_redacts_inaccessible_projects_and_hides_confidential_codes(self):
+        from apps.accounts.models import User
+        from apps.business.models import Project
+
+        other_manager = User.objects.create_user(username='scope-pm', role='manager')
+        secret = Project.objects.create(
+            code='SECRET-PRJ', name='保密产线', customer=self.customer, manager=other_manager, status='active'
+        )
+        BOMLine.objects.create(project=secret, item=self.old, quantity=7, assembly_unit='保密单元')
+        # 机械工程师未参与保密项目：upgrade-scope 不得泄露其编号、名称、单元、用量、在途或已领。
+        rows = self.get('mechanical_engineer', f'bom/{self.line.pk}/upgrade-scope/')
+        self.assertEqual(rows, [{'writable': False}])
+        denied = self.post(
+            'mechanical_engineer',
+            f'bom/{self.line.pk}/upgrade/',
+            {'drawing_revision': 'C', 'change_note': '尝试越权换版', 'projects': [secret.pk]},
+            status=403,
+        )
+        self.assertNotIn('SECRET-PRJ', str(denied))
+        # 本就有该项目读取权但无 BOM 写权限（例如兼仓管）时，只返回项目编号，不返回详情。
+        self.users['mechanical_engineer'].additional_roles = ['warehouse']
+        self.users['mechanical_engineer'].save(update_fields=['additional_roles'])
+        rows = self.get('mechanical_engineer', f'bom/{self.line.pk}/upgrade-scope/')
+        self.assertEqual(rows, [{'writable': False, 'code': 'SECRET-PRJ'}])
+
+    def test_revision_price_hike_enforces_approver_separation_and_budget_gate(self):
+        from apps.accounts.models import User
+        from apps.business.models import Project
+
+        approved = self.buy(self.line, '4', price='10')
+        # 预算设置：材料预算 50 元（原单已占 40 元，最多再涨 10 元），人工/费用预算 0。
+        self.post(
+            'manager',
+            f'projects/{self.project.pk}/budget/',
+            {'materials': '50', 'labor': '0', 'expenses': '0', 'expected_revision': 0, 'reason': '初始预算'},
+        )
+        self.replace()
+        converted = approved.lines.get(item=self.new)
+        url = f'purchases/{approved.pk}/revision-review/'
+
+        # 普通采购员涨价被拒（即使未超预算）。
+        self.post(
+            'purchaser',
+            url,
+            {'line': converted.pk, 'decision': 'confirm', 'unit_price': '11', 'reason': '涨价'},
+            status=403,
+        )
+        # 兼任其他项目经理的采购员也不能越权审批非参与项目的换版涨价。
+        other_pm = User.objects.create_user(username='foreign-pm-buyer', role='manager', additional_roles=['purchaser'])
+        from rest_framework.test import APIClient
+
+        foreign_client = APIClient()
+        foreign_client.force_authenticate(other_pm)
+        self.assertEqual(
+            foreign_client.post(
+                f'/api/business/{url}',
+                {'line': converted.pk, 'decision': 'confirm', 'unit_price': '11', 'reason': '越权涨价'},
+                format='json',
+                HTTP_IDEMPOTENCY_KEY='foreign-rev-hike',
+            ).status_code,
+            403,
+        )
+        # 原单申请人（即便是采购经理）也不能自批涨价。
+        self.users['purchaser'].additional_roles = ['purchase_manager']
+        self.users['purchaser'].save(update_fields=['additional_roles'])
+        self.post(
+            'purchaser',
+            url,
+            {'line': converted.pk, 'decision': 'confirm', 'unit_price': '11', 'reason': '自批涨价'},
+            status=403,
+        )
+        # 超预算涨价（4*20=80，增量 +40 > 剩余预算 10）：未勾选 confirm_over_budget 返回 409。
+        conflict = self.post(
+            'purchase_manager',
+            url,
+            {'line': converted.pk, 'decision': 'confirm', 'unit_price': '20', 'reason': '供应商涨价'},
+            status=409,
+        )
+        self.assertIn('确认承担超预算调价', str(conflict))
+        # 预算调整人（manager）不能批准超预算调价。
+        self.post(
+            'manager',
+            url,
+            {
+                'line': converted.pk,
+                'decision': 'confirm',
+                'unit_price': '20',
+                'confirm_over_budget': True,
+                'reason': '经理自批超预算',
+            },
+            status=403,
+        )
+        # 非申请人且非预算调整人的采购经理勾选 confirm_over_budget 后可批准超预算调价。
+        self.post(
+            'purchase_manager',
+            url,
+            {
+                'line': converted.pk,
+                'decision': 'confirm',
+                'unit_price': '20',
+                'confirm_over_budget': True,
+                'reason': '核准涨价',
+            },
+        )
+        entry = Entry.objects.get(purchase=approved)
+        self.assertEqual(entry.amount - entry.credit_amount, Decimal('80.00'))
+
+        # 验证降价仍可由普通采购员直接确认。
+        other = Project.objects.create(
+            code='DROP-PRJ', name='降价项目', customer=self.customer, manager=self.users['manager'], status='active'
+        )
+        other.members.add(self.users['mechanical_engineer'])
+        self.revise([{'item': self.old.pk, 'quantity': '4', 'assembly_unit': '01'}], project=other)
+        line2 = BOMLine.objects.get(project=other, item=self.old)
+        self.users['purchaser'].additional_roles = []
+        self.users['purchaser'].save(update_fields=['additional_roles'])
+        order2 = self.buy(line2, '4', price='10', project=other)
+        self.post(
+            'mechanical_engineer',
+            f'bom/{line2.pk}/replace/',
+            {'item': self.new.pk, 'quantity': '4', 'change_note': 'ECN-降价'},
+        )
+        conv2 = order2.lines.get(item=self.new)
+        self.post(
+            'purchaser',
+            f'purchases/{order2.pk}/revision-review/',
+            {'line': conv2.pk, 'decision': 'confirm', 'unit_price': '8', 'reason': '供应商降价'},
+        )
+        entry2 = Entry.objects.get(purchase=order2)
+        self.assertEqual(entry2.amount - entry2.credit_amount, Decimal('32.00'))
 
 
 class ImportRevisionTests(RevisionFixtures, TestCase):
@@ -767,6 +899,12 @@ class ContractUpdateTests(RevisionFixtures, TestCase):
         converted = self.purchase.lines.get(item=self.new)
         # 待确认期间只在「换版改单待确认」里，不重复提醒重签。
         self.assertNotIn('contract_updates', self.get('purchaser', 'workbench/'))
+        self.post(
+            'purchaser',
+            url + 'revision-review/',
+            {'line': converted.pk, 'decision': 'confirm', 'unit_price': '12', 'reason': '供应商按 B 版报价'},
+            status=403,
+        )
         result = self.post(
             'purchase_manager',
             url + 'revision-review/',

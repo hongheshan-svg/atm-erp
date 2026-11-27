@@ -15,8 +15,18 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from apps.core.actions import perform, receipt_data
+from apps.core.api import Conflict
 from apps.core.models import AuditLog, Company
-from apps.core.permissions import ADMIN, PermissionMixin, has_role, require_role, role, roles
+from apps.core.permissions import (
+    ADMIN,
+    ALL_ROLES,
+    OPERATION_ROLES,
+    PermissionMixin,
+    has_role,
+    require_role,
+    role,
+    roles,
+)
 
 from .authentication import RevocableJWTAuthentication, is_revoked, revoke_token
 from .models import User
@@ -172,7 +182,10 @@ class PasswordView(APIView):
         return Response({'detail': '密码已修改，请重新登录。'})
 
 
-class DirectoryView(APIView):
+class DirectoryView(PermissionMixin, APIView):
+    read_roles = ALL_ROLES
+    write_roles = set()
+
     def get(self, request):
         return Response(
             [
@@ -348,6 +361,26 @@ class UserView(
                 )
                 if not other_admin:
                     raise ValidationError('至少保留一位启用的管理员。')
+            if (
+                has_role(user, OPERATION_ROLES)
+                and data.get('is_active', user.is_active)
+                and not (target_roles & OPERATION_ROLES)
+            ):
+                from apps.business.models import Project
+
+                supervising = [
+                    project.code
+                    for project in Project.objects.filter(status__in=['active', 'delivering', 'warranty'])
+                    .exclude(task_supervisors={})
+                    .only('code', 'task_supervisors')
+                    .order_by('code')
+                    if user.pk in project.task_supervisors.values()
+                ]
+                if supervising:
+                    codes = '、'.join(supervising[:5]) + (' 等' if len(supervising) > 5 else '')
+                    raise Conflict(
+                        f'该人员仍是项目 {codes} 的专业主管，请先在项目中调整专业主管设置，再移除其业务岗位。'
+                    )
             previous_reports = user.management_reports
             previous_roles = sorted(roles(user))
             serializer.save()

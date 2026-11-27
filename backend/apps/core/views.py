@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from .actions import perform, receipt_data
 from .models import AuditLog, CodeRule, Company
-from .permissions import ADMIN, PermissionMixin, require_role
+from .permissions import ADMIN, ALL_ROLES, PermissionMixin, require_role
 
 
 @api_view(['GET'])
@@ -26,7 +26,8 @@ class CompanySerializer(serializers.ModelSerializer):
 
 
 class CompanyView(PermissionMixin, mixins.ListModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    queryset = Company.objects.filter(pk=1)
+    read_roles = ALL_ROLES
+    queryset = Company.objects.filter(pk=1).order_by('pk')
     serializer_class = CompanySerializer
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
 

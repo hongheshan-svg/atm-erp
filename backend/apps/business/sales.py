@@ -4,7 +4,7 @@ from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.core.permissions import SALES, SALES_READERS, project_read_allowed, sales_for
+from apps.core.permissions import MANAGERS, SALES, SALES_READERS, has_role, project_read_allowed, sales_for
 
 from .api.common import ImportableMixin, ReadView, key
 from .models import Project, SalesOrder
@@ -38,6 +38,7 @@ class SalesSerializer(serializers.ModelSerializer):
     project_status = serializers.CharField(source='project.status', read_only=True, default=None)
     amounts_visible = serializers.SerializerMethodField()
     can_transfer = serializers.SerializerMethodField()
+    can_upload_documents = serializers.SerializerMethodField()
     estimate_total = serializers.SerializerMethodField()
     estimated_margin = serializers.SerializerMethodField()
     estimated_by_name = PersonNameField(source='estimated_by')
@@ -84,6 +85,7 @@ class SalesSerializer(serializers.ModelSerializer):
             'updated_at',
             'amounts_visible',
             'can_transfer',
+            'can_upload_documents',
         ]
 
     def get_amounts_visible(self, sale):
@@ -91,6 +93,17 @@ class SalesSerializer(serializers.ModelSerializer):
 
     def get_can_transfer(self, sale):
         return sale.status == 'signed' and sales.may_transfer(self.context['request'].user, sale)
+
+    def get_can_upload_documents(self, sale):
+        request = self.context['request']
+        user = request.user
+        if sale.status == 'cancelled' or not has_role(user, SALES):
+            return False
+        if not has_role(user, MANAGERS) and sale.manager_id != user.pk:
+            return False
+        if sale.project_id is not None and sale.manager_id != user.pk:
+            return project_read_allowed(request, sale.project_id, MANAGERS)
+        return True
 
     def to_representation(self, instance):
         result = super().to_representation(instance)

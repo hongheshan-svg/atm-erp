@@ -241,6 +241,87 @@ class DocumentRemovalTests(BusinessFixtures, TestCase):
         self.post('sales_manager', f'documents/{document}/remove/', {'reason': '传错文件'})
         self.assertTrue(Document.all_objects.get(pk=document).is_deleted)
 
+    def test_unsigned_sale_removal_allows_admin_and_manager_while_role_demotion_revokes_removal(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+        from apps.business.models import PurchaseOrder
+
+        # 未签约销售单由销售经理上传后，管理员和项目经理都应能清理误传附件。
+        sale = SalesOrder.objects.create(
+            code='SO-UNSIGN', name='未签约单', customer=self.customer, manager=self.users['sales_manager']
+        )
+        doc_admin = (
+            self.clients['sales_manager']
+            .post(
+                '/api/business/documents/',
+                {'sale': sale.pk, 'category': 'other', 'file': SimpleUploadedFile('误传1.pdf', b'1')},
+                format='multipart',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            )
+            .data['id']
+        )
+        doc_mgr = (
+            self.clients['sales_manager']
+            .post(
+                '/api/business/documents/',
+                {'sale': sale.pk, 'category': 'other', 'file': SimpleUploadedFile('误传2.pdf', b'2')},
+                format='multipart',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            )
+            .data['id']
+        )
+        self.assertTrue(self.clients['admin'].get(f'/api/business/documents/{doc_admin}/').data['can_remove'])
+        self.assertTrue(self.clients['manager'].get(f'/api/business/documents/{doc_mgr}/').data['can_remove'])
+        self.post('admin', f'documents/{doc_admin}/remove/', {'reason': '管理员清理'})
+        self.post('manager', f'documents/{doc_mgr}/remove/', {'reason': '经理清理'})
+        self.assertTrue(Document.all_objects.get(pk=doc_admin).is_deleted)
+        self.assertTrue(Document.all_objects.get(pk=doc_mgr).is_deleted)
+
+        # 采购员上传采购附件后改岗为纯财务：虽然财务可读采购附件，但不再有采购写权限，不能删除。
+        purchase = PurchaseOrder.objects.create(
+            code='PO-DEMOTE', project=self.project, supplier=self.supplier, due_date=TODAY
+        )
+        po_doc = (
+            self.clients['purchaser']
+            .post(
+                '/api/business/documents/',
+                {'purchase': purchase.pk, 'category': 'contract', 'file': SimpleUploadedFile('po.pdf', b'p')},
+                format='multipart',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            )
+            .data['id']
+        )
+        self.users['purchaser'].role = 'finance'
+        self.users['purchaser'].additional_roles = []
+        self.users['purchaser'].save(update_fields=['role', 'additional_roles'])
+        self.assertFalse(self.clients['purchaser'].get(f'/api/business/documents/{po_doc}/').data['can_remove'])
+        self.post('purchaser', f'documents/{po_doc}/remove/', {'reason': '转岗后尝试删除'}, status=403)
+
+        # 非参与项目经理在被移出项目后，不能删除已签约销售单附件。
+        other_pm = User.objects.create_user(username='removed-pm', role='manager')
+        other_client = APIClient()
+        other_client.force_authenticate(other_pm)
+        self.project.members.add(other_pm)
+        signed_sale = SalesOrder.objects.get(project=self.project)
+        sale_doc = other_client.post(
+            '/api/business/documents/',
+            {'sale': signed_sale.pk, 'category': 'other', 'file': SimpleUploadedFile('tech.pdf', b't')},
+            format='multipart',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        ).data['id']
+        self.project.members.remove(other_pm)
+        self.assertFalse(other_client.get(f'/api/business/documents/{sale_doc}/').data['can_remove'])
+        self.assertEqual(
+            other_client.post(
+                f'/api/business/documents/{sale_doc}/remove/',
+                {'reason': '离项后删除'},
+                format='json',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            ).status_code,
+            403,
+        )
+
 
 class DocumentBatchRemovalTests(BusinessFixtures, TestCase):
     """附件批量删除：授权和拦截与单个删除一致，整批原子。"""

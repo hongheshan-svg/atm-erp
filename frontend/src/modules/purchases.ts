@@ -116,34 +116,39 @@ export async function createCommand(resource: string, projectId?: number): Promi
     initial: projectId ? { project: projectId } : {},
   }
 }
+const canEditPurchase = (r: Row) => buyer() && r.can_edit_purchase !== false
+const canReadContract = (r: Row) => contractReader() && r.can_read_contract !== false
+const canReadPurchaseMoney = (r: Row) => money() && r.can_read_money !== false
 export function actionNames(resource: string, r: Row): string[] {
   const a: string[] = []
   if (resource === 'purchases') {
+    const editable = canEditPurchase(r)
+    const readableMoney = canReadPurchaseMoney(r)
     a.push('查看明细', '处理记录')
     if (['approved', 'partial', 'received'].includes(r.status)) {
       a.push('质保记录')
-      if (buyer() || warehouse()) a.push('登记采购质保', '处理采购质保')
+      if (editable || warehouse()) a.push('登记采购质保', '处理采购质保')
     }
-    if (buyer() || money()) a.push('附件')
-    if (contractReader()) a.push('预览采购合同')
-    if (buyer() && r.status === 'draft') a.push('修改采购', '提交采购')
+    if (editable || readableMoney) a.push('附件')
+    if (canReadContract(r)) a.push('预览采购合同')
+    if (editable && r.status === 'draft') a.push('修改采购', '提交采购')
     if (r.status === 'submitted') {
       if (r.change_request) a.push(r.can_review_change ? '处理修改申请' : '查看修改申请')
       else {
         // 待审批单与草稿一样可整单作废（原因必填）；有待处理修改申请时须先由审批人处理。
-        if (buyer()) a.push('申请修改', '作废采购')
+        if (editable) a.push('申请修改', '作废采购')
         if (purchaseApprover(r)) a.push('批准采购', '退回修改')
       }
     }
     if (warehouse() && ['approved', 'partial'].includes(r.status)) a.push('收货')
-    if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('更新到货计划')
+    if (editable && ['approved', 'partial'].includes(r.status)) a.push('更新到货计划')
     if (warehouse() && r.lines?.some((l: Row) => Number(l.pending_quantity) > 0)) a.push('隔离品合格入库', '隔离品退回供应商')
-    if (buyer() && r.status === 'draft') a.push('作废采购')
-    if (buyer() && ['approved', 'partial'].includes(r.status)) a.push('取消未收余量', '整单取消未收余量')
+    if (editable && r.status === 'draft') a.push('作废采购')
+    if (editable && ['approved', 'partial'].includes(r.status)) a.push('取消未收余量', '整单取消未收余量')
     // 反审：批准后发现单价、数量等填错，审批人把单子退回草稿（收货一并冲回、应付作废），采购改完重新走审批和收货。
     if (purchaseApprover(r) && ['approved', 'partial', 'received'].includes(r.status)) a.push('反审')
-    // BOM 换版后已批准采购里转成新版的明细：向供应商确认新图（可调价）或取消，确认前仓库不能收货。
-    if (buyer() && ['approved', 'partial'].includes(r.status) && r.lines?.some(revisionPending)) a.unshift('确认换版改单')
+    // BOM 换版后已批准采购里转成新版的明细：向供应商确认新图（维持原价或降价可直接确认，调高单价须采购审批人确认）或取消，确认前仓库不能收货。
+    if (editable && ['approved', 'partial'].includes(r.status) && r.lines?.some(revisionPending)) a.unshift('确认换版改单')
   }
   return a
 }
@@ -289,8 +294,9 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       all('/business/moves/', { project: r.project, kind: 'receipt' }).then(rows => rows.filter(x => !x.reversed)),
       all('/business/moves/', { project: r.project, kind: 'purchase_return' }),
     ])
-    const expenses = money() ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
-    return { title: name, path, fields: [select('case', '质保事项', info.cases.filter((x: Row) => ['待响应', '维修中'].includes(x.status)).map((x: Row) => ({ value: x.id, label: `${x.id} · ${x.item} · ${x.description}` }))), select('status', '处理结果', [{ value: 'repairing', label: '维修中' }, { value: 'replaced', label: '已更换' }, { value: 'closed', label: '已关闭' }]), { key: 'response', label: '供应商响应、责任与处理说明', type: 'textarea' }, select('replacement', '补换货收货流水', receipts.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${quantityText(x.quantity)}` })), true), select('returned', '原批次退货流水', returns.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${quantityText(x.quantity)}` })), true), ...(money() ? [select('expense', '关联已登记费用', expenses.map(x => ({ value: x.id, label: `${x.title} · ${formatMoney(x.amount)}` })), true)] : [])], prepare: values => ({ ...values, expected_updated_at: info.cases.find((x: Row) => x.id === Number(values.case))?.updated_at }) }
+    const allowExpense = canReadPurchaseMoney(r)
+    const expenses = allowExpense ? await all('/business/entries/', { project: r.project, kind: 'expense', cancelled: false }) : []
+    return { title: name, path, fields: [select('case', '质保事项', info.cases.filter((x: Row) => ['待响应', '维修中'].includes(x.status)).map((x: Row) => ({ value: x.id, label: `${x.id} · ${x.item} · ${x.description}` }))), select('status', '处理结果', [{ value: 'repairing', label: '维修中' }, { value: 'replaced', label: '已更换' }, { value: 'closed', label: '已关闭' }]), { key: 'response', label: '供应商响应、责任与处理说明', type: 'textarea' }, select('replacement', '补换货收货流水', receipts.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${quantityText(x.quantity)}` })), true), select('returned', '原批次退货流水', returns.map(x => ({ value: x.id, label: `${x.id} · ${x.item_name} · ${quantityText(x.quantity)}` })), true), ...(allowExpense ? [select('expense', '关联已登记费用', expenses.map(x => ({ value: x.id, label: `${x.title} · ${formatMoney(x.amount)}` })), true)] : [])], prepare: values => ({ ...values, expected_updated_at: info.cases.find((x: Row) => x.id === Number(values.case))?.updated_at }) }
   }
   if (name === '更新到货计划') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
@@ -373,7 +379,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
         { key: 'receipt_status', label: '到货与检验状态' },
         { key: 'last_received_label', label: '最近入库日期' },
         { key: 'due_date', label: '交期' },
-        ...(money() || buyer() ? [{ key: 'total_label', label: '含税合计（元）' }] : []),
+        ...(canReadPurchaseMoney(detail) || canEditPurchase(detail) ? [{ key: 'total_label', label: '含税合计（元）' }] : []),
         { key: 'payment_term_label', label: '采购账期' },
         { key: 'payment_due_date', label: '付款到期日', optional: true },
         { key: 'warranty_months', label: '供应商质保月数' },
@@ -385,7 +391,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
           { key: 'project_unit', label: '项目号 / 单元', multiline: true, width: 110 },
           { ...t('due_date', '明细交期'), width: 116, short: true },
           { ...qty, label: '采购数量', width: 80, short: true },
-          ...(money() || buyer() ? [{ ...price, width: 100, short: true }] : []),
+          ...(canReadPurchaseMoney(detail) || canEditPurchase(detail) ? [{ ...price, width: 100, short: true }] : []),
           { ...t('received_quantity', '已收'), width: 64, short: true },
           { ...t('remaining', '待收'), width: 64, short: true },
           { ...t('cancelled_quantity', '已取消'), width: 72, short: true },
@@ -427,7 +433,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       }
       if (name === '收货') {
         // 默认全部勾选并按待收填入（一键整单收货不变）；未到货的行取消勾选即可。
-        const cancel = buyer()
+        const cancel = canEditPurchase(detail)
         const lines = detail.lines.map((line: Row) => ({
           ...materialDetails(line), line: line.id, project_code: detail.project_code,
           required_quantity: line.bom_quantity ?? line.quantity,

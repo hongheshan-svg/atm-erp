@@ -82,4 +82,12 @@ describe('销售列表与签约对话框', () => {
     const detail = await salesCommand({ id: 5, status: 'signed', quote_amount: '500000.00', contract_amount: '500000.00', original_contract_amount: null }, '查看明细')
     expect(detail.initial).toMatchObject({ quote_amount: '500,000.00', contract_amount: '500,000.00', original_contract_amount: null })
   })
+
+  it('销售经理兼财务查看自己负责的已签约销售单仍保留补充协议记录入口', () => {
+    user.value = { id: 8, roles: ['sales_manager', 'finance'] }
+    expect(actionNames('sales', { id: 5, status: 'signed', manager: 8 })).toEqual(['查看明细', '交付与回款', '补充协议记录', '附件'])
+    expect(actionNames('sales', { id: 6, status: 'signed', manager: 9 })).toEqual(['查看明细', '交付与回款', '补充协议记录', '附件'])
+    user.value = { id: 8, roles: ['sales_manager'] }
+    expect(actionNames('sales', { id: 5, status: 'signed', manager: 8 })).toEqual(['查看明细', '交付与回款', '附件'])
+  })
 })

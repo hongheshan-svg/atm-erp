@@ -127,12 +127,18 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
     const [scope, impact] = await Promise.all([read(`/business/bom/${r.id}/upgrade-scope/`) as Promise<Row[]>, read(`/business/bom/${r.id}/revision-impact/`) as Promise<Row>])
     const writable = scope.filter(row => row.writable)
     const locked = scope.filter(row => !row.writable)
+    const lockedNamed = locked.filter(row => row.code)
+    const lockedHidden = locked.length - lockedNamed.length
+    const lockedNotes = [
+      lockedNamed.length ? `项目 ${lockedNamed.map(row => row.code).join('、')} 也在用此物料，需由该项目的工程师或项目经理换版。` : '',
+      lockedHidden > 0 ? `另有 ${lockedHidden} 个其他项目也在用此物料，需由对应项目的工程师或项目经理换版。` : '',
+    ].filter(Boolean)
     const newer = r.newer_revision as Row | undefined
     return {
       title: `升版 ${r.item_code} ${r.item_name}`,
       submitLabel: '确认升版',
       path: `/business/bom/${r.id}/upgrade/`,
-      notice: { type: impactBlocked(impact) ? 'warning' : 'info', text: [newer ? `${newerText(r)}，新图档版本已填好，确认后直接换成这一版。` : '', revisionNotice(r), impactText(impact), locked.length ? `项目 ${locked.map(row => row.code).join('、')} 也在用此物料，需由该项目的工程师或项目经理换版。` : ''].filter(Boolean).join('') },
+      notice: { type: impactBlocked(impact) ? 'warning' : 'info', text: [newer ? `${newerText(r)}，新图档版本已填好，确认后直接换成这一版。` : '', revisionNotice(r), impactText(impact), ...lockedNotes].filter(Boolean).join('') },
       successNote: revisionResult,
       fields: [
         { ...t('item_label', '原物料'), readonly: true, displayOnly: true },

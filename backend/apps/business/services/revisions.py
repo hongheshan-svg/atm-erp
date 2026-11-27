@@ -19,6 +19,7 @@ from apps.core.actions import perform
 from apps.core.api import Conflict
 from apps.core.permissions import (
     BOM_WRITERS,
+    GLOBAL_PROJECT_ROLES,
     PURCHASE_APPROVERS,
     PURCHASERS,
     WAREHOUSE,
@@ -850,7 +851,13 @@ def receive_rework(user, project, line, qty, purchase):
 def review(actor, key, purchase_id, data):
     """采购处理换版改单：按新图确认（调高单价须采购审批权限、独立审批与预算复核）或取消余量。"""
     from . import budgets
-    from .supply import cancel_lines, purchase_action, purchase_applicants
+    from .supply import (
+        cancel_lines,
+        over_budget_adjusters,
+        purchase_action,
+        purchase_applicants,
+        review_budget_adjusters,
+    )
 
     def execute(user, purchase):
         fields(data, {'line', 'decision', 'unit_price', 'reason', 'confirm_over_budget'})
@@ -904,17 +911,34 @@ def review(actor, key, purchase_id, data):
                 if delta > ZERO:
                     report = budgets.analysis(purchase.project, delta)
                     if report['over_budget']:
-                        if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
-                            raise PermissionDenied(
-                                '预算调整人不能确认本项目超预算调价，请由其他经理审批；管理员例外必须填写原因。'
-                            )
+                        budget_adjuster_approval = independent_approval(
+                            user,
+                            over_budget_adjusters(purchase),
+                            reason,
+                            denied='预算调整人不能确认本项目超预算调价，请由其他经理审批；管理员例外必须填写原因。',
+                            reason_required='管理员调整预算后确认超预算调价，必须填写例外审批原因并保留审计。',
+                        )
                         if not confirm_over_budget:
-                            warnings = budgets.purchase_visibility(user, report, purchase.project)['warnings']
+                            visible_report = {
+                                **report,
+                                'purchase_amount': str(delta),
+                                'purchase': purchase.pk,
+                                'snapshot': '',
+                            }
+                            warnings = budgets.purchase_visibility(user, visible_report, purchase.project)['warnings']
                             raise Conflict(
                                 '；'.join(warnings) + '。调高单价会超出项目预算，请勾选「确认承担超预算调价」后提交。'
                             )
                         over_budget = True
-                        budget_adjuster_approval = user.pk == purchase.project.budget_changed_by_id
+                    else:
+                        budget_adjuster_approval = independent_approval(
+                            user,
+                            review_budget_adjusters(purchase, delta),
+                            reason,
+                            denied='你在本单提交后调整过项目预算，按调整前预算本次调价会超预算，不能由你确认；'
+                            '请交由其他有权限的人员审批，管理员例外须填写原因。',
+                            reason_required='管理员调整预算后确认本次调价，必须填写例外审批原因并保留审计。',
+                        )
                 audit_extra.update(
                     self_approval=self_approval,
                     over_budget=over_budget,
@@ -958,11 +982,16 @@ def pending_reviews(queryset=None):
     ).filter(quantity__gt=F('received_quantity') + F('cancelled_quantity'))
 
 
-def scope(actor, line):
-    """升版时可一并换版的其他项目：同一物料仍在 BOM 中、可维护 BOM 的项目，标明当前用户能否修改。"""
-    writable = set(
-        projects_for(actor, Project.objects.filter(status__in=BOM_STATES), BOM_WRITERS).values_list('pk', flat=True)
-    )
+def scope(actor, line, *, include_locked_ids=False):
+    """升版时可一并换版的其他项目：同一物料仍在 BOM 中、可维护 BOM 的项目，标明当前用户能否修改。
+
+    对当前用户无 BOM 维护权的项目不返回用量、在途、已领、单元或项目名称：
+    仅对本就有该项目读取权的人员返回项目编号，对其余项目仅提示存在其他使用方，不泄露项目标识与明细。
+    """
+    active = Project.objects.filter(status__in=BOM_STATES)
+    writable = set(projects_for(actor, active, BOM_WRITERS).values_list('pk', flat=True))
+    # 具备全局只读岗位的兼岗用户可看到无 BOM 维护权项目的编号；非全局岗位只读范围与 writable 相同，无需额外查询。
+    global_reader = has_role(actor, GLOBAL_PROJECT_ROLES)
     result = {}
     rows = list(
         BOMLine.objects.filter(item_id=line.item_id, project__status__in=BOM_STATES)
@@ -970,41 +999,51 @@ def scope(actor, line):
         .select_related('project')
         .order_by('project_id', 'pk')
     )
-    # 勾选前看到对方项目的在途和已领：一次批量查询，避免按 BOM 行重复查库。
-    transit = unreceived_by_line([row.pk for row in rows])
-    project_ids = sorted({row.project_id for row in rows})
+    writable_rows = [row for row in rows if row.project_id in writable]
+    # 勾选前看到对方项目的在途和已领：只对有 BOM 写权限的项目一次批量查询，不向无权人员泄露他项目数据。
+    transit = unreceived_by_line([row.pk for row in writable_rows]) if writable_rows else {}
+    writable_project_ids = sorted({row.project_id for row in writable_rows})
     issued_totals = (
         {
             row['project_id']: -(row['total'] or ZERO)
             for row in StockMove.objects.filter(
-                project_id__in=project_ids, stock__item_id=line.item_id, kind__in=['issue', 'return']
+                project_id__in=writable_project_ids, stock__item_id=line.item_id, kind__in=['issue', 'return']
             )
             .exclude(task__kind='service')
             .values('project_id')
             .annotate(total=Sum('quantity'))
         }
-        if project_ids
+        if writable_project_ids
         else {}
     )
     for row in rows:
-        entry = result.get(row.project_id)
-        if entry is None:
-            entry = {
-                'id': row.project_id,
-                'code': row.project.code,
-                'name': row.project.name,
-                'quantity': ZERO,
-                'in_transit': ZERO,
-                'issued': issued_totals.get(row.project_id, ZERO),
-                'units': [],
-                'writable': row.project_id in writable,
-            }
-            result[row.project_id] = entry
-        entry['quantity'] += row.quantity
-        entry['in_transit'] += max(ZERO, transit.get(row.pk, ZERO))
-        entry['units'].append(row.assembly_unit or '未分单元')
+        if row.project_id in writable:
+            entry = result.get(row.project_id)
+            if entry is None:
+                entry = {
+                    'id': row.project_id,
+                    'code': row.project.code,
+                    'name': row.project.name,
+                    'quantity': ZERO,
+                    'in_transit': ZERO,
+                    'issued': issued_totals.get(row.project_id, ZERO),
+                    'units': [],
+                    'writable': True,
+                }
+                result[row.project_id] = entry
+            entry['quantity'] += row.quantity
+            entry['in_transit'] += max(ZERO, transit.get(row.pk, ZERO))
+            entry['units'].append(row.assembly_unit or '未分单元')
+        elif row.project_id not in result:
+            locked = {'writable': False}
+            if global_reader:
+                locked['code'] = row.project.code
+            if include_locked_ids:
+                locked['id'] = row.project_id
+            result[row.project_id] = locked
     return [
-        {**row, **{key: quantity(row[key]) for key in ('quantity', 'in_transit', 'issued')}} for row in result.values()
+        {**row, **{key: quantity(row[key]) for key in ('quantity', 'in_transit', 'issued')}} if row['writable'] else row
+        for row in result.values()
     ]
 
 
@@ -1083,9 +1122,8 @@ def upgrade(actor, key, line_id, data):
             try:
                 require_project(current_actor, other_project, BOM_WRITERS)
             except PermissionDenied as exc:
-                raise PermissionDenied(
-                    f'你不能维护项目 {other_project.code} 的 BOM，请由该项目的工程师或项目经理换版。'
-                ) from exc
+                target = f'项目 {other_project.code}' if has_role(current_actor, GLOBAL_PROJECT_ROLES) else '所选项目'
+                raise PermissionDenied(f'你不能维护{target}的 BOM，请由该项目的工程师或项目经理换版。') from exc
         context['projects'] = locked
 
     def execute(user):

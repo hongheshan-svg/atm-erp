@@ -19,7 +19,11 @@ import { dateTimeText } from '../utils/datetime'
 const props = defineProps<{ owner: 'sale' | 'purchase'; record: Row }>()
 const emit = defineEmits<{ close: [] }>()
 const title = computed(() => `${props.owner === 'sale' ? '销售' : '采购'}附件 · ${props.record.code}`)
-const writable = computed(() => props.record.status !== 'cancelled' && (props.owner === 'sale' ? can(['admin', 'manager', 'sales_manager']) : purchasing()))
+const writable = computed(() => props.record.status !== 'cancelled' && (
+  props.owner === 'sale'
+    ? (props.record.can_upload_documents ?? can(['admin', 'manager', 'sales_manager']))
+    : (props.record.can_edit_purchase ?? purchasing())
+))
 const records = ref<Row[]>([])
 const total = ref(0)
 const page = ref(1)

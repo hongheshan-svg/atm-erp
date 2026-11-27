@@ -630,3 +630,55 @@ class SalesDateFactTests(BusinessFixtures, TestCase):
         self.assertIn('date', result)
         self.assertFalse(sale.amendments.exists())
         self.assertEqual((AuditLog.objects.count(), ActionReceipt.objects.count()), (audits, receipts))
+
+    def test_non_member_manager_cannot_operate_legacy_project_sale_and_sales_reads_company_and_directory(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        legacy_project = Project.objects.create(
+            code='LEG-PRJ',
+            name='历史未签约项目',
+            customer=self.customer,
+            manager=self.users['manager'],
+            status='quoted',
+        )
+        legacy_sale = SalesOrder.objects.create(
+            code='SO-LEG',
+            name='历史销售单',
+            customer=self.customer,
+            manager=self.users['manager'],
+            project=legacy_project,
+            status='quoted',
+            quote_amount=100,
+        )
+        outsider = User.objects.create_user(username='other-sale-pm', role='manager')
+        client = APIClient()
+        client.force_authenticate(outsider)
+        signing = {'date': TODAY, 'milestones': [{'title': '合同款', 'amount': '100', 'due_date': TODAY}]}
+        for suffix, body in [
+            ('quote/', {'amount': '200', 'reason': '改价'}),
+            ('sign/', signing),
+            ('cancel/', {'reason': '取消'}),
+            (
+                'edit/',
+                {'name': '越权修改', 'reason': '改名', 'expected_updated_at': legacy_sale.updated_at.isoformat()},
+            ),
+        ]:
+            response = client.post(
+                f'/api/business/sales/{legacy_sale.pk}/{suffix}',
+                body,
+                format='json',
+                HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+            )
+            self.assertEqual(response.status_code, 403, suffix)
+        # 纯销售经理可读公司基础资料与员工目录，仍不能修改公司资料。
+        sales_client = self.clients['sales_manager']
+        self.assertEqual(sales_client.get('/api/core/company/').status_code, 200)
+        self.assertEqual(sales_client.get('/api/auth/directory/').status_code, 200)
+        self.assertEqual(
+            sales_client.patch(
+                '/api/core/company/1/', {'name': '越权'}, format='json', HTTP_IDEMPOTENCY_KEY='sm-co'
+            ).status_code,
+            403,
+        )

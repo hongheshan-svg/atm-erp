@@ -54,15 +54,13 @@ class DocumentSerializer(serializers.ModelSerializer):
         ]
 
     def to_representation(self, obj):
-        from apps.core.permissions import MANAGERS, project_allowed
-
         result = super().to_representation(obj)
         user = self.context['request'].user
         owner = obj.sale if obj.sale_id else obj.purchase if obj.purchase_id else None
         project = obj.project or (owner.project if owner else None)
         # 已结项项目谁都不能删附件（先重新打开），按钮与后端口径一致。
-        result['can_remove'] = not (project and project.status == 'closed') and (
-            obj.created_by_id == user.pk or bool(project and project_allowed(user, project, MANAGERS))
+        result['can_remove'] = not (project and project.status == 'closed') and documents.removal_allowed(
+            user, obj, owner, project
         )
         return result
 

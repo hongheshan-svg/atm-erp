@@ -40,15 +40,17 @@ const tabsRef = ref<TabsInstance>()
 async function revealTab() {
   await revealActiveTab(() => tabsRef.value)
 }
-const allowedTabs = ['progress', 'tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(money() ? ['finance', 'cost'] : []), 'documents']
+const projectMoney = computed(() => project.value ? (project.value.can_read_money ?? money()) : money())
+const allowedTabs = computed(() => ['progress', 'tasks', 'bom', ...(purchaseReader() ? ['purchases'] : []), 'deliveries', ...(projectMoney.value ? ['finance', 'cost'] : []), 'documents'])
 const initialTab = String(route.query.tab || sessionStore.get(`project-tab-${id}`) || 'tasks')
-const tab = ref(allowedTabs.includes(initialTab) ? initialTab : 'tasks')
+const tab = ref(allowedTabs.value.includes(initialTab) ? initialTab : 'tasks')
 // 概览默认收起，任务 / BOM / 成本紧跟页头；展开过的用户在本机沿用自己的选择（storage 已内置 try/catch）。
 const overview = ref(localStore.get('project-overview') === 'expanded')
 watch(overview, value => localStore.set('project-overview', value ? 'expanded' : 'collapsed'))
 const requirementsOpen = ref(false)
 watch(tab, value => { sessionStore.set(`project-tab-${id}`, value); void router.replace({ query: { ...route.query, tab: value } }) })
-watch(() => route.query.tab, value => { if (allowedTabs.includes(String(value))) tab.value = String(value) })
+watch(() => route.query.tab, value => { if (allowedTabs.value.includes(String(value))) tab.value = String(value) })
+watch(allowedTabs, tabs => { if (!tabs.includes(tab.value)) tab.value = 'tasks' })
 watch(tab, revealTab, { flush: 'post' })
 const error = ref('')
 const projectFlow = computed(() => flowFor('projects', project.value))
@@ -68,7 +70,7 @@ const dueFlag = computed(() => {
 // 收起时的一行摘要，交期单独成段以便标红；合同金额与四宫格一样只在 money() 通过时才拼进来。
 const briefHead = computed(() => project.value ? `${project.value.equipment_quantity} 台 · ` : '')
 const briefDue = computed(() => project.value ? `交期 ${project.value.due_date || '未设置'}${dueFlag.value ? ` ${dueFlag.value}` : ''}` : '')
-const briefTail = computed(() => project.value && money() ? ` · ${project.value.has_sale === false ? contractText.value : `合同 ${contractText.value}`}` : '')
+const briefTail = computed(() => project.value && projectMoney.value ? ` · ${project.value.has_sale === false ? contractText.value : `合同 ${contractText.value}`}` : '')
 const memberNames = computed((): string[] | null => Array.isArray(project.value?.member_names) ? project.value!.member_names : null)
 const canEditProject = computed(() => Boolean(project.value && actionNames('projects', project.value).includes('编辑项目')))
 // 已结项、已取消的项目不再显示待办条，改为一行结项或取消说明。
@@ -182,7 +184,7 @@ onMounted(load)
       <div>
         <small>质保约定</small><strong>{{ project.warranty_months }} 个月</strong>
       </div>
-      <div v-if="money()">
+      <div v-if="projectMoney">
         <small>合同金额</small><strong>{{ contractText }}</strong>
       </div>
     </section>
@@ -227,6 +229,7 @@ onMounted(load)
           :project-id="id"
           :status="project.status"
           :can-edit-bom="project.can_edit_bom"
+          :can-edit-purchase="project.can_edit_purchase"
           :revision="revision"
           @changed="load" /></el-tab-pane
       ><el-tab-pane
@@ -239,7 +242,7 @@ onMounted(load)
           :key="`purchases-${attention}`"
           :class="{ 'attention-list': purchaseAttention }"
           title="项目采购"
-          :allow-create="['active', 'delivering', 'warranty'].includes(project.status)"
+          :allow-create="['active', 'delivering', 'warranty'].includes(project.status) && project.can_edit_purchase !== false"
           :params="purchaseParams"
           :project-id="id"
           :revision="revision"
@@ -260,7 +263,7 @@ onMounted(load)
           :project-id="id"
           :revision="revision"
           @changed="load" /></template></ModuleTabs></el-tab-pane
-      ><el-tab-pane v-if="money()" label="收付款" name="finance" lazy
+      ><el-tab-pane v-if="projectMoney" label="收付款" name="finance" lazy
         ><FinanceTotals v-if="tab === 'finance'" project :project-id="id" :revision="revision" /><ModuleTabs :parent-tab="tab" v-if="tab === 'finance'" :tabs="financeTabs" :storage-key="`project-${id}-finance`"><template #entries><ResourcePanel
           resource="entries"
           title="项目款项"
@@ -269,7 +272,7 @@ onMounted(load)
           :project-id="id"
           :revision="revision"
           @changed="load" /></template><template #reconciliations><ResourcePanel resource="reconciliations" title="项目对账" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template><template #payments><ResourcePanel resource="payments" title="项目收付流水" :allow-create="false" :params="{ entry__project: id }" :project-id="id" :revision="revision" @changed="load" /></template></ModuleTabs></el-tab-pane
-      ><el-tab-pane v-if="money()" label="成本与预算" name="cost" lazy>
+      ><el-tab-pane v-if="projectMoney" label="成本与预算" name="cost" lazy>
         <BudgetPanel v-if="tab === 'cost'" :project-id="id" :revision="revision" :status="project.status" :can-manage="project.can_manage" :contract="project.contract_amount" />
       </el-tab-pane><el-tab-pane label="附件" name="documents" lazy
         ><ResourcePanel

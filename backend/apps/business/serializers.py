@@ -177,6 +177,8 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
     can_edit_bom = serializers.SerializerMethodField()
     can_manage_production = serializers.SerializerMethodField()
     can_register_service = serializers.SerializerMethodField()
+    can_read_money = serializers.SerializerMethodField()
+    can_edit_purchase = serializers.SerializerMethodField()
 
     def get_can_manage_production(self, obj):
         return project_allowed(self.context['request'].user, obj, PRODUCTION_MANAGERS)
@@ -189,6 +191,12 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
 
     def get_can_edit_bom(self, obj):
         return project_allowed(self.context['request'].user, obj, BOM_WRITERS)
+
+    def get_can_read_money(self, obj):
+        return project_allowed(self.context['request'].user, obj, MONEY_READERS)
+
+    def get_can_edit_purchase(self, obj):
+        return project_allowed(self.context['request'].user, obj, PURCHASERS)
 
     quote_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
     contract_amount = serializers.DecimalField(max_digits=18, decimal_places=2, read_only=True)
@@ -231,6 +239,8 @@ class ProjectSerializer(MoneyFilter, serializers.ModelSerializer):
             'can_edit_bom',
             'can_manage_production',
             'can_register_service',
+            'can_read_money',
+            'can_edit_purchase',
             'id',
             'code',
             'name',
@@ -394,6 +404,9 @@ class PurchaseLineDetailSerializer(PurchaseLineSerializer):
 class PurchaseSerializer(serializers.ModelSerializer):
     can_manage = serializers.SerializerMethodField()
     can_approve = serializers.SerializerMethodField()
+    can_edit_purchase = serializers.SerializerMethodField()
+    can_read_contract = serializers.SerializerMethodField()
+    can_read_money = serializers.SerializerMethodField()
     change_request = serializers.SerializerMethodField()
     can_review_change = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
@@ -471,6 +484,15 @@ class PurchaseSerializer(serializers.ModelSerializer):
     def get_can_approve(self, obj):
         return project_allowed(self.context['request'].user, obj.project, PURCHASE_APPROVERS)
 
+    def get_can_edit_purchase(self, obj):
+        return project_allowed(self.context['request'].user, obj.project, PURCHASERS)
+
+    def get_can_read_contract(self, obj):
+        return project_allowed(self.context['request'].user, obj.project, MONEY_READERS | PURCHASERS)
+
+    def get_can_read_money(self, obj):
+        return project_allowed(self.context['request'].user, obj.project, MONEY_READERS)
+
     lines = PurchaseLineSerializer(many=True, read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
@@ -491,6 +513,9 @@ class PurchaseSerializer(serializers.ModelSerializer):
         fields = [
             'can_manage',
             'can_approve',
+            'can_edit_purchase',
+            'can_read_contract',
+            'can_read_money',
             'change_request',
             'can_review_change',
             'id',
@@ -961,9 +986,13 @@ class TaskSerializer(serializers.ModelSerializer):
 class DeliverySerializer(serializers.ModelSerializer):
     """批次进度由本批的安装、验收任务推导：待安装 → 待验收 → 已验收（含质保状态）。"""
 
+    can_accept = serializers.SerializerMethodField()
     stage = serializers.SerializerMethodField()
     installer_name = serializers.SerializerMethodField()
     acceptor_name = serializers.SerializerMethodField()
+
+    def get_can_accept(self, obj):
+        return project_read_allowed(self.context['request'], obj.project_id, MANAGERS)
 
     def batch_tasks(self, obj, kind):
         return [task for task in obj.tasks.all() if task.kind == kind and task.status != 'cancelled']
@@ -991,6 +1020,7 @@ class DeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = Delivery
         fields = [
+            'can_accept',
             'id',
             'code',
             'project',
