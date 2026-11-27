@@ -205,3 +205,22 @@ it('只在 BOM 页签放开 el-tabs 内容区的 overflow，采购选择条才�
     other.unmount()
   }
 })
+it('经理兼仓管打开非参与项目时，隐藏金额与收付款/成本页签，不误显示未签约并回落到任务页签', async () => {
+  user.value = { id: 9, roles: ['manager', 'warehouse'] }
+  vi.mocked(read).mockResolvedValue({
+    ...project,
+    contract_amount: undefined,
+    has_sale: true,
+    can_manage: false,
+    can_read_money: false,
+    can_edit_purchase: false,
+  })
+  const wrapper = await render('/projects/7?tab=cost')
+  expect(wrapper.find('.project-brief').text()).toBe('12 台 · 交期 2099-12-20')
+  expect(wrapper.text()).not.toContain('未签约')
+  expect(wrapper.text()).not.toContain('合同金额')
+  expect(wrapper.find('#tab-finance').exists()).toBe(false)
+  expect(wrapper.find('#tab-cost').exists()).toBe(false)
+  expect(wrapper.findComponent({ name: 'BudgetPanel' }).exists()).toBe(false)
+  wrapper.unmount()
+})

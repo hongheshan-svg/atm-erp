@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 
@@ -61,6 +62,8 @@ class BOMView(ReadView):
         """升版时可勾选一并换版的其他项目（同一物料仍在其 BOM 中），并标明当前用户能否维护。"""
         line = self.get_object()
         require_project(request.user, line.project, BOM_WRITERS)
+        if not line.item.drawing_number:
+            raise ValidationError('只有带图号的物料可以升版；换成其他型号请用「替换物料」。')
         return Response(revisions.scope(request.user, line))
 
     @action(detail=True, methods=['get'], url_path='revision-impact')

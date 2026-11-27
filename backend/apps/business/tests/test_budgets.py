@@ -264,3 +264,33 @@ class BudgetTests(BusinessFixtures, TestCase):
         payload['expected_snapshot'] = self.check(other)['snapshot']
         self.post('manager', f'purchases/{other.pk}/approve-over-budget/', payload)
         self.assertFalse(self.approval_log(other).detail['budget_adjuster_approval'])
+
+    def test_over_budget_approval_still_blocks_earlier_post_submit_budget_adjuster(self):
+        from rest_framework.test import APIClient
+
+        from apps.accounts.models import User
+
+        self.budget('50', '0', '0')
+        purchase = self.purchase(self.project, approve=False)
+        # 待审期间 manager 调整预算，随后另一项目经理微调预算覆盖了 budget_changed_by；
+        # 原调整人 manager 仍不能批准本项目超预算采购。
+        self.budget('60', '0', '0', revision=1, role='manager')
+        second = User.objects.create_user(username='second-budget-pm', role='manager')
+        self.project.members.add(second)
+        second_client = APIClient()
+        second_client.force_authenticate(second)
+        self.assertEqual(
+            second_client.post(
+                f'/api/business/projects/{self.project.pk}/budget/',
+                {'materials': '60', 'labor': '10', 'expenses': '0', 'expected_revision': 2, 'reason': '补充人工预算'},
+                format='json',
+                HTTP_IDEMPOTENCY_KEY='second-budget-edit',
+            ).status_code,
+            200,
+        )
+        check = self.check(purchase)
+        self.assertTrue(check['over_budget'])
+        payload = {'reason': '尝试绕过', 'confirmed': True, 'expected_snapshot': check['snapshot']}
+        self.post('manager', f'purchases/{purchase.pk}/approve-over-budget/', payload, status=403)
+        # 未调整预算的采购经理仍可正常超预算批准。
+        self.post('purchase_manager', f'purchases/{purchase.pk}/approve-over-budget/', payload)

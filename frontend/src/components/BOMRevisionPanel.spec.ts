@@ -72,6 +72,12 @@ it('按岗位给处理入口：仓管报废或留用在库、登记已装机报�
   wrapper = await render()
   expect(read).not.toHaveBeenCalled()
   expect(wrapper.find('.bom-revision-panel').exists()).toBe(false)
+
+  // 经理兼仓管在非参与项目上只有仓管处理权，不能开返修单。
+  user.value = { roles: ['manager', 'warehouse'] }
+  wrapper = await render({ canEditBom: false, canEditPurchase: false })
+  expect((wrapper.vm as any).$.setupState.actions(part)).toEqual(['在库报废', '留作备件', '已装机报废'])
+  wrapper.unmount()
 })
 
 it('工程师在 canEditBom 异步返回后自动拉取旧版待处理，并忽略切换项目后的迟到响应', async () => {

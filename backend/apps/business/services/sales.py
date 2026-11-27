@@ -6,7 +6,7 @@ from apps.accounts.models import User
 from apps.core.actions import perform
 from apps.core.api import Conflict
 from apps.core.models import CodeRule
-from apps.core.permissions import ADMIN, MANAGERS, SALES, has_role, require_role, require_sale
+from apps.core.permissions import ADMIN, MANAGERS, SALES, has_role, require_project, require_role, require_sale
 
 from ..models import Partner, Project, SalesOrder
 from . import finance, projects
@@ -93,6 +93,8 @@ def action(actor, key, operation, sale_id, data, execute, *, project_first=False
             require_role(user, roles)
         sale = locked()
         require_sale(user, sale)
+        if sale.project_id and sale.manager_id != user.pk and not check:
+            require_project(user, sale.project, MANAGERS)
         if check:
             check(user, sale)
         # perform runs execute right after authorize in the same transaction; the rows stay locked.

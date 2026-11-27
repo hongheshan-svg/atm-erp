@@ -27,7 +27,7 @@ import { useBatchSelection } from '../utils/batch-selection'
 import { quantityText as qty } from '../utils/quantity'
 import { linkLabel, purchaseLink } from '../utils/links'
 const qtyCell = (_row: Row, _column: unknown, value: unknown) => qty(value)
-const props = defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean; initialView?: 'prepare' | 'purchase' }>()
+const props = withDefaults(defineProps<{ projectId: number; revision?: number; status?: string; canEditBom?: boolean; canEditPurchase?: boolean; initialView?: 'prepare' | 'purchase' }>(), { canEditPurchase: true })
 const emit = defineEmits<{ changed: [] }>()
 const demand = ref<Row>({ lines: [] })
 const preview = ref<Row | null>(null)
@@ -135,7 +135,7 @@ async function closePurchase() {
 }
 // 已勾选的缺料行刚下单：收集已提交，清空勾选（同 ResourcePanel 批量领料成功后清空），避免对同一批行重复下单。
 function savedPurchase() { selected.value = []; void closePurchase(); saved() }
-const canPurchase = computed(() => permission.buyer() && ['active', 'delivering', 'warranty'].includes(props.status || ''))
+const canPurchase = computed(() => permission.buyer() && props.canEditPurchase !== false && ['active', 'delivering', 'warranty'].includes(props.status || ''))
 const canEdit = computed(() => bomEditor({ can_edit_bom: props.canEditBom }))
 const canMaintain = computed(() => canEdit.value && ['draft', 'quoted', 'active', 'delivering'].includes(props.status || ''))
 watch(canMaintain, value => { if (!value) { closeImport(); command.value = null } })
@@ -484,7 +484,7 @@ function saved() {
       <button v-for="group in unitSummary" :key="group.unit" type="button" class="bom-unit-chip" :class="{ active: unit === group.unit }" :aria-pressed="unit === group.unit" @click="unit = unit === group.unit ? '' : group.unit"><strong>{{ unitLabel(group.unit) }}</strong><small><span class="bom-unit-rows">{{ group.rows }} 行 · </span><span :class="{ 'shortage-number': group.short }">缺 {{ group.short }}</span><template v-if="group.overdue"> · <span class="overdue-count">逾期 {{ group.overdue }}</span></template></small></button>
     </div>
     <p v-if="inactiveCount" class="bom-inactive-note" role="status"><el-tag size="small" type="info">已停用</el-tag><span>{{ view === 'purchase' ? `${inactiveCount} 行物料已停用，不能采购；请联系工程师在 BOM 里替换为在用物料。` : `${inactiveCount} 行物料已停用，不能修改数量或采购；请在行尾「操作」用「替换物料」换成在用物料，或移除。` }}</span><button type="button" class="bom-link-button" :aria-pressed="inactiveOnly" @click="inactiveOnly = !inactiveOnly">{{ inactiveOnly ? '显示全部' : '只看这些行' }}</button></p>
-    <BOMRevisionPanel v-if="demand.revision_changes" :project-id="projectId" :refresh="(revision ?? 0) + partsVersion" :can-edit-bom="canEditBom" :status="status" @command="value => { command = value }" />
+    <BOMRevisionPanel v-if="demand.revision_changes" :project-id="projectId" :refresh="(revision ?? 0) + partsVersion" :can-edit-bom="canEditBom" :can-edit-purchase="canEditPurchase" :status="status" @command="value => { command = value }" />
     <div class="bom-demand-filters">
       <label class="bom-search"><span class="visually-hidden">搜索物料</span><input v-model="search" aria-label="搜索 BOM 物料" placeholder="编码、名称、规格、图号、品牌" /></label>
       <el-button v-if="mobile" class="bom-filter-toggle" :aria-expanded="filtersOpen" :aria-controls="filterId" @click="filtersOpen = !filtersOpen">筛选{{ activeFilters ? ` · ${activeFilters}` : '' }} {{ filtersOpen ? '▴' : '▾' }}</el-button>

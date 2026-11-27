@@ -56,7 +56,9 @@ it('带图号的非标件可一步升版：默认只改本项目，可勾选同�
   expect(actionNames('bom', row)).toEqual(['修改此行', '升版', '替换物料', '移除'])
   vi.mocked(read).mockImplementation(async (path: string) => path.endsWith('upgrade-scope/') ? [
     { id: 90, code: 'ATM2690', name: '下料线', quantity: '4.000', in_transit: '3.000', issued: '1.000', units: ['02 搬运'], writable: true },
-    { id: 91, code: 'ATM2691', name: '包装线', quantity: '2.000', in_transit: '0.000', issued: '0.000', units: ['未分单元'], writable: false },
+    { code: 'ATM2691', writable: false },
+    { writable: false },
+    { writable: false },
   ] : { in_transit: [{ code: 'PO-1', status_label: '已批准', quantity: '2.000', pending: true, blocked: false }], issued: '0.000', received_unissued: '0.000', need_after: '0.000', pending_issued: '0.000', pending_stock: '0.000' })
   const command = await actionCommand('bom', row, '升版')
   expect(read).toHaveBeenCalledWith('/business/bom/5/upgrade-scope/')
@@ -64,6 +66,7 @@ it('带图号的非标件可一步升版：默认只改本项目，可勾选同�
   expect(command.path).toBe('/business/bom/5/upgrade/')
   expect(command.notice!.text).toContain('PO-1 2 转为新版')
   expect(command.notice!.text).toContain('ATM2691')
+  expect(command.notice!.text).toContain('另有 2 个其他项目也在用此物料')
   const scope = command.fields.find(field => field.key === 'projects')!
   expect(scope.options).toEqual([{ value: 90, label: 'ATM2690 下料线（02 搬运，共 4，在途 3 一并改单，已领 1）' }])
   expect(command.initial).toMatchObject({ projects: [], quantity: '10' })

@@ -144,7 +144,7 @@ it('换版转来的新版明细待采购确认：采购可按新图改单（改�
   expect(review.fields.find(field => field.key === 'line')!.options).toEqual([{ value: 4, label: 'JG-001B 夹爪安装板（由 JG-001 转来）· 未收 2' }])
   expect(review.prepare!({ line: 4, decision: 'confirm', unit_price: '5.00', reason: '供应商确认' })).toEqual({ line: 4, decision: 'confirm', reason: '供应商确认' })
   expect(review.prepare!({ line: 4, decision: 'confirm', unit_price: '6', reason: '重新报价' })).toEqual({ line: 4, decision: 'confirm', reason: '重新报价', unit_price: '6' })
-  expect(review.prepare!({ line: 4, decision: 'cancel', unit_price: '6', reason: '不接受' })).toEqual({ line: 4, decision: 'cancel', reason: '不接受' })
+  expect(review.prepare!({ line: 4, decision: 'cancel', unit_price: '6', confirm_over_budget: true, reason: '不接受' })).toEqual({ line: 4, decision: 'cancel', reason: '不接受' })
   // 已归档合同的，确认后提醒与供应商签回并归档新版本。
   expect(review.successNote!({ id: 9, contract_version: 2 })).toContain('已归档合同第 2 版')
   expect(review.successNote!({ id: 9, contract_version: null })).toBe('')
@@ -175,4 +175,21 @@ it('换版转来的新版明细待采购确认：采购可按新图改单（改�
   expect(rows.map(row => row.operation)).toEqual(['换版按新图改单', '确认换版改单', '取消换版余量', '取消未收余量'])
   expect(rows[0]!.quantity_summary).toContain('JG-001 → JG-001B')
   expect(rows[1]!.quantity_summary).toContain('¥5.00 → ¥6.00')
+})
+
+it('经理兼仓管查看非参与项目采购单时，不展示采购写操作、合同预览、余量不再到货或费用关联', async () => {
+  user.value = { id: 5, roles: ['manager', 'warehouse'] }
+  const foreign = { ...detail, status: 'approved', can_manage: false, can_approve: false, can_edit_purchase: false, can_read_contract: false, can_read_money: false }
+  const actions = actionNames('purchases', foreign)
+  expect(actions).toContain('收货')
+  expect(actions).not.toContain('预览采购合同')
+  expect(actions).not.toContain('取消未收余量')
+  expect(actions).not.toContain('附件')
+  vi.mocked(read).mockImplementation(async (path: string) => (path.includes('locations') ? ['主仓'] : foreign))
+  const receive = await actionCommand('purchases', foreign, '收货')
+  expect(receive.fields.some(f => f.key === 'cancel_reason')).toBe(false)
+  vi.mocked(read).mockResolvedValueOnce({ cases: [], receipts: [], warranty_months: 12 })
+  vi.mocked(all).mockResolvedValue([])
+  const warranty = await actionCommand('purchases', foreign, '处理采购质保')
+  expect(warranty.fields.some(f => f.key === 'expense')).toBe(false)
 })

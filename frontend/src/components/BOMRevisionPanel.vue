@@ -11,7 +11,7 @@ import { dateTimeText } from '../utils/datetime'
 import { date, remote, t } from '../modules/shared'
 import { termLabel } from '../modules/payment-terms'
 
-const props = defineProps<{ projectId: number; refresh?: number; canEditBom?: boolean; status?: string }>()
+const props = withDefaults(defineProps<{ projectId: number; refresh?: number; canEditBom?: boolean; canEditPurchase?: boolean; status?: string }>(), { canEditPurchase: true })
 const emit = defineEmits<{ command: [Command] }>()
 const parts = ref<Row[]>([])
 const changes = ref<Row[]>([])
@@ -19,7 +19,8 @@ const error = ref('')
 const historyOpen = ref(false)
 const warehouseRole = () => can(['admin', 'warehouse'])
 const editor = computed(() => bomEditor({ can_edit_bom: props.canEditBom }))
-const readable = computed(() => warehouseRole() || purchasing() || editor.value)
+const canRework = computed(() => purchasing() && props.canEditPurchase !== false)
+const readable = computed(() => warehouseRole() || canRework.value || editor.value)
 const open = computed(() => parts.value.filter(row => row.open))
 const writable = computed(() => ['draft', 'quoted', 'active', 'delivering', 'warranty'].includes(props.status || ''))
 
@@ -64,7 +65,7 @@ function actions(row: Row): string[] {
   const result: string[] = []
   if (Number(row.pending_stock) > 0 && warehouseRole()) result.push('在库报废', '留作备件')
   if (Number(row.pending_issued) > 0 && (warehouseRole() || editor.value)) result.push('已装机报废')
-  if ((Number(row.pending_stock) > 0 || Number(row.pending_issued) > 0) && purchasing() && row.new_line) result.push('开返修单')
+  if ((Number(row.pending_stock) > 0 || Number(row.pending_issued) > 0) && canRework.value && row.new_line) result.push('开返修单')
   return result
 }
 const reason: Field = { ...t('reason', '原因'), hint: '写明 ECN 编号或旧版不能用的原因。' }

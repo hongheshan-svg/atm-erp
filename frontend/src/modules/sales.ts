@@ -33,10 +33,20 @@ export function salesActions(row: Row): string[] {
   return actions.length ? [...actions, '附件'] : actions
 }
 function salesBusinessActions(row: Row): string[] {
-  if (salesOnly() && row.manager === user.value?.id) return row.status === 'signed' ? ['查看明细', '交付与回款'] : ['draft', 'quoted'].includes(row.status) ? ['查看明细', '编辑销售', '报价', ...(row.status === 'quoted' ? ['签约'] : []), '取消销售'] : ['查看明细']
-  if (!can(['admin', 'manager', 'finance'])) return []
-  if (row.status === 'signed') return ['查看明细', '交付与回款', '补充协议记录', ...(manager() && !amountsHidden(row) ? ['签订补充协议'] : []), ...(manager() && row.can_transfer ? ['转交负责人'] : [])]
-  if (!manager() || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
+  const isOwn = row.manager === user.value?.id
+  const canReadAll = can(['admin', 'manager', 'finance'])
+  if (!canReadAll && !(can(['sales_manager']) && isOwn)) return []
+  if (row.status === 'signed') {
+    return [
+      '查看明细',
+      '交付与回款',
+      ...(canReadAll ? ['补充协议记录'] : []),
+      ...(manager() && !amountsHidden(row) ? ['签订补充协议'] : []),
+      ...(manager() && row.can_transfer ? ['转交负责人'] : []),
+    ]
+  }
+  const canOperate = manager() || (can(['sales_manager']) && isOwn)
+  if (!canOperate || !['draft', 'quoted'].includes(row.status)) return ['查看明细']
   return row.status === 'quoted' ? ['查看明细', '编辑销售', '报价', '签约', '取消销售'] : ['查看明细', '编辑销售', '报价', '取消销售']
 }
 // 金额以「分」整数核对，避免浮点；无法解析的输入（含负数）按 0 计，由逐字段校验另行提示。

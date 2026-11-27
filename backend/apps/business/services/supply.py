@@ -145,6 +145,27 @@ def purchase_applicants(purchase):
     return applicants_by_purchase([purchase])[purchase.pk]
 
 
+def submitted_budget_adjusters(purchase):
+    """本单首次提交后调整过本项目预算的审计记录 [(操作人ID, detail)]，按时间升序。"""
+    resource = f'purchaseorder:{purchase.pk}'
+    first = AuditLog.objects.filter(operation='purchase.submit', resource=resource).order_by('id').first()
+    if first is None:
+        return []
+    return list(
+        AuditLog.objects.filter(operation='project.budget', resource=f'project:{purchase.project_id}', id__gt=first.pk)
+        .order_by('id')
+        .values_list('actor_id', 'detail')
+    )
+
+
+def over_budget_adjusters(purchase):
+    """超预算审批时需避嫌的预算调整人：最近一次预算调整人，以及本单提交后参与调整过本项目预算的全部人员。"""
+    adjusters = {actor for actor, _ in submitted_budget_adjusters(purchase) if actor}
+    if purchase.project.budget_changed_by_id:
+        adjusters.add(purchase.project.budget_changed_by_id)
+    return adjusters
+
+
 def review_budget_adjusters(purchase, amount):
     """本单首次提交后调整过本项目预算、且按调整前预算本单会超预算的人（普通批准时视同申请人）。
 
@@ -152,16 +173,8 @@ def review_budget_adjusters(purchase, amount):
     """
     from .budgets import CATEGORIES, analysis
 
-    resource = f'purchaseorder:{purchase.pk}'
-    first = AuditLog.objects.filter(operation='purchase.submit', resource=resource).order_by('id').first()
-    if first is None:
-        return set()
-    revisions = list(
-        AuditLog.objects.filter(operation='project.budget', resource=f'project:{purchase.project_id}', id__gt=first.pk)
-        .order_by('id')
-        .values_list('actor_id', 'detail')
-    )
-    adjusters = {actor for actor, _ in revisions}
+    revisions = submitted_budget_adjusters(purchase)
+    adjusters = {actor for actor, _ in revisions if actor}
     if not revisions:
         return adjusters
     before = revisions[0][1].get('before')
@@ -455,10 +468,11 @@ def approve(actor, key, purchase_id, data, *, override=False):
                 raise Conflict('预算或成本已变化，请重新打开采购审批。')
             if not report['over_budget']:
                 raise Conflict('当前没有超预算，请使用普通批准。')
-            if not has_role(user, {'admin'}) and user.pk == purchase.project.budget_changed_by_id:
+            adjusters = over_budget_adjusters(purchase)
+            if not has_role(user, {'admin'}) and user.pk in adjusters:
                 raise PermissionDenied('预算调整人不能批准本项目超预算采购，请由其他经理审批；管理员例外必须填写原因。')
             # 走到这里的预算调整人只能是管理员例外（原因已必填），审计与普通批准的同类例外同样标记。
-            budget_adjuster_approval = user.pk == purchase.project.budget_changed_by_id
+            budget_adjuster_approval = user.pk in adjusters
         elif report['over_budget']:
             warnings = purchase_visibility(user, report, purchase.project)['warnings']
             raise Conflict('；'.join(warnings) + '。请重新打开审批，填写超预算批准原因。')

@@ -193,7 +193,7 @@ export function actionNames(resource: string, r: Row): string[] {
       if (r.kind !== 'acceptance' && (r.can_reopen ?? (manager() && r.status !== 'open'))) a.push('重开任务')
     }
   }
-  if (resource === 'deliveries' && manager() && !r.accepted_date) a.push('验收')
+  if (resource === 'deliveries' && manager() && r.can_accept !== false && !r.accepted_date) a.push('验收')
   if (
     resource === 'time' &&
     timeAmender(r) &&

@@ -131,6 +131,8 @@ def upload(actor, key, project_id, category, file, *, sale_id=None, purchase_id=
                 require_role(user, roles)
                 if owner == 'sale':
                     require_sale(user, source)
+                    if project is not None and source.manager_id != user.pk:
+                        require_project(user, project, MANAGERS)
                 elif project:
                     require_project(user, project, roles)
                 context.update(project=project, source=source)
@@ -172,6 +174,47 @@ def referenced(document):
         if model.objects.filter(document=document).exists():
             return label
     return ''
+
+
+def removal_roles(document):
+    if document.sale_id:
+        return SALES
+    if document.purchase_id:
+        return PURCHASERS
+    if document.category == 'contract':
+        return MANAGERS
+    if document.category == 'receipt':
+        return FINANCE
+    return ALL_ROLES
+
+
+def removal_allowed(user, document, owner=None, project=None):
+    """与 _lock_for_removal 同一套授权规则（不含已结项状态判断，由序列化器和 _remove_locked 各自处理）。"""
+    if not user.is_authenticated or not user.is_active:
+        return False
+    if document.sale_id:
+        sale = owner or document.sale
+        project = project if project is not None else sale.project
+        if not has_role(user, SALES):
+            return False
+        if not has_role(user, MANAGERS) and sale.manager_id != user.pk:
+            return False
+        if project is not None and sale.manager_id != user.pk and not project_allowed(user, project, MANAGERS):
+            return False
+        manager_override = has_role(user, MANAGERS) if project is None else project_allowed(user, project, MANAGERS)
+        return document.created_by_id == user.pk or manager_override
+    if document.purchase_id:
+        purchase = owner or document.purchase
+        project = project if project is not None else purchase.project
+        if project is None or not project_allowed(user, project, PURCHASERS):
+            return False
+        return document.created_by_id == user.pk or project_allowed(user, project, MANAGERS)
+    project = project if project is not None else document.project
+    if project is None:
+        return False
+    if project_allowed(user, project, MANAGERS):
+        return True
+    return document.created_by_id == user.pk and project_allowed(user, project, removal_roles(document))
 
 
 MAX_REMOVE_BATCH = 50
@@ -226,11 +269,18 @@ def _lock_for_removal(user, document_ids):
         try:
             if document.sale_id:
                 require_sale(user, owner)
-            if project is not None and not document.sale_id:
-                require_project(user, project, ALL_ROLES)
-            if document.created_by_id != user.pk and not (
-                project is not None and project_allowed(user, project, MANAGERS)
-            ):
+                if project is not None and owner.manager_id != user.pk:
+                    require_project(user, project, MANAGERS)
+            elif document.purchase_id:
+                require_project(user, project, PURCHASERS)
+            elif project is not None and not project_allowed(user, project, MANAGERS):
+                require_project(user, project, removal_roles(document))
+            manager_override = (
+                has_role(user, MANAGERS)
+                if document.sale_id and project is None
+                else (project is not None and project_allowed(user, project, MANAGERS))
+            )
+            if document.created_by_id != user.pk and not manager_override:
                 raise PermissionDenied('只能删除本人上传的附件；其他附件请由项目经理或管理员处理。')
         except PermissionDenied as exc:
             raise PermissionDenied(label(document, str(exc.detail))) from exc

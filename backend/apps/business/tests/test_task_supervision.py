@@ -207,3 +207,32 @@ class TaskSupervisionTests(BusinessFixtures, TestCase):
         self.post('admin', 'record-deletions/', {'resource': 'tasks', 'ids': [self.task.pk], 'reason': '误建清理'})
         self.assertFalse(Task.objects.filter(pk=self.task.pk).exists())
         self.assertEqual(self.clients['mechanical_engineer'].get('/api/business/task-notices/').data['count'], 0)
+
+    def test_stripping_operation_roles_blocked_for_active_supervisor_and_stale_supervisor_gets_no_notices(self):
+        from apps.business.services.task_supervision import notify_task, supervised_tasks
+        from apps.core.models import Company
+
+        Company.objects.get_or_create(pk=1, defaults={'name': '测试公司'})
+        engineer = self.users['mechanical_engineer']
+        self.configure({'mechanical': engineer.pk})
+        # 仍在担任活跃项目专业主管时，管理员不能直接移除其全部业务岗位（转为纯销售经理）。
+        response = self.clients['admin'].patch(
+            f'/api/auth/users/{engineer.pk}/',
+            {'roles': ['sales_manager']},
+            format='json',
+            HTTP_IDEMPOTENCY_KEY=str(uuid.uuid4()),
+        )
+        self.assertEqual(response.status_code, 409, response.data)
+        # 即使绕过接口直接修改角色或移出成员，notify_task 也不再向无权人员写通知，supervised_tasks 也排除非成员。
+        before_notices = TaskNotice.objects.filter(recipient=engineer).count()
+        engineer.role = 'sales_manager'
+        engineer.additional_roles = []
+        engineer.save(update_fields=['role', 'additional_roles'])
+        notify_task(self.users['manager'], self.task, '任务已调整')
+        self.assertEqual(TaskNotice.objects.filter(recipient=engineer).count(), before_notices)
+        engineer.role = 'purchaser'
+        engineer.save(update_fields=['role'])
+        self.project.members.remove(engineer)
+        notify_task(self.users['manager'], self.task, '任务再次调整')
+        self.assertEqual(TaskNotice.objects.filter(recipient=engineer).count(), before_notices)
+        self.assertFalse(supervised_tasks(engineer.pk, Task.objects.all()).exists())

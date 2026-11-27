@@ -167,3 +167,22 @@ it('管理员仍使用原有批量删除，不出现撤回按钮', async () => {
   expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(4)
   wrapper.unmount()
 })
+
+it('无上传权限的非参与项目销售单或采购单不显示上传附件按钮', async () => {
+  user.value = { roles: ['manager', 'warehouse'] }
+  vi.mocked(read).mockResolvedValue({ count: 0, results: [], next: null })
+  const sale = mount(AttachmentDialog, {
+    props: { owner: 'sale', record: { id: 1, code: 'SO1', status: 'signed', can_upload_documents: false } },
+    global: { plugins: [ElementPlus], stubs: { ElDialog: { template: '<section><slot /></section>' }, ActionDialog: true, RecordDeletionDialog: true, AttachmentRemovalDialog: true } },
+  })
+  await flushPromises()
+  expect(sale.findAll('button').some(button => button.text() === '上传附件')).toBe(false)
+  sale.unmount()
+  const purchase = mount(AttachmentDialog, {
+    props: { owner: 'purchase', record: { id: 2, code: 'PO2', status: 'approved', can_edit_purchase: false } },
+    global: { plugins: [ElementPlus], stubs: { ElDialog: { template: '<section><slot /></section>' }, ActionDialog: true, RecordDeletionDialog: true, AttachmentRemovalDialog: true } },
+  })
+  await flushPromises()
+  expect(purchase.findAll('button').some(button => button.text() === '上传附件')).toBe(false)
+  purchase.unmount()
+})
