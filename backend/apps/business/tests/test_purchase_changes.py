@@ -6,7 +6,7 @@ from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.business.models import Entry, PurchaseLine, PurchaseOrder, StockMove
+from apps.business.models import Entry, Partner, PurchaseLine, PurchaseOrder, StockMove
 from apps.business.services.purchase_changes import REQUEST, REVIEW, pending_requests
 from apps.core.models import ActionReceipt, AuditLog
 
@@ -76,6 +76,55 @@ class PurchaseChangeTests(PurchaseChangeFixtures, TestCase):
         review = next(row for row in history if row['operation'] == REVIEW)
         self.assertEqual(review['request_id'], request_id)
         self.assertEqual(review['decision'], 'approve')
+
+    def test_change_supplier_on_returned_original_order(self):
+        replacement = Partner.objects.create(code='S2', name='新供货单位', kind='both', payment_term='cash')
+        inactive = Partner.objects.create(code='S3', name='已停用供方', kind='supplier', is_active=False)
+        line = self.order.lines.get()
+        terms = self.order.payment_term
+        edit = {
+            'expected_updated_at': self.order.updated_at.isoformat(),
+            'reason': '更正合同供方',
+            'due_date': TODAY,
+            'supplier': replacement.pk,
+            'lines': [
+                {'id': line.pk, 'quantity': str(line.quantity), 'unit_price': str(line.unit_price), 'due_date': TODAY}
+            ],
+        }
+        request_id = self.request_change()
+        self.post('purchaser', self.url + 'edit/', edit, status=409)
+        self.review(request_id)
+        detail = self.detail()
+        self.assertTrue(detail['supplier_editable'])
+        edit['expected_updated_at'] = detail['updated_at']
+        for supplier in (self.customer, inactive):
+            self.post('purchaser', self.url + 'edit/', {**edit, 'supplier': supplier.pk}, status=404)
+        self.assertEqual(self.detail()['supplier'], self.supplier.pk)
+        self.post('purchase_manager', self.url + 'edit/', edit)
+        changed = self.detail()
+        self.assertEqual((changed['code'], changed['payment_term']), (self.order.code, terms))
+        self.assertEqual(changed['lines'][0]['id'], line.pk)
+        self.assertEqual(self.get('purchaser', self.url + 'contract-preview/')['supplier']['name'], replacement.name)
+        history = self.get('purchaser', self.url + 'handling-history/')['results']
+        event = next(row['supplier_change'] for row in history if row['operation'] == 'purchase.edit')
+        self.assertEqual((event['old_id'], event['new_id']), (self.supplier.pk, replacement.pk))
+        self.post('purchaser', self.url + 'submit/')
+        self.post('purchase_manager', self.url + 'approve/', status=403)
+        self.post('manager', self.url + 'approve/')
+        self.post('manager', self.url + 'unapprove/', {'reason': '核对历史应付归属'})
+        detail = self.detail()
+        self.assertFalse(detail['supplier_editable'])
+        self.post(
+            'purchaser',
+            self.url + 'edit/',
+            {
+                **edit,
+                'supplier': self.supplier.pk,
+                'expected_updated_at': detail['updated_at'],
+            },
+            status=409,
+        )
+        self.assertEqual(self.detail()['supplier'], replacement.pk)
 
     def test_decline_keeps_original_and_stale_review_cannot_resolve_new_request(self):
         request_id = self.request_change()

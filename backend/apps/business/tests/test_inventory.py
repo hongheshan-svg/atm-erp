@@ -377,6 +377,34 @@ class IssueSlipTests(BusinessFixtures, TestCase):
         self.assertEqual(IssueSlip.objects.get().moves.count(), len(payload), result)
         self.assertEqual(result['count'], 2)
 
+    def test_shared_rows_report_together_and_skipping_preserves_shortage(self):
+        other = self.active_project()
+        lines = []
+        expected = {}
+        for i in range(2):
+            item = Item.objects.create(code=f'COMMON-{i}', name='直线轴承', specification=f'LM{i}')
+            for project in (self.project, other):
+                BOMLine.objects.create(project=project, item=item, quantity=4)
+            stock = Stock.objects.create(item=item, location='主仓', quantity=4, value=40)
+            StockMove.objects.create(stock=stock, project=other, kind='receipt', quantity=4, value=40, reason='到货')
+            lines.append({'stock': stock.pk, 'quantity': '3'})
+            expected[str(stock.pk)] = item.pk
+        safe = {'stock': self.motor.pk, 'quantity': '2'}
+        denied = self.batch([lines[1], safe, lines[0]], status=409)
+        conflicts = denied['shared_conflicts']
+        self.assertEqual({row['stock'] for row in conflicts}, set(expected))
+        for row in conflicts:
+            self.assertEqual(Decimal(row['overlap']), 3)
+            self.assertEqual(row['projects'], [{'project': other.code, 'quantity': '4.000'}])
+        self.assertFalse(IssueSlip.objects.exists())
+        result = self.batch([safe])
+        self.assertEqual(result['slip_code'], 'LL000001')
+        self.assertEqual(list(IssueSlip.objects.get().moves.values_list('stock_id', flat=True)), [self.motor.pk])
+        for project, shortage_qty in ((self.project, 4), (other, 0)):
+            demand = self.clients['manager'].get(f'/api/business/projects/{project.pk}/demand/').data['lines']
+            actual = {row['item']: Decimal(row['shortage']) for row in demand if row['item'] in expected.values()}
+            self.assertEqual(actual, dict.fromkeys(expected.values(), shortage_qty))
+
     def test_batch_issue_reads_do_not_grow_with_lines(self):
         """BOM 剩余、全库位在库与其他项目到货在锁物料后一次读取，逐行出库在内存里扣减（同一物料前面的库位照样计入）。"""
         other = self.active_project()
@@ -406,6 +434,10 @@ class IssueSlipTests(BusinessFixtures, TestCase):
                 'confirm_shared': True,
                 'lines': [{'stock': stock.pk, 'quantity': '2'} for stock in stocks],
             }
+            denied = self.post('warehouse', 'stocks/bom-issue/', {**payload, 'confirm_shared': False}, status=409)
+            hits = denied['shared_conflicts']
+            self.assertEqual({row['stock'] for row in hits}, {str(s.pk) for s in stocks if s.location == '二号仓'})
+            self.assertTrue(all(Decimal(row['overlap']) == 2 for row in hits))
             result = {}
             reads, _ = counted_queries(
                 lambda: result.update(self.post('warehouse', 'stocks/bom-issue/', payload)),

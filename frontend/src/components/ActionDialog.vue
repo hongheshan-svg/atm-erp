@@ -12,6 +12,7 @@ import { defaults, fieldIssues, payload, validateFields, type FieldIssue } from 
 import { industryCommand } from '../industry-forms'
 import { read, write } from '../api'
 import { message, recoveryActions, requestKey } from '../utils/request'
+import type { SharedConflict } from '../modules/warehouse-lines'
 import FormFields from './FormFields.vue'
 import StatusBadge from './StatusBadge.vue'
 import ProcessSteps from './ProcessSteps.vue'
@@ -31,6 +32,7 @@ const wide = computed(() => wideCommand(command.value))
 const dense = computed(() => Boolean(command.value?.fields.some(field => field.dense)))
 const fields = ref<{ focusPath: (path: string) => Promise<void> }>()
 const attempted = ref(false), touched = ref<Set<string>>(new Set())
+const sharedConflicts = ref<SharedConflict[]>([])
 const serverIssues = ref<FieldIssue[]>([])
 const issues = computed(() => command.value ? [...fieldIssues(command.value.fields, data.value).filter(issue => attempted.value || touched.value.has(issue.path)), ...serverIssues.value] : [])
 const issueMap = computed(() => Object.fromEntries(issues.value.map(issue => [issue.path, issue.message])))
@@ -248,6 +250,7 @@ watch(
     if (c) {
       clearTimeout(draftTimer)
       attempted.value = false; touched.value = new Set(); serverIssues.value = []
+      sharedConflicts.value = []
       preview.value = null
       data.value = defaults(c.fields, JSON.parse(JSON.stringify(c.initial || {})))
       baseline.value = formSignature(data.value)
@@ -305,9 +308,16 @@ async function submit() {
     if (note) ElMessage({ type: 'warning', message: note, duration: 10000, showClose: true, grouping: true })
   } catch (e) {
     error.value = mapServerIssues(e) ? '' : message(e)
+    const conflicts = (e as { response?: { data?: Row } })?.response?.data?.shared_conflicts
+    sharedConflicts.value = Array.isArray(conflicts) ? conflicts : []
     recovery.value = usefulRecovery(e)
     await nextTick()
-    if (fieldsContainer.value) fieldsContainer.value.scrollTop = 0
+    if (fieldsContainer.value) {
+      fieldsContainer.value.scrollTop = 0
+      if (sharedConflicts.value.length && mobile.value) {
+        fieldsContainer.value.querySelector('[data-shared-conflicts]')?.scrollIntoView({ block: 'start' })
+      }
+    }
   } finally {
     busy.value = false
   }
@@ -336,7 +346,7 @@ async function submit() {
       <section v-if="command.blocked" class="action-blocker" role="status"><strong>先完成以下事项</strong><p>{{ command.blocked }}</p></section>
       <p v-for="link in command.links" :key="link.path"><el-button @click="follow(link.path)">{{ link.label }}</el-button></p>
       <section v-if="issues.length" class="field-issues" aria-label="填写问题汇总" role="alert"><strong>请修正以下 {{ issues.length }} 项，其他填写内容已保留：</strong><ul><li v-for="issue in issues" :key="issue.path"><button type="button" @click="fields?.focusPath(issue.path)">{{ issue.message }}</button></li></ul></section>
-      <FormFields v-if="!command.blocked" ref="fields" v-model="data" :fields="command.fields" :disabled="locked || command.readonly" :readonly="command.readonly" :issues="issueMap" @touched="touch" @uploading="uploading = $event" />
+      <FormFields v-if="!command.blocked" ref="fields" v-model="data" :fields="command.fields" :disabled="locked || command.readonly" :readonly="command.readonly" :issues="issueMap" :shared-conflicts="sharedConflicts" @touched="touch" @uploading="uploading = $event" />
       <slot v-if="command.readonly" name="context" />
       <ProjectProgress v-if="command.readonly && command.progressProject" :project-id="command.progressProject" />
       <section v-if="similarItems.length" aria-label="相似物料">

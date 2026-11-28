@@ -3,6 +3,13 @@ import { partTypes, productCategories } from '../product-categories'
 import { fromScaled, QUANTITY_SCALE, toScaled } from '../utils/decimal'
 import { rows } from './shared'
 
+export interface SharedConflict {
+  stock: string | number
+  requested: string
+  overlap: string
+  projects: { project: string; quantity: string }[]
+}
+
 const detail = (key: string, label: string): Field => ({ key, label, readonly: true, displayOnly: true })
 export function materialDetails(item: Row): Row {
   const drawing_model = [item.drawing_number && `图号：${item.drawing_number}`, item.specification && `型号：${item.specification}`].filter(Boolean).join('\n')

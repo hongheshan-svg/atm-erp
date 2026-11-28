@@ -315,41 +315,7 @@ def claimed_by_others(project, item_id):
 
     库存不预留；这里只把「别人的到货」显式算出来，领料挪用时让仓管确认并留痕。
     """
-    received = {
-        row['project_id']: row['total']
-        for row in StockMove.objects.filter(
-            stock__item_id=item_id,
-            kind__in=ARRIVAL_KINDS,
-            project__status__in=['active', 'delivering'],
-        )
-        .exclude(project=project)
-        .values('project_id')
-        .annotate(total=Sum('quantity'))
-    }
-    if not received:
-        return {}
-    used = {
-        row['project_id']: -row['total']
-        for row in StockMove.objects.filter(
-            stock__item_id=item_id, kind__in=['issue', 'return'], project_id__in=list(received)
-        )
-        .exclude(task__kind='service')
-        .values('project_id')
-        .annotate(total=Sum('quantity'))
-    }
-    needed = {
-        row['project_id']: row['total']
-        for row in BOMLine.objects.filter(item_id=item_id, project_id__in=list(received))
-        .values('project_id')
-        .annotate(total=Sum('quantity'))
-    }
-    result = {}
-    for project_id, quantity in received.items():
-        taken = used.get(project_id, ZERO)
-        claim = min(quantity - taken, needed.get(project_id, ZERO) - taken)
-        if claim > ZERO:
-            result[project_id] = claim
-    return result
+    return claimed_by_others_by_item(project, [item_id])[item_id]
 
 
 def purchase_groups(queryset, *keys):
@@ -363,7 +329,7 @@ def purchase_groups(queryset, *keys):
 
 
 def claimed_by_others_by_item(project, item_ids):
-    """{物料: claimed_by_others(project, 物料)}：到货、已领和需求各一次分组读取。"""
+    """按物料汇总各项目已到货待领数量。传入项目时排除本项目，传 None 时包含所有项目。"""
     result = {item_id: {} for item_id in item_ids}
     received = {}
     for row in (
@@ -429,6 +395,7 @@ def allocation(project, *, item_id=None, exclude_line=None):
     purchases = PurchaseLine.objects.filter(purchase__project=project, purchase__is_deleted=False, item_id__in=item_ids)
     if exclude_line is not None:
         purchases = purchases.exclude(pk=exclude_line)
+    stock = available_to_project(stock, claimed_by_others_by_item(project, stock))
     return lines, allocate(lines, used, stock, purchase_groups(purchases))
 
 
@@ -464,9 +431,21 @@ def allocations(project_ids):
         'purchase__project_id',
     ):
         purchases.setdefault(row['purchase__project_id'], []).append(row)
+    claims = claimed_by_others_by_item(None, stock)
+    result = {}
+    for project_id, lines in lines_by.items():
+        items = {line.item_id for line in lines}
+        relevant = {item: stock[item] for item in items if item in stock}
+        available = available_to_project(relevant, claims, project_id)
+        result[project_id] = lines, allocate(lines, used.get(project_id, {}), available, purchases.get(project_id, []))
+    return result
+
+
+def available_to_project(stock, claims, project_id=None):
+    """本项目计算缺料时，只计入无需占用其他项目到货即可领出的库存。"""
     return {
-        project_id: (lines, allocate(lines, used.get(project_id, {}), stock, purchases.get(project_id, [])))
-        for project_id, lines in lines_by.items()
+        item: max(ZERO, total - sum((qty for pk, qty in claims[item].items() if pk != project_id), ZERO))
+        for item, total in stock.items()
     }
 
 
@@ -610,10 +589,11 @@ class ItemSupply:
 
     @cached_property
     def stock(self):
-        return {
+        stock = {
             row['item_id']: row['total']
             for row in Stock.objects.filter(item_id__in=self.item_ids).values('item_id').annotate(total=Sum('quantity'))
         }
+        return available_to_project(stock, claimed_by_others_by_item(self.project, stock))
 
     @cached_property
     def purchases(self):

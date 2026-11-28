@@ -165,6 +165,7 @@ class PurchaseView(ImportableMixin, ReadView):
                     'operation': log.operation,
                     'reason': log.detail.get('reason', ''),
                     'decision': log.detail.get('decision', ''),
+                    'supplier_change': log.detail.get('supplier_change'),
                     'request_id': log.detail.get('request_id'),
                     'item': log.detail.get('item', ''),
                     'old_item': log.detail.get('old_item', ''),

@@ -95,6 +95,30 @@ it('按 BOM 领料几百行：按非标件 / 标准件筛开，Shift 连选只�
   wrapper.unmount()
 })
 
+it('占用行跨筛选和分页置顶，保留原行号，一次取消只影响冲突行', async () => {
+  const initial = Array.from({ length: 229 }, (_, i) => ({
+    ...material, stock: i + 1, part_type: i === 228 ? 'standard' : 'custom',
+    selected: true, quantity: '3', suggested: '3', remark: '装配',
+  }))
+  const field = warehouseLines('issue', initial, { batch: true })
+  const wrapper = mount(WarehouseLines, { props: { field, prefix: 'lines', modelValue: initial, context: {} } })
+  await wrapper.findAll('.warehouse-filter button')[1]!.trigger('click')
+  await wrapper.findAll('button').find(b => b.text() === '下一页明细')!.trigger('click')
+  await wrapper.setProps({ sharedConflicts: [229, 22].map(stock => ({
+    stock: String(stock), requested: '3', overlap: '2', projects: [{ project: 'A2618', quantity: '4' }],
+  })) })
+  const first = wrapper.findAll('tbody tr').slice(0, 2)
+  expect(first.map(tr => tr.get('input').attributes('aria-label'))).toEqual([
+    '本次领用：第 22 行 坦克链安装板', '本次领用：第 229 行 坦克链安装板',
+  ])
+  expect(first.every(tr => tr.classes('conflict-line') && tr.text().includes('型号：板厚2mm'))).toBe(true)
+  expect(first[0]!.text()).toContain('其中 2 PCS 会占用其他项目到货。涉及项目：A2618（待领 4 PCS）')
+  await wrapper.findAll('button').find(b => b.text().includes('取消勾选全部占用行'))!.trigger('click')
+  expect(initial.filter(row => !row.selected).map(row => row.stock)).toEqual([22, 229])
+  expect(initial.filter(row => row.selected).every(row => row.quantity === '3' && row.remark === '装配')).toBe(true)
+  wrapper.unmount()
+})
+
 it('分页错误定位跳到正确页；恢复草稿后仍显示原物料资料', async () => {
   const initial = Array.from({ length: 25 }, (_, i) => ({ ...material, line: i + 1, quantity: '1', pending_quantity: '0', remark: '' }))
   const field = warehouseLines('receipt', initial)

@@ -546,6 +546,15 @@ class PurchaseSerializer(serializers.ModelSerializer):
 
 class PurchaseDetailSerializer(PurchaseSerializer):
     lines = PurchaseLineDetailSerializer(many=True, read_only=True)
+    supplier_editable = serializers.SerializerMethodField()
+
+    def get_supplier_editable(self, obj):
+        from .services.supply import supplier_editable
+
+        return self.get_can_edit_purchase(obj) and supplier_editable(obj)
+
+    class Meta(PurchaseSerializer.Meta):
+        fields = [*PurchaseSerializer.Meta.fields, 'supplier_editable']
 
 
 class StockSerializer(MoneyFilter, serializers.ModelSerializer):
