@@ -2,12 +2,12 @@
 import TableScroll from './TableScroll.vue'
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch, type Directive } from 'vue'
 import { read } from '../api'
-import { sumQuantities } from '../modules/warehouse-lines'
+import { sumQuantities, type SharedConflict } from '../modules/warehouse-lines'
 import { message } from '../utils/request'
 import { quantityText } from '../utils/quantity'
 import { fromScaled, QUANTITY_SCALE, toScaled } from '../utils/decimal'
 import type { Field, Row } from '../types'
-const props = defineProps<{ field: Field; context: Row; disabled?: boolean; issues?: Record<string, string>; prefix: string }>()
+const props = defineProps<{ field: Field; sharedConflicts?: SharedConflict[]; context: Row; disabled?: boolean; issues?: Record<string, string>; prefix: string }>()
 const model = defineModel<Row[]>({ required: true })
 const emit = defineEmits<{ touched: [path: string] }>()
 const uid = useId(), root = ref<HTMLElement>(), page = ref(0)
@@ -39,8 +39,22 @@ const filters = computed(() => {
   return [{ key: 'all' as const, label: '全部', count: model.value.length },
     ...(Object.keys(groupLabels) as Group[]).filter(key => counts[key]).map(key => ({ key, label: groupLabels[key], count: counts[key] }))]
 })
-// 当前筛选下列出的行（model 下标，按原顺序）；分页、全选和 Shift 连选都只作用于这些行。
-const visible = computed(() => model.value.flatMap((row, i) => (filter.value === 'all' || group(row) === filter.value ? [i] : [])))
+const conflictByStock = computed(() => new Map(props.sharedConflicts?.map(row => [String(row.stock), row])))
+const conflictOf = (row: Row) => conflictByStock.value.get(String(row.stock))
+const visible = computed(() => {
+  const flagged: number[] = [], other: number[] = []
+  model.value.forEach((row, i) => {
+    if (filter.value === 'all' || group(row) === filter.value) (conflictOf(row) ? flagged : other).push(i)
+  })
+  return [...flagged, ...other]
+})
+watch(() => props.sharedConflicts, async conflicts => {
+  if (!conflicts?.length) return
+  setFilter('all')
+  await nextTick()
+  const scroller = root.value?.querySelector('.warehouse-scroll')
+  if (scroller) scroller.scrollTop = 0
+})
 let anchor: number | null = null
 function setFilter(key: 'all' | Group) { filter.value = key; page.value = 0; anchor = null }
 const cancellable = computed(() => receipt.value && props.field.fields!.some(field => field.key === 'cancel_remainder'))
@@ -131,12 +145,23 @@ function pick(row: Row, on: boolean) {
   if (cancellable.value) row.cancel_remainder = false
 }
 function pickAll(on: boolean) { for (const row of visibleRows.value) if (picked(row) !== on) pick(row, on) }
+function skipConflicts() {
+  for (const row of model.value) if (picked(row) && conflictOf(row)) pick(row, false)
+  anchor = null
+}
+function conflictNote(row: Row) {
+  const hit = conflictOf(row)
+  if (!hit) return ''
+  const unit = source(row).unit || ''
+  const projects = hit.projects.map(p => `${p.project}（待领 ${quantityText(p.quantity)} ${unit}）`).join('、')
+  return `上次核对拟领 ${quantityText(hit.requested)} ${unit}，其中 ${quantityText(hit.overlap)} ${unit} 会占用其他项目到货。涉及项目：${projects}`
+}
 function unpickAll() { for (const row of model.value) if (picked(row)) pick(row, false) }
 // 按住 Shift 点勾选框：从上一次点的行到这一行（当前筛选下列出的）一起勾上或取消。
 // click 时勾选状态已切换，在 click 里按 Shift 处理；随后的 change 对同一行再处理一次不改变结果。
 function onPick(i: number, on: boolean, shift = false) {
-  const from = anchor ?? i
-  const range = shift ? visible.value.filter(index => index >= Math.min(from, i) && index <= Math.max(from, i)) : [i]
+  const from = visible.value.indexOf(anchor ?? i), to = visible.value.indexOf(i)
+  const range = shift && from >= 0 ? visible.value.slice(Math.min(from, to), Math.max(from, to) + 1) : [i]
   for (const index of range) { const row = model.value[index]!; if (picked(row) !== on) pick(row, on) }
   anchor = i
 }
@@ -208,10 +233,14 @@ defineExpose({ focusPath })
     ><div v-if="filters.length" class="warehouse-filter" role="group" aria-label="按物料类别筛选"><button v-for="option in filters" :key="option.key" type="button" :class="{ active: filter === option.key }" :aria-pressed="filter === option.key" @click="setFilter(option.key)">{{ option.label }} {{ option.count }}</button></div
     ><small v-if="batch" class="muted">勾选本次要领的行，没勾的行本次不领；按住 Shift 点勾选框可连续多选。</small
     ><small v-if="receipt" class="muted">未到货的行取消勾选；合格与隔离合计少于待收的行已高亮，余量继续待收。{{ cancellable ? '供应商不再补货时，勾选该行的「余量不再到货」一并取消余量。' : '供应商不再补货时，请采购在「取消未收余量」中处理。' }}</small></div>
+    <div v-if="batch && conflictByStock.size" data-shared-conflicts class="warehouse-summary warehouse-fill">
+      <button type="button" :disabled="disabled || !pickedRows.some(conflictOf)" @click="skipConflicts">取消勾选全部占用行（{{ conflictByStock.size }}）</button>
+      <span>可逐行取消或调小数量，然后确认剩余物料出库。缺口可在项目 BOM 的「采购缺料」查看。</span>
+    </div>
     <TableScroll :label="field.label"><div data-table-scroll class="warehouse-scroll" tabindex="0" :aria-label="`${field.label}明细表，可左右滚动`">
       <table :aria-label="`${field.label}明细`">
         <thead><tr><th scope="col" class="col-index"><label v-if="selectable" class="line-pick"><input type="checkbox" :checked="allPicked" :indeterminate="somePicked && !allPicked" :disabled="disabled || !visible.length" :aria-label="pickAllLabel" @change="pickAll(($event.target as HTMLInputElement).checked)" /><span>{{ receipt ? '到货' : '领用' }}</span></label><template v-else>序号</template></th><th v-for="column in columns" :key="column.key" scope="col" :class="`col-${column.key}`">{{ column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label }}</th></tr></thead>
-        <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock" :class="{ 'partial-line': partial(model[i]!), 'unpicked-line': !picked(model[i]!), 'excess-line': Boolean(excess(model[i]!)) }">
+        <tbody><tr v-for="i in indices" :key="model[i]!.line || model[i]!.stock" :class="{ 'conflict-line': Boolean(conflictOf(model[i]!)), 'partial-line': partial(model[i]!), 'unpicked-line': !picked(model[i]!), 'excess-line': Boolean(excess(model[i]!)) }">
           <td :data-label="selectable ? (receipt ? '到货' : '领用') : '序号'" class="line-index"><label v-if="selectable" class="line-pick" :for="inputId(i, 'selected')"><input :id="inputId(i, 'selected')" type="checkbox" :checked="picked(model[i]!)" :disabled="disabled" :aria-label="`${pickName}：第 ${i + 1} 行 ${itemName(model[i]!)}`" @click="onPickClick(i, $event)" @change="onPick(i, ($event.target as HTMLInputElement).checked)" /><span>{{ i + 1 }}</span></label><template v-else>{{ i + 1 }}</template><span :id="rowId(i)" hidden>第 {{ i + 1 }} 行 {{ itemName(model[i]!) }}</span></td>
           <td v-for="column in columns" :key="column.key" :data-label="column.key === 'quantity' ? (field.warehouse === 'receipt' ? '本次合格数量' : '本次出库数量') : column.label" :class="[`col-${column.key}`, { 'editable-cell': !column.displayOnly, 'remark-cell': column.key === 'remark', 'material-cell': column.key === 'material_label' }]" :data-field-path="path(i, column.key)">
             <span v-if="column.displayOnly" class="material-value">{{ shown(model[i]!, column.key) }}</span>
@@ -225,6 +254,7 @@ defineExpose({ focusPath })
                 <p v-if="cancelBlocked(model[i]!)" class="remainder-note">{{ cancelBlocked(model[i]!) }}</p>
               </template>
             </template>
+            <small v-if="column.key === 'material_label' && conflictOf(model[i]!)" class="conflict-note">{{ !picked(model[i]!) ? '已取消本次领用。' : '' }}{{ conflictNote(model[i]!) }}</small>
           </td>
         </tr></tbody>
       </table>
@@ -266,10 +296,11 @@ th:first-child, td:first-child { min-width: 36px; }
 .warehouse-filter button { min-height: 30px; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--ink-3); background: var(--paper, #fff); border: 1px solid var(--field-line); border-radius: 15px; cursor: pointer; }
 .warehouse-filter button.active { color: var(--brand-ink); border-color: var(--brand); background: var(--brand-wash, var(--subtle-2)); font-weight: 600; }
 .partial-line td { background: var(--warn-wash); }
-.excess-line td { background: var(--risk-wash); }
+.conflict-line td, .conflict-line .material-cell, .excess-line td { background: var(--risk-wash); }
 input, textarea { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px; font: inherit; border: 1px solid var(--field-line); border-radius: 5px; background: var(--paper, #fff); }
 textarea { resize: vertical; }
 small { display: block; color: var(--mute); font-size: 11px; line-height: 1.4; margin-top: 4px; }
+.conflict-note { color: var(--risk); font-size: 12px; }
 .field-error { color: var(--risk); }
 [aria-invalid='true'] { border-color: var(--risk); }
 .warehouse-pages { display: flex; gap: 12px; align-items: center; margin-top: 12px; }

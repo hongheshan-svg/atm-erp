@@ -95,7 +95,7 @@ def _applicants(creators):
     for resource, operation, actor, detail in logs:
         if operation == 'purchase.submit':
             submitters[resources[resource]] = actor
-        elif _amount_changed(detail):
+        elif detail.get('supplier_change') or _amount_changed(detail):
             result[resources[resource]].add(actor)
     for pk, actor in submitters.items():
         result[pk].add(actor)
@@ -138,7 +138,7 @@ def purchase_trail(purchases):
 
 
 def purchase_applicants(purchase):
-    """单条采购的申请人ID集合：创建人、最近一次提交人、待审批前改过数量或单价的人。
+    """单条采购的申请人ID集合：创建人、最近一次提交人、待审批前改过供应商、数量或单价的人。
 
     申请人不能审批本单（管理员例外须填原因，见 approval.independent_approval）。
     """
@@ -813,12 +813,18 @@ def delivery_plan(actor, key, purchase_id, data):
     return purchase_action(actor, key, 'purchase.delivery_plan', purchase_id, data, PURCHASERS, execute)
 
 
+def supplier_editable(purchase):
+    # 历史收付款通过采购单关联供应商，反审作废的应付也要保留原归属。
+    return purchase.status == 'draft' and not Entry.objects.filter(purchase=purchase).exists()
+
+
 def edit(actor, key, purchase_id, data):
     def execute(user, purchase):
         fields(
             data,
             {
                 'expected_updated_at',
+                'supplier',
                 'reason',
                 'due_date',
                 'payment_due_date',
@@ -841,6 +847,18 @@ def edit(actor, key, purchase_id, data):
         if expected != purchase.updated_at:
             raise Conflict('采购单已更新，请刷新后重试。')
         reason = text(data, 'reason')
+        supplier_change = None
+        if 'supplier' in data and identity(data['supplier'], 'supplier') != purchase.supplier_id:
+            if not supplier_editable(purchase):
+                raise Conflict('本单已有应付记录，请保留原供应商。需向其他供应商下单时请另建采购单。')
+            supplier = lookup(Partner, data['supplier'], 'supplier', is_active=True, kind__in=['supplier', 'both'])
+            supplier_change = {
+                'old_id': purchase.supplier_id,
+                'old_name': purchase.supplier.name,
+                'new_id': supplier.pk,
+                'new_name': supplier.name,
+            }
+            purchase.supplier = supplier
         lines = {line.pk: line for line in purchase.lines.select_for_update()}
         agreed = terms(data, purchase)
         if agreed['payment_term'] != 'manual' and data.get('payment_due_date'):
@@ -921,6 +939,8 @@ def edit(actor, key, purchase_id, data):
         require_overrun_reason(overruns, over_bom_reason)
         save(purchase, user)
         extra = {'over_bom': overruns, 'over_bom_reason': over_bom_reason} if overruns else {}
+        if supplier_change:
+            extra['supplier_change'] = supplier_change
         return audit(user, 'purchase.edit', purchase, before=before, after=data, reason=reason, **extra)
 
     return purchase_action(actor, key, 'purchase.edit', purchase_id, data, PURCHASERS, execute)

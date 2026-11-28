@@ -121,12 +121,16 @@ def shared_arrival(project, item_id, qty, confirm_shared, action):
     )
 
 
+def claim_details(claims, codes):
+    return [{'project': code, 'quantity': str(claims[pk])} for pk, code in codes if pk in claims]
+
+
 def shared_from(claims, on_hand, qty, confirm_shared, action, codes):
     """shared_arrival 的判断部分：claims 为 {项目: 占用量}，codes() 返回按编号排序的 (项目, 编号)，可多于 claims。"""
     claimed = sum(claims.values(), ZERO)
     if on_hand - qty >= claimed:
         return []
-    shared = [{'project': code, 'quantity': str(claims[pk])} for pk, code in codes() if pk in claims]
+    shared = claim_details(claims, codes())
     if not confirm_shared:
         summary = '、'.join(f'{row["project"]} {row["quantity"]}' for row in shared)
         raise Conflict(
@@ -171,15 +175,49 @@ class IssueBatch:
         stock = self.stocks.get(source.pk)
         return stock if stock is not None else lock_stocks([source.item_id], source.location, user)[source.item_id]
 
-    def shared(self, item_id, qty, confirm_shared, action):
-        def codes():
-            # 被占用项目的编号只在第一次需要提示时读取一次，覆盖本单全部物料。
-            if self._codes is None:
-                claimed = {pk for claims in self.claims.values() for pk in claims}
-                self._codes = list(Project.objects.filter(pk__in=claimed).order_by('code').values_list('pk', 'code'))
-            return self._codes
+    def codes(self):
+        if self._codes is None:
+            claimed = {pk for claims in self.claims.values() for pk in claims}
+            self._codes = list(Project.objects.filter(pk__in=claimed).order_by('code').values_list('pk', 'code'))
+        return self._codes
 
-        return shared_from(self.claims[item_id], self.on_hand[item_id], qty, confirm_shared, action, codes)
+    def shared(self, item_id, qty, confirm_shared, action):
+        return shared_from(self.claims[item_id], self.on_hand[item_id], qty, confirm_shared, action, self.codes)
+
+    def check_shared_lines(self, ordered):
+        """按实际出库顺序分配可自由领用量，返回库位标识供界面匹配原始行号。"""
+        free = {
+            item: max(ZERO, self.on_hand[item] - sum(claims.values(), ZERO))
+            for item, claims in self.claims.items()
+            if claims
+        }
+        conflicts = []
+        for source, qty, _ in ordered:
+            item = source.item_id
+            if item not in free:
+                continue
+            # 实际库存不足的部分不能算作占用其他项目到货。
+            stock = self.stocks.get(source.pk)
+            available = min(qty, stock.quantity) if stock else ZERO
+            covered = min(available, free[item])
+            free[item] -= covered
+            if covered < available:
+                projects = claim_details(self.claims[item], self.codes())
+                conflicts.append(
+                    {
+                        'stock': source.pk,
+                        'requested': str(qty),
+                        'overlap': str(available - covered),
+                        'projects': projects,
+                    }
+                )
+        if conflicts:
+            raise Conflict(
+                {
+                    'detail': f'本次有 {len(conflicts)} 行会占用其他项目已到货、尚未领用的物料，整单尚未出库。请核对标红明细。',
+                    'shared_conflicts': conflicts,
+                }
+            )
 
     def took(self, item_id, qty, service):
         self.on_hand[item_id] -= qty
@@ -414,6 +452,8 @@ def issue_batch(actor, key, data):
         batch = IssueBatch(
             project, [source for source, _, _ in ordered], service=task is not None and task.kind == 'service'
         )
+        if not confirm_shared:
+            batch.check_shared_lines(ordered)
         moves = [
             take_issue(user, project, source, qty, slip=slip, remark=remark, confirm_shared=confirm_shared, batch=batch)
             for source, qty, remark in ordered

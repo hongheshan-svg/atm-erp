@@ -9,9 +9,10 @@ import InlineDocumentField from './InlineDocumentField.vue'
 import RemoteSelect from './RemoteSelect.vue'
 import ProcessSteps from './ProcessSteps.vue'
 import InitialPasswordInput from './InitialPasswordInput.vue'
+import type { SharedConflict } from '../modules/warehouse-lines'
 import WarehouseLines from './WarehouseLines.vue'
 import { flowFor } from '../flows'
-const props = defineProps<{ fields: Field[]; disabled?: boolean; readonly?: boolean; compact?: boolean; issues?: Record<string, string>; prefix?: string }>()
+const props = defineProps<{ fields: Field[]; sharedConflicts?: SharedConflict[]; disabled?: boolean; readonly?: boolean; compact?: boolean; issues?: Record<string, string>; prefix?: string }>()
 const emit = defineEmits<{ touched: [path: string]; uploading: [value: boolean] }>()
 const uid = useId()
 const root = ref<HTMLElement>()
@@ -69,7 +70,7 @@ function readonlyValue(field: Field) {
 <template>
   <div ref="root" class="fields" :class="{ 'readonly-fields': readonly, 'fields-inline': compact }">
     <template v-for="field in visibleFields" :key="field.key">
-      <WarehouseLines v-if="field.warehouse && !readonly" v-model="model[field.key]" :field="field" :context="model" :disabled="disabled" :prefix="fieldPath(field.key)" :issues="issues" :ref="(el: any) => { if (el) children.set(field.key, el); else children.delete(field.key) }" @touched="emit('touched', $event)" />
+      <WarehouseLines v-if="field.warehouse && !readonly" v-model="model[field.key]" :field="field" :context="model" :shared-conflicts="sharedConflicts" :disabled="disabled" :prefix="fieldPath(field.key)" :issues="issues" :ref="(el: any) => { if (el) children.set(field.key, el); else children.delete(field.key) }" @touched="emit('touched', $event)" />
       <fieldset v-else-if="field.type === 'rows'" class="row-list" :class="{ 'row-list-compact': field.compact || field.dense, 'row-list-dense': field.dense }">
         <legend>{{ field.label }} · {{ model[field.key]?.length || 0 }} 行</legend>
         <p v-if="field.hint" class="form-hint">{{ field.hint }}</p>

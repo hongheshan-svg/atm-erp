@@ -1,3 +1,4 @@
+import { selectRemoteOption } from './remote-select-helpers'
 import { businessDate } from './fixtures'
 import { test, expect, login, openRowAction, observePage, api, submitDialog, type Page } from './fixtures'
 
@@ -11,6 +12,7 @@ test('采购主动申请修改：独立审批人驳回或退回，修改后重�
   const reviewer = await api(page, 'auth/users/', { username: `changereviewer${suffix}`, display_name: '采购审批人', roles: ['purchase_manager'], password }, 201)
   const me = await api(page, 'auth/me/')
   const partner = await api(page, 'business/partners/', { name: `修改申请单位${suffix}`, kind: 'both' }, 201)
+  const newSupplier = await api(page, 'business/partners/', { name: `更正后供方${suffix}`, kind: 'supplier' }, 201)
   const project = await api(page, 'business/projects/', { name: `采购修改验收${suffix}`, customer: partner.id, manager: me.id }, 201)
   const material = await api(page, 'business/items/', { name: `修改验收电机${suffix}`, unit: '件' }, 201)
   await login(page, buyer.username, password)
@@ -65,6 +67,9 @@ test('采购主动申请修改：独立审批人驳回或退回，修改后重�
     await page.reload()
     await openRowAction(page, row(page, detail.code), '修改采购')
     const edit = page.getByRole('dialog', { name: '修改采购', exact: true })
+    await expect(edit.getByRole('textbox', { name: '当前供应商' })).toHaveValue(`修改申请单位${suffix}`)
+    await selectRemoteOption(edit.getByRole('combobox', { name: '更换供应商' }), { id: newSupplier.id, text: `更正后供方${suffix}` })
+    await edit.screenshot({ path: info.outputPath('change-order-supplier.png') })
     await edit.getByLabel('数量', { exact: true }).fill('3')
     await edit.getByLabel('原因 / 说明', { exact: true }).fill('按已同意的申请更正数量')
     await save(page, '修改采购', `purchases/${purchase.id}/edit/`)
@@ -75,6 +80,8 @@ test('采购主动申请修改：独立审批人驳回或退回，修改后重�
     await save(reviewPage, '批准采购', `purchases/${purchase.id}/approve/`)
     const final = await api(page, `business/purchases/${purchase.id}/`)
     expect(final.status).toBe('approved')
+    expect(final.supplier).toBe(newSupplier.id)
+    expect((await api(page, `business/purchases/${purchase.id}/contract-preview/`)).supplier.name).toBe(`更正后供方${suffix}`)
     expect(final.lines[0].quantity).toBe('3.000')
     expect(final.change_request).toBeNull()
     expect(errors).toEqual([])

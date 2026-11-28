@@ -12,14 +12,15 @@ const overBomReason: Field = {
   placeholder: '仅超出项目 BOM 缺口时填写，如备件、损耗补买、客户追加',
   hint: '按 BOM 补缺请用「从 BOM 多选下单」。本单物料超出项目 BOM 缺口时必须填写，审批人会看到超出数量和原因。',
 }
+const supplierField = () => remote('supplier', '供应商', '/business/partners/', {
+  remoteParams: { is_active: true },
+  remoteFilter: p => p.kind !== 'customer',
+  remoteLabel: p => `${p.code} · ${p.name} · ${termLabel(p)}`,
+})
 export const purchaseFields = (): Field[] => [
   codeField('采购单号'),
   project(),
-  remote('supplier', '供应商', '/business/partners/', {
-    remoteParams: { is_active: true },
-    remoteFilter: p => p.kind !== 'customer',
-    remoteLabel: p => `${p.code} · ${p.name} · ${termLabel(p)}`,
-  }),
+  supplierField(),
   date('due_date', '交期'),
   ...termFields(true),
   { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', hint: '仅指定日期账期填写；现付/月结请留空，实际到期明细在应收应付中查看。历史手工账期留空仍沿用订单交期。' },
@@ -169,7 +170,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       submitLabel: '提交修改申请',
       fields: [{ ...reason, label: '修改原因', type: 'textarea', hint: '请写清哪项填错、准备怎样修改，例如第 3 项数量由 10 改为 5。' }],
       blocked: detail.status !== 'submitted' ? '仅待审批采购单可申请修改，请刷新采购单。' : pending ? '已有待处理的修改申请，请勿重复申请。' : undefined,
-      notice: { type: 'info', text: '提交申请后暂停本单采购审批。审批人同意后退回草稿，修改完成须重新提交审批。若物料或供应商选错，可直接“作废采购”后重建。已批准订单请按原流程取消余量或更正。' },
+      notice: { type: 'info', text: '提交申请后暂停本单采购审批。审批人同意后退回草稿，修改完成须重新提交审批。供应商选错时，在原单「操作 → 修改采购」中更换。物料选错可作废后重建。已批准订单请按原流程取消余量或更正。' },
       prepare: data => ({ reason: data.reason }),
     }
     const readonly = name === '查看修改申请'
@@ -185,7 +186,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
       initial: { requested_by: pending?.requested_by, requested_at: dateTimeText(pending?.requested_at, ''), request_reason: pending?.reason },
       prepare: data => ({ request_id: pending?.id, decision: data.decision, reason: data.reason }),
       submitLabel: '确认处理申请',
-      notice: { type: 'info', text: '同意：退回草稿，采购修改后重新提交审批。驳回：保留原采购内容，继续待审批。处理记录会保留；管理员处理本人申请须在意见中说明例外原因。' },
+      notice: { type: 'info', text: '审批人同意后，采购员在本单「操作 → 修改采购」中更换供应商，再重新提交审批。驳回修改申请后，原单继续待审批。处理记录会保留；管理员处理本人申请须在意见中说明例外原因。' },
     }
   }
   if (name === '反审') {
@@ -304,6 +305,7 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '处理记录') {
     const summary = (l: Row) => {
+      if (l.supplier_change) return `供应商：${l.supplier_change.old_name} → ${l.supplier_change.new_name}`
       if (l.operation === 'purchase.revision_convert') {
         return `${l.old_item || '旧版'} → ${l.new_item || '新版'}，数量 ${quantityText(l.quantity || '0')}${l.credit ? `，冲减 ¥${formatMoney(l.credit)}` : ''}`
       }
@@ -319,7 +321,14 @@ export async function actionCommand(resource: string, r: Row, name: string): Pro
   }
   if (name === '修改采购') {
     const detail = await read(`${endpoint(resource)}${r.id}/`)
-    return { title: name, path: `${endpoint(resource)}${r.id}/edit/`, fields: [date('due_date', '交期'), ...termFields(true).map(f => ({ ...f, ...(f.key === 'payment_days' ? { visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'custom' } : {}), label: f.key === 'payment_term' ? '采购账期' : f.label, optional: true, hint: f.key === 'payment_term' ? '草稿阶段可调整；月结＝每批合格收货当月月底＋天数。' : f.hint })), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'manual', hint: '仅指定日期账期填写；现付/月结由实际收货自动计算。' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, overBomReason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, { ...qty, numeric: { scale: 3, min: 0.001 } }, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ due_date: data.due_date, ...((data.payment_term || detail.payment_term) === 'manual' ? { payment_due_date: data.payment_due_date } : {}), ...(data.payment_term ? { payment_term: data.payment_term } : {}), ...(data.payment_days !== undefined && data.payment_days !== '' && data.payment_days !== null ? { payment_days: data.payment_days } : {}), note: data.note, warranty_months: data.warranty_months, reason: data.reason, ...(data.over_bom_reason ? { over_bom_reason: data.over_bom_reason } : {}), expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
+    const supplierFields: Field[] = [
+      { ...t('supplier_name', '当前供应商'), readonly: true, displayOnly: true },
+    ]
+    if (detail.supplier_editable) supplierFields.push({
+      ...supplierField(), key: 'replacement_supplier', label: '更换供应商', optional: true,
+      hint: '选择新供应商后，请核对本单账期和单价。留空沿用当前供应商。',
+    })
+    return { title: name, subject: detail.code, path: `${endpoint(resource)}${r.id}/edit/`, fields: [...supplierFields, date('due_date', '交期'), ...termFields(true).map(f => ({ ...f, ...(f.key === 'payment_days' ? { visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'custom' } : {}), label: f.key === 'payment_term' ? '采购账期' : f.label, optional: true, hint: f.key === 'payment_term' ? '草稿阶段可调整；月结＝每批合格收货当月月底＋天数。' : f.hint })), { ...date('payment_due_date', '付款到期日'), optional: true, initial: '', visibleWhen: (d: Row) => (d.payment_term || detail.payment_term) === 'manual', hint: '仅指定日期账期填写；现付/月结由实际收货自动计算。' }, t('note', '说明', true), { key: 'warranty_months', label: '供应商质保月数', numeric: { scale: 0, min: 1, max: 120 } }, reason, overBomReason, { ...rows('lines', '采购明细', [{ key: 'id', label: '明细ID', hidden: true }, { ...t('item_name', '物料'), readonly: true }, { ...qty, numeric: { scale: 3, min: 0.001 } }, price, date('due_date', '明细交期')]), readonly: true, compact: true }], initial: { ...detail, lines: detail.lines.map((l: Row) => ({ ...l, due_date: l.due_date || detail.due_date })) }, prepare: data => ({ ...(detail.supplier_editable && data.replacement_supplier ? { supplier: data.replacement_supplier } : {}), due_date: data.due_date, ...((data.payment_term || detail.payment_term) === 'manual' ? { payment_due_date: data.payment_due_date } : {}), ...(data.payment_term ? { payment_term: data.payment_term } : {}), ...(data.payment_days !== undefined && data.payment_days !== '' && data.payment_days !== null ? { payment_days: data.payment_days } : {}), note: data.note, warranty_months: data.warranty_months, reason: data.reason, ...(data.over_bom_reason ? { over_bom_reason: data.over_bom_reason } : {}), expected_updated_at: detail.updated_at, lines: data.lines.map((l: Row) => ({ id: l.id, quantity: l.quantity, unit_price: l.unit_price, due_date: l.due_date })) }) }
   }
   if (name === '批准采购') {
     const check = await read(`/business/purchases/${r.id}/budget-check/`)
